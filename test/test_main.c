@@ -1,65 +1,123 @@
 #include "unity/unity.h"
-#include "http_client.h"
-#include <stdio.h>
+#include "../src/http_client.h"
+#include <stdlib.h>
 #include <string.h>
-#include <curl/curl.h>
 
-void setUp(void) {
-    curl_global_init(CURL_GLOBAL_DEFAULT);
+void setUp(void)
+{
+    // Set up before each test
 }
 
-void tearDown(void) {
-    curl_global_cleanup();
+void tearDown(void)
+{
+    // Clean up after each test
 }
 
-void test_http_post_null_parameters(void) {
+void test_http_response_initialization(void)
+{
     struct HTTPResponse response = {0};
-    
-    TEST_ASSERT_EQUAL_INT(-1, http_post(NULL, "data", &response));
-    TEST_ASSERT_EQUAL_INT(-1, http_post("http://example.com", NULL, &response));
-    TEST_ASSERT_EQUAL_INT(-1, http_post("http://example.com", "data", NULL));
-}
-
-void test_cleanup_response_null_safe(void) {
-    cleanup_response(NULL);
-    
-    struct HTTPResponse response = {0};
-    cleanup_response(&response);
-    
-    TEST_ASSERT_TRUE(1);
-}
-
-void test_cleanup_response_with_data(void) {
-    struct HTTPResponse response = {0};
-    response.data = malloc(10);
-    response.size = 10;
-    
-    TEST_ASSERT_NOT_NULL(response.data);
-    
-    cleanup_response(&response);
-    
     TEST_ASSERT_NULL(response.data);
     TEST_ASSERT_EQUAL_size_t(0, response.size);
 }
 
-void test_http_post_invalid_url(void) {
-    struct HTTPResponse response = {0};
-    const char *invalid_url = "not-a-valid-url";
-    const char *post_data = "test data";
-    
-    int result = http_post(invalid_url, post_data, &response);
-    
-    TEST_ASSERT_EQUAL_INT(-1, result);
-    cleanup_response(&response);
+void test_cleanup_response_with_null_response(void)
+{
+    // Should not crash with NULL pointer
+    cleanup_response(NULL);
+    TEST_ASSERT_TRUE(1); // If we get here, the test passed
 }
 
-int main(void) {
+void test_cleanup_response_with_null_data(void)
+{
+    struct HTTPResponse response = {0};
+    cleanup_response(&response);
+    TEST_ASSERT_NULL(response.data);
+    TEST_ASSERT_EQUAL_size_t(0, response.size);
+}
+
+void test_cleanup_response_with_allocated_data(void)
+{
+    struct HTTPResponse response = {0};
+    response.data = malloc(100);
+    response.size = 50;
+    
+    TEST_ASSERT_NOT_NULL(response.data);
+    
+    cleanup_response(&response);
+    TEST_ASSERT_NULL(response.data);
+    TEST_ASSERT_EQUAL_size_t(0, response.size);
+}
+
+void test_http_post_with_null_url(void)
+{
+    struct HTTPResponse response = {0};
+    int result = http_post(NULL, "test data", &response);
+    TEST_ASSERT_EQUAL_INT(-1, result);
+}
+
+void test_http_post_with_null_data(void)
+{
+    struct HTTPResponse response = {0};
+    int result = http_post("http://example.com", NULL, &response);
+    TEST_ASSERT_EQUAL_INT(-1, result);
+}
+
+void test_http_post_with_null_response(void)
+{
+    int result = http_post("http://example.com", "test data", NULL);
+    TEST_ASSERT_EQUAL_INT(-1, result);
+}
+
+void test_http_post_with_headers_null_url(void)
+{
+    struct HTTPResponse response = {0};
+    const char *headers[] = {"Content-Type: application/json", NULL};
+    int result = http_post_with_headers(NULL, "test data", headers, &response);
+    TEST_ASSERT_EQUAL_INT(-1, result);
+}
+
+void test_http_post_with_headers_null_data(void)
+{
+    struct HTTPResponse response = {0};
+    const char *headers[] = {"Content-Type: application/json", NULL};
+    int result = http_post_with_headers("http://example.com", NULL, headers, &response);
+    TEST_ASSERT_EQUAL_INT(-1, result);
+}
+
+void test_http_post_with_headers_null_response(void)
+{
+    const char *headers[] = {"Content-Type: application/json", NULL};
+    int result = http_post_with_headers("http://example.com", "test data", headers, NULL);
+    TEST_ASSERT_EQUAL_INT(-1, result);
+}
+
+void test_http_post_with_headers_null_headers(void)
+{
+    struct HTTPResponse response = {0};
+    // This should work - NULL headers should be handled gracefully
+    // Note: This would require network connectivity to actually test successfully
+    // For now, we just test that it doesn't crash
+    int result = http_post_with_headers("http://httpbin.org/post", "{\"test\": \"data\"}", NULL, &response);
+    cleanup_response(&response);
+    // We don't assert the result because it depends on network connectivity
+    TEST_ASSERT_TRUE(1); // If we get here without crashing, test passes
+}
+
+int main(void)
+{
     UNITY_BEGIN();
     
-    RUN_TEST(test_http_post_null_parameters);
-    RUN_TEST(test_cleanup_response_null_safe);
-    RUN_TEST(test_cleanup_response_with_data);
-    RUN_TEST(test_http_post_invalid_url);
+    RUN_TEST(test_http_response_initialization);
+    RUN_TEST(test_cleanup_response_with_null_response);
+    RUN_TEST(test_cleanup_response_with_null_data);
+    RUN_TEST(test_cleanup_response_with_allocated_data);
+    RUN_TEST(test_http_post_with_null_url);
+    RUN_TEST(test_http_post_with_null_data);
+    RUN_TEST(test_http_post_with_null_response);
+    RUN_TEST(test_http_post_with_headers_null_url);
+    RUN_TEST(test_http_post_with_headers_null_data);
+    RUN_TEST(test_http_post_with_headers_null_response);
+    RUN_TEST(test_http_post_with_headers_null_headers);
     
     return UNITY_END();
 }

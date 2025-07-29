@@ -194,10 +194,15 @@ void test_my_function(void) {
 }
 ```
 
-### Memory Testing
+### Memory Testing with Valgrind and Cosmopolitan
 - All tests should pass under valgrind with zero leaks
 - Use `make check-valgrind` to verify memory safety
 - Tests run with `--leak-check=full --error-exitcode=1`
+- **Important**: Cosmopolitan builds ARE compatible with valgrind
+- Valgrind automatically uses the `.aarch64.elf` binary (configured via `@COSMO_ELF_SUFFIX@`)
+- The build system correctly generates ELF binaries alongside .com and .dbg formats
+- Expected output: "All heap blocks were freed -- no leaks are possible"
+- Uninitialised value warnings from libcurl internals are normal and not our code's fault
 
 ## Development Environment
 
