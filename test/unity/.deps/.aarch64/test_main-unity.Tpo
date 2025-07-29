@@ -1,0 +1,45 @@
+unity/test_main-unity.o: unity/unity.c \
+ /opt/cosmos/include/libc/integral/normalize.inc \
+ /opt/cosmos/include/libc/integral/c.inc unity/unity.h \
+ unity/unity_internals.h /opt/cosmos/include/setjmp.h \
+ /opt/cosmos/include/libc/runtime/runtime.h /opt/cosmos/include/math.h \
+ /opt/cosmos/include/libc/math.h /opt/cosmos/include/stddef.h \
+ /opt/cosmos/include/stdint.h /opt/cosmos/include/libc/inttypes.h \
+ /opt/cosmos/include/libc/limits.h /opt/cosmos/include/libc/literal.h \
+ /opt/cosmos/include/limits.h \
+ /opt/cosmos/include/libc/sysv/consts/_posix.h \
+ /opt/cosmos/include/libc/sysv/consts/iov.h \
+ /opt/cosmos/include/libc/sysv/consts/limits.h \
+ /opt/cosmos/include/libc/sysv/consts/xopen.h \
+ /opt/cosmos/include/libc/thread/thread.h /opt/cosmos/include/stdio.h \
+ /opt/cosmos/include/libc/calls/calls.h \
+ /opt/cosmos/include/libc/calls/weirdtypes.h \
+ /opt/cosmos/include/libc/stdio/dprintf.h \
+ /opt/cosmos/include/libc/stdio/stdio.h /opt/cosmos/include/libc/temp.h \
+ /opt/cosmos/include/third_party/musl/tempnam.h
+/opt/cosmos/include/libc/integral/normalize.inc:
+/opt/cosmos/include/libc/integral/c.inc:
+unity/unity.h:
+unity/unity_internals.h:
+/opt/cosmos/include/setjmp.h:
+/opt/cosmos/include/libc/runtime/runtime.h:
+/opt/cosmos/include/math.h:
+/opt/cosmos/include/libc/math.h:
+/opt/cosmos/include/stddef.h:
+/opt/cosmos/include/stdint.h:
+/opt/cosmos/include/libc/inttypes.h:
+/opt/cosmos/include/libc/limits.h:
+/opt/cosmos/include/libc/literal.h:
+/opt/cosmos/include/limits.h:
+/opt/cosmos/include/libc/sysv/consts/_posix.h:
+/opt/cosmos/include/libc/sysv/consts/iov.h:
+/opt/cosmos/include/libc/sysv/consts/limits.h:
+/opt/cosmos/include/libc/sysv/consts/xopen.h:
+/opt/cosmos/include/libc/thread/thread.h:
+/opt/cosmos/include/stdio.h:
+/opt/cosmos/include/libc/calls/calls.h:
+/opt/cosmos/include/libc/calls/weirdtypes.h:
+/opt/cosmos/include/libc/stdio/dprintf.h:
+/opt/cosmos/include/libc/stdio/stdio.h:
+/opt/cosmos/include/libc/temp.h:
+/opt/cosmos/include/third_party/musl/tempnam.h:

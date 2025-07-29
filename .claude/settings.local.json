@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(make test_main:*)",
+      "Bash(autoreconf:*)",
+      "Bash(./configure)",
+      "Bash(make:*)",
+      "Bash(ls:*)"
+    ],
+    "deny": []
+  }
+}
