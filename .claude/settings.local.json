@@ -6,7 +6,14 @@
       "Bash(autoreconf:*)",
       "Bash(./configure)",
       "Bash(make:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(git commit:*)",
+      "Bash(pkg-config:*)",
+      "Bash(curl-config:*)",
+      "Bash(cosmocc:*)",
+      "Bash(rm:*)",
+      "Bash(grep:*)",
+      "Bash(git add:*)"
     ],
     "deny": []
   }

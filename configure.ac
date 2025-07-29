@@ -2,10 +2,20 @@ AC_INIT([hello-world], [1.0], [tim.gittos@example.com])
 AM_INIT_AUTOMAKE([-Wall foreign subdir-objects])
 
 # Cosmopolitan compiler doesn't support spaces in -D arguments
-# Override the default PACKAGE_STRING to use underscores
-AC_DEFINE([PACKAGE_STRING], ["hello-world_1.0"], [Define to the full name and version of this package.])
+# This is handled in Makefile.am with subst
 AC_PROG_CC
 AC_CANONICAL_HOST
+
+# Check for required tools to build libcurl
+AC_CHECK_PROGS([WGET], [wget curl], [])
+if test -z "$WGET"; then
+  AC_MSG_ERROR([wget or curl is required to download libcurl])
+fi
+
+AC_CHECK_PROG([TAR], [tar], [tar], [])
+if test -z "$TAR"; then
+  AC_MSG_ERROR([tar is required to extract libcurl])
+fi
 
 # Determine cosmopolitan ELF suffix for valgrind testing
 case $host_cpu in

@@ -1,6 +1,13 @@
 check_PROGRAMS = test_main
-test_main_SOURCES = test_main.c unity/unity.c
-test_main_CPPFLAGS = -I$(srcdir)/unity
+test_main_SOURCES = test_main.c unity/unity.c ../src/http_client.c
+
+# libcurl and MbedTLS paths
+CURL_BUILD_DIR = $(abs_builddir)/../deps/curl-8.4.0
+MBEDTLS_BUILD_DIR = $(abs_builddir)/../deps/mbedtls-3.5.1
+
+test_main_CPPFLAGS = -I$(srcdir)/unity -I$(srcdir)/../src -I$(CURL_BUILD_DIR)/include -I$(MBEDTLS_BUILD_DIR)/include
+test_main_LDFLAGS = -L$(CURL_BUILD_DIR)/lib/.libs -L$(MBEDTLS_BUILD_DIR)/library
+test_main_LDADD = -lcurl -lmbedtls -lmbedx509 -lmbedcrypto
 
 # Override DEFS to replace spaces with underscores for cosmopolitan compatibility  
 override DEFS := $(subst hello-world\ 1.0,hello-world_1.0,$(DEFS))
