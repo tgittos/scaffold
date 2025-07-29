@@ -1,4 +1,5 @@
-SUBDIRS = src test
+# Build dependencies first, then subdirectories
+SUBDIRS = . src test
 
 # libcurl dependency variables
 CURL_VERSION = 8.4.0
@@ -52,8 +53,11 @@ $(CURL_DIR)/lib/.libs/libcurl.a: $(MBEDTLS_DIR)/library/libmbedtls.a | deps
 deps:
 	mkdir -p deps
 
-# Make src depend on libcurl
-src: $(CURL_DIR)/lib/.libs/libcurl.a
+# Build dependencies in this directory first
+all-local: $(CURL_DIR)/lib/.libs/libcurl.a
+
+# Make subdirectories depend on local targets
+src test: all-local
 
 CLEANFILES = hello-world hello-world.aarch64.elf hello-world.com.dbg a.out.aarch64.elf a.out.com.dbg
 
@@ -65,4 +69,8 @@ clean-local:
 distclean-local:
 	rm -rf autom4te.cache .aarch64 deps
 
-.PHONY: deps
+# Export library paths for subdirectories
+export CURL_BUILD_DIR = $(abs_builddir)/deps/curl-$(CURL_VERSION)
+export MBEDTLS_BUILD_DIR = $(abs_builddir)/deps/mbedtls-$(MBEDTLS_VERSION)
+
+.PHONY: deps all-local
