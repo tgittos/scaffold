@@ -16,7 +16,7 @@ You are an expert low-level C programmer specializing in writing stable, bug-fre
 
 ## Project Overview
 
-This is a simple C "Hello World" program built using GNU Autotools (autoconf/automake) and Cosmopolitan Libc. The project generates a single executable called `hello-world` that prints "Hello, World!" to stdout.
+This is a C HTTP client program built using GNU Autotools (autoconf/automake) and Cosmopolitan Libc. The project generates a single executable called `hello-world` that makes HTTP POST requests using libcurl with SSL support via MbedTLS. The program demonstrates secure HTTP communication and serves as a foundation for network-enabled C applications.
 
 ## Build System
 
@@ -55,12 +55,56 @@ cosmocc src/main.c -o hello-world
 
 **Note**: When asked to "clean" the project, always use `make distclean` to fully clean everything back to source-only state.
 
+## Dependency Management
+
+This project has complex external dependencies that must be built in the correct order:
+
+### Dependencies
+- **MbedTLS 3.5.1**: Provides SSL/TLS support
+- **libcurl 8.4.0**: HTTP client library with MbedTLS backend
+
+### Build Order (Critical)
+The autotools build system is configured to build dependencies first:
+1. `SUBDIRS = . src test` - builds current directory first, then subdirectories
+2. `all-local` target builds MbedTLS and libcurl before proceeding
+3. `src test: all-local` - makes subdirectories depend on local targets
+
+### Dependency Paths
+Library paths are exported from top-level Makefile to subdirectories:
+```make
+export CURL_BUILD_DIR = $(abs_builddir)/deps/curl-$(CURL_VERSION)
+export MBEDTLS_BUILD_DIR = $(abs_builddir)/deps/mbedtls-$(MBEDTLS_VERSION)
+```
+
+Subdirectories use conditional assignment to allow overrides:
+```make
+CURL_BUILD_DIR ?= $(abs_builddir)/../deps/curl-8.4.0
+MBEDTLS_BUILD_DIR ?= $(abs_builddir)/../deps/mbedtls-3.5.1
+```
+
+### Common Dependency Issues
+- **Build order**: If subdirectories build before dependencies, linking will fail
+- **Missing libraries**: Ensure `deps/` directory exists and libraries are built
+- **Path issues**: Check that exported paths match actual dependency locations
+- **Clean state**: Use `make distclean` to remove deps/ and rebuild from scratch
+
 ## Architecture
 
-- **configure.ac**: Autoconf configuration defining the project metadata and build requirements
-- **Makefile.am**: Top-level automake configuration with proper clean targets for cosmopolitan artifacts
-- **src/Makefile.am**: Defines the hello-world binary target from main.c
-- **src/main.c**: Simple C program that prints "Hello, World!"
+### Build Configuration
+- **configure.ac**: Autoconf configuration defining project metadata, dependency checks, and cosmopolitan ELF suffix detection
+- **Makefile.am**: Top-level automake configuration with dependency build targets and comprehensive clean rules
+- **src/Makefile.am**: Defines the hello-world binary target with libcurl/MbedTLS linking
+- **test/Makefile.am**: Unity test configuration with memory testing via valgrind
+
+### Source Code
+- **src/main.c**: Main program that demonstrates HTTP POST functionality
+- **src/http_client.c**: HTTP client implementation using libcurl with SSL support
+- **src/http_client.h**: HTTP client interface and data structures
+- **test/test_main.c**: Unit tests for HTTP client functionality using Unity framework
+
+### Dependencies
+- **deps/**: Auto-downloaded and built external dependencies (MbedTLS, libcurl)
+- **test/unity/**: Vendored Unity testing framework for C
 
 ## Code Quality Standards
 
@@ -73,6 +117,40 @@ When modifying C code in this project:
 - Add bounds checking for array access
 - Use meaningful variable names and avoid magic numbers
 - Comment complex logic and document function contracts
+
+## HTTP Client Development
+
+When working with the HTTP client functionality:
+
+### libcurl Best Practices
+- Always call `curl_global_init()` before using libcurl
+- Always call `curl_global_cleanup()` when done
+- Check return codes from all curl functions
+- Free curl_slist headers with `curl_slist_free_all()`
+- Use proper SSL/TLS settings for secure connections
+- Set appropriate timeouts to prevent hanging
+
+### SSL/TLS with MbedTLS
+- MbedTLS is statically linked as the SSL backend for libcurl
+- Certificates are validated by default
+- Use proper error handling for SSL connection failures
+- Consider certificate pinning for production use
+
+### Memory Management
+- Use the HTTPResponse struct for managing response data
+- Always call `cleanup_response()` to free allocated memory
+- Initialize response structs to zero before use
+- Check for NULL pointers before accessing response data
+
+### Example Pattern
+```c
+struct HTTPResponse response = {0};
+if (http_post(url, data, &response) == 0) {
+    // Process response.data
+    printf("Response: %s\n", response.data);
+}
+cleanup_response(&response);
+```
 
 ## Test-Driven Development
 
@@ -127,3 +205,45 @@ void test_my_function(void) {
 - Produces multiple executable formats (.com, .aarch64.elf, etc.)
 - Development container includes autotools, cosmopolitan toolchain, and valgrind
 - Unity testing framework vendored in `test/unity/`
+
+## Build Troubleshooting
+
+Common issues and solutions when working with this build system:
+
+### Dependency Build Failures
+- **MbedTLS build fails**: Check that `cosmocc` is in PATH and working
+- **libcurl configure fails**: Ensure MbedTLS built successfully first
+- **Missing downloads**: Check network connectivity; deps download from GitHub/curl.se
+
+### Autotools Issues
+- **"missing" script errors**: Run `autoreconf -i` to regenerate autotools files
+- **Makefile.in not found**: Run `autoreconf -i` to create missing automake files
+- **Configure fails**: Check that required tools (wget/curl, tar) are available
+
+### Cosmopolitan Compiler Issues
+- **Space in arguments**: Use `PACKAGE_STRING="hello-world_1.0"` (underscore, not space)
+- **Precompiled headers error**: This is normal for cosmopolitan builds, continue anyway
+- **TIME_T_MAX warnings**: These are harmless redefinition warnings
+
+### Clean Build Issues
+If build artifacts are causing problems:
+```bash
+make distclean  # Remove everything including deps/
+autoreconf -i   # Regenerate autotools files
+./configure     # Reconfigure
+make            # Clean build
+```
+
+### Comprehensive Clean
+The following files should be removed by `make distclean`:
+- Build artifacts: `*.o`, `*.elf`, `*.dbg`, `.dirstamp`
+- Autotools files: `configure`, `Makefile.in`, `aclocal.m4`, etc.
+- Dependencies: `deps/` directory
+- Test artifacts: `test-suite.log`, Unity object files
+- Architecture directories: `.aarch64/`, `.deps/`
+
+### Performance Tips
+- **Parallel builds**: Use `make -j$(nproc)` for faster builds
+- **Incremental builds**: Only `make clean` removes build artifacts, not dependencies
+- **Dependency caching**: Dependencies in `deps/` persist across `make clean`
+- **Fresh start**: Use `make distclean` when build state is corrupted
