@@ -294,9 +294,97 @@ int main(int argc, char *argv[])
                                      parsed_response.response_content : 
                                      parsed_response.thinking_content;
         
-        if (message_content != NULL && parse_tool_calls(message_content, &tool_calls, &call_count) == 0 && call_count > 0) {
-            // We have tool calls to execute
-            fprintf(stderr, "Executing %d tool call(s)...\n", call_count);
+        // Check if this is a direct tool call response (from raw JSON)
+        ToolCall *raw_tool_calls = NULL;
+        int raw_call_count = 0;
+        if (parse_tool_calls(response.data, &raw_tool_calls, &raw_call_count) == 0 && raw_call_count > 0) {
+            // We have tool calls from raw response to execute
+            fprintf(stderr, "Executing %d tool call(s) from API response...\n", raw_call_count);
+            
+            // Save user message to conversation first
+            if (append_conversation_message(&conversation, "user", user_message) != 0) {
+                fprintf(stderr, "Warning: Failed to save user message to conversation history\n");
+            }
+            
+            // Save assistant message with tool calls to conversation
+            if (parsed_response.response_content != NULL) {
+                if (append_conversation_message(&conversation, "assistant", parsed_response.response_content) != 0) {
+                    fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
+                }
+            }
+            
+            // Execute tool calls
+            ToolResult *results = malloc(raw_call_count * sizeof(ToolResult));
+            if (results != NULL) {
+                for (int i = 0; i < raw_call_count; i++) {
+                    if (execute_tool_call(&tools, &raw_tool_calls[i], &results[i]) != 0) {
+                        fprintf(stderr, "Warning: Failed to execute tool call %s\n", raw_tool_calls[i].name);
+                        results[i].tool_call_id = strdup(raw_tool_calls[i].id);
+                        results[i].result = strdup("Tool execution failed");
+                        results[i].success = 0;
+                    } else {
+                        fprintf(stderr, "Executed tool: %s (ID: %s)\n", raw_tool_calls[i].name, raw_tool_calls[i].id);
+                    }
+                }
+                
+                // Add tool result messages to conversation
+                for (int i = 0; i < raw_call_count; i++) {
+                    char tool_message[1024];
+                    snprintf(tool_message, sizeof(tool_message), "Tool %s result: %s", 
+                             raw_tool_calls[i].name, results[i].result);
+                    if (append_conversation_message(&conversation, "tool", tool_message) != 0) {
+                        fprintf(stderr, "Warning: Failed to save tool result to conversation history\n");
+                    }
+                }
+                
+                // Make follow-up request with tool results
+                struct HTTPResponse follow_up_response = {0};
+                
+                // Build new JSON payload with conversation including tool results
+                char* follow_up_data = build_json_payload(model, system_prompt, &conversation, 
+                                                         "", max_tokens_param, max_tokens, NULL);
+                if (follow_up_data != NULL) {
+                    fprintf(stderr, "Making follow-up request with tool results...\n");
+                    
+                    if (http_post_with_headers(url, follow_up_data, headers, &follow_up_response) == 0) {
+                        // Parse follow-up response
+                        ParsedResponse follow_up_parsed;
+                        if (parse_api_response(follow_up_response.data, &follow_up_parsed) == 0) {
+                            // Display the final response
+                            print_formatted_response(&follow_up_parsed);
+                            
+                            // Save final assistant response to conversation
+                            const char* final_content = follow_up_parsed.response_content ? 
+                                                       follow_up_parsed.response_content : 
+                                                       follow_up_parsed.thinking_content;
+                            if (final_content != NULL) {
+                                if (append_conversation_message(&conversation, "assistant", final_content) != 0) {
+                                    fprintf(stderr, "Warning: Failed to save final assistant response to conversation history\n");
+                                }
+                            }
+                            
+                            cleanup_parsed_response(&follow_up_parsed);
+                        } else {
+                            fprintf(stderr, "Error: Failed to parse follow-up API response\n");
+                            printf("%s\n", follow_up_response.data);
+                        }
+                        
+                        cleanup_response(&follow_up_response);
+                    } else {
+                        fprintf(stderr, "Follow-up API request failed\n");
+                    }
+                    
+                    free(follow_up_data);
+                }
+                
+                cleanup_tool_results(results, raw_call_count);
+                free(results);
+            }
+            
+            cleanup_tool_calls(raw_tool_calls, raw_call_count);
+        } else if (message_content != NULL && parse_tool_calls(message_content, &tool_calls, &call_count) == 0 && call_count > 0) {
+            // Fallback: tool calls found in message content (for LM Studio format)
+            fprintf(stderr, "Executing %d tool call(s) from message content...\n", call_count);
             
             // Save user message to conversation first
             if (append_conversation_message(&conversation, "user", user_message) != 0) {
@@ -317,39 +405,33 @@ int main(int argc, char *argv[])
                     }
                 }
                 
-                // Generate tool results JSON for follow-up request
-                char *tool_results_json = generate_tool_results_json(results, call_count);
-                if (tool_results_json != NULL) {
-                    // Add tool results to conversation and make follow-up request
-                    // For now, just show the results and continue with normal response parsing
-                    fprintf(stderr, "Tool results: %s\n", tool_results_json);
-                    free(tool_results_json);
-                }
+                // For LM Studio, just show results (no follow-up needed)
+                fprintf(stderr, "Tool execution completed.\n");
                 
                 cleanup_tool_results(results, call_count);
                 free(results);
             }
             
             cleanup_tool_calls(tool_calls, call_count);
-        }
-        
-        // Display the response and save to conversation
-        print_formatted_response(&parsed_response);
-        
-        // Save user message if not already saved (when no tool calls)
-        if (call_count == 0) {
+        } else {
+            // No tool calls - normal response handling
+            
+            // Display the response and save to conversation
+            print_formatted_response(&parsed_response);
+            
+            // Save user message
             if (append_conversation_message(&conversation, "user", user_message) != 0) {
                 fprintf(stderr, "Warning: Failed to save user message to conversation history\n");
             }
-        }
-        
-        // Use response_content for the assistant's message (this is the main content without thinking)
-        const char* assistant_content = parsed_response.response_content ? 
-                                       parsed_response.response_content : 
-                                       parsed_response.thinking_content;
-        if (assistant_content != NULL) {
-            if (append_conversation_message(&conversation, "assistant", assistant_content) != 0) {
-                fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
+            
+            // Use response_content for the assistant's message (this is the main content without thinking)
+            const char* assistant_content = parsed_response.response_content ? 
+                                           parsed_response.response_content : 
+                                           parsed_response.thinking_content;
+            if (assistant_content != NULL) {
+                if (append_conversation_message(&conversation, "assistant", assistant_content) != 0) {
+                    fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
+                }
             }
         }
         

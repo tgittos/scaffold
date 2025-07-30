@@ -274,74 +274,137 @@ int parse_tool_calls(const char *json_response, ToolCall **tool_calls, int *call
         return -1;
     }
     
-    // For simplicity, we'll just parse the first tool call
-    // A full implementation would parse the entire array
-    const char *first_call = strchr(array_start, '{');
-    if (first_call == NULL) {
+    // Count tool calls in the array
+    int count = 0;
+    const char *current = array_start + 1;
+    while (*current != '\0' && *current != ']') {
+        if (*current == '{') {
+            count++;
+            // Skip to the end of this object
+            int brace_count = 1;
+            current++;
+            while (*current != '\0' && brace_count > 0) {
+                if (*current == '{') {
+                    brace_count++;
+                } else if (*current == '}') {
+                    brace_count--;
+                }
+                current++;
+            }
+        } else {
+            current++;
+        }
+    }
+    
+    if (count == 0) {
         return 0; // Empty array
     }
     
-    // Find the end of the first tool call object
-    const char *call_end = first_call + 1;
-    int brace_count = 1;
-    while (*call_end != '\0' && brace_count > 0) {
-        if (*call_end == '{') {
-            brace_count++;
-        } else if (*call_end == '}') {
-            brace_count--;
+    // Allocate array for all tool calls
+    ToolCall *calls = malloc(count * sizeof(ToolCall));
+    if (calls == NULL) {
+        return -1;
+    }
+    
+    // Parse each tool call
+    current = array_start + 1;
+    int parsed_count = 0;
+    
+    while (*current != '\0' && *current != ']' && parsed_count < count) {
+        // Skip whitespace and commas
+        while (*current == ' ' || *current == '\t' || *current == '\n' || *current == '\r' || *current == ',') {
+            current++;
         }
-        call_end++;
-    }
-    
-    if (brace_count != 0) {
-        return -1;
-    }
-    
-    // Extract the tool call JSON
-    size_t call_len = call_end - first_call;
-    char *call_json = malloc(call_len + 1);
-    if (call_json == NULL) {
-        return -1;
-    }
-    
-    strncpy(call_json, first_call, call_len);
-    call_json[call_len] = '\0';
-    
-    // Parse the tool call
-    ToolCall *call = malloc(sizeof(ToolCall));
-    if (call == NULL) {
-        free(call_json);
-        return -1;
-    }
-    
-    call->id = extract_json_string(call_json, "id");
-    call->arguments = extract_json_object(call_json, "arguments");
-    
-    // Extract function name from nested function object
-    char *function_obj = extract_json_object(call_json, "function");
-    if (function_obj != NULL) {
-        call->name = extract_json_string(function_obj, "name");
-        // Also extract arguments from the function object
-        if (call->arguments == NULL) {
-            call->arguments = extract_json_string(function_obj, "arguments");
+        
+        if (*current != '{') {
+            current++;
+            continue;
         }
-        free(function_obj);
-    } else {
+        
+        // Find the end of this tool call object
+        const char *call_start = current;
+        const char *call_end = current + 1;
+        int brace_count = 1;
+        
+        while (*call_end != '\0' && brace_count > 0) {
+            if (*call_end == '{') {
+                brace_count++;
+            } else if (*call_end == '}') {
+                brace_count--;
+            }
+            call_end++;
+        }
+        
+        if (brace_count != 0) {
+            // Cleanup and return error
+            for (int i = 0; i < parsed_count; i++) {
+                free(calls[i].id);
+                free(calls[i].name);
+                free(calls[i].arguments);
+            }
+            free(calls);
+            return -1;
+        }
+        
+        // Extract the tool call JSON
+        size_t call_len = call_end - call_start;
+        char *call_json = malloc(call_len + 1);
+        if (call_json == NULL) {
+            // Cleanup and return error
+            for (int i = 0; i < parsed_count; i++) {
+                free(calls[i].id);
+                free(calls[i].name);
+                free(calls[i].arguments);
+            }
+            free(calls);
+            return -1;
+        }
+        
+        strncpy(call_json, call_start, call_len);
+        call_json[call_len] = '\0';
+        
+        // Parse the tool call
+        ToolCall *call = &calls[parsed_count];
+        call->id = extract_json_string(call_json, "id");
         call->name = NULL;
+        call->arguments = NULL;
+        
+        // Extract function name and arguments from nested function object
+        char *function_obj = extract_json_object(call_json, "function");
+        if (function_obj != NULL) {
+            call->name = extract_json_string(function_obj, "name");
+            call->arguments = extract_json_string(function_obj, "arguments");
+            free(function_obj);
+        }
+        
+        free(call_json);
+        
+        // Validate the parsed call
+        if (call->id == NULL || call->name == NULL) {
+            // Cleanup and return error
+            free(call->id);
+            free(call->name);
+            free(call->arguments);
+            for (int i = 0; i < parsed_count; i++) {
+                free(calls[i].id);
+                free(calls[i].name);
+                free(calls[i].arguments);
+            }
+            free(calls);
+            return -1;
+        }
+        
+        // Default empty arguments if not provided
+        if (call->arguments == NULL) {
+            call->arguments = strdup("{}");
+        }
+        
+        parsed_count++;
+        current = call_end;
     }
     
-    free(call_json);
-    
-    if (call->id == NULL || call->name == NULL) {
-        free(call->id);
-        free(call->name);
-        free(call->arguments);
-        free(call);
-        return -1;
-    }
-    
-    *tool_calls = call;
-    *call_count = 1;
+    *tool_calls = calls;
+    *call_count = parsed_count;
     
     return 0;
 }
@@ -441,6 +504,24 @@ char* generate_tool_results_json(const ToolResult *results, int result_count) {
     strcat(json, "]");
     
     return json;
+}
+
+// Generate a single tool result message for conversation history
+char* generate_single_tool_message(const ToolResult *result) {
+    if (result == NULL || result->tool_call_id == NULL || result->result == NULL) {
+        return NULL;
+    }
+    
+    size_t estimated_size = strlen(result->result) * 2 + 200; // *2 for escaping
+    char *message = malloc(estimated_size);
+    if (message == NULL) {
+        return NULL;
+    }
+    
+    snprintf(message, estimated_size, "Tool call %s result: %s", 
+             result->tool_call_id, result->result);
+    
+    return message;
 }
 
 int load_tools_config(ToolRegistry *registry, const char *config_file) {
