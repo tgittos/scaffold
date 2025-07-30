@@ -1,6 +1,6 @@
-# Hello World
+# Ralph
 
-A simple "Hello, World!" program written in C and built with Cosmopolitan Libc.
+An HTTP client application written in C for making OpenAI API requests, built with Cosmopolitan Libc.
 
 ## Building
 
@@ -16,7 +16,7 @@ This project uses [Cosmopolitan Libc](https://cosmos.zip) for cross-platform com
 The simplest way to build:
 
 ```bash
-cosmocc src/main.c -o hello-world
+cosmocc src/main.c -o ralph
 ```
 
 ### Using Autotools
@@ -39,19 +39,24 @@ make
 ### Output
 
 The build produces multiple executable formats:
-- `hello-world` - Main executable
-- `hello-world.aarch64.elf` - Native ARM64 executable
-- `hello-world.com.dbg` - Debug symbols
+- `ralph` - Main executable
+- `ralph.aarch64.elf` - Native ARM64 executable
+- `ralph.com.dbg` - Debug symbols
 
 ## Running
 
 ```bash
-./hello-world
+export OPENAI_API_KEY="your-api-key-here"
+./ralph
 ```
 
 Output:
 ```
-Hello, World!
+Making OpenAI API request to https://api.openai.com/v1/chat/completions
+POST data: {"model": "gpt-3.5-turbo","messages": [{"role": "user","content": "Hello from C! Please respond with a brief greeting."}],"max_tokens": 100}
+
+OpenAI API Response:
+{"id":"chatcmpl-...","object":"chat.completion",...}
 ```
 
 ## Development Container

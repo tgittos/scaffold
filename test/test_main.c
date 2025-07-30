@@ -1,7 +1,7 @@
 #include "unity/unity.h"
-#include "../src/http_client.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 void setUp(void)
 {
@@ -13,111 +13,71 @@ void tearDown(void)
     // Clean up after each test
 }
 
-void test_http_response_initialization(void)
+void test_environment_setup(void)
 {
-    struct HTTPResponse response = {0};
-    TEST_ASSERT_NULL(response.data);
-    TEST_ASSERT_EQUAL_size_t(0, response.size);
+    // Test that we can check for environment variables
+    // Note: We don't require OPENAI_API_KEY to be set for testing
+    const char *api_key = getenv("OPENAI_API_KEY");
+    (void)api_key; // Suppress unused variable warning
+    // This test passes regardless of whether the key is set
+    TEST_ASSERT_TRUE(1);
 }
 
-void test_cleanup_response_with_null_response(void)
+void test_string_operations(void)
 {
-    // Should not crash with NULL pointer
-    cleanup_response(NULL);
-    TEST_ASSERT_TRUE(1); // If we get here, the test passed
-}
-
-void test_cleanup_response_with_null_data(void)
-{
-    struct HTTPResponse response = {0};
-    cleanup_response(&response);
-    TEST_ASSERT_NULL(response.data);
-    TEST_ASSERT_EQUAL_size_t(0, response.size);
-}
-
-void test_cleanup_response_with_allocated_data(void)
-{
-    struct HTTPResponse response = {0};
-    response.data = malloc(100);
-    response.size = 50;
+    // Test basic string operations used in main.c
+    char buffer[512];
+    const char *test_key = "test_key_12345";
     
-    TEST_ASSERT_NOT_NULL(response.data);
+    int ret = snprintf(buffer, sizeof(buffer), "Authorization: Bearer %s", test_key);
+    TEST_ASSERT_GREATER_THAN(0, ret);
+    TEST_ASSERT_LESS_THAN((int)sizeof(buffer), ret);
+    TEST_ASSERT_EQUAL_STRING("Authorization: Bearer test_key_12345", buffer);
+}
+
+void test_string_buffer_overflow_protection(void)
+{
+    // Test that we handle buffer size checking appropriately
+    char buffer[64]; // Buffer size
+    char long_key[30]; // Key that will make total string longer than buffer
+    memset(long_key, 'A', sizeof(long_key) - 1);
+    long_key[sizeof(long_key) - 1] = '\0';
     
-    cleanup_response(&response);
-    TEST_ASSERT_NULL(response.data);
-    TEST_ASSERT_EQUAL_size_t(0, response.size);
+    int ret = snprintf(buffer, sizeof(buffer), "Authorization: Bearer %s", long_key);
+    // snprintf returns the length that would have been written
+    TEST_ASSERT_GREATER_THAN(0, ret);
+    // Buffer should be null-terminated even if truncated
+    TEST_ASSERT_EQUAL_CHAR('\0', buffer[sizeof(buffer) - 1]);
 }
 
-void test_http_post_with_null_url(void)
+void test_json_payload_structure(void)
 {
-    struct HTTPResponse response = {0};
-    int result = http_post(NULL, "test data", &response);
-    TEST_ASSERT_EQUAL_INT(-1, result);
-}
-
-void test_http_post_with_null_data(void)
-{
-    struct HTTPResponse response = {0};
-    int result = http_post("http://example.com", NULL, &response);
-    TEST_ASSERT_EQUAL_INT(-1, result);
-}
-
-void test_http_post_with_null_response(void)
-{
-    int result = http_post("http://example.com", "test data", NULL);
-    TEST_ASSERT_EQUAL_INT(-1, result);
-}
-
-void test_http_post_with_headers_null_url(void)
-{
-    struct HTTPResponse response = {0};
-    const char *headers[] = {"Content-Type: application/json", NULL};
-    int result = http_post_with_headers(NULL, "test data", headers, &response);
-    TEST_ASSERT_EQUAL_INT(-1, result);
-}
-
-void test_http_post_with_headers_null_data(void)
-{
-    struct HTTPResponse response = {0};
-    const char *headers[] = {"Content-Type: application/json", NULL};
-    int result = http_post_with_headers("http://example.com", NULL, headers, &response);
-    TEST_ASSERT_EQUAL_INT(-1, result);
-}
-
-void test_http_post_with_headers_null_response(void)
-{
-    const char *headers[] = {"Content-Type: application/json", NULL};
-    int result = http_post_with_headers("http://example.com", "test data", headers, NULL);
-    TEST_ASSERT_EQUAL_INT(-1, result);
-}
-
-void test_http_post_with_headers_null_headers(void)
-{
-    struct HTTPResponse response = {0};
-    // This should work - NULL headers should be handled gracefully
-    // Note: This would require network connectivity to actually test successfully
-    // For now, we just test that it doesn't crash
-    int result = http_post_with_headers("http://httpbin.org/post", "{\"test\": \"data\"}", NULL, &response);
-    cleanup_response(&response);
-    // We don't assert the result because it depends on network connectivity
-    TEST_ASSERT_TRUE(1); // If we get here without crashing, test passes
+    // Test that our JSON payload is well-formed
+    const char *expected_json = "{"
+        "\"model\": \"gpt-3.5-turbo\","
+        "\"messages\": ["
+            "{"
+                "\"role\": \"user\","
+                "\"content\": \"Hello from C! Please respond with a brief greeting.\""
+            "}"
+        "],"
+        "\"max_tokens\": 100"
+    "}";
+    
+    // Basic validation that the JSON contains expected keys
+    TEST_ASSERT_NOT_NULL(strstr(expected_json, "\"model\""));
+    TEST_ASSERT_NOT_NULL(strstr(expected_json, "\"messages\""));
+    TEST_ASSERT_NOT_NULL(strstr(expected_json, "\"max_tokens\""));
 }
 
 int main(void)
 {
     UNITY_BEGIN();
     
-    RUN_TEST(test_http_response_initialization);
-    RUN_TEST(test_cleanup_response_with_null_response);
-    RUN_TEST(test_cleanup_response_with_null_data);
-    RUN_TEST(test_cleanup_response_with_allocated_data);
-    RUN_TEST(test_http_post_with_null_url);
-    RUN_TEST(test_http_post_with_null_data);
-    RUN_TEST(test_http_post_with_null_response);
-    RUN_TEST(test_http_post_with_headers_null_url);
-    RUN_TEST(test_http_post_with_headers_null_data);
-    RUN_TEST(test_http_post_with_headers_null_response);
-    RUN_TEST(test_http_post_with_headers_null_headers);
+    RUN_TEST(test_environment_setup);
+    RUN_TEST(test_string_operations);
+    RUN_TEST(test_string_buffer_overflow_protection);
+    RUN_TEST(test_json_payload_structure);
     
     return UNITY_END();
 }

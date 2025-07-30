@@ -4,8 +4,9 @@
 #include <string.h>
 #include <curl/curl.h>
 
-static size_t write_callback(void *contents, size_t size, size_t nmemb, struct HTTPResponse *response)
+static size_t write_callback(void *contents, size_t size, size_t nmemb, void *userp)
 {
+    struct HTTPResponse *response = (struct HTTPResponse *)userp;
     size_t realsize = size * nmemb;
     char *ptr = realloc(response->data, response->size + realsize + 1);
     
