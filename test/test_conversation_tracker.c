@@ -130,14 +130,14 @@ void test_append_conversation_message_with_multiline_content(void) {
 }
 
 void test_load_conversation_history_from_file(void) {
-    // Create a test conversation file in serialized format
+    // Create a test conversation file in JSON format
     FILE *file = fopen("CONVERSATION.md", "w");
     TEST_ASSERT_NOT_NULL(file);
     
-    // Format: role<SEP>content<SEP>tool_call_id<SEP>tool_name
-    fprintf(file, "user%cHello there!%c%c\n", 0x1F, 0x1F, 0x1F);
-    fprintf(file, "assistant%cHi! How can I help you?%c%c\n", 0x1F, 0x1F, 0x1F);  
-    fprintf(file, "user%cWhat is the weather like?%c%c\n", 0x1F, 0x1F, 0x1F);
+    // JSON format: {"role": "...", "content": "..."}
+    fprintf(file, "{\"role\": \"user\", \"content\": \"Hello there!\"}\n");
+    fprintf(file, "{\"role\": \"assistant\", \"content\": \"Hi! How can I help you?\"}\n");  
+    fprintf(file, "{\"role\": \"user\", \"content\": \"What is the weather like?\"}\n");
     fclose(file);
     
     ConversationHistory history;
@@ -165,12 +165,12 @@ void test_load_conversation_history_from_file(void) {
 }
 
 void test_load_conversation_history_with_escaped_newlines(void) {
-    // Create a test conversation file with escaped newlines in serialized format
+    // Create a test conversation file with escaped newlines in JSON format
     FILE *file = fopen("CONVERSATION.md", "w");
     TEST_ASSERT_NOT_NULL(file);
     
-    fprintf(file, "user%cThis is line 1\\nThis is line 2%c%c\n", 0x1F, 0x1F, 0x1F);
-    fprintf(file, "assistant%cMultiline response:\\nLine A\\nLine B%c%c\n", 0x1F, 0x1F, 0x1F);
+    fprintf(file, "{\"role\": \"user\", \"content\": \"This is line 1\\nThis is line 2\"}\n");
+    fprintf(file, "{\"role\": \"assistant\", \"content\": \"Multiline response:\\nLine A\\nLine B\"}\n");
     fclose(file);
     
     ConversationHistory history;
@@ -189,12 +189,12 @@ void test_load_conversation_history_with_escaped_newlines(void) {
 }
 
 void test_load_conversation_history_with_empty_content(void) {
-    // Create a test conversation file with empty content in serialized format
+    // Create a test conversation file with empty content in JSON format
     FILE *file = fopen("CONVERSATION.md", "w");
     TEST_ASSERT_NOT_NULL(file);
     
-    fprintf(file, "user%c%c%c\n", 0x1F, 0x1F, 0x1F);
-    fprintf(file, "assistant%cResponse to empty message%c%c\n", 0x1F, 0x1F, 0x1F);
+    fprintf(file, "{\"role\": \"user\", \"content\": \"\"}\n");
+    fprintf(file, "{\"role\": \"assistant\", \"content\": \"Response to empty message\"}\n");
     fclose(file);
     
     ConversationHistory history;
@@ -342,14 +342,14 @@ void test_append_tool_message_with_null_parameters(void) {
 }
 
 void test_load_conversation_history_with_tool_messages(void) {
-    // Create a test conversation file with tool messages in serialized format
+    // Create a test conversation file with tool messages in JSON format
     FILE *file = fopen("CONVERSATION.md", "w");
     TEST_ASSERT_NOT_NULL(file);
     
-    fprintf(file, "user%cHello%c%c\n", 0x1F, 0x1F, 0x1F);
-    fprintf(file, "assistant%cI'll help you write a file%c%c\n", 0x1F, 0x1F, 0x1F);
-    fprintf(file, "tool%cFile written successfully%ccall_123%cwrite_file\n", 0x1F, 0x1F, 0x1F);
-    fprintf(file, "assistant%cFile has been created!%c%c\n", 0x1F, 0x1F, 0x1F);
+    fprintf(file, "{\"role\": \"user\", \"content\": \"Hello\"}\n");
+    fprintf(file, "{\"role\": \"assistant\", \"content\": \"I'll help you write a file\"}\n");
+    fprintf(file, "{\"role\": \"tool\", \"content\": \"File written successfully\", \"tool_call_id\": \"call_123\", \"tool_name\": \"write_file\"}\n");
+    fprintf(file, "{\"role\": \"assistant\", \"content\": \"File has been created!\"}\n");
     fclose(file);
     
     ConversationHistory history;

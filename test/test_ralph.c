@@ -174,6 +174,38 @@ void test_ralph_config_parameter_selection(void) {
     ralph_cleanup_session(&session);
 }
 
+void test_ralph_execute_tool_workflow_null_parameters(void) {
+    RalphSession session;
+    ToolCall tool_calls[1];
+    const char* headers[2] = {NULL, NULL};
+    
+    // Initialize valid tool call for testing
+    tool_calls[0].id = "test_id";
+    tool_calls[0].name = "shell_execute";
+    tool_calls[0].arguments = "{\"command\":\"echo test\"}";
+    
+    ralph_init_session(&session);
+    ralph_load_config(&session);
+    
+    // Test null session
+    int result1 = ralph_execute_tool_workflow(NULL, tool_calls, 1, "test", 100, headers);
+    TEST_ASSERT_EQUAL_INT(-1, result1);
+    
+    // Test null tool_calls
+    int result2 = ralph_execute_tool_workflow(&session, NULL, 1, "test", 100, headers);
+    TEST_ASSERT_EQUAL_INT(-1, result2);
+    
+    // Test zero call_count
+    int result3 = ralph_execute_tool_workflow(&session, tool_calls, 0, "test", 100, headers);
+    TEST_ASSERT_EQUAL_INT(-1, result3);
+    
+    // Test negative call_count
+    int result4 = ralph_execute_tool_workflow(&session, tool_calls, -1, "test", 100, headers);
+    TEST_ASSERT_EQUAL_INT(-1, result4);
+    
+    ralph_cleanup_session(&session);
+}
+
 int main(void) {
     UNITY_BEGIN();
     
@@ -190,6 +222,7 @@ int main(void) {
     RUN_TEST(test_ralph_load_config_basic);
     RUN_TEST(test_ralph_process_message_null_parameters);
     RUN_TEST(test_ralph_config_parameter_selection);
+    RUN_TEST(test_ralph_execute_tool_workflow_null_parameters);
     
     return UNITY_END();
 }

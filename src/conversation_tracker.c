@@ -5,7 +5,7 @@
 
 #define INITIAL_CAPACITY 10
 #define GROWTH_FACTOR 2
-#define FIELD_SEPARATOR "\x1F"  // ASCII Unit Separator (rarely used in text)
+// JSON Lines format - one JSON object per line
 
 void init_conversation_history(ConversationHistory *history) {
     if (history == NULL) {
@@ -34,8 +34,8 @@ static int resize_conversation_history(ConversationHistory *history) {
     return 0;
 }
 
-// Escape field separators and newlines in content for serialization
-static char* escape_content_for_serialization(const char *content) {
+// Escape JSON string content
+static char* escape_json_string(const char *content) {
     if (content == NULL) {
         return strdup("");
     }
@@ -49,64 +49,49 @@ static char* escape_content_for_serialization(const char *content) {
     
     size_t j = 0;
     for (size_t i = 0; i < len; i++) {
-        if (content[i] == '\x1F') {
-            // Escape field separator
-            escaped[j++] = '\\';
-            escaped[j++] = 'F';
-        } else if (content[i] == '\n') {
-            // Escape newlines
-            escaped[j++] = '\\';
-            escaped[j++] = 'n';
-        } else if (content[i] == '\\') {
-            // Escape backslashes
-            escaped[j++] = '\\';
-            escaped[j++] = '\\';
-        } else if (content[i] == '\r') {
-            // Skip carriage returns
-            continue;
-        } else {
-            escaped[j++] = content[i];
+        switch (content[i]) {
+            case '"':
+                escaped[j++] = '\\';
+                escaped[j++] = '"';
+                break;
+            case '\\':
+                escaped[j++] = '\\';
+                escaped[j++] = '\\';
+                break;
+            case '\n':
+                escaped[j++] = '\\';
+                escaped[j++] = 'n';
+                break;
+            case '\r':
+                escaped[j++] = '\\';
+                escaped[j++] = 'r';
+                break;
+            case '\t':
+                escaped[j++] = '\\';
+                escaped[j++] = 't';
+                break;
+            case '\b':
+                escaped[j++] = '\\';
+                escaped[j++] = 'b';
+                break;
+            case '\f':
+                escaped[j++] = '\\';
+                escaped[j++] = 'f';
+                break;
+            default:
+                if ((unsigned char)content[i] < 32) {
+                    // Escape other control characters
+                    sprintf(&escaped[j], "\\u%04x", (unsigned char)content[i]);
+                    j += 6;
+                } else {
+                    escaped[j++] = content[i];
+                }
+                break;
         }
     }
     escaped[j] = '\0';
     
     return escaped;
-}
-
-// Unescape content from serialization format
-static char* unescape_content_from_serialization(const char *content) {
-    if (content == NULL) {
-        return strdup("");
-    }
-    
-    size_t len = strlen(content);
-    char *unescaped = malloc(len + 1);
-    if (unescaped == NULL) {
-        return NULL;
-    }
-    
-    size_t j = 0;
-    for (size_t i = 0; i < len; i++) {
-        if (content[i] == '\\' && i + 1 < len) {
-            if (content[i + 1] == 'F') {
-                unescaped[j++] = '\x1F';
-                i++; // Skip the 'F'
-            } else if (content[i + 1] == 'n') {
-                unescaped[j++] = '\n';
-                i++; // Skip the 'n'
-            } else if (content[i + 1] == '\\') {
-                unescaped[j++] = '\\';
-                i++; // Skip the second backslash
-            } else {
-                unescaped[j++] = content[i];
-            }
-        } else {
-            unescaped[j++] = content[i];
-        }
-    }
-    unescaped[j] = '\0';
-    
-    return unescaped;
 }
 
 static int add_message_to_history(ConversationHistory *history, const char *role, const char *content, const char *tool_call_id, const char *tool_name) {
@@ -162,6 +147,81 @@ static int add_message_to_history(ConversationHistory *history, const char *role
     return 0;
 }
 
+// Simple JSON parser for conversation messages
+static char* extract_json_field(const char *json, const char *field_name) {
+    char search_pattern[256] = {0};
+    snprintf(search_pattern, sizeof(search_pattern), "\"%s\":", field_name);
+    
+    char *start = strstr(json, search_pattern);
+    if (start == NULL) {
+        return NULL;
+    }
+    
+    start += strlen(search_pattern);
+    
+    // Skip optional whitespace
+    while (*start == ' ' || *start == '\t') {
+        start++;
+    }
+    
+    // Expect opening quote
+    if (*start != '"') {
+        return NULL;
+    }
+    start++;
+    char *end = start;
+    
+    // Find the end of the string value, handling escaped quotes
+    while (*end != '\0') {
+        if (*end == '"' && (end == start || *(end - 1) != '\\')) {
+            break;
+        }
+        end++;
+    }
+    
+    if (*end != '"') {
+        return NULL;
+    }
+    
+    size_t len = end - start;
+    char *result = malloc(len + 1);
+    if (result == NULL) {
+        return NULL;
+    }
+    
+    strncpy(result, start, len);
+    result[len] = '\0';
+    
+    // Unescape JSON string
+    char *unescaped = malloc(len + 1);
+    if (unescaped == NULL) {
+        free(result);
+        return NULL;
+    }
+    
+    size_t j = 0;
+    for (size_t i = 0; i < len; i++) {
+        if (result[i] == '\\' && i + 1 < len) {
+            switch (result[i + 1]) {
+                case '"': unescaped[j++] = '"'; i++; break;
+                case '\\': unescaped[j++] = '\\'; i++; break;
+                case 'n': unescaped[j++] = '\n'; i++; break;
+                case 'r': unescaped[j++] = '\r'; i++; break;
+                case 't': unescaped[j++] = '\t'; i++; break;
+                case 'b': unescaped[j++] = '\b'; i++; break;
+                case 'f': unescaped[j++] = '\f'; i++; break;
+                default: unescaped[j++] = result[i]; break;
+            }
+        } else {
+            unescaped[j++] = result[i];
+        }
+    }
+    unescaped[j] = '\0';
+    
+    free(result);
+    return unescaped;
+}
+
 int load_conversation_history(ConversationHistory *history) {
     if (history == NULL) {
         return -1;
@@ -175,11 +235,11 @@ int load_conversation_history(ConversationHistory *history) {
         return 0;
     }
     
-    char line[8192];
-    memset(line, 0, sizeof(line)); // Initialize buffer
-    while (fgets(line, sizeof(line), file)) {
-        // Ensure the line is null-terminated
-        line[sizeof(line) - 1] = '\0';
+    while (1) {
+        char line[16384] = {0};
+        if (!fgets(line, sizeof(line), file)) {
+            break;
+        }
         // Remove trailing newline
         size_t len = strlen(line);
         if (len > 0 && line[len - 1] == '\n') {
@@ -191,81 +251,27 @@ int load_conversation_history(ConversationHistory *history) {
             continue;
         }
         
-        // Parse serialized format: role<SEP>content<SEP>tool_call_id<SEP>tool_name
-        // Manual parsing to handle empty fields correctly - make a copy to avoid corruption
-        char *line_copy = strdup(line);
-        if (line_copy == NULL) {
-            fclose(file);
-            return -1;
-        }
-        
-        char *role = NULL;
-        char *content = NULL;
-        char *tool_call_id = NULL;
-        char *tool_name = NULL;
-        
-        char *pos = line_copy;
-        char *start = pos;
-        int field_num = 0;
-        
-        while (*pos != '\0') {
-            if (*pos == '\x1F') {
-                *pos = '\0'; // Null-terminate current field
-                
-                switch (field_num) {
-                    case 0:
-                        role = start;
-                        break;
-                    case 1:
-                        content = start;
-                        break;  
-                    case 2:
-                        if (strlen(start) > 0) tool_call_id = start;
-                        break;
-                    case 3:
-                        if (strlen(start) > 0) tool_name = start;
-                        break;
-                }
-                
-                field_num++;
-                start = pos + 1;
-            }
-            pos++;
-        }
-        
-        // Handle the last field (no trailing separator)
-        if (field_num <= 3) {
-            switch (field_num) {
-                case 0:
-                    role = start;
-                    break;
-                case 1:
-                    content = start;
-                    break;
-                case 2:
-                    if (strlen(start) > 0) tool_call_id = start;
-                    break;
-                case 3:
-                    if (strlen(start) > 0) tool_name = start;
-                    break;
-            }
-        }
+        // Parse JSON line
+        char *role = extract_json_field(line, "role");
+        char *content = extract_json_field(line, "content");
+        char *tool_call_id = extract_json_field(line, "tool_call_id");
+        char *tool_name = extract_json_field(line, "tool_name");
         
         if (role != NULL && content != NULL) {
-            char *unescaped_content = unescape_content_from_serialization(content);
-            if (unescaped_content != NULL) {
-                if (add_message_to_history(history, role, unescaped_content, tool_call_id, tool_name) != 0) {
-                    free(unescaped_content);
-                    free(line_copy);
-                    fclose(file);
-                    return -1;
-                }
-                free(unescaped_content);
+            if (add_message_to_history(history, role, content, tool_call_id, tool_name) != 0) {
+                free(role);
+                free(content);
+                free(tool_call_id);
+                free(tool_name);
+                fclose(file);
+                return -1;
             }
         }
         
-        free(line_copy);
-        memset(line, 0, sizeof(line)); // Clear buffer for next iteration
+        free(role);
+        free(content);
+        free(tool_call_id);
+        free(tool_name);
     }
     
     fclose(file);
@@ -288,14 +294,14 @@ int append_conversation_message(ConversationHistory *history, const char *role, 
         return -1;
     }
     
-    char *escaped_content = escape_content_for_serialization(content);
+    char *escaped_content = escape_json_string(content);
     if (escaped_content == NULL) {
         fclose(file);
         return -1;
     }
     
-    // Format: role<SEP>content<SEP><SEP>\n (empty tool fields)
-    fprintf(file, "%s%s%s%s%s\n", role, FIELD_SEPARATOR, escaped_content, FIELD_SEPARATOR, FIELD_SEPARATOR);
+    // Write JSON line
+    fprintf(file, "{\"role\":\"%s\",\"content\":\"%s\"}\n", role, escaped_content);
     
     free(escaped_content);
     fclose(file);
@@ -318,14 +324,15 @@ int append_tool_message(ConversationHistory *history, const char *content, const
         return -1;
     }
     
-    char *escaped_content = escape_content_for_serialization(content);
+    char *escaped_content = escape_json_string(content);
     if (escaped_content == NULL) {
         fclose(file);
         return -1;
     }
     
-    // Format: tool<SEP>content<SEP>tool_call_id<SEP>tool_name\n
-    fprintf(file, "tool%s%s%s%s%s%s\n", FIELD_SEPARATOR, escaped_content, FIELD_SEPARATOR, tool_call_id, FIELD_SEPARATOR, tool_name);
+    // Write JSON line with tool metadata
+    fprintf(file, "{\"role\":\"tool\",\"content\":\"%s\",\"tool_call_id\":\"%s\",\"tool_name\":\"%s\"}\n", 
+            escaped_content, tool_call_id, tool_name);
     
     free(escaped_content);
     fclose(file);

@@ -37,4 +37,8 @@ char* ralph_build_json_payload(const char* model, const char* system_prompt,
                               const char* user_message, const char* max_tokens_param, 
                               int max_tokens, const ToolRegistry* tools);
 
+// Common tool calling workflow
+int ralph_execute_tool_workflow(RalphSession* session, ToolCall* tool_calls, int call_count, 
+                               const char* user_message, int max_tokens, const char** headers);
+
 #endif // RALPH_H

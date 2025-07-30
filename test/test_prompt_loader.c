@@ -36,7 +36,7 @@ void test_load_system_prompt_file_not_exists(void) {
     
     // Should contain the core system prompt
     TEST_ASSERT_TRUE(strstr(prompt_content, "You are an advanced AI programming agent") != NULL);
-    TEST_ASSERT_TRUE(strstr(prompt_content, "Following is the user's custom instructions:") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, "User customization:") != NULL);
     
     cleanup_system_prompt(&prompt_content);
 }
@@ -57,7 +57,7 @@ void test_load_system_prompt_simple_content(void) {
     
     // Should contain both core prompt and user prompt
     TEST_ASSERT_TRUE(strstr(prompt_content, "You are an advanced AI programming agent") != NULL);
-    TEST_ASSERT_TRUE(strstr(prompt_content, "Following is the user's custom instructions:") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, "User customization:") != NULL);
     TEST_ASSERT_TRUE(strstr(prompt_content, "You are a helpful assistant.") != NULL);
     
     cleanup_system_prompt(&prompt_content);
@@ -123,7 +123,7 @@ void test_load_system_prompt_empty_file(void) {
     
     // Should contain only the core system prompt (no user content)
     TEST_ASSERT_TRUE(strstr(prompt_content, "You are an advanced AI programming agent") != NULL);
-    TEST_ASSERT_TRUE(strstr(prompt_content, "Following is the user's custom instructions:") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, "User customization:") != NULL);
     
     cleanup_system_prompt(&prompt_content);
 }
@@ -144,7 +144,7 @@ void test_load_system_prompt_with_whitespace_only(void) {
     
     // Should contain only the core system prompt (whitespace trimmed away)
     TEST_ASSERT_TRUE(strstr(prompt_content, "You are an advanced AI programming agent") != NULL);
-    TEST_ASSERT_TRUE(strstr(prompt_content, "Following is the user's custom instructions:") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, "User customization:") != NULL);
     
     cleanup_system_prompt(&prompt_content);
 }
@@ -219,7 +219,7 @@ void test_core_system_prompt_always_present(void) {
     // Core prompt should always be present
     TEST_ASSERT_TRUE(strstr(prompt_content, "You are an advanced AI programming agent") != NULL);
     TEST_ASSERT_TRUE(strstr(prompt_content, "You have access to a number of tools") != NULL);
-    TEST_ASSERT_TRUE(strstr(prompt_content, "Following is the user's custom instructions:") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, "User customization:") != NULL);
     
     cleanup_system_prompt(&prompt_content);
 }
