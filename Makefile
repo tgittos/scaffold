@@ -9,9 +9,9 @@ TESTDIR = test
 DEPDIR = deps
 
 # Source files
-SOURCES = $(SRCDIR)/main.c $(SRCDIR)/http_client.c $(SRCDIR)/env_loader.c $(SRCDIR)/output_formatter.c
+SOURCES = $(SRCDIR)/main.c $(SRCDIR)/http_client.c $(SRCDIR)/env_loader.c $(SRCDIR)/output_formatter.c $(SRCDIR)/prompt_loader.c
 OBJECTS = $(SOURCES:.c=.o)
-HEADERS = $(SRCDIR)/http_client.h $(SRCDIR)/env_loader.h $(SRCDIR)/output_formatter.h
+HEADERS = $(SRCDIR)/http_client.h $(SRCDIR)/env_loader.h $(SRCDIR)/output_formatter.h $(SRCDIR)/prompt_loader.h
 
 # Test files
 TEST_MAIN_SOURCES = $(TESTDIR)/test_main.c $(TESTDIR)/unity/unity.c
@@ -30,7 +30,11 @@ TEST_OUTPUT_SOURCES = $(TESTDIR)/test_output_formatter.c $(SRCDIR)/output_format
 TEST_OUTPUT_OBJECTS = $(TEST_OUTPUT_SOURCES:.c=.o)
 TEST_OUTPUT_TARGET = $(TESTDIR)/test_output_formatter
 
-ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_HTTP_TARGET) $(TEST_ENV_TARGET) $(TEST_OUTPUT_TARGET)
+TEST_PROMPT_SOURCES = $(TESTDIR)/test_prompt_loader.c $(SRCDIR)/prompt_loader.c $(TESTDIR)/unity/unity.c
+TEST_PROMPT_OBJECTS = $(TEST_PROMPT_SOURCES:.c=.o)
+TEST_PROMPT_TARGET = $(TESTDIR)/test_prompt_loader
+
+ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_HTTP_TARGET) $(TEST_ENV_TARGET) $(TEST_OUTPUT_TARGET) $(TEST_PROMPT_TARGET)
 
 # Dependencies
 CURL_VERSION = 8.4.0
@@ -67,6 +71,7 @@ test: $(ALL_TEST_TARGETS)
 	./$(TEST_HTTP_TARGET)
 	./$(TEST_ENV_TARGET)
 	./$(TEST_OUTPUT_TARGET)
+	./$(TEST_PROMPT_TARGET)
 
 check: test
 
@@ -83,6 +88,9 @@ $(TEST_ENV_TARGET): $(TEST_ENV_OBJECTS)
 $(TEST_OUTPUT_TARGET): $(TEST_OUTPUT_OBJECTS)
 	$(CC) -o $@ $(TEST_OUTPUT_OBJECTS)
 
+$(TEST_PROMPT_TARGET): $(TEST_PROMPT_OBJECTS)
+	$(CC) -o $@ $(TEST_PROMPT_OBJECTS)
+
 # Compile test files
 $(TESTDIR)/%.o: $(TESTDIR)/%.c $(HEADERS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
 	$(CC) $(CFLAGS) $(TEST_INCLUDES) -c $< -o $@
@@ -95,6 +103,7 @@ check-valgrind: $(ALL_TEST_TARGETS)
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_MAIN_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_ENV_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_OUTPUT_TARGET).aarch64.elf
+	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_PROMPT_TARGET).aarch64.elf
 
 # Valgrind testing for all tests (including external libraries - may show false positives)
 check-valgrind-all: $(ALL_TEST_TARGETS)
@@ -102,6 +111,7 @@ check-valgrind-all: $(ALL_TEST_TARGETS)
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_HTTP_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_ENV_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_OUTPUT_TARGET).aarch64.elf
+	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_PROMPT_TARGET).aarch64.elf
 
 # Dependencies (redundant - libraries are built automatically when needed)
 

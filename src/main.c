@@ -5,6 +5,7 @@
 #include "http_client.h"
 #include "env_loader.h"
 #include "output_formatter.h"
+#include "prompt_loader.h"
 
 int main(int argc, char *argv[])
 {
@@ -22,6 +23,10 @@ int main(int argc, char *argv[])
     
     struct HTTPResponse response = {0};
     const char *user_message = argv[1];
+    char *system_prompt = NULL;
+    
+    // Try to load system prompt from PROMPT.md (optional)
+    load_system_prompt(&system_prompt);
     
     // Get API URL from environment variable, default to OpenAI
     const char *url = getenv("API_URL");
@@ -73,22 +78,45 @@ int main(int argc, char *argv[])
         max_tokens_param = "max_completion_tokens";
     }
     
-    // Build JSON payload with user's message
-    char post_data[2048];
-    int json_ret = snprintf(post_data, sizeof(post_data),
-        "{"
-        "\"model\": \"%s\","
-        "\"messages\": ["
+    // Build JSON payload with system prompt (if available) and user's message
+    char post_data[4096];  // Increased size to accommodate system prompt
+    int json_ret;
+    
+    if (system_prompt != NULL) {
+        // Include system prompt
+        json_ret = snprintf(post_data, sizeof(post_data),
             "{"
-                "\"role\": \"user\","
-                "\"content\": \"%s\""
-            "}"
-        "],"
-        "\"%s\": %d"
-        "}", model, user_message, max_tokens_param, max_tokens);
+            "\"model\": \"%s\","
+            "\"messages\": ["
+                "{"
+                    "\"role\": \"system\","
+                    "\"content\": \"%s\""
+                "},"
+                "{"
+                    "\"role\": \"user\","
+                    "\"content\": \"%s\""
+                "}"
+            "],"
+            "\"%s\": %d"
+            "}", model, system_prompt, user_message, max_tokens_param, max_tokens);
+    } else {
+        // No system prompt, just user message
+        json_ret = snprintf(post_data, sizeof(post_data),
+            "{"
+            "\"model\": \"%s\","
+            "\"messages\": ["
+                "{"
+                    "\"role\": \"user\","
+                    "\"content\": \"%s\""
+                "}"
+            "],"
+            "\"%s\": %d"
+            "}", model, user_message, max_tokens_param, max_tokens);
+    }
     
     if (json_ret < 0 || json_ret >= (int)sizeof(post_data)) {
         fprintf(stderr, "Error: Message too long\n");
+        cleanup_system_prompt(&system_prompt);
         return EXIT_FAILURE;
     }
     
@@ -101,6 +129,7 @@ int main(int argc, char *argv[])
         int ret = snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", api_key);
         if (ret < 0 || ret >= (int)sizeof(auth_header)) {
             fprintf(stderr, "Error: Authorization header too long\n");
+            cleanup_system_prompt(&system_prompt);
             return EXIT_FAILURE;
         }
         headers[0] = auth_header;
@@ -123,11 +152,13 @@ int main(int argc, char *argv[])
     } else {
         fprintf(stderr, "API request failed\n");
         cleanup_response(&response);
+        cleanup_system_prompt(&system_prompt);
         curl_global_cleanup();
         return EXIT_FAILURE;
     }
     
     cleanup_response(&response);
+    cleanup_system_prompt(&system_prompt);
     curl_global_cleanup();
     return EXIT_SUCCESS;
 }

@@ -54,23 +54,26 @@ void test_string_buffer_overflow_protection(void)
     TEST_ASSERT_EQUAL_CHAR('\0', buffer[sizeof(buffer) - 1]);
 }
 
-void test_json_payload_structure(void)
+void test_json_payload_structure_without_system_prompt(void)
 {
-    // Test that our JSON payload generation works with dynamic content
-    char post_data[2048];
+    // Test that our JSON payload generation works with dynamic content (no system prompt)
+    char post_data[4096];
     const char *test_message = "This is a test message";
+    const char *model = "gpt-3.5-turbo";
+    const char *max_tokens_param = "max_tokens";
+    int max_tokens = 100;
     
     int json_ret = snprintf(post_data, sizeof(post_data),
         "{"
-        "\"model\": \"gpt-3.5-turbo\","
+        "\"model\": \"%s\","
         "\"messages\": ["
             "{"
                 "\"role\": \"user\","
                 "\"content\": \"%s\""
             "}"
         "],"
-        "\"max_tokens\": 100"
-        "}", test_message);
+        "\"%s\": %d"
+        "}", model, test_message, max_tokens_param, max_tokens);
     
     // Test that JSON generation succeeded
     TEST_ASSERT_GREATER_THAN(0, json_ret);
@@ -81,6 +84,70 @@ void test_json_payload_structure(void)
     TEST_ASSERT_NOT_NULL(strstr(post_data, "\"messages\""));
     TEST_ASSERT_NOT_NULL(strstr(post_data, "\"max_tokens\""));
     TEST_ASSERT_NOT_NULL(strstr(post_data, test_message));
+    TEST_ASSERT_NOT_NULL(strstr(post_data, "\"role\": \"user\""));
+    // Should NOT contain system role
+    TEST_ASSERT_NULL(strstr(post_data, "\"role\": \"system\""));
+}
+
+void test_json_payload_structure_with_system_prompt(void)
+{
+    // Test that our JSON payload generation works with system prompt
+    char post_data[4096];
+    const char *test_message = "This is a test message";
+    const char *system_prompt = "You are a helpful assistant.";
+    const char *model = "gpt-3.5-turbo";
+    const char *max_tokens_param = "max_completion_tokens";
+    int max_tokens = 100;
+    
+    int json_ret = snprintf(post_data, sizeof(post_data),
+        "{"
+        "\"model\": \"%s\","
+        "\"messages\": ["
+            "{"
+                "\"role\": \"system\","
+                "\"content\": \"%s\""
+            "},"
+            "{"
+                "\"role\": \"user\","
+                "\"content\": \"%s\""
+            "}"
+        "],"
+        "\"%s\": %d"
+        "}", model, system_prompt, test_message, max_tokens_param, max_tokens);
+    
+    // Test that JSON generation succeeded
+    TEST_ASSERT_GREATER_THAN(0, json_ret);
+    TEST_ASSERT_LESS_THAN((int)sizeof(post_data), json_ret);
+    
+    // Basic validation that the JSON contains expected keys and our content
+    TEST_ASSERT_NOT_NULL(strstr(post_data, "\"model\""));
+    TEST_ASSERT_NOT_NULL(strstr(post_data, "\"messages\""));
+    TEST_ASSERT_NOT_NULL(strstr(post_data, "\"max_completion_tokens\""));
+    TEST_ASSERT_NOT_NULL(strstr(post_data, test_message));
+    TEST_ASSERT_NOT_NULL(strstr(post_data, system_prompt));
+    TEST_ASSERT_NOT_NULL(strstr(post_data, "\"role\": \"user\""));
+    TEST_ASSERT_NOT_NULL(strstr(post_data, "\"role\": \"system\""));
+}
+
+void test_max_tokens_param_selection(void)
+{
+    // Test the logic for selecting the correct max tokens parameter
+    const char *openai_url = "https://api.openai.com/v1/chat/completions";
+    const char *local_url = "http://localhost:1234/v1/chat/completions";
+    
+    // Test OpenAI URL detection
+    const char *openai_param = "max_tokens";
+    if (strstr(openai_url, "api.openai.com") != NULL) {
+        openai_param = "max_completion_tokens";
+    }
+    TEST_ASSERT_EQUAL_STRING("max_completion_tokens", openai_param);
+    
+    // Test local server URL
+    const char *local_param = "max_tokens";
+    if (strstr(local_url, "api.openai.com") != NULL) {
+        local_param = "max_completion_tokens";
+    }
+    TEST_ASSERT_EQUAL_STRING("max_tokens", local_param);
 }
 
 void test_json_payload_overflow_protection(void)
@@ -118,7 +185,9 @@ int main(void)
     RUN_TEST(test_environment_setup);
     RUN_TEST(test_string_operations);
     RUN_TEST(test_string_buffer_overflow_protection);
-    RUN_TEST(test_json_payload_structure);
+    RUN_TEST(test_json_payload_structure_without_system_prompt);
+    RUN_TEST(test_json_payload_structure_with_system_prompt);
+    RUN_TEST(test_max_tokens_param_selection);
     RUN_TEST(test_json_payload_overflow_protection);
     
     return UNITY_END();
