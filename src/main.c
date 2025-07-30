@@ -4,20 +4,36 @@
 #include <curl/curl.h>
 #include "http_client.h"
 
-int main(void)
+int main(int argc, char *argv[])
 {
+    if (argc != 2) {
+        fprintf(stderr, "Usage: %s \"<message>\"\n", argv[0]);
+        fprintf(stderr, "Example: %s \"Hello, how are you?\"\n", argv[0]);
+        return EXIT_FAILURE;
+    }
+    
     struct HTTPResponse response = {0};
     const char *url = "https://api.openai.com/v1/chat/completions";
-    const char *post_data = "{"
+    const char *user_message = argv[1];
+    
+    // Build JSON payload with user's message
+    char post_data[2048];
+    int json_ret = snprintf(post_data, sizeof(post_data),
+        "{"
         "\"model\": \"gpt-3.5-turbo\","
         "\"messages\": ["
             "{"
                 "\"role\": \"user\","
-                "\"content\": \"Hello from C! Please respond with a brief greeting.\""
+                "\"content\": \"%s\""
             "}"
         "],"
         "\"max_tokens\": 100"
-    "}";
+        "}", user_message);
+    
+    if (json_ret < 0 || json_ret >= (int)sizeof(post_data)) {
+        fprintf(stderr, "Error: Message too long\n");
+        return EXIT_FAILURE;
+    }
     
     const char *api_key = getenv("OPENAI_API_KEY");
     if (api_key == NULL) {

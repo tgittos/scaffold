@@ -52,22 +52,61 @@ void test_string_buffer_overflow_protection(void)
 
 void test_json_payload_structure(void)
 {
-    // Test that our JSON payload is well-formed
-    const char *expected_json = "{"
+    // Test that our JSON payload generation works with dynamic content
+    char post_data[2048];
+    const char *test_message = "This is a test message";
+    
+    int json_ret = snprintf(post_data, sizeof(post_data),
+        "{"
         "\"model\": \"gpt-3.5-turbo\","
         "\"messages\": ["
             "{"
                 "\"role\": \"user\","
-                "\"content\": \"Hello from C! Please respond with a brief greeting.\""
+                "\"content\": \"%s\""
             "}"
         "],"
         "\"max_tokens\": 100"
-    "}";
+        "}", test_message);
     
-    // Basic validation that the JSON contains expected keys
-    TEST_ASSERT_NOT_NULL(strstr(expected_json, "\"model\""));
-    TEST_ASSERT_NOT_NULL(strstr(expected_json, "\"messages\""));
-    TEST_ASSERT_NOT_NULL(strstr(expected_json, "\"max_tokens\""));
+    // Test that JSON generation succeeded
+    TEST_ASSERT_GREATER_THAN(0, json_ret);
+    TEST_ASSERT_LESS_THAN((int)sizeof(post_data), json_ret);
+    
+    // Basic validation that the JSON contains expected keys and our message
+    TEST_ASSERT_NOT_NULL(strstr(post_data, "\"model\""));
+    TEST_ASSERT_NOT_NULL(strstr(post_data, "\"messages\""));
+    TEST_ASSERT_NOT_NULL(strstr(post_data, "\"max_tokens\""));
+    TEST_ASSERT_NOT_NULL(strstr(post_data, test_message));
+}
+
+void test_json_payload_overflow_protection(void)
+{
+    // Test that very long messages are handled appropriately
+    char post_data[128]; // Small buffer to test overflow
+    char long_message[100]; // Message that should cause overflow when formatted
+    memset(long_message, 'A', sizeof(long_message) - 1);
+    long_message[sizeof(long_message) - 1] = '\0';
+    
+    // Use pragma to suppress format-truncation warning for this intentional test
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wformat-truncation"
+    int json_ret = snprintf(post_data, sizeof(post_data),
+        "{"
+        "\"model\": \"gpt-3.5-turbo\","
+        "\"messages\": ["
+            "{"
+                "\"role\": \"user\","
+                "\"content\": \"%s\""
+            "}"
+        "],"
+        "\"max_tokens\": 100"
+        "}", long_message);
+    #pragma GCC diagnostic pop
+    
+    // snprintf should return a value >= buffer size indicating truncation would occur
+    TEST_ASSERT_GREATER_OR_EQUAL((int)sizeof(post_data), json_ret);
+    // Buffer should still be null-terminated
+    TEST_ASSERT_EQUAL_CHAR('\0', post_data[sizeof(post_data) - 1]);
 }
 
 int main(void)
@@ -78,6 +117,7 @@ int main(void)
     RUN_TEST(test_string_operations);
     RUN_TEST(test_string_buffer_overflow_protection);
     RUN_TEST(test_json_payload_structure);
+    RUN_TEST(test_json_payload_overflow_protection);
     
     return UNITY_END();
 }
