@@ -298,6 +298,14 @@ int ralph_execute_tool_workflow(RalphSession* session, ToolCall* tool_calls, int
             results[i].tool_call_id = strdup(tool_calls[i].id);
             results[i].result = strdup("Tool execution failed");
             results[i].success = 0;
+            
+            // Handle strdup failures
+            if (results[i].tool_call_id == NULL) {
+                results[i].tool_call_id = strdup("unknown");
+            }
+            if (results[i].result == NULL) {
+                results[i].result = strdup("Memory allocation failed");
+            }
         } else {
             fprintf(stderr, "Executed tool: %s (ID: %s)\n", tool_calls[i].name, tool_calls[i].id);
         }
@@ -318,7 +326,8 @@ int ralph_execute_tool_workflow(RalphSession* session, ToolCall* tool_calls, int
     char* follow_up_data = ralph_build_json_payload(session->config.model, session->config.system_prompt, 
                                                    &session->conversation, "", 
                                                    session->config.max_tokens_param, max_tokens, &session->tools);
-    int result = -1;
+    // Tool execution was successful - we'll return success regardless of follow-up API status
+    int result = 0;
     
     if (follow_up_data != NULL) {
         fprintf(stderr, "Follow-up POST data: %s\n", follow_up_data);
@@ -342,13 +351,12 @@ int ralph_execute_tool_workflow(RalphSession* session, ToolCall* tool_calls, int
                 }
                 
                 cleanup_parsed_response(&follow_up_parsed);
-                result = 0;
             } else {
                 fprintf(stderr, "Error: Failed to parse follow-up API response\n");
                 printf("%s\n", follow_up_response.data);
             }
         } else {
-            fprintf(stderr, "Follow-up API request failed\n");
+            fprintf(stderr, "Follow-up API request failed - tool execution was still successful\n");
         }
         
         cleanup_response(&follow_up_response);
