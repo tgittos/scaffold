@@ -1,4 +1,5 @@
 #include "tools_system.h"
+#include "shell_tool.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -104,7 +105,7 @@ char* generate_tools_json(const ToolRegistry *registry) {
 
 // Simple JSON parser for tool calls (basic implementation)
 static char* extract_json_string(const char *json, const char *key) {
-    char search_key[256];
+    char search_key[256] = {0};
     snprintf(search_key, sizeof(search_key), "\"%s\":", key);
     
     const char *start = strstr(json, search_key);
@@ -141,7 +142,7 @@ static char* extract_json_string(const char *json, const char *key) {
         return NULL;
     }
     
-    strncpy(result, start, len);
+    memcpy(result, start, len);
     result[len] = '\0';
     
     return result;
@@ -149,7 +150,7 @@ static char* extract_json_string(const char *json, const char *key) {
 
 // Extract JSON object as string
 static char* extract_json_object(const char *json, const char *key) {
-    char search_key[256];
+    char search_key[256] = {0};
     snprintf(search_key, sizeof(search_key), "\"%s\":", key);
     
     const char *start = strstr(json, search_key);
@@ -191,7 +192,7 @@ static char* extract_json_object(const char *json, const char *key) {
         return NULL;
     }
     
-    strncpy(result, start, len);
+    memcpy(result, start, len);
     result[len] = '\0';
     
     return result;
@@ -232,7 +233,7 @@ int parse_tool_calls(const char *json_response, ToolCall **tool_calls, int *call
             return -1;
         }
         
-        strncpy(call_json, json_start, json_len);
+        memcpy(call_json, json_start, json_len);
         call_json[json_len] = '\0';
         
         // Parse the tool call JSON
@@ -360,7 +361,7 @@ int parse_tool_calls(const char *json_response, ToolCall **tool_calls, int *call
             return -1;
         }
         
-        strncpy(call_json, call_start, call_len);
+        memcpy(call_json, call_start, call_len);
         call_json[call_len] = '\0';
         
         // Parse the tool call
@@ -429,6 +430,11 @@ int execute_tool_call(const ToolRegistry *registry, const ToolCall *tool_call, T
     // Look for the tool in the registry
     for (int i = 0; i < registry->function_count; i++) {
         if (strcmp(registry->functions[i].name, tool_call->name) == 0) {
+            // Handle specific tool implementations
+            if (strcmp(tool_call->name, "shell_execute") == 0) {
+                return execute_shell_tool_call(tool_call, result);
+            }
+            
             // Tool found in registry but no implementation provided
             // Users should extend this function to implement their own tool execution logic
             result->result = strdup("Error: Tool execution not implemented");
