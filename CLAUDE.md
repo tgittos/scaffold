@@ -21,6 +21,16 @@ Every component will be comprehensively tested using automated testing.
 All C code is checked with Valgrind to ensure memory safety and correctness.
 A feature or component is not considered complete unless all of it's composite components are compilable and fully tested and checked with Valgrind.
 
+Do not write example code to demo a feature you've just implemented. Trust the testing and Valgrind to ensure your work is correct.
+The main application can be used to test directly against when verifying work.
+
+## Development Behavior
+
+NEVER write stubs, placeholder code or anything that bypasses actually solving the problem at hand.
+If you determine the problem is too large, complex or time consuming to complete, you MUST break it down into smaller tasks.
+You MUST complete a given programming task fully - this means ALL requested functionality is implemented, tested and checked with Valgrind.
+NEVER ignore segmentation faults. NEVER leave the codebase in a broken state.
+
 ## Cosmopolitan C
 
 You are writing highly portable C code to be compiled by the Cosmopolitan C compiler:
@@ -88,3 +98,124 @@ Before any commit, you MUST:
 4. If any .o, .elf, .dbg files or build directories appear staged, STOP and fix it
 
 This is non-negotiable. Build artifact commits are completely unacceptable.
+
+# Ralph Project Structure and Build Analysis
+
+## Codebase Architecture
+
+Ralph is a modular HTTP client for AI language models with the following architecture:
+
+### Core Components
+- **`src/main.c`**: Application entry point with argument parsing, token calculation, and tool integration
+- **`src/http_client.c/.h`**: HTTP request handling using libcurl with proper error handling
+- **`src/env_loader.c/.h`**: Environment variable and .env file processing for configuration
+- **`src/output_formatter.c/.h`**: JSON parsing, response formatting, and ANSI color output
+- **`src/prompt_loader.c/.h`**: System prompt loading from PROMPT.md files
+- **`src/conversation_tracker.c/.h`**: Persistent conversation history in CONVERSATION.md
+- **`src/tools_system.c/.h`**: Tool calling system with OpenAI API compatibility
+- **`src/shell_tool.c/.h`**: Built-in shell execution tool with security validation
+
+### Test Suite Structure
+- **Comprehensive testing**: 34+ unit tests across all components
+- **Unity framework**: Located in `test/unity/` for C unit testing
+- **Individual test files**: `test/test_*.c` for each component
+- **Memory safety**: All tests run under Valgrind with zero tolerance for memory issues
+
+### Dependencies
+- **libcurl 8.4.0**: HTTP client functionality with SSL support
+- **mbedTLS 3.5.1**: Cryptographic library for HTTPS connections
+- **Unity**: Lightweight C unit testing framework
+
+## Build System Analysis
+
+### Makefile Structure
+The project uses a sophisticated Makefile with the following capabilities:
+
+#### Targets Available
+- `make` or `make all`: Build main executable
+- `make test`: Build and run complete test suite
+- `make check`: Alias for test
+- `make check-valgrind`: Run tests under Valgrind memory analysis
+- `make check-valgrind-all`: Include HTTP tests (may have library false positives)
+- `make clean`: Remove build artifacts
+- `make distclean`: Remove artifacts and dependencies  
+- `make realclean`: Complete clean slate
+
+#### Dependency Management
+- **Automatic dependency building**: mbedTLS and libcurl built automatically
+- **Cached downloads**: Dependencies downloaded once and reused
+- **Static linking**: All dependencies statically linked for portability
+- **Cosmopolitan integration**: Configured for cosmocc compiler
+
+#### Compiler Configuration
+```makefile
+CC = cosmocc
+CFLAGS = -Wall -Wextra -Werror -O2 -std=c11
+```
+
+#### Output Formats
+Cosmopolitan creates multiple executable formats:
+- `ralph`: Main executable (portable)
+- `ralph.aarch64.elf`: ARM64 native executable
+- `ralph.com.dbg`: Debug symbols
+
+### Memory Safety Protocol
+
+#### Valgrind Integration
+- **Mandatory memory checks**: All components must pass Valgrind analysis
+- **Zero tolerance**: No memory leaks, uninitialized values, or buffer overruns allowed
+- **Automated testing**: `make check-valgrind` runs comprehensive memory analysis
+- **Selective testing**: HTTP tests excluded from default Valgrind due to library noise
+
+#### Common Memory Issues Patterns Found
+1. **Uninitialized string buffers**: Always initialize with `= {0}`
+2. **Unsafe strncpy() usage**: Use `memcpy()` for known-length copies
+3. **JSON parsing vulnerabilities**: Proper buffer initialization critical
+4. **Dynamic memory management**: Consistent malloc/free patterns with error checking
+
+### Testing Standards
+
+#### Test Coverage Requirements
+Each component must have:
+- **Null parameter handling**: Test all functions with NULL inputs
+- **Error condition testing**: Test failure paths and edge cases  
+- **Memory safety verification**: All tests run under Valgrind
+- **Integration testing**: Cross-component functionality verification
+
+#### Test Execution Pattern
+```bash
+./test/test_main        # Basic functionality
+./test/test_http_client # HTTP operations (requires network)
+./test/test_env_loader  # Configuration loading
+./test/test_output_formatter # Response parsing/formatting
+./test/test_prompt_loader    # File loading operations
+./test/test_conversation_tracker # Persistence functionality
+./test/test_tools_system     # Tool calling system
+./test/test_shell_tool      # Shell command execution
+```
+
+### Build Dependencies Resolution
+
+The Makefile handles complex dependency chains:
+1. **mbedTLS builds first**: Required for SSL/TLS support
+2. **libcurl depends on mbedTLS**: Configured with `--with-mbedtls`
+3. **Application links both**: Static linking for portability
+4. **Test executables**: Each test links only required components
+
+### Development Workflow
+
+#### Standard Development Cycle
+1. **Make changes to source**: Edit .c/.h files
+2. **Run tests**: `make test` to verify functionality
+3. **Memory check**: `make check-valgrind` to verify safety
+4. **Commit selectively**: Only commit source files, never build artifacts
+5. **Build verification**: Ensure `make clean && make test` passes
+
+#### Memory Safety Workflow
+1. **Develop feature**: Write code with defensive patterns
+2. **Unit test**: Create comprehensive tests in `test/test_*.c`
+3. **Valgrind verification**: Must pass `make check-valgrind` with 0 errors
+4. **Integration test**: Verify with main application
+5. **Commit**: Memory-safe code only
+
+This architecture ensures robust, portable, and memory-safe C code suitable for production use across multiple platforms via Cosmopolitan Libc.

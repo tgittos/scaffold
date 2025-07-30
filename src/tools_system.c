@@ -1,5 +1,6 @@
 #include "tools_system.h"
 #include "shell_tool.h"
+#include "file_tools.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -435,6 +436,26 @@ int execute_tool_call(const ToolRegistry *registry, const ToolCall *tool_call, T
                 return execute_shell_tool_call(tool_call, result);
             }
             
+            // Handle file tools
+            if (strcmp(tool_call->name, "file_read") == 0) {
+                return execute_file_read_tool_call(tool_call, result);
+            }
+            if (strcmp(tool_call->name, "file_write") == 0) {
+                return execute_file_write_tool_call(tool_call, result);
+            }
+            if (strcmp(tool_call->name, "file_append") == 0) {
+                return execute_file_append_tool_call(tool_call, result);
+            }
+            if (strcmp(tool_call->name, "file_list") == 0) {
+                return execute_file_list_tool_call(tool_call, result);
+            }
+            if (strcmp(tool_call->name, "file_search") == 0) {
+                return execute_file_search_tool_call(tool_call, result);
+            }
+            if (strcmp(tool_call->name, "file_info") == 0) {
+                return execute_file_info_tool_call(tool_call, result);
+            }
+            
             // Tool found in registry but no implementation provided
             // Users should extend this function to implement their own tool execution logic
             result->result = strdup("Error: Tool execution not implemented");
@@ -540,9 +561,14 @@ int register_builtin_tools(ToolRegistry *registry) {
         return -1;
     }
     
+    // Register file manipulation tools
+    if (register_file_tools(registry) != 0) {
+        return -1;
+    }
+    
     // Future built-in tools would be registered here:
-    // if (register_file_tool(registry) != 0) return -1;
     // if (register_git_tool(registry) != 0) return -1;
+    // if (register_network_tool(registry) != 0) return -1;
     
     return 0;
 }

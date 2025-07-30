@@ -266,7 +266,10 @@ int main(int argc, char *argv[])
             cleanup_system_prompt(&system_prompt);
             cleanup_conversation_history(&conversation);
             cleanup_tool_registry(&tools);
-            free(post_data);
+            if (post_data != NULL) {
+                free(post_data);
+                post_data = NULL;
+            }
             return EXIT_FAILURE;
         }
         headers[0] = auth_header;
@@ -287,7 +290,10 @@ int main(int argc, char *argv[])
             cleanup_system_prompt(&system_prompt);
             cleanup_conversation_history(&conversation);
             cleanup_tool_registry(&tools);
-            free(post_data);
+            if (post_data != NULL) {
+                free(post_data);
+                post_data = NULL;
+            }
             curl_global_cleanup();
             return EXIT_FAILURE;
         }
@@ -384,7 +390,6 @@ int main(int argc, char *argv[])
                 }
                 
                 cleanup_tool_results(results, raw_call_count);
-                free(results);
             }
             
             cleanup_tool_calls(raw_tool_calls, raw_call_count);
@@ -415,7 +420,6 @@ int main(int argc, char *argv[])
                 fprintf(stderr, "Tool execution completed.\n");
                 
                 cleanup_tool_results(results, call_count);
-                free(results);
             }
             
             cleanup_tool_calls(tool_calls, call_count);
@@ -448,7 +452,10 @@ int main(int argc, char *argv[])
         cleanup_system_prompt(&system_prompt);
         cleanup_conversation_history(&conversation);
         cleanup_tool_registry(&tools);
-        free(post_data);
+        if (post_data != NULL) {
+            free(post_data);
+            post_data = NULL;
+        }
         curl_global_cleanup();
         return EXIT_FAILURE;
     }
@@ -457,7 +464,10 @@ int main(int argc, char *argv[])
     cleanup_system_prompt(&system_prompt);
     cleanup_conversation_history(&conversation);
     cleanup_tool_registry(&tools);
-    free(post_data);
+    if (post_data != NULL) {
+        free(post_data);
+        post_data = NULL;
+    }
     curl_global_cleanup();
     return EXIT_SUCCESS;
 }

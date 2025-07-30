@@ -9,9 +9,9 @@ TESTDIR = test
 DEPDIR = deps
 
 # Source files
-SOURCES = $(SRCDIR)/main.c $(SRCDIR)/http_client.c $(SRCDIR)/env_loader.c $(SRCDIR)/output_formatter.c $(SRCDIR)/prompt_loader.c $(SRCDIR)/conversation_tracker.c $(SRCDIR)/tools_system.c
+SOURCES = $(SRCDIR)/main.c $(SRCDIR)/http_client.c $(SRCDIR)/env_loader.c $(SRCDIR)/output_formatter.c $(SRCDIR)/prompt_loader.c $(SRCDIR)/conversation_tracker.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c
 OBJECTS = $(SOURCES:.c=.o)
-HEADERS = $(SRCDIR)/http_client.h $(SRCDIR)/env_loader.h $(SRCDIR)/output_formatter.h $(SRCDIR)/prompt_loader.h $(SRCDIR)/conversation_tracker.h $(SRCDIR)/tools_system.h
+HEADERS = $(SRCDIR)/http_client.h $(SRCDIR)/env_loader.h $(SRCDIR)/output_formatter.h $(SRCDIR)/prompt_loader.h $(SRCDIR)/conversation_tracker.h $(SRCDIR)/tools_system.h $(SRCDIR)/shell_tool.h $(SRCDIR)/file_tools.h
 
 # Test files
 TEST_MAIN_SOURCES = $(TESTDIR)/test_main.c $(TESTDIR)/unity/unity.c
@@ -38,11 +38,19 @@ TEST_CONVERSATION_SOURCES = $(TESTDIR)/test_conversation_tracker.c $(SRCDIR)/con
 TEST_CONVERSATION_OBJECTS = $(TEST_CONVERSATION_SOURCES:.c=.o)
 TEST_CONVERSATION_TARGET = $(TESTDIR)/test_conversation_tracker
 
-TEST_TOOLS_SOURCES = $(TESTDIR)/test_tools_system.c $(SRCDIR)/tools_system.c $(TESTDIR)/unity/unity.c
+TEST_TOOLS_SOURCES = $(TESTDIR)/test_tools_system.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(TESTDIR)/unity/unity.c
 TEST_TOOLS_OBJECTS = $(TEST_TOOLS_SOURCES:.c=.o)
 TEST_TOOLS_TARGET = $(TESTDIR)/test_tools_system
 
-ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_HTTP_TARGET) $(TEST_ENV_TARGET) $(TEST_OUTPUT_TARGET) $(TEST_PROMPT_TARGET) $(TEST_CONVERSATION_TARGET) $(TEST_TOOLS_TARGET)
+TEST_SHELL_SOURCES = $(TESTDIR)/test_shell_tool.c $(SRCDIR)/shell_tool.c $(SRCDIR)/tools_system.c $(SRCDIR)/file_tools.c $(TESTDIR)/unity/unity.c
+TEST_SHELL_OBJECTS = $(TEST_SHELL_SOURCES:.c=.o)
+TEST_SHELL_TARGET = $(TESTDIR)/test_shell_tool
+
+TEST_FILE_SOURCES = $(TESTDIR)/test_file_tools.c $(SRCDIR)/file_tools.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(TESTDIR)/unity/unity.c
+TEST_FILE_OBJECTS = $(TEST_FILE_SOURCES:.c=.o)
+TEST_FILE_TARGET = $(TESTDIR)/test_file_tools
+
+ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_HTTP_TARGET) $(TEST_ENV_TARGET) $(TEST_OUTPUT_TARGET) $(TEST_PROMPT_TARGET) $(TEST_CONVERSATION_TARGET) $(TEST_TOOLS_TARGET) $(TEST_SHELL_TARGET) $(TEST_FILE_TARGET)
 
 # Dependencies
 CURL_VERSION = 8.4.0
@@ -82,6 +90,8 @@ test: $(ALL_TEST_TARGETS)
 	./$(TEST_PROMPT_TARGET)
 	./$(TEST_CONVERSATION_TARGET)
 	./$(TEST_TOOLS_TARGET)
+	./$(TEST_SHELL_TARGET)
+	./$(TEST_FILE_TARGET)
 
 check: test
 
@@ -107,6 +117,12 @@ $(TEST_CONVERSATION_TARGET): $(TEST_CONVERSATION_OBJECTS)
 $(TEST_TOOLS_TARGET): $(TEST_TOOLS_OBJECTS)
 	$(CC) -o $@ $(TEST_TOOLS_OBJECTS)
 
+$(TEST_SHELL_TARGET): $(TEST_SHELL_OBJECTS)
+	$(CC) -o $@ $(TEST_SHELL_OBJECTS)
+
+$(TEST_FILE_TARGET): $(TEST_FILE_OBJECTS)
+	$(CC) -o $@ $(TEST_FILE_OBJECTS)
+
 # Compile test files
 $(TESTDIR)/%.o: $(TESTDIR)/%.c $(HEADERS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
 	$(CC) $(CFLAGS) $(TEST_INCLUDES) -c $< -o $@
@@ -122,6 +138,8 @@ check-valgrind: $(ALL_TEST_TARGETS)
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_PROMPT_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_CONVERSATION_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_TOOLS_TARGET).aarch64.elf
+	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_SHELL_TARGET).aarch64.elf
+	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_FILE_TARGET).aarch64.elf
 
 # Valgrind testing for all tests (including external libraries - may show false positives)
 check-valgrind-all: $(ALL_TEST_TARGETS)
@@ -132,6 +150,8 @@ check-valgrind-all: $(ALL_TEST_TARGETS)
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_PROMPT_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_CONVERSATION_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_TOOLS_TARGET).aarch64.elf
+	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_SHELL_TARGET).aarch64.elf
+	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_FILE_TARGET).aarch64.elf
 
 # Dependencies (redundant - libraries are built automatically when needed)
 
