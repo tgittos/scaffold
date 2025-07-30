@@ -93,13 +93,36 @@ When committing code:
    - Test source files (test_*.c)
    - Documentation and configuration files
 
+## CRITICAL: NEVER DELETE INFRASTRUCTURE FILES
+
+**ABSOLUTELY FORBIDDEN to delete or remove:**
+- `.devcontainer/` directory and all contents
+- `.github/` directory and all contents  
+- `Dockerfile` or any containerization files
+- `Makefile` or build system files
+- `.gitignore` or other git configuration
+- Any configuration files for development environment
+- Any CI/CD pipeline files
+- Any infrastructure or tooling setup files
+
+**If you accidentally stage deletion of infrastructure files:**
+1. IMMEDIATELY run `git reset HEAD <file>` to unstage
+2. Run `git checkout -- <file>` to restore the file
+3. NEVER commit deletions of critical infrastructure
+
+**Before any commit, VERIFY:**
+1. Check `git status` for any deleted files (marked with 'D')
+2. If ANY infrastructure files are marked for deletion, STOP and restore them
+3. Only proceed with commit after confirming no critical files are being removed
+
 Before any commit, you MUST:
 1. Create appropriate .gitignore if it doesn't exist
 2. Use `git add <specific-files>` for only source files
 3. Verify with `git status` that no build artifacts are staged
-4. If any .o, .elf, .dbg files or build directories appear staged, STOP and fix it
+4. **VERIFY no infrastructure files are being deleted**
+5. If any .o, .elf, .dbg files or build directories appear staged, STOP and fix it
 
-This is non-negotiable. Build artifact commits are completely unacceptable.
+This is non-negotiable. Build artifact commits and infrastructure deletions are completely unacceptable.
 
 # Ralph Project Structure and Build Analysis
 
