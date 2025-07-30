@@ -30,8 +30,15 @@ void test_load_system_prompt_file_not_exists(void) {
     
     int result = load_system_prompt(&prompt_content);
     
-    TEST_ASSERT_EQUAL(-1, result);
-    TEST_ASSERT_NULL(prompt_content);
+    // Should succeed with just the core system prompt
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_NOT_NULL(prompt_content);
+    
+    // Should contain the core system prompt
+    TEST_ASSERT_TRUE(strstr(prompt_content, "You are an advanced AI programming agent") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, "Following is the user's custom instructions:") != NULL);
+    
+    cleanup_system_prompt(&prompt_content);
 }
 
 void test_load_system_prompt_simple_content(void) {
@@ -47,7 +54,11 @@ void test_load_system_prompt_simple_content(void) {
     
     TEST_ASSERT_EQUAL(0, result);
     TEST_ASSERT_NOT_NULL(prompt_content);
-    TEST_ASSERT_EQUAL_STRING("You are a helpful assistant.", prompt_content);
+    
+    // Should contain both core prompt and user prompt
+    TEST_ASSERT_TRUE(strstr(prompt_content, "You are an advanced AI programming agent") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, "Following is the user's custom instructions:") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, "You are a helpful assistant.") != NULL);
     
     cleanup_system_prompt(&prompt_content);
     TEST_ASSERT_NULL(prompt_content);
@@ -66,7 +77,12 @@ void test_load_system_prompt_with_trailing_newlines(void) {
     
     TEST_ASSERT_EQUAL(0, result);
     TEST_ASSERT_NOT_NULL(prompt_content);
-    TEST_ASSERT_EQUAL_STRING("You are a helpful assistant.", prompt_content);
+    
+    // Should contain core prompt and trimmed user prompt
+    TEST_ASSERT_TRUE(strstr(prompt_content, "You are an advanced AI programming agent") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, "You are a helpful assistant.") != NULL);
+    // Should not contain the trailing newlines
+    TEST_ASSERT_TRUE(strstr(prompt_content, "assistant.\n\n") == NULL);
     
     cleanup_system_prompt(&prompt_content);
 }
@@ -84,7 +100,10 @@ void test_load_system_prompt_multiline_content(void) {
     
     TEST_ASSERT_EQUAL(0, result);
     TEST_ASSERT_NOT_NULL(prompt_content);
-    TEST_ASSERT_EQUAL_STRING("You are a helpful assistant.\nAlways be polite and informative.\nRespond concisely.", prompt_content);
+    
+    // Should contain core prompt and full multiline user prompt
+    TEST_ASSERT_TRUE(strstr(prompt_content, "You are an advanced AI programming agent") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, "You are a helpful assistant.\nAlways be polite and informative.\nRespond concisely.") != NULL);
     
     cleanup_system_prompt(&prompt_content);
 }
@@ -101,7 +120,10 @@ void test_load_system_prompt_empty_file(void) {
     
     TEST_ASSERT_EQUAL(0, result);
     TEST_ASSERT_NOT_NULL(prompt_content);
-    TEST_ASSERT_EQUAL_STRING("", prompt_content);
+    
+    // Should contain only the core system prompt (no user content)
+    TEST_ASSERT_TRUE(strstr(prompt_content, "You are an advanced AI programming agent") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, "Following is the user's custom instructions:") != NULL);
     
     cleanup_system_prompt(&prompt_content);
 }
@@ -119,7 +141,10 @@ void test_load_system_prompt_with_whitespace_only(void) {
     
     TEST_ASSERT_EQUAL(0, result);
     TEST_ASSERT_NOT_NULL(prompt_content);
-    TEST_ASSERT_EQUAL_STRING("", prompt_content);
+    
+    // Should contain only the core system prompt (whitespace trimmed away)
+    TEST_ASSERT_TRUE(strstr(prompt_content, "You are an advanced AI programming agent") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, "Following is the user's custom instructions:") != NULL);
     
     cleanup_system_prompt(&prompt_content);
 }
@@ -172,7 +197,29 @@ void test_load_system_prompt_large_content(void) {
     
     TEST_ASSERT_EQUAL(0, result);
     TEST_ASSERT_NOT_NULL(prompt_content);
+    
+    // Should contain core prompt plus the large user content
+    TEST_ASSERT_TRUE(strstr(prompt_content, "You are an advanced AI programming agent") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, "Line 0: You are a helpful assistant") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, "Line 99: You are a helpful assistant") != NULL);
     TEST_ASSERT_TRUE(strlen(prompt_content) > 1000); // Should be a large string
+    
+    cleanup_system_prompt(&prompt_content);
+}
+
+void test_core_system_prompt_always_present(void) {
+    char *prompt_content = NULL;
+    
+    // Test with no file
+    unlink("PROMPT.md");
+    int result = load_system_prompt(&prompt_content);
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_NOT_NULL(prompt_content);
+    
+    // Core prompt should always be present
+    TEST_ASSERT_TRUE(strstr(prompt_content, "You are an advanced AI programming agent") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, "You have access to a number of tools") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, "Following is the user's custom instructions:") != NULL);
     
     cleanup_system_prompt(&prompt_content);
 }
@@ -191,6 +238,7 @@ int main(void) {
     RUN_TEST(test_cleanup_system_prompt_with_null_content);
     RUN_TEST(test_cleanup_system_prompt_with_allocated_content);
     RUN_TEST(test_load_system_prompt_large_content);
+    RUN_TEST(test_core_system_prompt_always_present);
     
     return UNITY_END();
 }
