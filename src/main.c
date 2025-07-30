@@ -359,9 +359,10 @@ int main(int argc, char *argv[])
                 // Make follow-up request with tool results
                 struct HTTPResponse follow_up_response = {0};
                 
+                fprintf(stderr, "Building follow-up JSON payload...\n");
                 // Build new JSON payload with conversation including tool results
                 char* follow_up_data = build_json_payload(model, system_prompt, &conversation, 
-                                                         "", max_tokens_param, max_tokens, NULL);
+                                                         "", max_tokens_param, max_tokens, &tools);
                 if (follow_up_data != NULL) {
                     fprintf(stderr, "Making follow-up request with tool results...\n");
                     
@@ -423,8 +424,50 @@ int main(int argc, char *argv[])
                     }
                 }
                 
-                // For LM Studio, just show results (no follow-up needed)
-                fprintf(stderr, "Tool execution completed.\n");
+                // Add tool result messages to conversation
+                for (int i = 0; i < call_count; i++) {
+                    if (append_tool_message(&conversation, results[i].result, tool_calls[i].id, tool_calls[i].name) != 0) {
+                        fprintf(stderr, "Warning: Failed to save tool result to conversation history\n");
+                    }
+                }
+                
+                // Make follow-up request with tool results
+                struct HTTPResponse follow_up_response = {0};
+                
+                // Build new JSON payload with conversation including tool results
+                char* follow_up_data = build_json_payload(model, system_prompt, &conversation, 
+                                                         "", max_tokens_param, max_tokens, &tools);
+                if (follow_up_data != NULL) {
+                    fprintf(stderr, "Making follow-up request with tool results...\n");
+                    
+                    if (http_post_with_headers(url, follow_up_data, headers, &follow_up_response) == 0) {
+                        // Parse follow-up response
+                        ParsedResponse follow_up_parsed;
+                        if (parse_api_response(follow_up_response.data, &follow_up_parsed) == 0) {
+                            // Display the final response
+                            print_formatted_response(&follow_up_parsed);
+                            
+                            // Save final assistant response to conversation
+                            const char* final_content = follow_up_parsed.response_content ? 
+                                                       follow_up_parsed.response_content : 
+                                                       follow_up_parsed.thinking_content;
+                            if (final_content != NULL) {
+                                if (append_conversation_message(&conversation, "assistant", final_content) != 0) {
+                                    fprintf(stderr, "Warning: Failed to save final response to conversation history\n");
+                                }
+                            }
+                            
+                            cleanup_parsed_response(&follow_up_parsed);
+                        } else {
+                            fprintf(stderr, "Error: Failed to parse follow-up API response\n");
+                        }
+                    } else {
+                        fprintf(stderr, "Error: Follow-up HTTP request failed\n");
+                    }
+                    
+                    free(follow_up_data);
+                    cleanup_response(&follow_up_response);
+                }
                 
                 cleanup_tool_results(results, call_count);
             }
