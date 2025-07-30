@@ -20,14 +20,25 @@ int main(int argc, char *argv[])
     }
     
     struct HTTPResponse response = {0};
-    const char *url = "https://api.openai.com/v1/chat/completions";
     const char *user_message = argv[1];
+    
+    // Get API URL from environment variable, default to OpenAI
+    const char *url = getenv("API_URL");
+    if (url == NULL) {
+        url = "https://api.openai.com/v1/chat/completions";
+    }
+    
+    // Get model from environment variable, default to gpt-3.5-turbo
+    const char *model = getenv("MODEL");
+    if (model == NULL) {
+        model = "gpt-3.5-turbo";
+    }
     
     // Build JSON payload with user's message
     char post_data[2048];
     int json_ret = snprintf(post_data, sizeof(post_data),
         "{"
-        "\"model\": \"gpt-3.5-turbo\","
+        "\"model\": \"%s\","
         "\"messages\": ["
             "{"
                 "\"role\": \"user\","
@@ -35,40 +46,36 @@ int main(int argc, char *argv[])
             "}"
         "],"
         "\"max_tokens\": 100"
-        "}", user_message);
+        "}", model, user_message);
     
     if (json_ret < 0 || json_ret >= (int)sizeof(post_data)) {
         fprintf(stderr, "Error: Message too long\n");
         return EXIT_FAILURE;
     }
     
+    // Setup authorization - optional for local servers
     const char *api_key = getenv("OPENAI_API_KEY");
-    if (api_key == NULL) {
-        fprintf(stderr, "Error: OPENAI_API_KEY environment variable not set\n");
-        return EXIT_FAILURE;
-    }
-    
     char auth_header[512];
-    int ret = snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", api_key);
-    if (ret < 0 || ret >= (int)sizeof(auth_header)) {
-        fprintf(stderr, "Error: Authorization header too long\n");
-        return EXIT_FAILURE;
-    }
+    const char *headers[2] = {NULL, NULL};
     
-    const char *headers[] = {
-        auth_header,
-        NULL
-    };
+    if (api_key != NULL) {
+        int ret = snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", api_key);
+        if (ret < 0 || ret >= (int)sizeof(auth_header)) {
+            fprintf(stderr, "Error: Authorization header too long\n");
+            return EXIT_FAILURE;
+        }
+        headers[0] = auth_header;
+    }
     
     curl_global_init(CURL_GLOBAL_DEFAULT);
     
-    fprintf(stderr, "Making OpenAI API request to %s\n", url);
+    fprintf(stderr, "Making API request to %s\n", url);
     fprintf(stderr, "POST data: %s\n\n", post_data);
     
     if (http_post_with_headers(url, post_data, headers, &response) == 0) {
         printf("%s\n", response.data);
     } else {
-        fprintf(stderr, "OpenAI API request failed\n");
+        fprintf(stderr, "API request failed\n");
         cleanup_response(&response);
         curl_global_cleanup();
         return EXIT_FAILURE;
