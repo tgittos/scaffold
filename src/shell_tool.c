@@ -15,7 +15,7 @@ static volatile pid_t executing_pid = 0;
 static void timeout_handler(int sig) {
     (void)sig;
     if (executing_pid > 0) {
-        kill(executing_pid, SIGTERM);
+        kill(executing_pid, SIGKILL);  // Use SIGKILL for immediate termination
     }
 }
 
@@ -343,11 +343,63 @@ int execute_shell_command(const ShellCommandParams *params, ShellExecutionResult
     sa.sa_flags = 0;
     sigaction(SIGALRM, &sa, NULL);
     
+    // Set up timeout for the entire operation
     if (params->timeout_seconds > 0) {
         alarm(params->timeout_seconds);
     }
     
-    // Read output
+    // Wait for child process with timeout using time-based polling
+    int status;
+    int wait_result;
+    result->timed_out = 0;
+    
+    if (params->timeout_seconds > 0) {
+        // Time-based timeout approach
+        struct timeval timeout_start, current_time;
+        gettimeofday(&timeout_start, NULL);
+        
+        while (1) {
+            wait_result = waitpid(pid, &status, WNOHANG);
+            if (wait_result == pid) {
+                // Process completed normally
+                result->exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+                alarm(0);  // Cancel alarm
+                break;
+            } else if (wait_result == -1) {
+                // Error occurred
+                result->exit_code = -1;
+                alarm(0);
+                break;
+            }
+            
+            // Check if timeout exceeded
+            gettimeofday(&current_time, NULL);
+            double elapsed = (current_time.tv_sec - timeout_start.tv_sec) + 
+                           (current_time.tv_usec - timeout_start.tv_usec) / 1000000.0;
+            
+            if (elapsed >= params->timeout_seconds) {
+                result->timed_out = 1;
+                result->exit_code = -1;
+                kill(pid, SIGKILL);
+                waitpid(pid, NULL, 0);  // Clean up zombie
+                alarm(0);
+                break;
+            }
+            
+            // Process still running, sleep briefly and continue
+            usleep(50000);  // Sleep 50ms
+        }
+    } else {
+        // No timeout, wait normally
+        wait_result = waitpid(pid, &status, 0);
+        if (wait_result == pid) {
+            result->exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+        } else {
+            result->exit_code = -1;
+        }
+    }
+    
+    // Read output after process completion (non-blocking since process is done)
     char stdout_buffer[SHELL_MAX_OUTPUT_LENGTH];
     char stderr_buffer[SHELL_MAX_OUTPUT_LENGTH];
     ssize_t stdout_bytes = 0, stderr_bytes = 0;
@@ -369,47 +421,20 @@ int execute_shell_command(const ShellCommandParams *params, ShellExecutionResult
         close(stderr_pipe[0]);
     }
     
-    // Wait for child process with timeout
-    int status;
-    int wait_result;
-    result->timed_out = 0;
-    
-    if (params->timeout_seconds > 0) {
-        // Use alarm-based timeout
-        alarm(params->timeout_seconds);
-        wait_result = waitpid(pid, &status, 0);
-        alarm(0);
-        
-        if (wait_result == -1 && errno == EINTR) {
-            // Timeout occurred (SIGALRM interrupted waitpid)
-            result->timed_out = 1;
-            result->exit_code = -1;
-            kill(pid, SIGTERM);
-            usleep(100000); // Give it 100ms to terminate gracefully
-            kill(pid, SIGKILL);
-            waitpid(pid, NULL, 0);
-        } else if (wait_result == pid) {
-            // Normal completion
-            result->exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
-        } else {
-            // Other error
-            result->exit_code = -1;
-        }
-    } else {
-        // No timeout, wait normally
-        wait_result = waitpid(pid, &status, 0);
-        if (wait_result == pid) {
-            result->exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
-        } else {
-            result->exit_code = -1;
-        }
-    }
-    
     executing_pid = 0;
     
     gettimeofday(&end_time, NULL);
-    result->execution_time = (end_time.tv_sec - start_time.tv_sec) + 
-                            (end_time.tv_usec - start_time.tv_usec) / 1000000.0;
+    
+    // Calculate execution time, but if timed out, limit it to the timeout duration
+    double actual_time = (end_time.tv_sec - start_time.tv_sec) + 
+                        (end_time.tv_usec - start_time.tv_usec) / 1000000.0;
+    
+    if (result->timed_out && params->timeout_seconds > 0) {
+        // For timed out processes, execution time should reflect the timeout duration
+        result->execution_time = params->timeout_seconds;
+    } else {
+        result->execution_time = actual_time;
+    }
     
     // Allocate and copy output
     result->stdout_output = malloc(stdout_bytes + 1);

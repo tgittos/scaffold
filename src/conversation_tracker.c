@@ -5,6 +5,7 @@
 
 #define INITIAL_CAPACITY 10
 #define GROWTH_FACTOR 2
+#define FIELD_SEPARATOR "\x1F"  // ASCII Unit Separator (rarely used in text)
 
 void init_conversation_history(ConversationHistory *history) {
     if (history == NULL) {
@@ -33,33 +34,10 @@ static int resize_conversation_history(ConversationHistory *history) {
     return 0;
 }
 
-static char* trim_whitespace(char *str) {
-    if (str == NULL) {
-        return NULL;
-    }
-    
-    // Trim leading whitespace
-    while (*str == ' ' || *str == '\t' || *str == '\n' || *str == '\r') {
-        str++;
-    }
-    
-    if (*str == '\0') {
-        return str;
-    }
-    
-    // Trim trailing whitespace
-    char *end = str + strlen(str) - 1;
-    while (end > str && (*end == ' ' || *end == '\t' || *end == '\n' || *end == '\r')) {
-        *end = '\0';
-        end--;
-    }
-    
-    return str;
-}
-
-static char* escape_markdown_content(const char *content) {
+// Escape field separators and newlines in content for serialization
+static char* escape_content_for_serialization(const char *content) {
     if (content == NULL) {
-        return NULL;
+        return strdup("");
     }
     
     size_t len = strlen(content);
@@ -71,10 +49,18 @@ static char* escape_markdown_content(const char *content) {
     
     size_t j = 0;
     for (size_t i = 0; i < len; i++) {
-        // Escape newlines as literal \n for markdown storage
-        if (content[i] == '\n') {
+        if (content[i] == '\x1F') {
+            // Escape field separator
+            escaped[j++] = '\\';
+            escaped[j++] = 'F';
+        } else if (content[i] == '\n') {
+            // Escape newlines
             escaped[j++] = '\\';
             escaped[j++] = 'n';
+        } else if (content[i] == '\\') {
+            // Escape backslashes
+            escaped[j++] = '\\';
+            escaped[j++] = '\\';
         } else if (content[i] == '\r') {
             // Skip carriage returns
             continue;
@@ -87,9 +73,10 @@ static char* escape_markdown_content(const char *content) {
     return escaped;
 }
 
-static char* unescape_markdown_content(const char *content) {
+// Unescape content from serialization format
+static char* unescape_content_from_serialization(const char *content) {
     if (content == NULL) {
-        return NULL;
+        return strdup("");
     }
     
     size_t len = strlen(content);
@@ -100,9 +87,19 @@ static char* unescape_markdown_content(const char *content) {
     
     size_t j = 0;
     for (size_t i = 0; i < len; i++) {
-        if (content[i] == '\\' && i + 1 < len && content[i + 1] == 'n') {
-            unescaped[j++] = '\n';
-            i++; // Skip the 'n'
+        if (content[i] == '\\' && i + 1 < len) {
+            if (content[i + 1] == 'F') {
+                unescaped[j++] = '\x1F';
+                i++; // Skip the 'F'
+            } else if (content[i + 1] == 'n') {
+                unescaped[j++] = '\n';
+                i++; // Skip the 'n'
+            } else if (content[i + 1] == '\\') {
+                unescaped[j++] = '\\';
+                i++; // Skip the second backslash
+            } else {
+                unescaped[j++] = content[i];
+            }
         } else {
             unescaped[j++] = content[i];
         }
@@ -112,7 +109,7 @@ static char* unescape_markdown_content(const char *content) {
     return unescaped;
 }
 
-static int add_message_to_history(ConversationHistory *history, const char *role, const char *content) {
+static int add_message_to_history(ConversationHistory *history, const char *role, const char *content, const char *tool_call_id, const char *tool_name) {
     if (history == NULL || role == NULL || content == NULL) {
         return -1;
     }
@@ -127,6 +124,8 @@ static int add_message_to_history(ConversationHistory *history, const char *role
     // Allocate and copy role and content
     char *role_copy = strdup(role);
     char *content_copy = strdup(content);
+    char *tool_call_id_copy = NULL;
+    char *tool_name_copy = NULL;
     
     if (role_copy == NULL || content_copy == NULL) {
         free(role_copy);
@@ -134,8 +133,30 @@ static int add_message_to_history(ConversationHistory *history, const char *role
         return -1;
     }
     
+    // Copy tool metadata if provided
+    if (tool_call_id != NULL) {
+        tool_call_id_copy = strdup(tool_call_id);
+        if (tool_call_id_copy == NULL) {
+            free(role_copy);
+            free(content_copy);
+            return -1;
+        }
+    }
+    
+    if (tool_name != NULL) {
+        tool_name_copy = strdup(tool_name);
+        if (tool_name_copy == NULL) {
+            free(role_copy);
+            free(content_copy);
+            free(tool_call_id_copy);
+            return -1;
+        }
+    }
+    
     history->messages[history->count].role = role_copy;
     history->messages[history->count].content = content_copy;
+    history->messages[history->count].tool_call_id = tool_call_id_copy;
+    history->messages[history->count].tool_name = tool_name_copy;
     history->count++;
     
     return 0;
@@ -150,106 +171,101 @@ int load_conversation_history(ConversationHistory *history) {
     
     FILE *file = fopen("CONVERSATION.md", "r");
     if (file == NULL) {
-        // File doesn't exist - this is OK, start with empty history
+        // File doesn't exist - this is OK, start with empty history  
         return 0;
     }
     
-    char *current_role = NULL;
-    char *current_content = NULL;
-    
-    char line[4096];
-    memset(line, 0, sizeof(line));
-    
+    char line[8192];
+    memset(line, 0, sizeof(line)); // Initialize buffer
     while (fgets(line, sizeof(line), file)) {
-        // Ensure line is properly null-terminated
+        // Ensure the line is null-terminated
         line[sizeof(line) - 1] = '\0';
-        char *trimmed = trim_whitespace(line);
+        // Remove trailing newline
+        size_t len = strlen(line);
+        if (len > 0 && line[len - 1] == '\n') {
+            line[len - 1] = '\0';
+        }
         
         // Skip empty lines
-        if (strlen(trimmed) == 0) {
+        if (strlen(line) == 0) {
             continue;
         }
         
-        // Check for role headers
-        if (strncmp(trimmed, "## User:", 8) == 0) {
-            // Save previous message if exists
-            if (current_role != NULL && current_content != NULL) {
-                char *unescaped_content = unescape_markdown_content(current_content);
-                if (unescaped_content != NULL) {
-                    if (add_message_to_history(history, current_role, unescaped_content) != 0) {
-                        free(unescaped_content);
-                        free(current_role);
-                        free(current_content);
-                        fclose(file);
-                        return -1;
-                    }
-                    free(unescaped_content);
-                }
-                free(current_role);
-                free(current_content);
-            }
-            
-            current_role = strdup("user");
-            current_content = strdup("");
-        } else if (strncmp(trimmed, "## Assistant:", 13) == 0) {
-            // Save previous message if exists
-            if (current_role != NULL && current_content != NULL) {
-                char *unescaped_content = unescape_markdown_content(current_content);
-                if (unescaped_content != NULL) {
-                    if (add_message_to_history(history, current_role, unescaped_content) != 0) {
-                        free(unescaped_content);
-                        free(current_role);
-                        free(current_content);
-                        fclose(file);
-                        return -1;
-                    }
-                    free(unescaped_content);
-                }
-                free(current_role);
-                free(current_content);
-            }
-            
-            current_role = strdup("assistant");
-            current_content = strdup("");
-        } else if (current_role != NULL) {
-            // Append content line
-            size_t old_len = strlen(current_content);
-            size_t new_len = old_len + strlen(trimmed) + 1; // +1 for newline
-            char *new_content = realloc(current_content, new_len + 1); // +1 for null terminator
-            
-            if (new_content == NULL) {
-                free(current_role);
-                free(current_content);
-                fclose(file);
-                return -1;
-            }
-            
-            current_content = new_content;
-            if (old_len > 0) {
-                strcat(current_content, "\n");
-            }
-            strcat(current_content, trimmed);
+        // Parse serialized format: role<SEP>content<SEP>tool_call_id<SEP>tool_name
+        // Manual parsing to handle empty fields correctly - make a copy to avoid corruption
+        char *line_copy = strdup(line);
+        if (line_copy == NULL) {
+            fclose(file);
+            return -1;
         }
         
-        // Clear buffer for next iteration
-        memset(line, 0, sizeof(line));
-    }
-    
-    // Save the last message if exists
-    if (current_role != NULL && current_content != NULL) {
-        char *unescaped_content = unescape_markdown_content(current_content);
-        if (unescaped_content != NULL) {
-            if (add_message_to_history(history, current_role, unescaped_content) != 0) {
-                free(unescaped_content);
-                free(current_role);
-                free(current_content);
-                fclose(file);
-                return -1;
+        char *role = NULL;
+        char *content = NULL;
+        char *tool_call_id = NULL;
+        char *tool_name = NULL;
+        
+        char *pos = line_copy;
+        char *start = pos;
+        int field_num = 0;
+        
+        while (*pos != '\0') {
+            if (*pos == '\x1F') {
+                *pos = '\0'; // Null-terminate current field
+                
+                switch (field_num) {
+                    case 0:
+                        role = start;
+                        break;
+                    case 1:
+                        content = start;
+                        break;  
+                    case 2:
+                        if (strlen(start) > 0) tool_call_id = start;
+                        break;
+                    case 3:
+                        if (strlen(start) > 0) tool_name = start;
+                        break;
+                }
+                
+                field_num++;
+                start = pos + 1;
             }
-            free(unescaped_content);
+            pos++;
         }
-        free(current_role);
-        free(current_content);
+        
+        // Handle the last field (no trailing separator)
+        if (field_num <= 3) {
+            switch (field_num) {
+                case 0:
+                    role = start;
+                    break;
+                case 1:
+                    content = start;
+                    break;
+                case 2:
+                    if (strlen(start) > 0) tool_call_id = start;
+                    break;
+                case 3:
+                    if (strlen(start) > 0) tool_name = start;
+                    break;
+            }
+        }
+        
+        if (role != NULL && content != NULL) {
+            char *unescaped_content = unescape_content_from_serialization(content);
+            if (unescaped_content != NULL) {
+                if (add_message_to_history(history, role, unescaped_content, tool_call_id, tool_name) != 0) {
+                    free(unescaped_content);
+                    free(line_copy);
+                    fclose(file);
+                    return -1;
+                }
+                free(unescaped_content);
+            }
+        }
+        
+        free(line_copy);
+        memset(line, 0, sizeof(line)); // Clear buffer for next iteration
     }
     
     fclose(file);
@@ -262,7 +278,7 @@ int append_conversation_message(ConversationHistory *history, const char *role, 
     }
     
     // Add to in-memory history
-    if (add_message_to_history(history, role, content) != 0) {
+    if (add_message_to_history(history, role, content, NULL, NULL) != 0) {
         return -1;
     }
     
@@ -272,17 +288,44 @@ int append_conversation_message(ConversationHistory *history, const char *role, 
         return -1;
     }
     
-    char *escaped_content = escape_markdown_content(content);
+    char *escaped_content = escape_content_for_serialization(content);
     if (escaped_content == NULL) {
         fclose(file);
         return -1;
     }
     
-    if (strcmp(role, "user") == 0) {
-        fprintf(file, "\n## User:\n%s\n", escaped_content);
-    } else if (strcmp(role, "assistant") == 0) {
-        fprintf(file, "\n## Assistant:\n%s\n", escaped_content);
+    // Format: role<SEP>content<SEP><SEP>\n (empty tool fields)
+    fprintf(file, "%s%s%s%s%s\n", role, FIELD_SEPARATOR, escaped_content, FIELD_SEPARATOR, FIELD_SEPARATOR);
+    
+    free(escaped_content);
+    fclose(file);
+    return 0;
+}
+
+int append_tool_message(ConversationHistory *history, const char *content, const char *tool_call_id, const char *tool_name) {
+    if (history == NULL || content == NULL || tool_call_id == NULL || tool_name == NULL) {
+        return -1;
     }
+    
+    // Add to in-memory history
+    if (add_message_to_history(history, "tool", content, tool_call_id, tool_name) != 0) {
+        return -1;
+    }
+    
+    // Write to file (append mode)
+    FILE *file = fopen("CONVERSATION.md", "a");
+    if (file == NULL) {
+        return -1;
+    }
+    
+    char *escaped_content = escape_content_for_serialization(content);
+    if (escaped_content == NULL) {
+        fclose(file);
+        return -1;
+    }
+    
+    // Format: tool<SEP>content<SEP>tool_call_id<SEP>tool_name\n
+    fprintf(file, "tool%s%s%s%s%s%s\n", FIELD_SEPARATOR, escaped_content, FIELD_SEPARATOR, tool_call_id, FIELD_SEPARATOR, tool_name);
     
     free(escaped_content);
     fclose(file);
@@ -297,8 +340,12 @@ void cleanup_conversation_history(ConversationHistory *history) {
     for (int i = 0; i < history->count; i++) {
         free(history->messages[i].role);
         free(history->messages[i].content);
+        free(history->messages[i].tool_call_id);
+        free(history->messages[i].tool_name);
         history->messages[i].role = NULL;
         history->messages[i].content = NULL;
+        history->messages[i].tool_call_id = NULL;
+        history->messages[i].tool_name = NULL;
     }
     
     free(history->messages);

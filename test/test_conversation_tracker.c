@@ -130,11 +130,14 @@ void test_append_conversation_message_with_multiline_content(void) {
 }
 
 void test_load_conversation_history_from_file(void) {
-    // Create a test conversation file
+    // Create a test conversation file in serialized format
     FILE *file = fopen("CONVERSATION.md", "w");
     TEST_ASSERT_NOT_NULL(file);
     
-    fprintf(file, "\n## User:\nHello there!\n\n## Assistant:\nHi! How can I help you?\n\n## User:\nWhat is the weather like?\n");
+    // Format: role<SEP>content<SEP>tool_call_id<SEP>tool_name
+    fprintf(file, "user%cHello there!%c%c\n", 0x1F, 0x1F, 0x1F);
+    fprintf(file, "assistant%cHi! How can I help you?%c%c\n", 0x1F, 0x1F, 0x1F);  
+    fprintf(file, "user%cWhat is the weather like?%c%c\n", 0x1F, 0x1F, 0x1F);
     fclose(file);
     
     ConversationHistory history;
@@ -145,22 +148,29 @@ void test_load_conversation_history_from_file(void) {
     
     TEST_ASSERT_EQUAL_STRING("user", history.messages[0].role);
     TEST_ASSERT_EQUAL_STRING("Hello there!", history.messages[0].content);
+    TEST_ASSERT_NULL(history.messages[0].tool_call_id);
+    TEST_ASSERT_NULL(history.messages[0].tool_name);
     
     TEST_ASSERT_EQUAL_STRING("assistant", history.messages[1].role);
     TEST_ASSERT_EQUAL_STRING("Hi! How can I help you?", history.messages[1].content);
+    TEST_ASSERT_NULL(history.messages[1].tool_call_id);
+    TEST_ASSERT_NULL(history.messages[1].tool_name);
     
     TEST_ASSERT_EQUAL_STRING("user", history.messages[2].role);
     TEST_ASSERT_EQUAL_STRING("What is the weather like?", history.messages[2].content);
+    TEST_ASSERT_NULL(history.messages[2].tool_call_id);
+    TEST_ASSERT_NULL(history.messages[2].tool_name);
     
     cleanup_conversation_history(&history);
 }
 
 void test_load_conversation_history_with_escaped_newlines(void) {
-    // Create a test conversation file with escaped newlines
+    // Create a test conversation file with escaped newlines in serialized format
     FILE *file = fopen("CONVERSATION.md", "w");
     TEST_ASSERT_NOT_NULL(file);
     
-    fprintf(file, "\n## User:\nThis is line 1\\nThis is line 2\n\n## Assistant:\nMultiline response:\\nLine A\\nLine B\n");
+    fprintf(file, "user%cThis is line 1\\nThis is line 2%c%c\n", 0x1F, 0x1F, 0x1F);
+    fprintf(file, "assistant%cMultiline response:\\nLine A\\nLine B%c%c\n", 0x1F, 0x1F, 0x1F);
     fclose(file);
     
     ConversationHistory history;
@@ -179,11 +189,12 @@ void test_load_conversation_history_with_escaped_newlines(void) {
 }
 
 void test_load_conversation_history_with_empty_content(void) {
-    // Create a test conversation file with empty content
+    // Create a test conversation file with empty content in serialized format
     FILE *file = fopen("CONVERSATION.md", "w");
     TEST_ASSERT_NOT_NULL(file);
     
-    fprintf(file, "\n## User:\n\n## Assistant:\nResponse to empty message\n");
+    fprintf(file, "user%c%c%c\n", 0x1F, 0x1F, 0x1F);
+    fprintf(file, "assistant%cResponse to empty message%c%c\n", 0x1F, 0x1F, 0x1F);
     fclose(file);
     
     ConversationHistory history;
@@ -194,9 +205,13 @@ void test_load_conversation_history_with_empty_content(void) {
     
     TEST_ASSERT_EQUAL_STRING("user", history.messages[0].role);
     TEST_ASSERT_EQUAL_STRING("", history.messages[0].content);
+    TEST_ASSERT_NULL(history.messages[0].tool_call_id);
+    TEST_ASSERT_NULL(history.messages[0].tool_name);
     
     TEST_ASSERT_EQUAL_STRING("assistant", history.messages[1].role);
     TEST_ASSERT_EQUAL_STRING("Response to empty message", history.messages[1].content);
+    TEST_ASSERT_NULL(history.messages[1].tool_call_id);
+    TEST_ASSERT_NULL(history.messages[1].tool_name);
     
     cleanup_conversation_history(&history);
 }
@@ -285,6 +300,121 @@ void test_large_conversation_handling(void) {
     cleanup_conversation_history(&history);
 }
 
+void test_append_tool_message(void) {
+    ConversationHistory history;
+    init_conversation_history(&history);
+    
+    int result = append_tool_message(&history, "File written successfully", "call_123", "write_file");
+    
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_EQUAL(1, history.count);
+    TEST_ASSERT_NOT_NULL(history.messages);
+    TEST_ASSERT_EQUAL_STRING("tool", history.messages[0].role);
+    TEST_ASSERT_EQUAL_STRING("File written successfully", history.messages[0].content);
+    TEST_ASSERT_EQUAL_STRING("call_123", history.messages[0].tool_call_id);
+    TEST_ASSERT_EQUAL_STRING("write_file", history.messages[0].tool_name);
+    
+    // Check that file was created with correct format
+    FILE *file = fopen("CONVERSATION.md", "r");
+    TEST_ASSERT_NOT_NULL(file);
+    if (file) fclose(file);
+    
+    cleanup_conversation_history(&history);
+}
+
+void test_append_tool_message_with_null_parameters(void) {
+    ConversationHistory history;
+    init_conversation_history(&history);
+    
+    // Test null history
+    TEST_ASSERT_EQUAL(-1, append_tool_message(NULL, "content", "call_123", "tool_name"));
+    
+    // Test null content
+    TEST_ASSERT_EQUAL(-1, append_tool_message(&history, NULL, "call_123", "tool_name"));
+    
+    // Test null tool_call_id
+    TEST_ASSERT_EQUAL(-1, append_tool_message(&history, "content", NULL, "tool_name"));
+    
+    // Test null tool_name
+    TEST_ASSERT_EQUAL(-1, append_tool_message(&history, "content", "call_123", NULL));
+    
+    cleanup_conversation_history(&history);
+}
+
+void test_load_conversation_history_with_tool_messages(void) {
+    // Create a test conversation file with tool messages in serialized format
+    FILE *file = fopen("CONVERSATION.md", "w");
+    TEST_ASSERT_NOT_NULL(file);
+    
+    fprintf(file, "user%cHello%c%c\n", 0x1F, 0x1F, 0x1F);
+    fprintf(file, "assistant%cI'll help you write a file%c%c\n", 0x1F, 0x1F, 0x1F);
+    fprintf(file, "tool%cFile written successfully%ccall_123%cwrite_file\n", 0x1F, 0x1F, 0x1F);
+    fprintf(file, "assistant%cFile has been created!%c%c\n", 0x1F, 0x1F, 0x1F);
+    fclose(file);
+    
+    ConversationHistory history;
+    int result = load_conversation_history(&history);
+    
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_EQUAL(4, history.count);
+    
+    // Check user message
+    TEST_ASSERT_EQUAL_STRING("user", history.messages[0].role);
+    TEST_ASSERT_EQUAL_STRING("Hello", history.messages[0].content);
+    TEST_ASSERT_NULL(history.messages[0].tool_call_id);
+    TEST_ASSERT_NULL(history.messages[0].tool_name);
+    
+    // Check first assistant message
+    TEST_ASSERT_EQUAL_STRING("assistant", history.messages[1].role);
+    TEST_ASSERT_EQUAL_STRING("I'll help you write a file", history.messages[1].content);
+    TEST_ASSERT_NULL(history.messages[1].tool_call_id);
+    TEST_ASSERT_NULL(history.messages[1].tool_name);
+    
+    // Check tool message
+    TEST_ASSERT_EQUAL_STRING("tool", history.messages[2].role);
+    TEST_ASSERT_EQUAL_STRING("File written successfully", history.messages[2].content);
+    TEST_ASSERT_EQUAL_STRING("call_123", history.messages[2].tool_call_id);
+    TEST_ASSERT_EQUAL_STRING("write_file", history.messages[2].tool_name);
+    
+    // Check final assistant message
+    TEST_ASSERT_EQUAL_STRING("assistant", history.messages[3].role);
+    TEST_ASSERT_EQUAL_STRING("File has been created!", history.messages[3].content);
+    TEST_ASSERT_NULL(history.messages[3].tool_call_id);
+    TEST_ASSERT_NULL(history.messages[3].tool_name);
+    
+    cleanup_conversation_history(&history);
+}
+
+void test_conversation_persistence_with_tool_messages(void) {
+    ConversationHistory history1, history2;
+    
+    // Create initial conversation with tool messages
+    init_conversation_history(&history1);
+    append_conversation_message(&history1, "user", "Create a file");
+    append_tool_message(&history1, "File created", "call_456", "create_file");
+    append_conversation_message(&history1, "assistant", "Done!");
+    cleanup_conversation_history(&history1);
+    
+    // Load conversation from file
+    int result = load_conversation_history(&history2);
+    
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_EQUAL(3, history2.count);
+    
+    TEST_ASSERT_EQUAL_STRING("user", history2.messages[0].role);
+    TEST_ASSERT_EQUAL_STRING("Create a file", history2.messages[0].content);
+    
+    TEST_ASSERT_EQUAL_STRING("tool", history2.messages[1].role);
+    TEST_ASSERT_EQUAL_STRING("File created", history2.messages[1].content);
+    TEST_ASSERT_EQUAL_STRING("call_456", history2.messages[1].tool_call_id);
+    TEST_ASSERT_EQUAL_STRING("create_file", history2.messages[1].tool_name);
+    
+    TEST_ASSERT_EQUAL_STRING("assistant", history2.messages[2].role);
+    TEST_ASSERT_EQUAL_STRING("Done!", history2.messages[2].content);
+    
+    cleanup_conversation_history(&history2);
+}
+
 int main(void) {
     UNITY_BEGIN();
     
@@ -303,6 +433,10 @@ int main(void) {
     RUN_TEST(test_cleanup_conversation_history_with_null);
     RUN_TEST(test_conversation_persistence_across_loads);
     RUN_TEST(test_large_conversation_handling);
+    RUN_TEST(test_append_tool_message);
+    RUN_TEST(test_append_tool_message_with_null_parameters);
+    RUN_TEST(test_load_conversation_history_with_tool_messages);
+    RUN_TEST(test_conversation_persistence_with_tool_messages);
     
     return UNITY_END();
 }

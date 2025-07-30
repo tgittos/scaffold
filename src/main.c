@@ -110,7 +110,17 @@ static char* build_json_payload(const char* model, const char* system_prompt,
             strcat(json, conversation->messages[i].role);
             strcat(json, "\", \"content\": \"");
             strcat(json, escaped_content);
-            strcat(json, "\"}");
+            strcat(json, "\"");
+            
+            // Add tool metadata for tool messages
+            if (strcmp(conversation->messages[i].role, "tool") == 0 && 
+                conversation->messages[i].tool_call_id != NULL) {
+                strcat(json, ", \"tool_call_id\": \"");
+                strcat(json, conversation->messages[i].tool_call_id);
+                strcat(json, "\"");
+            }
+            
+            strcat(json, "}");
             free(escaped_content);
         }
     }
@@ -341,10 +351,7 @@ int main(int argc, char *argv[])
                 
                 // Add tool result messages to conversation
                 for (int i = 0; i < raw_call_count; i++) {
-                    char tool_message[1024];
-                    snprintf(tool_message, sizeof(tool_message), "Tool %s result: %s", 
-                             raw_tool_calls[i].name, results[i].result);
-                    if (append_conversation_message(&conversation, "tool", tool_message) != 0) {
+                    if (append_tool_message(&conversation, results[i].result, raw_tool_calls[i].id, raw_tool_calls[i].name) != 0) {
                         fprintf(stderr, "Warning: Failed to save tool result to conversation history\n");
                     }
                 }

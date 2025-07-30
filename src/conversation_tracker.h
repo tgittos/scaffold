@@ -5,8 +5,10 @@
  * Structure representing a single message in the conversation
  */
 typedef struct {
-    char *role;     // "user" or "assistant"
-    char *content;  // The message content
+    char *role;        // "user", "assistant", or "tool"
+    char *content;     // The message content
+    char *tool_call_id; // For tool messages, the ID of the tool call being responded to (nullable)
+    char *tool_name;   // For tool messages, the name of the tool that was called (nullable)
 } ConversationMessage;
 
 /**
@@ -36,6 +38,17 @@ int load_conversation_history(ConversationHistory *history);
  * @return 0 on success, -1 on failure (memory allocation error, file write error)
  */
 int append_conversation_message(ConversationHistory *history, const char *role, const char *content);
+
+/**
+ * Append a tool message to the conversation history and save to CONVERSATION.md
+ * 
+ * @param history Pointer to ConversationHistory structure
+ * @param content The tool response content
+ * @param tool_call_id The ID of the tool call being responded to
+ * @param tool_name The name of the tool that was called
+ * @return 0 on success, -1 on failure (memory allocation error, file write error)
+ */
+int append_tool_message(ConversationHistory *history, const char *content, const char *tool_call_id, const char *tool_name);
 
 /**
  * Free all memory allocated for conversation history

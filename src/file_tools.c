@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <strings.h>  // For strcasecmp
+#include <limits.h>   // For PATH_MAX
 
 // Helper function to safely duplicate strings
 static char* safe_strdup(const char *str) {
@@ -383,6 +384,137 @@ FileErrorCode file_list_directory(const char *directory_path, const char *patter
     return FILE_SUCCESS;
 }
 
+// Helper function to search content in a single file
+static FileErrorCode search_file_content(const char *file_path, const char *pattern,
+                                        int case_sensitive, SearchResults *results, int *capacity) {
+    char *content = NULL;
+    FileErrorCode read_result = file_read_content(file_path, 0, 0, &content);
+    if (read_result != FILE_SUCCESS) {
+        return read_result;
+    }
+    
+    // Simple line-by-line search
+    char *line_start = content;
+    char *line_end;
+    int line_number = 1;
+    
+    while (*line_start != '\0' && results->count < FILE_MAX_SEARCH_RESULTS) {
+        line_end = strchr(line_start, '\n');
+        if (line_end == NULL) {
+            line_end = line_start + strlen(line_start);
+        }
+        
+        // Create null-terminated line
+        size_t line_len = line_end - line_start;
+        char *line = malloc(line_len + 1);
+        if (line == NULL) {
+            free(content);
+            return FILE_ERROR_MEMORY;
+        }
+        memcpy(line, line_start, line_len);
+        line[line_len] = '\0';
+        
+        // Search for pattern in line
+        char *match = case_sensitive ? strstr(line, pattern) : strcasestr(line, pattern);
+        if (match != NULL) {
+            // Expand capacity if needed
+            if (results->count >= *capacity) {
+                *capacity *= 2;
+                SearchResult *new_results = realloc(results->results, *capacity * sizeof(SearchResult));
+                if (new_results == NULL) {
+                    free(line);
+                    free(content);
+                    return FILE_ERROR_MEMORY;
+                }
+                results->results = new_results;
+            }
+            
+            SearchResult *result = &results->results[results->count];
+            memset(result, 0, sizeof(SearchResult));
+            
+            result->file_path = safe_strdup(file_path);
+            result->line_number = line_number;
+            result->line_content = safe_strdup(line);
+            result->match_context = safe_strdup(line); // Simple context for now
+            
+            if (result->file_path == NULL || result->line_content == NULL || result->match_context == NULL) {
+                free(result->file_path);
+                free(result->line_content);
+                free(result->match_context);
+                free(line);
+                free(content);
+                return FILE_ERROR_MEMORY;
+            }
+            
+            results->count++;
+            results->total_matches++;
+        }
+        
+        free(line);
+        line_number++;
+        
+        if (*line_end == '\n') {
+            line_start = line_end + 1;
+        } else {
+            break;
+        }
+    }
+    
+    free(content);
+    return FILE_SUCCESS;
+}
+
+// Helper function to search content within a directory
+static FileErrorCode search_directory_content(const char *dir_path, const char *pattern,
+                                            int recursive, int case_sensitive,
+                                            SearchResults *results, int *capacity) {
+    DIR *dir = opendir(dir_path);
+    if (dir == NULL) {
+        return (errno == EACCES) ? FILE_ERROR_PERMISSION : FILE_ERROR_NOT_FOUND;
+    }
+    
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        // Skip . and ..
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+        
+        // Build full path
+        char full_path[PATH_MAX];
+        int path_len = snprintf(full_path, sizeof(full_path), "%s/%s", dir_path, entry->d_name);
+        if (path_len >= (int)sizeof(full_path)) {
+            // Path too long, skip
+            continue;
+        }
+        
+        struct stat entry_stat;
+        if (stat(full_path, &entry_stat) != 0) {
+            continue; // Skip if we can't stat the file
+        }
+        
+        if (S_ISREG(entry_stat.st_mode)) {
+            // Regular file - search its content
+            FileErrorCode search_result = search_file_content(full_path, pattern, case_sensitive, results, capacity);
+            if (search_result != FILE_SUCCESS && search_result != FILE_ERROR_NOT_FOUND) {
+                closedir(dir);
+                return search_result;
+            }
+            results->files_searched++;
+        } else if (S_ISDIR(entry_stat.st_mode) && recursive) {
+            // Directory - recurse if requested
+            FileErrorCode search_result = search_directory_content(full_path, pattern, recursive, case_sensitive, results, capacity);
+            if (search_result != FILE_SUCCESS) {
+                closedir(dir);
+                return search_result;
+            }
+        }
+    }
+    
+    closedir(dir);
+    return FILE_SUCCESS;
+}
+
 // Search for pattern in files (basic implementation)
 FileErrorCode file_search_content(const char *search_path, const char *pattern,
                                  const char *file_pattern, int recursive, 
@@ -408,8 +540,14 @@ FileErrorCode file_search_content(const char *search_path, const char *pattern,
     }
     
     if (S_ISDIR(path_stat.st_mode)) {
-        // Directory search not yet implemented
-        return FILE_SUCCESS;
+        // Search within directory
+        // Initialize results array
+        int capacity = 50;
+        results->results = malloc(capacity * sizeof(SearchResult));
+        if (results->results == NULL) {
+            return FILE_ERROR_MEMORY;
+        }
+        return search_directory_content(search_path, pattern, recursive, case_sensitive, results, &capacity);
     }
     
     // Search in single file
