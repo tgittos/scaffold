@@ -62,3 +62,29 @@ The build system for this project is driven by a main Makefile. This Makefile is
 
 At ALL times, the Makefile should be capable of restoring the project to a clean state.
 At ALL times, the Makefile must be capable of building the entire project from a clean state, including dependencies.
+
+## Git and Version Control
+
+When committing code:
+
+1. **NEVER use `git add -A` or `git add .`** - Always be selective about what gets committed
+2. **Always check for and create .gitignore FIRST** before any commits
+3. **For C projects, NEVER commit:**
+   - Object files (*.o)
+   - Executables 
+   - Build artifacts (*.elf, *.dbg, *.com.dbg)
+   - Build directories (.aarch64/, deps/)
+   - Dependency downloads or extracted archives
+4. **Only commit source code files:**
+   - .c and .h files
+   - Makefiles and build configuration
+   - Test source files (test_*.c)
+   - Documentation and configuration files
+
+Before any commit, you MUST:
+1. Create appropriate .gitignore if it doesn't exist
+2. Use `git add <specific-files>` for only source files
+3. Verify with `git status` that no build artifacts are staged
+4. If any .o, .elf, .dbg files or build directories appear staged, STOP and fix it
+
+This is non-negotiable. Build artifact commits are completely unacceptable.
