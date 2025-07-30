@@ -6,6 +6,131 @@
 #include "env_loader.h"
 #include "output_formatter.h"
 #include "prompt_loader.h"
+#include "conversation_tracker.h"
+
+// Helper function to escape JSON strings
+static char* escape_json_string(const char* str) {
+    if (str == NULL) return NULL;
+    
+    size_t len = strlen(str);
+    // Worst case: every character needs escaping, plus quotes and null terminator
+    char* escaped = malloc(len * 2 + 3);
+    if (escaped == NULL) return NULL;
+    
+    size_t j = 0;
+    for (size_t i = 0; i < len; i++) {
+        switch (str[i]) {
+            case '"':
+                escaped[j++] = '\\';
+                escaped[j++] = '"';
+                break;
+            case '\\':
+                escaped[j++] = '\\';
+                escaped[j++] = '\\';
+                break;
+            case '\n':
+                escaped[j++] = '\\';
+                escaped[j++] = 'n';
+                break;
+            case '\r':
+                escaped[j++] = '\\';
+                escaped[j++] = 'r';
+                break;
+            case '\t':
+                escaped[j++] = '\\';
+                escaped[j++] = 't';
+                break;
+            default:
+                escaped[j++] = str[i];
+                break;
+        }
+    }
+    escaped[j] = '\0';
+    return escaped;
+}
+
+// Helper function to build JSON payload with conversation history
+static char* build_json_payload(const char* model, const char* system_prompt, 
+                               const ConversationHistory* conversation, 
+                               const char* user_message, const char* max_tokens_param, 
+                               int max_tokens) {
+    // Calculate required buffer size
+    size_t base_size = 200; // Base JSON structure
+    size_t model_len = strlen(model);
+    size_t user_msg_len = strlen(user_message) * 2 + 50; // *2 for escaping, +50 for JSON structure
+    size_t system_len = (system_prompt != NULL) ? strlen(system_prompt) * 2 + 50 : 0;
+    size_t history_len = 0;
+    
+    // Calculate space needed for conversation history
+    for (int i = 0; i < conversation->count; i++) {
+        history_len += strlen(conversation->messages[i].role) + 
+                      strlen(conversation->messages[i].content) * 2 + 50;
+    }
+    
+    size_t total_size = base_size + model_len + user_msg_len + system_len + history_len + 100;
+    char* json = malloc(total_size);
+    if (json == NULL) return NULL;
+    
+    // Start building JSON
+    strcpy(json, "{\"model\": \"");
+    strcat(json, model);
+    strcat(json, "\", \"messages\": [");
+    
+    // Add system prompt if available
+    if (system_prompt != NULL) {
+        char* escaped_system = escape_json_string(system_prompt);
+        if (escaped_system != NULL) {
+            strcat(json, "{\"role\": \"system\", \"content\": \"");
+            strcat(json, escaped_system);
+            strcat(json, "\"}");
+            free(escaped_system);
+            
+            if (conversation->count > 0) {
+                strcat(json, ", ");
+            }
+        }
+    }
+    
+    // Add conversation history
+    for (int i = 0; i < conversation->count; i++) {
+        char* escaped_content = escape_json_string(conversation->messages[i].content);
+        if (escaped_content != NULL) {
+            if (i > 0 || system_prompt != NULL) {
+                strcat(json, ", ");
+            }
+            strcat(json, "{\"role\": \"");
+            strcat(json, conversation->messages[i].role);
+            strcat(json, "\", \"content\": \"");
+            strcat(json, escaped_content);
+            strcat(json, "\"}");
+            free(escaped_content);
+        }
+    }
+    
+    // Add current user message
+    char* escaped_user_msg = escape_json_string(user_message);
+    if (escaped_user_msg != NULL) {
+        if (conversation->count > 0 || system_prompt != NULL) {
+            strcat(json, ", ");
+        }
+        strcat(json, "{\"role\": \"user\", \"content\": \"");
+        strcat(json, escaped_user_msg);
+        strcat(json, "\"}");
+        free(escaped_user_msg);
+    }
+    
+    // Close messages array and add max_tokens parameter
+    strcat(json, "], \"");
+    strcat(json, max_tokens_param);
+    strcat(json, "\": ");
+    
+    char tokens_str[20];
+    snprintf(tokens_str, sizeof(tokens_str), "%d", max_tokens);
+    strcat(json, tokens_str);
+    strcat(json, "}");
+    
+    return json;
+}
 
 int main(int argc, char *argv[])
 {
@@ -15,9 +140,17 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
     
+    // Load conversation history
+    ConversationHistory conversation;
+    if (load_conversation_history(&conversation) != 0) {
+        fprintf(stderr, "Error: Failed to load conversation history\n");
+        return EXIT_FAILURE;
+    }
+    
     if (argc != 2) {
         fprintf(stderr, "Usage: %s \"<message>\"\n", argv[0]);
         fprintf(stderr, "Example: %s \"Hello, how are you?\"\n", argv[0]);
+        cleanup_conversation_history(&conversation);
         return EXIT_FAILURE;
     }
     
@@ -78,45 +211,13 @@ int main(int argc, char *argv[])
         max_tokens_param = "max_completion_tokens";
     }
     
-    // Build JSON payload with system prompt (if available) and user's message
-    char post_data[4096];  // Increased size to accommodate system prompt
-    int json_ret;
-    
-    if (system_prompt != NULL) {
-        // Include system prompt
-        json_ret = snprintf(post_data, sizeof(post_data),
-            "{"
-            "\"model\": \"%s\","
-            "\"messages\": ["
-                "{"
-                    "\"role\": \"system\","
-                    "\"content\": \"%s\""
-                "},"
-                "{"
-                    "\"role\": \"user\","
-                    "\"content\": \"%s\""
-                "}"
-            "],"
-            "\"%s\": %d"
-            "}", model, system_prompt, user_message, max_tokens_param, max_tokens);
-    } else {
-        // No system prompt, just user message
-        json_ret = snprintf(post_data, sizeof(post_data),
-            "{"
-            "\"model\": \"%s\","
-            "\"messages\": ["
-                "{"
-                    "\"role\": \"user\","
-                    "\"content\": \"%s\""
-                "}"
-            "],"
-            "\"%s\": %d"
-            "}", model, user_message, max_tokens_param, max_tokens);
-    }
-    
-    if (json_ret < 0 || json_ret >= (int)sizeof(post_data)) {
-        fprintf(stderr, "Error: Message too long\n");
+    // Build JSON payload with conversation history
+    char* post_data = build_json_payload(model, system_prompt, &conversation, 
+                                        user_message, max_tokens_param, max_tokens);
+    if (post_data == NULL) {
+        fprintf(stderr, "Error: Failed to build JSON payload\n");
         cleanup_system_prompt(&system_prompt);
+        cleanup_conversation_history(&conversation);
         return EXIT_FAILURE;
     }
     
@@ -130,6 +231,8 @@ int main(int argc, char *argv[])
         if (ret < 0 || ret >= (int)sizeof(auth_header)) {
             fprintf(stderr, "Error: Authorization header too long\n");
             cleanup_system_prompt(&system_prompt);
+            cleanup_conversation_history(&conversation);
+            free(post_data);
             return EXIT_FAILURE;
         }
         headers[0] = auth_header;
@@ -144,6 +247,22 @@ int main(int argc, char *argv[])
         ParsedResponse parsed_response;
         if (parse_api_response(response.data, &parsed_response) == 0) {
             print_formatted_response(&parsed_response);
+            
+            // Save user message and assistant response to conversation history
+            if (append_conversation_message(&conversation, "user", user_message) != 0) {
+                fprintf(stderr, "Warning: Failed to save user message to conversation history\n");
+            }
+            
+            // Use response_content for the assistant's message (this is the main content without thinking)
+            const char* assistant_content = parsed_response.response_content ? 
+                                           parsed_response.response_content : 
+                                           parsed_response.thinking_content;
+            if (assistant_content != NULL) {
+                if (append_conversation_message(&conversation, "assistant", assistant_content) != 0) {
+                    fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
+                }
+            }
+            
             cleanup_parsed_response(&parsed_response);
         } else {
             fprintf(stderr, "Error: Failed to parse API response\n");
@@ -153,12 +272,16 @@ int main(int argc, char *argv[])
         fprintf(stderr, "API request failed\n");
         cleanup_response(&response);
         cleanup_system_prompt(&system_prompt);
+        cleanup_conversation_history(&conversation);
+        free(post_data);
         curl_global_cleanup();
         return EXIT_FAILURE;
     }
     
     cleanup_response(&response);
     cleanup_system_prompt(&system_prompt);
+    cleanup_conversation_history(&conversation);
+    free(post_data);
     curl_global_cleanup();
     return EXIT_SUCCESS;
 }
