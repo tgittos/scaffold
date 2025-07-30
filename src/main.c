@@ -32,7 +32,7 @@ int main(int argc, char *argv[])
     // Get model from environment variable, default to gpt-3.5-turbo
     const char *model = getenv("MODEL");
     if (model == NULL) {
-        model = "gpt-3.5-turbo";
+        model = "o4-mini-2025-04-16";
     }
     
     // Get context window size from environment variable
@@ -66,6 +66,13 @@ int main(int argc, char *argv[])
         }
     }
     
+    // Determine the correct parameter name for max tokens
+    // OpenAI uses "max_completion_tokens" for newer models, while local servers typically use "max_tokens"
+    const char *max_tokens_param = "max_tokens";
+    if (strstr(url, "api.openai.com") != NULL) {
+        max_tokens_param = "max_completion_tokens";
+    }
+    
     // Build JSON payload with user's message
     char post_data[2048];
     int json_ret = snprintf(post_data, sizeof(post_data),
@@ -77,8 +84,8 @@ int main(int argc, char *argv[])
                 "\"content\": \"%s\""
             "}"
         "],"
-        "\"max_tokens\": %d"
-        "}", model, user_message, max_tokens);
+        "\"%s\": %d"
+        "}", model, user_message, max_tokens_param, max_tokens);
     
     if (json_ret < 0 || json_ret >= (int)sizeof(post_data)) {
         fprintf(stderr, "Error: Message too long\n");
