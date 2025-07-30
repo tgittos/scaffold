@@ -530,23 +530,40 @@ char* generate_single_tool_message(const ToolResult *result) {
     return message;
 }
 
+int register_builtin_tools(ToolRegistry *registry) {
+    if (registry == NULL) {
+        return -1;
+    }
+    
+    // Register all built-in tools that are compiled into the binary
+    if (register_shell_tool(registry) != 0) {
+        return -1;
+    }
+    
+    // Future built-in tools would be registered here:
+    // if (register_file_tool(registry) != 0) return -1;
+    // if (register_git_tool(registry) != 0) return -1;
+    
+    return 0;
+}
+
 int load_tools_config(ToolRegistry *registry, const char *config_file) {
     if (registry == NULL) {
         return -1;
     }
     
-    // Try to load from configuration file
+    // Try to load from configuration file for user-defined custom tools
     FILE *file = fopen(config_file, "r");
     if (file == NULL) {
-        // Configuration file doesn't exist - this is OK, just have no tools
+        // Configuration file doesn't exist - this is OK, no custom tools
         return 0;
     }
     
     fclose(file);
     
-    // For now, return 0 (no tools loaded) since config file parsing is not implemented
+    // For now, return 0 (no custom tools loaded) since config file parsing is not implemented
     // Users can extend this function to parse JSON/YAML configuration files
-    // and register their own tools using register_tool() or similar functions
+    // and register their own custom tools using register_tool() or similar functions
     
     return 0;
 }

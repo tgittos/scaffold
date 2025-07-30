@@ -59,7 +59,15 @@ typedef struct {
 void init_tool_registry(ToolRegistry *registry);
 
 /**
- * Load tool definitions from a configuration file
+ * Register all built-in tools that are compiled into the binary
+ * 
+ * @param registry Pointer to ToolRegistry structure to populate
+ * @return 0 on success, -1 on failure
+ */
+int register_builtin_tools(ToolRegistry *registry);
+
+/**
+ * Load custom tool definitions from a configuration file (optional)
  * 
  * @param registry Pointer to ToolRegistry structure to populate
  * @param config_file Path to tool configuration file

@@ -8,6 +8,7 @@
 #include "prompt_loader.h"
 #include "conversation_tracker.h"
 #include "tools_system.h"
+#include "shell_tool.h"
 
 // Helper function to escape JSON strings
 static char* escape_json_string(const char* str) {
@@ -165,11 +166,16 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
     
-    // Initialize tool registry
+    // Initialize tool registry and register all built-in tools
     ToolRegistry tools;
     init_tool_registry(&tools);
+    if (register_builtin_tools(&tools) != 0) {
+        fprintf(stderr, "Warning: Failed to register built-in tools\n");
+    }
+    
+    // Optionally load custom tools from configuration file (non-critical)
     if (load_tools_config(&tools, "tools.json") != 0) {
-        fprintf(stderr, "Warning: Failed to load tools configuration, proceeding without tools\n");
+        fprintf(stderr, "Warning: Failed to load custom tools configuration\n");
     }
     
     if (argc != 2) {
