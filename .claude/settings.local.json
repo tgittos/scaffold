@@ -18,7 +18,10 @@
       "Bash(valgrind:*)",
       "Bash(find:*)",
       "Bash(git restore:*)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(./hello-world \"Test message to AI\")",
+      "Bash(./ralph)",
+      "Bash(./ralph \"Hello, this is a test message from the command line!\")"
     ],
     "deny": []
   }

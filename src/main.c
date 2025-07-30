@@ -3,9 +3,16 @@
 #include <string.h>
 #include <curl/curl.h>
 #include "http_client.h"
+#include "env_loader.h"
 
 int main(int argc, char *argv[])
 {
+    // Load environment variables from .env file
+    if (load_env_file(".env") != 0) {
+        fprintf(stderr, "Error: Failed to load .env file\n");
+        return EXIT_FAILURE;
+    }
+    
     if (argc != 2) {
         fprintf(stderr, "Usage: %s \"<message>\"\n", argv[0]);
         fprintf(stderr, "Example: %s \"Hello, how are you?\"\n", argv[0]);
@@ -55,11 +62,11 @@ int main(int argc, char *argv[])
     
     curl_global_init(CURL_GLOBAL_DEFAULT);
     
-    printf("Making OpenAI API request to %s\n", url);
-    printf("POST data: %s\n\n", post_data);
+    fprintf(stderr, "Making OpenAI API request to %s\n", url);
+    fprintf(stderr, "POST data: %s\n\n", post_data);
     
     if (http_post_with_headers(url, post_data, headers, &response) == 0) {
-        printf("OpenAI API Response:\n%s\n", response.data);
+        printf("%s\n", response.data);
     } else {
         fprintf(stderr, "OpenAI API request failed\n");
         cleanup_response(&response);

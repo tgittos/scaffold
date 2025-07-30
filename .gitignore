@@ -1,0 +1,24 @@
+# Build artifacts
+*.o
+*.a
+*.so
+*.elf
+*.dbg
+*.com.dbg
+.aarch64/
+src/.aarch64/
+test/.aarch64/
+
+# Dependencies
+deps/
+
+# Test executables
+test/test_*
+!test/test_*.c
+
+# Unity build artifacts
+test/unity/*.o
+test/unity/.aarch64/
+
+# Environment files (should be local only)
+.env

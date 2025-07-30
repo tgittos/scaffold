@@ -53,6 +53,9 @@ make install
 
 For more detail about Cosmopolitan, read COSMOPOLITAN.md
 
+You are running in a devcontainer that has this toolchain pre-configured in /opt/cosmos with environment variables appropriate for most autotools projects.
+Check ./.devcontainer/Dockerfile or inspect your `env` and `$PATH` for more details
+
 ## Build System
 
 The build system for this project is driven by a main Makefile. This Makefile is responsible for fetching and building dependencies, building the main application, building and running the test suite and checking the application with Valgrind.

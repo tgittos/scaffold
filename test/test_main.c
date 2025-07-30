@@ -38,15 +38,19 @@ void test_string_operations(void)
 void test_string_buffer_overflow_protection(void)
 {
     // Test that we handle buffer size checking appropriately
-    char buffer[64]; // Buffer size
-    char long_key[30]; // Key that will make total string longer than buffer
-    memset(long_key, 'A', sizeof(long_key) - 1);
-    long_key[sizeof(long_key) - 1] = '\0';
+    char buffer[32] = {0}; // Small buffer to test bounds checking
+    const char *long_key = "this_is_a_very_long_api_key_that_will_exceed_buffer_size_limits";
     
+    // Use pragma to suppress format-truncation warning for this intentional test
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wformat-truncation"
     int ret = snprintf(buffer, sizeof(buffer), "Authorization: Bearer %s", long_key);
-    // snprintf returns the length that would have been written
+    #pragma GCC diagnostic pop
+    // snprintf returns the length that would have been written (including null terminator)
     TEST_ASSERT_GREATER_THAN(0, ret);
-    // Buffer should be null-terminated even if truncated
+    // The return value should be larger than buffer size indicating truncation would occur
+    TEST_ASSERT_GREATER_THAN((int)sizeof(buffer), ret);
+    // Buffer should still be null-terminated even if truncated
     TEST_ASSERT_EQUAL_CHAR('\0', buffer[sizeof(buffer) - 1]);
 }
 
@@ -82,17 +86,15 @@ void test_json_payload_structure(void)
 void test_json_payload_overflow_protection(void)
 {
     // Test that very long messages are handled appropriately
-    char post_data[128]; // Small buffer to test overflow
-    char long_message[100]; // Message that should cause overflow when formatted
-    memset(long_message, 'A', sizeof(long_message) - 1);
-    long_message[sizeof(long_message) - 1] = '\0';
+    char post_data[100] = {0}; // Small buffer to test overflow
+    const char *long_message = "This is a very long message that will definitely cause the JSON payload to exceed the buffer size and trigger truncation behavior in snprintf";
     
     // Use pragma to suppress format-truncation warning for this intentional test
     #pragma GCC diagnostic push
     #pragma GCC diagnostic ignored "-Wformat-truncation"
     int json_ret = snprintf(post_data, sizeof(post_data),
         "{"
-        "\"model\": \"gpt-3.5-turbo\","
+        "\"model\": \"gpt-3.5-turbo\","  
         "\"messages\": ["
             "{"
                 "\"role\": \"user\","
