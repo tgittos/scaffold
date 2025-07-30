@@ -17,7 +17,8 @@
       "Bash(./src/hello-world)",
       "Bash(valgrind:*)",
       "Bash(find:*)",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(git rm:*)"
     ],
     "deny": []
   }
