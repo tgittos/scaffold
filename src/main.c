@@ -4,6 +4,7 @@
 #include <curl/curl.h>
 #include "http_client.h"
 #include "env_loader.h"
+#include "output_formatter.h"
 
 int main(int argc, char *argv[])
 {
@@ -34,6 +35,37 @@ int main(int argc, char *argv[])
         model = "gpt-3.5-turbo";
     }
     
+    // Get context window size from environment variable
+    const char *context_window_str = getenv("CONTEXT_WINDOW");
+    int context_window = 8192;  // Default for many models
+    if (context_window_str != NULL) {
+        int parsed_window = atoi(context_window_str);
+        if (parsed_window > 0) {
+            context_window = parsed_window;
+        }
+    }
+    
+    // Get max response tokens from environment variable (optional override)
+    const char *max_tokens_str = getenv("MAX_TOKENS");
+    int max_tokens = -1;  // Will be calculated later if not set
+    if (max_tokens_str != NULL) {
+        int parsed_tokens = atoi(max_tokens_str);
+        if (parsed_tokens > 0) {
+            max_tokens = parsed_tokens;
+        }
+    }
+    
+    // Estimate prompt tokens (rough approximation: ~4 chars per token)
+    int estimated_prompt_tokens = (int)(strlen(user_message) / 4) + 20; // +20 for system overhead
+    
+    // Calculate max response tokens if not explicitly set
+    if (max_tokens == -1) {
+        max_tokens = context_window - estimated_prompt_tokens - 50; // -50 for safety buffer
+        if (max_tokens < 100) {
+            max_tokens = 100; // Minimum reasonable response length
+        }
+    }
+    
     // Build JSON payload with user's message
     char post_data[2048];
     int json_ret = snprintf(post_data, sizeof(post_data),
@@ -45,8 +77,8 @@ int main(int argc, char *argv[])
                 "\"content\": \"%s\""
             "}"
         "],"
-        "\"max_tokens\": 100"
-        "}", model, user_message);
+        "\"max_tokens\": %d"
+        "}", model, user_message, max_tokens);
     
     if (json_ret < 0 || json_ret >= (int)sizeof(post_data)) {
         fprintf(stderr, "Error: Message too long\n");
@@ -73,7 +105,14 @@ int main(int argc, char *argv[])
     fprintf(stderr, "POST data: %s\n\n", post_data);
     
     if (http_post_with_headers(url, post_data, headers, &response) == 0) {
-        printf("%s\n", response.data);
+        ParsedResponse parsed_response;
+        if (parse_api_response(response.data, &parsed_response) == 0) {
+            print_formatted_response(&parsed_response);
+            cleanup_parsed_response(&parsed_response);
+        } else {
+            fprintf(stderr, "Error: Failed to parse API response\n");
+            printf("%s\n", response.data);  // Fallback to raw output
+        }
     } else {
         fprintf(stderr, "API request failed\n");
         cleanup_response(&response);
