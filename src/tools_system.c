@@ -128,9 +128,15 @@ static char* extract_json_string(const char *json, const char *key) {
     start++; // Skip opening quote
     const char *end = start;
     
-    // Find closing quote (simple - doesn't handle escapes properly)
-    while (*end != '\0' && *end != '"') {
-        end++;
+    // Find closing quote, properly handling escaped quotes
+    while (*end != '\0') {
+        if (*end == '"') {
+            break; // Found unescaped closing quote
+        } else if (*end == '\\' && *(end + 1) != '\0') {
+            end += 2; // Skip escaped character
+        } else {
+            end++;
+        }
     }
     
     if (*end != '"') {

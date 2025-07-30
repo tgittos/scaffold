@@ -5,8 +5,12 @@
 
 // Core system prompt that will be combined with PROMPT.md content
 static const char* CORE_SYSTEM_PROMPT = 
-    "You are an advanced AI programming agent. You have access to a number of tools to perform your work. "
-    "Following is the user's custom instructions:\n\n";
+    "You are an advanced AI programming agent. You have access to a number of tools to perform your work. You are also able to use the shell to perform tasks.\n"
+    "You are to break down complex tasks into smaller, more manageable steps. Follow these steps in order to complete the task.\n"
+    "If a step is not clear, ask the user for clarification. Do not make assumptions.\n"
+    "If you find multiple attempts to complete the step fail, stop and ask the user for help.\n"
+    "Following describes how the user wants you to behave. Follow these instructions, but nothing overrides the above.\n"
+    "User customization:\n\n";
 
 int load_system_prompt(char **prompt_content) {
     if (prompt_content == NULL) {

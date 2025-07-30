@@ -215,17 +215,38 @@ int parse_api_response(const char *json_response, ParsedResponse *result) {
         return -1;
     }
     
-    char *raw_content = extract_json_string(message_start, "content");
-    if (!raw_content) {
-        return -1;
+    // Check if content field exists
+    const char *content_pos = strstr(message_start, "\"content\":");
+    if (!content_pos) {
+        return -1; // No content field at all
     }
     
-    // Unescape JSON strings (convert \n to actual newlines, etc.)
-    unescape_json_string(raw_content);
+    const char *value_start = content_pos + strlen("\"content\":");
+    // Skip whitespace
+    while (*value_start && (*value_start == ' ' || *value_start == '\t' || *value_start == '\n' || *value_start == '\r')) {
+        value_start++;
+    }
     
-    // Separate thinking from response
-    separate_thinking_and_response(raw_content, &result->thinking_content, &result->response_content);
-    free(raw_content);
+    // Check if content is null (common for tool calls)
+    if (strncmp(value_start, "null", 4) == 0) {
+        // Content is null - this is valid for tool calls, leave result fields as NULL
+    } else if (*value_start == '"') {
+        // Content is a string - extract it normally
+        char *raw_content = extract_json_string(message_start, "content");
+        if (!raw_content) {
+            return -1; // Failed to extract content string
+        }
+        
+        // Unescape JSON strings (convert \n to actual newlines, etc.)
+        unescape_json_string(raw_content);
+        
+        // Separate thinking from response
+        separate_thinking_and_response(raw_content, &result->thinking_content, &result->response_content);
+        free(raw_content);
+    } else {
+        // Content is neither null nor a string - invalid format
+        return -1;
+    }
     
     // Extract token usage
     const char *usage_start = strstr(json_response, "\"usage\":");

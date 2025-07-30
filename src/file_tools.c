@@ -675,12 +675,42 @@ void cleanup_search_results(SearchResults *results) {
 }
 
 // JSON parsing helpers for tool calls
+// Helper function to unescape JSON string values
+static void unescape_json_string(char *str) {
+    if (!str) return;
+    
+    char *src = str;
+    char *dst = str;
+    
+    while (*src) {
+        if (*src == '\\' && *(src + 1)) {
+            src++; // Skip backslash
+            switch (*src) {
+                case '"': *dst++ = '"'; break;
+                case '\\': *dst++ = '\\'; break;
+                case 'n': *dst++ = '\n'; break;
+                case 'r': *dst++ = '\r'; break;
+                case 't': *dst++ = '\t'; break;
+                case 'b': *dst++ = '\b'; break;
+                case 'f': *dst++ = '\f'; break;
+                default: *dst++ = *src; break;
+            }
+            src++;
+        } else {
+            *dst++ = *src++;
+        }
+    }
+    *dst = '\0';
+}
+
 static char* extract_string_param(const char *json, const char *param_name) {
     char search_key[256] = {0};
     snprintf(search_key, sizeof(search_key), "\"%s\":", param_name);
     
     const char *start = strstr(json, search_key);
-    if (start == NULL) return NULL;
+    if (start == NULL) {
+        return NULL;
+    }
     
     start += strlen(search_key);
     while (*start == ' ' || *start == '\t') start++;
@@ -745,9 +775,20 @@ int execute_file_write_tool_call(const ToolCall *tool_call, ToolResult *result) 
     result->tool_call_id = safe_strdup(tool_call->id);
     if (result->tool_call_id == NULL) return -1;
     
-    char *file_path = extract_string_param(tool_call->arguments, "file_path");
-    char *content = extract_string_param(tool_call->arguments, "content");
-    int create_backup = extract_bool_param(tool_call->arguments, "create_backup", 0);
+    // Unescape the entire arguments JSON string first
+    char *unescaped_args = NULL;
+    if (tool_call->arguments != NULL) {
+        unescaped_args = safe_strdup(tool_call->arguments);
+        if (unescaped_args != NULL) {
+            unescape_json_string(unescaped_args);
+        }
+    }
+    
+    char *file_path = extract_string_param(unescaped_args, "file_path");
+    char *content = extract_string_param(unescaped_args, "content");
+    int create_backup = extract_bool_param(unescaped_args, "create_backup", 0);
+    
+    free(unescaped_args);
     
     if (file_path == NULL || content == NULL) {
         result->result = safe_strdup("Error: Missing required parameters 'file_path' or 'content'");

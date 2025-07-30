@@ -82,6 +82,10 @@ char* ralph_build_json_payload(const char* model, const char* system_prompt,
     strcat(json, model);
     strcat(json, "\", \"messages\": [");
     
+    // Determine if we need to add user message
+    int will_add_user_message = (user_message != NULL && strlen(user_message) > 0);
+    int message_count = 0; // Track how many messages we've added
+    
     // Add system prompt if available
     if (system_prompt != NULL) {
         char* escaped_system = ralph_escape_json_string(system_prompt);
@@ -90,10 +94,7 @@ char* ralph_build_json_payload(const char* model, const char* system_prompt,
             strcat(json, escaped_system);
             strcat(json, "\"}");
             free(escaped_system);
-            
-            if (conversation->count > 0) {
-                strcat(json, ", ");
-            }
+            message_count++;
         }
     }
     
@@ -101,7 +102,7 @@ char* ralph_build_json_payload(const char* model, const char* system_prompt,
     for (int i = 0; i < conversation->count; i++) {
         char* escaped_content = ralph_escape_json_string(conversation->messages[i].content);
         if (escaped_content != NULL) {
-            if (i > 0 || system_prompt != NULL) {
+            if (message_count > 0) {
                 strcat(json, ", ");
             }
             strcat(json, "{\"role\": \"");
@@ -120,20 +121,22 @@ char* ralph_build_json_payload(const char* model, const char* system_prompt,
             
             strcat(json, "}");
             free(escaped_content);
+            message_count++;
         }
     }
     
     // Add current user message (only if not empty)
-    if (user_message != NULL && strlen(user_message) > 0) {
+    if (will_add_user_message) {
         char* escaped_user_msg = ralph_escape_json_string(user_message);
         if (escaped_user_msg != NULL) {
-            if (conversation->count > 0 || system_prompt != NULL) {
+            if (message_count > 0) {
                 strcat(json, ", ");
             }
             strcat(json, "{\"role\": \"user\", \"content\": \"");
             strcat(json, escaped_user_msg);
             strcat(json, "\"}");
             free(escaped_user_msg);
+            message_count++;
         }
     }
     

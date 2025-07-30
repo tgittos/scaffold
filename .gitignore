@@ -9,6 +9,9 @@
 src/.aarch64/
 test/.aarch64/
 
+# Executables
+ralph
+
 # Dependencies
 deps/
 
@@ -22,3 +25,7 @@ test/unity/.aarch64/
 
 # Environment files (should be local only)
 .env
+
+# Runtime files
+CONVERSATION.md
+success.txt
