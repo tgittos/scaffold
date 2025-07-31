@@ -3,7 +3,7 @@
 
 int main(int argc, char *argv[]) {
     if (argc != 3) {
-        fprintf(stderr, "Usage: %s <input_binary> <output_header>\n", argv[0]);
+        fprintf(stderr, "Usage: %s <input_binary> <var_name>\n", argv[0]);
         return 1;
     }
     
@@ -13,12 +13,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     
-    FILE *output = fopen(argv[2], "w");
-    if (!output) {
-        perror("Failed to open output file");
-        fclose(input);
-        return 1;
-    }
+    FILE *output = stdout;  // Output to stdout for redirection
     
     // Get file size
     fseek(input, 0, SEEK_END);
@@ -29,7 +24,7 @@ int main(int argc, char *argv[]) {
     fprintf(output, "#ifndef EMBEDDED_LINKS_H\n");
     fprintf(output, "#define EMBEDDED_LINKS_H\n\n");
     fprintf(output, "#include <stddef.h>\n\n");
-    fprintf(output, "static const unsigned char embedded_links_data[] = {\n    ");
+    fprintf(output, "static const unsigned char %s_data[] = {\n    ", argv[2]);
     
     int byte;
     int count = 0;
@@ -44,12 +39,11 @@ int main(int argc, char *argv[]) {
     }
     
     fprintf(output, "\n};\n\n");
-    fprintf(output, "static const size_t embedded_links_size = %ld;\n\n", size);
+    fprintf(output, "static const size_t %s_size = %ld;\n\n", argv[2], size);
     fprintf(output, "#endif // EMBEDDED_LINKS_H\n");
     
     fclose(input);
-    fclose(output);
     
-    printf("Generated %s (%ld bytes)\n", argv[2], size);
+    fprintf(stderr, "Generated %s (%ld bytes)\n", argv[2], size);
     return 0;
 }

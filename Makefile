@@ -14,7 +14,7 @@ OBJECTS = $(SOURCES:.c=.o)
 HEADERS = $(SRCDIR)/ralph.h $(SRCDIR)/http_client.h $(SRCDIR)/env_loader.h $(SRCDIR)/output_formatter.h $(SRCDIR)/prompt_loader.h $(SRCDIR)/conversation_tracker.h $(SRCDIR)/tools_system.h $(SRCDIR)/shell_tool.h $(SRCDIR)/file_tools.h $(SRCDIR)/links_tool.h $(SRCDIR)/debug_output.h $(SRCDIR)/embedded_links.h
 
 # Tools
-BIN2C = ./bin2c
+BIN2C = build/bin2c
 
 # Test files
 TEST_MAIN_SOURCES = $(TESTDIR)/test_main.c $(TESTDIR)/unity/unity.c
@@ -81,7 +81,7 @@ LIBS = -lcurl -lmbedtls -lmbedx509 -lmbedcrypto
 RALPH_TEST_LIBS = $(LIBS) -lpthread
 
 # Bundled Links binary
-LINKS_BUNDLED = links_bundled
+LINKS_BUNDLED = build/links
 EMBEDDED_LINKS_HEADER = $(SRCDIR)/embedded_links.h
 
 # Default target
@@ -96,15 +96,15 @@ $(TARGET): $(EMBEDDED_LINKS_HEADER) $(OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBE
 	$(CC) $(LDFLAGS) -o $@ $(OBJECTS) $(LIBS)
 
 # Build bin2c tool
-$(BIN2C): bin2c.c
+$(BIN2C): build/bin2c.c
 	$(CC) -O2 -o $@ $<
 
 # Generate embedded links header
 $(EMBEDDED_LINKS_HEADER): $(LINKS_BUNDLED) $(BIN2C)
-	$(BIN2C) $(LINKS_BUNDLED) $(EMBEDDED_LINKS_HEADER)
+	$(BIN2C) $(LINKS_BUNDLED) embedded_links > $(EMBEDDED_LINKS_HEADER)
 
 # Download pre-built Cosmopolitan Links binary
-$(LINKS_BUNDLED): | $(DEPDIR)
+$(LINKS_BUNDLED):
 	@echo "Checking for pre-built Cosmopolitan Links binary..."
 	@if [ ! -f $(LINKS_BUNDLED) ]; then \
 		echo "Downloading pre-built Cosmopolitan Links binary..."; \

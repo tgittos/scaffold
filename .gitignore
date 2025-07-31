@@ -11,9 +11,10 @@ test/.aarch64/
 
 # Executables
 ralph
-bin2c
 test_bundled_links
-links_bundled
+
+# Build directory and artifacts
+build/
 
 # Generated headers
 src/embedded_links.h
