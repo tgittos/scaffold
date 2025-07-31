@@ -259,4 +259,35 @@ When running `make check-valgrind`, expect:
 - **Verification**: Test passes in normal execution (`./test/test_shell_tool`)
 - **Action required**: None - this is expected behavior and doesn't indicate memory safety issues
 
+#### Debugging with GDB and Cosmopolitan Binaries
+When debugging segfaults or other runtime issues with GDB:
+
+**CRITICAL**: Use the `.aarch64.elf` binary format for GDB debugging:
+```bash
+# WRONG - will not work with GDB
+gdb ./ralph
+
+# CORRECT - use the native ELF format
+gdb ./ralph.aarch64.elf
+```
+
+**Cosmopolitan Build Outputs**:
+- `ralph` - Portable APE (Actually Portable Executable) format - cannot be debugged with GDB
+- `ralph.aarch64.elf` - Native ARM64 ELF format - **use this with GDB**  
+- `ralph.com.dbg` - Debug symbols file - may have compatibility issues
+
+**Common GDB debugging workflow**:
+```bash
+# Run with GDB to catch segfaults
+gdb -ex run -ex bt -ex quit --args ./ralph.aarch64.elf
+
+# Interactive debugging
+gdb ./ralph.aarch64.elf
+(gdb) run
+(gdb) bt
+(gdb) info registers
+```
+
+**Note**: The main `ralph` executable uses Cosmopolitan's APE format which provides portability across platforms but is not compatible with standard debuggers like GDB. Always use the `.aarch64.elf` version for debugging purposes.
+
 This architecture ensures robust, portable, and memory-safe C code suitable for production use across multiple platforms via Cosmopolitan Libc.
