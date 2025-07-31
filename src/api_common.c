@@ -56,6 +56,10 @@ int format_openai_message(char* buffer, size_t buffer_size,
         result = snprintf(buffer, buffer_size,
                          "{\"role\": \"tool\", \"content\": \"%s\", \"tool_call_id\": \"%s\"}",
                          escaped_content, message->tool_call_id);
+    } else if (strcmp(message->role, "assistant") == 0 && 
+               strstr(message->content, "\"tool_calls\"") != NULL) {
+        // This is an assistant message with tool calls - use the content as-is (it's already JSON)
+        result = snprintf(buffer, buffer_size, "%s", message->content);
     } else {
         result = snprintf(buffer, buffer_size,
                          "{\"role\": \"%s\", \"content\": \"%s\"}",

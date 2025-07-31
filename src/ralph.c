@@ -195,6 +195,70 @@ int ralph_load_config(RalphSession* session) {
     return 0;
 }
 
+// Helper function to construct OpenAI assistant message with tool calls
+static char* construct_openai_assistant_message_with_tools(const char* content, 
+                                                          const ToolCall* tool_calls, 
+                                                          int call_count) {
+    if (call_count <= 0 || tool_calls == NULL) {
+        return content ? strdup(content) : NULL;
+    }
+    
+    // Estimate size needed for the JSON message
+    size_t base_size = 200; // Base structure
+    size_t content_size = content ? strlen(content) * 2 + 50 : 50; // Escaped content
+    size_t tools_size = call_count * 200; // Rough estimate per tool call
+    
+    char* message = malloc(base_size + content_size + tools_size);
+    if (message == NULL) {
+        return NULL;
+    }
+    
+    // Start constructing the message
+    char* escaped_content = ralph_escape_json_string(content ? content : "");
+    if (escaped_content == NULL) {
+        free(message);
+        return NULL;
+    }
+    
+    int written = snprintf(message, base_size + content_size + tools_size,
+                          "{\"role\": \"assistant\", \"content\": \"%s\", \"tool_calls\": [",
+                          escaped_content);
+    free(escaped_content);
+    
+    if (written < 0) {
+        free(message);
+        return NULL;
+    }
+    
+    // Add tool calls
+    for (int i = 0; i < call_count; i++) {
+        char* escaped_args = ralph_escape_json_string(tool_calls[i].arguments ? tool_calls[i].arguments : "{}");
+        if (escaped_args == NULL) {
+            free(message);
+            return NULL;
+        }
+        
+        char tool_call_json[512];
+        int tool_written = snprintf(tool_call_json, sizeof(tool_call_json),
+                                   "%s{\"id\": \"%s\", \"type\": \"function\", \"function\": {\"name\": \"%s\", \"arguments\": \"%s\"}}",
+                                   i > 0 ? ", " : "",
+                                   tool_calls[i].id ? tool_calls[i].id : "",
+                                   tool_calls[i].name ? tool_calls[i].name : "",
+                                   escaped_args);
+        free(escaped_args);
+        
+        if (tool_written < 0 || tool_written >= (int)sizeof(tool_call_json)) {
+            free(message);
+            return NULL;
+        }
+        
+        strcat(message, tool_call_json);
+    }
+    
+    strcat(message, "]}");
+    return message;
+}
+
 // Common tool calling workflow that handles both OpenAI and LM Studio formats
 int ralph_execute_tool_workflow(RalphSession* session, ToolCall* tool_calls, int call_count, 
                                const char* user_message, int max_tokens, const char** headers) {
@@ -457,12 +521,17 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
             }
             
             // Then save assistant message with tool calls
-            const char* content_to_save;
+            const char* content_to_save = NULL;
+            char* constructed_message = NULL;
+            
             if (session->config.api_type == API_TYPE_ANTHROPIC) {
                 // Use a special format to preserve Anthropic tool_use blocks
                 content_to_save = response.data;
             } else {
-                content_to_save = parsed_response.response_content;
+                // For OpenAI, construct a message with tool_calls array
+                constructed_message = construct_openai_assistant_message_with_tools(
+                    parsed_response.response_content, raw_tool_calls, raw_call_count);
+                content_to_save = constructed_message;
             }
             
             if (content_to_save != NULL) {
@@ -470,6 +539,8 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
                     fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
                 }
             }
+            
+            free(constructed_message);
             
             result = ralph_execute_tool_workflow(session, raw_tool_calls, raw_call_count, user_message, max_tokens, headers);
             cleanup_tool_calls(raw_tool_calls, raw_call_count);
