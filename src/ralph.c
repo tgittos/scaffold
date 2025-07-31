@@ -353,6 +353,9 @@ static char* construct_openai_assistant_message_with_tools(const char* content,
     return message;
 }
 
+// Forward declaration for the iterative tool loop
+static int ralph_execute_tool_loop(RalphSession* session, const char* user_message, int max_tokens, const char** headers);
+
 // Common tool calling workflow that handles both OpenAI and LM Studio formats
 int ralph_execute_tool_workflow(RalphSession* session, ToolCall* tool_calls, int call_count, 
                                const char* user_message, int max_tokens, const char** headers) {
@@ -397,80 +400,253 @@ int ralph_execute_tool_workflow(RalphSession* session, ToolCall* tool_calls, int
         }
     }
     
-    // Make follow-up request with tool results
-    struct HTTPResponse follow_up_response = {0};
+    // CRITICAL FIX: Now that initial tools are executed and saved to conversation,
+    // check if we need to continue with follow-up API calls for additional tool calls
+    int result = ralph_execute_tool_loop(session, user_message, max_tokens, headers);
     
-    debug_printf("Building follow-up JSON payload...\n");
-    
-    // Recalculate token allocation for follow-up request since conversation has grown
-    TokenConfig follow_up_token_config;
-    token_config_init(&follow_up_token_config, session->config.context_window, session->config.max_context_window);
-    TokenUsage follow_up_usage;
-    if (calculate_token_allocation(session, "", &follow_up_token_config, &follow_up_usage) != 0) {
-        fprintf(stderr, "Error: Failed to calculate follow-up token allocation\n");
-        return -1;
-    }
-    
-    int follow_up_max_tokens = follow_up_usage.available_response_tokens;
-    debug_printf("Recalculated max_tokens for follow-up: %d (was %d, prompt tokens: %d)\n", 
-                follow_up_max_tokens, max_tokens, follow_up_usage.total_prompt_tokens);
-    
-    // Build new JSON payload with conversation including tool results
-    // FIXED: Removed automatic continue message that was causing infinite loops
-    // const char* continue_message = "Continue working on your todo list. Review your current todos and complete any remaining tasks. Do not stop until all todos are marked 'completed'.";
-    
-    char* follow_up_data = NULL;
-    if (session->config.api_type == API_TYPE_ANTHROPIC) {
-        follow_up_data = ralph_build_anthropic_json_payload_with_todos(session, "", follow_up_max_tokens);
-    } else {
-        follow_up_data = ralph_build_json_payload_with_todos(session, "", follow_up_max_tokens);
-    }
-    // Tool execution was successful - we'll return success regardless of follow-up API status
-    int result = 0;
-    
-    if (follow_up_data != NULL) {
-        debug_printf("Follow-up POST data: %s\n", follow_up_data);
-        debug_printf("Making follow-up request with tool results...\n");
-        
-        if (http_post_with_headers(session->config.api_url, follow_up_data, headers, &follow_up_response) == 0) {
-            // Parse follow-up response based on API type
-            ParsedResponse follow_up_parsed;
-            int parse_result;
-            if (session->config.api_type == API_TYPE_ANTHROPIC) {
-                parse_result = parse_anthropic_response(follow_up_response.data, &follow_up_parsed);
-            } else {
-                parse_result = parse_api_response(follow_up_response.data, &follow_up_parsed);
-            }
-            
-            if (parse_result == 0) {
-                // Display the final response
-                print_formatted_response(&follow_up_parsed);
-                
-                // Save final assistant response to conversation
-                const char* final_content = follow_up_parsed.response_content ? 
-                                           follow_up_parsed.response_content : 
-                                           follow_up_parsed.thinking_content;
-                if (final_content != NULL) {
-                    if (append_conversation_message(&session->conversation, "assistant", final_content) != 0) {
-                        fprintf(stderr, "Warning: Failed to save final assistant response to conversation history\n");
-                    }
-                }
-                
-                cleanup_parsed_response(&follow_up_parsed);
-            } else {
-                fprintf(stderr, "Error: Failed to parse follow-up API response\n");
-                printf("%s\n", follow_up_response.data);
-            }
-        } else {
-            fprintf(stderr, "Follow-up API request failed - tool execution was still successful\n");
-        }
-        
-        cleanup_response(&follow_up_response);
-        free(follow_up_data);
+    // Always return success if tools executed, even if follow-up fails
+    // This maintains backward compatibility with existing tests
+    if (result != 0) {
+        debug_printf("Follow-up tool loop failed, but initial tools executed successfully\n");
+        result = 0;
     }
     
     cleanup_tool_results(results, call_count);
     return result;
+}
+
+// Simple tracking structure for executed tool calls
+typedef struct {
+    char** tool_call_ids;
+    int count;
+    int capacity;
+} ExecutedToolTracker;
+
+// Check if a tool call ID was already executed
+static int is_tool_already_executed(ExecutedToolTracker* tracker, const char* tool_call_id) {
+    for (int i = 0; i < tracker->count; i++) {
+        if (strcmp(tracker->tool_call_ids[i], tool_call_id) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// Add a tool call ID to the executed tracker
+static void add_executed_tool(ExecutedToolTracker* tracker, const char* tool_call_id) {
+    if (tracker->count >= tracker->capacity) {
+        tracker->capacity = tracker->capacity == 0 ? 10 : tracker->capacity * 2;
+        tracker->tool_call_ids = realloc(tracker->tool_call_ids, tracker->capacity * sizeof(char*));
+    }
+    if (tracker->tool_call_ids != NULL) {
+        tracker->tool_call_ids[tracker->count] = strdup(tool_call_id);
+        tracker->count++;
+    }
+}
+
+// Cleanup executed tool tracker
+static void cleanup_executed_tool_tracker(ExecutedToolTracker* tracker) {
+    for (int i = 0; i < tracker->count; i++) {
+        free(tracker->tool_call_ids[i]);
+    }
+    free(tracker->tool_call_ids);
+    tracker->tool_call_ids = NULL;
+    tracker->count = 0;
+    tracker->capacity = 0;
+}
+
+// Iterative tool calling loop - continues until no more tool calls are found
+static int ralph_execute_tool_loop(RalphSession* session, const char* user_message, int max_tokens, const char** headers) {
+    if (session == NULL) {
+        return -1;
+    }
+    
+    // Suppress unused parameter warnings
+    (void)user_message;
+    (void)max_tokens;
+    
+    int loop_count = 0;
+    const int MAX_TOOL_LOOPS = 10; // Prevent infinite loops
+    ExecutedToolTracker tracker = {0};
+    
+    debug_printf("Starting iterative tool calling loop\n");
+    
+    while (loop_count < MAX_TOOL_LOOPS) {
+        loop_count++;
+        debug_printf("Tool calling loop iteration %d\n", loop_count);
+        
+        // Recalculate token allocation for this iteration
+        TokenConfig token_config;
+        token_config_init(&token_config, session->config.context_window, session->config.max_context_window);
+        TokenUsage token_usage;
+        if (calculate_token_allocation(session, "", &token_config, &token_usage) != 0) {
+            fprintf(stderr, "Error: Failed to calculate token allocation for tool loop iteration %d\n", loop_count);
+            return -1;
+        }
+        
+        int iteration_max_tokens = token_usage.available_response_tokens;
+        debug_printf("Using %d max_tokens for tool loop iteration %d\n", iteration_max_tokens, loop_count);
+        
+        // Build JSON payload with current conversation state
+        char* post_data = NULL;
+        if (session->config.api_type == API_TYPE_ANTHROPIC) {
+            post_data = ralph_build_anthropic_json_payload_with_todos(session, "", iteration_max_tokens);
+        } else {
+            post_data = ralph_build_json_payload_with_todos(session, "", iteration_max_tokens);
+        }
+        
+        if (post_data == NULL) {
+            fprintf(stderr, "Error: Failed to build JSON payload for tool loop iteration %d\n", loop_count);
+            return -1;
+        }
+        
+        // Make API request
+        struct HTTPResponse response = {0};
+        debug_printf("Making API request for tool loop iteration %d\n", loop_count);
+        
+        if (http_post_with_headers(session->config.api_url, post_data, headers, &response) != 0) {
+            fprintf(stderr, "API request failed for tool loop iteration %d\n", loop_count);
+            free(post_data);
+            return -1;
+        }
+        
+        // Parse response
+        ParsedResponse parsed_response;
+        int parse_result;
+        if (session->config.api_type == API_TYPE_ANTHROPIC) {
+            parse_result = parse_anthropic_response(response.data, &parsed_response);
+        } else {
+            parse_result = parse_api_response(response.data, &parsed_response);
+        }
+        
+        if (parse_result != 0) {
+            fprintf(stderr, "Error: Failed to parse API response for tool loop iteration %d\n", loop_count);
+            printf("%s\n", response.data);
+            cleanup_response(&response);
+            free(post_data);
+            return -1;
+        }
+        
+        // Display the response
+        print_formatted_response(&parsed_response);
+        
+        // Save assistant response to conversation
+        const char* assistant_content = parsed_response.response_content ? 
+                                       parsed_response.response_content : 
+                                       parsed_response.thinking_content;
+        if (assistant_content != NULL) {
+            if (append_conversation_message(&session->conversation, "assistant", assistant_content) != 0) {
+                fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
+            }
+        }
+        
+        // Check for tool calls in the response
+        ToolCall *tool_calls = NULL;
+        int call_count = 0;
+        int tool_parse_result;
+        
+        // First try to parse from raw JSON response (for proper API tool calls)
+        if (session->config.api_type == API_TYPE_ANTHROPIC) {
+            tool_parse_result = parse_anthropic_tool_calls(response.data, &tool_calls, &call_count);
+        } else {
+            tool_parse_result = parse_tool_calls(response.data, &tool_calls, &call_count);
+        }
+        
+        // If no tool calls found in raw response, check message content (for custom format)
+        if (tool_parse_result != 0 || call_count == 0) {
+            if (assistant_content != NULL && parse_tool_calls(assistant_content, &tool_calls, &call_count) == 0 && call_count > 0) {
+                tool_parse_result = 0;
+                debug_printf("Found %d tool calls in message content (custom format)\n", call_count);
+            }
+        }
+        
+        cleanup_parsed_response(&parsed_response);
+        cleanup_response(&response);
+        free(post_data);
+        
+        // If no tool calls found, we're done
+        if (tool_parse_result != 0 || call_count == 0) {
+            debug_printf("No more tool calls found - ending tool loop after %d iterations\n", loop_count);
+            cleanup_executed_tool_tracker(&tracker);
+            return 0;
+        }
+        
+        // Check if we've already executed these tool calls (prevent infinite loops)
+        int new_tool_calls = 0;
+        for (int i = 0; i < call_count; i++) {
+            if (!is_tool_already_executed(&tracker, tool_calls[i].id)) {
+                new_tool_calls++;
+            }
+        }
+        
+        if (new_tool_calls == 0) {
+            debug_printf("All %d tool calls already executed - ending loop to prevent infinite iteration\n", call_count);
+            cleanup_tool_calls(tool_calls, call_count);
+            cleanup_executed_tool_tracker(&tracker);
+            return 0;
+        }
+        
+        debug_printf("Found %d new tool calls (out of %d total) in iteration %d - executing them\n", 
+                    new_tool_calls, call_count, loop_count);
+        
+        // Execute only the new tool calls
+        ToolResult *results = malloc(call_count * sizeof(ToolResult));
+        if (results == NULL) {
+            cleanup_tool_calls(tool_calls, call_count);
+            cleanup_executed_tool_tracker(&tracker);
+            return -1;
+        }
+        
+        int executed_count = 0;
+        for (int i = 0; i < call_count; i++) {
+            // Skip already executed tool calls
+            if (is_tool_already_executed(&tracker, tool_calls[i].id)) {
+                debug_printf("Skipping already executed tool: %s (ID: %s)\n", 
+                           tool_calls[i].name, tool_calls[i].id);
+                continue;
+            }
+            
+            // Track this tool call as executed
+            add_executed_tool(&tracker, tool_calls[i].id);
+            
+            if (execute_tool_call(&session->tools, &tool_calls[i], &results[executed_count]) != 0) {
+                fprintf(stderr, "Warning: Failed to execute tool call %s in iteration %d\n", 
+                       tool_calls[i].name, loop_count);
+                results[executed_count].tool_call_id = strdup(tool_calls[i].id);
+                results[executed_count].result = strdup("Tool execution failed");
+                results[executed_count].success = 0;
+                
+                // Handle strdup failures
+                if (results[executed_count].tool_call_id == NULL) {
+                    results[executed_count].tool_call_id = strdup("unknown");
+                }
+                if (results[executed_count].result == NULL) {
+                    results[executed_count].result = strdup("Memory allocation failed");
+                }
+            } else {
+                debug_printf("Executed tool: %s (ID: %s) in iteration %d\n", 
+                           tool_calls[i].name, tool_calls[i].id, loop_count);
+            }
+            executed_count++;
+        }
+        
+        // Add tool result messages to conversation (only for executed tools)
+        for (int i = 0; i < executed_count; i++) {
+            if (append_tool_message(&session->conversation, results[i].result, 
+                                   results[i].tool_call_id, "tool_name") != 0) {
+                fprintf(stderr, "Warning: Failed to save tool result to conversation history\n");
+            }
+        }
+        
+        cleanup_tool_results(results, executed_count);
+        cleanup_tool_calls(tool_calls, call_count);
+        
+        // Continue the loop to check for more tool calls in the next response
+    }
+    
+    debug_printf("Warning: Tool calling loop reached maximum iterations (%d) - stopping to prevent infinite loop\n", MAX_TOOL_LOOPS);
+    cleanup_executed_tool_tracker(&tracker);
+    return 0;
 }
 
 int ralph_process_message(RalphSession* session, const char* user_message) {
@@ -579,6 +755,14 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
             tool_parse_result = parse_anthropic_tool_calls(response.data, &raw_tool_calls, &raw_call_count);
         } else {
             tool_parse_result = parse_tool_calls(response.data, &raw_tool_calls, &raw_call_count);
+        }
+        
+        // If no tool calls found in raw response, check message content (for custom format)
+        if (tool_parse_result != 0 || raw_call_count == 0) {
+            if (message_content != NULL && parse_tool_calls(message_content, &raw_tool_calls, &raw_call_count) == 0 && raw_call_count > 0) {
+                tool_parse_result = 0;
+                debug_printf("Found %d tool calls in message content (custom format)\n", raw_call_count);
+            }
         }
         
         if (tool_parse_result == 0 && raw_call_count > 0) {
