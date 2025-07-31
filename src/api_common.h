@@ -47,6 +47,16 @@ int build_messages_json(char* buffer, size_t buffer_size,
                        int skip_system_in_history);
 
 /**
+ * Anthropic-specific messages builder that validates tool_result/tool_use pairing
+ */
+int build_anthropic_messages_json(char* buffer, size_t buffer_size,
+                                 const char* system_prompt,
+                                 const ConversationHistory* conversation,
+                                 const char* user_message,
+                                 MessageFormatter formatter,
+                                 int skip_system_in_history);
+
+/**
  * API-specific JSON builders that use common components
  */
 char* build_json_payload_common(const char* model, const char* system_prompt,

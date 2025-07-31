@@ -530,17 +530,7 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
         // Display the response
         print_formatted_response(&parsed_response);
         
-        // Save assistant response to conversation
-        const char* assistant_content = parsed_response.response_content ? 
-                                       parsed_response.response_content : 
-                                       parsed_response.thinking_content;
-        if (assistant_content != NULL) {
-            if (append_conversation_message(&session->conversation, "assistant", assistant_content) != 0) {
-                fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
-            }
-        }
-        
-        // Check for tool calls in the response
+        // Check for tool calls in the response FIRST
         ToolCall *tool_calls = NULL;
         int call_count = 0;
         int tool_parse_result;
@@ -553,10 +543,40 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
         }
         
         // If no tool calls found in raw response, check message content (for custom format)
+        const char* assistant_content = parsed_response.response_content ? 
+                                       parsed_response.response_content : 
+                                       parsed_response.thinking_content;
         if (tool_parse_result != 0 || call_count == 0) {
             if (assistant_content != NULL && parse_tool_calls(assistant_content, &tool_calls, &call_count) == 0 && call_count > 0) {
                 tool_parse_result = 0;
                 debug_printf("Found %d tool calls in message content (custom format)\n", call_count);
+            }
+        }
+        
+        // Save assistant response to conversation - use raw response for tool calls, parsed content otherwise
+        if (tool_parse_result == 0 && call_count > 0) {
+            // For responses with tool calls, save the raw JSON response to preserve tool_use structure
+            if (session->config.api_type == API_TYPE_ANTHROPIC) {
+                // For Anthropic, save the raw JSON response as-is to preserve tool_use blocks
+                if (append_conversation_message(&session->conversation, "assistant", response.data) != 0) {
+                    fprintf(stderr, "Warning: Failed to save assistant response with tool calls to conversation history\n");
+                }
+            } else {
+                // For OpenAI, construct a message with tool_calls array
+                // We'll save the assistant message after tool execution in the main function
+                // For now, just save text content if available
+                if (assistant_content != NULL) {
+                    if (append_conversation_message(&session->conversation, "assistant", assistant_content) != 0) {
+                        fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
+                    }
+                }
+            }
+        } else {
+            // For responses without tool calls, save the parsed content
+            if (assistant_content != NULL) {
+                if (append_conversation_message(&session->conversation, "assistant", assistant_content) != 0) {
+                    fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
+                }
             }
         }
         

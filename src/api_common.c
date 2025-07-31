@@ -235,6 +235,118 @@ int build_messages_json(char* buffer, size_t buffer_size,
     return current - buffer;
 }
 
+// Helper function to check if a tool_use_id exists in an assistant message
+static int message_contains_tool_use_id(const ConversationMessage* msg, const char* tool_use_id) {
+    if (!msg || !tool_use_id || strcmp(msg->role, "assistant") != 0) {
+        return 0;
+    }
+    
+    // Search for the tool_use_id in the message content
+    char search_pattern[256];
+    snprintf(search_pattern, sizeof(search_pattern), "\"id\": \"%s\"", tool_use_id);
+    
+    if (strstr(msg->content, search_pattern)) {
+        return 1;
+    }
+    
+    // Also try without spaces around colon
+    snprintf(search_pattern, sizeof(search_pattern), "\"id\":\"%s\"", tool_use_id);
+    return strstr(msg->content, search_pattern) != NULL;
+}
+
+// Anthropic-specific message builder that ensures tool_result messages 
+// have corresponding tool_use blocks in the previous message
+int build_anthropic_messages_json(char* buffer, size_t buffer_size,
+                                 const char* system_prompt,
+                                 const ConversationHistory* conversation,
+                                 const char* user_message,
+                                 MessageFormatter formatter,
+                                 int skip_system_in_history) {
+    char* current = buffer;
+    size_t remaining = buffer_size;
+    int message_count = 0;
+    
+    // Add system prompt if available and not skipping
+    if (system_prompt != NULL && !skip_system_in_history) {
+        ConversationMessage sys_msg = {
+            .role = "system",
+            .content = (char*)system_prompt,
+            .tool_call_id = NULL,
+            .tool_name = NULL
+        };
+        
+        int written = formatter(current, remaining, &sys_msg, 1);
+        if (written < 0) return -1;
+        
+        current += written;
+        remaining -= written;
+        message_count++;
+    }
+    
+    // Add conversation history with Anthropic tool call validation
+    for (int i = 0; i < conversation->count; i++) {
+        const ConversationMessage* msg = &conversation->messages[i];
+        
+        // Skip system messages if requested
+        if (skip_system_in_history && strcmp(msg->role, "system") == 0) {
+            continue;
+        }
+        
+        // For tool results, verify the previous assistant message contains the tool_use_id
+        if (strcmp(msg->role, "tool") == 0 && msg->tool_call_id != NULL) {
+            // Look backwards for the most recent assistant message
+            int found_tool_use = 0;
+            
+            for (int j = i - 1; j >= 0; j--) {
+                const ConversationMessage* prev_msg = &conversation->messages[j];
+                
+                if (strcmp(prev_msg->role, "assistant") == 0) {
+                    if (message_contains_tool_use_id(prev_msg, msg->tool_call_id)) {
+                        found_tool_use = 1;
+                    }
+                    break; // Stop at first assistant message found
+                }
+                
+                // If we hit another role that breaks the sequence, stop looking
+                if (strcmp(prev_msg->role, "user") == 0) {
+                    break;
+                }
+            }
+            
+            // Skip orphaned tool results that don't have corresponding tool_use in previous assistant message
+            if (!found_tool_use) {
+                continue;
+            }
+        }
+        
+        int written = formatter(current, remaining, msg, message_count == 0);
+        if (written < 0) return -1;
+        
+        current += written;
+        remaining -= written;
+        message_count++;
+    }
+    
+    // Add current user message if provided
+    if (user_message != NULL && strlen(user_message) > 0) {
+        ConversationMessage user_msg = {
+            .role = "user",
+            .content = (char*)user_message,
+            .tool_call_id = NULL,
+            .tool_name = NULL
+        };
+        
+        int written = formatter(current, remaining, &user_msg, message_count == 0);
+        if (written < 0) return -1;
+        
+        current += written;
+        remaining -= written;
+        message_count++;
+    }
+    
+    return current - buffer;
+}
+
 char* build_json_payload_common(const char* model, const char* system_prompt,
                                const ConversationHistory* conversation,
                                const char* user_message, const char* max_tokens_param,
@@ -258,11 +370,18 @@ char* build_json_payload_common(const char* model, const char* system_prompt,
     current += written;
     remaining -= written;
     
-    // Build messages array
-    written = build_messages_json(current, remaining, 
-                                 system_at_top_level ? NULL : system_prompt,
-                                 conversation, user_message, formatter,
-                                 system_at_top_level);
+    // Build messages array - use Anthropic-specific builder if system_at_top_level (Anthropic API)
+    if (system_at_top_level) {
+        written = build_anthropic_messages_json(current, remaining, 
+                                               NULL,  // system prompt handled at top level
+                                               conversation, user_message, formatter,
+                                               system_at_top_level);
+    } else {
+        written = build_messages_json(current, remaining, 
+                                     system_prompt,
+                                     conversation, user_message, formatter,
+                                     system_at_top_level);
+    }
     if (written < 0) {
         free(json);
         return NULL;

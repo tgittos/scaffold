@@ -10,6 +10,12 @@ You will need to use Ralph to test your work.
 - ./ralph "perform this complext specific task" with a string argument is non-interactive mode. Conversation tracking still occurs, but Ralph does not run in a loop.
 - The `--debug` flag will show you stdout and stderr logging.
 
+# Implementation details
+- This project supports 3 backends; OpenAI, Anthropic, and local AI via LMStudio.
+- Each LLM provider backend has it's own restrictions on message structure, tool use and response guidelines, and historical tracking concerns.
+- When you work on code specific to a single provider, you MUST take UTMOST care to ensure you don't break functionality in a different provider.
+- Extensively write tests to explore the differences in providers, and to ensure functionality is not broken as you work.
+
 # Development guidance
 
 - Prefer smaller functions to larger function.
