@@ -2,15 +2,31 @@
 #include <stdlib.h>
 #include <string.h>
 #include "ralph.h"
+#include "debug_output.h"
 
 #define MAX_INPUT_SIZE 8192
 
 int main(int argc, char *argv[])
 {
+    // Parse command line arguments for debug flag
+    bool debug_mode = false;
+    int message_arg_index = -1;
+    
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--debug") == 0) {
+            debug_mode = true;
+        } else if (message_arg_index == -1 && argv[i][0] != '-') {
+            message_arg_index = i;
+        }
+    }
+    
+    // Initialize debug system
+    debug_init(debug_mode);
+    
     // Check if single message mode or interactive mode
-    if (argc == 2) {
+    if (message_arg_index != -1) {
         // Single message mode (original behavior)
-        const char *user_message = argv[1];
+        const char *user_message = argv[message_arg_index];
         
         // Initialize Ralph session
         RalphSession session;
@@ -32,7 +48,7 @@ int main(int argc, char *argv[])
         // Cleanup and return result
         ralph_cleanup_session(&session);
         return (result == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
-    } else if (argc == 1) {
+    } else if (argc == 1 || (argc == 2 && debug_mode)) {
         // Interactive mode
         printf("Ralph Interactive Mode\n");
         printf("Type 'quit' or 'exit' to end the conversation.\n");
@@ -54,7 +70,7 @@ int main(int argc, char *argv[])
         
         // Check if this is a first-time user (no conversation history)
         if (session.conversation.count == 0) {
-            fprintf(stderr, "Generating welcome message...\n");
+            debug_printf("Generating welcome message...\n");
             
             // Send a system message to get an AI-generated greeting
             const char* greeting_prompt = "This is your first interaction with this user in interactive mode. "
@@ -114,10 +130,12 @@ int main(int argc, char *argv[])
         return EXIT_SUCCESS;
     } else {
         // Invalid arguments
-        fprintf(stderr, "Usage: %s [\"<message>\"]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [--debug] [\"<message>\"]\n", argv[0]);
         fprintf(stderr, "  No arguments: Interactive mode\n");
         fprintf(stderr, "  With message: Single message mode\n");
+        fprintf(stderr, "  --debug: Enable debug output (pale yellow stderr)\n");
         fprintf(stderr, "Example: %s \"Hello, how are you?\"\n", argv[0]);
+        fprintf(stderr, "Example: %s --debug \"Hello, how are you?\"\n", argv[0]);
         return EXIT_FAILURE;
     }
 }

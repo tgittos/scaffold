@@ -1,4 +1,5 @@
 #include "output_formatter.h"
+#include "debug_output.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -276,12 +277,12 @@ void print_formatted_response(const ParsedResponse *response) {
     
     // Print token usage in gray, de-prioritized (stderr)
     if (response->total_tokens > 0) {
-        fprintf(stderr, "\n" ANSI_GRAY "[tokens: %d total", response->total_tokens);
+        debug_printf("\n[tokens: %d total", response->total_tokens);
         if (response->prompt_tokens > 0 && response->completion_tokens > 0) {
-            fprintf(stderr, " (%d prompt + %d completion)", 
-                   response->prompt_tokens, response->completion_tokens);
+            debug_printf(" (%d prompt + %d completion)", 
+                        response->prompt_tokens, response->completion_tokens);
         }
-        fprintf(stderr, "]" ANSI_RESET "\n");
+        debug_printf("]\n");
     }
 }
 

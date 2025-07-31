@@ -9,9 +9,9 @@ TESTDIR = test
 DEPDIR = deps
 
 # Source files
-SOURCES = $(SRCDIR)/main.c $(SRCDIR)/ralph.c $(SRCDIR)/http_client.c $(SRCDIR)/env_loader.c $(SRCDIR)/output_formatter.c $(SRCDIR)/prompt_loader.c $(SRCDIR)/conversation_tracker.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c
+SOURCES = $(SRCDIR)/main.c $(SRCDIR)/ralph.c $(SRCDIR)/http_client.c $(SRCDIR)/env_loader.c $(SRCDIR)/output_formatter.c $(SRCDIR)/prompt_loader.c $(SRCDIR)/conversation_tracker.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/debug_output.c
 OBJECTS = $(SOURCES:.c=.o)
-HEADERS = $(SRCDIR)/ralph.h $(SRCDIR)/http_client.h $(SRCDIR)/env_loader.h $(SRCDIR)/output_formatter.h $(SRCDIR)/prompt_loader.h $(SRCDIR)/conversation_tracker.h $(SRCDIR)/tools_system.h $(SRCDIR)/shell_tool.h $(SRCDIR)/file_tools.h
+HEADERS = $(SRCDIR)/ralph.h $(SRCDIR)/http_client.h $(SRCDIR)/env_loader.h $(SRCDIR)/output_formatter.h $(SRCDIR)/prompt_loader.h $(SRCDIR)/conversation_tracker.h $(SRCDIR)/tools_system.h $(SRCDIR)/shell_tool.h $(SRCDIR)/file_tools.h $(SRCDIR)/debug_output.h
 
 # Test files
 TEST_MAIN_SOURCES = $(TESTDIR)/test_main.c $(TESTDIR)/unity/unity.c
@@ -26,7 +26,7 @@ TEST_ENV_SOURCES = $(TESTDIR)/test_env_loader.c $(SRCDIR)/env_loader.c $(TESTDIR
 TEST_ENV_OBJECTS = $(TEST_ENV_SOURCES:.c=.o)
 TEST_ENV_TARGET = $(TESTDIR)/test_env_loader
 
-TEST_OUTPUT_SOURCES = $(TESTDIR)/test_output_formatter.c $(SRCDIR)/output_formatter.c $(TESTDIR)/unity/unity.c
+TEST_OUTPUT_SOURCES = $(TESTDIR)/test_output_formatter.c $(SRCDIR)/output_formatter.c $(SRCDIR)/debug_output.c $(TESTDIR)/unity/unity.c
 TEST_OUTPUT_OBJECTS = $(TEST_OUTPUT_SOURCES:.c=.o)
 TEST_OUTPUT_TARGET = $(TESTDIR)/test_output_formatter
 
@@ -50,7 +50,7 @@ TEST_FILE_SOURCES = $(TESTDIR)/test_file_tools.c $(SRCDIR)/file_tools.c $(SRCDIR
 TEST_FILE_OBJECTS = $(TEST_FILE_SOURCES:.c=.o)
 TEST_FILE_TARGET = $(TESTDIR)/test_file_tools
 
-TEST_RALPH_SOURCES = $(TESTDIR)/test_ralph.c $(TESTDIR)/mock_api_server.c $(SRCDIR)/ralph.c $(SRCDIR)/http_client.c $(SRCDIR)/env_loader.c $(SRCDIR)/output_formatter.c $(SRCDIR)/prompt_loader.c $(SRCDIR)/conversation_tracker.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(TESTDIR)/unity/unity.c
+TEST_RALPH_SOURCES = $(TESTDIR)/test_ralph.c $(TESTDIR)/mock_api_server.c $(SRCDIR)/ralph.c $(SRCDIR)/http_client.c $(SRCDIR)/env_loader.c $(SRCDIR)/output_formatter.c $(SRCDIR)/prompt_loader.c $(SRCDIR)/conversation_tracker.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/debug_output.c $(TESTDIR)/unity/unity.c
 TEST_RALPH_OBJECTS = $(TEST_RALPH_SOURCES:.c=.o)
 TEST_RALPH_TARGET = $(TESTDIR)/test_ralph
 

@@ -3,6 +3,7 @@
 #include "output_formatter.h"
 #include "prompt_loader.h"
 #include "shell_tool.h"
+#include "debug_output.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -279,7 +280,7 @@ int ralph_execute_tool_workflow(RalphSession* session, ToolCall* tool_calls, int
         return -1;
     }
     
-    fprintf(stderr, "Executing %d tool call(s)...\n", call_count);
+    debug_printf("Executing %d tool call(s)...\n", call_count);
     
     // Save user message to conversation first
     if (append_conversation_message(&session->conversation, "user", user_message) != 0) {
@@ -307,7 +308,7 @@ int ralph_execute_tool_workflow(RalphSession* session, ToolCall* tool_calls, int
                 results[i].result = strdup("Memory allocation failed");
             }
         } else {
-            fprintf(stderr, "Executed tool: %s (ID: %s)\n", tool_calls[i].name, tool_calls[i].id);
+            debug_printf("Executed tool: %s (ID: %s)\n", tool_calls[i].name, tool_calls[i].id);
         }
     }
     
@@ -321,7 +322,7 @@ int ralph_execute_tool_workflow(RalphSession* session, ToolCall* tool_calls, int
     // Make follow-up request with tool results
     struct HTTPResponse follow_up_response = {0};
     
-    fprintf(stderr, "Building follow-up JSON payload...\n");
+    debug_printf("Building follow-up JSON payload...\n");
     // Build new JSON payload with conversation including tool results
     char* follow_up_data = ralph_build_json_payload(session->config.model, session->config.system_prompt, 
                                                    &session->conversation, "", 
@@ -330,8 +331,8 @@ int ralph_execute_tool_workflow(RalphSession* session, ToolCall* tool_calls, int
     int result = 0;
     
     if (follow_up_data != NULL) {
-        fprintf(stderr, "Follow-up POST data: %s\n", follow_up_data);
-        fprintf(stderr, "Making follow-up request with tool results...\n");
+        debug_printf("Follow-up POST data: %s\n", follow_up_data);
+        debug_printf("Making follow-up request with tool results...\n");
         
         if (http_post_with_headers(session->config.api_url, follow_up_data, headers, &follow_up_response) == 0) {
             // Parse follow-up response
@@ -407,8 +408,8 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
     
     curl_global_init(CURL_GLOBAL_DEFAULT);
     
-    fprintf(stderr, "Making API request to %s\n", session->config.api_url);
-    fprintf(stderr, "POST data: %s\n\n", post_data);
+    debug_printf("Making API request to %s\n", session->config.api_url);
+    debug_printf("POST data: %s\n\n", post_data);
     
     struct HTTPResponse response = {0};
     int result = -1;
