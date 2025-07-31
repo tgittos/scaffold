@@ -235,24 +235,7 @@ int build_messages_json(char* buffer, size_t buffer_size,
     return current - buffer;
 }
 
-// Helper function to check if a tool_use_id exists in an assistant message
-static int message_contains_tool_use_id(const ConversationMessage* msg, const char* tool_use_id) {
-    if (!msg || !tool_use_id || strcmp(msg->role, "assistant") != 0) {
-        return 0;
-    }
-    
-    // Search for the tool_use_id in the message content
-    char search_pattern[256];
-    snprintf(search_pattern, sizeof(search_pattern), "\"id\": \"%s\"", tool_use_id);
-    
-    if (strstr(msg->content, search_pattern)) {
-        return 1;
-    }
-    
-    // Also try without spaces around colon
-    snprintf(search_pattern, sizeof(search_pattern), "\"id\":\"%s\"", tool_use_id);
-    return strstr(msg->content, search_pattern) != NULL;
-}
+// Removed message_contains_tool_use_id function - no longer needed after removing orphaned tool filtering
 
 // Anthropic-specific message builder that ensures tool_result messages 
 // have corresponding tool_use blocks in the previous message
@@ -292,32 +275,8 @@ int build_anthropic_messages_json(char* buffer, size_t buffer_size,
             continue;
         }
         
-        // For tool results, verify the previous assistant message contains the tool_use_id
-        if (strcmp(msg->role, "tool") == 0 && msg->tool_call_id != NULL) {
-            // Look backwards for the most recent assistant message
-            int found_tool_use = 0;
-            
-            for (int j = i - 1; j >= 0; j--) {
-                const ConversationMessage* prev_msg = &conversation->messages[j];
-                
-                if (strcmp(prev_msg->role, "assistant") == 0) {
-                    if (message_contains_tool_use_id(prev_msg, msg->tool_call_id)) {
-                        found_tool_use = 1;
-                    }
-                    break; // Stop at first assistant message found
-                }
-                
-                // If we hit another role that breaks the sequence, stop looking
-                if (strcmp(prev_msg->role, "user") == 0) {
-                    break;
-                }
-            }
-            
-            // Skip orphaned tool results that don't have corresponding tool_use in previous assistant message
-            if (!found_tool_use) {
-                continue;
-            }
-        }
+        // NOTE: Removed orphaned tool result filtering - it was causing infinite loops
+        // The AI agent needs to see ALL tool results to avoid re-requesting the same tools
         
         int written = formatter(current, remaining, msg, message_count == 0);
         if (written < 0) return -1;

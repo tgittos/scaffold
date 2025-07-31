@@ -617,6 +617,15 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
             return -1;
         }
         
+        // Track mapping from result index to tool call index for proper tool names
+        int *tool_call_indices = malloc(call_count * sizeof(int));
+        if (tool_call_indices == NULL) {
+            free(results);
+            cleanup_tool_calls(tool_calls, call_count);
+            cleanup_executed_tool_tracker(&tracker);
+            return -1;
+        }
+        
         int executed_count = 0;
         for (int i = 0; i < call_count; i++) {
             // Skip already executed tool calls
@@ -628,6 +637,9 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
             
             // Track this tool call as executed
             add_executed_tool(&tracker, tool_calls[i].id);
+            
+            // Store mapping from result index to tool call index
+            tool_call_indices[executed_count] = i;
             
             if (execute_tool_call(&session->tools, &tool_calls[i], &results[executed_count]) != 0) {
                 fprintf(stderr, "Warning: Failed to execute tool call %s in iteration %d\n", 
@@ -652,11 +664,15 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
         
         // Add tool result messages to conversation (only for executed tools)
         for (int i = 0; i < executed_count; i++) {
+            int tool_call_index = tool_call_indices[i];
+            const char* tool_name = tool_calls[tool_call_index].name;
             if (append_tool_message(&session->conversation, results[i].result, 
-                                   results[i].tool_call_id, "tool_name") != 0) {
+                                   results[i].tool_call_id, tool_name) != 0) {
                 fprintf(stderr, "Warning: Failed to save tool result to conversation history\n");
             }
         }
+        
+        free(tool_call_indices);
         
         cleanup_tool_results(results, executed_count);
         cleanup_tool_calls(tool_calls, call_count);
