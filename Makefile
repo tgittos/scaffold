@@ -9,9 +9,12 @@ TESTDIR = test
 DEPDIR = deps
 
 # Source files
-SOURCES = $(SRCDIR)/main.c $(SRCDIR)/ralph.c $(SRCDIR)/http_client.c $(SRCDIR)/env_loader.c $(SRCDIR)/output_formatter.c $(SRCDIR)/prompt_loader.c $(SRCDIR)/conversation_tracker.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/debug_output.c
+SOURCES = $(SRCDIR)/main.c $(SRCDIR)/ralph.c $(SRCDIR)/http_client.c $(SRCDIR)/env_loader.c $(SRCDIR)/output_formatter.c $(SRCDIR)/prompt_loader.c $(SRCDIR)/conversation_tracker.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/debug_output.c
 OBJECTS = $(SOURCES:.c=.o)
-HEADERS = $(SRCDIR)/ralph.h $(SRCDIR)/http_client.h $(SRCDIR)/env_loader.h $(SRCDIR)/output_formatter.h $(SRCDIR)/prompt_loader.h $(SRCDIR)/conversation_tracker.h $(SRCDIR)/tools_system.h $(SRCDIR)/shell_tool.h $(SRCDIR)/file_tools.h $(SRCDIR)/debug_output.h
+HEADERS = $(SRCDIR)/ralph.h $(SRCDIR)/http_client.h $(SRCDIR)/env_loader.h $(SRCDIR)/output_formatter.h $(SRCDIR)/prompt_loader.h $(SRCDIR)/conversation_tracker.h $(SRCDIR)/tools_system.h $(SRCDIR)/shell_tool.h $(SRCDIR)/file_tools.h $(SRCDIR)/links_tool.h $(SRCDIR)/debug_output.h $(SRCDIR)/embedded_links.h
+
+# Tools
+BIN2C = ./bin2c
 
 # Test files
 TEST_MAIN_SOURCES = $(TESTDIR)/test_main.c $(TESTDIR)/unity/unity.c
@@ -38,21 +41,23 @@ TEST_CONVERSATION_SOURCES = $(TESTDIR)/test_conversation_tracker.c $(SRCDIR)/con
 TEST_CONVERSATION_OBJECTS = $(TEST_CONVERSATION_SOURCES:.c=.o)
 TEST_CONVERSATION_TARGET = $(TESTDIR)/test_conversation_tracker
 
-TEST_TOOLS_SOURCES = $(TESTDIR)/test_tools_system.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(TESTDIR)/unity/unity.c
+TEST_TOOLS_SOURCES = $(TESTDIR)/test_tools_system.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(TESTDIR)/unity/unity.c
 TEST_TOOLS_OBJECTS = $(TEST_TOOLS_SOURCES:.c=.o)
 TEST_TOOLS_TARGET = $(TESTDIR)/test_tools_system
 
-TEST_SHELL_SOURCES = $(TESTDIR)/test_shell_tool.c $(SRCDIR)/shell_tool.c $(SRCDIR)/tools_system.c $(SRCDIR)/file_tools.c $(TESTDIR)/unity/unity.c
+TEST_SHELL_SOURCES = $(TESTDIR)/test_shell_tool.c $(SRCDIR)/shell_tool.c $(SRCDIR)/tools_system.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(TESTDIR)/unity/unity.c
 TEST_SHELL_OBJECTS = $(TEST_SHELL_SOURCES:.c=.o)
 TEST_SHELL_TARGET = $(TESTDIR)/test_shell_tool
 
-TEST_FILE_SOURCES = $(TESTDIR)/test_file_tools.c $(SRCDIR)/file_tools.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(TESTDIR)/unity/unity.c
+TEST_FILE_SOURCES = $(TESTDIR)/test_file_tools.c $(SRCDIR)/file_tools.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/links_tool.c $(TESTDIR)/unity/unity.c
 TEST_FILE_OBJECTS = $(TEST_FILE_SOURCES:.c=.o)
 TEST_FILE_TARGET = $(TESTDIR)/test_file_tools
 
-TEST_RALPH_SOURCES = $(TESTDIR)/test_ralph.c $(TESTDIR)/mock_api_server.c $(SRCDIR)/ralph.c $(SRCDIR)/http_client.c $(SRCDIR)/env_loader.c $(SRCDIR)/output_formatter.c $(SRCDIR)/prompt_loader.c $(SRCDIR)/conversation_tracker.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/debug_output.c $(TESTDIR)/unity/unity.c
+TEST_RALPH_SOURCES = $(TESTDIR)/test_ralph.c $(TESTDIR)/mock_api_server.c $(SRCDIR)/ralph.c $(SRCDIR)/http_client.c $(SRCDIR)/env_loader.c $(SRCDIR)/output_formatter.c $(SRCDIR)/prompt_loader.c $(SRCDIR)/conversation_tracker.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/debug_output.c $(TESTDIR)/unity/unity.c
 TEST_RALPH_OBJECTS = $(TEST_RALPH_SOURCES:.c=.o)
 TEST_RALPH_TARGET = $(TESTDIR)/test_ralph
+
+TEST_BUNDLED_LINKS = test_bundled_links
 
 ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_HTTP_TARGET) $(TEST_ENV_TARGET) $(TEST_OUTPUT_TARGET) $(TEST_PROMPT_TARGET) $(TEST_CONVERSATION_TARGET) $(TEST_TOOLS_TARGET) $(TEST_SHELL_TARGET) $(TEST_FILE_TARGET) $(TEST_RALPH_TARGET)
 
@@ -75,14 +80,46 @@ LDFLAGS = -L$(CURL_DIR)/lib/.libs -L$(MBEDTLS_DIR)/library
 LIBS = -lcurl -lmbedtls -lmbedx509 -lmbedcrypto
 RALPH_TEST_LIBS = $(LIBS) -lpthread
 
+# Bundled Links binary
+LINKS_BUNDLED = links_bundled
+EMBEDDED_LINKS_HEADER = $(SRCDIR)/embedded_links.h
+
 # Default target
 all: $(TARGET)
 
+# Build bundled links test
+$(TEST_BUNDLED_LINKS): test_bundled_links.c $(SRCDIR)/tools_system.o $(SRCDIR)/links_tool.o $(SRCDIR)/shell_tool.o $(SRCDIR)/file_tools.o $(EMBEDDED_LINKS_HEADER)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< $(SRCDIR)/tools_system.o $(SRCDIR)/links_tool.o $(SRCDIR)/shell_tool.o $(SRCDIR)/file_tools.o
+
 # Build main executable
-$(TARGET): $(OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
+$(TARGET): $(EMBEDDED_LINKS_HEADER) $(OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
 	$(CC) $(LDFLAGS) -o $@ $(OBJECTS) $(LIBS)
 
-# Compile source files
+# Build bin2c tool
+$(BIN2C): bin2c.c
+	$(CC) -O2 -o $@ $<
+
+# Generate embedded links header
+$(EMBEDDED_LINKS_HEADER): $(LINKS_BUNDLED) $(BIN2C)
+	$(BIN2C) $(LINKS_BUNDLED) $(EMBEDDED_LINKS_HEADER)
+
+# Download pre-built Cosmopolitan Links binary
+$(LINKS_BUNDLED): | $(DEPDIR)
+	@echo "Checking for pre-built Cosmopolitan Links binary..."
+	@if [ ! -f $(LINKS_BUNDLED) ]; then \
+		echo "Downloading pre-built Cosmopolitan Links binary..."; \
+		curl -L -o $(LINKS_BUNDLED) https://cosmo.zip/pub/cosmos/bin/links || \
+		wget -O $(LINKS_BUNDLED) https://cosmo.zip/pub/cosmos/bin/links; \
+		chmod +x $(LINKS_BUNDLED); \
+	else \
+		echo "Using existing $(LINKS_BUNDLED)"; \
+	fi
+
+# Compile source files (links_tool.o depends on embedded_links.h)
+$(SRCDIR)/links_tool.o: $(SRCDIR)/links_tool.c $(EMBEDDED_LINKS_HEADER) $(HEADERS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
+	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+# Compile other source files
 $(SRCDIR)/%.o: $(SRCDIR)/%.c $(HEADERS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
@@ -213,14 +250,16 @@ $(CURL_LIB): $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
 
 # Clean targets
 clean:
-	rm -f $(OBJECTS) $(TEST_MAIN_OBJECTS) $(TEST_HTTP_OBJECTS) $(TEST_RALPH_OBJECTS) $(TARGET) $(ALL_TEST_TARGETS)
+	rm -f $(OBJECTS) $(TEST_MAIN_OBJECTS) $(TEST_HTTP_OBJECTS) $(TEST_RALPH_OBJECTS) $(TARGET) $(ALL_TEST_TARGETS) $(TEST_BUNDLED_LINKS)
 	rm -f src/*.o test/*.o test/unity/*.o
 	rm -f *.aarch64.elf *.com.dbg *.dbg src/*.aarch64.elf src/*.com.dbg src/*.dbg test/*.aarch64.elf test/*.com.dbg test/*.dbg
 	rm -f test/*.log test/*.trs test/test-suite.log
+	rm -f $(BIN2C) $(EMBEDDED_LINKS_HEADER)
 
 distclean: clean
 	rm -rf $(DEPDIR)
 	rm -f *.tar.gz
+	rm -f $(LINKS_BUNDLED)
 
 # This target works without any configuration whatsoever
 realclean: distclean

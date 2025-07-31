@@ -11,6 +11,12 @@ test/.aarch64/
 
 # Executables
 ralph
+bin2c
+test_bundled_links
+links_bundled
+
+# Generated headers
+src/embedded_links.h
 
 # Dependencies
 deps/

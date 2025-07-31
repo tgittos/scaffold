@@ -1,6 +1,7 @@
 #include "tools_system.h"
 #include "shell_tool.h"
 #include "file_tools.h"
+#include "links_tool.h"
 #include "output_formatter.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -576,6 +577,12 @@ static void log_tool_use(const char *tool_name, const char *arguments) {
             printf(" path: \"%s\"", path);
             free(path);
         }
+    } else if (strcmp(tool_name, "web_fetch") == 0) {
+        char *url = extract_tool_parameter(arguments, "url");
+        if (url) {
+            printf(" url: \"%s\"", url);
+            free(url);
+        }
     }
     
     printf(ANSI_RESET "\n");
@@ -624,6 +631,11 @@ int execute_tool_call(const ToolRegistry *registry, const ToolCall *tool_call, T
             }
             if (strcmp(tool_call->name, "file_info") == 0) {
                 return execute_file_info_tool_call(tool_call, result);
+            }
+            
+            // Handle web fetch tool
+            if (strcmp(tool_call->name, "web_fetch") == 0) {
+                return execute_links_tool_call(tool_call, result);
             }
             
             // Tool found in registry but no implementation provided
@@ -736,9 +748,13 @@ int register_builtin_tools(ToolRegistry *registry) {
         return -1;
     }
     
+    // Register Links web browser tool
+    if (register_links_tool(registry) != 0) {
+        return -1;
+    }
+    
     // Future built-in tools would be registered here:
     // if (register_git_tool(registry) != 0) return -1;
-    // if (register_network_tool(registry) != 0) return -1;
     
     return 0;
 }

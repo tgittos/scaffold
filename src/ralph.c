@@ -371,22 +371,32 @@ int ralph_execute_tool_workflow(RalphSession* session, ToolCall* tool_calls, int
 int ralph_process_message(RalphSession* session, const char* user_message) {
     if (session == NULL || user_message == NULL) return -1;
     
-    // Estimate prompt tokens (rough approximation: ~4 chars per token)
-    int estimated_prompt_tokens = (int)(strlen(user_message) / 4) + 20; // +20 for system overhead
+    // Build JSON payload first to get accurate size
+    char* post_data = ralph_build_json_payload(session->config.model, session->config.system_prompt, 
+                                             &session->conversation, user_message, 
+                                             session->config.max_tokens_param, -1, &session->tools);
+    if (post_data == NULL) {
+        fprintf(stderr, "Error: Failed to build JSON payload\n");
+        return -1;
+    }
+    
+    // Estimate prompt tokens based on actual payload size (rough approximation: ~4 chars per token)
+    int estimated_prompt_tokens = (int)(strlen(post_data) / 4) + 50; // +50 for JSON overhead
     
     // Calculate max response tokens if not explicitly set
     int max_tokens = session->config.max_tokens;
     if (max_tokens == -1) {
-        max_tokens = session->config.context_window - estimated_prompt_tokens - 50; // -50 for safety buffer
+        max_tokens = session->config.context_window - estimated_prompt_tokens - 100; // -100 for safety buffer
         if (max_tokens < 100) {
             max_tokens = 100; // Minimum reasonable response length
         }
     }
     
-    // Build JSON payload with conversation history and tools
-    char* post_data = ralph_build_json_payload(session->config.model, session->config.system_prompt, 
-                                             &session->conversation, user_message, 
-                                             session->config.max_tokens_param, max_tokens, &session->tools);
+    // Rebuild payload with correct max_tokens
+    free(post_data);
+    post_data = ralph_build_json_payload(session->config.model, session->config.system_prompt, 
+                                       &session->conversation, user_message, 
+                                       session->config.max_tokens_param, max_tokens, &session->tools);
     if (post_data == NULL) {
         fprintf(stderr, "Error: Failed to build JSON payload\n");
         return -1;
