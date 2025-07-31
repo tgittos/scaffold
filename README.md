@@ -5,7 +5,7 @@ A portable command-line AI assistant that brings the power of language models di
 ## What is Ralph?
 
 Ralph is an HTTP client for AI language models that enables developers to:
-- Query any OpenAI-compatible API (OpenAI, Anthropic via proxy, local models)
+- Query OpenAI, Anthropic, and any OpenAI-compatible API
 - Execute shell commands through AI-driven workflows
 - Maintain persistent conversation context across sessions
 - Work with both cloud and local language models
@@ -40,8 +40,9 @@ Ralph is an HTTP client for AI language models that enables developers to:
 
 ### Flexible Model Support
 - **OpenAI API** - GPT-4, GPT-4 Turbo, GPT-3.5
+- **Anthropic API** - Claude 3.5 Sonnet, Claude 3 Opus, Claude 3 Haiku
 - **Local models** - LM Studio, Ollama, llama.cpp server
-- **Any OpenAI-compatible endpoint** - Anthropic via proxy, custom deployments
+- **Any OpenAI-compatible endpoint** - Custom deployments, alternative providers
 - **Automatic parameter adaptation** - Handles API differences transparently
 
 ### Developer-Focused Design
@@ -85,6 +86,12 @@ API_URL=https://api.openai.com/v1/chat/completions
 MODEL=gpt-4o
 CONTEXT_WINDOW=128000
 
+# Anthropic API
+ANTHROPIC_API_KEY=sk-ant-your-api-key
+API_URL=https://api.anthropic.com/v1/messages
+MODEL=claude-3-5-sonnet-20241022
+CONTEXT_WINDOW=200000
+
 # Local LM Studio
 API_URL=http://localhost:1234/v1/chat/completions
 MODEL=qwen/qwen-2.5-coder-32b
@@ -104,7 +111,8 @@ CONTEXT_WINDOW=131072
 | `MODEL` | Model identifier | `gpt-4o-mini` |
 | `CONTEXT_WINDOW` | Maximum context size | `8192` |
 | `MAX_TOKENS` | Max response tokens | Auto-calculated |
-| `OPENAI_API_KEY` | API key (if required) | None |
+| `OPENAI_API_KEY` | OpenAI API key | None |
+| `ANTHROPIC_API_KEY` | Anthropic API key | None |
 
 ## Usage Examples
 

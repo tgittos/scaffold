@@ -284,6 +284,121 @@ void test_cleanup_tool_registry_with_null(void) {
     TEST_ASSERT_TRUE(1); // Just to have an assertion
 }
 
+void test_generate_anthropic_tools_json(void) {
+    ToolRegistry registry;
+    init_tool_registry(&registry);
+    
+    // No tools registered, should return NULL
+    char *json = generate_anthropic_tools_json(&registry);
+    TEST_ASSERT_NULL(json);
+    
+    cleanup_tool_registry(&registry);
+}
+
+void test_generate_anthropic_tools_json_with_tools(void) {
+    ToolRegistry registry;
+    init_tool_registry(&registry);
+    
+    // Register built-in tools to test with
+    register_builtin_tools(&registry);
+    
+    char *json = generate_anthropic_tools_json(&registry);
+    TEST_ASSERT_NOT_NULL(json);
+    
+    // Check for Anthropic format - no "type": "function" wrapper
+    TEST_ASSERT_NULL(strstr(json, "\"type\": \"function\""));
+    
+    // Check for input_schema instead of parameters
+    TEST_ASSERT_NOT_NULL(strstr(json, "\"input_schema\""));
+    
+    // Check for shell_execute tool
+    TEST_ASSERT_NOT_NULL(strstr(json, "\"name\": \"shell_execute\""));
+    
+    free(json);
+    cleanup_tool_registry(&registry);
+}
+
+void test_parse_anthropic_tool_calls_no_calls(void) {
+    const char *response = "{\"content\": [{\"type\": \"text\", \"text\": \"Hello!\"}]}";
+    
+    ToolCall *tool_calls = NULL;
+    int call_count = 0;
+    
+    int result = parse_anthropic_tool_calls(response, &tool_calls, &call_count);
+    
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_EQUAL(0, call_count);
+    TEST_ASSERT_NULL(tool_calls);
+}
+
+void test_parse_anthropic_tool_calls_with_tool_use(void) {
+    const char *response = 
+        "{\"content\": ["
+        "{\"type\": \"text\", \"text\": \"I'll execute that command for you.\"},"
+        "{\"type\": \"tool_use\", \"id\": \"toolu_01ABC\", \"name\": \"shell_execute\", "
+        "\"input\": {\"command\": \"ls -la\"}}"
+        "]}";
+    
+    ToolCall *tool_calls = NULL;
+    int call_count = 0;
+    
+    int result = parse_anthropic_tool_calls(response, &tool_calls, &call_count);
+    
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_EQUAL(1, call_count);
+    TEST_ASSERT_NOT_NULL(tool_calls);
+    TEST_ASSERT_NOT_NULL(tool_calls[0].id);
+    TEST_ASSERT_EQUAL_STRING("toolu_01ABC", tool_calls[0].id);
+    TEST_ASSERT_EQUAL_STRING("shell_execute", tool_calls[0].name);
+    TEST_ASSERT_NOT_NULL(tool_calls[0].arguments);
+    TEST_ASSERT_NOT_NULL(strstr(tool_calls[0].arguments, "\"command\": \"ls -la\""));
+    
+    cleanup_tool_calls(tool_calls, call_count);
+}
+
+void test_parse_anthropic_tool_calls_multiple(void) {
+    const char *response = 
+        "{\"content\": ["
+        "{\"type\": \"tool_use\", \"id\": \"call1\", \"name\": \"tool1\", \"input\": {\"arg\": \"val1\"}},"
+        "{\"type\": \"text\", \"text\": \"Processing...\"},"
+        "{\"type\": \"tool_use\", \"id\": \"call2\", \"name\": \"tool2\", \"input\": {\"arg\": \"val2\"}}"
+        "]}";
+    
+    ToolCall *tool_calls = NULL;
+    int call_count = 0;
+    
+    int result = parse_anthropic_tool_calls(response, &tool_calls, &call_count);
+    
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_EQUAL(2, call_count);
+    TEST_ASSERT_NOT_NULL(tool_calls);
+    
+    // First tool call
+    TEST_ASSERT_EQUAL_STRING("call1", tool_calls[0].id);
+    TEST_ASSERT_EQUAL_STRING("tool1", tool_calls[0].name);
+    
+    // Second tool call
+    TEST_ASSERT_EQUAL_STRING("call2", tool_calls[1].id);
+    TEST_ASSERT_EQUAL_STRING("tool2", tool_calls[1].name);
+    
+    cleanup_tool_calls(tool_calls, call_count);
+}
+
+void test_parse_anthropic_tool_calls_null_parameters(void) {
+    const char *response = "{\"content\": []}";
+    ToolCall *tool_calls = NULL;
+    int call_count = 0;
+    
+    // Test null response
+    TEST_ASSERT_EQUAL(-1, parse_anthropic_tool_calls(NULL, &tool_calls, &call_count));
+    
+    // Test null tool_calls
+    TEST_ASSERT_EQUAL(-1, parse_anthropic_tool_calls(response, NULL, &call_count));
+    
+    // Test null call_count
+    TEST_ASSERT_EQUAL(-1, parse_anthropic_tool_calls(response, &tool_calls, NULL));
+}
+
 int main(void) {
     UNITY_BEGIN();
     
@@ -307,6 +422,14 @@ int main(void) {
     RUN_TEST(test_load_tools_config);
     RUN_TEST(test_cleanup_tool_registry);
     RUN_TEST(test_cleanup_tool_registry_with_null);
+    
+    // Anthropic tests
+    RUN_TEST(test_generate_anthropic_tools_json);
+    RUN_TEST(test_generate_anthropic_tools_json_with_tools);
+    RUN_TEST(test_parse_anthropic_tool_calls_no_calls);
+    RUN_TEST(test_parse_anthropic_tool_calls_with_tool_use);
+    RUN_TEST(test_parse_anthropic_tool_calls_multiple);
+    RUN_TEST(test_parse_anthropic_tool_calls_null_parameters);
     
     return UNITY_END();
 }

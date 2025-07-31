@@ -149,6 +149,103 @@ char* generate_tools_json(const ToolRegistry *registry) {
     return json;
 }
 
+char* generate_anthropic_tools_json(const ToolRegistry *registry) {
+    if (registry == NULL || registry->function_count == 0) {
+        return NULL;
+    }
+    
+    // Estimate size needed
+    size_t estimated_size = 1000 + (registry->function_count * 500);
+    char *json = malloc(estimated_size);
+    if (json == NULL) {
+        return NULL;
+    }
+    
+    strcpy(json, "[");
+    
+    for (int i = 0; i < registry->function_count; i++) {
+        const ToolFunction *func = &registry->functions[i];
+        
+        if (i > 0) {
+            strcat(json, ", ");
+        }
+        
+        // Anthropic uses a simpler format without the "type": "function" wrapper
+        strcat(json, "{\"name\": \"");
+        strcat(json, func->name);
+        strcat(json, "\", \"description\": \"");
+        strcat(json, func->description);
+        strcat(json, "\", \"input_schema\": {\"type\": \"object\"");
+        
+        if (func->parameter_count > 0) {
+            strcat(json, ", \"properties\": {");
+            
+            for (int j = 0; j < func->parameter_count; j++) {
+                const ToolParameter *param = &func->parameters[j];
+                
+                if (j > 0) {
+                    strcat(json, ", ");
+                }
+                
+                strcat(json, "\"");
+                strcat(json, param->name);
+                strcat(json, "\": {\"type\": \"");
+                strcat(json, param->type);
+                strcat(json, "\", \"description\": \"");
+                strcat(json, param->description);
+                strcat(json, "\"");
+                
+                if (param->enum_values != NULL && param->enum_count > 0) {
+                    strcat(json, ", \"enum\": [");
+                    for (int k = 0; k < param->enum_count; k++) {
+                        if (k > 0) strcat(json, ", ");
+                        strcat(json, "\"");
+                        strcat(json, param->enum_values[k]);
+                        strcat(json, "\"");
+                    }
+                    strcat(json, "]");
+                }
+                
+                strcat(json, "}");
+            }
+            
+            strcat(json, "}");
+            
+            // Add required array if there are required parameters
+            int has_required = 0;
+            for (int j = 0; j < func->parameter_count; j++) {
+                if (func->parameters[j].required) {
+                    has_required = 1;
+                    break;
+                }
+            }
+            
+            if (has_required) {
+                strcat(json, ", \"required\": [");
+                int first_required = 1;
+                for (int j = 0; j < func->parameter_count; j++) {
+                    if (func->parameters[j].required) {
+                        if (!first_required) {
+                            strcat(json, ", ");
+                        }
+                        strcat(json, "\"");
+                        strcat(json, func->parameters[j].name);
+                        strcat(json, "\"");
+                        first_required = 0;
+                    }
+                }
+                strcat(json, "]");
+            }
+        }
+        
+        strcat(json, "}}");
+    }
+    
+    strcat(json, "]");
+    
+    return json;
+}
+
 // Simple JSON parser for tool calls (basic implementation)
 static char* extract_json_string(const char *json, const char *key) {
     char search_key[256] = {0};
@@ -465,6 +562,150 @@ int parse_tool_calls(const char *json_response, ToolCall **tool_calls, int *call
     
     *tool_calls = calls;
     *call_count = parsed_count;
+    
+    return 0;
+}
+
+int parse_anthropic_tool_calls(const char *json_response, ToolCall **tool_calls, int *call_count) {
+    if (json_response == NULL || tool_calls == NULL || call_count == NULL) {
+        return -1;
+    }
+    
+    *tool_calls = NULL;
+    *call_count = 0;
+    
+    // Anthropic returns tool use in a specific format in the content array
+    // Look for "type": "tool_use" in the content array
+    const char *content_array = strstr(json_response, "\"content\":");
+    if (content_array == NULL) {
+        return 0; // No content array, no tool calls
+    }
+    
+    // Count tool_use items in the content array
+    const char *search_pos = content_array;
+    int tool_count = 0;
+    const char *pos = search_pos;
+    while (pos != NULL) {
+        const char *found = strstr(pos, "\"type\": \"tool_use\"");
+        if (found == NULL) {
+            found = strstr(pos, "\"type\":\"tool_use\"");
+        }
+        if (found == NULL) {
+            break;
+        }
+        tool_count++;
+        pos = found + strlen("\"type\": \"tool_use\"");
+    }
+    
+    if (tool_count == 0) {
+        return 0; // No tool calls found
+    }
+    
+    *tool_calls = malloc(tool_count * sizeof(ToolCall));
+    if (*tool_calls == NULL) {
+        return -1;
+    }
+    
+    // Parse each tool_use item
+    search_pos = content_array;
+    int parsed_count = 0;
+    
+    while (parsed_count < tool_count) {
+        // Find next tool_use
+        const char *tool_use = strstr(search_pos, "\"type\": \"tool_use\"");
+        if (tool_use == NULL) {
+            tool_use = strstr(search_pos, "\"type\":\"tool_use\"");
+        }
+        if (tool_use == NULL) {
+            break;
+        }
+        
+        // Find the containing object boundaries
+        const char *obj_start = tool_use;
+        while (obj_start > content_array && *obj_start != '{') {
+            obj_start--;
+        }
+        
+        if (*obj_start != '{') {
+            search_pos = tool_use + 1;
+            continue;
+        }
+        
+        // Find matching closing brace
+        const char *obj_end = obj_start + 1;
+        int brace_count = 1;
+        while (*obj_end != '\0' && brace_count > 0) {
+            if (*obj_end == '{' && (obj_end == json_response || *(obj_end-1) != '\\')) {
+                brace_count++;
+            } else if (*obj_end == '}' && (obj_end == json_response || *(obj_end-1) != '\\')) {
+                brace_count--;
+            }
+            obj_end++;
+        }
+        
+        if (brace_count != 0) {
+            search_pos = tool_use + 1;
+            continue;
+        }
+        
+        // Extract the tool use object
+        size_t obj_len = obj_end - obj_start;
+        char *tool_obj = malloc(obj_len + 1);
+        if (tool_obj == NULL) {
+            cleanup_tool_calls(*tool_calls, parsed_count);
+            *tool_calls = NULL;
+            return -1;
+        }
+        
+        memcpy(tool_obj, obj_start, obj_len);
+        tool_obj[obj_len] = '\0';
+        
+        // Parse the tool use object
+        ToolCall *call = &(*tool_calls)[parsed_count];
+        call->id = extract_json_string(tool_obj, "id");
+        call->name = extract_json_string(tool_obj, "name");
+        call->arguments = extract_json_object(tool_obj, "input");
+        
+        // If arguments is not an object, try string format
+        if (call->arguments == NULL) {
+            call->arguments = extract_json_string(tool_obj, "input");
+            if (call->arguments == NULL) {
+                call->arguments = strdup("{}");
+            } else {
+                // Unescape JSON string arguments
+                unescape_json_string(call->arguments);
+            }
+        }
+        
+        free(tool_obj);
+        
+        if (call->id == NULL || call->name == NULL) {
+            // Generate ID if missing
+            if (call->id == NULL) {
+                char id_buf[32];
+                snprintf(id_buf, sizeof(id_buf), "anthropic_call_%d", parsed_count);
+                call->id = strdup(id_buf);
+            }
+            
+            // Skip if name is missing
+            if (call->name == NULL) {
+                free(call->id);
+                free(call->arguments);
+                search_pos = obj_end;
+                continue;
+            }
+        }
+        
+        parsed_count++;
+        search_pos = obj_end;
+    }
+    
+    *call_count = parsed_count;
+    
+    if (parsed_count == 0) {
+        free(*tool_calls);
+        *tool_calls = NULL;
+    }
     
     return 0;
 }

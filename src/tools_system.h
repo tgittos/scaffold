@@ -84,12 +84,20 @@ int load_tools_config(ToolRegistry *registry, const char *config_file);
  */
 
 /**
- * Generate JSON tools array for API request
+ * Generate JSON tools array for API request (OpenAI format)
  * 
  * @param registry Pointer to ToolRegistry structure
  * @return Dynamically allocated JSON string, caller must free
  */
 char* generate_tools_json(const ToolRegistry *registry);
+
+/**
+ * Generate JSON tools array for Anthropic API request
+ * 
+ * @param registry Pointer to ToolRegistry structure
+ * @return Dynamically allocated JSON string, caller must free
+ */
+char* generate_anthropic_tools_json(const ToolRegistry *registry);
 
 /**
  * Parse tool calls from API response JSON
@@ -100,6 +108,16 @@ char* generate_tools_json(const ToolRegistry *registry);
  * @return 0 on success, -1 on failure
  */
 int parse_tool_calls(const char *json_response, ToolCall **tool_calls, int *call_count);
+
+/**
+ * Parse tool calls from Anthropic API response JSON
+ * 
+ * @param json_response Raw JSON response from Anthropic API
+ * @param tool_calls Output array of tool calls, caller must free
+ * @param call_count Output number of tool calls found
+ * @return 0 on success, -1 on failure
+ */
+int parse_anthropic_tool_calls(const char *json_response, ToolCall **tool_calls, int *call_count);
 
 /**
  * Execute a tool call and return result
