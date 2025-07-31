@@ -52,6 +52,25 @@ int main(int argc, char *argv[])
             return EXIT_FAILURE;
         }
         
+        // Check if this is a first-time user (no conversation history)
+        if (session.conversation.count == 0) {
+            fprintf(stderr, "Generating welcome message...\n");
+            
+            // Send a system message to get an AI-generated greeting
+            const char* greeting_prompt = "This is your first interaction with this user in interactive mode. "
+                                        "Please introduce yourself as Ralph, briefly explain your capabilities "
+                                        "(answering questions, running shell commands, file operations, problem-solving), "
+                                        "and ask what you can help with today. Keep it warm, concise, and engaging. "
+                                        "Make it feel personal and conversational, not like a static template.";
+            
+            int result = ralph_process_message(&session, greeting_prompt);
+            if (result != 0) {
+                // Fallback to basic message if AI greeting fails
+                printf("Hello! I'm Ralph, your AI assistant. What can I help you with today?\n");
+            }
+            printf("\n");
+        }
+        
         char input_buffer[MAX_INPUT_SIZE];
         
         while (1) {
