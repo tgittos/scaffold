@@ -24,6 +24,12 @@ A feature or component is not considered complete unless all of it's composite c
 Do not write example code to demo a feature you've just implemented. Trust the testing and Valgrind to ensure your work is correct.
 The main application can be used to test directly against when verifying work.
 
+When using libraries and dependencies, clone the source code of the dependency and integrate it into the build system for the main application.
+The ultimate design goal of this application is 0 external dependencies - any dependencies should be statically compiled and linked.
+
+At all times, the application must be buildable from a clean state only through Make.
+Make should be configured to fetch and build dependencies as part of the main build process.
+
 ## Development Behavior
 
 This is a large, mature project. Most basic functionality has already been implemented. Before writing new functionality, run a code search to ensure it hasn't already been implemented.

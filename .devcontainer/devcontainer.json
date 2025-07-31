@@ -4,6 +4,5 @@
 	"name": "Debian",
     "build": {
         "dockerfile": "Dockerfile"
-    },
-	// "postCreateCommand": "bash .devcontainer/setup.sh"
+    }
 }
