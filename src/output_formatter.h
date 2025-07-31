@@ -3,6 +3,12 @@
 
 #include <stddef.h>
 
+// ANSI color codes
+#define ANSI_RESET   "\033[0m"
+#define ANSI_GRAY    "\033[90m"
+#define ANSI_DIM     "\033[2m"
+#define ANSI_BLUE    "\033[34m"
+
 typedef struct {
     char *thinking_content;  // Content inside <think> tags (optional)
     char *response_content;  // Actual response content

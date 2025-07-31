@@ -4,10 +4,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-// ANSI color codes
-#define ANSI_RESET   "\033[0m"
-#define ANSI_GRAY    "\033[90m"
-#define ANSI_DIM     "\033[2m"
 
 static char *extract_json_string(const char *json, const char *key) {
     if (!json || !key) {

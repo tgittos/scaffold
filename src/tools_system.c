@@ -1,6 +1,7 @@
 #include "tools_system.h"
 #include "shell_tool.h"
 #include "file_tools.h"
+#include "output_formatter.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -471,6 +472,116 @@ int parse_tool_calls(const char *json_response, ToolCall **tool_calls, int *call
 // These were placeholder implementations for testing
 // Users should implement their own tool execution logic in execute_tool_call
 
+// Helper function to extract key parameter from tool arguments
+static char* extract_tool_parameter(const char *arguments, const char *param_name) {
+    if (!arguments || !param_name) return NULL;
+    
+    char pattern[256] = {0};
+    snprintf(pattern, sizeof(pattern), "\"%s\":", param_name);
+    
+    const char *start = strstr(arguments, pattern);
+    if (!start) return NULL;
+    
+    start += strlen(pattern);
+    // Skip whitespace
+    while (*start == ' ' || *start == '\t') start++;
+    
+    if (*start == '"') {
+        // String value
+        start++;
+        const char *end = start;
+        while (*end && *end != '"') {
+            if (*end == '\\' && *(end + 1)) end += 2;
+            else end++;
+        }
+        
+        size_t len = end - start;
+        char *value = malloc(len + 1);
+        if (value) {
+            memcpy(value, start, len);
+            value[len] = '\0';
+        }
+        return value;
+    }
+    
+    return NULL;
+}
+
+// Log tool use to stdout in blue
+static void log_tool_use(const char *tool_name, const char *arguments) {
+    printf(ANSI_BLUE "[Tool: %s]", tool_name);
+    
+    if (!arguments) {
+        printf(ANSI_RESET "\n");
+        fflush(stdout);
+        return;
+    }
+    
+    // Extract and log key parameters based on tool type
+    if (strcmp(tool_name, "shell_execute") == 0) {
+        char *command = extract_tool_parameter(arguments, "command");
+        if (command) {
+            printf(" command: \"%s\"", command);
+            free(command);
+        }
+    } else if (strcmp(tool_name, "file_read") == 0) {
+        char *path = extract_tool_parameter(arguments, "file_path");
+        if (path) {
+            printf(" path: \"%s\"", path);
+            free(path);
+        }
+    } else if (strcmp(tool_name, "file_write") == 0 || strcmp(tool_name, "file_append") == 0) {
+        char *path = extract_tool_parameter(arguments, "file_path");
+        char *content = extract_tool_parameter(arguments, "content");
+        if (path) {
+            printf(" path: \"%s\"", path);
+            free(path);
+        } else {
+            // Try alternate parameter name
+            path = extract_tool_parameter(arguments, "path");
+            if (path) {
+                printf(" path: \"%s\"", path);
+                free(path);
+            }
+        }
+        if (content) {
+            // Count lines in content
+            int line_count = 1; // At least one line if content exists
+            for (const char *p = content; *p; p++) {
+                if (*p == '\n') line_count++;
+            }
+            printf(" (%d lines)", line_count);
+            free(content);
+        }
+    } else if (strcmp(tool_name, "file_list") == 0) {
+        char *path = extract_tool_parameter(arguments, "directory_path");
+        if (path) {
+            printf(" path: \"%s\"", path);
+            free(path);
+        }
+    } else if (strcmp(tool_name, "file_search") == 0) {
+        char *pattern = extract_tool_parameter(arguments, "pattern");
+        char *path = extract_tool_parameter(arguments, "search_path");
+        if (pattern) {
+            printf(" pattern: \"%s\"", pattern);
+            free(pattern);
+        }
+        if (path) {
+            printf(" in: \"%s\"", path);
+            free(path);
+        }
+    } else if (strcmp(tool_name, "file_info") == 0) {
+        char *path = extract_tool_parameter(arguments, "file_path");
+        if (path) {
+            printf(" path: \"%s\"", path);
+            free(path);
+        }
+    }
+    
+    printf(ANSI_RESET "\n");
+    fflush(stdout);
+}
+
 int execute_tool_call(const ToolRegistry *registry, const ToolCall *tool_call, ToolResult *result) {
     if (registry == NULL || tool_call == NULL || result == NULL) {
         return -1;
@@ -483,6 +594,9 @@ int execute_tool_call(const ToolRegistry *registry, const ToolCall *tool_call, T
     if (result->tool_call_id == NULL) {
         return -1;
     }
+    
+    // Log tool use
+    log_tool_use(tool_call->name, tool_call->arguments);
     
     // Look for the tool in the registry
     for (int i = 0; i < registry->function_count; i++) {
