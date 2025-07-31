@@ -243,15 +243,41 @@ int ralph_execute_tool_workflow(RalphSession* session, ToolCall* tool_calls, int
     struct HTTPResponse follow_up_response = {0};
     
     debug_printf("Building follow-up JSON payload...\n");
+    
+    // Recalculate max_tokens for follow-up request since conversation has grown
+    // First build a temporary payload to estimate the new size
+    char* temp_data = NULL;
+    if (session->config.api_type == API_TYPE_ANTHROPIC) {
+        temp_data = ralph_build_anthropic_json_payload(session->config.model, session->config.system_prompt,
+                                                      &session->conversation, "", -1, &session->tools);
+    } else {
+        temp_data = ralph_build_json_payload(session->config.model, session->config.system_prompt, 
+                                           &session->conversation, "", 
+                                           session->config.max_tokens_param, -1, &session->tools);
+    }
+    
+    // Recalculate max_tokens based on updated conversation size
+    int follow_up_max_tokens = max_tokens; // Default to original value
+    if (temp_data != NULL) {
+        int estimated_prompt_tokens = (int)(strlen(temp_data) / 4) + 50; // +50 for JSON overhead
+        follow_up_max_tokens = session->config.context_window - estimated_prompt_tokens - 100; // -100 for safety buffer
+        if (follow_up_max_tokens < 100) {
+            follow_up_max_tokens = 100; // Minimum reasonable response length
+        }
+        debug_printf("Recalculated max_tokens for follow-up: %d (was %d, prompt tokens: %d)\n", 
+                    follow_up_max_tokens, max_tokens, estimated_prompt_tokens);
+        free(temp_data);
+    }
+    
     // Build new JSON payload with conversation including tool results
     char* follow_up_data = NULL;
     if (session->config.api_type == API_TYPE_ANTHROPIC) {
         follow_up_data = ralph_build_anthropic_json_payload(session->config.model, session->config.system_prompt,
-                                                          &session->conversation, "", max_tokens, &session->tools);
+                                                          &session->conversation, "", follow_up_max_tokens, &session->tools);
     } else {
         follow_up_data = ralph_build_json_payload(session->config.model, session->config.system_prompt, 
                                                 &session->conversation, "", 
-                                                session->config.max_tokens_param, max_tokens, &session->tools);
+                                                session->config.max_tokens_param, follow_up_max_tokens, &session->tools);
     }
     // Tool execution was successful - we'll return success regardless of follow-up API status
     int result = 0;
