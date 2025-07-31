@@ -69,7 +69,7 @@ int main(int argc, char *argv[])
         }
         
         // Check if this is a first-time user (no conversation history)
-        if (session.conversation.count == 0) {
+        if (session.session_data.conversation.count == 0) {
             debug_printf("Generating welcome message...\n");
             
             // Send a system message to get an AI-generated greeting

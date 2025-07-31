@@ -1,0 +1,197 @@
+#include "../llm_provider.h"
+#include "../api_common.h"
+#include "../json_utils.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+// Forward declarations
+static int anthropic_detect_provider(const char* api_url);
+static char* anthropic_build_request_json(const LLMProvider* provider,
+                                         const char* model,
+                                         const char* system_prompt,
+                                         const ConversationHistory* conversation,
+                                         const char* user_message,
+                                         int max_tokens,
+                                         const ToolRegistry* tools);
+static int anthropic_build_headers(const LLMProvider* provider,
+                                  const char* api_key,
+                                  const char** headers,
+                                  int max_headers);
+static int anthropic_parse_response(const LLMProvider* provider,
+                                   const char* json_response,
+                                   ParsedResponse* result);
+static int anthropic_parse_tool_calls(const LLMProvider* provider,
+                                     const char* json_response,
+                                     ToolCall** tool_calls,
+                                     int* call_count);
+static char* anthropic_format_assistant_message(const LLMProvider* provider,
+                                               const char* response_content,
+                                               const ToolCall* tool_calls,
+                                               int tool_call_count);
+static int anthropic_validate_conversation(const LLMProvider* provider,
+                                          const ConversationHistory* conversation);
+
+// Helper function to check if a tool_use_id exists in an assistant message
+static int message_contains_tool_use_id(const ConversationMessage* msg, const char* tool_use_id) {
+    if (!msg || !tool_use_id || strcmp(msg->role, "assistant") != 0) {
+        return 0;
+    }
+    
+    // Search for the tool_use_id in the message content
+    char search_pattern[256];
+    snprintf(search_pattern, sizeof(search_pattern), "\"id\": \"%s\"", tool_use_id);
+    
+    if (strstr(msg->content, search_pattern)) {
+        return 1;
+    }
+    
+    // Also try without spaces around colon
+    snprintf(search_pattern, sizeof(search_pattern), "\"id\":\"%s\"", tool_use_id);
+    return strstr(msg->content, search_pattern) != NULL;
+}
+
+// Anthropic provider implementation
+static int anthropic_detect_provider(const char* api_url) {
+    return strstr(api_url, "api.anthropic.com") != NULL;
+}
+
+static char* anthropic_build_request_json(const LLMProvider* provider,
+                                         const char* model,
+                                         const char* system_prompt,
+                                         const ConversationHistory* conversation,
+                                         const char* user_message,
+                                         int max_tokens,
+                                         const ToolRegistry* tools) {
+    // Anthropic-specific request building - system prompt at top level
+    // Use the specialized Anthropic message builder to handle tool_result validation
+    return build_json_payload_common(model, system_prompt, conversation,
+                                   user_message, provider->capabilities.max_tokens_param,
+                                   max_tokens, tools, format_anthropic_message, 1);
+}
+
+static int anthropic_build_headers(const LLMProvider* provider,
+                                  const char* api_key,
+                                  const char** headers,
+                                  int max_headers) {
+    (void)provider; // Suppress unused parameter warning
+    int count = 0;
+    static char auth_header[512];
+    static char content_type[] = "Content-Type: application/json";
+    static char version_header[] = "anthropic-version: 2023-06-01";
+    
+    // Add x-api-key header if API key provided
+    if (api_key && count < max_headers - 1) {
+        snprintf(auth_header, sizeof(auth_header), "x-api-key: %s", api_key);
+        headers[count++] = auth_header;
+    }
+    
+    // Add version header (required by Anthropic)
+    if (count < max_headers - 1) {
+        headers[count++] = version_header;
+    }
+    
+    // Add content type header
+    if (count < max_headers - 1) {
+        headers[count++] = content_type;
+    }
+    
+    return count;
+}
+
+static int anthropic_parse_response(const LLMProvider* provider,
+                                   const char* json_response,
+                                   ParsedResponse* result) {
+    (void)provider; // Suppress unused parameter warning
+    // Use existing Anthropic response parser
+    return parse_anthropic_response(json_response, result);
+}
+
+static int anthropic_parse_tool_calls(const LLMProvider* provider,
+                                     const char* json_response,
+                                     ToolCall** tool_calls,
+                                     int* call_count) {
+    (void)provider; // Suppress unused parameter warning
+    // Use existing Anthropic tool call parser
+    return parse_anthropic_tool_calls(json_response, tool_calls, call_count);
+}
+
+static char* anthropic_format_assistant_message(const LLMProvider* provider,
+                                               const char* response_content,
+                                               const ToolCall* tool_calls,
+                                               int tool_call_count) {
+    (void)provider; // Suppress unused parameter warning
+    (void)tool_calls; // Suppress unused parameter warning
+    (void)tool_call_count; // Suppress unused parameter warning
+    // For Anthropic, we save the raw JSON response to preserve tool_use blocks
+    // This is because Anthropic requires exact tool_use/tool_result pairing
+    if (response_content) {
+        return strdup(response_content);
+    }
+    return NULL;
+}
+
+static int anthropic_validate_conversation(const LLMProvider* provider,
+                                          const ConversationHistory* conversation) {
+    (void)provider; // Suppress unused parameter warning
+    // Anthropic-specific validation: tool_result must have corresponding tool_use
+    // This logic was moved here from api_common.c
+    
+    for (int i = 0; i < conversation->count; i++) {
+        const ConversationMessage* msg = &conversation->messages[i];
+        
+        // For tool results, verify the previous assistant message contains the tool_use_id
+        if (strcmp(msg->role, "tool") == 0 && msg->tool_call_id != NULL) {
+            // Look backwards for the most recent assistant message
+            int found_tool_use = 0;
+            
+            for (int j = i - 1; j >= 0; j--) {
+                const ConversationMessage* prev_msg = &conversation->messages[j];
+                
+                if (strcmp(prev_msg->role, "assistant") == 0) {
+                    if (message_contains_tool_use_id(prev_msg, msg->tool_call_id)) {
+                        found_tool_use = 1;
+                    }
+                    break; // Stop at first assistant message found
+                }
+                
+                // If we hit another role that breaks the sequence, stop looking
+                if (strcmp(prev_msg->role, "user") == 0) {
+                    break;
+                }
+            }
+            
+            // Report orphaned tool results (but don't fail - they'll be filtered)
+            if (!found_tool_use) {
+                fprintf(stderr, "Warning: Orphaned tool result with ID %s will be filtered\n", 
+                       msg->tool_call_id);
+            }
+        }
+    }
+    
+    return 0; // Always succeed - orphaned results are handled by message builder
+}
+
+// Anthropic provider instance
+static LLMProvider anthropic_provider = {
+    .capabilities = {
+        .name = "Anthropic",
+        .max_tokens_param = "max_tokens",
+        .supports_system_message = 1,
+        .supports_tool_calling = 1,
+        .requires_version_header = 1,
+        .auth_header_format = "x-api-key: %s",
+        .version_header = "anthropic-version: 2023-06-01"
+    },
+    .detect_provider = anthropic_detect_provider,
+    .build_request_json = anthropic_build_request_json,
+    .build_headers = anthropic_build_headers,
+    .parse_response = anthropic_parse_response,
+    .parse_tool_calls = anthropic_parse_tool_calls,
+    .format_assistant_message = anthropic_format_assistant_message,
+    .validate_conversation = anthropic_validate_conversation
+};
+
+int register_anthropic_provider(ProviderRegistry* registry) {
+    return register_provider(registry, &anthropic_provider);
+}

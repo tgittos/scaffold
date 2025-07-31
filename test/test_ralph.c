@@ -95,14 +95,14 @@ void test_ralph_init_and_cleanup_session(void) {
     TEST_ASSERT_EQUAL_INT(0, init_result);
     
     // Verify session was initialized
-    TEST_ASSERT_EQUAL_INT(0, session.conversation.count);
+    TEST_ASSERT_EQUAL_INT(0, session.session_data.conversation.count);
     TEST_ASSERT_TRUE(session.tools.function_count > 0); // Should have built-in tools
     
     // Cleanup should work without errors
     ralph_cleanup_session(&session);
     
     // After cleanup, session should be zeroed
-    TEST_ASSERT_EQUAL_INT(0, session.conversation.count);
+    TEST_ASSERT_EQUAL_INT(0, session.session_data.conversation.count);
 }
 
 void test_ralph_load_config_null_parameter(void) {
@@ -122,21 +122,21 @@ void test_ralph_load_config_basic(void) {
     TEST_ASSERT_EQUAL_INT(0, config_result);
     
     // Verify configuration was loaded (values may come from environment or defaults)
-    TEST_ASSERT_NOT_NULL(session.config.api_url);
-    TEST_ASSERT_NOT_NULL(session.config.model);
+    TEST_ASSERT_NOT_NULL(session.session_data.config.api_url);
+    TEST_ASSERT_NOT_NULL(session.session_data.config.model);
     
     // The API URL could be from environment or default - both are valid
     // Just verify it's a reasonable URL (OpenAI or Anthropic format)
-    printf("DEBUG: API URL is: %s\n", session.config.api_url);
-    TEST_ASSERT_TRUE(strstr(session.config.api_url, "/v1/chat/completions") != NULL ||
-                     strstr(session.config.api_url, "/v1/messages") != NULL);
+    printf("DEBUG: API URL is: %s\n", session.session_data.config.api_url);
+    TEST_ASSERT_TRUE(strstr(session.session_data.config.api_url, "/v1/chat/completions") != NULL ||
+                     strstr(session.session_data.config.api_url, "/v1/messages") != NULL);
     
     // Model should be set to something reasonable
-    TEST_ASSERT_TRUE(strlen(session.config.model) > 0);
+    TEST_ASSERT_TRUE(strlen(session.session_data.config.model) > 0);
     
     // Basic numeric values should be initialized
-    TEST_ASSERT_TRUE(session.config.context_window > 0);
-    TEST_ASSERT_NOT_NULL(session.config.max_tokens_param);
+    TEST_ASSERT_TRUE(session.session_data.config.context_window > 0);
+    TEST_ASSERT_NOT_NULL(session.session_data.config.max_tokens_param);
     
     ralph_cleanup_session(&session);
 }
@@ -162,21 +162,21 @@ void test_ralph_config_parameter_selection(void) {
     ralph_init_session(&session);
     
     // Test OpenAI URL parameter selection
-    session.config.api_url = strdup("https://api.openai.com/v1/chat/completions");
-    session.config.max_tokens_param = "max_tokens";
-    if (strstr(session.config.api_url, "api.openai.com") != NULL) {
-        session.config.max_tokens_param = "max_completion_tokens";  
+    session.session_data.config.api_url = strdup("https://api.openai.com/v1/chat/completions");
+    session.session_data.config.max_tokens_param = "max_tokens";
+    if (strstr(session.session_data.config.api_url, "api.openai.com") != NULL) {
+        session.session_data.config.max_tokens_param = "max_completion_tokens";  
     }
-    TEST_ASSERT_EQUAL_STRING("max_completion_tokens", session.config.max_tokens_param);
+    TEST_ASSERT_EQUAL_STRING("max_completion_tokens", session.session_data.config.max_tokens_param);
     
     // Test local server parameter selection
-    free(session.config.api_url);
-    session.config.api_url = strdup("http://localhost:1234/v1/chat/completions");
-    session.config.max_tokens_param = "max_tokens";
-    if (strstr(session.config.api_url, "api.openai.com") != NULL) {
-        session.config.max_tokens_param = "max_completion_tokens";
+    free(session.session_data.config.api_url);
+    session.session_data.config.api_url = strdup("http://localhost:1234/v1/chat/completions");
+    session.session_data.config.max_tokens_param = "max_tokens";
+    if (strstr(session.session_data.config.api_url, "api.openai.com") != NULL) {
+        session.session_data.config.max_tokens_param = "max_completion_tokens";
     }
-    TEST_ASSERT_EQUAL_STRING("max_tokens", session.config.max_tokens_param);
+    TEST_ASSERT_EQUAL_STRING("max_tokens", session.session_data.config.max_tokens_param);
     
     ralph_cleanup_session(&session);
 }
@@ -233,8 +233,8 @@ void test_ralph_execute_tool_workflow_api_failure_resilience(void) {
     
     // Set API URL to something that will fail (simulate network failure)
     // This tests the exact scenario: tool succeeds, API fails
-    free(session.config.api_url);
-    session.config.api_url = strdup("http://127.0.0.1:99999/v1/chat/completions"); // Port 99999 should be unreachable
+    free(session.session_data.config.api_url);
+    session.session_data.config.api_url = strdup("http://127.0.0.1:99999/v1/chat/completions"); // Port 99999 should be unreachable
     
     // Execute tool workflow - this should return 0 (success) because:
     // 1. Tool execution succeeds (shell_execute with "echo" command works)
@@ -249,16 +249,16 @@ void test_ralph_execute_tool_workflow_api_failure_resilience(void) {
     
     // Verify tool result was actually added to conversation history
     // This proves the tool executed successfully despite API failure
-    TEST_ASSERT_TRUE(session.conversation.count > 0);
+    TEST_ASSERT_TRUE(session.session_data.conversation.count > 0);
     
     // Look for tool result message in conversation history
     int found_tool_result = 0;
-    for (int i = 0; i < session.conversation.count; i++) {
-        if (strcmp(session.conversation.messages[i].role, "tool") == 0) {
+    for (int i = 0; i < session.session_data.conversation.count; i++) {
+        if (strcmp(session.session_data.conversation.messages[i].role, "tool") == 0) {
             found_tool_result = 1;
-            TEST_ASSERT_EQUAL_STRING("test_tool_id_123", session.conversation.messages[i].tool_call_id);
-            TEST_ASSERT_EQUAL_STRING("shell_execute", session.conversation.messages[i].tool_name);
-            TEST_ASSERT_TRUE(strstr(session.conversation.messages[i].content, "integration_test_success") != NULL);
+            TEST_ASSERT_EQUAL_STRING("test_tool_id_123", session.session_data.conversation.messages[i].tool_call_id);
+            TEST_ASSERT_EQUAL_STRING("shell_execute", session.session_data.conversation.messages[i].tool_name);
+            TEST_ASSERT_TRUE(strstr(session.session_data.conversation.messages[i].content, "integration_test_success") != NULL);
             break;
         }
     }
@@ -278,14 +278,14 @@ void test_ralph_process_message_basic_workflow(void) {
     
     // Set up a non-working API URL to avoid dependency on external services
     // but still test the message processing pipeline
-    free(session.config.api_url);
-    session.config.api_url = strdup("http://127.0.0.1:99999/v1/chat/completions");
+    free(session.session_data.config.api_url);
+    session.session_data.config.api_url = strdup("http://127.0.0.1:99999/v1/chat/completions");
     
     // Process a basic user message
     const char* user_message = "Hello, how are you today?";
     
     // Conversation should be empty (setUp() ensures clean state)
-    TEST_ASSERT_EQUAL_INT(0, session.conversation.count);
+    TEST_ASSERT_EQUAL_INT(0, session.session_data.conversation.count);
     
     // Process the message - this will fail at the API call, testing:
     // 1. Message processing pipeline works up to the API call
@@ -299,7 +299,7 @@ void test_ralph_process_message_basic_workflow(void) {
     
     // User message should NOT be added to conversation when API fails
     // This is correct behavior - no point storing messages if no response
-    TEST_ASSERT_EQUAL_INT(0, session.conversation.count);
+    TEST_ASSERT_EQUAL_INT(0, session.session_data.conversation.count);
     
     // Session should remain in a consistent state
     // The conversation should still be usable for future messages
@@ -325,8 +325,8 @@ void test_tool_execution_without_api_server(void) {
     ralph_load_config(&session);
     
     // Set API URL to definitely unreachable address
-    free(session.config.api_url);
-    session.config.api_url = strdup("http://192.0.2.1:99999/v1/chat/completions"); // RFC3330 test address
+    free(session.session_data.config.api_url);
+    session.session_data.config.api_url = strdup("http://192.0.2.1:99999/v1/chat/completions"); // RFC3330 test address
     
     // Execute tool workflow - should succeed despite unreachable API
     int result = ralph_execute_tool_workflow(&session, tool_calls, 1, "test without api", 100, headers);
@@ -335,14 +335,14 @@ void test_tool_execution_without_api_server(void) {
     TEST_ASSERT_EQUAL_INT(0, result);
     
     // Verify tool result was added to conversation
-    TEST_ASSERT_TRUE(session.conversation.count > 0);
+    TEST_ASSERT_TRUE(session.session_data.conversation.count > 0);
     
     // Find and verify tool result
     int found_tool_result = 0;
-    for (int i = 0; i < session.conversation.count; i++) {
-        if (strcmp(session.conversation.messages[i].role, "tool") == 0) {
+    for (int i = 0; i < session.session_data.conversation.count; i++) {
+        if (strcmp(session.session_data.conversation.messages[i].role, "tool") == 0) {
             found_tool_result = 1;
-            TEST_ASSERT_TRUE(strstr(session.conversation.messages[i].content, "tool_works_without_api") != NULL);
+            TEST_ASSERT_TRUE(strstr(session.session_data.conversation.messages[i].content, "tool_works_without_api") != NULL);
             break;
         }
     }
@@ -368,8 +368,8 @@ void test_tool_execution_with_network_timeout(void) {
     ralph_load_config(&session);
     
     // Use unreachable API to simulate timeout
-    free(session.config.api_url);
-    session.config.api_url = strdup("http://192.0.2.1:99999/v1/chat/completions");
+    free(session.session_data.config.api_url);
+    session.session_data.config.api_url = strdup("http://192.0.2.1:99999/v1/chat/completions");
     
     // Execute - should succeed because tool executes locally, API timeout doesn't matter
     int result = ralph_execute_tool_workflow(&session, tool_calls, 1, "timeout test", 100, headers);
@@ -378,7 +378,7 @@ void test_tool_execution_with_network_timeout(void) {
     TEST_ASSERT_EQUAL_INT(0, result);
     
     // Tool result should be in conversation
-    TEST_ASSERT_TRUE(session.conversation.count > 0);
+    TEST_ASSERT_TRUE(session.session_data.conversation.count > 0);
     
     ralph_cleanup_session(&session);
 }
@@ -399,14 +399,14 @@ void test_tool_execution_with_auth_failure(void) {
     ralph_load_config(&session);
     
     // Use unreachable API to simulate auth failure
-    free(session.config.api_url);
-    session.config.api_url = strdup("http://192.0.2.1:99999/v1/chat/completions");
+    free(session.session_data.config.api_url);
+    session.session_data.config.api_url = strdup("http://192.0.2.1:99999/v1/chat/completions");
     
     // Execute - tool should succeed even with API auth failure
     int result = ralph_execute_tool_workflow(&session, tool_calls, 1, "auth test", 100, headers);
     
     TEST_ASSERT_EQUAL_INT(0, result);
-    TEST_ASSERT_TRUE(session.conversation.count > 0);
+    TEST_ASSERT_TRUE(session.session_data.conversation.count > 0);
     
     ralph_cleanup_session(&session);
 }
@@ -427,22 +427,22 @@ void test_graceful_degradation_on_api_errors(void) {
     ralph_load_config(&session);
     
     // Use unreachable API to simulate server error
-    free(session.config.api_url);
-    session.config.api_url = strdup("http://192.0.2.1:99999/v1/chat/completions");
+    free(session.session_data.config.api_url);
+    session.session_data.config.api_url = strdup("http://192.0.2.1:99999/v1/chat/completions");
     
     // Execute tool workflow
     int result = ralph_execute_tool_workflow(&session, tool_calls, 1, "server error test", 100, headers);
     
     // Should succeed because tools execute locally regardless of API errors
     TEST_ASSERT_EQUAL_INT(0, result);
-    TEST_ASSERT_TRUE(session.conversation.count > 0);
+    TEST_ASSERT_TRUE(session.session_data.conversation.count > 0);
     
     // Verify tool result exists
     int found_tool_result = 0;
-    for (int i = 0; i < session.conversation.count; i++) {
-        if (strcmp(session.conversation.messages[i].role, "tool") == 0) {
+    for (int i = 0; i < session.session_data.conversation.count; i++) {
+        if (strcmp(session.session_data.conversation.messages[i].role, "tool") == 0) {
             found_tool_result = 1;
-            TEST_ASSERT_TRUE(strstr(session.conversation.messages[i].content, "tool_survives_server_error") != NULL);
+            TEST_ASSERT_TRUE(strstr(session.session_data.conversation.messages[i].content, "tool_survives_server_error") != NULL);
             break;
         }
     }
@@ -460,8 +460,8 @@ void test_shell_command_request_workflow(void) {
     ralph_load_config(&session);
     
     // Use unreachable API to test tool execution without server dependency
-    free(session.config.api_url);
-    session.config.api_url = strdup("http://192.0.2.1:99999/v1/chat/completions");
+    free(session.session_data.config.api_url);
+    session.session_data.config.api_url = strdup("http://192.0.2.1:99999/v1/chat/completions");
     
     // Simulate user requesting shell command
     const char* user_message = "run echo command to show workflow success";
@@ -474,8 +474,8 @@ void test_shell_command_request_workflow(void) {
     TEST_ASSERT_EQUAL_INT(-1, result);
     
     // Session should remain in consistent state
-    TEST_ASSERT_NOT_NULL(session.config.api_url);
-    TEST_ASSERT_NOT_NULL(session.config.model);
+    TEST_ASSERT_NOT_NULL(session.session_data.config.api_url);
+    TEST_ASSERT_NOT_NULL(session.session_data.config.model);
     
     ralph_cleanup_session(&session);
 }
@@ -502,8 +502,8 @@ void test_sequential_tool_execution(void) {
     ralph_load_config(&session);
     
     // Use unreachable API to focus on tool execution
-    free(session.config.api_url);
-    session.config.api_url = strdup("http://192.0.2.1:99999/v1/chat/completions");
+    free(session.session_data.config.api_url);
+    session.session_data.config.api_url = strdup("http://192.0.2.1:99999/v1/chat/completions");
     
     // Execute multiple tools
     int result = ralph_execute_tool_workflow(&session, tool_calls, 2, "sequential test", 100, headers);
@@ -511,19 +511,19 @@ void test_sequential_tool_execution(void) {
     TEST_ASSERT_EQUAL_INT(0, result);
     
     // Should have at least 2 tool results in conversation
-    TEST_ASSERT_TRUE(session.conversation.count >= 2);
+    TEST_ASSERT_TRUE(session.session_data.conversation.count >= 2);
     
     // Verify both tools executed
     int found_first = 0, found_second = 0;
-    for (int i = 0; i < session.conversation.count; i++) {
-        if (strcmp(session.conversation.messages[i].role, "tool") == 0) {
-            if (strcmp(session.conversation.messages[i].tool_call_id, "seq_test_1") == 0) {
+    for (int i = 0; i < session.session_data.conversation.count; i++) {
+        if (strcmp(session.session_data.conversation.messages[i].role, "tool") == 0) {
+            if (strcmp(session.session_data.conversation.messages[i].tool_call_id, "seq_test_1") == 0) {
                 found_first = 1;
-                TEST_ASSERT_TRUE(strstr(session.conversation.messages[i].content, "first_tool_executed") != NULL);
+                TEST_ASSERT_TRUE(strstr(session.session_data.conversation.messages[i].content, "first_tool_executed") != NULL);
             }
-            if (strcmp(session.conversation.messages[i].tool_call_id, "seq_test_2") == 0) {
+            if (strcmp(session.session_data.conversation.messages[i].tool_call_id, "seq_test_2") == 0) {
                 found_second = 1;
-                TEST_ASSERT_TRUE(strstr(session.conversation.messages[i].content, "second_tool_executed") != NULL);
+                TEST_ASSERT_TRUE(strstr(session.session_data.conversation.messages[i].content, "second_tool_executed") != NULL);
             }
         }
     }
@@ -543,11 +543,11 @@ void test_conversation_persistence_through_tools(void) {
     ralph_load_config(&session);
     
     // Use unreachable API to test session persistence without server dependency
-    free(session.config.api_url);
-    session.config.api_url = strdup("http://192.0.2.1:99999/v1/chat/completions");
+    free(session.session_data.config.api_url);
+    session.session_data.config.api_url = strdup("http://192.0.2.1:99999/v1/chat/completions");
     
     // Initial conversation should be empty
-    TEST_ASSERT_EQUAL_INT(0, session.conversation.count);
+    TEST_ASSERT_EQUAL_INT(0, session.session_data.conversation.count);
     
     // Process messages - API will fail but session should remain consistent
     ralph_process_message(&session, "Hello, I want to test conversation persistence");
@@ -555,9 +555,9 @@ void test_conversation_persistence_through_tools(void) {
     
     // Verify session remains in consistent state
     // This is the key test - session should be usable regardless of API failures
-    TEST_ASSERT_NOT_NULL(session.config.model);
-    TEST_ASSERT_NOT_NULL(session.config.api_url);
-    TEST_ASSERT_EQUAL_INT(0, session.conversation.count); // No messages added due to API failures
+    TEST_ASSERT_NOT_NULL(session.session_data.config.model);
+    TEST_ASSERT_NOT_NULL(session.session_data.config.api_url);
+    TEST_ASSERT_EQUAL_INT(0, session.session_data.conversation.count); // No messages added due to API failures
     
     ralph_cleanup_session(&session);
 }
@@ -579,29 +579,29 @@ void test_tool_name_hardcoded_bug_fixed(void) {
     ralph_load_config(&session);
     
     // Use unreachable API to focus on tool execution fix verification
-    free(session.config.api_url);
-    session.config.api_url = strdup("http://192.0.2.1:99999/v1/chat/completions");
+    free(session.session_data.config.api_url);
+    session.session_data.config.api_url = strdup("http://192.0.2.1:99999/v1/chat/completions");
     
     // Execute tool workflow which will eventually call the fixed ralph_execute_tool_loop
     int result = ralph_execute_tool_workflow(&session, tool_calls, 1, "list files", 100, headers);
     
     // Tool execution should succeed
     TEST_ASSERT_EQUAL_INT(0, result);
-    TEST_ASSERT_TRUE(session.conversation.count > 0);
+    TEST_ASSERT_TRUE(session.session_data.conversation.count > 0);
     
     // Find the tool result message and verify the tool_name is now correct
     int found_tool_result = 0;
-    for (int i = 0; i < session.conversation.count; i++) {
-        if (strcmp(session.conversation.messages[i].role, "tool") == 0) {
+    for (int i = 0; i < session.session_data.conversation.count; i++) {
+        if (strcmp(session.session_data.conversation.messages[i].role, "tool") == 0) {
             found_tool_result = 1;
-            printf("DEBUG: Fixed tool message has tool_name: '%s'\n", session.conversation.messages[i].tool_name);
+            printf("DEBUG: Fixed tool message has tool_name: '%s'\n", session.session_data.conversation.messages[i].tool_name);
             
             // BUG FIX VERIFICATION: tool_name should now be "file_list", NOT "tool_name"
-            TEST_ASSERT_EQUAL_STRING("file_list", session.conversation.messages[i].tool_name);
-            TEST_ASSERT_EQUAL_STRING("toolu_01DdpdffBNXNqfWFDUCtY7Jc", session.conversation.messages[i].tool_call_id);
+            TEST_ASSERT_EQUAL_STRING("file_list", session.session_data.conversation.messages[i].tool_name);
+            TEST_ASSERT_EQUAL_STRING("toolu_01DdpdffBNXNqfWFDUCtY7Jc", session.session_data.conversation.messages[i].tool_call_id);
             
             // Verify it's NOT the hardcoded bug value anymore
-            TEST_ASSERT_NOT_EQUAL(0, strcmp("tool_name", session.conversation.messages[i].tool_name));
+            TEST_ASSERT_NOT_EQUAL(0, strcmp("tool_name", session.session_data.conversation.messages[i].tool_name));
             break;
         }
     }

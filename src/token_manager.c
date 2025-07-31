@@ -5,11 +5,14 @@
 #include <string.h>
 #include <math.h>
 
+// Include ralph.h after token_manager.h to resolve the struct RalphSession
+#include "ralph.h"
+
 // Default token configuration values
 #define DEFAULT_MIN_RESPONSE_TOKENS 150
 #define DEFAULT_SAFETY_BUFFER_BASE 50
-#define DEFAULT_SAFETY_BUFFER_RATIO 0.05f  // 5% of context window
-#define DEFAULT_CHARS_PER_TOKEN 3.5f       // More conservative than 4.0
+#define DEFAULT_SAFETY_BUFFER_RATIO 0.02f  // 2% of context window - reduced due to better estimation
+#define DEFAULT_CHARS_PER_TOKEN 5.5f       // Modern tokenizers: ~1 token per word (4-6 chars)
 
 void token_config_init(TokenConfig* config, int context_window, int max_context_window) {
     if (config == NULL) return;
@@ -31,14 +34,28 @@ int estimate_token_count(const char* text, const TokenConfig* config) {
     if (text == NULL || config == NULL) return 0;
     
     int char_count = strlen(text);
-    int estimated_tokens = (int)ceil(char_count / config->chars_per_token);
+    float chars_per_token = config->chars_per_token;
+    
+    // Adjust estimation based on content type
+    // Code and JSON are more efficiently tokenized
+    if (strstr(text, "```") != NULL || strstr(text, "function ") != NULL || 
+        strstr(text, "#include") != NULL || strstr(text, "def ") != NULL) {
+        chars_per_token *= 1.2f; // Code is ~20% more efficient
+    }
+    
+    // JSON content is very efficiently tokenized
+    if (text[0] == '{' || strstr(text, "\"role\":") != NULL) {
+        chars_per_token *= 1.3f; // JSON is ~30% more efficient
+    }
+    
+    int estimated_tokens = (int)ceil(char_count / chars_per_token);
     
     // Add overhead for JSON structure, tool definitions, etc.
     if (strstr(text, "\"tools\"") != NULL) {
-        estimated_tokens += 100; // Tool definition overhead
+        estimated_tokens += 50; // Reduced overhead - was too conservative
     }
     if (strstr(text, "\"system\"") != NULL) {
-        estimated_tokens += 20; // System message overhead
+        estimated_tokens += 10; // Reduced overhead
     }
     
     return estimated_tokens;
@@ -153,7 +170,7 @@ int trim_conversation_for_tokens(ConversationHistory* conversation,
     return trimmed_count;
 }
 
-int calculate_token_allocation(const RalphSession* session, const char* user_message,
+int calculate_token_allocation(const SessionData* session, const char* user_message,
                               TokenConfig* config, TokenUsage* usage) {
     if (session == NULL || config == NULL || usage == NULL) return -1;
     
@@ -195,8 +212,8 @@ int calculate_token_allocation(const RalphSession* session, const char* user_mes
     
     // Estimate tokens for tool definitions
     int tool_tokens = 0;
-    if (session->tools.function_count > 0) {
-        tool_tokens = session->tools.function_count * 50; // Rough estimate per tool
+    if (session->tool_count > 0) {
+        tool_tokens = session->tool_count * 50; // Rough estimate per tool
     }
     
     int total_prompt_tokens = system_tokens + user_tokens + history_tokens + tool_tokens + 50; // JSON overhead
@@ -209,17 +226,8 @@ int calculate_token_allocation(const RalphSession* session, const char* user_mes
     // Calculate available response tokens
     int available_tokens = effective_context_window - total_prompt_tokens - safety_buffer;
     
-    // Ensure minimum response tokens
-    if (available_tokens < config->min_response_tokens) {
-        debug_printf("Insufficient tokens for response: %d < %d (min required)\n", 
-                    available_tokens, config->min_response_tokens);
-        
-        // For now, just use the minimum - actual trimming should be done elsewhere
-        // when actually building the request
-        available_tokens = config->min_response_tokens;
-        usage->messages_trimmed = 0; // Will be determined when actually trimming
-        debug_printf("Using minimum response tokens: %d\n", available_tokens);
-    }
+    // Note: If available_tokens < min_response_tokens, the caller should use
+    // manage_conversation_tokens() which will attempt compaction
     
     usage->available_response_tokens = available_tokens;
     
@@ -229,3 +237,5 @@ int calculate_token_allocation(const RalphSession* session, const char* user_mes
     
     return 0;
 }
+
+// manage_conversation_tokens moved to ralph.c to avoid circular dependencies

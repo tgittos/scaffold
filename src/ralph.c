@@ -9,6 +9,8 @@
 #include "debug_output.h"
 #include "api_common.h"
 #include "token_manager.h"
+#include "conversation_compactor.h"
+#include "session_manager.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -50,7 +52,7 @@ char* ralph_build_anthropic_json_payload(const char* model, const char* system_p
 char* ralph_build_enhanced_system_prompt(const RalphSession* session) {
     if (session == NULL) return NULL;
     
-    const char* base_prompt = session->config.system_prompt;
+    const char* base_prompt = session->session_data.config.system_prompt;
     if (base_prompt == NULL) base_prompt = "";
     
     // Serialize current todo list state
@@ -103,9 +105,9 @@ char* ralph_build_json_payload_with_todos(const RalphSession* session,
     char* enhanced_prompt = ralph_build_enhanced_system_prompt(session);
     if (enhanced_prompt == NULL) return NULL;
     
-    char* result = ralph_build_json_payload(session->config.model, enhanced_prompt,
-                                          &session->conversation, user_message,
-                                          session->config.max_tokens_param, max_tokens,
+    char* result = ralph_build_json_payload(session->session_data.config.model, enhanced_prompt,
+                                          &session->session_data.conversation, user_message,
+                                          session->session_data.config.max_tokens_param, max_tokens,
                                           &session->tools);
     
     free(enhanced_prompt);
@@ -119,8 +121,8 @@ char* ralph_build_anthropic_json_payload_with_todos(const RalphSession* session,
     char* enhanced_prompt = ralph_build_enhanced_system_prompt(session);
     if (enhanced_prompt == NULL) return NULL;
     
-    char* result = ralph_build_anthropic_json_payload(session->config.model, enhanced_prompt,
-                                                    &session->conversation, user_message,
+    char* result = ralph_build_anthropic_json_payload(session->session_data.config.model, enhanced_prompt,
+                                                    &session->session_data.conversation, user_message,
                                                     max_tokens, &session->tools);
     
     free(enhanced_prompt);
@@ -130,11 +132,11 @@ char* ralph_build_anthropic_json_payload_with_todos(const RalphSession* session,
 int ralph_init_session(RalphSession* session) {
     if (session == NULL) return -1;
     
-    // Initialize configuration structure
-    memset(&session->config, 0, sizeof(RalphConfig));
+    // Initialize session data
+    session_data_init(&session->session_data);
     
-    // Load conversation history
-    if (load_conversation_history(&session->conversation) != 0) {
+    // Load conversation history into session data
+    if (load_conversation_history(&session->session_data.conversation) != 0) {
         fprintf(stderr, "Error: Failed to load conversation history\n");
         return -1;
     }
@@ -148,7 +150,7 @@ int ralph_init_session(RalphSession* session) {
     // Initialize todo list for AI agent use
     if (todo_list_init(&session->todo_list) != 0) {
         fprintf(stderr, "Error: Failed to initialize todo list\n");
-        cleanup_conversation_history(&session->conversation);
+        cleanup_conversation_history(&session->session_data.conversation);
         cleanup_tool_registry(&session->tools);
         return -1;
     }
@@ -180,7 +182,7 @@ int ralph_init_session(RalphSession* session) {
 void ralph_cleanup_session(RalphSession* session) {
     if (session == NULL) return;
     
-    // Clear global todo tool reference before destroying the todo list
+    // Clear global tool reference before destroying the todo list
     clear_todo_tool_reference();
     
     // Cleanup todo display system
@@ -189,18 +191,11 @@ void ralph_cleanup_session(RalphSession* session) {
     // Cleanup todo list first (before tool registry which might reference it)
     todo_list_destroy(&session->todo_list);
     
-    // Cleanup conversation and tools
-    cleanup_conversation_history(&session->conversation);
+    // Cleanup tools registry
     cleanup_tool_registry(&session->tools);
     
-    // Cleanup configuration
-    free(session->config.api_url);
-    free(session->config.model);
-    free(session->config.api_key);
-    cleanup_system_prompt(&session->config.system_prompt);
-    
-    // Reset configuration
-    memset(&session->config, 0, sizeof(RalphConfig));
+    // Cleanup session data (handles conversation and config cleanup)
+    session_data_cleanup(&session->session_data);
 }
 
 int ralph_load_config(RalphSession* session) {
@@ -213,77 +208,77 @@ int ralph_load_config(RalphSession* session) {
     }
     
     // Try to load system prompt from PROMPT.md (optional)
-    load_system_prompt(&session->config.system_prompt);
+    load_system_prompt(&session->session_data.config.system_prompt);
     
     // Get API URL from environment variable, default to OpenAI
     const char *url = getenv("API_URL");
     if (url == NULL) {
         url = "https://api.openai.com/v1/chat/completions";
     }
-    session->config.api_url = strdup(url);
-    if (session->config.api_url == NULL) return -1;
+    session->session_data.config.api_url = strdup(url);
+    if (session->session_data.config.api_url == NULL) return -1;
     
     // Get model from environment variable, default to o4-mini
     const char *model = getenv("MODEL");
     if (model == NULL) {
         model = "o4-mini-2025-04-16";
     }
-    session->config.model = strdup(model);
-    if (session->config.model == NULL) return -1;
+    session->session_data.config.model = strdup(model);
+    if (session->session_data.config.model == NULL) return -1;
     
     // Get API key (optional for local servers)
     const char *api_key = NULL;
-    if (strstr(session->config.api_url, "api.anthropic.com") != NULL) {
+    if (strstr(session->session_data.config.api_url, "api.anthropic.com") != NULL) {
         api_key = getenv("ANTHROPIC_API_KEY");
     } else {
         api_key = getenv("OPENAI_API_KEY");
     }
     
     if (api_key != NULL) {
-        session->config.api_key = strdup(api_key);
-        if (session->config.api_key == NULL) return -1;
+        session->session_data.config.api_key = strdup(api_key);
+        if (session->session_data.config.api_key == NULL) return -1;
     }
     
     // Get context window size from environment variable
     const char *context_window_str = getenv("CONTEXT_WINDOW");
-    session->config.context_window = 8192;  // Default for many models
+    session->session_data.config.context_window = 8192;  // Default for many models
     if (context_window_str != NULL) {
         int parsed_window = atoi(context_window_str);
         if (parsed_window > 0) {
-            session->config.context_window = parsed_window;
+            session->session_data.config.context_window = parsed_window;
         }
     }
     
     // Get maximum context window size from environment variable
     const char *max_context_window_str = getenv("MAX_CONTEXT_WINDOW");
-    session->config.max_context_window = session->config.context_window;  // Default to same as context_window
+    session->session_data.config.max_context_window = session->session_data.config.context_window;  // Default to same as context_window
     if (max_context_window_str != NULL) {
         int parsed_max_window = atoi(max_context_window_str);
         if (parsed_max_window > 0) {
-            session->config.max_context_window = parsed_max_window;
+            session->session_data.config.max_context_window = parsed_max_window;
         }
     }
     
     // Get max response tokens from environment variable (optional override)
     const char *max_tokens_str = getenv("MAX_TOKENS");
-    session->config.max_tokens = -1;  // Will be calculated later if not set
+    session->session_data.config.max_tokens = -1;  // Will be calculated later if not set
     if (max_tokens_str != NULL) {
         int parsed_tokens = atoi(max_tokens_str);
         if (parsed_tokens > 0) {
-            session->config.max_tokens = parsed_tokens;
+            session->session_data.config.max_tokens = parsed_tokens;
         }
     }
     
     // Determine API type and correct parameter name for max tokens
-    if (strstr(session->config.api_url, "api.openai.com") != NULL) {
-        session->config.api_type = API_TYPE_OPENAI;
-        session->config.max_tokens_param = "max_completion_tokens";
-    } else if (strstr(session->config.api_url, "api.anthropic.com") != NULL) {
-        session->config.api_type = API_TYPE_ANTHROPIC;
-        session->config.max_tokens_param = "max_tokens";
+    if (strstr(session->session_data.config.api_url, "api.openai.com") != NULL) {
+        session->session_data.config.api_type = API_TYPE_OPENAI;
+        session->session_data.config.max_tokens_param = "max_completion_tokens";
+    } else if (strstr(session->session_data.config.api_url, "api.anthropic.com") != NULL) {
+        session->session_data.config.api_type = API_TYPE_ANTHROPIC;
+        session->session_data.config.max_tokens_param = "max_tokens";
     } else {
-        session->config.api_type = API_TYPE_LOCAL;
-        session->config.max_tokens_param = "max_tokens";
+        session->session_data.config.api_type = API_TYPE_LOCAL;
+        session->session_data.config.max_tokens_param = "max_tokens";
     }
     
     return 0;
@@ -395,7 +390,7 @@ int ralph_execute_tool_workflow(RalphSession* session, ToolCall* tool_calls, int
     
     // Add tool result messages to conversation
     for (int i = 0; i < call_count; i++) {
-        if (append_tool_message(&session->conversation, results[i].result, tool_calls[i].id, tool_calls[i].name) != 0) {
+        if (append_tool_message(&session->session_data.conversation, results[i].result, tool_calls[i].id, tool_calls[i].name) != 0) {
             fprintf(stderr, "Warning: Failed to save tool result to conversation history\n");
         }
     }
@@ -477,9 +472,9 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
         
         // Recalculate token allocation for this iteration
         TokenConfig token_config;
-        token_config_init(&token_config, session->config.context_window, session->config.max_context_window);
+        token_config_init(&token_config, session->session_data.config.context_window, session->session_data.config.max_context_window);
         TokenUsage token_usage;
-        if (calculate_token_allocation(session, "", &token_config, &token_usage) != 0) {
+        if (manage_conversation_tokens(session, "", &token_config, &token_usage) != 0) {
             fprintf(stderr, "Error: Failed to calculate token allocation for tool loop iteration %d\n", loop_count);
             return -1;
         }
@@ -489,7 +484,7 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
         
         // Build JSON payload with current conversation state
         char* post_data = NULL;
-        if (session->config.api_type == API_TYPE_ANTHROPIC) {
+        if (session->session_data.config.api_type == API_TYPE_ANTHROPIC) {
             post_data = ralph_build_anthropic_json_payload_with_todos(session, "", iteration_max_tokens);
         } else {
             post_data = ralph_build_json_payload_with_todos(session, "", iteration_max_tokens);
@@ -504,7 +499,7 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
         struct HTTPResponse response = {0};
         debug_printf("Making API request for tool loop iteration %d\n", loop_count);
         
-        if (http_post_with_headers(session->config.api_url, post_data, headers, &response) != 0) {
+        if (http_post_with_headers(session->session_data.config.api_url, post_data, headers, &response) != 0) {
             fprintf(stderr, "API request failed for tool loop iteration %d\n", loop_count);
             free(post_data);
             return -1;
@@ -513,7 +508,7 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
         // Parse response
         ParsedResponse parsed_response;
         int parse_result;
-        if (session->config.api_type == API_TYPE_ANTHROPIC) {
+        if (session->session_data.config.api_type == API_TYPE_ANTHROPIC) {
             parse_result = parse_anthropic_response(response.data, &parsed_response);
         } else {
             parse_result = parse_api_response(response.data, &parsed_response);
@@ -536,7 +531,7 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
         int tool_parse_result;
         
         // First try to parse from raw JSON response (for proper API tool calls)
-        if (session->config.api_type == API_TYPE_ANTHROPIC) {
+        if (session->session_data.config.api_type == API_TYPE_ANTHROPIC) {
             tool_parse_result = parse_anthropic_tool_calls(response.data, &tool_calls, &call_count);
         } else {
             tool_parse_result = parse_tool_calls(response.data, &tool_calls, &call_count);
@@ -556,9 +551,9 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
         // Save assistant response to conversation - use raw response for tool calls, parsed content otherwise
         if (tool_parse_result == 0 && call_count > 0) {
             // For responses with tool calls, save the raw JSON response to preserve tool_use structure
-            if (session->config.api_type == API_TYPE_ANTHROPIC) {
+            if (session->session_data.config.api_type == API_TYPE_ANTHROPIC) {
                 // For Anthropic, save the raw JSON response as-is to preserve tool_use blocks
-                if (append_conversation_message(&session->conversation, "assistant", response.data) != 0) {
+                if (append_conversation_message(&session->session_data.conversation, "assistant", response.data) != 0) {
                     fprintf(stderr, "Warning: Failed to save assistant response with tool calls to conversation history\n");
                 }
             } else {
@@ -566,7 +561,7 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
                 // We'll save the assistant message after tool execution in the main function
                 // For now, just save text content if available
                 if (assistant_content != NULL) {
-                    if (append_conversation_message(&session->conversation, "assistant", assistant_content) != 0) {
+                    if (append_conversation_message(&session->session_data.conversation, "assistant", assistant_content) != 0) {
                         fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
                     }
                 }
@@ -574,7 +569,7 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
         } else {
             // For responses without tool calls, save the parsed content
             if (assistant_content != NULL) {
-                if (append_conversation_message(&session->conversation, "assistant", assistant_content) != 0) {
+                if (append_conversation_message(&session->session_data.conversation, "assistant", assistant_content) != 0) {
                     fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
                 }
             }
@@ -666,7 +661,7 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
         for (int i = 0; i < executed_count; i++) {
             int tool_call_index = tool_call_indices[i];
             const char* tool_name = tool_calls[tool_call_index].name;
-            if (append_tool_message(&session->conversation, results[i].result, 
+            if (append_tool_message(&session->session_data.conversation, results[i].result, 
                                    results[i].tool_call_id, tool_name) != 0) {
                 fprintf(stderr, "Warning: Failed to save tool result to conversation history\n");
             }
@@ -690,16 +685,16 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
     
     // Initialize token configuration and calculate optimal allocation
     TokenConfig token_config;
-    token_config_init(&token_config, session->config.context_window, session->config.max_context_window);
+    token_config_init(&token_config, session->session_data.config.context_window, session->session_data.config.max_context_window);
     
     TokenUsage token_usage;
-    if (calculate_token_allocation(session, user_message, &token_config, &token_usage) != 0) {
+    if (manage_conversation_tokens(session, user_message, &token_config, &token_usage) != 0) {
         fprintf(stderr, "Error: Failed to calculate token allocation\n");
         return -1;
     }
     
     // Use calculated max tokens or configured override
-    int max_tokens = session->config.max_tokens;
+    int max_tokens = session->session_data.config.max_tokens;
     if (max_tokens == -1) {
         max_tokens = token_usage.available_response_tokens;
     }
@@ -709,7 +704,7 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
     
     // Build JSON payload with calculated max_tokens
     char* post_data = NULL;
-    if (session->config.api_type == API_TYPE_ANTHROPIC) {
+    if (session->session_data.config.api_type == API_TYPE_ANTHROPIC) {
         post_data = ralph_build_anthropic_json_payload_with_todos(session, user_message, max_tokens);
     } else {
         post_data = ralph_build_json_payload_with_todos(session, user_message, max_tokens);
@@ -726,10 +721,10 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
     const char *headers[4] = {NULL, NULL, NULL, NULL};
     int header_count = 0;
     
-    if (session->config.api_key != NULL) {
-        if (session->config.api_type == API_TYPE_ANTHROPIC) {
+    if (session->session_data.config.api_key != NULL) {
+        if (session->session_data.config.api_type == API_TYPE_ANTHROPIC) {
             // Anthropic uses x-api-key header
-            int ret = snprintf(auth_header, sizeof(auth_header), "x-api-key: %s", session->config.api_key);
+            int ret = snprintf(auth_header, sizeof(auth_header), "x-api-key: %s", session->session_data.config.api_key);
             if (ret < 0 || ret >= (int)sizeof(auth_header)) {
                 fprintf(stderr, "Error: Authorization header too long\n");
                 free(post_data);
@@ -740,7 +735,7 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
             headers[header_count++] = content_type;
         } else {
             // OpenAI and local servers use Bearer token
-            int ret = snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", session->config.api_key);
+            int ret = snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", session->session_data.config.api_key);
             if (ret < 0 || ret >= (int)sizeof(auth_header)) {
                 fprintf(stderr, "Error: Authorization header too long\n");
                 free(post_data);
@@ -752,18 +747,18 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
     
     curl_global_init(CURL_GLOBAL_DEFAULT);
     
-    debug_printf("Making API request to %s\n", session->config.api_url);
+    debug_printf("Making API request to %s\n", session->session_data.config.api_url);
     debug_printf("POST data: %s\n\n", post_data);
     
     struct HTTPResponse response = {0};
     int result = -1;
     
-    if (http_post_with_headers(session->config.api_url, post_data, headers, &response) == 0) {
+    if (http_post_with_headers(session->session_data.config.api_url, post_data, headers, &response) == 0) {
         debug_printf("Got API response: %s\n", response.data);
         // Parse the response based on API type
         ParsedResponse parsed_response;
         int parse_result;
-        if (session->config.api_type == API_TYPE_ANTHROPIC) {
+        if (session->session_data.config.api_type == API_TYPE_ANTHROPIC) {
             parse_result = parse_anthropic_response(response.data, &parsed_response);
         } else {
             parse_result = parse_api_response(response.data, &parsed_response);
@@ -787,7 +782,7 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
         int raw_call_count = 0;
         int tool_parse_result;
         
-        if (session->config.api_type == API_TYPE_ANTHROPIC) {
+        if (session->session_data.config.api_type == API_TYPE_ANTHROPIC) {
             tool_parse_result = parse_anthropic_tool_calls(response.data, &raw_tool_calls, &raw_call_count);
         } else {
             tool_parse_result = parse_tool_calls(response.data, &raw_tool_calls, &raw_call_count);
@@ -811,7 +806,7 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
             // First save user message, then assistant message, then execute tools
             
             // Save user message first
-            if (append_conversation_message(&session->conversation, "user", user_message) != 0) {
+            if (append_conversation_message(&session->session_data.conversation, "user", user_message) != 0) {
                 fprintf(stderr, "Warning: Failed to save user message to conversation history\n");
             }
             
@@ -826,7 +821,7 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
                                                parsed_response.response_content : 
                                                parsed_response.thinking_content;
                 if (assistant_content != NULL) {
-                    if (append_conversation_message(&session->conversation, "assistant", assistant_content) != 0) {
+                    if (append_conversation_message(&session->session_data.conversation, "assistant", assistant_content) != 0) {
                         fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
                     }
                 }
@@ -836,7 +831,7 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
                 const char* content_to_save = NULL;
                 char* constructed_message = NULL;
                 
-                if (session->config.api_type == API_TYPE_ANTHROPIC) {
+                if (session->session_data.config.api_type == API_TYPE_ANTHROPIC) {
                     // For Anthropic, save the raw JSON response as-is for conversation history
                     content_to_save = response.data;
                 } else {
@@ -847,7 +842,7 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
                 }
                 
                 if (content_to_save != NULL) {
-                    if (append_conversation_message(&session->conversation, "assistant", content_to_save) != 0) {
+                    if (append_conversation_message(&session->session_data.conversation, "assistant", content_to_save) != 0) {
                         fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
                     }
                 }
@@ -869,7 +864,7 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
                 print_formatted_response(&parsed_response);
                 
                 // Save user message first for LM Studio format too
-                if (append_conversation_message(&session->conversation, "user", user_message) != 0) {
+                if (append_conversation_message(&session->session_data.conversation, "user", user_message) != 0) {
                     fprintf(stderr, "Warning: Failed to save user message to conversation history\n");
                 }
                 result = ralph_execute_tool_workflow(session, tool_calls, call_count, user_message, max_tokens, headers);
@@ -879,7 +874,7 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
                 print_formatted_response(&parsed_response);
                 
                 // Save user message
-                if (append_conversation_message(&session->conversation, "user", user_message) != 0) {
+                if (append_conversation_message(&session->session_data.conversation, "user", user_message) != 0) {
                     fprintf(stderr, "Warning: Failed to save user message to conversation history\n");
                 }
                 
@@ -888,7 +883,7 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
                                                parsed_response.response_content : 
                                                parsed_response.thinking_content;
                 if (assistant_content != NULL) {
-                    if (append_conversation_message(&session->conversation, "assistant", assistant_content) != 0) {
+                    if (append_conversation_message(&session->session_data.conversation, "assistant", assistant_content) != 0) {
                         fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
                     }
                 }
@@ -905,4 +900,59 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
     free(post_data);
     curl_global_cleanup();
     return result;
+}
+
+// Manage conversation size using compaction when needed
+int manage_conversation_tokens(RalphSession* session, const char* user_message,
+                              TokenConfig* config, TokenUsage* usage) {
+    if (session == NULL || config == NULL || usage == NULL) {
+        return -1;
+    }
+    
+    // Update tool count in session data
+    session->session_data.tool_count = session->tools.function_count;
+    
+    // First, try normal token allocation using the embedded SessionData
+    int result = calculate_token_allocation(&session->session_data, user_message, config, usage);
+    if (result != 0) {
+        return result;
+    }
+    
+    // If we have insufficient tokens for a good response, try compaction
+    if (usage->available_response_tokens < config->min_response_tokens * 2) {
+        debug_printf("Available response tokens (%d) below comfortable threshold, attempting compaction\n",
+                    usage->available_response_tokens);
+        
+        // Set up compaction configuration
+        CompactionConfig compact_config;
+        compaction_config_init(&compact_config);
+        
+        // Calculate target token count (aim for 70% of max context window)
+        int target_tokens = (int)(config->max_context_window * 0.7);
+        
+        // Attempt compaction using the embedded SessionData
+        CompactionResult compact_result;
+        int compact_status = compact_conversation(&session->session_data, &compact_config, target_tokens, &compact_result);
+        
+        if (compact_status == 0 && compact_result.tokens_saved > 0) {
+            // Compaction succeeded, recalculate token allocation
+            debug_printf("Compaction saved %d tokens, recalculating allocation\n", compact_result.tokens_saved);
+            
+            cleanup_compaction_result(&compact_result);
+            
+            // Recalculate with the compacted conversation (conversation is already updated in session_data)
+            result = calculate_token_allocation(&session->session_data, user_message, config, usage);
+            if (result == 0) {
+                debug_printf("After compaction: %d response tokens available\n", usage->available_response_tokens);
+            }
+            
+            return result;
+        } else {
+            // Compaction failed or wasn't helpful
+            debug_printf("Compaction failed or ineffective, using original allocation\n");
+            cleanup_compaction_result(&compact_result);
+        }
+    }
+    
+    return 0;
 }

@@ -2,7 +2,8 @@
 #define TOKEN_MANAGER_H
 
 #include "conversation_tracker.h"
-#include "ralph.h"
+
+#include "session_manager.h"
 
 // Token calculation configuration
 typedef struct {
@@ -30,7 +31,7 @@ void token_config_init(TokenConfig* config, int context_window, int max_context_
 int estimate_token_count(const char* text, const TokenConfig* config);
 
 // Calculate optimal token allocation for a request
-int calculate_token_allocation(const RalphSession* session, const char* user_message,
+int calculate_token_allocation(const SessionData* session, const char* user_message,
                               TokenConfig* config, TokenUsage* usage);
 
 // Trim conversation history to fit within token limits
@@ -41,7 +42,9 @@ int trim_conversation_for_tokens(ConversationHistory* conversation,
 // Get dynamic safety buffer based on context complexity
 int get_dynamic_safety_buffer(const TokenConfig* config, int estimated_prompt_tokens);
 
-// Validate token configuration
+// Validate token configuration  
 int validate_token_config(const TokenConfig* config);
+
+// Note: manage_conversation_tokens moved to ralph.c to avoid circular dependencies
 
 #endif // TOKEN_MANAGER_H

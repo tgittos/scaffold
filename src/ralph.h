@@ -5,8 +5,11 @@
 #include "conversation_tracker.h"
 #include "tools_system.h"
 #include "todo_manager.h"
+#include "llm_provider.h"
+#include "token_manager.h"
+#include "session_manager.h"
 
-// API type enumeration
+// API type enumeration (deprecated - kept for compatibility)
 typedef enum {
     API_TYPE_OPENAI,
     API_TYPE_ANTHROPIC,
@@ -23,15 +26,16 @@ typedef struct {
     int max_context_window;      // Maximum context window allowed
     int max_tokens;
     const char* max_tokens_param;
-    APIType api_type;
+    APIType api_type;            // Deprecated - kept for compatibility
 } RalphConfig;
 
-// Ralph session structure
+// Ralph session structure - uses SessionData for core session functionality
 typedef struct {
-    RalphConfig config;
-    ConversationHistory conversation;
+    SessionData session_data;            // Core session data (config, conversation, tool_count)
     TodoList todo_list;
     ToolRegistry tools;
+    ProviderRegistry provider_registry;  // New provider system
+    LLMProvider* provider;               // Current active provider
 } RalphSession;
 
 // Core Ralph functions
@@ -64,5 +68,9 @@ char* ralph_build_json_payload_with_todos(const RalphSession* session,
                                          const char* user_message, int max_tokens);
 char* ralph_build_anthropic_json_payload_with_todos(const RalphSession* session,
                                                    const char* user_message, int max_tokens);
+
+// Manage conversation size using compaction when needed
+int manage_conversation_tokens(RalphSession* session, const char* user_message,
+                              TokenConfig* config, TokenUsage* usage);
 
 #endif // RALPH_H

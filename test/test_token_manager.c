@@ -1,5 +1,6 @@
 #include "unity.h"
 #include "token_manager.h"
+#include "session_manager.h"
 #include "ralph.h"
 #include <string.h>
 
@@ -19,8 +20,8 @@ void test_token_config_init_with_valid_values(void) {
     TEST_ASSERT_EQUAL_INT(32768, config.max_context_window);
     TEST_ASSERT_EQUAL_INT(150, config.min_response_tokens);
     TEST_ASSERT_EQUAL_INT(50, config.safety_buffer_base);
-    TEST_ASSERT_EQUAL_FLOAT(0.05f, config.safety_buffer_ratio);
-    TEST_ASSERT_EQUAL_FLOAT(3.5f, config.chars_per_token);
+    TEST_ASSERT_EQUAL_FLOAT(0.02f, config.safety_buffer_ratio);
+    TEST_ASSERT_EQUAL_FLOAT(5.5f, config.chars_per_token);
 }
 
 void test_token_config_init_with_zero_values(void) {
@@ -46,8 +47,8 @@ void test_estimate_token_count_simple_text(void) {
     const char* text = "Hello world";
     int tokens = estimate_token_count(text, &config);
     
-    // "Hello world" = 11 chars / 3.5 = ~3.14 -> 4 tokens
-    TEST_ASSERT_EQUAL_INT(4, tokens);
+    // "Hello world" = 11 chars / 5.5 = ~2.0 -> 2 tokens
+    TEST_ASSERT_EQUAL_INT(2, tokens);
 }
 
 void test_estimate_token_count_with_tools(void) {
@@ -57,9 +58,9 @@ void test_estimate_token_count_with_tools(void) {
     const char* text = "This message contains \"tools\" in it";
     int tokens = estimate_token_count(text, &config);
     
-    // Should include tool overhead (+100)
-    int base_tokens = (int)ceil(strlen(text) / 3.5f);
-    TEST_ASSERT_EQUAL_INT(base_tokens + 100, tokens);
+    // Should include tool overhead (+50)
+    int base_tokens = (int)ceil(strlen(text) / 5.5f);
+    TEST_ASSERT_EQUAL_INT(base_tokens + 50, tokens);
 }
 
 void test_estimate_token_count_with_system(void) {
@@ -69,9 +70,9 @@ void test_estimate_token_count_with_system(void) {
     const char* text = "This is a \"system\" message";
     int tokens = estimate_token_count(text, &config);
     
-    // Should include system overhead (+20)
-    int base_tokens = (int)ceil(strlen(text) / 3.5f);
-    TEST_ASSERT_EQUAL_INT(base_tokens + 20, tokens);
+    // Should include system overhead (+10)
+    int base_tokens = (int)ceil(strlen(text) / 5.5f);
+    TEST_ASSERT_EQUAL_INT(base_tokens + 10, tokens);
 }
 
 void test_get_dynamic_safety_buffer_normal(void) {
@@ -80,8 +81,8 @@ void test_get_dynamic_safety_buffer_normal(void) {
     
     int buffer = get_dynamic_safety_buffer(&config, 1000);
     
-    // Base (50) + ratio (8192 * 0.05 = 409) = 459
-    int expected = 50 + (int)(8192 * 0.05f);
+    // Base (50) + ratio (8192 * 0.02 = 163) = 213
+    int expected = 50 + (int)(8192 * 0.02f);
     TEST_ASSERT_EQUAL_INT(expected, buffer);
 }
 
@@ -94,7 +95,7 @@ void test_get_dynamic_safety_buffer_complex_prompt(void) {
     int buffer = get_dynamic_safety_buffer(&config, complex_tokens);
     
     // Base + ratio + complex penalty (+50)
-    int expected = 50 + (int)(8192 * 0.05f) + 50;
+    int expected = 50 + (int)(8192 * 0.02f) + 50;
     TEST_ASSERT_EQUAL_INT(expected, buffer);
 }
 
@@ -145,13 +146,14 @@ void test_trim_conversation_empty_history(void) {
 }
 
 void test_calculate_token_allocation_simple(void) {
-    // Create a minimal session
-    RalphSession session = {0};
+    // Create session data for testing
+    SessionData session;
+    session_data_init(&session);
     session.config.context_window = 8192;
     session.config.max_context_window = 8192;
     session.config.system_prompt = strdup("You are a helpful assistant.");
     session.conversation.count = 0;
-    session.tools.function_count = 0;
+    session.tool_count = 0;
     
     TokenConfig config;
     token_config_init(&config, session.config.context_window, session.config.max_context_window);
@@ -165,17 +167,18 @@ void test_calculate_token_allocation_simple(void) {
     TEST_ASSERT_EQUAL_INT(8192, usage.context_window_used);
     
     // Cleanup
-    free(session.config.system_prompt);
+    session_data_cleanup(&session);
 }
 
 void test_calculate_token_allocation_with_max_context_window(void) {
-    // Create a session with max context window larger than context window
-    RalphSession session = {0};
+    // Create session data with max context window larger than context window
+    SessionData session;
+    session_data_init(&session);
     session.config.context_window = 8192;
     session.config.max_context_window = 16384;
     session.config.system_prompt = strdup("You are a helpful assistant.");
     session.conversation.count = 0;
-    session.tools.function_count = 0;
+    session.tool_count = 0;
     
     TokenConfig config;
     token_config_init(&config, session.config.context_window, session.config.max_context_window);
@@ -188,17 +191,18 @@ void test_calculate_token_allocation_with_max_context_window(void) {
     TEST_ASSERT_GREATER_THAN_INT(0, usage.available_response_tokens);
     
     // Cleanup
-    free(session.config.system_prompt);
+    session_data_cleanup(&session);
 }
 
 void test_calculate_token_allocation_insufficient_tokens(void) {
-    // Create a session with very small context window
-    RalphSession session = {0};
+    // Create session data with very small context window
+    SessionData session;
+    session_data_init(&session);
     session.config.context_window = 200;  // Very small
     session.config.max_context_window = 200;
     session.config.system_prompt = strdup("You are a helpful assistant with a very long system prompt that takes up most of the context window space and leaves little room for the actual response which should trigger the minimum response token logic.");
     session.conversation.count = 0;
-    session.tools.function_count = 0;
+    session.tool_count = 0;
     
     TokenConfig config;
     token_config_init(&config, session.config.context_window, session.config.max_context_window);
@@ -207,10 +211,12 @@ void test_calculate_token_allocation_insufficient_tokens(void) {
     int result = calculate_token_allocation(&session, "Hello", &config, &usage);
     
     TEST_ASSERT_EQUAL_INT(0, result);
-    TEST_ASSERT_EQUAL_INT(150, usage.available_response_tokens);  // Should use minimum
+    // After the fix, this should return whatever tokens are actually available (might be negative)
+    // instead of artificially setting to 150
+    TEST_ASSERT_LESS_THAN_INT(150, usage.available_response_tokens);  // Should be less than minimum
     
     // Cleanup
-    free(session.config.system_prompt);
+    session_data_cleanup(&session);
 }
 
 int main(void) {
