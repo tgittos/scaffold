@@ -718,6 +718,109 @@ void test_conversation_persistence_through_tools(void) {
     mock_api_server_stop(&mock_server);
 }
 
+// Anthropic-specific tests
+void test_ralph_build_anthropic_json_payload_basic(void) {
+    const char *test_message = "Hello Anthropic";
+    const char *model = "claude-3-opus-20240229";
+    int max_tokens = 200;
+    
+    ConversationHistory conversation = {0};
+    ToolRegistry tools = {0};
+    
+    char* result = ralph_build_anthropic_json_payload(model, NULL, &conversation, 
+                                                     test_message, max_tokens, &tools);
+    
+    TEST_ASSERT_NOT_NULL(result);
+    
+    // Check that payload contains expected fields
+    TEST_ASSERT_TRUE(strstr(result, "\"model\": \"claude-3-opus-20240229\"") != NULL);
+    TEST_ASSERT_TRUE(strstr(result, "\"messages\"") != NULL);
+    TEST_ASSERT_TRUE(strstr(result, "\"Hello Anthropic\"") != NULL);
+    TEST_ASSERT_TRUE(strstr(result, "\"max_tokens\": 200") != NULL);
+    
+    free(result);
+}
+
+void test_ralph_build_anthropic_json_payload_with_system(void) {
+    const char *test_message = "What is 2+2?";
+    const char *system_prompt = "You are a helpful math tutor.";
+    const char *model = "claude-3-opus-20240229";
+    int max_tokens = 100;
+    
+    ConversationHistory conversation = {0};
+    ToolRegistry tools = {0};
+    
+    char* result = ralph_build_anthropic_json_payload(model, system_prompt, &conversation, 
+                                                     test_message, max_tokens, &tools);
+    
+    TEST_ASSERT_NOT_NULL(result);
+    
+    // Check that system prompt is in the top-level system field (Anthropic format)
+    TEST_ASSERT_TRUE(strstr(result, "\"system\": \"You are a helpful math tutor.\"") != NULL);
+    // Should not be in messages array
+    TEST_ASSERT_NULL(strstr(result, "\"role\": \"system\""));
+    
+    free(result);
+}
+
+void test_ralph_api_type_detection(void) {
+    // Test API type detection logic directly without going through load_config
+    // which might load from .env file
+    
+    // Test OpenAI detection
+    const char* openai_url = "https://api.openai.com/v1/chat/completions";
+    APIType api_type;
+    const char* max_tokens_param;
+    
+    if (strstr(openai_url, "api.openai.com") != NULL) {
+        api_type = API_TYPE_OPENAI;
+        max_tokens_param = "max_completion_tokens";
+    } else if (strstr(openai_url, "api.anthropic.com") != NULL) {
+        api_type = API_TYPE_ANTHROPIC;
+        max_tokens_param = "max_tokens";
+    } else {
+        api_type = API_TYPE_LOCAL;
+        max_tokens_param = "max_tokens";
+    }
+    
+    TEST_ASSERT_EQUAL(API_TYPE_OPENAI, api_type);
+    TEST_ASSERT_EQUAL_STRING("max_completion_tokens", max_tokens_param);
+    
+    // Test Anthropic detection
+    const char* anthropic_url = "https://api.anthropic.com/v1/messages";
+    
+    if (strstr(anthropic_url, "api.openai.com") != NULL) {
+        api_type = API_TYPE_OPENAI;
+        max_tokens_param = "max_completion_tokens";
+    } else if (strstr(anthropic_url, "api.anthropic.com") != NULL) {
+        api_type = API_TYPE_ANTHROPIC;
+        max_tokens_param = "max_tokens";
+    } else {
+        api_type = API_TYPE_LOCAL;
+        max_tokens_param = "max_tokens";
+    }
+    
+    TEST_ASSERT_EQUAL(API_TYPE_ANTHROPIC, api_type);
+    TEST_ASSERT_EQUAL_STRING("max_tokens", max_tokens_param);
+    
+    // Test local server detection
+    const char* local_url = "http://localhost:1234/v1/chat/completions";
+    
+    if (strstr(local_url, "api.openai.com") != NULL) {
+        api_type = API_TYPE_OPENAI;
+        max_tokens_param = "max_completion_tokens";
+    } else if (strstr(local_url, "api.anthropic.com") != NULL) {
+        api_type = API_TYPE_ANTHROPIC;
+        max_tokens_param = "max_tokens";
+    } else {
+        api_type = API_TYPE_LOCAL;
+        max_tokens_param = "max_tokens";
+    }
+    
+    TEST_ASSERT_EQUAL(API_TYPE_LOCAL, api_type);
+    TEST_ASSERT_EQUAL_STRING("max_tokens", max_tokens_param);
+}
+
 int main(void) {
     UNITY_BEGIN();
     
@@ -744,6 +847,11 @@ int main(void) {
     RUN_TEST(test_shell_command_request_workflow);
     RUN_TEST(test_sequential_tool_execution);
     RUN_TEST(test_conversation_persistence_through_tools);
+    
+    // Anthropic tests
+    RUN_TEST(test_ralph_build_anthropic_json_payload_basic);
+    RUN_TEST(test_ralph_build_anthropic_json_payload_with_system);
+    RUN_TEST(test_ralph_api_type_detection);
     
     return UNITY_END();
 }

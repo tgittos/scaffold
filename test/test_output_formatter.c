@@ -269,6 +269,70 @@ void test_parse_api_response_tool_calls_format(void) {
     cleanup_parsed_response(&result);
 }
 
+// Anthropic response tests
+void test_parse_anthropic_response_basic(void) {
+    const char *anthropic_response = 
+        "{"
+        "\"content\": [{\"type\": \"text\", \"text\": \"Hello from Anthropic!\"}],"
+        "\"usage\": {\"input_tokens\": 10, \"output_tokens\": 5}"
+        "}";
+    
+    ParsedResponse result;
+    int ret = parse_anthropic_response(anthropic_response, &result);
+    
+    TEST_ASSERT_EQUAL(0, ret);
+    TEST_ASSERT_NULL(result.thinking_content);
+    TEST_ASSERT_NOT_NULL(result.response_content);
+    TEST_ASSERT_EQUAL_STRING("Hello from Anthropic!", result.response_content);
+    TEST_ASSERT_EQUAL(10, result.prompt_tokens);
+    TEST_ASSERT_EQUAL(5, result.completion_tokens);
+    TEST_ASSERT_EQUAL(15, result.total_tokens);
+    
+    cleanup_parsed_response(&result);
+}
+
+void test_parse_anthropic_response_with_thinking(void) {
+    const char *anthropic_response = 
+        "{"
+        "\"content\": [{\"type\": \"text\", \"text\": \"<think>I need to think about this.</think>\\n\\nThe answer is 42.\"}],"
+        "\"usage\": {\"input_tokens\": 20, \"output_tokens\": 15}"
+        "}";
+    
+    ParsedResponse result;
+    int ret = parse_anthropic_response(anthropic_response, &result);
+    
+    TEST_ASSERT_EQUAL(0, ret);
+    TEST_ASSERT_NOT_NULL(result.thinking_content);
+    TEST_ASSERT_NOT_NULL(result.response_content);
+    TEST_ASSERT_EQUAL_STRING("I need to think about this.", result.thinking_content);
+    TEST_ASSERT_EQUAL_STRING("The answer is 42.", result.response_content);
+    TEST_ASSERT_EQUAL(20, result.prompt_tokens);
+    TEST_ASSERT_EQUAL(15, result.completion_tokens);
+    TEST_ASSERT_EQUAL(35, result.total_tokens);
+    
+    cleanup_parsed_response(&result);
+}
+
+void test_parse_anthropic_response_null_parameters(void) {
+    ParsedResponse result;
+    
+    // Test null JSON response
+    TEST_ASSERT_EQUAL(-1, parse_anthropic_response(NULL, &result));
+    
+    // Test null result pointer
+    const char *valid_response = "{\"content\": [{\"type\": \"text\", \"text\": \"test\"}]}";
+    TEST_ASSERT_EQUAL(-1, parse_anthropic_response(valid_response, NULL));
+}
+
+void test_parse_anthropic_response_malformed(void) {
+    const char *malformed_response = "{\"invalid\": \"json structure\"}";
+    
+    ParsedResponse result;
+    int ret = parse_anthropic_response(malformed_response, &result);
+    
+    TEST_ASSERT_EQUAL(-1, ret);
+}
+
 int main(void) {
     UNITY_BEGIN();
     
@@ -284,6 +348,12 @@ int main(void) {
     RUN_TEST(test_print_formatted_response_with_null_parameters);
     RUN_TEST(test_content_with_escaped_quotes);
     RUN_TEST(test_parse_api_response_tool_calls_format);
+    
+    // Anthropic tests
+    RUN_TEST(test_parse_anthropic_response_basic);
+    RUN_TEST(test_parse_anthropic_response_with_thinking);
+    RUN_TEST(test_parse_anthropic_response_null_parameters);
+    RUN_TEST(test_parse_anthropic_response_malformed);
     
     return UNITY_END();
 }

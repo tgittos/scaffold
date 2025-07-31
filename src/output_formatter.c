@@ -298,6 +298,53 @@ void print_formatted_response(const ParsedResponse *response) {
     }
 }
 
+int parse_anthropic_response(const char *json_response, ParsedResponse *result) {
+    if (!json_response || !result) {
+        return -1;
+    }
+    
+    // Initialize result
+    result->thinking_content = NULL;
+    result->response_content = NULL;
+    result->prompt_tokens = -1;
+    result->completion_tokens = -1;
+    result->total_tokens = -1;
+    
+    // Anthropic response format has content array
+    // Look for "content": [{"type": "text", "text": "..."}]
+    const char *content_array = strstr(json_response, "\"content\":");
+    if (!content_array) {
+        return -1;
+    }
+    
+    // Find the text content within the array
+    const char *text_pos = strstr(content_array, "\"text\":");
+    if (text_pos) {
+        char *raw_content = extract_json_string(text_pos, "text");
+        if (raw_content) {
+            // Unescape JSON strings
+            unescape_json_string(raw_content);
+            
+            // Separate thinking from response (same as OpenAI)
+            separate_thinking_and_response(raw_content, &result->thinking_content, &result->response_content);
+            free(raw_content);
+        }
+    }
+    
+    // Extract token usage from Anthropic response
+    const char *usage_start = strstr(json_response, "\"usage\":");
+    if (usage_start) {
+        result->prompt_tokens = extract_json_int(usage_start, "input_tokens");
+        result->completion_tokens = extract_json_int(usage_start, "output_tokens");
+        // Anthropic doesn't provide total_tokens, so calculate it
+        if (result->prompt_tokens > 0 && result->completion_tokens > 0) {
+            result->total_tokens = result->prompt_tokens + result->completion_tokens;
+        }
+    }
+    
+    return 0;
+}
+
 void cleanup_parsed_response(ParsedResponse *response) {
     if (response) {
         if (response->thinking_content) {

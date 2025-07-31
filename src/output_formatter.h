@@ -29,6 +29,17 @@ typedef struct {
 int parse_api_response(const char *json_response, ParsedResponse *result);
 
 /**
+ * Parse JSON response from Anthropic API and extract message content and token usage
+ * 
+ * @param json_response Raw JSON response string
+ * @param result Pointer to ParsedResponse struct to store results
+ * @return 0 on success, -1 on error
+ * 
+ * Note: Caller must free result->thinking_content and result->response_content when done
+ */
+int parse_anthropic_response(const char *json_response, ParsedResponse *result);
+
+/**
  * Format and print the parsed response with content and token usage
  * Content is printed prominently, token usage is visually de-prioritized
  * 

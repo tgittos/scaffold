@@ -165,6 +165,99 @@ char* ralph_build_json_payload(const char* model, const char* system_prompt,
     return json;
 }
 
+// Helper function to build Anthropic-specific JSON payload
+char* ralph_build_anthropic_json_payload(const char* model, const char* system_prompt,
+                                        const ConversationHistory* conversation,
+                                        const char* user_message, int max_tokens,
+                                        const ToolRegistry* tools) {
+    (void)tools; // Suppress unused parameter warning - tools not yet implemented for Anthropic
+    // Calculate required buffer size
+    size_t base_size = 200; // Base JSON structure
+    size_t model_len = strlen(model);
+    size_t user_msg_len = user_message ? strlen(user_message) * 2 + 50 : 0;
+    size_t system_len = system_prompt ? strlen(system_prompt) * 2 + 50 : 0;
+    size_t history_len = 0;
+    
+    // Calculate space needed for conversation history
+    for (int i = 0; i < conversation->count; i++) {
+        history_len += strlen(conversation->messages[i].role) +
+                      strlen(conversation->messages[i].content) * 2 + 50;
+    }
+    
+    // Account for tools JSON size (not yet supported for Anthropic)
+    size_t tools_len = 0;
+    
+    size_t total_size = base_size + model_len + user_msg_len + system_len + history_len + tools_len + 200;
+    char* json = malloc(total_size);
+    if (json == NULL) return NULL;
+    
+    // Start building JSON
+    strcpy(json, "{\"model\": \"");
+    strcat(json, model);
+    strcat(json, "\", \"messages\": [");
+    
+    int message_count = 0;
+    
+    // Add conversation history (Anthropic format)
+    for (int i = 0; i < conversation->count; i++) {
+        // Skip system messages in history - they'll be handled separately
+        if (strcmp(conversation->messages[i].role, "system") == 0) continue;
+        
+        char* escaped_content = ralph_escape_json_string(conversation->messages[i].content);
+        if (escaped_content != NULL) {
+            if (message_count > 0) {
+                strcat(json, ", ");
+            }
+            strcat(json, "{\"role\": \"");
+            strcat(json, conversation->messages[i].role);
+            strcat(json, "\", \"content\": \"");
+            strcat(json, escaped_content);
+            strcat(json, "\"}");
+            free(escaped_content);
+            message_count++;
+        }
+    }
+    
+    // Add current user message
+    if (user_message && strlen(user_message) > 0) {
+        char* escaped_user_msg = ralph_escape_json_string(user_message);
+        if (escaped_user_msg != NULL) {
+            if (message_count > 0) {
+                strcat(json, ", ");
+            }
+            strcat(json, "{\"role\": \"user\", \"content\": \"");
+            strcat(json, escaped_user_msg);
+            strcat(json, "\"}");
+            free(escaped_user_msg);
+            message_count++;
+        }
+    }
+    
+    // Close messages array
+    strcat(json, "]");
+    
+    // Add system prompt if available (Anthropic uses top-level system field)
+    if (system_prompt != NULL) {
+        char* escaped_system = ralph_escape_json_string(system_prompt);
+        if (escaped_system != NULL) {
+            strcat(json, ", \"system\": \"");
+            strcat(json, escaped_system);
+            strcat(json, "\"");
+            free(escaped_system);
+        }
+    }
+    
+    // Add max_tokens
+    strcat(json, ", \"max_tokens\": ");
+    char tokens_str[20];
+    snprintf(tokens_str, sizeof(tokens_str), "%d", max_tokens);
+    strcat(json, tokens_str);
+    
+    strcat(json, "}");
+    
+    return json;
+}
+
 int ralph_init_session(RalphSession* session) {
     if (session == NULL) return -1;
     
@@ -237,7 +330,13 @@ int ralph_load_config(RalphSession* session) {
     if (session->config.model == NULL) return -1;
     
     // Get API key (optional for local servers)
-    const char *api_key = getenv("OPENAI_API_KEY");
+    const char *api_key = NULL;
+    if (strstr(session->config.api_url, "api.anthropic.com") != NULL) {
+        api_key = getenv("ANTHROPIC_API_KEY");
+    } else {
+        api_key = getenv("OPENAI_API_KEY");
+    }
+    
     if (api_key != NULL) {
         session->config.api_key = strdup(api_key);
         if (session->config.api_key == NULL) return -1;
@@ -263,11 +362,16 @@ int ralph_load_config(RalphSession* session) {
         }
     }
     
-    // Determine the correct parameter name for max tokens
-    // OpenAI uses "max_completion_tokens" for newer models, while local servers typically use "max_tokens"
-    session->config.max_tokens_param = "max_tokens";
+    // Determine API type and correct parameter name for max tokens
     if (strstr(session->config.api_url, "api.openai.com") != NULL) {
+        session->config.api_type = API_TYPE_OPENAI;
         session->config.max_tokens_param = "max_completion_tokens";
+    } else if (strstr(session->config.api_url, "api.anthropic.com") != NULL) {
+        session->config.api_type = API_TYPE_ANTHROPIC;
+        session->config.max_tokens_param = "max_tokens";
+    } else {
+        session->config.api_type = API_TYPE_LOCAL;
+        session->config.max_tokens_param = "max_tokens";
     }
     
     return 0;
@@ -324,9 +428,15 @@ int ralph_execute_tool_workflow(RalphSession* session, ToolCall* tool_calls, int
     
     debug_printf("Building follow-up JSON payload...\n");
     // Build new JSON payload with conversation including tool results
-    char* follow_up_data = ralph_build_json_payload(session->config.model, session->config.system_prompt, 
-                                                   &session->conversation, "", 
-                                                   session->config.max_tokens_param, max_tokens, &session->tools);
+    char* follow_up_data = NULL;
+    if (session->config.api_type == API_TYPE_ANTHROPIC) {
+        follow_up_data = ralph_build_anthropic_json_payload(session->config.model, session->config.system_prompt,
+                                                          &session->conversation, "", max_tokens, &session->tools);
+    } else {
+        follow_up_data = ralph_build_json_payload(session->config.model, session->config.system_prompt, 
+                                                &session->conversation, "", 
+                                                session->config.max_tokens_param, max_tokens, &session->tools);
+    }
     // Tool execution was successful - we'll return success regardless of follow-up API status
     int result = 0;
     
@@ -335,9 +445,16 @@ int ralph_execute_tool_workflow(RalphSession* session, ToolCall* tool_calls, int
         debug_printf("Making follow-up request with tool results...\n");
         
         if (http_post_with_headers(session->config.api_url, follow_up_data, headers, &follow_up_response) == 0) {
-            // Parse follow-up response
+            // Parse follow-up response based on API type
             ParsedResponse follow_up_parsed;
-            if (parse_api_response(follow_up_response.data, &follow_up_parsed) == 0) {
+            int parse_result;
+            if (session->config.api_type == API_TYPE_ANTHROPIC) {
+                parse_result = parse_anthropic_response(follow_up_response.data, &follow_up_parsed);
+            } else {
+                parse_result = parse_api_response(follow_up_response.data, &follow_up_parsed);
+            }
+            
+            if (parse_result == 0) {
                 // Display the final response
                 print_formatted_response(&follow_up_parsed);
                 
@@ -372,9 +489,15 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
     if (session == NULL || user_message == NULL) return -1;
     
     // Build JSON payload first to get accurate size
-    char* post_data = ralph_build_json_payload(session->config.model, session->config.system_prompt, 
-                                             &session->conversation, user_message, 
-                                             session->config.max_tokens_param, -1, &session->tools);
+    char* post_data = NULL;
+    if (session->config.api_type == API_TYPE_ANTHROPIC) {
+        post_data = ralph_build_anthropic_json_payload(session->config.model, session->config.system_prompt,
+                                                      &session->conversation, user_message, -1, &session->tools);
+    } else {
+        post_data = ralph_build_json_payload(session->config.model, session->config.system_prompt, 
+                                           &session->conversation, user_message, 
+                                           session->config.max_tokens_param, -1, &session->tools);
+    }
     if (post_data == NULL) {
         fprintf(stderr, "Error: Failed to build JSON payload\n");
         return -1;
@@ -394,26 +517,48 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
     
     // Rebuild payload with correct max_tokens
     free(post_data);
-    post_data = ralph_build_json_payload(session->config.model, session->config.system_prompt, 
-                                       &session->conversation, user_message, 
-                                       session->config.max_tokens_param, max_tokens, &session->tools);
+    if (session->config.api_type == API_TYPE_ANTHROPIC) {
+        post_data = ralph_build_anthropic_json_payload(session->config.model, session->config.system_prompt,
+                                                      &session->conversation, user_message, max_tokens, &session->tools);
+    } else {
+        post_data = ralph_build_json_payload(session->config.model, session->config.system_prompt, 
+                                           &session->conversation, user_message, 
+                                           session->config.max_tokens_param, max_tokens, &session->tools);
+    }
     if (post_data == NULL) {
         fprintf(stderr, "Error: Failed to build JSON payload\n");
         return -1;
     }
     
-    // Setup authorization headers if API key is available
+    // Setup authorization headers
     char auth_header[512];
-    const char *headers[2] = {NULL, NULL};
+    char anthropic_version[128] = "anthropic-version: 2023-06-01";
+    char content_type[64] = "Content-Type: application/json";
+    const char *headers[4] = {NULL, NULL, NULL, NULL};
+    int header_count = 0;
     
     if (session->config.api_key != NULL) {
-        int ret = snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", session->config.api_key);
-        if (ret < 0 || ret >= (int)sizeof(auth_header)) {
-            fprintf(stderr, "Error: Authorization header too long\n");
-            free(post_data);
-            return -1;
+        if (session->config.api_type == API_TYPE_ANTHROPIC) {
+            // Anthropic uses x-api-key header
+            int ret = snprintf(auth_header, sizeof(auth_header), "x-api-key: %s", session->config.api_key);
+            if (ret < 0 || ret >= (int)sizeof(auth_header)) {
+                fprintf(stderr, "Error: Authorization header too long\n");
+                free(post_data);
+                return -1;
+            }
+            headers[header_count++] = auth_header;
+            headers[header_count++] = anthropic_version;
+            headers[header_count++] = content_type;
+        } else {
+            // OpenAI and local servers use Bearer token
+            int ret = snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", session->config.api_key);
+            if (ret < 0 || ret >= (int)sizeof(auth_header)) {
+                fprintf(stderr, "Error: Authorization header too long\n");
+                free(post_data);
+                return -1;
+            }
+            headers[header_count++] = auth_header;
         }
-        headers[0] = auth_header;
     }
     
     curl_global_init(CURL_GLOBAL_DEFAULT);
@@ -425,9 +570,16 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
     int result = -1;
     
     if (http_post_with_headers(session->config.api_url, post_data, headers, &response) == 0) {
-        // Parse the normal response first to get message content
+        // Parse the response based on API type
         ParsedResponse parsed_response;
-        if (parse_api_response(response.data, &parsed_response) != 0) {
+        int parse_result;
+        if (session->config.api_type == API_TYPE_ANTHROPIC) {
+            parse_result = parse_anthropic_response(response.data, &parsed_response);
+        } else {
+            parse_result = parse_api_response(response.data, &parsed_response);
+        }
+        
+        if (parse_result != 0) {
             fprintf(stderr, "Error: Failed to parse API response\n");
             printf("%s\n", response.data);  // Fallback to raw output
             cleanup_response(&response);

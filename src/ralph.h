@@ -5,6 +5,13 @@
 #include "conversation_tracker.h"
 #include "tools_system.h"
 
+// API type enumeration
+typedef enum {
+    API_TYPE_OPENAI,
+    API_TYPE_ANTHROPIC,
+    API_TYPE_LOCAL
+} APIType;
+
 // Ralph configuration structure
 typedef struct {
     char* api_url;
@@ -14,6 +21,7 @@ typedef struct {
     int context_window;
     int max_tokens;
     const char* max_tokens_param;
+    APIType api_type;
 } RalphConfig;
 
 // Ralph session structure
@@ -36,6 +44,10 @@ char* ralph_build_json_payload(const char* model, const char* system_prompt,
                               const ConversationHistory* conversation, 
                               const char* user_message, const char* max_tokens_param, 
                               int max_tokens, const ToolRegistry* tools);
+char* ralph_build_anthropic_json_payload(const char* model, const char* system_prompt,
+                                        const ConversationHistory* conversation,
+                                        const char* user_message, int max_tokens,
+                                        const ToolRegistry* tools);
 
 // Common tool calling workflow
 int ralph_execute_tool_workflow(RalphSession* session, ToolCall* tool_calls, int call_count, 
