@@ -204,10 +204,8 @@ int ralph_execute_tool_workflow(RalphSession* session, ToolCall* tool_calls, int
     
     debug_printf("Executing %d tool call(s)...\n", call_count);
     
-    // Save user message to conversation first
-    if (append_conversation_message(&session->conversation, "user", user_message) != 0) {
-        fprintf(stderr, "Warning: Failed to save user message to conversation history\n");
-    }
+    // Note: User message is already saved by caller
+    (void)user_message; // Acknowledge parameter usage
     
     // Execute tool calls
     ToolResult *results = malloc(call_count * sizeof(ToolResult));
@@ -424,9 +422,25 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
         
         if (tool_parse_result == 0 && raw_call_count > 0) {
             debug_printf("Found %d tool calls in raw response\n", raw_call_count);
-            // Save assistant message with tool calls to conversation
-            if (parsed_response.response_content != NULL) {
-                if (append_conversation_message(&session->conversation, "assistant", parsed_response.response_content) != 0) {
+            // For tool calls, we need to save messages in the right order
+            // First save user message, then assistant message, then execute tools
+            
+            // Save user message first
+            if (append_conversation_message(&session->conversation, "user", user_message) != 0) {
+                fprintf(stderr, "Warning: Failed to save user message to conversation history\n");
+            }
+            
+            // Then save assistant message with tool calls
+            const char* content_to_save;
+            if (session->config.api_type == API_TYPE_ANTHROPIC) {
+                // Use a special format to preserve Anthropic tool_use blocks
+                content_to_save = response.data;
+            } else {
+                content_to_save = parsed_response.response_content;
+            }
+            
+            if (content_to_save != NULL) {
+                if (append_conversation_message(&session->conversation, "assistant", content_to_save) != 0) {
                     fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
                 }
             }
@@ -439,6 +453,10 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
             ToolCall *tool_calls = NULL;
             int call_count = 0;
             if (message_content != NULL && parse_tool_calls(message_content, &tool_calls, &call_count) == 0 && call_count > 0) {
+                // Save user message first for LM Studio format too
+                if (append_conversation_message(&session->conversation, "user", user_message) != 0) {
+                    fprintf(stderr, "Warning: Failed to save user message to conversation history\n");
+                }
                 result = ralph_execute_tool_workflow(session, tool_calls, call_count, user_message, max_tokens, headers);
                 cleanup_tool_calls(tool_calls, call_count);
             } else {

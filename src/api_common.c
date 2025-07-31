@@ -74,14 +74,10 @@ int format_openai_message(char* buffer, size_t buffer_size,
 int format_anthropic_message(char* buffer, size_t buffer_size,
                             const ConversationMessage* message,
                             int is_first_message) {
-    char* escaped_content = ralph_escape_json_string(message->content);
-    if (escaped_content == NULL) return -1;
-    
     int written = 0;
     if (!is_first_message) {
         written = snprintf(buffer, buffer_size, ", ");
         if (written < 0 || written >= (int)buffer_size) {
-            free(escaped_content);
             return -1;
         }
         buffer += written;
@@ -91,6 +87,9 @@ int format_anthropic_message(char* buffer, size_t buffer_size,
     int result;
     if (strcmp(message->role, "tool") == 0) {
         // Tool results in Anthropic are user messages with tool_result content
+        char* escaped_content = ralph_escape_json_string(message->content);
+        if (escaped_content == NULL) return -1;
+        
         if (message->tool_call_id != NULL) {
             result = snprintf(buffer, buffer_size,
                              "{\"role\": \"user\", \"content\": [{\"type\": \"tool_result\", "
@@ -102,13 +101,57 @@ int format_anthropic_message(char* buffer, size_t buffer_size,
                              "\"content\": \"%s\"}]}",
                              escaped_content);
         }
+        free(escaped_content);
+    } else if (strcmp(message->role, "assistant") == 0 && 
+               strstr(message->content, "\"tool_use\"") != NULL) {
+        // This is a raw Anthropic response with tool_use blocks - extract the content
+        const char *content_start = strstr(message->content, "\"content\":");
+        if (content_start) {
+            const char *array_start = strchr(content_start, '[');
+            if (array_start) {
+                const char *array_end = strrchr(message->content, ']');
+                if (array_end && array_end > array_start) {
+                    int content_len = array_end - array_start + 1;
+                    result = snprintf(buffer, buffer_size,
+                                     "{\"role\": \"assistant\", \"content\": %.*s}",
+                                     content_len, array_start);
+                } else {
+                    // Fallback to escaped content
+                    char* escaped_content = ralph_escape_json_string(message->content);
+                    if (escaped_content == NULL) return -1;
+                    result = snprintf(buffer, buffer_size,
+                                     "{\"role\": \"%s\", \"content\": \"%s\"}",
+                                     message->role, escaped_content);
+                    free(escaped_content);
+                }
+            } else {
+                // Fallback to escaped content
+                char* escaped_content = ralph_escape_json_string(message->content);
+                if (escaped_content == NULL) return -1;
+                result = snprintf(buffer, buffer_size,
+                                 "{\"role\": \"%s\", \"content\": \"%s\"}",
+                                 message->role, escaped_content);
+                free(escaped_content);
+            }
+        } else {
+            // Fallback to escaped content
+            char* escaped_content = ralph_escape_json_string(message->content);
+            if (escaped_content == NULL) return -1;
+            result = snprintf(buffer, buffer_size,
+                             "{\"role\": \"%s\", \"content\": \"%s\"}",
+                             message->role, escaped_content);
+            free(escaped_content);
+        }
     } else {
+        // Regular message
+        char* escaped_content = ralph_escape_json_string(message->content);
+        if (escaped_content == NULL) return -1;
+        
         result = snprintf(buffer, buffer_size,
                          "{\"role\": \"%s\", \"content\": \"%s\"}",
                          message->role, escaped_content);
+        free(escaped_content);
     }
-    
-    free(escaped_content);
     
     if (result < 0 || result >= (int)buffer_size) {
         return -1;
