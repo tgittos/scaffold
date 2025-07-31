@@ -255,8 +255,8 @@ clean:
 	rm -f *.aarch64.elf *.com.dbg *.dbg src/*.aarch64.elf src/*.com.dbg src/*.dbg test/*.aarch64.elf test/*.com.dbg test/*.dbg
 	rm -f test/*.log test/*.trs test/test-suite.log
 	rm -f $(EMBEDDED_LINKS_HEADER)
-	# Clean non-tracked files from build directory (keep bin2c.c)
-	find build -type f ! -name 'bin2c.c' -delete 2>/dev/null || true
+	# Clean non-tracked files from build directory (keep bin2c.c and links)
+	find build -type f ! -name 'bin2c.c' ! -name 'links' -delete 2>/dev/null || true
 
 distclean: clean
 	rm -rf $(DEPDIR)
