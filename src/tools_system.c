@@ -1,4 +1,5 @@
 #include "tools_system.h"
+#include "json_utils.h"
 #include "shell_tool.h"
 #include "file_tools.h"
 #include "links_tool.h"
@@ -257,105 +258,22 @@ char* generate_anthropic_tools_json(const ToolRegistry *registry) {
     return json;
 }
 
-// Simple JSON parser for tool calls (basic implementation)
+// Wrapper around unified JSON parser for tool calls
 static char* extract_json_string(const char *json, const char *key) {
-    char search_key[256] = {0};
-    snprintf(search_key, sizeof(search_key), "\"%s\":", key);
-    
-    const char *start = strstr(json, search_key);
-    if (start == NULL) {
+    JsonParser parser = {0};
+    if (json_parser_init(&parser, json) != 0) {
         return NULL;
     }
-    
-    start += strlen(search_key);
-    
-    // Skip whitespace
-    while (*start == ' ' || *start == '\t' || *start == '\n' || *start == '\r') {
-        start++;
-    }
-    
-    if (*start != '"') {
-        return NULL; // Not a string value
-    }
-    
-    start++; // Skip opening quote
-    const char *end = start;
-    
-    // Find closing quote, properly handling escaped quotes
-    while (*end != '\0') {
-        if (*end == '"') {
-            break; // Found unescaped closing quote
-        } else if (*end == '\\' && *(end + 1) != '\0') {
-            end += 2; // Skip escaped character
-        } else {
-            end++;
-        }
-    }
-    
-    if (*end != '"') {
-        return NULL;
-    }
-    
-    size_t len = end - start;
-    char *result = malloc(len + 1);
-    if (result == NULL) {
-        return NULL;
-    }
-    
-    memcpy(result, start, len);
-    result[len] = '\0';
-    
-    return result;
+    return json_parser_extract_string(&parser, key);
 }
 
-// Extract JSON object as string
+// Wrapper around unified JSON parser for tool objects
 static char* extract_json_object(const char *json, const char *key) {
-    char search_key[256] = {0};
-    snprintf(search_key, sizeof(search_key), "\"%s\":", key);
-    
-    const char *start = strstr(json, search_key);
-    if (start == NULL) {
+    JsonParser parser = {0};
+    if (json_parser_init(&parser, json) != 0) {
         return NULL;
     }
-    
-    start += strlen(search_key);
-    
-    // Skip whitespace
-    while (*start == ' ' || *start == '\t' || *start == '\n' || *start == '\r') {
-        start++;
-    }
-    
-    if (*start != '{') {
-        return NULL; // Not an object
-    }
-    
-    const char *end = start + 1;
-    int brace_count = 1;
-    
-    // Find matching closing brace
-    while (*end != '\0' && brace_count > 0) {
-        if (*end == '{') {
-            brace_count++;
-        } else if (*end == '}') {
-            brace_count--;
-        }
-        end++;
-    }
-    
-    if (brace_count != 0) {
-        return NULL;
-    }
-    
-    size_t len = end - start;
-    char *result = malloc(len + 1);
-    if (result == NULL) {
-        return NULL;
-    }
-    
-    memcpy(result, start, len);
-    result[len] = '\0';
-    
-    return result;
+    return json_parser_extract_object(&parser, key);
 }
 
 int parse_tool_calls(const char *json_response, ToolCall **tool_calls, int *call_count) {
@@ -760,8 +678,13 @@ static char* extract_tool_parameter(const char *arguments, const char *param_nam
     return NULL;
 }
 
-// Log tool use to stdout in blue
+// Log tool use to stdout in blue (excludes internal todo management)
 static void log_tool_use(const char *tool_name, const char *arguments) {
+    // Skip logging for TodoWrite - this is internal task management
+    if (strcmp(tool_name, "TodoWrite") == 0) {
+        return;
+    }
+    
     printf(ANSI_BLUE "[Tool: %s]", tool_name);
     
     if (!arguments) {

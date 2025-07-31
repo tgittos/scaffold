@@ -1,4 +1,5 @@
 #include "todo_tool.h"
+#include "todo_display.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -307,10 +308,16 @@ int execute_todo_tool_call(const ToolCall *tool_call, ToolResult *result) {
                                 char priority_str[32] = "medium";
                                 char id[TODO_MAX_ID_LENGTH] = {0};
                                 
-                                // Extract content
+                                // Extract content (try "content" first, then "title" as fallback)
                                 const char *content_start = strstr(todo_obj, "\"content\":");
+                                int skip_len = 10; // Length of "content":
+                                if (!content_start) {
+                                    // Fallback to "title" for AI compatibility
+                                    content_start = strstr(todo_obj, "\"title\":");
+                                    skip_len = 8; // Length of "title":
+                                }
                                 if (content_start) {
-                                    content_start += 10; // Skip "content":
+                                    content_start += skip_len;
                                     while (*content_start == ' ' || *content_start == '\t') content_start++;
                                     if (*content_start == '"') {
                                         content_start++;
@@ -415,6 +422,9 @@ int execute_todo_tool_call(const ToolCall *tool_call, ToolResult *result) {
                 }
                 
                 free(todos_json);
+                
+                // Update the todo display after successful modification
+                todo_display_update(g_todo_list);
                 
                 // Return success message with updated todo list
                 response = strdup("Todos have been modified successfully. Ensure that you continue to use the todo list to track your progress. Please proceed with the current tasks if applicable");

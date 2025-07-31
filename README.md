@@ -109,10 +109,23 @@ CONTEXT_WINDOW=131072
 |----------|-------------|---------|
 | `API_URL` | API endpoint URL | `https://api.openai.com/v1/chat/completions` |
 | `MODEL` | Model identifier | `gpt-4o-mini` |
-| `CONTEXT_WINDOW` | Maximum context size | `8192` |
+| `CONTEXT_WINDOW` | Model context window size | `8192` |
+| `MAX_CONTEXT_WINDOW` | Maximum context window allowed | Same as `CONTEXT_WINDOW` |
 | `MAX_TOKENS` | Max response tokens | Auto-calculated |
 | `OPENAI_API_KEY` | OpenAI API key | None |
 | `ANTHROPIC_API_KEY` | Anthropic API key | None |
+
+### Advanced Token Management
+
+Ralph features intelligent token management that ensures models always have enough context for meaningful responses:
+
+- **Dynamic Context Window Usage**: Automatically uses `MAX_CONTEXT_WINDOW` when the conversation exceeds `CONTEXT_WINDOW`
+- **Intelligent Safety Buffers**: Calculates safety buffers dynamically based on context complexity (5% of context window + base buffer)
+- **Conversation History Trimming**: Automatically trims older messages when context limits are reached, preserving recent tool interactions
+- **Minimum Response Guarantee**: Always reserves at least 150 tokens for model responses
+- **Accurate Token Estimation**: Uses improved token counting (3.5 chars/token) with overhead for JSON structure and tools
+
+The system prioritizes response quality by maximizing available response tokens while ensuring the prompt fits within context limits.
 
 ## Usage Examples
 

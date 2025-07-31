@@ -1,11 +1,14 @@
 #include "ralph.h"
+#include "json_utils.h"
 #include "env_loader.h"
 #include "output_formatter.h"
 #include "prompt_loader.h"
 #include "shell_tool.h"
 #include "todo_tool.h"
+#include "todo_display.h"
 #include "debug_output.h"
 #include "api_common.h"
+#include "token_manager.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,45 +19,12 @@ char* generate_anthropic_tools_json(const ToolRegistry *registry);
 // Forward declaration for Anthropic tool call parser
 int parse_anthropic_tool_calls(const char *json_response, ToolCall **tool_calls, int *call_count);
 
-// Helper function to escape JSON strings
+// Use unified JSON escaping from json_utils.h
+
+// Compatibility wrapper for tests - use json_escape_string instead in new code
 char* ralph_escape_json_string(const char* str) {
     if (str == NULL) return NULL;
-    
-    size_t len = strlen(str);
-    // Worst case: every character needs escaping, plus quotes and null terminator
-    char* escaped = malloc(len * 2 + 3);
-    if (escaped == NULL) return NULL;
-    
-    size_t j = 0;
-    for (size_t i = 0; i < len; i++) {
-        switch (str[i]) {
-            case '"':
-                escaped[j++] = '\\';
-                escaped[j++] = '"';
-                break;
-            case '\\':
-                escaped[j++] = '\\';
-                escaped[j++] = '\\';
-                break;
-            case '\n':
-                escaped[j++] = '\\';
-                escaped[j++] = 'n';
-                break;
-            case '\r':
-                escaped[j++] = '\\';
-                escaped[j++] = 'r';
-                break;
-            case '\t':
-                escaped[j++] = '\\';
-                escaped[j++] = 't';
-                break;
-            default:
-                escaped[j++] = str[i];
-                break;
-        }
-    }
-    escaped[j] = '\0';
-    return escaped;
+    return json_escape_string(str);
 }
 
 // Helper function to build JSON payload with conversation history and tools
@@ -99,15 +69,16 @@ char* ralph_build_enhanced_system_prompt(const RalphSession* session) {
                               "This is YOUR todo list for breaking down and tracking your work. "
                               "Your current internal todo list state is:\n\n";
     
-    const char* todo_instructions = "\n\nIMPORTANT: Use the TodoWrite tool to manage YOUR internal todo list for task completion tracking. "
-                                   "When you receive a user request:\n"
-                                   "1. Break it down into specific, actionable steps using TodoWrite\n"
-                                   "2. Mark tasks as 'in_progress' when working on them\n"
-                                   "3. Mark tasks as 'completed' only when fully finished\n"
-                                   "4. Your work is NOT COMPLETE until ALL todos are marked 'completed'\n"
-                                   "5. Continue iterating through tool calls until your todo list is empty or all items are completed\n"
-                                   "6. Do not end your response while there are pending or in_progress todos\n\n"
-                                   "This is YOUR internal task management system - use it to ensure you complete everything the user has requested.";
+    const char* todo_instructions = "\n\nCRITICAL TODO SYSTEM RULES:\n"
+                                   "1. IMMEDIATELY after creating todos with TodoWrite, you MUST begin executing them\n"
+                                   "2. NEVER create todos and then stop - you must DO THE WORK\n"
+                                   "3. Mark tasks 'in_progress' when starting, 'completed' when done\n"
+                                   "4. Your response is NOT COMPLETE until ALL todos are 'completed'\n"
+                                   "5. If you have pending or in_progress todos, you MUST continue working\n"
+                                   "6. Use tool calls, provide responses, and take actions to complete each todo\n"
+                                   "7. Only end your response when your todo list shows all tasks completed\n\n"
+                                   "WORKFLOW: TodoWrite → Execute Tasks → Mark Complete → Verify All Done → End Response\n"
+                                   "DO NOT create a todo list and then do nothing. ACT ON YOUR TODOS.";
     
     size_t total_len = strlen(base_prompt) + strlen(todo_section) + 
                        strlen(todo_json) + strlen(todo_instructions) + 1;
@@ -187,6 +158,17 @@ int ralph_init_session(RalphSession* session) {
         fprintf(stderr, "Warning: Failed to register todo tool\n");
     }
     
+    // Initialize todo display system
+    TodoDisplayConfig display_config = {
+        .enabled = true,
+        .show_completed = false,
+        .compact_mode = true,
+        .max_display_items = 5
+    };
+    if (todo_display_init(&display_config) != 0) {
+        fprintf(stderr, "Warning: Failed to initialize todo display\n");
+    }
+    
     // Optionally load custom tools from configuration file (non-critical)
     if (load_tools_config(&session->tools, "tools.json") != 0) {
         fprintf(stderr, "Warning: Failed to load custom tools configuration\n");
@@ -200,6 +182,9 @@ void ralph_cleanup_session(RalphSession* session) {
     
     // Clear global todo tool reference before destroying the todo list
     clear_todo_tool_reference();
+    
+    // Cleanup todo display system
+    todo_display_cleanup();
     
     // Cleanup todo list first (before tool registry which might reference it)
     todo_list_destroy(&session->todo_list);
@@ -269,6 +254,16 @@ int ralph_load_config(RalphSession* session) {
         }
     }
     
+    // Get maximum context window size from environment variable
+    const char *max_context_window_str = getenv("MAX_CONTEXT_WINDOW");
+    session->config.max_context_window = session->config.context_window;  // Default to same as context_window
+    if (max_context_window_str != NULL) {
+        int parsed_max_window = atoi(max_context_window_str);
+        if (parsed_max_window > 0) {
+            session->config.max_context_window = parsed_max_window;
+        }
+    }
+    
     // Get max response tokens from environment variable (optional override)
     const char *max_tokens_str = getenv("MAX_TOKENS");
     session->config.max_tokens = -1;  // Will be calculated later if not set
@@ -313,7 +308,7 @@ static char* construct_openai_assistant_message_with_tools(const char* content,
     }
     
     // Start constructing the message
-    char* escaped_content = ralph_escape_json_string(content ? content : "");
+    char* escaped_content = json_escape_string(content ? content : "");
     if (escaped_content == NULL) {
         free(message);
         return NULL;
@@ -331,7 +326,7 @@ static char* construct_openai_assistant_message_with_tools(const char* content,
     
     // Add tool calls
     for (int i = 0; i < call_count; i++) {
-        char* escaped_args = ralph_escape_json_string(tool_calls[i].arguments ? tool_calls[i].arguments : "{}");
+        char* escaped_args = json_escape_string(tool_calls[i].arguments ? tool_calls[i].arguments : "{}");
         if (escaped_args == NULL) {
             free(message);
             return NULL;
@@ -407,29 +402,23 @@ int ralph_execute_tool_workflow(RalphSession* session, ToolCall* tool_calls, int
     
     debug_printf("Building follow-up JSON payload...\n");
     
-    // Recalculate max_tokens for follow-up request since conversation has grown
-    // First build a temporary payload to estimate the new size
-    char* temp_data = NULL;
-    if (session->config.api_type == API_TYPE_ANTHROPIC) {
-        temp_data = ralph_build_anthropic_json_payload_with_todos(session, "", -1);
-    } else {
-        temp_data = ralph_build_json_payload_with_todos(session, "", -1);
+    // Recalculate token allocation for follow-up request since conversation has grown
+    TokenConfig follow_up_token_config;
+    token_config_init(&follow_up_token_config, session->config.context_window, session->config.max_context_window);
+    TokenUsage follow_up_usage;
+    if (calculate_token_allocation(session, "", &follow_up_token_config, &follow_up_usage) != 0) {
+        fprintf(stderr, "Error: Failed to calculate follow-up token allocation\n");
+        return -1;
     }
     
-    // Recalculate max_tokens based on updated conversation size
-    int follow_up_max_tokens = max_tokens; // Default to original value
-    if (temp_data != NULL) {
-        int estimated_prompt_tokens = (int)(strlen(temp_data) / 4) + 50; // +50 for JSON overhead
-        follow_up_max_tokens = session->config.context_window - estimated_prompt_tokens - 100; // -100 for safety buffer
-        if (follow_up_max_tokens < 100) {
-            follow_up_max_tokens = 100; // Minimum reasonable response length
-        }
-        debug_printf("Recalculated max_tokens for follow-up: %d (was %d, prompt tokens: %d)\n", 
-                    follow_up_max_tokens, max_tokens, estimated_prompt_tokens);
-        free(temp_data);
-    }
+    int follow_up_max_tokens = follow_up_usage.available_response_tokens;
+    debug_printf("Recalculated max_tokens for follow-up: %d (was %d, prompt tokens: %d)\n", 
+                follow_up_max_tokens, max_tokens, follow_up_usage.total_prompt_tokens);
     
     // Build new JSON payload with conversation including tool results
+    // FIXED: Removed automatic continue message that was causing infinite loops
+    // const char* continue_message = "Continue working on your todo list. Review your current todos and complete any remaining tasks. Do not stop until all todos are marked 'completed'.";
+    
     char* follow_up_data = NULL;
     if (session->config.api_type == API_TYPE_ANTHROPIC) {
         follow_up_data = ralph_build_anthropic_json_payload_with_todos(session, "", follow_up_max_tokens);
@@ -487,32 +476,27 @@ int ralph_execute_tool_workflow(RalphSession* session, ToolCall* tool_calls, int
 int ralph_process_message(RalphSession* session, const char* user_message) {
     if (session == NULL || user_message == NULL) return -1;
     
-    // Build JSON payload first to get accurate size
-    char* post_data = NULL;
-    if (session->config.api_type == API_TYPE_ANTHROPIC) {
-        post_data = ralph_build_anthropic_json_payload_with_todos(session, user_message, -1);
-    } else {
-        post_data = ralph_build_json_payload_with_todos(session, user_message, -1);
-    }
-    if (post_data == NULL) {
-        fprintf(stderr, "Error: Failed to build JSON payload\n");
+    // Initialize token configuration and calculate optimal allocation
+    TokenConfig token_config;
+    token_config_init(&token_config, session->config.context_window, session->config.max_context_window);
+    
+    TokenUsage token_usage;
+    if (calculate_token_allocation(session, user_message, &token_config, &token_usage) != 0) {
+        fprintf(stderr, "Error: Failed to calculate token allocation\n");
         return -1;
     }
     
-    // Estimate prompt tokens based on actual payload size (rough approximation: ~4 chars per token)
-    int estimated_prompt_tokens = (int)(strlen(post_data) / 4) + 50; // +50 for JSON overhead
-    
-    // Calculate max response tokens if not explicitly set
+    // Use calculated max tokens or configured override
     int max_tokens = session->config.max_tokens;
     if (max_tokens == -1) {
-        max_tokens = session->config.context_window - estimated_prompt_tokens - 100; // -100 for safety buffer
-        if (max_tokens < 100) {
-            max_tokens = 100; // Minimum reasonable response length
-        }
+        max_tokens = token_usage.available_response_tokens;
     }
     
-    // Rebuild payload with correct max_tokens
-    free(post_data);
+    debug_printf("Using token allocation - Response tokens: %d, Safety buffer: %d, Context window: %d\n",
+                max_tokens, token_usage.safety_buffer_used, token_usage.context_window_used);
+    
+    // Build JSON payload with calculated max_tokens
+    char* post_data = NULL;
     if (session->config.api_type == API_TYPE_ANTHROPIC) {
         post_data = ralph_build_anthropic_json_payload_with_todos(session, user_message, max_tokens);
     } else {
@@ -633,7 +617,7 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
                 char* constructed_message = NULL;
                 
                 if (session->config.api_type == API_TYPE_ANTHROPIC) {
-                    // Use a special format to preserve Anthropic tool_use blocks
+                    // For Anthropic, save the raw JSON response as-is for conversation history
                     content_to_save = response.data;
                 } else {
                     // For OpenAI, construct a message with tool_calls array

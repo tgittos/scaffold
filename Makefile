@@ -9,9 +9,9 @@ TESTDIR = test
 DEPDIR = deps
 
 # Source files
-SOURCES = $(SRCDIR)/main.c $(SRCDIR)/ralph.c $(SRCDIR)/http_client.c $(SRCDIR)/env_loader.c $(SRCDIR)/output_formatter.c $(SRCDIR)/prompt_loader.c $(SRCDIR)/conversation_tracker.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/debug_output.c $(SRCDIR)/api_common.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_tool.c
+SOURCES = $(SRCDIR)/main.c $(SRCDIR)/ralph.c $(SRCDIR)/http_client.c $(SRCDIR)/env_loader.c $(SRCDIR)/output_formatter.c $(SRCDIR)/prompt_loader.c $(SRCDIR)/conversation_tracker.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/debug_output.c $(SRCDIR)/api_common.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_display.c $(SRCDIR)/json_utils.c $(SRCDIR)/token_manager.c
 OBJECTS = $(SOURCES:.c=.o)
-HEADERS = $(SRCDIR)/ralph.h $(SRCDIR)/http_client.h $(SRCDIR)/env_loader.h $(SRCDIR)/output_formatter.h $(SRCDIR)/prompt_loader.h $(SRCDIR)/conversation_tracker.h $(SRCDIR)/tools_system.h $(SRCDIR)/shell_tool.h $(SRCDIR)/file_tools.h $(SRCDIR)/links_tool.h $(SRCDIR)/debug_output.h $(SRCDIR)/embedded_links.h $(SRCDIR)/api_common.h $(SRCDIR)/todo_manager.h $(SRCDIR)/todo_tool.h
+HEADERS = $(SRCDIR)/ralph.h $(SRCDIR)/http_client.h $(SRCDIR)/env_loader.h $(SRCDIR)/output_formatter.h $(SRCDIR)/prompt_loader.h $(SRCDIR)/conversation_tracker.h $(SRCDIR)/tools_system.h $(SRCDIR)/shell_tool.h $(SRCDIR)/file_tools.h $(SRCDIR)/links_tool.h $(SRCDIR)/debug_output.h $(SRCDIR)/embedded_links.h $(SRCDIR)/api_common.h $(SRCDIR)/todo_manager.h $(SRCDIR)/todo_tool.h $(SRCDIR)/todo_display.h $(SRCDIR)/json_utils.h $(SRCDIR)/token_manager.h
 
 # Tools
 BIN2C = build/bin2c
@@ -37,23 +37,23 @@ TEST_PROMPT_SOURCES = $(TESTDIR)/test_prompt_loader.c $(SRCDIR)/prompt_loader.c 
 TEST_PROMPT_OBJECTS = $(TEST_PROMPT_SOURCES:.c=.o)
 TEST_PROMPT_TARGET = $(TESTDIR)/test_prompt_loader
 
-TEST_CONVERSATION_SOURCES = $(TESTDIR)/test_conversation_tracker.c $(SRCDIR)/conversation_tracker.c $(TESTDIR)/unity/unity.c
+TEST_CONVERSATION_SOURCES = $(TESTDIR)/test_conversation_tracker.c $(SRCDIR)/conversation_tracker.c $(SRCDIR)/json_utils.c $(TESTDIR)/unity/unity.c
 TEST_CONVERSATION_OBJECTS = $(TEST_CONVERSATION_SOURCES:.c=.o)
 TEST_CONVERSATION_TARGET = $(TESTDIR)/test_conversation_tracker
 
-TEST_TOOLS_SOURCES = $(TESTDIR)/test_tools_system.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(TESTDIR)/unity/unity.c
+TEST_TOOLS_SOURCES = $(TESTDIR)/test_tools_system.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_display.c $(SRCDIR)/json_utils.c $(TESTDIR)/unity/unity.c
 TEST_TOOLS_OBJECTS = $(TEST_TOOLS_SOURCES:.c=.o)
 TEST_TOOLS_TARGET = $(TESTDIR)/test_tools_system
 
-TEST_SHELL_SOURCES = $(TESTDIR)/test_shell_tool.c $(SRCDIR)/shell_tool.c $(SRCDIR)/tools_system.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(TESTDIR)/unity/unity.c
+TEST_SHELL_SOURCES = $(TESTDIR)/test_shell_tool.c $(SRCDIR)/shell_tool.c $(SRCDIR)/tools_system.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_display.c $(SRCDIR)/json_utils.c $(TESTDIR)/unity/unity.c
 TEST_SHELL_OBJECTS = $(TEST_SHELL_SOURCES:.c=.o)
 TEST_SHELL_TARGET = $(TESTDIR)/test_shell_tool
 
-TEST_FILE_SOURCES = $(TESTDIR)/test_file_tools.c $(SRCDIR)/file_tools.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/links_tool.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(TESTDIR)/unity/unity.c
+TEST_FILE_SOURCES = $(TESTDIR)/test_file_tools.c $(SRCDIR)/file_tools.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/links_tool.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_display.c $(SRCDIR)/json_utils.c $(TESTDIR)/unity/unity.c
 TEST_FILE_OBJECTS = $(TEST_FILE_SOURCES:.c=.o)
 TEST_FILE_TARGET = $(TESTDIR)/test_file_tools
 
-TEST_RALPH_SOURCES = $(TESTDIR)/test_ralph.c $(TESTDIR)/mock_api_server.c $(SRCDIR)/ralph.c $(SRCDIR)/http_client.c $(SRCDIR)/env_loader.c $(SRCDIR)/output_formatter.c $(SRCDIR)/prompt_loader.c $(SRCDIR)/conversation_tracker.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/debug_output.c $(SRCDIR)/api_common.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(TESTDIR)/unity/unity.c
+TEST_RALPH_SOURCES = $(TESTDIR)/test_ralph.c $(TESTDIR)/mock_api_server.c $(SRCDIR)/ralph.c $(SRCDIR)/http_client.c $(SRCDIR)/env_loader.c $(SRCDIR)/output_formatter.c $(SRCDIR)/prompt_loader.c $(SRCDIR)/conversation_tracker.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/debug_output.c $(SRCDIR)/api_common.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_display.c $(SRCDIR)/json_utils.c $(SRCDIR)/token_manager.c $(TESTDIR)/unity/unity.c
 TEST_RALPH_OBJECTS = $(TEST_RALPH_SOURCES:.c=.o)
 TEST_RALPH_TARGET = $(TESTDIR)/test_ralph
 
@@ -63,11 +63,19 @@ TEST_TODO_MANAGER_SOURCES = $(TESTDIR)/test_todo_manager.c $(SRCDIR)/todo_manage
 TEST_TODO_MANAGER_OBJECTS = $(TEST_TODO_MANAGER_SOURCES:.c=.o)
 TEST_TODO_MANAGER_TARGET = $(TESTDIR)/test_todo_manager
 
-TEST_TODO_TOOL_SOURCES = $(TESTDIR)/test_todo_tool.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(TESTDIR)/unity/unity.c
+TEST_TODO_TOOL_SOURCES = $(TESTDIR)/test_todo_tool.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_display.c $(TESTDIR)/unity/unity.c
 TEST_TODO_TOOL_OBJECTS = $(TEST_TODO_TOOL_SOURCES:.c=.o)
 TEST_TODO_TOOL_TARGET = $(TESTDIR)/test_todo_tool
 
-ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_HTTP_TARGET) $(TEST_ENV_TARGET) $(TEST_OUTPUT_TARGET) $(TEST_PROMPT_TARGET) $(TEST_CONVERSATION_TARGET) $(TEST_TOOLS_TARGET) $(TEST_SHELL_TARGET) $(TEST_FILE_TARGET) $(TEST_RALPH_TARGET) $(TEST_TODO_MANAGER_TARGET) $(TEST_TODO_TOOL_TARGET)
+TEST_RALPH_INTEGRATION_SOURCES = $(TESTDIR)/test_ralph_integration.c $(TESTDIR)/unity/unity.c
+TEST_RALPH_INTEGRATION_OBJECTS = $(TEST_RALPH_INTEGRATION_SOURCES:.c=.o)
+TEST_RALPH_INTEGRATION_TARGET = $(TESTDIR)/test_ralph_integration
+
+TEST_TOKEN_MANAGER_SOURCES = $(TESTDIR)/test_token_manager.c $(SRCDIR)/token_manager.c $(SRCDIR)/debug_output.c $(TESTDIR)/unity/unity.c
+TEST_TOKEN_MANAGER_OBJECTS = $(TEST_TOKEN_MANAGER_SOURCES:.c=.o)
+TEST_TOKEN_MANAGER_TARGET = $(TESTDIR)/test_token_manager
+
+ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_HTTP_TARGET) $(TEST_ENV_TARGET) $(TEST_OUTPUT_TARGET) $(TEST_PROMPT_TARGET) $(TEST_CONVERSATION_TARGET) $(TEST_TOOLS_TARGET) $(TEST_SHELL_TARGET) $(TEST_FILE_TARGET) $(TEST_RALPH_TARGET) $(TEST_TODO_MANAGER_TARGET) $(TEST_TODO_TOOL_TARGET) $(TEST_RALPH_INTEGRATION_TARGET) $(TEST_TOKEN_MANAGER_TARGET)
 
 # Dependencies
 CURL_VERSION = 8.4.0
@@ -143,6 +151,10 @@ test: $(ALL_TEST_TARGETS)
 	./$(TEST_SHELL_TARGET)
 	./$(TEST_FILE_TARGET)
 	./$(TEST_RALPH_TARGET)
+	./$(TEST_TODO_MANAGER_TARGET)
+	./$(TEST_TODO_TOOL_TARGET)
+	./$(TEST_RALPH_INTEGRATION_TARGET)
+	./$(TEST_TOKEN_MANAGER_TARGET)
 
 check: test
 
@@ -183,6 +195,12 @@ $(TEST_TODO_MANAGER_TARGET): $(TEST_TODO_MANAGER_OBJECTS)
 $(TEST_TODO_TOOL_TARGET): $(TEST_TODO_TOOL_OBJECTS)
 	$(CC) -o $@ $(TEST_TODO_TOOL_OBJECTS)
 
+$(TEST_RALPH_INTEGRATION_TARGET): $(TEST_RALPH_INTEGRATION_OBJECTS)
+	$(CC) -o $@ $(TEST_RALPH_INTEGRATION_OBJECTS)
+
+$(TEST_TOKEN_MANAGER_TARGET): $(TEST_TOKEN_MANAGER_OBJECTS)
+	$(CC) -o $@ $(TEST_TOKEN_MANAGER_OBJECTS)
+
 # Compile test files
 $(TESTDIR)/%.o: $(TESTDIR)/%.c $(HEADERS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
 	$(CC) $(CFLAGS) $(TEST_INCLUDES) -c $< -o $@
@@ -203,6 +221,7 @@ check-valgrind: $(ALL_TEST_TARGETS)
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_RALPH_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_TODO_MANAGER_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_TODO_TOOL_TARGET).aarch64.elf
+	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_TOKEN_MANAGER_TARGET).aarch64.elf
 
 # Valgrind testing for all tests (including external libraries - may show false positives)
 check-valgrind-all: $(ALL_TEST_TARGETS)

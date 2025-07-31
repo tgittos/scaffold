@@ -1,4 +1,5 @@
 #include "api_common.h"
+#include "json_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,8 +8,7 @@
 extern char* generate_tools_json(const ToolRegistry *registry);
 extern char* generate_anthropic_tools_json(const ToolRegistry *registry);
 
-// Forward declaration for JSON escaping
-extern char* ralph_escape_json_string(const char* str);
+// Use unified JSON escaping from json_utils.h
 
 size_t calculate_json_payload_size(const char* model, const char* system_prompt,
                                   const ConversationHistory* conversation,
@@ -37,75 +37,90 @@ size_t calculate_json_payload_size(const char* model, const char* system_prompt,
 int format_openai_message(char* buffer, size_t buffer_size,
                          const ConversationMessage* message,
                          int is_first_message) {
-    char* escaped_content = ralph_escape_json_string(message->content);
-    if (escaped_content == NULL) return -1;
+    char *message_json = NULL;
     
-    int written = 0;
-    if (!is_first_message) {
-        written = snprintf(buffer, buffer_size, ", ");
-        if (written < 0 || written >= (int)buffer_size) {
-            free(escaped_content);
-            return -1;
-        }
-        buffer += written;
-        buffer_size -= written;
-    }
-    
-    int result;
     if (strcmp(message->role, "tool") == 0 && message->tool_call_id != NULL) {
-        result = snprintf(buffer, buffer_size,
-                         "{\"role\": \"tool\", \"content\": \"%s\", \"tool_call_id\": \"%s\"}",
-                         escaped_content, message->tool_call_id);
+        // Build tool message
+        JsonBuilder builder = {0};
+        if (json_builder_init(&builder) != 0) return -1;
+        
+        json_builder_start_object(&builder);
+        json_builder_add_string(&builder, "role", "tool");
+        json_builder_add_separator(&builder);
+        json_builder_add_string(&builder, "content", message->content);
+        json_builder_add_separator(&builder);
+        json_builder_add_string(&builder, "tool_call_id", message->tool_call_id);
+        json_builder_end_object(&builder);
+        
+        message_json = json_builder_finalize(&builder);
+        json_builder_cleanup(&builder);
     } else if (strcmp(message->role, "assistant") == 0 && 
                strstr(message->content, "\"tool_calls\"") != NULL) {
         // This is an assistant message with tool calls - use the content as-is (it's already JSON)
-        result = snprintf(buffer, buffer_size, "%s", message->content);
+        message_json = strdup(message->content);
     } else {
-        result = snprintf(buffer, buffer_size,
-                         "{\"role\": \"%s\", \"content\": \"%s\"}",
-                         message->role, escaped_content);
+        // Regular message
+        message_json = json_build_message(message->role, message->content);
     }
     
-    free(escaped_content);
+    if (message_json == NULL) return -1;
     
-    if (result < 0 || result >= (int)buffer_size) {
+    // Build final result with optional comma separator
+    int written = 0;
+    if (!is_first_message) {
+        written = snprintf(buffer, buffer_size, ", %s", message_json);
+    } else {
+        written = snprintf(buffer, buffer_size, "%s", message_json);
+    }
+    
+    free(message_json);
+    
+    if (written < 0 || written >= (int)buffer_size) {
         return -1;
     }
     
-    return written + result;
+    return written;
 }
 
 int format_anthropic_message(char* buffer, size_t buffer_size,
                             const ConversationMessage* message,
                             int is_first_message) {
-    int written = 0;
-    if (!is_first_message) {
-        written = snprintf(buffer, buffer_size, ", ");
-        if (written < 0 || written >= (int)buffer_size) {
-            return -1;
-        }
-        buffer += written;
-        buffer_size -= written;
-    }
+    char *message_json = NULL;
+    JsonBuilder builder = {0};
     
-    int result;
     if (strcmp(message->role, "tool") == 0) {
         // Tool results in Anthropic are user messages with tool_result content
-        char* escaped_content = ralph_escape_json_string(message->content);
-        if (escaped_content == NULL) return -1;
+        if (json_builder_init(&builder) != 0) return -1;
+        
+        json_builder_start_object(&builder);
+        json_builder_add_string(&builder, "role", "user");
+        json_builder_add_separator(&builder);
+        json_builder_add_object(&builder, "content", NULL);
+        
+        // Build content array manually for complex structure
+        json_builder_cleanup(&builder);
         
         if (message->tool_call_id != NULL) {
-            result = snprintf(buffer, buffer_size,
-                             "{\"role\": \"user\", \"content\": [{\"type\": \"tool_result\", "
-                             "\"tool_use_id\": \"%s\", \"content\": \"%s\"}]}",
-                             message->tool_call_id, escaped_content);
+            message_json = malloc(strlen(message->content) * 2 + 200);
+            if (message_json) {
+                char *escaped_content = json_escape_string(message->content);
+                snprintf(message_json, strlen(message->content) * 2 + 200,
+                        "{\"role\": \"user\", \"content\": [{\"type\": \"tool_result\", "
+                        "\"tool_use_id\": \"%s\", \"content\": \"%s\"}]}",
+                        message->tool_call_id, escaped_content ? escaped_content : "");
+                free(escaped_content);
+            }
         } else {
-            result = snprintf(buffer, buffer_size,
-                             "{\"role\": \"user\", \"content\": [{\"type\": \"tool_result\", "
-                             "\"content\": \"%s\"}]}",
-                             escaped_content);
+            message_json = malloc(strlen(message->content) * 2 + 150);
+            if (message_json) {
+                char *escaped_content = json_escape_string(message->content);
+                snprintf(message_json, strlen(message->content) * 2 + 150,
+                        "{\"role\": \"user\", \"content\": [{\"type\": \"tool_result\", "
+                        "\"content\": \"%s\"}]}",
+                        escaped_content ? escaped_content : "");
+                free(escaped_content);
+            }
         }
-        free(escaped_content);
     } else if (strcmp(message->role, "assistant") == 0 && 
                strstr(message->content, "\"tool_use\"") != NULL) {
         // This is a raw Anthropic response with tool_use blocks - extract the content
@@ -116,52 +131,46 @@ int format_anthropic_message(char* buffer, size_t buffer_size,
                 const char *array_end = strrchr(message->content, ']');
                 if (array_end && array_end > array_start) {
                     int content_len = array_end - array_start + 1;
-                    result = snprintf(buffer, buffer_size,
-                                     "{\"role\": \"assistant\", \"content\": %.*s}",
-                                     content_len, array_start);
+                    message_json = malloc(content_len + 50);
+                    if (message_json) {
+                        snprintf(message_json, content_len + 50,
+                                "{\"role\": \"assistant\", \"content\": %.*s}",
+                                content_len, array_start);
+                    }
                 } else {
                     // Fallback to escaped content
-                    char* escaped_content = ralph_escape_json_string(message->content);
-                    if (escaped_content == NULL) return -1;
-                    result = snprintf(buffer, buffer_size,
-                                     "{\"role\": \"%s\", \"content\": \"%s\"}",
-                                     message->role, escaped_content);
-                    free(escaped_content);
+                    message_json = json_build_message(message->role, message->content);
                 }
             } else {
                 // Fallback to escaped content
-                char* escaped_content = ralph_escape_json_string(message->content);
-                if (escaped_content == NULL) return -1;
-                result = snprintf(buffer, buffer_size,
-                                 "{\"role\": \"%s\", \"content\": \"%s\"}",
-                                 message->role, escaped_content);
-                free(escaped_content);
+                message_json = json_build_message(message->role, message->content);
             }
         } else {
             // Fallback to escaped content
-            char* escaped_content = ralph_escape_json_string(message->content);
-            if (escaped_content == NULL) return -1;
-            result = snprintf(buffer, buffer_size,
-                             "{\"role\": \"%s\", \"content\": \"%s\"}",
-                             message->role, escaped_content);
-            free(escaped_content);
+            message_json = json_build_message(message->role, message->content);
         }
     } else {
         // Regular message
-        char* escaped_content = ralph_escape_json_string(message->content);
-        if (escaped_content == NULL) return -1;
-        
-        result = snprintf(buffer, buffer_size,
-                         "{\"role\": \"%s\", \"content\": \"%s\"}",
-                         message->role, escaped_content);
-        free(escaped_content);
+        message_json = json_build_message(message->role, message->content);
     }
     
-    if (result < 0 || result >= (int)buffer_size) {
+    if (message_json == NULL) return -1;
+    
+    // Build final result with optional comma separator
+    int written = 0;
+    if (!is_first_message) {
+        written = snprintf(buffer, buffer_size, ", %s", message_json);
+    } else {
+        written = snprintf(buffer, buffer_size, "%s", message_json);
+    }
+    
+    free(message_json);
+    
+    if (written < 0 || written >= (int)buffer_size) {
         return -1;
     }
     
-    return written + result;
+    return written;
 }
 
 int build_messages_json(char* buffer, size_t buffer_size,
@@ -272,7 +281,7 @@ char* build_json_payload_common(const char* model, const char* system_prompt,
     
     // Add system prompt at top level if requested (Anthropic style)
     if (system_at_top_level && system_prompt != NULL) {
-        char* escaped_system = ralph_escape_json_string(system_prompt);
+        char* escaped_system = json_escape_string(system_prompt);
         if (escaped_system != NULL) {
             written = snprintf(current, remaining, ", \"system\": \"%s\"", escaped_system);
             free(escaped_system);

@@ -1,4 +1,5 @@
 #include "conversation_tracker.h"
+#include "json_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,65 +35,7 @@ static int resize_conversation_history(ConversationHistory *history) {
     return 0;
 }
 
-// Escape JSON string content
-static char* escape_json_string(const char *content) {
-    if (content == NULL) {
-        return strdup("");
-    }
-    
-    size_t len = strlen(content);
-    // Worst case: every character needs escaping, plus null terminator
-    char *escaped = malloc(len * 2 + 1);
-    if (escaped == NULL) {
-        return NULL;
-    }
-    
-    size_t j = 0;
-    for (size_t i = 0; i < len; i++) {
-        switch (content[i]) {
-            case '"':
-                escaped[j++] = '\\';
-                escaped[j++] = '"';
-                break;
-            case '\\':
-                escaped[j++] = '\\';
-                escaped[j++] = '\\';
-                break;
-            case '\n':
-                escaped[j++] = '\\';
-                escaped[j++] = 'n';
-                break;
-            case '\r':
-                escaped[j++] = '\\';
-                escaped[j++] = 'r';
-                break;
-            case '\t':
-                escaped[j++] = '\\';
-                escaped[j++] = 't';
-                break;
-            case '\b':
-                escaped[j++] = '\\';
-                escaped[j++] = 'b';
-                break;
-            case '\f':
-                escaped[j++] = '\\';
-                escaped[j++] = 'f';
-                break;
-            default:
-                if ((unsigned char)content[i] < 32) {
-                    // Escape other control characters
-                    sprintf(&escaped[j], "\\u%04x", (unsigned char)content[i]);
-                    j += 6;
-                } else {
-                    escaped[j++] = content[i];
-                }
-                break;
-        }
-    }
-    escaped[j] = '\0';
-    
-    return escaped;
-}
+// Use unified JSON escaping from json_utils.h
 
 static int add_message_to_history(ConversationHistory *history, const char *role, const char *content, const char *tool_call_id, const char *tool_name) {
     if (history == NULL || role == NULL || content == NULL) {
@@ -147,79 +90,14 @@ static int add_message_to_history(ConversationHistory *history, const char *role
     return 0;
 }
 
-// Simple JSON parser for conversation messages
+// Wrapper around unified JSON parser for backward compatibility
 static char* extract_json_field(const char *json, const char *field_name) {
-    char search_pattern[256] = {0};
-    snprintf(search_pattern, sizeof(search_pattern), "\"%s\":", field_name);
-    
-    char *start = strstr(json, search_pattern);
-    if (start == NULL) {
+    JsonParser parser = {0};
+    if (json_parser_init(&parser, json) != 0) {
         return NULL;
     }
     
-    start += strlen(search_pattern);
-    
-    // Skip optional whitespace
-    while (*start == ' ' || *start == '\t') {
-        start++;
-    }
-    
-    // Expect opening quote
-    if (*start != '"') {
-        return NULL;
-    }
-    start++;
-    char *end = start;
-    
-    // Find the end of the string value, handling escaped quotes
-    while (*end != '\0') {
-        if (*end == '"' && (end == start || *(end - 1) != '\\')) {
-            break;
-        }
-        end++;
-    }
-    
-    if (*end != '"') {
-        return NULL;
-    }
-    
-    size_t len = end - start;
-    char *result = malloc(len + 1);
-    if (result == NULL) {
-        return NULL;
-    }
-    
-    strncpy(result, start, len);
-    result[len] = '\0';
-    
-    // Unescape JSON string
-    char *unescaped = malloc(len + 1);
-    if (unescaped == NULL) {
-        free(result);
-        return NULL;
-    }
-    
-    size_t j = 0;
-    for (size_t i = 0; i < len; i++) {
-        if (result[i] == '\\' && i + 1 < len) {
-            switch (result[i + 1]) {
-                case '"': unescaped[j++] = '"'; i++; break;
-                case '\\': unescaped[j++] = '\\'; i++; break;
-                case 'n': unescaped[j++] = '\n'; i++; break;
-                case 'r': unescaped[j++] = '\r'; i++; break;
-                case 't': unescaped[j++] = '\t'; i++; break;
-                case 'b': unescaped[j++] = '\b'; i++; break;
-                case 'f': unescaped[j++] = '\f'; i++; break;
-                default: unescaped[j++] = result[i]; break;
-            }
-        } else {
-            unescaped[j++] = result[i];
-        }
-    }
-    unescaped[j] = '\0';
-    
-    free(result);
-    return unescaped;
+    return json_parser_extract_string(&parser, field_name);
 }
 
 int load_conversation_history(ConversationHistory *history) {
@@ -294,16 +172,17 @@ int append_conversation_message(ConversationHistory *history, const char *role, 
         return -1;
     }
     
-    char *escaped_content = escape_json_string(content);
-    if (escaped_content == NULL) {
+    // Build JSON message using unified builder
+    char *json_message = json_build_message(role, content);
+    if (json_message == NULL) {
         fclose(file);
         return -1;
     }
     
     // Write JSON line
-    fprintf(file, "{\"role\":\"%s\",\"content\":\"%s\"}\n", role, escaped_content);
+    fprintf(file, "%s\n", json_message);
     
-    free(escaped_content);
+    free(json_message);
     fclose(file);
     return 0;
 }
@@ -324,17 +203,35 @@ int append_tool_message(ConversationHistory *history, const char *content, const
         return -1;
     }
     
-    char *escaped_content = escape_json_string(content);
-    if (escaped_content == NULL) {
+    // Build JSON message using unified builder
+    JsonBuilder builder = {0};
+    if (json_builder_init(&builder) != 0) {
+        fclose(file);
+        return -1;
+    }
+    
+    json_builder_start_object(&builder);
+    json_builder_add_string(&builder, "role", "tool");
+    json_builder_add_separator(&builder);
+    json_builder_add_string(&builder, "content", content);
+    json_builder_add_separator(&builder);
+    json_builder_add_string(&builder, "tool_call_id", tool_call_id);
+    json_builder_add_separator(&builder);
+    json_builder_add_string(&builder, "tool_name", tool_name);
+    json_builder_end_object(&builder);
+    
+    char *json_message = json_builder_finalize(&builder);
+    json_builder_cleanup(&builder);
+    
+    if (json_message == NULL) {
         fclose(file);
         return -1;
     }
     
     // Write JSON line with tool metadata
-    fprintf(file, "{\"role\":\"tool\",\"content\":\"%s\",\"tool_call_id\":\"%s\",\"tool_name\":\"%s\"}\n", 
-            escaped_content, tool_call_id, tool_name);
+    fprintf(file, "%s\n", json_message);
     
-    free(escaped_content);
+    free(json_message);
     fclose(file);
     return 0;
 }
