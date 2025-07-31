@@ -60,6 +60,35 @@ static const char *minimal_response =
     "}]"
     "}";
 
+// Test data - tool calls response (no content field)
+static const char *tool_calls_response = 
+    "{"
+    "\"id\":\"chatcmpl-test123\","
+    "\"object\":\"chat.completion\","
+    "\"created\":1753923401,"
+    "\"model\":\"test/model\","
+    "\"choices\":[{"
+        "\"index\":0,"
+        "\"message\":{"
+            "\"role\":\"assistant\","
+            "\"tool_calls\":[{"
+                "\"id\":\"call_123\","
+                "\"type\":\"function\","
+                "\"function\":{"
+                    "\"name\":\"shell_execute\","
+                    "\"arguments\":\"{\\\"command\\\":\\\"echo test\\\"}\""
+                "}"
+            "}]"
+        "},"
+        "\"finish_reason\":\"tool_calls\""
+    "}],"
+    "\"usage\":{"
+        "\"prompt_tokens\":100,"
+        "\"completion_tokens\":25,"
+        "\"total_tokens\":125"
+    "}"
+    "}";
+
 // Test data - malformed JSON
 static const char *malformed_response = 
     "{"
@@ -225,6 +254,21 @@ void test_content_with_escaped_quotes(void) {
     cleanup_parsed_response(&result);
 }
 
+void test_parse_api_response_tool_calls_format(void) {
+    ParsedResponse result;
+    
+    int ret = parse_api_response(tool_calls_response, &result);
+    
+    TEST_ASSERT_EQUAL(0, ret);
+    TEST_ASSERT_NULL(result.thinking_content);  // No content in tool calls
+    TEST_ASSERT_NULL(result.response_content);  // No content in tool calls
+    TEST_ASSERT_EQUAL(100, result.prompt_tokens);
+    TEST_ASSERT_EQUAL(25, result.completion_tokens);
+    TEST_ASSERT_EQUAL(125, result.total_tokens);
+    
+    cleanup_parsed_response(&result);
+}
+
 int main(void) {
     UNITY_BEGIN();
     
@@ -239,6 +283,7 @@ int main(void) {
     RUN_TEST(test_cleanup_parsed_response_with_allocated_content);
     RUN_TEST(test_print_formatted_response_with_null_parameters);
     RUN_TEST(test_content_with_escaped_quotes);
+    RUN_TEST(test_parse_api_response_tool_calls_format);
     
     return UNITY_END();
 }

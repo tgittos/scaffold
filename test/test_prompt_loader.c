@@ -218,7 +218,7 @@ void test_core_system_prompt_always_present(void) {
     
     // Core prompt should always be present
     TEST_ASSERT_TRUE(strstr(prompt_content, "You are an advanced AI programming agent") != NULL);
-    TEST_ASSERT_TRUE(strstr(prompt_content, "You have access to a number of tools") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, "access to powerful tools") != NULL);
     TEST_ASSERT_TRUE(strstr(prompt_content, "User customization:") != NULL);
     
     cleanup_system_prompt(&prompt_content);

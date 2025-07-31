@@ -523,7 +523,7 @@ void test_shell_command_request_workflow(void) {
         "\"type\":\"function\","
         "\"function\":{"
         "\"name\":\"shell_execute\","
-        "\"arguments\":\"{\\\"command\\\":\\\"echo 'workflow_test_success'}\\\"}"
+        "\"arguments\":\"{\\\"command\\\":\\\"echo workflow_test_success\\\"}\""
         "}"
         "}"
         "]"

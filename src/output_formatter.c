@@ -219,7 +219,23 @@ int parse_api_response(const char *json_response, ParsedResponse *result) {
     // Check if content field exists
     const char *content_pos = strstr(message_start, "\"content\":");
     if (!content_pos) {
-        return -1; // No content field at all
+        // No content field - this is valid for tool calls
+        // Check if there are tool_calls instead
+        const char *tool_calls_pos = strstr(message_start, "\"tool_calls\":");
+        if (tool_calls_pos) {
+            // This is a tool call response with no content - valid, leave fields as NULL
+            // But still extract token usage before returning
+            const char *usage_start = strstr(json_response, "\"usage\":");
+            if (usage_start) {
+                result->prompt_tokens = extract_json_int(usage_start, "prompt_tokens");
+                result->completion_tokens = extract_json_int(usage_start, "completion_tokens");
+                result->total_tokens = extract_json_int(usage_start, "total_tokens");
+            }
+            return 0;
+        } else {
+            // No content and no tool_calls - invalid
+            return -1;
+        }
     }
     
     const char *value_start = content_pos + strlen("\"content\":");

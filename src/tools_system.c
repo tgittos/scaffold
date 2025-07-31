@@ -8,6 +8,49 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+// Unescape JSON string in-place
+static void unescape_json_string(char *str) {
+    if (!str) return;
+    
+    char *src = str;
+    char *dst = str;
+    
+    while (*src) {
+        if (*src == '\\' && *(src + 1)) {
+            switch (*(src + 1)) {
+                case 'n':
+                    *dst++ = '\n';
+                    src += 2;
+                    break;
+                case 't':
+                    *dst++ = '\t';
+                    src += 2;
+                    break;
+                case 'r':
+                    *dst++ = '\r';
+                    src += 2;
+                    break;
+                case '\\':
+                    *dst++ = '\\';
+                    src += 2;
+                    break;
+                case '"':
+                    *dst++ = '"';
+                    src += 2;
+                    break;
+                default:
+                    // Unknown escape, keep both characters
+                    *dst++ = *src++;
+                    *dst++ = *src++;
+                    break;
+            }
+        } else {
+            *dst++ = *src++;
+        }
+    }
+    *dst = '\0';
+}
+
 void init_tool_registry(ToolRegistry *registry) {
     if (registry == NULL) {
         return;
@@ -259,6 +302,9 @@ int parse_tool_calls(const char *json_response, ToolCall **tool_calls, int *call
             call->arguments = extract_json_string(call_json, "arguments");
             if (call->arguments == NULL) {
                 call->arguments = strdup("{}");
+            } else {
+                // Unescape JSON string arguments
+                unescape_json_string(call->arguments);
             }
         }
         
@@ -382,6 +428,10 @@ int parse_tool_calls(const char *json_response, ToolCall **tool_calls, int *call
         if (function_obj != NULL) {
             call->name = extract_json_string(function_obj, "name");
             call->arguments = extract_json_string(function_obj, "arguments");
+            if (call->arguments != NULL) {
+                // Unescape JSON string arguments
+                unescape_json_string(call->arguments);
+            }
             free(function_obj);
         }
         
