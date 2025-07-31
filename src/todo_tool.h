@@ -2,6 +2,7 @@
 #define TODO_TOOL_H
 
 #include "todo_manager.h"
+#include "tools_system.h"
 
 typedef struct {
     TodoList* todo_list;
@@ -18,5 +19,10 @@ char* todo_tool_update_priority(TodoTool* tool, const char* id, const char* prio
 char* todo_tool_delete(TodoTool* tool, const char* id);
 char* todo_tool_list(TodoTool* tool, const char* status_filter, const char* min_priority);
 char* todo_tool_serialize(TodoTool* tool);
+
+// Tool system integration
+int register_todo_tool(ToolRegistry* registry, TodoList* todo_list);
+int execute_todo_tool_call(const ToolCall *tool_call, ToolResult *result);
+void clear_todo_tool_reference(void);
 
 #endif

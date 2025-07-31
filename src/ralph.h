@@ -4,6 +4,7 @@
 #include "http_client.h"
 #include "conversation_tracker.h"
 #include "tools_system.h"
+#include "todo_manager.h"
 
 // API type enumeration
 typedef enum {
@@ -28,6 +29,7 @@ typedef struct {
 typedef struct {
     RalphConfig config;
     ConversationHistory conversation;
+    TodoList todo_list;
     ToolRegistry tools;
 } RalphSession;
 
@@ -52,5 +54,14 @@ char* ralph_build_anthropic_json_payload(const char* model, const char* system_p
 // Common tool calling workflow
 int ralph_execute_tool_workflow(RalphSession* session, ToolCall* tool_calls, int call_count, 
                                const char* user_message, int max_tokens, const char** headers);
+
+// Helper function to build enhanced system prompt with todo list
+char* ralph_build_enhanced_system_prompt(const RalphSession* session);
+
+// Wrapper functions that automatically use enhanced system prompt with todo list
+char* ralph_build_json_payload_with_todos(const RalphSession* session,
+                                         const char* user_message, int max_tokens);
+char* ralph_build_anthropic_json_payload_with_todos(const RalphSession* session,
+                                                   const char* user_message, int max_tokens);
 
 #endif // RALPH_H

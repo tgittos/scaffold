@@ -2,6 +2,7 @@
 #include "shell_tool.h"
 #include "file_tools.h"
 #include "links_tool.h"
+#include "todo_tool.h"
 #include "output_formatter.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -111,6 +112,11 @@ char* generate_tools_json(const ToolRegistry *registry) {
                 strcat(json, param->description);
                 strcat(json, "\"");
                 
+                // Add items schema for array types
+                if (strcmp(param->type, "array") == 0) {
+                    strcat(json, ", \"items\": {\"type\": \"object\"}");
+                }
+                
                 if (param->enum_values != NULL && param->enum_count > 0) {
                     strcat(json, ", \"enum\": [");
                     for (int k = 0; k < param->enum_count; k++) {
@@ -194,6 +200,11 @@ char* generate_anthropic_tools_json(const ToolRegistry *registry) {
                 strcat(json, "\", \"description\": \"");
                 strcat(json, param->description);
                 strcat(json, "\"");
+                
+                // Add items schema for array types
+                if (strcmp(param->type, "array") == 0) {
+                    strcat(json, ", \"items\": {\"type\": \"object\"}");
+                }
                 
                 if (param->enum_values != NULL && param->enum_count > 0) {
                     strcat(json, ", \"enum\": [");
@@ -879,6 +890,11 @@ int execute_tool_call(const ToolRegistry *registry, const ToolCall *tool_call, T
                 return execute_links_tool_call(tool_call, result);
             }
             
+            // Handle todo tool
+            if (strcmp(tool_call->name, "TodoWrite") == 0) {
+                return execute_todo_tool_call(tool_call, result);
+            }
+            
             // Tool found in registry but no implementation provided
             // Users should extend this function to implement their own tool execution logic
             result->result = strdup("Error: Tool execution not implemented");
@@ -1023,6 +1039,26 @@ int load_tools_config(ToolRegistry *registry, const char *config_file) {
 
 void cleanup_tool_registry(ToolRegistry *registry) {
     if (registry == NULL) {
+        return;
+    }
+    
+    // Defensive programming: check if function_count is reasonable first
+    // before trying to access the functions pointer
+    if (registry->function_count < 0 || registry->function_count > 1000) {
+        // Function count is garbage - registry is corrupted
+        return;
+    }
+    
+    if (registry->function_count == 0) {
+        // No functions to clean up, but still clean up the functions array if allocated
+        free(registry->functions);
+        registry->functions = NULL;
+        return;
+    }
+    
+    if (registry->functions == NULL) {
+        // Functions pointer is NULL but count > 0 - corrupted
+        registry->function_count = 0;
         return;
     }
     
