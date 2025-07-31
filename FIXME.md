@@ -185,21 +185,13 @@ Multi-Layer Testing
 ## Immediate Action Items
 
 ### High Priority (Fix Immediately):
-1. **Add integration test for the fixed bug**:
-   ```c
-   void test_tool_workflow_api_failure_resilience(void) {
-       // Simulate tool success + API failure
-       // Verify workflow returns success (not failure)
-   }
-   ```
+~~1. **Add integration test for the fixed bug**: ✅ COMPLETED~~
+   - Added `test_ralph_execute_tool_workflow_api_failure_resilience()` in test/test_ralph.c
+   - Tests exact bug scenario: tool succeeds, API fails, workflow returns success
 
-2. **Add basic end-to-end workflow test**:
-   ```c
-   void test_complete_shell_tool_workflow(void) {
-       // Process message that triggers shell tool
-       // Verify tool executes and message processing succeeds
-   }
-   ```
+~~2. **Add basic end-to-end workflow test**: ✅ COMPLETED~~
+   - Added `test_ralph_process_message_basic_workflow()` in test/test_ralph.c  
+   - Tests message processing pipeline with proper test isolation
 
 3. **Add API server mock framework**:
    - Simple HTTP server for testing

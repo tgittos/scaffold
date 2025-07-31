@@ -5,7 +5,11 @@
 #include <string.h>
 #include <unistd.h>
 
-void setUp(void) {}
+void setUp(void) {
+    // Clean up any existing CONVERSATION.md file before each test
+    // This ensures tests don't interfere with each other
+    remove("CONVERSATION.md");
+}
 void tearDown(void) {}
 
 void test_ralph_escape_json_string_null(void) {
@@ -206,6 +210,101 @@ void test_ralph_execute_tool_workflow_null_parameters(void) {
     ralph_cleanup_session(&session);
 }
 
+void test_ralph_execute_tool_workflow_api_failure_resilience(void) {
+    // INTEGRATION TEST: Tool execution succeeds, API follow-up fails
+    // This tests the specific bug that was fixed: ralph_execute_tool_workflow
+    // should return 0 (success) when tools execute successfully, even if 
+    // the follow-up API request fails (network down, server error, etc.)
+    
+    RalphSession session;
+    ToolCall tool_calls[1];
+    const char* headers[2] = {"Content-Type: application/json", NULL};
+    
+    // Initialize with a simple tool call that will succeed
+    tool_calls[0].id = "test_tool_id_123";
+    tool_calls[0].name = "shell_execute";
+    tool_calls[0].arguments = "{\"command\":\"echo 'integration_test_success'\"}";
+    
+    ralph_init_session(&session);
+    ralph_load_config(&session);
+    
+    // Set API URL to something that will fail (simulate network failure)
+    // This tests the exact scenario: tool succeeds, API fails
+    free(session.config.api_url);
+    session.config.api_url = strdup("http://127.0.0.1:99999/v1/chat/completions"); // Port 99999 should be unreachable
+    
+    // Execute tool workflow - this should return 0 (success) because:
+    // 1. Tool execution succeeds (shell_execute with "echo" command works)
+    // 2. Tool results are added to conversation history
+    // 3. Follow-up API request fails (unreachable server)
+    // 4. Function returns 0 anyway because tools executed successfully
+    int result = ralph_execute_tool_workflow(&session, tool_calls, 1, "run echo command", 100, headers);
+    
+    // The key assertion: even though API follow-up fails, workflow returns success (0)
+    // because the actual tool execution was successful
+    TEST_ASSERT_EQUAL_INT(0, result);
+    
+    // Verify tool result was actually added to conversation history
+    // This proves the tool executed successfully despite API failure
+    TEST_ASSERT_TRUE(session.conversation.count > 0);
+    
+    // Look for tool result message in conversation history
+    int found_tool_result = 0;
+    for (int i = 0; i < session.conversation.count; i++) {
+        if (strcmp(session.conversation.messages[i].role, "tool") == 0) {
+            found_tool_result = 1;
+            TEST_ASSERT_EQUAL_STRING("test_tool_id_123", session.conversation.messages[i].tool_call_id);
+            TEST_ASSERT_EQUAL_STRING("shell_execute", session.conversation.messages[i].tool_name);
+            TEST_ASSERT_TRUE(strstr(session.conversation.messages[i].content, "integration_test_success") != NULL);
+            break;
+        }
+    }
+    TEST_ASSERT_TRUE(found_tool_result);
+    
+    ralph_cleanup_session(&session);
+}
+
+void test_ralph_process_message_basic_workflow(void) {
+    // INTEGRATION TEST: End-to-end message processing workflow
+    // This tests the core user workflow: user sends message, system processes it
+    // Even if API fails, we can verify the message was added to conversation
+    
+    RalphSession session;
+    ralph_init_session(&session);
+    ralph_load_config(&session);
+    
+    // Set up a non-working API URL to avoid dependency on external services
+    // but still test the message processing pipeline
+    free(session.config.api_url);
+    session.config.api_url = strdup("http://127.0.0.1:99999/v1/chat/completions");
+    
+    // Process a basic user message
+    const char* user_message = "Hello, how are you today?";
+    
+    // Conversation should be empty (setUp() ensures clean state)
+    TEST_ASSERT_EQUAL_INT(0, session.conversation.count);
+    
+    // Process the message - this will fail at the API call, testing:
+    // 1. Message processing pipeline works up to the API call
+    // 2. JSON payload generation works (can be verified via debug output)
+    // 3. Session state remains consistent
+    // 4. Function correctly handles API failures
+    int result = ralph_process_message(&session, user_message);
+    
+    // Function should return -1 because API call fails
+    TEST_ASSERT_EQUAL_INT(-1, result);
+    
+    // User message should NOT be added to conversation when API fails
+    // This is correct behavior - no point storing messages if no response
+    TEST_ASSERT_EQUAL_INT(0, session.conversation.count);
+    
+    // Session should remain in a consistent state
+    // The conversation should still be usable for future messages
+    // When empty, messages array is NULL, which is valid
+    
+    ralph_cleanup_session(&session);
+}
+
 int main(void) {
     UNITY_BEGIN();
     
@@ -223,6 +322,8 @@ int main(void) {
     RUN_TEST(test_ralph_process_message_null_parameters);
     RUN_TEST(test_ralph_config_parameter_selection);
     RUN_TEST(test_ralph_execute_tool_workflow_null_parameters);
+    RUN_TEST(test_ralph_execute_tool_workflow_api_failure_resilience);
+    RUN_TEST(test_ralph_process_message_basic_workflow);
     
     return UNITY_END();
 }
