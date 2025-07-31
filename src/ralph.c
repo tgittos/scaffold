@@ -4,10 +4,16 @@
 #include "prompt_loader.h"
 #include "shell_tool.h"
 #include "debug_output.h"
+#include "api_common.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <curl/curl.h>
+
+// Forward declaration for Anthropic tools JSON generator
+char* generate_anthropic_tools_json(const ToolRegistry *registry);
+// Forward declaration for Anthropic tool call parser
+int parse_anthropic_tool_calls(const char *json_response, ToolCall **tool_calls, int *call_count);
 
 // Helper function to escape JSON strings
 char* ralph_escape_json_string(const char* str) {
@@ -55,114 +61,9 @@ char* ralph_build_json_payload(const char* model, const char* system_prompt,
                               const ConversationHistory* conversation, 
                               const char* user_message, const char* max_tokens_param, 
                               int max_tokens, const ToolRegistry* tools) {
-    // Calculate required buffer size
-    size_t base_size = 200; // Base JSON structure
-    size_t model_len = strlen(model);
-    size_t user_msg_len = strlen(user_message) * 2 + 50; // *2 for escaping, +50 for JSON structure
-    size_t system_len = (system_prompt != NULL) ? strlen(system_prompt) * 2 + 50 : 0;
-    size_t history_len = 0;
-    
-    // Calculate space needed for conversation history
-    for (int i = 0; i < conversation->count; i++) {
-        history_len += strlen(conversation->messages[i].role) + 
-                      strlen(conversation->messages[i].content) * 2 + 50;
-    }
-    
-    // Account for tools JSON size
-    size_t tools_len = 0;
-    if (tools != NULL && tools->function_count > 0) {
-        tools_len = tools->function_count * 500; // Rough estimate per tool
-    }
-    
-    size_t total_size = base_size + model_len + user_msg_len + system_len + history_len + tools_len + 200;
-    char* json = malloc(total_size);
-    if (json == NULL) return NULL;
-    
-    // Start building JSON
-    strcpy(json, "{\"model\": \"");
-    strcat(json, model);
-    strcat(json, "\", \"messages\": [");
-    
-    // Determine if we need to add user message
-    int will_add_user_message = (user_message != NULL && strlen(user_message) > 0);
-    int message_count = 0; // Track how many messages we've added
-    
-    // Add system prompt if available
-    if (system_prompt != NULL) {
-        char* escaped_system = ralph_escape_json_string(system_prompt);
-        if (escaped_system != NULL) {
-            strcat(json, "{\"role\": \"system\", \"content\": \"");
-            strcat(json, escaped_system);
-            strcat(json, "\"}");
-            free(escaped_system);
-            message_count++;
-        }
-    }
-    
-    // Add conversation history
-    for (int i = 0; i < conversation->count; i++) {
-        char* escaped_content = ralph_escape_json_string(conversation->messages[i].content);
-        if (escaped_content != NULL) {
-            if (message_count > 0) {
-                strcat(json, ", ");
-            }
-            strcat(json, "{\"role\": \"");
-            strcat(json, conversation->messages[i].role);
-            strcat(json, "\", \"content\": \"");
-            strcat(json, escaped_content);
-            strcat(json, "\"");
-            
-            // Add tool metadata for tool messages
-            if (strcmp(conversation->messages[i].role, "tool") == 0 && 
-                conversation->messages[i].tool_call_id != NULL) {
-                strcat(json, ", \"tool_call_id\": \"");
-                strcat(json, conversation->messages[i].tool_call_id);
-                strcat(json, "\"");
-            }
-            
-            strcat(json, "}");
-            free(escaped_content);
-            message_count++;
-        }
-    }
-    
-    // Add current user message (only if not empty)
-    if (will_add_user_message) {
-        char* escaped_user_msg = ralph_escape_json_string(user_message);
-        if (escaped_user_msg != NULL) {
-            if (message_count > 0) {
-                strcat(json, ", ");
-            }
-            strcat(json, "{\"role\": \"user\", \"content\": \"");
-            strcat(json, escaped_user_msg);
-            strcat(json, "\"}");
-            free(escaped_user_msg);
-            message_count++;
-        }
-    }
-    
-    // Close messages array and add max_tokens parameter
-    strcat(json, "], \"");
-    strcat(json, max_tokens_param);
-    strcat(json, "\": ");
-    
-    char tokens_str[20];
-    snprintf(tokens_str, sizeof(tokens_str), "%d", max_tokens);
-    strcat(json, tokens_str);
-    
-    // Add tools if available
-    if (tools != NULL && tools->function_count > 0) {
-        char* tools_json = generate_tools_json(tools);
-        if (tools_json != NULL) {
-            strcat(json, ", \"tools\": ");
-            strcat(json, tools_json);
-            free(tools_json);
-        }
-    }
-    
-    strcat(json, "}");
-    
-    return json;
+    return build_json_payload_common(model, system_prompt, conversation, user_message,
+                                    max_tokens_param, max_tokens, tools,
+                                    format_openai_message, 0);
 }
 
 // Helper function to build Anthropic-specific JSON payload
@@ -170,92 +71,9 @@ char* ralph_build_anthropic_json_payload(const char* model, const char* system_p
                                         const ConversationHistory* conversation,
                                         const char* user_message, int max_tokens,
                                         const ToolRegistry* tools) {
-    (void)tools; // Suppress unused parameter warning - tools not yet implemented for Anthropic
-    // Calculate required buffer size
-    size_t base_size = 200; // Base JSON structure
-    size_t model_len = strlen(model);
-    size_t user_msg_len = user_message ? strlen(user_message) * 2 + 50 : 0;
-    size_t system_len = system_prompt ? strlen(system_prompt) * 2 + 50 : 0;
-    size_t history_len = 0;
-    
-    // Calculate space needed for conversation history
-    for (int i = 0; i < conversation->count; i++) {
-        history_len += strlen(conversation->messages[i].role) +
-                      strlen(conversation->messages[i].content) * 2 + 50;
-    }
-    
-    // Account for tools JSON size (not yet supported for Anthropic)
-    size_t tools_len = 0;
-    
-    size_t total_size = base_size + model_len + user_msg_len + system_len + history_len + tools_len + 200;
-    char* json = malloc(total_size);
-    if (json == NULL) return NULL;
-    
-    // Start building JSON
-    strcpy(json, "{\"model\": \"");
-    strcat(json, model);
-    strcat(json, "\", \"messages\": [");
-    
-    int message_count = 0;
-    
-    // Add conversation history (Anthropic format)
-    for (int i = 0; i < conversation->count; i++) {
-        // Skip system messages in history - they'll be handled separately
-        if (strcmp(conversation->messages[i].role, "system") == 0) continue;
-        
-        char* escaped_content = ralph_escape_json_string(conversation->messages[i].content);
-        if (escaped_content != NULL) {
-            if (message_count > 0) {
-                strcat(json, ", ");
-            }
-            strcat(json, "{\"role\": \"");
-            strcat(json, conversation->messages[i].role);
-            strcat(json, "\", \"content\": \"");
-            strcat(json, escaped_content);
-            strcat(json, "\"}");
-            free(escaped_content);
-            message_count++;
-        }
-    }
-    
-    // Add current user message
-    if (user_message && strlen(user_message) > 0) {
-        char* escaped_user_msg = ralph_escape_json_string(user_message);
-        if (escaped_user_msg != NULL) {
-            if (message_count > 0) {
-                strcat(json, ", ");
-            }
-            strcat(json, "{\"role\": \"user\", \"content\": \"");
-            strcat(json, escaped_user_msg);
-            strcat(json, "\"}");
-            free(escaped_user_msg);
-            message_count++;
-        }
-    }
-    
-    // Close messages array
-    strcat(json, "]");
-    
-    // Add system prompt if available (Anthropic uses top-level system field)
-    if (system_prompt != NULL) {
-        char* escaped_system = ralph_escape_json_string(system_prompt);
-        if (escaped_system != NULL) {
-            strcat(json, ", \"system\": \"");
-            strcat(json, escaped_system);
-            strcat(json, "\"");
-            free(escaped_system);
-        }
-    }
-    
-    // Add max_tokens
-    strcat(json, ", \"max_tokens\": ");
-    char tokens_str[20];
-    snprintf(tokens_str, sizeof(tokens_str), "%d", max_tokens);
-    strcat(json, tokens_str);
-    
-    strcat(json, "}");
-    
-    return json;
+    return build_json_payload_common(model, system_prompt, conversation, user_message,
+                                    "max_tokens", max_tokens, tools,
+                                    format_anthropic_message, 1);
 }
 
 int ralph_init_session(RalphSession* session) {
@@ -304,10 +122,10 @@ void ralph_cleanup_session(RalphSession* session) {
 int ralph_load_config(RalphSession* session) {
     if (session == NULL) return -1;
     
-    // Load environment variables from .env file
+    // Load environment variables from .env file (optional)
     if (load_env_file(".env") != 0) {
-        fprintf(stderr, "Error: Failed to load .env file\n");
-        return -1;
+        // .env file is optional, just print debug message
+        debug_printf("No .env file found, using environment variables or defaults\n");
     }
     
     // Try to load system prompt from PROMPT.md (optional)
@@ -570,6 +388,7 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
     int result = -1;
     
     if (http_post_with_headers(session->config.api_url, post_data, headers, &response) == 0) {
+        debug_printf("Got API response: %s\n", response.data);
         // Parse the response based on API type
         ParsedResponse parsed_response;
         int parse_result;
@@ -592,10 +411,19 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
                                      parsed_response.response_content : 
                                      parsed_response.thinking_content;
         
-        // Try to parse tool calls from raw JSON response (OpenAI format)
+        // Try to parse tool calls from raw JSON response
         ToolCall *raw_tool_calls = NULL;
         int raw_call_count = 0;
-        if (parse_tool_calls(response.data, &raw_tool_calls, &raw_call_count) == 0 && raw_call_count > 0) {
+        int tool_parse_result;
+        
+        if (session->config.api_type == API_TYPE_ANTHROPIC) {
+            tool_parse_result = parse_anthropic_tool_calls(response.data, &raw_tool_calls, &raw_call_count);
+        } else {
+            tool_parse_result = parse_tool_calls(response.data, &raw_tool_calls, &raw_call_count);
+        }
+        
+        if (tool_parse_result == 0 && raw_call_count > 0) {
+            debug_printf("Found %d tool calls in raw response\n", raw_call_count);
             // Save assistant message with tool calls to conversation
             if (parsed_response.response_content != NULL) {
                 if (append_conversation_message(&session->conversation, "assistant", parsed_response.response_content) != 0) {
@@ -606,6 +434,7 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
             result = ralph_execute_tool_workflow(session, raw_tool_calls, raw_call_count, user_message, max_tokens, headers);
             cleanup_tool_calls(raw_tool_calls, raw_call_count);
         } else {
+            debug_printf("No tool calls found in raw response (result: %d, count: %d)\n", tool_parse_result, raw_call_count);
             // Try to parse tool calls from message content (LM Studio format)
             ToolCall *tool_calls = NULL;
             int call_count = 0;

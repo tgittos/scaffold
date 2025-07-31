@@ -126,8 +126,10 @@ void test_ralph_load_config_basic(void) {
     TEST_ASSERT_NOT_NULL(session.config.model);
     
     // The API URL could be from environment or default - both are valid
-    // Just verify it's a reasonable URL
-    TEST_ASSERT_TRUE(strstr(session.config.api_url, "/v1/chat/completions") != NULL);
+    // Just verify it's a reasonable URL (OpenAI or Anthropic format)
+    printf("DEBUG: API URL is: %s\n", session.config.api_url);
+    TEST_ASSERT_TRUE(strstr(session.config.api_url, "/v1/chat/completions") != NULL ||
+                     strstr(session.config.api_url, "/v1/messages") != NULL);
     
     // Model should be set to something reasonable
     TEST_ASSERT_TRUE(strlen(session.config.model) > 0);
@@ -496,7 +498,7 @@ void test_shell_command_request_workflow(void) {
     // Tests the complete workflow: user message -> tool detection -> execution -> result
     
     MockAPIServer mock_server = {0};
-    MockAPIResponse responses[1];
+    MockAPIResponse responses[2];
     
     // Setup mock server that returns a tool call request
     responses[0].endpoint = "/v1/chat/completions";
@@ -535,9 +537,36 @@ void test_shell_command_request_workflow(void) {
     
     responses[0].response_body = tool_response;
     
+    // Setup second response for the follow-up request after tool execution
+    responses[1].endpoint = "/v1/chat/completions";
+    responses[1].method = "POST";
+    responses[1].response_code = 200;
+    responses[1].delay_ms = 0;
+    responses[1].should_fail = 0;
+    
+    // Simple success response for follow-up
+    static char follow_up_response[] = "{"
+        "\"id\":\"chatcmpl-followup123\","
+        "\"object\":\"chat.completion\","
+        "\"created\":1234567890,"
+        "\"model\":\"gpt-3.5-turbo\","
+        "\"choices\":["
+        "{"
+        "\"index\":0,"
+        "\"message\":{"
+        "\"role\":\"assistant\","
+        "\"content\":\"Tool executed successfully\""
+        "},"
+        "\"finish_reason\":\"stop\""
+        "}"
+        "]"
+        "}";
+    
+    responses[1].response_body = follow_up_response;
+    
     mock_server.port = MOCK_SERVER_DEFAULT_PORT + 4;
     mock_server.responses = responses;
-    mock_server.response_count = 1;
+    mock_server.response_count = 2;
     
     TEST_ASSERT_EQUAL_INT(0, mock_api_server_start(&mock_server));
     TEST_ASSERT_EQUAL_INT(0, mock_api_server_wait_ready(&mock_server, 1000));
@@ -548,9 +577,17 @@ void test_shell_command_request_workflow(void) {
     
     free(session.config.api_url);
     session.config.api_url = strdup("http://127.0.0.1:8892/v1/chat/completions");
+    session.config.api_type = API_TYPE_LOCAL;  // Make sure it's set to LOCAL for mock server
+    printf("DEBUG: Using API URL: %s\n", session.config.api_url);
+    printf("DEBUG: Mock server port: %d\n", mock_server.port);
+    printf("DEBUG: Registered tools: %d\n", session.tools.function_count);
+    printf("DEBUG: API type: %d\n", session.config.api_type);
     
     // Simulate user requesting shell command
     const char* user_message = "run echo command to show workflow success";
+    
+    // Print expected response
+    printf("DEBUG: Mock server should return: %s\n", responses[0].response_body);
     
     // Process message - this should:
     // 1. Send message to API
@@ -558,6 +595,7 @@ void test_shell_command_request_workflow(void) {
     // 3. Execute shell command
     // 4. Add results to conversation
     int result = ralph_process_message(&session, user_message);
+    printf("DEBUG: ralph_process_message returned %d\n", result);
     
     // This may fail due to follow-up API call, but tool should have executed
     // The key is that conversation should contain the tool results
@@ -567,9 +605,12 @@ void test_shell_command_request_workflow(void) {
     
     // Look for tool execution result in conversation
     int found_tool_result = 0;
+    printf("DEBUG: Conversation has %d messages\n", session.conversation.count);
     for (int i = 0; i < session.conversation.count; i++) {
+        printf("DEBUG: Message %d - role: %s\n", i, session.conversation.messages[i].role);
         if (strcmp(session.conversation.messages[i].role, "tool") == 0) {
             found_tool_result = 1;
+            printf("DEBUG: Tool message content: %s\n", session.conversation.messages[i].content);
             TEST_ASSERT_TRUE(strstr(session.conversation.messages[i].content, "workflow_test_success") != NULL);
             break;
         }
@@ -763,6 +804,35 @@ void test_ralph_build_anthropic_json_payload_with_system(void) {
     free(result);
 }
 
+void test_ralph_build_anthropic_json_payload_with_tools(void) {
+    const char *test_message = "List files";
+    const char *model = "claude-3-opus-20240229";
+    int max_tokens = 200;
+    
+    ConversationHistory conversation = {0};
+    ToolRegistry tools = {0};
+    init_tool_registry(&tools);
+    register_builtin_tools(&tools);
+    
+    char* result = ralph_build_anthropic_json_payload(model, NULL, &conversation, 
+                                                     test_message, max_tokens, &tools);
+    
+    TEST_ASSERT_NOT_NULL(result);
+    
+    // Check for tools array
+    TEST_ASSERT_NOT_NULL(strstr(result, "\"tools\": ["));
+    
+    // Check for shell_execute tool with Anthropic format
+    TEST_ASSERT_NOT_NULL(strstr(result, "\"name\": \"shell_execute\""));
+    TEST_ASSERT_NOT_NULL(strstr(result, "\"input_schema\""));
+    
+    // Should not have OpenAI's function wrapper
+    TEST_ASSERT_NULL(strstr(result, "\"type\": \"function\""));
+    
+    free(result);
+    cleanup_tool_registry(&tools);
+}
+
 void test_ralph_api_type_detection(void) {
     // Test API type detection logic directly without going through load_config
     // which might load from .env file
@@ -851,6 +921,7 @@ int main(void) {
     // Anthropic tests
     RUN_TEST(test_ralph_build_anthropic_json_payload_basic);
     RUN_TEST(test_ralph_build_anthropic_json_payload_with_system);
+    RUN_TEST(test_ralph_build_anthropic_json_payload_with_tools);
     RUN_TEST(test_ralph_api_type_detection);
     
     return UNITY_END();
