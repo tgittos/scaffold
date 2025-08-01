@@ -213,3 +213,18 @@ TodoPriority todo_priority_from_string(const char* priority_str) {
     
     return TODO_PRIORITY_LOW;
 }
+
+int todo_has_pending_tasks(TodoList* list) {
+    if (list == NULL || list->todos == NULL) {
+        return 0;
+    }
+    
+    for (size_t i = 0; i < list->count; i++) {
+        if (list->todos[i].status == TODO_STATUS_PENDING || 
+            list->todos[i].status == TODO_STATUS_IN_PROGRESS) {
+            return 1;
+        }
+    }
+    
+    return 0;
+}

@@ -579,9 +579,16 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
         cleanup_response(&response);
         free(post_data);
         
-        // If no tool calls found, we're done
+        // If no tool calls found, check if we have pending todos before exiting
         if (tool_parse_result != 0 || call_count == 0) {
-            debug_printf("No more tool calls found - ending tool loop after %d iterations\n", loop_count);
+            // Check if there are pending todos that need completion
+            if (todo_has_pending_tasks(&session->todo_list)) {
+                debug_printf("No tool calls found but there are pending todos - continuing loop (iteration %d)\n", loop_count);
+                // Continue the loop to give the agent another chance to complete todos
+                continue;
+            }
+            
+            debug_printf("No more tool calls found and no pending todos - ending tool loop after %d iterations\n", loop_count);
             cleanup_executed_tool_tracker(&tracker);
             return 0;
         }
