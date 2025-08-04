@@ -385,6 +385,9 @@ int ralph_execute_tool_workflow(RalphSession* session, ToolCall* tool_calls, int
     
     debug_printf("Executing %d tool call(s)...\n", call_count);
     
+    // Start tool execution group for improved visual formatting
+    display_tool_execution_group_start();
+    
     // Note: User message is already saved by caller
     (void)user_message; // Acknowledge parameter usage
     
@@ -412,6 +415,9 @@ int ralph_execute_tool_workflow(RalphSession* session, ToolCall* tool_calls, int
             debug_printf("Executed tool: %s (ID: %s)\n", tool_calls[i].name, tool_calls[i].id);
         }
     }
+    
+    // End tool execution group for improved visual formatting
+    display_tool_execution_group_end();
     
     // Add tool result messages to conversation
     for (int i = 0; i < call_count; i++) {
@@ -551,7 +557,7 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
         }
         
         // Display the response
-        print_formatted_response(&parsed_response);
+        print_formatted_response_improved(&parsed_response);
         
         // Check for tool calls in the response FIRST
         ToolCall *tool_calls = NULL;
@@ -638,6 +644,9 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
         debug_printf("Found %d new tool calls (out of %d total) in iteration %d - executing them\n", 
                     new_tool_calls, call_count, loop_count);
         
+        // Start tool execution group for improved visual formatting
+        display_tool_execution_group_start();
+        
         // Execute only the new tool calls
         ToolResult *results = malloc(call_count * sizeof(ToolResult));
         if (results == NULL) {
@@ -690,6 +699,9 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
             }
             executed_count++;
         }
+        
+        // End tool execution group for improved visual formatting
+        display_tool_execution_group_end();
         
         // Add tool result messages to conversation (only for executed tools)
         for (int i = 0; i < executed_count; i++) {
@@ -831,7 +843,7 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
             debug_printf("Found %d tool calls in raw response\n", raw_call_count);
             
             // Display the AI's initial response content before executing tools
-            print_formatted_response(&parsed_response);
+            print_formatted_response_improved(&parsed_response);
             
             // For tool calls, we need to save messages in the right order
             // First save user message, then assistant message, then execute tools
@@ -892,7 +904,7 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
             int call_count = 0;
             if (message_content != NULL && parse_tool_calls(message_content, &tool_calls, &call_count) == 0 && call_count > 0) {
                 // Display the AI's initial response content before executing tools
-                print_formatted_response(&parsed_response);
+                print_formatted_response_improved(&parsed_response);
                 
                 // Save user message first for LM Studio format too
                 if (append_conversation_message(&session->session_data.conversation, "user", user_message) != 0) {
@@ -902,7 +914,7 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
                 cleanup_tool_calls(tool_calls, call_count);
             } else {
                 // No tool calls - normal response handling
-                print_formatted_response(&parsed_response);
+                print_formatted_response_improved(&parsed_response);
                 
                 // Save user message
                 if (append_conversation_message(&session->session_data.conversation, "user", user_message) != 0) {

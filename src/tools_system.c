@@ -645,75 +645,7 @@ int parse_anthropic_tool_calls(const char *json_response, ToolCall **tool_calls,
 
 
 // Truncate a string for display, adding "..." if truncated
-static char* truncate_string(const char *str, size_t max_len) {
-    if (!str) return NULL;
-    
-    size_t len = strlen(str);
-    if (len <= max_len) {
-        return strdup(str);
-    }
-    
-    // Allocate space for truncated string + "..." + null terminator
-    char *truncated = malloc(max_len + 4);
-    if (!truncated) return NULL;
-    
-    memcpy(truncated, str, max_len);
-    strcpy(truncated + max_len, "...");
-    
-    return truncated;
-}
 
-// Log enhanced tool use to stdout in blue (excludes internal todo management)
-static void log_tool_use(const char *tool_name, const char *arguments) {
-    // Skip logging for TodoWrite - this is internal task management
-    if (strcmp(tool_name, "TodoWrite") == 0) {
-        return;
-    }
-    
-    printf(ANSI_BLUE "[Tool: %s]", tool_name);
-    
-    if (!arguments) {
-        printf(ANSI_RESET "\n");
-        fflush(stdout);
-        return;
-    }
-    
-    // Show truncated arguments (max 200 chars for readability)
-    char *truncated_args = truncate_string(arguments, 200);
-    if (truncated_args) {
-        printf(" args: %s", truncated_args);
-        free(truncated_args);
-    }
-    
-    printf(ANSI_RESET "\n");
-    fflush(stdout);
-}
-
-// Log tool execution result with success/failure indication
-static void log_tool_result(const char *tool_name, int success, const char *result) {
-    // Skip logging for TodoWrite - this is internal task management
-    if (strcmp(tool_name, "TodoWrite") == 0) {
-        return;
-    }
-    
-    if (success) {
-        printf(ANSI_BLUE "[Tool: %s] " "\033[32m" "✓ SUCCESS" ANSI_RESET, tool_name);
-    } else {
-        printf(ANSI_BLUE "[Tool: %s] " "\033[31m" "✗ FAILED" ANSI_RESET, tool_name);
-        
-        // Show truncated error message for failures
-        if (result) {
-            char *truncated_result = truncate_string(result, 100);
-            if (truncated_result) {
-                printf(" - %s", truncated_result);
-                free(truncated_result);
-            }
-        }
-    }
-    
-    printf("\n");
-    fflush(stdout);
-}
 
 int execute_tool_call(const ToolRegistry *registry, const ToolCall *tool_call, ToolResult *result) {
     if (registry == NULL || tool_call == NULL || result == NULL) {
@@ -728,10 +660,7 @@ int execute_tool_call(const ToolRegistry *registry, const ToolCall *tool_call, T
         return -1;
     }
     
-    // Log tool use
-    log_tool_use(tool_call->name, tool_call->arguments);
-    
-    // Execute the tool and then log the result
+    // Execute the tool - we'll log everything at the end
     int exec_result = 0;
     
     // Look for the tool in the registry
@@ -763,8 +692,8 @@ int execute_tool_call(const ToolRegistry *registry, const ToolCall *tool_call, T
                 exec_result = 0;
             }
             
-            // Log the result after execution
-            log_tool_result(tool_call->name, result->success, result->result);
+            // Log the result after execution with improved formatting
+            log_tool_execution_improved(tool_call->name, tool_call->arguments, result->success, result->result);
             return exec_result;
         }
     }
@@ -778,8 +707,8 @@ int execute_tool_call(const ToolRegistry *registry, const ToolCall *tool_call, T
         return -1;
     }
     
-    // Log the result after execution
-    log_tool_result(tool_call->name, result->success, result->result);
+    // Log the result after execution with improved formatting
+    log_tool_execution_improved(tool_call->name, tool_call->arguments, result->success, result->result);
     return 0;
 }
 

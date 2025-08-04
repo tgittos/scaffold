@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 
 
 static char *extract_json_string(const char *json, const char *key) {
@@ -444,4 +445,164 @@ void cleanup_parsed_response(ParsedResponse *response) {
             response->response_content = NULL;
         }
     }
+}
+
+// Additional ANSI codes for improved formatting
+#define ANSI_CYAN    "\033[36m"
+#define ANSI_GREEN   "\033[32m"
+#define ANSI_RED     "\033[31m"
+#define ANSI_YELLOW  "\033[33m"
+#define ANSI_BOLD    "\033[1m"
+
+// Visual separators
+#define SEPARATOR_LIGHT "────────────────────────────────────────"
+#define SEPARATOR_HEAVY "════════════════════════════════════════"
+
+// Global state for output grouping
+static bool system_info_group_active = false;
+static bool tool_execution_group_active = false;
+
+// Helper function to create formatted strings - declare before use
+static char* sprintf_allocated(const char* format, ...) {
+    va_list args;
+    va_start(args, format);
+    
+    // Calculate required size
+    va_list args_copy;
+    va_copy(args_copy, args);
+    int size = vsnprintf(NULL, 0, format, args_copy);
+    va_end(args_copy);
+    
+    if (size < 0) {
+        va_end(args);
+        return NULL;
+    }
+    
+    // Allocate and format
+    char* result = malloc(size + 1);
+    if (result) {
+        vsnprintf(result, size + 1, format, args);
+    }
+    
+    va_end(args);
+    return result;
+}
+
+void print_formatted_response_improved(const ParsedResponse *response) {
+    if (!response) {
+        return;
+    }
+    
+    // Clear visual separator before main response
+    printf("\n" ANSI_BOLD SEPARATOR_HEAVY ANSI_RESET "\n");
+    
+    // Print thinking content in dim gray if present (unchanged behavior)
+    if (response->thinking_content) {
+        printf(ANSI_DIM ANSI_GRAY "%s" ANSI_RESET "\n\n", response->thinking_content);
+    }
+    
+    // Print the main response content prominently with clear separation
+    if (response->response_content) {
+        printf("%s\n", response->response_content);
+    }
+    
+    // Add separator after main response to visually separate from system info
+    printf("\n" ANSI_BOLD SEPARATOR_HEAVY ANSI_RESET "\n");
+    
+    // Print token usage in a dedicated system info section
+    if (response->total_tokens > 0) {
+        display_system_info_group_start();
+        if (response->prompt_tokens > 0 && response->completion_tokens > 0) {
+            char* usage_msg = sprintf_allocated("%d total (%d prompt + %d completion)", 
+                response->total_tokens, response->prompt_tokens, response->completion_tokens);
+            if (usage_msg) {
+                log_system_info("Token Usage", usage_msg);
+                free(usage_msg);
+            }
+        } else {
+            char* usage_msg = sprintf_allocated("%d total", response->total_tokens);
+            if (usage_msg) {
+                log_system_info("Token Usage", usage_msg);
+                free(usage_msg);
+            }
+        }
+        display_system_info_group_end();
+    }
+}
+
+void display_tool_execution_group_start(void) {
+    if (!tool_execution_group_active) {
+        printf("\n" ANSI_CYAN ANSI_BOLD "▼ Tool Execution" ANSI_RESET "\n");
+        printf(ANSI_CYAN SEPARATOR_LIGHT ANSI_RESET "\n");
+        tool_execution_group_active = true;
+    }
+}
+
+void display_tool_execution_group_end(void) {
+    if (tool_execution_group_active) {
+        printf(ANSI_CYAN SEPARATOR_LIGHT ANSI_RESET "\n");
+        printf(ANSI_CYAN ANSI_BOLD "▲ Tool Execution Complete" ANSI_RESET "\n\n");
+        tool_execution_group_active = false;
+    }
+}
+
+void log_tool_execution_improved(const char *tool_name, const char *arguments, bool success, const char *result) {
+    if (!tool_name) return;
+    
+    // Skip internal todo tool logging
+    if (strcmp(tool_name, "TodoWrite") == 0) {
+        return;
+    }
+    
+    // Print tool name and status
+    if (success) {
+        printf(ANSI_CYAN "  ✓ " ANSI_GREEN "%s" ANSI_RESET, tool_name);
+    } else {
+        printf(ANSI_CYAN "  ✗ " ANSI_RED "%s" ANSI_RESET, tool_name);
+    }
+    
+    // Show arguments if provided (truncated for readability)
+    if (arguments && strlen(arguments) > 0) {
+        if (strlen(arguments) > 100) {
+            printf(ANSI_DIM " (%.97s...)" ANSI_RESET, arguments);
+        } else {
+            printf(ANSI_DIM " (%s)" ANSI_RESET, arguments);
+        }
+    }
+    
+    printf("\n");
+    
+    // Show result/error for failures
+    if (!success && result && strlen(result) > 0) {
+        if (strlen(result) > 200) {
+            printf(ANSI_RED "    Error: %.197s..." ANSI_RESET "\n", result);
+        } else {
+            printf(ANSI_RED "    Error: %s" ANSI_RESET "\n", result);
+        }
+    }
+    
+    fflush(stdout);
+}
+
+void display_system_info_group_start(void) {
+    if (!system_info_group_active) {
+        printf(ANSI_YELLOW ANSI_BOLD "▼ System Information" ANSI_RESET "\n");
+        printf(ANSI_YELLOW SEPARATOR_LIGHT ANSI_RESET "\n");
+        system_info_group_active = true;
+    }
+}
+
+void display_system_info_group_end(void) {
+    if (system_info_group_active) {
+        printf(ANSI_YELLOW SEPARATOR_LIGHT ANSI_RESET "\n");
+        printf(ANSI_YELLOW ANSI_BOLD "▲ System Information Complete" ANSI_RESET "\n\n");
+        system_info_group_active = false;
+    }
+}
+
+void log_system_info(const char *category, const char *message) {
+    if (!category || !message) return;
+    
+    printf(ANSI_YELLOW "  %s:" ANSI_RESET " %s\n", category, message);
+    fflush(stdout);
 }

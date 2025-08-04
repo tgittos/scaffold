@@ -2,6 +2,7 @@
 #define OUTPUT_FORMATTER_H
 
 #include <stddef.h>
+#include <stdbool.h>
 
 
 // ANSI color codes
@@ -66,6 +67,51 @@ void print_formatted_response(const ParsedResponse *response);
  * @param response Pointer to ParsedResponse struct to clean up
  */
 void cleanup_parsed_response(ParsedResponse *response);
+
+/**
+ * Print formatted response with improved visual grouping and separation
+ * 
+ * @param response Parsed response struct
+ */
+void print_formatted_response_improved(const ParsedResponse *response);
+
+/**
+ * Display start of tool execution group with visual separator
+ */
+void display_tool_execution_group_start(void);
+
+/**
+ * Display end of tool execution group with visual separator
+ */
+void display_tool_execution_group_end(void);
+
+/**
+ * Log tool execution with improved formatting and grouping
+ * 
+ * @param tool_name Name of the tool
+ * @param arguments Tool arguments in JSON format
+ * @param success Whether the tool execution was successful
+ * @param result Result of the tool execution
+ */
+void log_tool_execution_improved(const char *tool_name, const char *arguments, bool success, const char *result);
+
+/**
+ * Display start of system info group with visual separator
+ */
+void display_system_info_group_start(void);
+
+/**
+ * Display end of system info group with visual separator
+ */
+void display_system_info_group_end(void);
+
+/**
+ * Log system information with improved formatting and grouping
+ * 
+ * @param category Category of the system info
+ * @param message The info message
+ */
+void log_system_info(const char *category, const char *message);
 
 
 #endif /* OUTPUT_FORMATTER_H */
