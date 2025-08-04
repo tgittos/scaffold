@@ -462,31 +462,6 @@ void cleanup_parsed_response(ParsedResponse *response) {
 static bool system_info_group_active = false;
 static bool tool_execution_group_active = false;
 
-// Helper function to create formatted strings - declare before use
-static char* sprintf_allocated(const char* format, ...) {
-    va_list args;
-    va_start(args, format);
-    
-    // Calculate required size
-    va_list args_copy;
-    va_copy(args_copy, args);
-    int size = vsnprintf(NULL, 0, format, args_copy);
-    va_end(args_copy);
-    
-    if (size < 0) {
-        va_end(args);
-        return NULL;
-    }
-    
-    // Allocate and format
-    char* result = malloc(size + 1);
-    if (result) {
-        vsnprintf(result, size + 1, format, args);
-    }
-    
-    va_end(args);
-    return result;
-}
 
 void print_formatted_response_improved(const ParsedResponse *response) {
     if (!response) {
@@ -501,39 +476,33 @@ void print_formatted_response_improved(const ParsedResponse *response) {
     // Print the main response content prominently
     if (response->response_content) {
         printf("%s\n", response->response_content);
-    }
-    
-    // Print token usage in a dedicated system info section (only if we have content to show)
-    if (response->total_tokens > 0) {
-        display_system_info_group_start();
-        if (response->prompt_tokens > 0 && response->completion_tokens > 0) {
-            char* usage_msg = sprintf_allocated("%d total (%d prompt + %d completion)", 
-                response->total_tokens, response->prompt_tokens, response->completion_tokens);
-            if (usage_msg) {
-                log_system_info("Token Usage", usage_msg);
-                free(usage_msg);
-            }
-        } else {
-            char* usage_msg = sprintf_allocated("%d total", response->total_tokens);
-            if (usage_msg) {
-                log_system_info("Token Usage", usage_msg);
-                free(usage_msg);
+        
+        // Print token usage on separate line, grouped with response
+        if (response->total_tokens > 0) {
+            if (response->prompt_tokens > 0 && response->completion_tokens > 0) {
+                printf(ANSI_DIM "    └─ %d tokens (%d prompt + %d completion)\n" ANSI_RESET, 
+                       response->total_tokens, response->prompt_tokens, response->completion_tokens);
+            } else {
+                printf(ANSI_DIM "    └─ %d tokens\n" ANSI_RESET, response->total_tokens);
             }
         }
-        display_system_info_group_end();
+        
+        printf("\n");
     }
 }
 
 void display_tool_execution_group_start(void) {
     if (!tool_execution_group_active) {
-        printf("\n" ANSI_CYAN ANSI_BOLD "▼ Tool Execution" ANSI_RESET "\n");
-        printf(ANSI_CYAN SEPARATOR_LIGHT ANSI_RESET "\n");
+        // Professional header for tool execution section
+        printf(ANSI_CYAN "┌─ " ANSI_BOLD "Tool Execution" ANSI_RESET ANSI_CYAN " ─────────────────────────────────────────────────────────────────────┐" ANSI_RESET "\n");
+        printf(ANSI_CYAN "│" ANSI_RESET " ");
         tool_execution_group_active = true;
     }
 }
 
 void display_tool_execution_group_end(void) {
     if (tool_execution_group_active) {
+        printf("\n" ANSI_CYAN "└──────────────────────────────────────────────────────────────────────────────────┘" ANSI_RESET "\n\n");
         tool_execution_group_active = false;
     }
 }
@@ -564,42 +533,35 @@ void log_tool_execution_improved(const char *tool_name, const char *arguments, b
     // Check if this is an informational check rather than a real failure
     bool is_info_check = !success && is_informational_check(tool_name, arguments);
     
-    // Print tool name and status
+    // Print tool execution within the bordered section
     if (success) {
-        printf(ANSI_CYAN "  ✓ " ANSI_GREEN "%s" ANSI_RESET, tool_name);
+        printf(ANSI_GREEN "✓" ANSI_RESET " %s", tool_name);
     } else if (is_info_check) {
-        printf(ANSI_CYAN "  ◦ " ANSI_YELLOW "%s" ANSI_RESET, tool_name);
+        printf(ANSI_YELLOW "◦" ANSI_RESET " %s", tool_name);
     } else {
-        printf(ANSI_CYAN "  ✗ " ANSI_RED "%s" ANSI_RESET, tool_name);
+        printf(ANSI_RED "✗" ANSI_RESET " %s", tool_name);
     }
     
-    // Show arguments if provided (truncated for readability)
+    // Show brief tool arguments for context
     if (arguments && strlen(arguments) > 0) {
-        if (strlen(arguments) > 100) {
-            printf(ANSI_DIM " (%.97s...)" ANSI_RESET, arguments);
-        } else {
-            printf(ANSI_DIM " (%s)" ANSI_RESET, arguments);
+        if (strstr(arguments, "\"directory_path\"")) {
+            printf(ANSI_DIM " (listing directory)" ANSI_RESET);
+        } else if (strstr(arguments, "\"file_path\"")) {
+            printf(ANSI_DIM " (reading file)" ANSI_RESET);
+        } else if (strstr(arguments, "\"command\"")) {
+            printf(ANSI_DIM " (running command)" ANSI_RESET);
         }
     }
     
-    printf("\n");
+    printf("\n" ANSI_CYAN "│" ANSI_RESET " ");
     
-    // Show result/error for failures, but with different styling for info checks
-    if (!success && result && strlen(result) > 0) {
-        if (is_info_check) {
-            // For informational checks, show result more neutrally
-            if (strlen(result) > 200) {
-                printf(ANSI_DIM "    Result: %.197s..." ANSI_RESET "\n", result);
-            } else {
-                printf(ANSI_DIM "    Result: %s" ANSI_RESET "\n", result);
-            }
+    // Show errors for actual failures with proper indentation
+    if (!success && !is_info_check && result && strlen(result) > 0) {
+        printf("\n" ANSI_CYAN "│" ANSI_RESET "   " ANSI_RED "└─ Error: ");
+        if (strlen(result) > 80) {
+            printf("%.77s..." ANSI_RESET "\n" ANSI_CYAN "│" ANSI_RESET " ", result);
         } else {
-            // For real errors, keep the red styling
-            if (strlen(result) > 200) {
-                printf(ANSI_RED "    Error: %.197s..." ANSI_RESET "\n", result);
-            } else {
-                printf(ANSI_RED "    Error: %s" ANSI_RESET "\n", result);
-            }
+            printf("%s" ANSI_RESET "\n" ANSI_CYAN "│" ANSI_RESET " ", result);
         }
     }
     
