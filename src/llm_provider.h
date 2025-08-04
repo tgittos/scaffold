@@ -14,7 +14,7 @@ typedef struct {
     const char* name;
     const char* max_tokens_param;
     int supports_system_message;
-    int supports_tool_calling;
+    int supports_tool_calling;  // Deprecated - use ModelCapabilities instead
     int requires_version_header;
     const char* auth_header_format;  // "Authorization: Bearer %s" or "x-api-key: %s"
     const char* version_header;      // Optional version header
@@ -47,17 +47,8 @@ typedef struct LLMProvider {
                          const char* json_response,
                          ParsedResponse* result);
     
-    // Tool calling
-    int (*parse_tool_calls)(const struct LLMProvider* provider,
-                           const char* json_response,
-                           ToolCall** tool_calls,
-                           int* call_count);
-    
     // Message formatting for conversation history
-    char* (*format_assistant_message)(const struct LLMProvider* provider,
-                                     const char* response_content,
-                                     const ToolCall* tool_calls,
-                                     int tool_call_count);
+    // Note: Tool calling is now handled through ModelCapabilities
     
     // Conversation validation (for providers with specific requirements)
     int (*validate_conversation)(const struct LLMProvider* provider,

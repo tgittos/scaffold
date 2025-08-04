@@ -21,14 +21,7 @@ static int anthropic_build_headers(const LLMProvider* provider,
 static int anthropic_parse_response(const LLMProvider* provider,
                                    const char* json_response,
                                    ParsedResponse* result);
-static int anthropic_parse_tool_calls(const LLMProvider* provider,
-                                     const char* json_response,
-                                     ToolCall** tool_calls,
-                                     int* call_count);
-static char* anthropic_format_assistant_message(const LLMProvider* provider,
-                                               const char* response_content,
-                                               const ToolCall* tool_calls,
-                                               int tool_call_count);
+// Tool calling functions removed - now handled by ModelCapabilities
 static int anthropic_validate_conversation(const LLMProvider* provider,
                                           const ConversationHistory* conversation);
 
@@ -107,29 +100,7 @@ static int anthropic_parse_response(const LLMProvider* provider,
     return parse_anthropic_response(json_response, result);
 }
 
-static int anthropic_parse_tool_calls(const LLMProvider* provider,
-                                     const char* json_response,
-                                     ToolCall** tool_calls,
-                                     int* call_count) {
-    (void)provider; // Suppress unused parameter warning
-    // Use existing Anthropic tool call parser
-    return parse_anthropic_tool_calls(json_response, tool_calls, call_count);
-}
-
-static char* anthropic_format_assistant_message(const LLMProvider* provider,
-                                               const char* response_content,
-                                               const ToolCall* tool_calls,
-                                               int tool_call_count) {
-    (void)provider; // Suppress unused parameter warning
-    (void)tool_calls; // Suppress unused parameter warning
-    (void)tool_call_count; // Suppress unused parameter warning
-    // For Anthropic, we save the raw JSON response to preserve tool_use blocks
-    // This is because Anthropic requires exact tool_use/tool_result pairing
-    if (response_content) {
-        return strdup(response_content);
-    }
-    return NULL;
-}
+// Tool calling implementation removed - now handled by ModelCapabilities
 
 static int anthropic_validate_conversation(const LLMProvider* provider,
                                           const ConversationHistory* conversation) {
@@ -187,8 +158,7 @@ static LLMProvider anthropic_provider = {
     .build_request_json = anthropic_build_request_json,
     .build_headers = anthropic_build_headers,
     .parse_response = anthropic_parse_response,
-    .parse_tool_calls = anthropic_parse_tool_calls,
-    .format_assistant_message = anthropic_format_assistant_message,
+    // Tool functions removed - now handled by ModelCapabilities
     .validate_conversation = anthropic_validate_conversation
 };
 

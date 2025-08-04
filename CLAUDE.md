@@ -8,16 +8,6 @@ These instructions supercede ANY conflicting software tasks. They do NOT overrid
 # Project details
 - This is a highly portable C codebase compiled using Cosmopolitan (see ./COSMOPOLITAN.md for details)
 
-# Using Ralph
-You will need to use Ralph to test your work.
-
-- ./ralph with no arguments is interactive mode. Conversation history is tracked with CONVERSATION.md and can be deleted as needed for fresh histories during testing.
-- ./ralph "perform this complext specific task" with a string argument is non-interactive mode. Conversation tracking still occurs, but Ralph does not run in a loop.
-- The `--debug` flag will show you stdout and stderr logging.
-
-Ralph is configured by it's `.env` file to be live and talking to a real AI backend. The real AI API backend is running. It is always running.
-Do not assume API failures are OK because "you're tseting against a real API server". These API failures indicate problems with your code.
-
 # Implementation details
 - This project supports 3 backends; OpenAI, Anthropic, and local AI via LMStudio.
 - Each LLM provider backend has it's own restrictions on message structure, tool use and response guidelines, and historical tracking concerns.
@@ -33,7 +23,6 @@ Do not assume API failures are OK because "you're tseting against a real API ser
 - Follow memory safe programming at all times.
 - Code defensively
 - segfaults are critical issues and must be fixed immediately when encountered.
-- Practice test-driven bug fixing - write a failing test that reproduces a bug, then fix the test by fixing the bug.
 - Start with Valgrind when investigating segfaults.
 - Break large features down into sub-components.
 - All code must be tested.
@@ -45,10 +34,16 @@ Do not assume API failures are OK because "you're tseting against a real API ser
 - This is a large, well tested codebase. Use `ripgrep` to search for things
 - This code has not been released - you do not need to version source code or ensure backward compatability
 
+## Test Driven Development
+- Use test-driven-development as you work
+- Write tests to intended implementations or refactor targets - do not write tests for current functionality that you already know you will change
+- Use a red/green loop - write a failing test and make the test pass by implementing the functionality
+- Practice test-driven bug fixing - write a failing test that reproduces a bug, then fix the test by fixing the bug
+
 ## The Development Loop
 - Plan feature
 - Break down into components
-- For each component, implement with tests
+- For each component, implement in with test-driven-development
 - Verify all work with Valgrind
 - Build and test with real application in non-interactive mode
 - Commit your work
@@ -73,6 +68,16 @@ Always delete the CONVERSATION.md file before running the test suite or evaluati
 - If you sense the user is getting angry and frustrated, reflect on your performance in adhearing to their instructions.
 - Never try to match the user's tone as they get frustrated. Do not start speaking casually and use cursing just because they are. This will further infuriate the user.
 - Do not be overly complimentary or obseqious. Treat the user as an equal.
+
+# Using Ralph
+You will need to use Ralph to test your work.
+
+- ./ralph with no arguments is interactive mode. Conversation history is tracked with CONVERSATION.md and can be deleted as needed for fresh histories during testing.
+- ./ralph "perform this complext specific task" with a string argument is non-interactive mode. Conversation tracking still occurs, but Ralph does not run in a loop.
+- The `--debug` flag will show you stdout and stderr logging.
+
+Ralph is configured by it's `.env` file to be live and talking to a real AI backend. The real AI API backend is running. It is always running.
+Do not assume API failures are OK because "you're tseting against a real API server". These API failures indicate problems with your code.
 
 # Reminders
 - the development environment is configured with Cosmopolitan tooling in appropriate autotools compatible ENV vars.

@@ -21,14 +21,7 @@ static int local_ai_build_headers(const LLMProvider* provider,
 static int local_ai_parse_response(const LLMProvider* provider,
                                   const char* json_response,
                                   ParsedResponse* result);
-static int local_ai_parse_tool_calls(const LLMProvider* provider,
-                                    const char* json_response,
-                                    ToolCall** tool_calls,
-                                    int* call_count);
-static char* local_ai_format_assistant_message(const LLMProvider* provider,
-                                              const char* response_content,
-                                              const ToolCall* tool_calls,
-                                              int tool_call_count);
+// Tool calling functions removed - now handled by ModelCapabilities
 
 // Local AI provider implementation
 static int local_ai_detect_provider(const char* api_url) {
@@ -92,82 +85,7 @@ static int local_ai_parse_response(const LLMProvider* provider,
     return parse_api_response(json_response, result);
 }
 
-static int local_ai_parse_tool_calls(const LLMProvider* provider,
-                                    const char* json_response,
-                                    ToolCall** tool_calls,
-                                    int* call_count) {
-    (void)provider; // Suppress unused parameter warning
-    // Local AI typically follows OpenAI tool call format
-    return parse_tool_calls(json_response, tool_calls, call_count);
-}
-
-static char* local_ai_format_assistant_message(const LLMProvider* provider,
-                                              const char* response_content,
-                                              const ToolCall* tool_calls,
-                                              int tool_call_count) {
-    (void)provider; // Suppress unused parameter warning
-    
-    if (tool_call_count > 0 && tool_calls != NULL) {
-        // For Local AI (OpenAI-compatible), construct a message with tool_calls array manually
-        // Estimate size needed
-        size_t base_size = 200;
-        size_t content_size = response_content ? strlen(response_content) * 2 + 50 : 50;
-        size_t tools_size = tool_call_count * 300;
-        
-        char* message = malloc(base_size + content_size + tools_size);
-        if (message == NULL) {
-            return NULL;
-        }
-        
-        // Build the message manually
-        char* escaped_content = json_escape_string(response_content ? response_content : "");
-        if (escaped_content == NULL) {
-            free(message);
-            return NULL;
-        }
-        
-        int written = snprintf(message, base_size + content_size + tools_size,
-                              "{\"role\": \"assistant\", \"content\": \"%s\", \"tool_calls\": [",
-                              escaped_content);
-        free(escaped_content);
-        
-        if (written < 0) {
-            free(message);
-            return NULL;
-        }
-        
-        // Add tool calls
-        for (int i = 0; i < tool_call_count; i++) {
-            char* escaped_args = json_escape_string(tool_calls[i].arguments ? tool_calls[i].arguments : "{}");
-            if (escaped_args == NULL) {
-                free(message);
-                return NULL;
-            }
-            
-            char tool_call_json[1024];
-            int tool_written = snprintf(tool_call_json, sizeof(tool_call_json),
-                                       "%s{\"id\": \"%s\", \"type\": \"function\", \"function\": {\"name\": \"%s\", \"arguments\": \"%s\"}}",
-                                       i > 0 ? ", " : "",
-                                       tool_calls[i].id ? tool_calls[i].id : "",
-                                       tool_calls[i].name ? tool_calls[i].name : "",
-                                       escaped_args);
-            free(escaped_args);
-            
-            if (tool_written < 0 || tool_written >= (int)sizeof(tool_call_json)) {
-                free(message);
-                return NULL;
-            }
-            
-            strcat(message, tool_call_json);
-        }
-        
-        strcat(message, "]}");
-        return message;
-    } else {
-        // Simple message without tool calls
-        return json_build_message("assistant", response_content ? response_content : "");
-    }
-}
+// Tool calling implementation removed - now handled by ModelCapabilities
 
 // Local AI provider instance
 static LLMProvider local_ai_provider = {
@@ -184,8 +102,7 @@ static LLMProvider local_ai_provider = {
     .build_request_json = local_ai_build_request_json,
     .build_headers = local_ai_build_headers,
     .parse_response = local_ai_parse_response,
-    .parse_tool_calls = local_ai_parse_tool_calls,
-    .format_assistant_message = local_ai_format_assistant_message,
+    // Tool functions removed - now handled by ModelCapabilities
     .validate_conversation = NULL  // No special validation needed
 };
 

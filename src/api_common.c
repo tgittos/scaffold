@@ -5,9 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Forward declaration for tool JSON generators
-extern char* generate_tools_json(const ToolRegistry *registry);
-extern char* generate_anthropic_tools_json(const ToolRegistry *registry);
+// Model registry is now used for all tool handling
 extern ModelRegistry* get_model_registry(void);
 
 // Use unified JSON escaping from json_utils.h
@@ -385,20 +383,21 @@ char* build_json_payload_common(const char* model, const char* system_prompt,
         remaining -= written;
     }
     
-    // Add tools if available
-    if (tools != NULL && tools->function_count > 0) {
-        char* tools_json = (system_at_top_level) ? 
-                          generate_anthropic_tools_json(tools) : 
-                          generate_tools_json(tools);
-        if (tools_json != NULL) {
-            written = snprintf(current, remaining, ", \"tools\": %s", tools_json);
-            free(tools_json);
-            if (written < 0 || written >= (int)remaining) {
-                free(json);
-                return NULL;
+    // Add tools if available - always use model capabilities
+    if (tools != NULL && tools->function_count > 0 && model) {
+        ModelRegistry* registry = get_model_registry();
+        if (registry) {
+            char* tools_json = generate_model_tools_json(registry, model, tools);
+            if (tools_json != NULL) {
+                written = snprintf(current, remaining, ", \"tools\": %s", tools_json);
+                free(tools_json);
+                if (written < 0 || written >= (int)remaining) {
+                    free(json);
+                    return NULL;
+                }
+                current += written;
+                remaining -= written;
             }
-            current += written;
-            remaining -= written;
         }
     }
     
@@ -493,17 +492,10 @@ char* build_json_payload_model_aware(const char* model, const char* system_promp
     if (tools != NULL && tools->function_count > 0) {
         char* tools_json = NULL;
         
-        // Try to use model-specific tool formatting
+        // Always use model-specific tool formatting
         ModelRegistry* registry = get_model_registry();
         if (registry && model) {
             tools_json = generate_model_tools_json(registry, model, tools);
-        }
-        
-        // Fall back to provider-specific formatting if model-specific not available
-        if (!tools_json) {
-            tools_json = (system_at_top_level) ? 
-                          generate_anthropic_tools_json(tools) : 
-                          generate_tools_json(tools);
         }
         
         if (tools_json != NULL) {
