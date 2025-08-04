@@ -41,15 +41,15 @@ TEST_CONVERSATION_SOURCES = $(TESTDIR)/test_conversation_tracker.c $(SRCDIR)/con
 TEST_CONVERSATION_OBJECTS = $(TEST_CONVERSATION_SOURCES:.c=.o)
 TEST_CONVERSATION_TARGET = $(TESTDIR)/test_conversation_tracker
 
-TEST_TOOLS_SOURCES = $(TESTDIR)/test_tools_system.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_display.c $(SRCDIR)/json_utils.c $(TESTDIR)/unity/unity.c
+TEST_TOOLS_SOURCES = $(TESTDIR)/test_tools_system.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_display.c $(SRCDIR)/json_utils.c $(SRCDIR)/output_formatter.c $(SRCDIR)/debug_output.c $(SRCDIR)/model_capabilities.c $(SRCDIR)/models/qwen_model.c $(SRCDIR)/models/deepseek_model.c $(SRCDIR)/models/gpt_model.c $(SRCDIR)/models/claude_model.c $(SRCDIR)/models/default_model.c $(TESTDIR)/unity/unity.c
 TEST_TOOLS_OBJECTS = $(TEST_TOOLS_SOURCES:.c=.o)
 TEST_TOOLS_TARGET = $(TESTDIR)/test_tools_system
 
-TEST_SHELL_SOURCES = $(TESTDIR)/test_shell_tool.c $(SRCDIR)/shell_tool.c $(SRCDIR)/tools_system.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_display.c $(SRCDIR)/json_utils.c $(TESTDIR)/unity/unity.c
+TEST_SHELL_SOURCES = $(TESTDIR)/test_shell_tool.c $(SRCDIR)/shell_tool.c $(SRCDIR)/tools_system.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_display.c $(SRCDIR)/json_utils.c $(SRCDIR)/output_formatter.c $(SRCDIR)/debug_output.c $(SRCDIR)/model_capabilities.c $(SRCDIR)/models/qwen_model.c $(SRCDIR)/models/deepseek_model.c $(SRCDIR)/models/gpt_model.c $(SRCDIR)/models/claude_model.c $(SRCDIR)/models/default_model.c $(TESTDIR)/unity/unity.c
 TEST_SHELL_OBJECTS = $(TEST_SHELL_SOURCES:.c=.o)
 TEST_SHELL_TARGET = $(TESTDIR)/test_shell_tool
 
-TEST_FILE_SOURCES = $(TESTDIR)/test_file_tools.c $(SRCDIR)/file_tools.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/links_tool.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_display.c $(SRCDIR)/json_utils.c $(TESTDIR)/unity/unity.c
+TEST_FILE_SOURCES = $(TESTDIR)/test_file_tools.c $(SRCDIR)/file_tools.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/links_tool.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_display.c $(SRCDIR)/json_utils.c $(SRCDIR)/output_formatter.c $(SRCDIR)/debug_output.c $(SRCDIR)/model_capabilities.c $(SRCDIR)/models/qwen_model.c $(SRCDIR)/models/deepseek_model.c $(SRCDIR)/models/gpt_model.c $(SRCDIR)/models/claude_model.c $(SRCDIR)/models/default_model.c $(TESTDIR)/unity/unity.c
 TEST_FILE_OBJECTS = $(TEST_FILE_SOURCES:.c=.o)
 TEST_FILE_TARGET = $(TESTDIR)/test_file_tools
 
@@ -87,11 +87,15 @@ TEST_INCOMPLETE_TASK_BUG_SOURCES = $(TESTDIR)/test_incomplete_task_bug.c $(SRCDI
 TEST_INCOMPLETE_TASK_BUG_OBJECTS = $(TEST_INCOMPLETE_TASK_BUG_SOURCES:.c=.o)
 TEST_INCOMPLETE_TASK_BUG_TARGET = $(TESTDIR)/test_incomplete_task_bug
 
-TEST_MODEL_TOOLS_SOURCES = $(TESTDIR)/test_model_tools.c $(SRCDIR)/model_capabilities.c $(SRCDIR)/tools_system.c $(SRCDIR)/output_formatter.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_display.c $(SRCDIR)/json_utils.c $(SRCDIR)/models/qwen_model.c $(SRCDIR)/models/deepseek_model.c $(SRCDIR)/models/gpt_model.c $(SRCDIR)/models/claude_model.c $(SRCDIR)/models/default_model.c $(TESTDIR)/unity/unity.c
+TEST_MODEL_TOOLS_SOURCES = $(TESTDIR)/test_model_tools.c $(SRCDIR)/model_capabilities.c $(SRCDIR)/tools_system.c $(SRCDIR)/output_formatter.c $(SRCDIR)/debug_output.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_display.c $(SRCDIR)/json_utils.c $(SRCDIR)/models/qwen_model.c $(SRCDIR)/models/deepseek_model.c $(SRCDIR)/models/gpt_model.c $(SRCDIR)/models/claude_model.c $(SRCDIR)/models/default_model.c $(TESTDIR)/unity/unity.c
 TEST_MODEL_TOOLS_OBJECTS = $(TEST_MODEL_TOOLS_SOURCES:.c=.o)
 TEST_MODEL_TOOLS_TARGET = $(TESTDIR)/test_model_tools
 
-ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_HTTP_TARGET) $(TEST_ENV_TARGET) $(TEST_OUTPUT_TARGET) $(TEST_PROMPT_TARGET) $(TEST_CONVERSATION_TARGET) $(TEST_TOOLS_TARGET) $(TEST_SHELL_TARGET) $(TEST_FILE_TARGET) $(TEST_SMART_FILE_TARGET) $(TEST_RALPH_TARGET) $(TEST_TODO_MANAGER_TARGET) $(TEST_TODO_TOOL_TARGET) $(TEST_RALPH_INTEGRATION_TARGET) $(TEST_TOKEN_MANAGER_TARGET) $(TEST_CONVERSATION_COMPACTOR_TARGET) $(TEST_INCOMPLETE_TASK_BUG_TARGET) $(TEST_MODEL_TOOLS_TARGET)
+TEST_MESSAGES_ARRAY_BUG_SOURCES = $(TESTDIR)/test_messages_array_bug.c $(SRCDIR)/api_common.c $(SRCDIR)/conversation_tracker.c $(SRCDIR)/json_utils.c $(SRCDIR)/model_capabilities.c $(SRCDIR)/tools_system.c $(SRCDIR)/output_formatter.c $(SRCDIR)/debug_output.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_display.c $(SRCDIR)/models/qwen_model.c $(SRCDIR)/models/deepseek_model.c $(SRCDIR)/models/gpt_model.c $(SRCDIR)/models/claude_model.c $(SRCDIR)/models/default_model.c $(TESTDIR)/unity/unity.c
+TEST_MESSAGES_ARRAY_BUG_OBJECTS = $(TEST_MESSAGES_ARRAY_BUG_SOURCES:.c=.o)
+TEST_MESSAGES_ARRAY_BUG_TARGET = $(TESTDIR)/test_messages_array_bug
+
+ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_HTTP_TARGET) $(TEST_ENV_TARGET) $(TEST_OUTPUT_TARGET) $(TEST_PROMPT_TARGET) $(TEST_CONVERSATION_TARGET) $(TEST_TOOLS_TARGET) $(TEST_SHELL_TARGET) $(TEST_FILE_TARGET) $(TEST_SMART_FILE_TARGET) $(TEST_RALPH_TARGET) $(TEST_TODO_MANAGER_TARGET) $(TEST_TODO_TOOL_TARGET) $(TEST_RALPH_INTEGRATION_TARGET) $(TEST_TOKEN_MANAGER_TARGET) $(TEST_CONVERSATION_COMPACTOR_TARGET) $(TEST_INCOMPLETE_TASK_BUG_TARGET) $(TEST_MODEL_TOOLS_TARGET) $(TEST_MESSAGES_ARRAY_BUG_TARGET)
 
 # Dependencies
 CURL_VERSION = 8.4.0
@@ -175,6 +179,7 @@ test: $(ALL_TEST_TARGETS)
 	./$(TEST_MODEL_TOOLS_TARGET)
 	./$(TEST_CONVERSATION_COMPACTOR_TARGET)
 	./$(TEST_INCOMPLETE_TASK_BUG_TARGET)
+	./$(TEST_MESSAGES_ARRAY_BUG_TARGET)
 
 check: test
 
@@ -232,6 +237,9 @@ $(TEST_INCOMPLETE_TASK_BUG_TARGET): $(TEST_INCOMPLETE_TASK_BUG_OBJECTS) $(EMBEDD
 
 $(TEST_MODEL_TOOLS_TARGET): $(TEST_MODEL_TOOLS_OBJECTS) $(EMBEDDED_LINKS_HEADER)
 	$(CC) -o $@ $(TEST_MODEL_TOOLS_OBJECTS)
+
+$(TEST_MESSAGES_ARRAY_BUG_TARGET): $(TEST_MESSAGES_ARRAY_BUG_OBJECTS) $(EMBEDDED_LINKS_HEADER)
+	$(CC) -o $@ $(TEST_MESSAGES_ARRAY_BUG_OBJECTS)
 
 # Compile test files
 $(TESTDIR)/%.o: $(TESTDIR)/%.c $(HEADERS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)

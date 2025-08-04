@@ -39,6 +39,11 @@ int format_openai_message(char* buffer, size_t buffer_size,
                          int is_first_message) {
     char *message_json = NULL;
     
+    // Validate message fields first
+    if (message == NULL || message->role == NULL || message->content == NULL) {
+        return -1;
+    }
+    
     if (strcmp(message->role, "tool") == 0 && message->tool_call_id != NULL) {
         // Build tool message
         JsonBuilder builder = {0};
@@ -87,6 +92,11 @@ int format_anthropic_message(char* buffer, size_t buffer_size,
                             int is_first_message) {
     char *message_json = NULL;
     JsonBuilder builder = {0};
+    
+    // Validate message fields first
+    if (message == NULL || message->role == NULL || message->content == NULL) {
+        return -1;
+    }
     
     if (strcmp(message->role, "tool") == 0) {
         // Tool results in Anthropic are user messages with tool_result content
