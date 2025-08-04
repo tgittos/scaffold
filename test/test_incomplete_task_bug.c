@@ -1,6 +1,6 @@
 #include "unity/unity.h"
-#include "../src/ralph.h"
-#include "../src/todo_manager.h"
+#include "ralph.h"
+#include "todo_manager.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

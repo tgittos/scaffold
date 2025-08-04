@@ -6,6 +6,8 @@
 
 #define INITIAL_CAPACITY 10
 #define GROWTH_FACTOR 2
+#define INITIAL_LINE_BUFFER_SIZE 4096
+#define LINE_BUFFER_GROWTH_FACTOR 2
 // JSON Lines format - one JSON object per line
 
 void init_conversation_history(ConversationHistory *history) {
@@ -100,6 +102,42 @@ static char* extract_json_field(const char *json, const char *field_name) {
     return json_parser_extract_string(&parser, field_name);
 }
 
+static char* read_dynamic_line(FILE *file) {
+    size_t buffer_size = INITIAL_LINE_BUFFER_SIZE;
+    char *buffer = malloc(buffer_size);
+    if (buffer == NULL) {
+        return NULL;
+    }
+    
+    size_t pos = 0;
+    int c;
+    
+    while ((c = fgetc(file)) != EOF && c != '\n') {
+        // Ensure we have space for the character plus null terminator
+        if (pos >= buffer_size - 1) {
+            size_t new_size = buffer_size * LINE_BUFFER_GROWTH_FACTOR;
+            char *new_buffer = realloc(buffer, new_size);
+            if (new_buffer == NULL) {
+                free(buffer);
+                return NULL;
+            }
+            buffer = new_buffer;
+            buffer_size = new_size;
+        }
+        
+        buffer[pos++] = (char)c;
+    }
+    
+    // If we read nothing and hit EOF, return NULL
+    if (pos == 0 && c == EOF) {
+        free(buffer);
+        return NULL;
+    }
+    
+    buffer[pos] = '\0';
+    return buffer;
+}
+
 int load_conversation_history(ConversationHistory *history) {
     if (history == NULL) {
         return -1;
@@ -113,19 +151,11 @@ int load_conversation_history(ConversationHistory *history) {
         return 0;
     }
     
-    while (1) {
-        char line[16384] = {0};
-        if (!fgets(line, sizeof(line), file)) {
-            break;
-        }
-        // Remove trailing newline
-        size_t len = strlen(line);
-        if (len > 0 && line[len - 1] == '\n') {
-            line[len - 1] = '\0';
-        }
-        
+    char *line;
+    while ((line = read_dynamic_line(file)) != NULL) {
         // Skip empty lines
         if (strlen(line) == 0) {
+            free(line);
             continue;
         }
         
@@ -141,6 +171,7 @@ int load_conversation_history(ConversationHistory *history) {
                 free(content);
                 free(tool_call_id);
                 free(tool_name);
+                free(line);
                 fclose(file);
                 return -1;
             }
@@ -150,6 +181,7 @@ int load_conversation_history(ConversationHistory *history) {
         free(content);
         free(tool_call_id);
         free(tool_name);
+        free(line);
     }
     
     fclose(file);

@@ -594,9 +594,26 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
                 }
                 free(formatted_message);
             } else {
-                // Fallback: save raw response if formatting fails
-                if (append_conversation_message(&session->session_data.conversation, "assistant", response.data) != 0) {
-                    fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
+                // Fallback: create a proper assistant message with tool calls
+                // Don't save the raw API response as it contains invalid nested structure
+                char* simple_message = malloc(256);
+                if (simple_message) {
+                    snprintf(simple_message, 256, "Used tools: ");
+                    for (int i = 0; i < call_count; i++) {
+                        if (i > 0) {
+                            strncat(simple_message, ", ", 255 - strlen(simple_message));
+                        }
+                        strncat(simple_message, tool_calls[i].name, 255 - strlen(simple_message));
+                    }
+                    if (append_conversation_message(&session->session_data.conversation, "assistant", simple_message) != 0) {
+                        fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
+                    }
+                    free(simple_message);
+                } else {
+                    // Last resort: save a generic message
+                    if (append_conversation_message(&session->session_data.conversation, "assistant", "Executed tool calls") != 0) {
+                        fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
+                    }
                 }
             }
         } else {
@@ -612,16 +629,9 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
         cleanup_response(&response);
         free(post_data);
         
-        // If no tool calls found, check if we have pending todos before exiting
+        // If no tool calls found, exit the loop
         if (tool_parse_result != 0 || call_count == 0) {
-            // Check if there are pending todos that need completion
-            if (todo_has_pending_tasks(&session->todo_list)) {
-                debug_printf("No tool calls found but there are pending todos - continuing loop (iteration %d)\n", loop_count);
-                // Continue the loop to give the agent another chance to complete todos
-                continue;
-            }
-            
-            debug_printf("No more tool calls found and no pending todos - ending tool loop after %d iterations\n", loop_count);
+            debug_printf("No more tool calls found - ending tool loop after %d iterations\n", loop_count);
             cleanup_executed_tool_tracker(&tracker);
             return 0;
         }

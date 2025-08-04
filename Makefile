@@ -1,105 +1,162 @@
-# Simple, sane Makefile for ralph HTTP client
-# No autotools bullshit, just straightforward make
+# Modern Makefile for ralph HTTP client
+# Built with Cosmopolitan for universal binary compatibility
 
-CC = cosmocc
-CFLAGS = -Wall -Wextra -Werror -O2 -std=c11
-TARGET = ralph
-SRCDIR = src
-TESTDIR = test
-DEPDIR = deps
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
 
-# Source files
-SOURCES = $(SRCDIR)/main.c $(SRCDIR)/ralph.c $(SRCDIR)/http_client.c $(SRCDIR)/env_loader.c $(SRCDIR)/output_formatter.c $(SRCDIR)/prompt_loader.c $(SRCDIR)/conversation_tracker.c $(SRCDIR)/conversation_compactor.c $(SRCDIR)/session_manager.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/debug_output.c $(SRCDIR)/api_common.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_display.c $(SRCDIR)/json_utils.c $(SRCDIR)/token_manager.c $(SRCDIR)/llm_provider.c $(SRCDIR)/providers/openai_provider.c $(SRCDIR)/providers/anthropic_provider.c $(SRCDIR)/providers/local_ai_provider.c $(SRCDIR)/model_capabilities.c $(SRCDIR)/models/qwen_model.c $(SRCDIR)/models/deepseek_model.c $(SRCDIR)/models/gpt_model.c $(SRCDIR)/models/claude_model.c $(SRCDIR)/models/default_model.c
-OBJECTS = $(SOURCES:.c=.o)
-HEADERS = $(SRCDIR)/ralph.h $(SRCDIR)/http_client.h $(SRCDIR)/env_loader.h $(SRCDIR)/output_formatter.h $(SRCDIR)/prompt_loader.h $(SRCDIR)/conversation_tracker.h $(SRCDIR)/conversation_compactor.h $(SRCDIR)/session_manager.h $(SRCDIR)/tools_system.h $(SRCDIR)/shell_tool.h $(SRCDIR)/file_tools.h $(SRCDIR)/links_tool.h $(SRCDIR)/debug_output.h $(SRCDIR)/embedded_links.h $(SRCDIR)/api_common.h $(SRCDIR)/todo_manager.h $(SRCDIR)/todo_tool.h $(SRCDIR)/todo_display.h $(SRCDIR)/json_utils.h $(SRCDIR)/token_manager.h $(SRCDIR)/llm_provider.h $(SRCDIR)/model_capabilities.h
+# Compiler and build settings
+CC := cosmocc
+CFLAGS := -Wall -Wextra -Werror -O2 -std=c11
+TARGET := ralph
 
-# Tools
-BIN2C = build/bin2c
+# Directory structure
+SRCDIR := src
+TESTDIR := test
+DEPDIR := deps
+BUILDDIR := build
+
+# Dependency versions
+CURL_VERSION := 8.4.0
+MBEDTLS_VERSION := 3.5.1
+
+# =============================================================================
+# SOURCE FILES
+# =============================================================================
+
+# Core source files
+CORE_SOURCES := $(SRCDIR)/core/main.c \
+                $(SRCDIR)/core/ralph.c \
+                $(SRCDIR)/network/http_client.c \
+                $(SRCDIR)/utils/env_loader.c \
+                $(SRCDIR)/utils/output_formatter.c \
+                $(SRCDIR)/utils/prompt_loader.c \
+                $(SRCDIR)/session/conversation_tracker.c \
+                $(SRCDIR)/session/conversation_compactor.c \
+                $(SRCDIR)/session/session_manager.c \
+                $(SRCDIR)/utils/debug_output.c \
+                $(SRCDIR)/network/api_common.c \
+                $(SRCDIR)/utils/json_utils.c \
+                $(SRCDIR)/session/token_manager.c \
+                $(SRCDIR)/llm/llm_provider.c
+
+# Tool system sources
+TOOL_SOURCES := $(SRCDIR)/tools/tools_system.c \
+                $(SRCDIR)/tools/shell_tool.c \
+                $(SRCDIR)/tools/file_tools.c \
+                $(SRCDIR)/tools/links_tool.c \
+                $(SRCDIR)/tools/todo_manager.c \
+                $(SRCDIR)/tools/todo_tool.c \
+                $(SRCDIR)/tools/todo_display.c
+
+# Provider sources
+PROVIDER_SOURCES := $(SRCDIR)/llm/providers/openai_provider.c \
+                    $(SRCDIR)/llm/providers/anthropic_provider.c \
+                    $(SRCDIR)/llm/providers/local_ai_provider.c
+
+# Model sources
+MODEL_SOURCES := $(SRCDIR)/llm/model_capabilities.c \
+                 $(SRCDIR)/llm/models/qwen_model.c \
+                 $(SRCDIR)/llm/models/deepseek_model.c \
+                 $(SRCDIR)/llm/models/gpt_model.c \
+                 $(SRCDIR)/llm/models/claude_model.c \
+                 $(SRCDIR)/llm/models/default_model.c
+
+# All sources combined
+SOURCES := $(CORE_SOURCES) $(TOOL_SOURCES) $(PROVIDER_SOURCES) $(MODEL_SOURCES)
+OBJECTS := $(SOURCES:.c=.o)
+
+# Header files
+HEADERS := $(wildcard $(SRCDIR)/*/*.h) $(SRCDIR)/embedded_links.h
+
+# =============================================================================
+# TOOLS AND UTILITIES
+# =============================================================================
+
+BIN2C := $(BUILDDIR)/bin2c
+LINKS_BUNDLED := $(BUILDDIR)/links
+EMBEDDED_LINKS_HEADER := $(SRCDIR)/embedded_links.h
 
 # Test files
 TEST_MAIN_SOURCES = $(TESTDIR)/test_main.c $(TESTDIR)/unity/unity.c
 TEST_MAIN_OBJECTS = $(TEST_MAIN_SOURCES:.c=.o)
 TEST_MAIN_TARGET = $(TESTDIR)/test_main
 
-TEST_HTTP_SOURCES = $(TESTDIR)/test_http_client.c $(SRCDIR)/http_client.c $(SRCDIR)/env_loader.c $(TESTDIR)/unity/unity.c
+TEST_HTTP_SOURCES = $(TESTDIR)/test_http_client.c $(SRCDIR)/network/http_client.c $(SRCDIR)/utils/env_loader.c $(TESTDIR)/unity/unity.c
 TEST_HTTP_OBJECTS = $(TEST_HTTP_SOURCES:.c=.o)
 TEST_HTTP_TARGET = $(TESTDIR)/test_http_client
 
-TEST_ENV_SOURCES = $(TESTDIR)/test_env_loader.c $(SRCDIR)/env_loader.c $(TESTDIR)/unity/unity.c
+TEST_ENV_SOURCES = $(TESTDIR)/test_env_loader.c $(SRCDIR)/utils/env_loader.c $(TESTDIR)/unity/unity.c
 TEST_ENV_OBJECTS = $(TEST_ENV_SOURCES:.c=.o)
 TEST_ENV_TARGET = $(TESTDIR)/test_env_loader
 
-TEST_OUTPUT_SOURCES = $(TESTDIR)/test_output_formatter.c $(SRCDIR)/output_formatter.c $(SRCDIR)/debug_output.c $(SRCDIR)/model_capabilities.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_display.c $(SRCDIR)/json_utils.c $(SRCDIR)/models/qwen_model.c $(SRCDIR)/models/deepseek_model.c $(SRCDIR)/models/gpt_model.c $(SRCDIR)/models/claude_model.c $(SRCDIR)/models/default_model.c $(TESTDIR)/unity/unity.c
+TEST_OUTPUT_SOURCES = $(TESTDIR)/test_output_formatter.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/utils/json_utils.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(TESTDIR)/unity/unity.c
 TEST_OUTPUT_OBJECTS = $(TEST_OUTPUT_SOURCES:.c=.o)
 TEST_OUTPUT_TARGET = $(TESTDIR)/test_output_formatter
 
-TEST_PROMPT_SOURCES = $(TESTDIR)/test_prompt_loader.c $(SRCDIR)/prompt_loader.c $(TESTDIR)/unity/unity.c
+TEST_PROMPT_SOURCES = $(TESTDIR)/test_prompt_loader.c $(SRCDIR)/utils/prompt_loader.c $(TESTDIR)/unity/unity.c
 TEST_PROMPT_OBJECTS = $(TEST_PROMPT_SOURCES:.c=.o)
 TEST_PROMPT_TARGET = $(TESTDIR)/test_prompt_loader
 
-TEST_CONVERSATION_SOURCES = $(TESTDIR)/test_conversation_tracker.c $(SRCDIR)/conversation_tracker.c $(SRCDIR)/json_utils.c $(TESTDIR)/unity/unity.c
+TEST_CONVERSATION_SOURCES = $(TESTDIR)/test_conversation_tracker.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/utils/json_utils.c $(TESTDIR)/unity/unity.c
 TEST_CONVERSATION_OBJECTS = $(TEST_CONVERSATION_SOURCES:.c=.o)
 TEST_CONVERSATION_TARGET = $(TESTDIR)/test_conversation_tracker
 
-TEST_TOOLS_SOURCES = $(TESTDIR)/test_tools_system.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_display.c $(SRCDIR)/json_utils.c $(SRCDIR)/output_formatter.c $(SRCDIR)/debug_output.c $(SRCDIR)/model_capabilities.c $(SRCDIR)/models/qwen_model.c $(SRCDIR)/models/deepseek_model.c $(SRCDIR)/models/gpt_model.c $(SRCDIR)/models/claude_model.c $(SRCDIR)/models/default_model.c $(TESTDIR)/unity/unity.c
+TEST_TOOLS_SOURCES = $(TESTDIR)/test_tools_system.c $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/utils/json_utils.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(TESTDIR)/unity/unity.c
 TEST_TOOLS_OBJECTS = $(TEST_TOOLS_SOURCES:.c=.o)
 TEST_TOOLS_TARGET = $(TESTDIR)/test_tools_system
 
-TEST_SHELL_SOURCES = $(TESTDIR)/test_shell_tool.c $(SRCDIR)/shell_tool.c $(SRCDIR)/tools_system.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_display.c $(SRCDIR)/json_utils.c $(SRCDIR)/output_formatter.c $(SRCDIR)/debug_output.c $(SRCDIR)/model_capabilities.c $(SRCDIR)/models/qwen_model.c $(SRCDIR)/models/deepseek_model.c $(SRCDIR)/models/gpt_model.c $(SRCDIR)/models/claude_model.c $(SRCDIR)/models/default_model.c $(TESTDIR)/unity/unity.c
+TEST_SHELL_SOURCES = $(TESTDIR)/test_shell_tool.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/utils/json_utils.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(TESTDIR)/unity/unity.c
 TEST_SHELL_OBJECTS = $(TEST_SHELL_SOURCES:.c=.o)
 TEST_SHELL_TARGET = $(TESTDIR)/test_shell_tool
 
-TEST_FILE_SOURCES = $(TESTDIR)/test_file_tools.c $(SRCDIR)/file_tools.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/links_tool.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_display.c $(SRCDIR)/json_utils.c $(SRCDIR)/output_formatter.c $(SRCDIR)/debug_output.c $(SRCDIR)/model_capabilities.c $(SRCDIR)/models/qwen_model.c $(SRCDIR)/models/deepseek_model.c $(SRCDIR)/models/gpt_model.c $(SRCDIR)/models/claude_model.c $(SRCDIR)/models/default_model.c $(TESTDIR)/unity/unity.c
+TEST_FILE_SOURCES = $(TESTDIR)/test_file_tools.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/utils/json_utils.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(TESTDIR)/unity/unity.c
 TEST_FILE_OBJECTS = $(TEST_FILE_SOURCES:.c=.o)
 TEST_FILE_TARGET = $(TESTDIR)/test_file_tools
 
-TEST_SMART_FILE_SOURCES = $(TESTDIR)/test_smart_file_tools.c $(SRCDIR)/file_tools.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/links_tool.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_display.c $(SRCDIR)/json_utils.c $(SRCDIR)/output_formatter.c $(SRCDIR)/debug_output.c $(SRCDIR)/model_capabilities.c $(SRCDIR)/models/qwen_model.c $(SRCDIR)/models/deepseek_model.c $(SRCDIR)/models/gpt_model.c $(SRCDIR)/models/claude_model.c $(SRCDIR)/models/default_model.c $(TESTDIR)/unity/unity.c
+TEST_SMART_FILE_SOURCES = $(TESTDIR)/test_smart_file_tools.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/utils/json_utils.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(TESTDIR)/unity/unity.c
 TEST_SMART_FILE_OBJECTS = $(TEST_SMART_FILE_SOURCES:.c=.o)
 TEST_SMART_FILE_TARGET = $(TESTDIR)/test_smart_file_tools
 
-TEST_RALPH_SOURCES = $(TESTDIR)/test_ralph.c $(TESTDIR)/mock_api_server.c $(SRCDIR)/ralph.c $(SRCDIR)/http_client.c $(SRCDIR)/env_loader.c $(SRCDIR)/output_formatter.c $(SRCDIR)/prompt_loader.c $(SRCDIR)/conversation_tracker.c $(SRCDIR)/conversation_compactor.c $(SRCDIR)/session_manager.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/debug_output.c $(SRCDIR)/api_common.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_display.c $(SRCDIR)/json_utils.c $(SRCDIR)/token_manager.c $(SRCDIR)/llm_provider.c $(SRCDIR)/providers/openai_provider.c $(SRCDIR)/providers/anthropic_provider.c $(SRCDIR)/providers/local_ai_provider.c $(SRCDIR)/model_capabilities.c $(SRCDIR)/models/qwen_model.c $(SRCDIR)/models/deepseek_model.c $(SRCDIR)/models/gpt_model.c $(SRCDIR)/models/claude_model.c $(SRCDIR)/models/default_model.c $(TESTDIR)/unity/unity.c
+TEST_RALPH_SOURCES = $(TESTDIR)/test_ralph.c $(TESTDIR)/mock_api_server.c $(SRCDIR)/core/ralph.c $(SRCDIR)/network/http_client.c $(SRCDIR)/utils/env_loader.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/network/api_common.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/utils/json_utils.c $(SRCDIR)/session/token_manager.c $(SRCDIR)/llm/llm_provider.c $(SRCDIR)/llm/providers/openai_provider.c $(SRCDIR)/llm/providers/anthropic_provider.c $(SRCDIR)/llm/providers/local_ai_provider.c $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(TESTDIR)/unity/unity.c
 TEST_RALPH_OBJECTS = $(TEST_RALPH_SOURCES:.c=.o)
 TEST_RALPH_TARGET = $(TESTDIR)/test_ralph
 
 TEST_BUNDLED_LINKS = test_bundled_links
 
-TEST_TODO_MANAGER_SOURCES = $(TESTDIR)/test_todo_manager.c $(SRCDIR)/todo_manager.c $(TESTDIR)/unity/unity.c
+TEST_TODO_MANAGER_SOURCES = $(TESTDIR)/test_todo_manager.c $(SRCDIR)/tools/todo_manager.c $(TESTDIR)/unity/unity.c
 TEST_TODO_MANAGER_OBJECTS = $(TEST_TODO_MANAGER_SOURCES:.c=.o)
 TEST_TODO_MANAGER_TARGET = $(TESTDIR)/test_todo_manager
 
-TEST_TODO_TOOL_SOURCES = $(TESTDIR)/test_todo_tool.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_display.c $(TESTDIR)/unity/unity.c
+TEST_TODO_TOOL_SOURCES = $(TESTDIR)/test_todo_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(TESTDIR)/unity/unity.c
 TEST_TODO_TOOL_OBJECTS = $(TEST_TODO_TOOL_SOURCES:.c=.o)
 TEST_TODO_TOOL_TARGET = $(TESTDIR)/test_todo_tool
 
-TEST_RALPH_INTEGRATION_SOURCES = $(TESTDIR)/test_ralph_integration.c $(TESTDIR)/unity/unity.c
-TEST_RALPH_INTEGRATION_OBJECTS = $(TEST_RALPH_INTEGRATION_SOURCES:.c=.o)
-TEST_RALPH_INTEGRATION_TARGET = $(TESTDIR)/test_ralph_integration
 
-TEST_TOKEN_MANAGER_SOURCES = $(TESTDIR)/test_token_manager.c $(SRCDIR)/token_manager.c $(SRCDIR)/session_manager.c $(SRCDIR)/conversation_tracker.c $(SRCDIR)/json_utils.c $(SRCDIR)/http_client.c $(SRCDIR)/debug_output.c $(TESTDIR)/unity/unity.c
+TEST_TOKEN_MANAGER_SOURCES = $(TESTDIR)/test_token_manager.c $(SRCDIR)/session/token_manager.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/utils/json_utils.c $(SRCDIR)/network/http_client.c $(SRCDIR)/utils/debug_output.c $(TESTDIR)/unity/unity.c
 TEST_TOKEN_MANAGER_OBJECTS = $(TEST_TOKEN_MANAGER_SOURCES:.c=.o)
 TEST_TOKEN_MANAGER_TARGET = $(TESTDIR)/test_token_manager
 
-TEST_CONVERSATION_COMPACTOR_SOURCES = $(TESTDIR)/test_conversation_compactor.c $(SRCDIR)/conversation_compactor.c $(SRCDIR)/session_manager.c $(SRCDIR)/conversation_tracker.c $(SRCDIR)/token_manager.c $(SRCDIR)/debug_output.c $(SRCDIR)/json_utils.c $(SRCDIR)/http_client.c $(TESTDIR)/unity/unity.c
+TEST_CONVERSATION_COMPACTOR_SOURCES = $(TESTDIR)/test_conversation_compactor.c $(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/token_manager.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/utils/json_utils.c $(SRCDIR)/network/http_client.c $(TESTDIR)/unity/unity.c
 TEST_CONVERSATION_COMPACTOR_OBJECTS = $(TEST_CONVERSATION_COMPACTOR_SOURCES:.c=.o)
 TEST_CONVERSATION_COMPACTOR_TARGET = $(TESTDIR)/test_conversation_compactor
 
-TEST_INCOMPLETE_TASK_BUG_SOURCES = $(TESTDIR)/test_incomplete_task_bug.c $(SRCDIR)/ralph.c $(SRCDIR)/http_client.c $(SRCDIR)/env_loader.c $(SRCDIR)/output_formatter.c $(SRCDIR)/prompt_loader.c $(SRCDIR)/conversation_tracker.c $(SRCDIR)/conversation_compactor.c $(SRCDIR)/session_manager.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/debug_output.c $(SRCDIR)/api_common.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_display.c $(SRCDIR)/json_utils.c $(SRCDIR)/token_manager.c $(SRCDIR)/llm_provider.c $(SRCDIR)/providers/openai_provider.c $(SRCDIR)/providers/anthropic_provider.c $(SRCDIR)/providers/local_ai_provider.c $(SRCDIR)/model_capabilities.c $(SRCDIR)/models/qwen_model.c $(SRCDIR)/models/deepseek_model.c $(SRCDIR)/models/gpt_model.c $(SRCDIR)/models/claude_model.c $(SRCDIR)/models/default_model.c $(TESTDIR)/unity/unity.c
+TEST_INCOMPLETE_TASK_BUG_SOURCES = $(TESTDIR)/test_incomplete_task_bug.c $(SRCDIR)/core/ralph.c $(SRCDIR)/network/http_client.c $(SRCDIR)/utils/env_loader.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/network/api_common.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/utils/json_utils.c $(SRCDIR)/session/token_manager.c $(SRCDIR)/llm/llm_provider.c $(SRCDIR)/llm/providers/openai_provider.c $(SRCDIR)/llm/providers/anthropic_provider.c $(SRCDIR)/llm/providers/local_ai_provider.c $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(TESTDIR)/unity/unity.c
 TEST_INCOMPLETE_TASK_BUG_OBJECTS = $(TEST_INCOMPLETE_TASK_BUG_SOURCES:.c=.o)
 TEST_INCOMPLETE_TASK_BUG_TARGET = $(TESTDIR)/test_incomplete_task_bug
 
-TEST_MODEL_TOOLS_SOURCES = $(TESTDIR)/test_model_tools.c $(SRCDIR)/model_capabilities.c $(SRCDIR)/tools_system.c $(SRCDIR)/output_formatter.c $(SRCDIR)/debug_output.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_display.c $(SRCDIR)/json_utils.c $(SRCDIR)/models/qwen_model.c $(SRCDIR)/models/deepseek_model.c $(SRCDIR)/models/gpt_model.c $(SRCDIR)/models/claude_model.c $(SRCDIR)/models/default_model.c $(TESTDIR)/unity/unity.c
+TEST_MODEL_TOOLS_SOURCES = $(TESTDIR)/test_model_tools.c $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/tools/tools_system.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/utils/json_utils.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(TESTDIR)/unity/unity.c
 TEST_MODEL_TOOLS_OBJECTS = $(TEST_MODEL_TOOLS_SOURCES:.c=.o)
 TEST_MODEL_TOOLS_TARGET = $(TESTDIR)/test_model_tools
 
-TEST_MESSAGES_ARRAY_BUG_SOURCES = $(TESTDIR)/test_messages_array_bug.c $(SRCDIR)/api_common.c $(SRCDIR)/conversation_tracker.c $(SRCDIR)/json_utils.c $(SRCDIR)/model_capabilities.c $(SRCDIR)/tools_system.c $(SRCDIR)/output_formatter.c $(SRCDIR)/debug_output.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_display.c $(SRCDIR)/models/qwen_model.c $(SRCDIR)/models/deepseek_model.c $(SRCDIR)/models/gpt_model.c $(SRCDIR)/models/claude_model.c $(SRCDIR)/models/default_model.c $(TESTDIR)/unity/unity.c
+TEST_MESSAGES_ARRAY_BUG_SOURCES = $(TESTDIR)/test_messages_array_bug.c $(SRCDIR)/network/api_common.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/utils/json_utils.c $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/tools/tools_system.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(TESTDIR)/unity/unity.c
 TEST_MESSAGES_ARRAY_BUG_OBJECTS = $(TEST_MESSAGES_ARRAY_BUG_SOURCES:.c=.o)
 TEST_MESSAGES_ARRAY_BUG_TARGET = $(TESTDIR)/test_messages_array_bug
 
-ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_HTTP_TARGET) $(TEST_ENV_TARGET) $(TEST_OUTPUT_TARGET) $(TEST_PROMPT_TARGET) $(TEST_CONVERSATION_TARGET) $(TEST_TOOLS_TARGET) $(TEST_SHELL_TARGET) $(TEST_FILE_TARGET) $(TEST_SMART_FILE_TARGET) $(TEST_RALPH_TARGET) $(TEST_TODO_MANAGER_TARGET) $(TEST_TODO_TOOL_TARGET) $(TEST_RALPH_INTEGRATION_TARGET) $(TEST_TOKEN_MANAGER_TARGET) $(TEST_CONVERSATION_COMPACTOR_TARGET) $(TEST_INCOMPLETE_TASK_BUG_TARGET) $(TEST_MODEL_TOOLS_TARGET) $(TEST_MESSAGES_ARRAY_BUG_TARGET)
+ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_HTTP_TARGET) $(TEST_ENV_TARGET) $(TEST_OUTPUT_TARGET) $(TEST_PROMPT_TARGET) $(TEST_CONVERSATION_TARGET) $(TEST_TOOLS_TARGET) $(TEST_SHELL_TARGET) $(TEST_FILE_TARGET) $(TEST_SMART_FILE_TARGET) $(TEST_RALPH_TARGET) $(TEST_TODO_MANAGER_TARGET) $(TEST_TODO_TOOL_TARGET) $(TEST_TOKEN_MANAGER_TARGET) $(TEST_CONVERSATION_COMPACTOR_TARGET) $(TEST_INCOMPLETE_TASK_BUG_TARGET) $(TEST_MODEL_TOOLS_TARGET) $(TEST_MESSAGES_ARRAY_BUG_TARGET)
 
-# Dependencies
-CURL_VERSION = 8.4.0
-MBEDTLS_VERSION = 3.5.1
+# Dependencies - remove duplicates (already defined above)
+# CURL_VERSION and MBEDTLS_VERSION already defined at line 20-21
 CURL_DIR = $(DEPDIR)/curl-$(CURL_VERSION)
 MBEDTLS_DIR = $(DEPDIR)/mbedtls-$(MBEDTLS_VERSION)
 
@@ -110,8 +167,8 @@ MBEDTLS_LIB2 = $(MBEDTLS_DIR)/library/libmbedx509.a
 MBEDTLS_LIB3 = $(MBEDTLS_DIR)/library/libmbedcrypto.a
 
 # Include and library flags
-INCLUDES = -I$(CURL_DIR)/include -I$(MBEDTLS_DIR)/include
-TEST_INCLUDES = $(INCLUDES) -I$(TESTDIR)/unity -I$(SRCDIR)
+INCLUDES = -I$(CURL_DIR)/include -I$(MBEDTLS_DIR)/include -I$(SRCDIR) -I$(SRCDIR)/core -I$(SRCDIR)/network -I$(SRCDIR)/llm -I$(SRCDIR)/session -I$(SRCDIR)/tools -I$(SRCDIR)/utils
+TEST_INCLUDES = $(INCLUDES) -I$(TESTDIR)/unity
 LDFLAGS = -L$(CURL_DIR)/lib/.libs -L$(MBEDTLS_DIR)/library
 LIBS = -lcurl -lmbedtls -lmbedx509 -lmbedcrypto
 RALPH_TEST_LIBS = $(LIBS) -lpthread
@@ -124,8 +181,8 @@ EMBEDDED_LINKS_HEADER = $(SRCDIR)/embedded_links.h
 all: $(TARGET)
 
 # Build bundled links test
-$(TEST_BUNDLED_LINKS): test_bundled_links.c $(SRCDIR)/tools_system.o $(SRCDIR)/links_tool.o $(SRCDIR)/shell_tool.o $(SRCDIR)/file_tools.o $(EMBEDDED_LINKS_HEADER)
-	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< $(SRCDIR)/tools_system.o $(SRCDIR)/links_tool.o $(SRCDIR)/shell_tool.o $(SRCDIR)/file_tools.o
+$(TEST_BUNDLED_LINKS): test_bundled_links.c $(SRCDIR)/tools/tools_system.o $(SRCDIR)/tools/links_tool.o $(SRCDIR)/tools/shell_tool.o $(SRCDIR)/tools/file_tools.o $(EMBEDDED_LINKS_HEADER)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< $(SRCDIR)/tools/tools_system.o $(SRCDIR)/tools/links_tool.o $(SRCDIR)/tools/shell_tool.o $(SRCDIR)/tools/file_tools.o
 
 # Build main executable
 $(TARGET): $(EMBEDDED_LINKS_HEADER) $(OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
@@ -174,7 +231,6 @@ test: $(ALL_TEST_TARGETS)
 	./$(TEST_RALPH_TARGET)
 	./$(TEST_TODO_MANAGER_TARGET)
 	./$(TEST_TODO_TOOL_TARGET)
-	./$(TEST_RALPH_INTEGRATION_TARGET)
 	./$(TEST_TOKEN_MANAGER_TARGET)
 	./$(TEST_MODEL_TOOLS_TARGET)
 	./$(TEST_CONVERSATION_COMPACTOR_TARGET)
@@ -223,8 +279,6 @@ $(TEST_TODO_MANAGER_TARGET): $(TEST_TODO_MANAGER_OBJECTS)
 $(TEST_TODO_TOOL_TARGET): $(TEST_TODO_TOOL_OBJECTS)
 	$(CC) -o $@ $(TEST_TODO_TOOL_OBJECTS)
 
-$(TEST_RALPH_INTEGRATION_TARGET): $(TEST_RALPH_INTEGRATION_OBJECTS)
-	$(CC) -o $@ $(TEST_RALPH_INTEGRATION_OBJECTS)
 
 $(TEST_TOKEN_MANAGER_TARGET): $(TEST_TOKEN_MANAGER_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
 	$(CC) -o $@ $(TEST_TOKEN_MANAGER_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)

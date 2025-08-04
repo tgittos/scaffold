@@ -3,7 +3,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <unistd.h>
-#include "../src/output_formatter.h"
+#include "output_formatter.h"
 #include "unity/unity.h"
 
 void setUp(void) {

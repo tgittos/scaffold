@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-#include "../src/tools_system.h"
+#include "tools_system.h"
 
 // Test enhanced tool feedback functionality
 void test_enhanced_tool_feedback() {

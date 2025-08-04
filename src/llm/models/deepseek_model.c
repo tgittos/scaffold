@@ -1,6 +1,6 @@
-#include "../model_capabilities.h"
-#include "../output_formatter.h"
-#include "../tools_system.h"
+#include "model_capabilities.h"
+#include "output_formatter.h"
+#include "tools_system.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,8 +10,8 @@ extern char* generate_tools_json(const ToolRegistry *registry);
 extern int parse_tool_calls(const char *json_response, ToolCall **tool_calls, int *call_count);
 extern char* generate_single_tool_message(const ToolResult *result);
 
-// Qwen-specific response processor
-static int qwen_process_response(const char* content, ParsedResponse* result) {
+// DeepSeek uses the same thinking tag format as Qwen
+static int deepseek_process_response(const char* content, ParsedResponse* result) {
     if (!content || !result) {
         return -1;
     }
@@ -20,7 +20,7 @@ static int qwen_process_response(const char* content, ParsedResponse* result) {
     result->thinking_content = NULL;
     result->response_content = NULL;
     
-    // Look for <think> and </think> tags (Qwen models support this)
+    // Look for <think> and </think> tags
     const char* think_start = strstr(content, "<think>");
     const char* think_end = strstr(content, "</think>");
     
@@ -67,13 +67,13 @@ static int qwen_process_response(const char* content, ParsedResponse* result) {
     return 0;
 }
 
-// Qwen model capabilities
-static ModelCapabilities qwen_model = {
-    .model_pattern = "qwen",
+// DeepSeek model capabilities
+static ModelCapabilities deepseek_model = {
+    .model_pattern = "deepseek",
     .supports_thinking_tags = 1,
     .thinking_start_tag = "<think>",
     .thinking_end_tag = "</think>",
-    .process_response = qwen_process_response,
+    .process_response = deepseek_process_response,
     .supports_function_calling = 1,
     .generate_tools_json = generate_tools_json,
     .parse_tool_calls = parse_tool_calls,
@@ -81,9 +81,9 @@ static ModelCapabilities qwen_model = {
     .format_assistant_tool_message = NULL,  // Use default OpenAI-style formatting
     .supports_structured_output = 0,
     .supports_json_mode = 0,
-    .max_context_length = 32768
+    .max_context_length = 128000
 };
 
-int register_qwen_models(ModelRegistry* registry) {
-    return register_model_capabilities(registry, &qwen_model);
+int register_deepseek_models(ModelRegistry* registry) {
+    return register_model_capabilities(registry, &deepseek_model);
 }

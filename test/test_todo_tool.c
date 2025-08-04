@@ -1,5 +1,5 @@
 #include "unity/unity.h"
-#include "../src/todo_tool.h"
+#include "todo_tool.h"
 #include <string.h>
 #include <stdlib.h>
 

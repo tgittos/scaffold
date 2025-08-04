@@ -336,12 +336,13 @@ char* json_escape_string(const char *str) {
     if (str == NULL) return strdup("");
     
     size_t len = strlen(str);
-    // Worst case: every character needs escaping
-    char *escaped = malloc(len * 2 + 1);
+    // Worst case: every character needs unicode escaping (6 chars each)
+    size_t escaped_len = len * 6 + 1;
+    char *escaped = malloc(escaped_len);
     if (escaped == NULL) return NULL;
     
     size_t j = 0;
-    for (size_t i = 0; i < len; i++) {
+    for (size_t i = 0; i < len && j < escaped_len - 7; i++) {
         switch (str[i]) {
             case '"':
                 escaped[j++] = '\\';
@@ -374,8 +375,10 @@ char* json_escape_string(const char *str) {
             default:
                 if ((unsigned char)str[i] < 32) {
                     // Escape other control characters
-                    sprintf(&escaped[j], "\\u%04x", (unsigned char)str[i]);
-                    j += 6;
+                    int ret = snprintf(&escaped[j], escaped_len - j, "\\u%04x", (unsigned char)str[i]);
+                    if (ret > 0 && (size_t)ret < escaped_len - j) {
+                        j += ret;
+                    }
                 } else {
                     escaped[j++] = str[i];
                 }

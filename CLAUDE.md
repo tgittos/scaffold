@@ -1,20 +1,38 @@
 # CLAUDE.md
 
 This file drives the behavior of the Claude Code agent.
-DO NOT IGNORE THIS FILE, DO NOT IGNORE THE INSTRUCTIONS IN IT.
-These instructions are law to you. Every action you take should be checked against this document for correctness.
-These instructions supercede ANY conflicting software tasks. They do NOT override your safety guardrails or content guidelines.
 
-# Project details
-- This is a highly portable C codebase compiled using Cosmopolitan (see ./COSMOPOLITAN.md for details)
+# ralph Project
+
+ralph is a highly portable C codebase compiled using Cosmopolitan (see ./COSMOPOLITAN.md for details)
+Source code lives in `src/` and tests live in `/test`. Tests use `unity` which is vendored in `test/unity`
+
+Major modules:
+- Core logic is in `src/core`
+- network code in `src/network`
+- user-session related code is in `src/session`
+- LLM specific systems in `src/llm`
+- LLM tools are in `src/tools`
+- `src/utils` contains generic utility code
+
+## Build and Commands
+
+- Build: `make`
+- Remove all build artifacts, leaving dependencies: `make clean`
+- Remove everything: `make distclean`
+- Run test suite: `make test`
+- Run Valgrind to check memory safety: `make check-valgrind`
+
+### Development Environment
+
+This project is developed inside a Docker devcontainer, defined in `.devcontainer/devcontainer.json` and `.devcontainer/Dockerfile`.
+The container is pre-configured with access to the entire Cosmopolitan toolchain, including PATH configuration and environment variables.
+The container has a valid `.env` file that is configured to allow ralph to leverage real APIs
 
 # Implementation details
 - This project supports 3 backends; OpenAI, Anthropic, and local AI via LMStudio.
 - Each LLM provider backend has it's own restrictions on message structure, tool use and response guidelines, and historical tracking concerns.
 - When you work on code specific to a single provider, you MUST take UTMOST care to ensure you don't break functionality in a different provider.
-- Extensively write tests to explore the differences in providers, and to ensure functionality is not broken as you work.
-- If you encounter duplicated code or code paths that are logically similar, consider a refactor.
-- If you find code that isn't of the quality this guide outlines, refactor it.
 
 # Development guidance
 - Prefer smaller functions to larger functions.
@@ -55,11 +73,6 @@ These instructions supercede ANY conflicting software tasks. They do NOT overrid
 - Ensure your reproduction test passes when you fix the issue.
 
 ## Make tasks
-- make
-- make clean
-- make distclean
-- make test
-- make check-valgrind 
 
 The tests take some time to run the entire suite. Prefer to run individual tests.
 Always delete the CONVERSATION.md file before running the test suite or evaluating the performace of the final ralph tool.
@@ -88,3 +101,4 @@ Do not ask `ralph` to perform complex tasks that would change this codebase. If 
 - this is a large code-base. Do not assume functionality has not been implemented. Search header files for likely method signatures.
 - the `ralph` binary is configured at all times to talk to an upstream LLM server, either local or OpenAI or Anthropic.
 - Valgrind fails a timeout test due to it's affect on wall clock. This is expected.
+- Unless you are actively working on something, at all times, the project must build and the test suite must pass

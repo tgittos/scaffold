@@ -1,5 +1,5 @@
-#include "../model_capabilities.h"
-#include "../output_formatter.h"
+#include "model_capabilities.h"
+#include "output_formatter.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

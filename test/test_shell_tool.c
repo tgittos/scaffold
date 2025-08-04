@@ -1,6 +1,6 @@
 #include "unity/unity.h"
-#include "../src/shell_tool.h"
-#include "../src/tools_system.h"
+#include "shell_tool.h"
+#include "tools_system.h"
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
