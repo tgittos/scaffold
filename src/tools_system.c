@@ -643,42 +643,27 @@ int parse_anthropic_tool_calls(const char *json_response, ToolCall **tool_calls,
 // These were placeholder implementations for testing
 // Users should implement their own tool execution logic in execute_tool_call
 
-// Helper function to extract key parameter from tool arguments
-static char* extract_tool_parameter(const char *arguments, const char *param_name) {
-    if (!arguments || !param_name) return NULL;
+
+// Truncate a string for display, adding "..." if truncated
+static char* truncate_string(const char *str, size_t max_len) {
+    if (!str) return NULL;
     
-    char pattern[256] = {0};
-    snprintf(pattern, sizeof(pattern), "\"%s\":", param_name);
-    
-    const char *start = strstr(arguments, pattern);
-    if (!start) return NULL;
-    
-    start += strlen(pattern);
-    // Skip whitespace
-    while (*start == ' ' || *start == '\t') start++;
-    
-    if (*start == '"') {
-        // String value
-        start++;
-        const char *end = start;
-        while (*end && *end != '"') {
-            if (*end == '\\' && *(end + 1)) end += 2;
-            else end++;
-        }
-        
-        size_t len = end - start;
-        char *value = malloc(len + 1);
-        if (value) {
-            memcpy(value, start, len);
-            value[len] = '\0';
-        }
-        return value;
+    size_t len = strlen(str);
+    if (len <= max_len) {
+        return strdup(str);
     }
     
-    return NULL;
+    // Allocate space for truncated string + "..." + null terminator
+    char *truncated = malloc(max_len + 4);
+    if (!truncated) return NULL;
+    
+    memcpy(truncated, str, max_len);
+    strcpy(truncated + max_len, "...");
+    
+    return truncated;
 }
 
-// Log tool use to stdout in blue (excludes internal todo management)
+// Log enhanced tool use to stdout in blue (excludes internal todo management)
 static void log_tool_use(const char *tool_name, const char *arguments) {
     // Skip logging for TodoWrite - this is internal task management
     if (strcmp(tool_name, "TodoWrite") == 0) {
@@ -693,74 +678,40 @@ static void log_tool_use(const char *tool_name, const char *arguments) {
         return;
     }
     
-    // Extract and log key parameters based on tool type
-    if (strcmp(tool_name, "shell_execute") == 0) {
-        char *command = extract_tool_parameter(arguments, "command");
-        if (command) {
-            printf(" command: \"%s\"", command);
-            free(command);
-        }
-    } else if (strcmp(tool_name, "file_read") == 0) {
-        char *path = extract_tool_parameter(arguments, "file_path");
-        if (path) {
-            printf(" path: \"%s\"", path);
-            free(path);
-        }
-    } else if (strcmp(tool_name, "file_write") == 0 || strcmp(tool_name, "file_append") == 0) {
-        char *path = extract_tool_parameter(arguments, "file_path");
-        char *content = extract_tool_parameter(arguments, "content");
-        if (path) {
-            printf(" path: \"%s\"", path);
-            free(path);
-        } else {
-            // Try alternate parameter name
-            path = extract_tool_parameter(arguments, "path");
-            if (path) {
-                printf(" path: \"%s\"", path);
-                free(path);
-            }
-        }
-        if (content) {
-            // Count lines in content
-            int line_count = 1; // At least one line if content exists
-            for (const char *p = content; *p; p++) {
-                if (*p == '\n') line_count++;
-            }
-            printf(" (%d lines)", line_count);
-            free(content);
-        }
-    } else if (strcmp(tool_name, "file_list") == 0) {
-        char *path = extract_tool_parameter(arguments, "directory_path");
-        if (path) {
-            printf(" path: \"%s\"", path);
-            free(path);
-        }
-    } else if (strcmp(tool_name, "file_search") == 0) {
-        char *pattern = extract_tool_parameter(arguments, "pattern");
-        char *path = extract_tool_parameter(arguments, "search_path");
-        if (pattern) {
-            printf(" pattern: \"%s\"", pattern);
-            free(pattern);
-        }
-        if (path) {
-            printf(" in: \"%s\"", path);
-            free(path);
-        }
-    } else if (strcmp(tool_name, "file_info") == 0) {
-        char *path = extract_tool_parameter(arguments, "file_path");
-        if (path) {
-            printf(" path: \"%s\"", path);
-            free(path);
-        }
-    } else if (strcmp(tool_name, "web_fetch") == 0) {
-        char *url = extract_tool_parameter(arguments, "url");
-        if (url) {
-            printf(" url: \"%s\"", url);
-            free(url);
-        }
+    // Show truncated arguments (max 200 chars for readability)
+    char *truncated_args = truncate_string(arguments, 200);
+    if (truncated_args) {
+        printf(" args: %s", truncated_args);
+        free(truncated_args);
     }
     
     printf(ANSI_RESET "\n");
+    fflush(stdout);
+}
+
+// Log tool execution result with success/failure indication
+static void log_tool_result(const char *tool_name, int success, const char *result) {
+    // Skip logging for TodoWrite - this is internal task management
+    if (strcmp(tool_name, "TodoWrite") == 0) {
+        return;
+    }
+    
+    if (success) {
+        printf(ANSI_BLUE "[Tool: %s] " "\033[32m" "✓ SUCCESS" ANSI_RESET, tool_name);
+    } else {
+        printf(ANSI_BLUE "[Tool: %s] " "\033[31m" "✗ FAILED" ANSI_RESET, tool_name);
+        
+        // Show truncated error message for failures
+        if (result) {
+            char *truncated_result = truncate_string(result, 100);
+            if (truncated_result) {
+                printf(" - %s", truncated_result);
+                free(truncated_result);
+            }
+        }
+    }
+    
+    printf("\n");
     fflush(stdout);
 }
 
@@ -780,49 +731,41 @@ int execute_tool_call(const ToolRegistry *registry, const ToolCall *tool_call, T
     // Log tool use
     log_tool_use(tool_call->name, tool_call->arguments);
     
+    // Execute the tool and then log the result
+    int exec_result = 0;
+    
     // Look for the tool in the registry
     for (int i = 0; i < registry->function_count; i++) {
         if (strcmp(registry->functions[i].name, tool_call->name) == 0) {
             // Handle specific tool implementations
             if (strcmp(tool_call->name, "shell_execute") == 0) {
-                return execute_shell_tool_call(tool_call, result);
+                exec_result = execute_shell_tool_call(tool_call, result);
+            } else if (strcmp(tool_call->name, "file_read") == 0) {
+                exec_result = execute_file_read_tool_call(tool_call, result);
+            } else if (strcmp(tool_call->name, "file_write") == 0) {
+                exec_result = execute_file_write_tool_call(tool_call, result);
+            } else if (strcmp(tool_call->name, "file_append") == 0) {
+                exec_result = execute_file_append_tool_call(tool_call, result);
+            } else if (strcmp(tool_call->name, "file_list") == 0) {
+                exec_result = execute_file_list_tool_call(tool_call, result);
+            } else if (strcmp(tool_call->name, "file_search") == 0) {
+                exec_result = execute_file_search_tool_call(tool_call, result);
+            } else if (strcmp(tool_call->name, "file_info") == 0) {
+                exec_result = execute_file_info_tool_call(tool_call, result);
+            } else if (strcmp(tool_call->name, "web_fetch") == 0) {
+                exec_result = execute_links_tool_call(tool_call, result);
+            } else if (strcmp(tool_call->name, "TodoWrite") == 0) {
+                exec_result = execute_todo_tool_call(tool_call, result);
+            } else {
+                // Tool found in registry but no implementation provided
+                result->result = strdup("Error: Tool execution not implemented");
+                result->success = 0;
+                exec_result = 0;
             }
             
-            // Handle file tools
-            if (strcmp(tool_call->name, "file_read") == 0) {
-                return execute_file_read_tool_call(tool_call, result);
-            }
-            if (strcmp(tool_call->name, "file_write") == 0) {
-                return execute_file_write_tool_call(tool_call, result);
-            }
-            if (strcmp(tool_call->name, "file_append") == 0) {
-                return execute_file_append_tool_call(tool_call, result);
-            }
-            if (strcmp(tool_call->name, "file_list") == 0) {
-                return execute_file_list_tool_call(tool_call, result);
-            }
-            if (strcmp(tool_call->name, "file_search") == 0) {
-                return execute_file_search_tool_call(tool_call, result);
-            }
-            if (strcmp(tool_call->name, "file_info") == 0) {
-                return execute_file_info_tool_call(tool_call, result);
-            }
-            
-            // Handle web fetch tool
-            if (strcmp(tool_call->name, "web_fetch") == 0) {
-                return execute_links_tool_call(tool_call, result);
-            }
-            
-            // Handle todo tool
-            if (strcmp(tool_call->name, "TodoWrite") == 0) {
-                return execute_todo_tool_call(tool_call, result);
-            }
-            
-            // Tool found in registry but no implementation provided
-            // Users should extend this function to implement their own tool execution logic
-            result->result = strdup("Error: Tool execution not implemented");
-            result->success = 0;
-            return 0;
+            // Log the result after execution
+            log_tool_result(tool_call->name, result->success, result->result);
+            return exec_result;
         }
     }
     
@@ -835,6 +778,8 @@ int execute_tool_call(const ToolRegistry *registry, const ToolCall *tool_call, T
         return -1;
     }
     
+    // Log the result after execution
+    log_tool_result(tool_call->name, result->success, result->result);
     return 0;
 }
 

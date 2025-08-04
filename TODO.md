@@ -1,2 +1,1 @@
-- I want to upgrade the user feedback when a model calls a tool. I want to see a) the tool used, b) the arguments used, and c) the success/failure of the tool call. Some tool calls have long text strings as arguments,g so some kind of truncation is going to be required.
 - The CLI interface for this application supports a subset of Readline-like features. Research how to compile Readline with Cosmopolitan, and refactor the user input functionality to use Readline.
