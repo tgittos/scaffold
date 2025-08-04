@@ -493,23 +493,17 @@ void print_formatted_response_improved(const ParsedResponse *response) {
         return;
     }
     
-    // Clear visual separator before main response
-    printf("\n" ANSI_BOLD SEPARATOR_HEAVY ANSI_RESET "\n");
-    
     // Print thinking content in dim gray if present (unchanged behavior)
     if (response->thinking_content) {
         printf(ANSI_DIM ANSI_GRAY "%s" ANSI_RESET "\n\n", response->thinking_content);
     }
     
-    // Print the main response content prominently with clear separation
+    // Print the main response content prominently
     if (response->response_content) {
         printf("%s\n", response->response_content);
     }
     
-    // Add separator after main response to visually separate from system info
-    printf("\n" ANSI_BOLD SEPARATOR_HEAVY ANSI_RESET "\n");
-    
-    // Print token usage in a dedicated system info section
+    // Print token usage in a dedicated system info section (only if we have content to show)
     if (response->total_tokens > 0) {
         display_system_info_group_start();
         if (response->prompt_tokens > 0 && response->completion_tokens > 0) {
@@ -540,9 +534,23 @@ void display_tool_execution_group_start(void) {
 
 void display_tool_execution_group_end(void) {
     if (tool_execution_group_active) {
-        printf("\n");
         tool_execution_group_active = false;
     }
+}
+
+static bool is_informational_check(const char *tool_name, const char *arguments) {
+    if (!tool_name || !arguments) return false;
+    
+    // Common informational commands that are expected to sometimes "fail"
+    if (strcmp(tool_name, "shell_execute") == 0) {
+        // Version checks, which commands, etc.
+        if (strstr(arguments, "--version") || strstr(arguments, "which ") || 
+            strstr(arguments, "command -v") || strstr(arguments, "type ")) {
+            return true;
+        }
+    }
+    
+    return false;
 }
 
 void log_tool_execution_improved(const char *tool_name, const char *arguments, bool success, const char *result) {
@@ -553,9 +561,14 @@ void log_tool_execution_improved(const char *tool_name, const char *arguments, b
         return;
     }
     
+    // Check if this is an informational check rather than a real failure
+    bool is_info_check = !success && is_informational_check(tool_name, arguments);
+    
     // Print tool name and status
     if (success) {
         printf(ANSI_CYAN "  ✓ " ANSI_GREEN "%s" ANSI_RESET, tool_name);
+    } else if (is_info_check) {
+        printf(ANSI_CYAN "  ◦ " ANSI_YELLOW "%s" ANSI_RESET, tool_name);
     } else {
         printf(ANSI_CYAN "  ✗ " ANSI_RED "%s" ANSI_RESET, tool_name);
     }
@@ -571,12 +584,22 @@ void log_tool_execution_improved(const char *tool_name, const char *arguments, b
     
     printf("\n");
     
-    // Show result/error for failures
+    // Show result/error for failures, but with different styling for info checks
     if (!success && result && strlen(result) > 0) {
-        if (strlen(result) > 200) {
-            printf(ANSI_RED "    Error: %.197s..." ANSI_RESET "\n", result);
+        if (is_info_check) {
+            // For informational checks, show result more neutrally
+            if (strlen(result) > 200) {
+                printf(ANSI_DIM "    Result: %.197s..." ANSI_RESET "\n", result);
+            } else {
+                printf(ANSI_DIM "    Result: %s" ANSI_RESET "\n", result);
+            }
         } else {
-            printf(ANSI_RED "    Error: %s" ANSI_RESET "\n", result);
+            // For real errors, keep the red styling
+            if (strlen(result) > 200) {
+                printf(ANSI_RED "    Error: %.197s..." ANSI_RESET "\n", result);
+            } else {
+                printf(ANSI_RED "    Error: %s" ANSI_RESET "\n", result);
+            }
         }
     }
     
@@ -585,7 +608,7 @@ void log_tool_execution_improved(const char *tool_name, const char *arguments, b
 
 void display_system_info_group_start(void) {
     if (!system_info_group_active) {
-        printf(ANSI_YELLOW ANSI_BOLD "▼ System Information" ANSI_RESET "\n");
+        printf("\n" ANSI_YELLOW ANSI_BOLD "▼ System Information" ANSI_RESET "\n");
         printf(ANSI_YELLOW SEPARATOR_LIGHT ANSI_RESET "\n");
         system_info_group_active = true;
     }
@@ -593,7 +616,6 @@ void display_system_info_group_start(void) {
 
 void display_system_info_group_end(void) {
     if (system_info_group_active) {
-        printf("\n");
         system_info_group_active = false;
     }
 }

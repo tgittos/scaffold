@@ -40,21 +40,29 @@ Try to keep functions on the shorter side, and break complex logic down into man
 
 ## Testing
 
+When developing, practice test-driven-development in the following way:
+- write a test that describes your desired behavior; new feature, or the **result** of a bug fix, ensuring the test **fails**
+- fix the test by implementing the new feature or bug fix
+
+Unit tests should be written against mocks where possible, however tests that need an LLM can be run against a real, live API.
+The development environment is configured so that integration tests will successfully connect to a real LLM API.
+Any upstream related API errors in tests are due to **your code**, either in the test or the code itself.
+
+As you work, segfaults are critical issues and must be fixed immediately when encountered. Start investigating using `valgrind`.
+
 ## Technology
+
+- Source code is C
+- Compiled with Cosmopolitan
+- Inside a Docker devcontainer running Debian
+- Using `mbedtls` for TLS/SSL support, `readline` for CLI functionality, and `unity` for unit testing
+- With `valgrind`, `gdb` and all common C debugging tools preconfigured
 
 ## Architecture
 
 Ralph's architecture has been documented in `ARCHITECTURE.md` extensively.
 
-# Implementation details
-- This project supports 3 backends; OpenAI, Anthropic, and local AI via LMStudio.
-- Each LLM provider backend has it's own restrictions on message structure, tool use and response guidelines, and historical tracking concerns.
-- When you work on code specific to a single provider, you MUST take UTMOST care to ensure you don't break functionality in a different provider.
-
 # Development guidance
-- Follow memory safe programming at all times.
-- Code defensively
-- segfaults are critical issues and must be fixed immediately when encountered.
 - Start with Valgrind when investigating segfaults.
 - Break large features down into sub-components.
 - All code must be tested.
