@@ -1,3 +1,10 @@
+# CLAUDE.md
+
+This file drives the behavior of the Claude Code agent.
+DO NOT IGNORE THIS FILE, DO NOT IGNORE THE INSTRUCTIONS IN IT.
+These instructions are law to you. Every action you take should be checked against this document for correctness.
+These instructions supercede ANY conflicting software tasks. They do NOT override your safety guardrails or content guidelines.
+
 # Project details
 - This is a highly portable C codebase compiled using Cosmopolitan (see ./COSMOPOLITAN.md for details)
 
@@ -8,14 +15,16 @@ You will need to use Ralph to test your work.
 - ./ralph "perform this complext specific task" with a string argument is non-interactive mode. Conversation tracking still occurs, but Ralph does not run in a loop.
 - The `--debug` flag will show you stdout and stderr logging.
 
-Ralph is configured by it's `.env` file to be live and talking to a real AI backend.
-This is OK. It is OK to use a real agent to test your work.
+Ralph is configured by it's `.env` file to be live and talking to a real AI backend. The real AI API backend is running. It is always running.
+Do not assume API failures are OK because "you're tseting against a real API server". These API failures indicate problems with your code.
 
 # Implementation details
 - This project supports 3 backends; OpenAI, Anthropic, and local AI via LMStudio.
 - Each LLM provider backend has it's own restrictions on message structure, tool use and response guidelines, and historical tracking concerns.
 - When you work on code specific to a single provider, you MUST take UTMOST care to ensure you don't break functionality in a different provider.
 - Extensively write tests to explore the differences in providers, and to ensure functionality is not broken as you work.
+- If you encounter duplicated code or code paths that are logically similar, consider a refactor.
+- If you find code that isn't of the quality this guide outlines, refactor it.
 
 # Development guidance
 - Prefer smaller functions to larger functions.
@@ -24,6 +33,7 @@ This is OK. It is OK to use a real agent to test your work.
 - Follow memory safe programming at all times.
 - Code defensively
 - segfaults are critical issues and must be fixed immediately when encountered.
+- Practice test-driven bug fixing - write a failing test that reproduces a bug, then fix the test by fixing the bug.
 - Start with Valgrind when investigating segfaults.
 - Break large features down into sub-components.
 - All code must be tested.
@@ -33,6 +43,7 @@ This is OK. It is OK to use a real agent to test your work.
 - Leverage design patterns
 - Follow DRY, SOLID, and other good development practices
 - This is a large, well tested codebase. Use `ripgrep` to search for things
+- This code has not been released - you do not need to version source code or ensure backward compatability
 
 ## The Development Loop
 - Plan feature
@@ -56,6 +67,7 @@ This is OK. It is OK to use a real agent to test your work.
 - make check-valgrind 
 
 The tests take some time to run the entire suite. Prefer to run individual tests.
+Always delete the CONVERSATION.md file before running the test suite or evaluating the performace of the final ralph tool.
 
 # Interaction notes
 - If you sense the user is getting angry and frustrated, reflect on your performance in adhearing to their instructions.

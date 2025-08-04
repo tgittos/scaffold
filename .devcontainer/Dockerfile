@@ -19,6 +19,9 @@ RUN export NVM_DIR="$HOME/.nvm" && \
     [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
 RUN nvm install 22 && nvm use 22
 RUN npm install -g @anthropic-ai/claude-code
+RUN npm install -g @musistudio/claude-code-router
+
+COPY .claude-code-router/config.json /root/.claude-code-router/config.json
 
 RUN wget https://cosmo.zip/pub/cosmocc/cosmocc-4.0.2.zip && \
     unzip cosmocc-4.0.2.zip -d /opt/cosmos && \
