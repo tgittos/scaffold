@@ -53,6 +53,10 @@ TEST_FILE_SOURCES = $(TESTDIR)/test_file_tools.c $(SRCDIR)/file_tools.c $(SRCDIR
 TEST_FILE_OBJECTS = $(TEST_FILE_SOURCES:.c=.o)
 TEST_FILE_TARGET = $(TESTDIR)/test_file_tools
 
+TEST_SMART_FILE_SOURCES = $(TESTDIR)/test_smart_file_tools.c $(SRCDIR)/file_tools.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/links_tool.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_display.c $(SRCDIR)/json_utils.c $(SRCDIR)/output_formatter.c $(SRCDIR)/debug_output.c $(SRCDIR)/model_capabilities.c $(SRCDIR)/models/qwen_model.c $(SRCDIR)/models/deepseek_model.c $(SRCDIR)/models/gpt_model.c $(SRCDIR)/models/claude_model.c $(SRCDIR)/models/default_model.c $(TESTDIR)/unity/unity.c
+TEST_SMART_FILE_OBJECTS = $(TEST_SMART_FILE_SOURCES:.c=.o)
+TEST_SMART_FILE_TARGET = $(TESTDIR)/test_smart_file_tools
+
 TEST_RALPH_SOURCES = $(TESTDIR)/test_ralph.c $(TESTDIR)/mock_api_server.c $(SRCDIR)/ralph.c $(SRCDIR)/http_client.c $(SRCDIR)/env_loader.c $(SRCDIR)/output_formatter.c $(SRCDIR)/prompt_loader.c $(SRCDIR)/conversation_tracker.c $(SRCDIR)/conversation_compactor.c $(SRCDIR)/session_manager.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/debug_output.c $(SRCDIR)/api_common.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_display.c $(SRCDIR)/json_utils.c $(SRCDIR)/token_manager.c $(SRCDIR)/llm_provider.c $(SRCDIR)/providers/openai_provider.c $(SRCDIR)/providers/anthropic_provider.c $(SRCDIR)/providers/local_ai_provider.c $(SRCDIR)/model_capabilities.c $(SRCDIR)/models/qwen_model.c $(SRCDIR)/models/deepseek_model.c $(SRCDIR)/models/gpt_model.c $(SRCDIR)/models/claude_model.c $(SRCDIR)/models/default_model.c $(TESTDIR)/unity/unity.c
 TEST_RALPH_OBJECTS = $(TEST_RALPH_SOURCES:.c=.o)
 TEST_RALPH_TARGET = $(TESTDIR)/test_ralph
@@ -87,7 +91,7 @@ TEST_MODEL_TOOLS_SOURCES = $(TESTDIR)/test_model_tools.c $(SRCDIR)/model_capabil
 TEST_MODEL_TOOLS_OBJECTS = $(TEST_MODEL_TOOLS_SOURCES:.c=.o)
 TEST_MODEL_TOOLS_TARGET = $(TESTDIR)/test_model_tools
 
-ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_HTTP_TARGET) $(TEST_ENV_TARGET) $(TEST_OUTPUT_TARGET) $(TEST_PROMPT_TARGET) $(TEST_CONVERSATION_TARGET) $(TEST_TOOLS_TARGET) $(TEST_SHELL_TARGET) $(TEST_FILE_TARGET) $(TEST_RALPH_TARGET) $(TEST_TODO_MANAGER_TARGET) $(TEST_TODO_TOOL_TARGET) $(TEST_RALPH_INTEGRATION_TARGET) $(TEST_TOKEN_MANAGER_TARGET) $(TEST_CONVERSATION_COMPACTOR_TARGET) $(TEST_INCOMPLETE_TASK_BUG_TARGET) $(TEST_MODEL_TOOLS_TARGET)
+ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_HTTP_TARGET) $(TEST_ENV_TARGET) $(TEST_OUTPUT_TARGET) $(TEST_PROMPT_TARGET) $(TEST_CONVERSATION_TARGET) $(TEST_TOOLS_TARGET) $(TEST_SHELL_TARGET) $(TEST_FILE_TARGET) $(TEST_SMART_FILE_TARGET) $(TEST_RALPH_TARGET) $(TEST_TODO_MANAGER_TARGET) $(TEST_TODO_TOOL_TARGET) $(TEST_RALPH_INTEGRATION_TARGET) $(TEST_TOKEN_MANAGER_TARGET) $(TEST_CONVERSATION_COMPACTOR_TARGET) $(TEST_INCOMPLETE_TASK_BUG_TARGET) $(TEST_MODEL_TOOLS_TARGET)
 
 # Dependencies
 CURL_VERSION = 8.4.0
@@ -162,6 +166,7 @@ test: $(ALL_TEST_TARGETS)
 	./$(TEST_TOOLS_TARGET)
 	./$(TEST_SHELL_TARGET)
 	./$(TEST_FILE_TARGET)
+	./$(TEST_SMART_FILE_TARGET)
 	./$(TEST_RALPH_TARGET)
 	./$(TEST_TODO_MANAGER_TARGET)
 	./$(TEST_TODO_TOOL_TARGET)
@@ -200,6 +205,9 @@ $(TEST_SHELL_TARGET): $(TEST_SHELL_OBJECTS)
 
 $(TEST_FILE_TARGET): $(TEST_FILE_OBJECTS)
 	$(CC) -o $@ $(TEST_FILE_OBJECTS)
+
+$(TEST_SMART_FILE_TARGET): $(TEST_SMART_FILE_OBJECTS)
+	$(CC) -o $@ $(TEST_SMART_FILE_OBJECTS)
 
 $(TEST_RALPH_TARGET): $(TEST_RALPH_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
 	$(CC) $(LDFLAGS) -o $@ $(TEST_RALPH_OBJECTS) $(RALPH_TEST_LIBS)

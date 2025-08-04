@@ -103,6 +103,20 @@ int register_file_tools(ToolRegistry *registry);
 FileErrorCode file_read_content(const char *file_path, int start_line, int end_line, char **content);
 
 /**
+ * Read file contents with token budget awareness and smart truncation
+ * 
+ * @param file_path Path to file to read
+ * @param start_line Starting line number (1-based, 0 for entire file)
+ * @param end_line Ending line number (1-based, 0 for to end of file)
+ * @param max_tokens Maximum token budget for content (0 for no limit)
+ * @param content Output buffer for file contents (caller must free)
+ * @param truncated Output flag indicating if content was truncated (can be NULL)
+ * @return FileErrorCode indicating success or failure
+ */
+FileErrorCode file_read_content_smart(const char *file_path, int start_line, int end_line, 
+                                     int max_tokens, char **content, int *truncated);
+
+/**
  * Write content to file (overwrites existing file)
  * 
  * @param file_path Path to file to write
@@ -150,6 +164,24 @@ FileErrorCode file_search_content(const char *search_path, const char *pattern,
                                  int case_sensitive, SearchResults *results);
 
 /**
+ * Search for pattern in files with token budget awareness
+ * 
+ * @param search_path Path to search (file or directory)
+ * @param pattern Pattern to search for (regex supported)
+ * @param file_pattern Optional file pattern filter (NULL for all files)
+ * @param recursive Whether to search recursively in directories
+ * @param case_sensitive Whether search is case sensitive
+ * @param max_tokens Maximum token budget for results (0 for no limit)
+ * @param max_results Maximum number of results to return
+ * @param results Output search results (caller must free)
+ * @return FileErrorCode indicating success or failure
+ */
+FileErrorCode file_search_content_smart(const char *search_path, const char *pattern,
+                                       const char *file_pattern, int recursive, 
+                                       int case_sensitive, int max_tokens, 
+                                       int max_results, SearchResults *results);
+
+/**
  * Get file information and metadata
  * 
  * @param file_path Path to file
@@ -182,6 +214,26 @@ int file_validate_path(const char *file_path);
  * @return Static error message string
  */
 const char* file_error_message(FileErrorCode error_code);
+
+/**
+ * Estimate token count for given content
+ * 
+ * @param content Content to estimate tokens for
+ * @return Estimated token count
+ */
+int estimate_content_tokens(const char *content);
+
+/**
+ * Smart truncate content preserving structure (functions, classes, etc.)
+ * 
+ * @param content Original content
+ * @param max_tokens Maximum tokens to keep
+ * @param truncated_content Output truncated content (caller must free)
+ * @param was_truncated Output flag indicating if truncation occurred
+ * @return 0 on success, -1 on failure
+ */
+int smart_truncate_content(const char *content, int max_tokens, 
+                          char **truncated_content, int *was_truncated);
 
 /**
  * Clean up file information structure

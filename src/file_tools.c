@@ -12,6 +12,7 @@
 #include <time.h>
 #include <strings.h>  // For strcasecmp
 #include <limits.h>   // For PATH_MAX
+#include <math.h>     // For ceil
 
 // Helper function to safely duplicate strings
 static char* safe_strdup(const char *str) {
@@ -58,6 +59,90 @@ const char* file_error_message(FileErrorCode error_code) {
         case FILE_ERROR_IO: return "I/O error";
         default: return "Unknown error";
     }
+}
+
+// Estimate token count for content using simple heuristics
+int estimate_content_tokens(const char *content) {
+    if (content == NULL) return 0;
+    
+    int char_count = strlen(content);
+    float chars_per_token = 5.5f; // Default for modern tokenizers
+    
+    // Adjust estimation based on content type
+    // Code and structured text are more efficiently tokenized
+    if (strstr(content, "function ") != NULL || strstr(content, "def ") != NULL ||
+        strstr(content, "#include") != NULL || strstr(content, "class ") != NULL) {
+        chars_per_token *= 1.2f; // Code is ~20% more efficient
+    }
+    
+    // JSON content is very efficiently tokenized
+    if (content[0] == '{' || strstr(content, "\"role\":") != NULL) {
+        chars_per_token *= 1.3f; // JSON is ~30% more efficient
+    }
+    
+    return (int)ceil(char_count / chars_per_token);
+}
+
+// Smart truncate content preserving structure
+int smart_truncate_content(const char *content, int max_tokens, 
+                          char **truncated_content, int *was_truncated) {
+    if (content == NULL || truncated_content == NULL) return -1;
+    
+    int total_tokens = estimate_content_tokens(content);
+    if (was_truncated != NULL) {
+        *was_truncated = (total_tokens > max_tokens);
+    }
+    
+    // If content fits within budget, return as-is
+    if (max_tokens <= 0 || total_tokens <= max_tokens) {
+        *truncated_content = safe_strdup(content);
+        return (*truncated_content != NULL) ? 0 : -1;
+    }
+    
+    // Calculate target character count
+    float chars_per_token = 5.5f;
+    int target_chars = (int)(max_tokens * chars_per_token * 0.8f); // Leave some buffer
+    int content_len = strlen(content);
+    
+    if (target_chars >= content_len) {
+        *truncated_content = safe_strdup(content);
+        return (*truncated_content != NULL) ? 0 : -1;
+    }
+    
+    // Try to find a good truncation point
+    int best_cut = target_chars;
+    
+    // Look for natural break points: function ends, class ends, blank lines
+    for (int i = target_chars - 200; i >= 0 && i > target_chars - 500; i--) {
+        if (content[i] == '\n') {
+            // Check if this looks like a function or class boundary
+            const char *line_start = &content[i + 1];
+            
+            // Look for function definitions starting on next line
+            if (strncmp(line_start, "int ", 4) == 0 || 
+                strncmp(line_start, "void ", 5) == 0 ||
+                strncmp(line_start, "char", 4) == 0 ||
+                strncmp(line_start, "static ", 7) == 0 ||
+                strncmp(line_start, "typedef ", 8) == 0 ||
+                line_start[0] == '}' || 
+                (line_start[0] == '\n' && line_start[1] != '\0')) {
+                best_cut = i;
+                break;
+            }
+        }
+    }
+    
+    // Allocate result buffer with truncation notice
+    const char *truncation_notice = "\n\n[... Content truncated to fit token budget ...]";
+    int notice_len = strlen(truncation_notice);
+    char *result = malloc(best_cut + notice_len + 1);
+    if (result == NULL) return -1;
+    
+    memcpy(result, content, best_cut);
+    strcpy(result + best_cut, truncation_notice);
+    
+    *truncated_content = result;
+    return 0;
 }
 
 // Read file content with optional line range
@@ -139,6 +224,44 @@ FileErrorCode file_read_content(const char *file_path, int start_line, int end_l
         return FILE_ERROR_MEMORY;
     }
     *content = final_content;
+    
+    return FILE_SUCCESS;
+}
+
+// Read file content with token budget awareness
+FileErrorCode file_read_content_smart(const char *file_path, int start_line, int end_line, 
+                                     int max_tokens, char **content, int *truncated) {
+    if (file_path == NULL || content == NULL) {
+        return FILE_ERROR_INVALID_PATH;
+    }
+    
+    // First, read the content normally
+    char *raw_content = NULL;
+    FileErrorCode result = file_read_content(file_path, start_line, end_line, &raw_content);
+    
+    if (result != FILE_SUCCESS) {
+        return result;
+    }
+    
+    // If no token limit specified, return as-is
+    if (max_tokens <= 0) {
+        *content = raw_content;
+        if (truncated != NULL) *truncated = 0;
+        return FILE_SUCCESS;
+    }
+    
+    // Apply smart truncation if needed
+    char *smart_content = NULL;
+    int was_truncated = 0;
+    
+    if (smart_truncate_content(raw_content, max_tokens, &smart_content, &was_truncated) != 0) {
+        free(raw_content);
+        return FILE_ERROR_MEMORY;
+    }
+    
+    free(raw_content);
+    *content = smart_content;
+    if (truncated != NULL) *truncated = was_truncated;
     
     return FILE_SUCCESS;
 }
@@ -641,6 +764,79 @@ FileErrorCode file_search_content(const char *search_path, const char *pattern,
     return FILE_SUCCESS;
 }
 
+// Smart search with token budget awareness
+FileErrorCode file_search_content_smart(const char *search_path, const char *pattern,
+                                       const char *file_pattern, int recursive, 
+                                       int case_sensitive, int max_tokens, 
+                                       int max_results, SearchResults *results) {
+    // First, perform normal search
+    FileErrorCode result = file_search_content(search_path, pattern, file_pattern, 
+                                              recursive, case_sensitive, results);
+    
+    if (result != FILE_SUCCESS) {
+        return result;
+    }
+    
+    // If no limits specified, return as-is
+    if (max_tokens <= 0 && max_results <= 0) {
+        return FILE_SUCCESS;
+    }
+    
+    // Apply result limiting based on token budget
+    int token_budget = max_tokens;
+    int result_limit = (max_results > 0) ? max_results : results->count;
+    
+    // Estimate tokens for each result and trim if needed
+    int kept_results = 0;
+    int estimated_tokens = 0;
+    
+    for (int i = 0; i < results->count && kept_results < result_limit; i++) {
+        SearchResult *search_result = &results->results[i];
+        
+        // Estimate tokens for this result
+        int result_tokens = 0;
+        if (search_result->file_path) result_tokens += estimate_content_tokens(search_result->file_path);
+        if (search_result->line_content) result_tokens += estimate_content_tokens(search_result->line_content);
+        if (search_result->match_context) result_tokens += estimate_content_tokens(search_result->match_context);
+        result_tokens += 10; // Overhead for JSON structure
+        
+        // Check if adding this result would exceed budget
+        if (max_tokens > 0 && (estimated_tokens + result_tokens) > token_budget) {
+            break;
+        }
+        
+        // If we're keeping fewer results, move this one forward
+        if (kept_results != i) {
+            results->results[kept_results] = results->results[i];
+            // Clear the moved-from slot to avoid double-free
+            memset(&results->results[i], 0, sizeof(SearchResult));
+        }
+        
+        kept_results++;
+        estimated_tokens += result_tokens;
+    }
+    
+    // Clean up any results we're not keeping
+    for (int i = kept_results; i < results->count; i++) {
+        free(results->results[i].file_path);
+        free(results->results[i].line_content);
+        free(results->results[i].match_context);
+    }
+    
+    // Update result count
+    results->count = kept_results;
+    
+    // Shrink the results array if we removed many results
+    if (kept_results < results->count / 2) {
+        SearchResult *new_results = realloc(results->results, kept_results * sizeof(SearchResult));
+        if (new_results != NULL) {
+            results->results = new_results;
+        }
+    }
+    
+    return FILE_SUCCESS;
+}
+
 // Cleanup functions
 void cleanup_file_info(FileInfo *info) {
     if (info == NULL) return;
@@ -944,9 +1140,19 @@ int execute_file_search_tool_call(const ToolCall *tool_call, ToolResult *result)
     }
     
     int case_sensitive = extract_bool_param(tool_call->arguments, "case_sensitive", 1);
+    int max_tokens = extract_int_param(tool_call->arguments, "max_tokens", 0);
+    int max_results = extract_int_param(tool_call->arguments, "max_results", 0);
     
     SearchResults search_results;
-    FileErrorCode error = file_search_content(search_path, pattern, NULL, 0, case_sensitive, &search_results);
+    FileErrorCode error;
+    
+    // Use smart search if limits are specified
+    if (max_tokens > 0 || max_results > 0) {
+        error = file_search_content_smart(search_path, pattern, NULL, 0, case_sensitive, 
+                                        max_tokens, max_results, &search_results);
+    } else {
+        error = file_search_content(search_path, pattern, NULL, 0, case_sensitive, &search_results);
+    }
     
     if (error == FILE_SUCCESS) {
         size_t result_size = search_results.count * 300 + 1000;
@@ -1056,9 +1262,18 @@ int execute_file_read_tool_call(const ToolCall *tool_call, ToolResult *result) {
     
     int start_line = extract_int_param(tool_call->arguments, "start_line", 0);
     int end_line = extract_int_param(tool_call->arguments, "end_line", 0);
+    int max_tokens = extract_int_param(tool_call->arguments, "max_tokens", 0);
     
     char *content = NULL;
-    FileErrorCode error = file_read_content(file_path, start_line, end_line, &content);
+    int was_truncated = 0;
+    FileErrorCode error;
+    
+    // Use smart reading if max_tokens is specified
+    if (max_tokens > 0) {
+        error = file_read_content_smart(file_path, start_line, end_line, max_tokens, &content, &was_truncated);
+    } else {
+        error = file_read_content(file_path, start_line, end_line, &content);
+    }
     
     if (error == FILE_SUCCESS && content != NULL) {
         // Format as JSON result
@@ -1066,8 +1281,9 @@ int execute_file_read_tool_call(const ToolCall *tool_call, ToolResult *result) {
         char *json_result = malloc(result_size);
         if (json_result != NULL) {
             snprintf(json_result, result_size, 
-                "{\"success\": true, \"file_path\": \"%s\", \"content\": \"%s\", \"lines_read\": %d}",
-                file_path, content, (end_line > start_line) ? (end_line - start_line + 1) : -1);
+                "{\"success\": true, \"file_path\": \"%s\", \"content\": \"%s\", \"lines_read\": %d, \"truncated\": %s}",
+                file_path, content, (end_line > start_line) ? (end_line - start_line + 1) : -1, 
+                was_truncated ? "true" : "false");
             result->result = json_result;
         } else {
             result->result = safe_strdup("Error: Memory allocation failed");
@@ -1117,14 +1333,15 @@ int register_file_tools(ToolRegistry *registry) {
     if (registry == NULL) return -1;
     
     // 1. Register file_read tool
-    ToolParameter *read_params = malloc(3 * sizeof(ToolParameter));
+    ToolParameter *read_params = malloc(4 * sizeof(ToolParameter));
     if (read_params == NULL) return -1;
     
     read_params[0] = (ToolParameter){"file_path", "string", "Path to the file to read", NULL, 0, 1};
     read_params[1] = (ToolParameter){"start_line", "number", "Starting line number (1-based, 0 for entire file)", NULL, 0, 0};
     read_params[2] = (ToolParameter){"end_line", "number", "Ending line number (1-based, 0 for to end of file)", NULL, 0, 0};
+    read_params[3] = (ToolParameter){"max_tokens", "number", "Maximum tokens to return (0 for no limit, enables smart truncation)", NULL, 0, 0};
     
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
         read_params[i].name = safe_strdup(read_params[i].name);
         read_params[i].type = safe_strdup(read_params[i].type);
         read_params[i].description = safe_strdup(read_params[i].description);
@@ -1139,7 +1356,7 @@ int register_file_tools(ToolRegistry *registry) {
         }
     }
     
-    if (register_single_tool(registry, "file_read", "Read file contents with optional line range", read_params, 3) != 0) {
+    if (register_single_tool(registry, "file_read", "Read file contents with optional line range and smart truncation", read_params, 4) != 0) {
         return -1;
     }
     
@@ -1224,14 +1441,16 @@ int register_file_tools(ToolRegistry *registry) {
     }
     
     // 5. Register file_search tool
-    ToolParameter *search_params = malloc(3 * sizeof(ToolParameter));
+    ToolParameter *search_params = malloc(5 * sizeof(ToolParameter));
     if (search_params == NULL) return -1;
     
     search_params[0] = (ToolParameter){"search_path", "string", "File or directory path to search", NULL, 0, 1};
     search_params[1] = (ToolParameter){"pattern", "string", "Text pattern to search for", NULL, 0, 1};
     search_params[2] = (ToolParameter){"case_sensitive", "boolean", "Case sensitive search (default: true)", NULL, 0, 0};
+    search_params[3] = (ToolParameter){"max_tokens", "number", "Maximum tokens for search results (0 for no limit)", NULL, 0, 0};
+    search_params[4] = (ToolParameter){"max_results", "number", "Maximum number of search results (0 for no limit)", NULL, 0, 0};
     
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 5; i++) {
         search_params[i].name = safe_strdup(search_params[i].name);
         search_params[i].type = safe_strdup(search_params[i].type);
         search_params[i].description = safe_strdup(search_params[i].description);
@@ -1246,7 +1465,7 @@ int register_file_tools(ToolRegistry *registry) {
         }
     }
     
-    if (register_single_tool(registry, "file_search", "Search for text patterns in files", search_params, 3) != 0) {
+    if (register_single_tool(registry, "file_search", "Search for text patterns in files with intelligent result limiting", search_params, 5) != 0) {
         return -1;
     }
     
