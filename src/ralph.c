@@ -459,12 +459,11 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
     (void)max_tokens;
     
     int loop_count = 0;
-    const int MAX_TOOL_LOOPS = 10; // Prevent infinite loops
     ExecutedToolTracker tracker = {0};
     
     debug_printf("Starting iterative tool calling loop\n");
     
-    while (loop_count < MAX_TOOL_LOOPS) {
+    while (1) {
         loop_count++;
         debug_printf("Tool calling loop iteration %d\n", loop_count);
         
@@ -474,6 +473,7 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
         TokenUsage token_usage;
         if (manage_conversation_tokens(session, "", &token_config, &token_usage) != 0) {
             fprintf(stderr, "Error: Failed to calculate token allocation for tool loop iteration %d\n", loop_count);
+            cleanup_executed_tool_tracker(&tracker);
             return -1;
         }
         
@@ -490,6 +490,7 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
         
         if (post_data == NULL) {
             fprintf(stderr, "Error: Failed to build JSON payload for tool loop iteration %d\n", loop_count);
+            cleanup_executed_tool_tracker(&tracker);
             return -1;
         }
         
@@ -500,6 +501,7 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
         if (http_post_with_headers(session->session_data.config.api_url, post_data, headers, &response) != 0) {
             fprintf(stderr, "API request failed for tool loop iteration %d\n", loop_count);
             free(post_data);
+            cleanup_executed_tool_tracker(&tracker);
             return -1;
         }
         
@@ -517,6 +519,7 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
             printf("%s\n", response.data);
             cleanup_response(&response);
             free(post_data);
+            cleanup_executed_tool_tracker(&tracker);
             return -1;
         }
         
@@ -678,10 +681,6 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
         
         // Continue the loop to check for more tool calls in the next response
     }
-    
-    debug_printf("Warning: Tool calling loop reached maximum iterations (%d) - stopping to prevent infinite loop\n", MAX_TOOL_LOOPS);
-    cleanup_executed_tool_tracker(&tracker);
-    return 0;
 }
 
 int ralph_process_message(RalphSession* session, const char* user_message) {
