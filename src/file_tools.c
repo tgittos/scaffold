@@ -1,5 +1,6 @@
 #define _GNU_SOURCE  // For strcasestr
 #include "file_tools.h"
+#include "json_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,6 +14,10 @@
 #include <strings.h>  // For strcasecmp
 #include <limits.h>   // For PATH_MAX
 #include <math.h>     // For ceil
+
+// Forward declarations
+static FileErrorCode list_directory_recursive(const char *directory_path, const char *pattern,
+                                             int include_hidden, DirectoryListing *listing, int *capacity);
 
 // Helper function to safely duplicate strings
 static char* safe_strdup(const char *str) {
@@ -413,7 +418,6 @@ FileErrorCode file_create_backup(const char *file_path, char **backup_path) {
 // List directory contents
 FileErrorCode file_list_directory(const char *directory_path, const char *pattern, 
                                  int include_hidden, int recursive, DirectoryListing *listing) {
-    (void)recursive; // TODO: Implement recursive directory traversal
     if (directory_path == NULL || listing == NULL) {
         return FILE_ERROR_INVALID_PATH;
     }
@@ -424,17 +428,29 @@ FileErrorCode file_list_directory(const char *directory_path, const char *patter
     
     memset(listing, 0, sizeof(DirectoryListing));
     
-    DIR *dir = opendir(directory_path);
-    if (dir == NULL) {
-        return (errno == ENOENT) ? FILE_ERROR_NOT_FOUND : FILE_ERROR_PERMISSION;
-    }
-    
     // Allocate initial space for entries
     int capacity = 100;
     listing->entries = malloc(capacity * sizeof(DirectoryEntry));
     if (listing->entries == NULL) {
-        closedir(dir);
         return FILE_ERROR_MEMORY;
+    }
+    
+    if (recursive) {
+        // Use recursive helper function
+        FileErrorCode result = list_directory_recursive(directory_path, pattern, include_hidden, listing, &capacity);
+        if (result != FILE_SUCCESS) {
+            cleanup_directory_listing(listing);
+            return result;
+        }
+        return FILE_SUCCESS;
+    }
+    
+    // Non-recursive listing (existing implementation)
+    DIR *dir = opendir(directory_path);
+    if (dir == NULL) {
+        free(listing->entries);
+        listing->entries = NULL;
+        return (errno == ENOENT) ? FILE_ERROR_NOT_FOUND : FILE_ERROR_PERMISSION;
     }
     
     struct dirent *entry;
@@ -501,6 +517,131 @@ FileErrorCode file_list_directory(const char *directory_path, const char *patter
         }
         
         listing->count++;
+    }
+    
+    closedir(dir);
+    return FILE_SUCCESS;
+}
+
+// Helper function to match file patterns (supports basic wildcards)
+static int matches_file_pattern(const char *filename, const char *pattern) {
+    if (pattern == NULL || filename == NULL) {
+        return 1; // No pattern means match everything
+    }
+    
+    // Simple pattern matching with * and ? wildcards
+    const char *f = filename;
+    const char *p = pattern;
+    
+    while (*f && *p) {
+        if (*p == '*') {
+            // Skip consecutive asterisks
+            while (*p == '*') p++;
+            if (!*p) return 1; // Pattern ends with *, match rest
+            
+            // Try to match the rest of the pattern at each position
+            while (*f) {
+                if (matches_file_pattern(f, p)) {
+                    return 1;
+                }
+                f++;
+            }
+            return 0;
+        } else if (*p == '?' || *p == *f) {
+            // ? matches any character, or exact match
+            p++;
+            f++;
+        } else {
+            return 0; // No match
+        }
+    }
+    
+    // Skip trailing asterisks
+    while (*p == '*') p++;
+    
+    // Both should be at the end for a complete match
+    return (*f == 0 && *p == 0);
+}
+
+// Helper function for recursive directory traversal
+static FileErrorCode list_directory_recursive(const char *directory_path, const char *pattern,
+                                             int include_hidden, DirectoryListing *listing, int *capacity) {
+    DIR *dir = opendir(directory_path);
+    if (dir == NULL) {
+        return (errno == ENOENT) ? FILE_ERROR_NOT_FOUND : FILE_ERROR_PERMISSION;
+    }
+    
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL && listing->count < FILE_MAX_LIST_ENTRIES) {
+        // Skip . and .. entries
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+        
+        // Skip hidden files if not requested
+        if (!include_hidden && entry->d_name[0] == '.') {
+            continue;
+        }
+        
+        // Apply pattern filter if provided
+        if (pattern != NULL && strstr(entry->d_name, pattern) == NULL) {
+            continue;
+        }
+        
+        // Expand capacity if needed
+        if (listing->count >= *capacity) {
+            *capacity *= 2;
+            DirectoryEntry *new_entries = realloc(listing->entries, *capacity * sizeof(DirectoryEntry));
+            if (new_entries == NULL) {
+                closedir(dir);
+                return FILE_ERROR_MEMORY;
+            }
+            listing->entries = new_entries;
+        }
+        
+        DirectoryEntry *dir_entry = &listing->entries[listing->count];
+        memset(dir_entry, 0, sizeof(DirectoryEntry));
+        
+        dir_entry->name = safe_strdup(entry->d_name);
+        
+        // Build full path
+        size_t full_path_len = strlen(directory_path) + strlen(entry->d_name) + 2;
+        dir_entry->full_path = malloc(full_path_len);
+        if (dir_entry->full_path != NULL) {
+            snprintf(dir_entry->full_path, full_path_len, "%s/%s", directory_path, entry->d_name);
+        }
+        
+        // Get file info
+        struct stat file_stat;
+        if (dir_entry->full_path != NULL && stat(dir_entry->full_path, &file_stat) == 0) {
+            dir_entry->is_directory = S_ISDIR(file_stat.st_mode);
+            dir_entry->size = file_stat.st_size;
+            dir_entry->modified_time = file_stat.st_mtime;
+            
+            if (dir_entry->is_directory) {
+                listing->total_directories++;
+            } else {
+                listing->total_files++;
+            }
+        }
+        
+        if (dir_entry->name == NULL || dir_entry->full_path == NULL) {
+            free(dir_entry->name);
+            free(dir_entry->full_path);
+            closedir(dir);
+            return FILE_ERROR_MEMORY;
+        }
+        
+        listing->count++;
+        
+        // If this is a directory, recurse into it
+        if (dir_entry->is_directory && listing->count < FILE_MAX_LIST_ENTRIES) {
+            FileErrorCode recursive_result = list_directory_recursive(dir_entry->full_path, pattern, include_hidden, listing, capacity);
+            if (recursive_result != FILE_SUCCESS) {
+                closedir(dir);
+                return recursive_result;
+            }
+        }
     }
     
     closedir(dir);
@@ -589,7 +730,7 @@ static FileErrorCode search_file_content(const char *file_path, const char *patt
 
 // Helper function to search content within a directory
 static FileErrorCode search_directory_content(const char *dir_path, const char *pattern,
-                                            int recursive, int case_sensitive,
+                                            const char *file_pattern, int recursive, int case_sensitive,
                                             SearchResults *results, int *capacity) {
     DIR *dir = opendir(dir_path);
     if (dir == NULL) {
@@ -617,6 +758,11 @@ static FileErrorCode search_directory_content(const char *dir_path, const char *
         }
         
         if (S_ISREG(entry_stat.st_mode)) {
+            // Check if file matches the file pattern
+            if (!matches_file_pattern(entry->d_name, file_pattern)) {
+                continue; // Skip files that don't match the pattern
+            }
+            
             // Regular file - search its content
             FileErrorCode search_result = search_file_content(full_path, pattern, case_sensitive, results, capacity);
             if (search_result != FILE_SUCCESS && search_result != FILE_ERROR_NOT_FOUND) {
@@ -626,7 +772,7 @@ static FileErrorCode search_directory_content(const char *dir_path, const char *
             results->files_searched++;
         } else if (S_ISDIR(entry_stat.st_mode) && recursive) {
             // Directory - recurse if requested
-            FileErrorCode search_result = search_directory_content(full_path, pattern, recursive, case_sensitive, results, capacity);
+            FileErrorCode search_result = search_directory_content(full_path, pattern, file_pattern, recursive, case_sensitive, results, capacity);
             if (search_result != FILE_SUCCESS) {
                 closedir(dir);
                 return search_result;
@@ -642,8 +788,6 @@ static FileErrorCode search_directory_content(const char *dir_path, const char *
 FileErrorCode file_search_content(const char *search_path, const char *pattern,
                                  const char *file_pattern, int recursive, 
                                  int case_sensitive, SearchResults *results) {
-    (void)file_pattern; // TODO: Implement file pattern filtering
-    (void)recursive; // TODO: Implement recursive search
     if (search_path == NULL || pattern == NULL || results == NULL) {
         return FILE_ERROR_INVALID_PATH;
     }
@@ -653,9 +797,6 @@ FileErrorCode file_search_content(const char *search_path, const char *pattern,
     }
     
     memset(results, 0, sizeof(SearchResults));
-    
-    // For now, implement simple string search in a single file
-    // Full implementation would handle directories, regex, etc.
     
     struct stat path_stat;
     if (stat(search_path, &path_stat) != 0) {
@@ -670,10 +811,22 @@ FileErrorCode file_search_content(const char *search_path, const char *pattern,
         if (results->results == NULL) {
             return FILE_ERROR_MEMORY;
         }
-        return search_directory_content(search_path, pattern, recursive, case_sensitive, results, &capacity);
+        return search_directory_content(search_path, pattern, file_pattern, recursive, case_sensitive, results, &capacity);
     }
     
-    // Search in single file
+    // Search in single file - check if it matches the file pattern
+    const char *filename = strrchr(search_path, '/');
+    filename = filename ? filename + 1 : search_path; // Get basename
+    
+    if (!matches_file_pattern(filename, file_pattern)) {
+        // File doesn't match pattern, return empty results
+        results->results = malloc(sizeof(SearchResult)); // Allocate minimal space
+        if (results->results == NULL) {
+            return FILE_ERROR_MEMORY;
+        }
+        return FILE_SUCCESS;
+    }
+    
     char *content = NULL;
     FileErrorCode read_result = file_read_content(search_path, 0, 0, &content);
     if (read_result != FILE_SUCCESS) {
@@ -1276,19 +1429,32 @@ int execute_file_read_tool_call(const ToolCall *tool_call, ToolResult *result) {
     }
     
     if (error == FILE_SUCCESS && content != NULL) {
-        // Format as JSON result
-        size_t result_size = strlen(content) * 2 + 1000; // *2 for escaping
-        char *json_result = malloc(result_size);
-        if (json_result != NULL) {
-            snprintf(json_result, result_size, 
-                "{\"success\": true, \"file_path\": \"%s\", \"content\": \"%s\", \"lines_read\": %d, \"truncated\": %s}",
-                file_path, content, (end_line > start_line) ? (end_line - start_line + 1) : -1, 
-                was_truncated ? "true" : "false");
-            result->result = json_result;
+        // Escape content for JSON
+        char *escaped_content = json_escape_string(content);
+        char *escaped_file_path = json_escape_string(file_path);
+        
+        if (escaped_content != NULL && escaped_file_path != NULL) {
+            // Format as JSON result  
+            size_t result_size = strlen(escaped_content) + strlen(escaped_file_path) + 200;
+            char *json_result = malloc(result_size);
+            if (json_result != NULL) {
+                snprintf(json_result, result_size, 
+                    "{\"success\": true, \"file_path\": \"%s\", \"content\": \"%s\", \"lines_read\": %d, \"truncated\": %s}",
+                    escaped_file_path, escaped_content, (end_line > start_line) ? (end_line - start_line + 1) : -1, 
+                    was_truncated ? "true" : "false");
+                result->result = json_result;
+                result->success = 1;
+            } else {
+                result->result = safe_strdup("Error: Memory allocation failed");
+                result->success = 0;
+            }
         } else {
-            result->result = safe_strdup("Error: Memory allocation failed");
+            result->result = safe_strdup("Error: JSON escaping failed");
+            result->success = 0;
         }
-        result->success = (json_result != NULL) ? 1 : 0;
+        
+        free(escaped_content);
+        free(escaped_file_path);
         free(content);
     } else {
         char error_msg[256];

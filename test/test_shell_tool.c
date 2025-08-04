@@ -186,8 +186,7 @@ void test_execute_shell_command_timeout(void) {
     TEST_ASSERT_NOT_NULL(result.stdout_output);
     TEST_ASSERT_NOT_NULL(result.stderr_output);
     TEST_ASSERT_EQUAL_INT(-1, result.exit_code);
-    // TODO: Fix timeout detection - for now just test that it doesn't run forever
-    // TEST_ASSERT_EQUAL_INT(1, result.timed_out);
+    TEST_ASSERT_EQUAL_INT(1, result.timed_out);
     // The sleep command should be killed by the timeout, so execution time should be around 1 second
     TEST_ASSERT_TRUE(result.execution_time >= 0.9);
     TEST_ASSERT_TRUE(result.execution_time < 5.0);  // Should not exceed timeout by much
