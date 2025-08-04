@@ -63,13 +63,20 @@ void test_claude_model_tool_generation(void) {
 }
 
 void test_qwen_model_tool_generation(void) {
-    // Test Qwen model uses OpenAI-style tools
+    // Test Qwen model uses OpenAI-style tool format (same as GPT)
+    // First verify the model is registered
+    ModelCapabilities* model = detect_model_capabilities(test_registry, "qwen2.5");
+    TEST_ASSERT_NOT_NULL_MESSAGE(model, "Qwen model should be found");
+    TEST_ASSERT_NOT_NULL_MESSAGE(model->generate_tools_json, "Qwen model should have generate_tools_json");
+    
     char* tools_json = generate_model_tools_json(test_registry, "qwen2.5", &tool_registry);
     
-    TEST_ASSERT_NOT_NULL(tools_json);
+    TEST_ASSERT_NOT_NULL_MESSAGE(tools_json, "generate_model_tools_json should return non-NULL for qwen");
     
-    // Should use OpenAI format
+    // Should use standard OpenAI format since qwen uses generate_tools_json
     TEST_ASSERT_NOT_NULL(strstr(tools_json, "\"type\": \"function\""));
+    TEST_ASSERT_NOT_NULL(strstr(tools_json, "\"function\""));
+    TEST_ASSERT_NOT_NULL(strstr(tools_json, "shell_execute"));  // Use actual registered tool
     
     free(tools_json);
 }

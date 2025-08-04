@@ -29,7 +29,7 @@ TEST_ENV_SOURCES = $(TESTDIR)/test_env_loader.c $(SRCDIR)/env_loader.c $(TESTDIR
 TEST_ENV_OBJECTS = $(TEST_ENV_SOURCES:.c=.o)
 TEST_ENV_TARGET = $(TESTDIR)/test_env_loader
 
-TEST_OUTPUT_SOURCES = $(TESTDIR)/test_output_formatter.c $(SRCDIR)/output_formatter.c $(SRCDIR)/debug_output.c $(SRCDIR)/model_capabilities.c $(SRCDIR)/models/qwen_model.c $(SRCDIR)/models/deepseek_model.c $(SRCDIR)/models/gpt_model.c $(SRCDIR)/models/claude_model.c $(SRCDIR)/models/default_model.c $(TESTDIR)/unity/unity.c
+TEST_OUTPUT_SOURCES = $(TESTDIR)/test_output_formatter.c $(SRCDIR)/output_formatter.c $(SRCDIR)/debug_output.c $(SRCDIR)/model_capabilities.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_display.c $(SRCDIR)/json_utils.c $(SRCDIR)/models/qwen_model.c $(SRCDIR)/models/deepseek_model.c $(SRCDIR)/models/gpt_model.c $(SRCDIR)/models/claude_model.c $(SRCDIR)/models/default_model.c $(TESTDIR)/unity/unity.c
 TEST_OUTPUT_OBJECTS = $(TEST_OUTPUT_SOURCES:.c=.o)
 TEST_OUTPUT_TARGET = $(TESTDIR)/test_output_formatter
 
@@ -168,6 +168,8 @@ test: $(ALL_TEST_TARGETS)
 	./$(TEST_RALPH_INTEGRATION_TARGET)
 	./$(TEST_TOKEN_MANAGER_TARGET)
 	./$(TEST_MODEL_TOOLS_TARGET)
+	./$(TEST_CONVERSATION_COMPACTOR_TARGET)
+	./$(TEST_INCOMPLETE_TASK_BUG_TARGET)
 
 check: test
 
@@ -223,8 +225,6 @@ $(TEST_INCOMPLETE_TASK_BUG_TARGET): $(TEST_INCOMPLETE_TASK_BUG_OBJECTS) $(EMBEDD
 $(TEST_MODEL_TOOLS_TARGET): $(TEST_MODEL_TOOLS_OBJECTS) $(EMBEDDED_LINKS_HEADER)
 	$(CC) -o $@ $(TEST_MODEL_TOOLS_OBJECTS)
 
-$(TEST_MODEL_CAPABILITIES_TARGET): $(TEST_MODEL_CAPABILITIES_OBJECTS)
-	$(CC) -o $@ $(TEST_MODEL_CAPABILITIES_OBJECTS)
 
 # Compile test files
 $(TESTDIR)/%.o: $(TESTDIR)/%.c $(HEADERS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
@@ -248,7 +248,7 @@ check-valgrind: $(ALL_TEST_TARGETS)
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_TODO_TOOL_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_TOKEN_MANAGER_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_CONVERSATION_COMPACTOR_TARGET).aarch64.elf
-	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_MODEL_CAPABILITIES_TARGET).aarch64.elf
+	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_MODEL_TOOLS_TARGET).aarch64.elf
 
 # Valgrind testing for all tests (including external libraries - may show false positives)
 check-valgrind-all: $(ALL_TEST_TARGETS)

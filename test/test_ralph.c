@@ -219,6 +219,23 @@ void test_ralph_execute_tool_workflow_api_failure_resilience(void) {
     // should return 0 (success) when tools execute successfully, even if 
     // the follow-up API request fails (network down, server error, etc.)
     
+    // Start mock server that will fail on API requests
+    MockAPIServer server = {0};
+    server.port = MOCK_SERVER_DEFAULT_PORT;
+    MockAPIResponse responses[1];
+    responses[0] = mock_network_failure(); // This will drop connections
+    responses[0].endpoint = "/v1/chat/completions";
+    responses[0].method = "POST";
+    server.responses = responses;
+    server.response_count = 1;
+    
+    TEST_ASSERT_EQUAL_INT(0, mock_api_server_start(&server));
+    TEST_ASSERT_EQUAL_INT(0, mock_api_server_wait_ready(&server, 1000));
+    
+    // Set environment to use mock server
+    setenv("API_URL", "http://127.0.0.1:8888/v1/chat/completions", 1);
+    setenv("MODEL", "test-model", 1);
+    
     RalphSession session;
     ToolCall tool_calls[1];
     const char* headers[2] = {"Content-Type: application/json", NULL};
@@ -231,15 +248,10 @@ void test_ralph_execute_tool_workflow_api_failure_resilience(void) {
     ralph_init_session(&session);
     ralph_load_config(&session);
     
-    // Set API URL to something that will fail (simulate network failure)
-    // This tests the exact scenario: tool succeeds, API fails
-    free(session.session_data.config.api_url);
-    session.session_data.config.api_url = strdup("http://127.0.0.1:99999/v1/chat/completions"); // Port 99999 should be unreachable
-    
     // Execute tool workflow - this should return 0 (success) because:
     // 1. Tool execution succeeds (shell_execute with "echo" command works)
     // 2. Tool results are added to conversation history
-    // 3. Follow-up API request fails (unreachable server)
+    // 3. Follow-up API request fails (mock server drops connection)
     // 4. Function returns 0 anyway because tools executed successfully
     int result = ralph_execute_tool_workflow(&session, tool_calls, 1, "run echo command", 100, headers);
     
@@ -265,6 +277,13 @@ void test_ralph_execute_tool_workflow_api_failure_resilience(void) {
     TEST_ASSERT_TRUE(found_tool_result);
     
     ralph_cleanup_session(&session);
+    
+    // Stop mock server
+    mock_api_server_stop(&server);
+    
+    // Clean up environment
+    unsetenv("API_URL");
+    unsetenv("MODEL");
 }
 
 void test_ralph_process_message_basic_workflow(void) {
@@ -312,6 +331,23 @@ void test_tool_execution_without_api_server(void) {
     // NETWORK RESILIENCE TEST: Tool execution with completely unreachable API server
     // This tests graceful degradation when no API server is available
     
+    // Start mock server that will drop all connections
+    MockAPIServer server = {0};
+    server.port = MOCK_SERVER_DEFAULT_PORT;
+    MockAPIResponse responses[1];
+    responses[0] = mock_network_failure();
+    responses[0].endpoint = "/v1/chat/completions";
+    responses[0].method = "POST";
+    server.responses = responses;
+    server.response_count = 1;
+    
+    TEST_ASSERT_EQUAL_INT(0, mock_api_server_start(&server));
+    TEST_ASSERT_EQUAL_INT(0, mock_api_server_wait_ready(&server, 1000));
+    
+    // Set environment to use mock server
+    setenv("API_URL", "http://127.0.0.1:8888/v1/chat/completions", 1);
+    setenv("MODEL", "test-model", 1);
+    
     RalphSession session;
     ToolCall tool_calls[1];
     const char* headers[2] = {"Content-Type: application/json", NULL};
@@ -323,10 +359,6 @@ void test_tool_execution_without_api_server(void) {
     
     ralph_init_session(&session);
     ralph_load_config(&session);
-    
-    // Set API URL to definitely unreachable address
-    free(session.session_data.config.api_url);
-    session.session_data.config.api_url = strdup("http://192.0.2.1:99999/v1/chat/completions"); // RFC3330 test address
     
     // Execute tool workflow - should succeed despite unreachable API
     int result = ralph_execute_tool_workflow(&session, tool_calls, 1, "test without api", 100, headers);
@@ -349,11 +381,36 @@ void test_tool_execution_without_api_server(void) {
     TEST_ASSERT_TRUE(found_tool_result);
     
     ralph_cleanup_session(&session);
+    
+    // Stop mock server
+    mock_api_server_stop(&server);
+    
+    // Clean up environment
+    unsetenv("API_URL");
+    unsetenv("MODEL");
 }
 
 void test_tool_execution_with_network_timeout(void) {
     // NETWORK RESILIENCE TEST: Tool execution with network timeout
     // Tests behavior when API server times out
+    
+    // Start mock server with long delay to simulate timeout
+    MockAPIServer server = {0};
+    server.port = MOCK_SERVER_DEFAULT_PORT;
+    MockAPIResponse responses[1];
+    responses[0] = mock_network_failure(); // Simulates timeout by dropping connection
+    responses[0].endpoint = "/v1/chat/completions";
+    responses[0].method = "POST";
+    responses[0].delay_ms = 5000; // Long delay before dropping
+    server.responses = responses;
+    server.response_count = 1;
+    
+    TEST_ASSERT_EQUAL_INT(0, mock_api_server_start(&server));
+    TEST_ASSERT_EQUAL_INT(0, mock_api_server_wait_ready(&server, 1000));
+    
+    // Set environment to use mock server
+    setenv("API_URL", "http://127.0.0.1:8888/v1/chat/completions", 1);
+    setenv("MODEL", "test-model", 1);
     
     RalphSession session;
     ToolCall tool_calls[1];
@@ -367,10 +424,6 @@ void test_tool_execution_with_network_timeout(void) {
     ralph_init_session(&session);
     ralph_load_config(&session);
     
-    // Use unreachable API to simulate timeout
-    free(session.session_data.config.api_url);
-    session.session_data.config.api_url = strdup("http://192.0.2.1:99999/v1/chat/completions");
-    
     // Execute - should succeed because tool executes locally, API timeout doesn't matter
     int result = ralph_execute_tool_workflow(&session, tool_calls, 1, "timeout test", 100, headers);
     
@@ -381,11 +434,36 @@ void test_tool_execution_with_network_timeout(void) {
     TEST_ASSERT_TRUE(session.session_data.conversation.count > 0);
     
     ralph_cleanup_session(&session);
+    
+    // Stop mock server
+    mock_api_server_stop(&server);
+    
+    // Clean up environment
+    unsetenv("API_URL");
+    unsetenv("MODEL");
 }
 
 void test_tool_execution_with_auth_failure(void) {
     // NETWORK RESILIENCE TEST: Tool execution with API authentication failure
-    // Tests graceful handling when API server is unreachable (simulating auth failure)
+    // Tests graceful handling when API server returns auth error
+    
+    // Start mock server that returns 401 Unauthorized
+    MockAPIServer server = {0};
+    server.port = MOCK_SERVER_DEFAULT_PORT;
+    MockAPIResponse responses[1];
+    responses[0] = mock_error_response(401, "Unauthorized");
+    responses[0].endpoint = "/v1/chat/completions";
+    responses[0].method = "POST";
+    server.responses = responses;
+    server.response_count = 1;
+    
+    TEST_ASSERT_EQUAL_INT(0, mock_api_server_start(&server));
+    TEST_ASSERT_EQUAL_INT(0, mock_api_server_wait_ready(&server, 1000));
+    
+    // Set environment to use mock server
+    setenv("API_URL", "http://127.0.0.1:8888/v1/chat/completions", 1);
+    setenv("MODEL", "test-model", 1);
+    setenv("API_KEY", "test-key", 1);
     
     RalphSession session;
     ToolCall tool_calls[1];
@@ -398,10 +476,6 @@ void test_tool_execution_with_auth_failure(void) {
     ralph_init_session(&session);
     ralph_load_config(&session);
     
-    // Use unreachable API to simulate auth failure
-    free(session.session_data.config.api_url);
-    session.session_data.config.api_url = strdup("http://192.0.2.1:99999/v1/chat/completions");
-    
     // Execute - tool should succeed even with API auth failure
     int result = ralph_execute_tool_workflow(&session, tool_calls, 1, "auth test", 100, headers);
     
@@ -409,11 +483,36 @@ void test_tool_execution_with_auth_failure(void) {
     TEST_ASSERT_TRUE(session.session_data.conversation.count > 0);
     
     ralph_cleanup_session(&session);
+    
+    // Stop mock server
+    mock_api_server_stop(&server);
+    
+    // Clean up environment
+    unsetenv("API_URL");
+    unsetenv("MODEL");
+    unsetenv("API_KEY");
 }
 
 void test_graceful_degradation_on_api_errors(void) {
     // NETWORK RESILIENCE TEST: Various API error scenarios
     // Tests that tool execution continues working despite different API failures
+    
+    // Start mock server that returns 500 Internal Server Error
+    MockAPIServer server = {0};
+    server.port = MOCK_SERVER_DEFAULT_PORT;
+    MockAPIResponse responses[1];
+    responses[0] = mock_error_response(500, "Internal Server Error");
+    responses[0].endpoint = "/v1/chat/completions";
+    responses[0].method = "POST";
+    server.responses = responses;
+    server.response_count = 1;
+    
+    TEST_ASSERT_EQUAL_INT(0, mock_api_server_start(&server));
+    TEST_ASSERT_EQUAL_INT(0, mock_api_server_wait_ready(&server, 1000));
+    
+    // Set environment to use mock server
+    setenv("API_URL", "http://127.0.0.1:8888/v1/chat/completions", 1);
+    setenv("MODEL", "test-model", 1);
     
     RalphSession session;
     ToolCall tool_calls[1];
@@ -425,10 +524,6 @@ void test_graceful_degradation_on_api_errors(void) {
     
     ralph_init_session(&session);
     ralph_load_config(&session);
-    
-    // Use unreachable API to simulate server error
-    free(session.session_data.config.api_url);
-    session.session_data.config.api_url = strdup("http://192.0.2.1:99999/v1/chat/completions");
     
     // Execute tool workflow
     int result = ralph_execute_tool_workflow(&session, tool_calls, 1, "server error test", 100, headers);
@@ -449,6 +544,13 @@ void test_graceful_degradation_on_api_errors(void) {
     TEST_ASSERT_TRUE(found_tool_result);
     
     ralph_cleanup_session(&session);
+    
+    // Stop mock server
+    mock_api_server_stop(&server);
+    
+    // Clean up environment
+    unsetenv("API_URL");
+    unsetenv("MODEL");
 }
 
 void test_shell_command_request_workflow(void) {
