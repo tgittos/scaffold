@@ -1,5 +1,6 @@
 #include "output_formatter.h"
 #include "debug_output.h"
+#include "model_capabilities.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -145,6 +146,26 @@ static int extract_json_int(const char *json, const char *key) {
     return value;
 }
 
+// Global model registry - initialized once
+static ModelRegistry* g_model_registry = NULL;
+
+ModelRegistry* get_model_registry() {
+    if (!g_model_registry) {
+        g_model_registry = malloc(sizeof(ModelRegistry));
+        if (g_model_registry) {
+            if (init_model_registry(g_model_registry) == 0) {
+                // Register all known models
+                register_qwen_models(g_model_registry);
+                register_deepseek_models(g_model_registry);
+                register_gpt_models(g_model_registry);
+                register_claude_models(g_model_registry);
+                register_default_model(g_model_registry);
+            }
+        }
+    }
+    return g_model_registry;
+}
+
 static void separate_thinking_and_response(const char *content, char **thinking, char **response) {
     *thinking = NULL;
     *response = NULL;
@@ -198,78 +219,17 @@ int parse_api_response(const char *json_response, ParsedResponse *result) {
         return -1;
     }
     
-    // Initialize result
-    result->thinking_content = NULL;
-    result->response_content = NULL;
-    result->prompt_tokens = -1;
-    result->completion_tokens = -1;
-    result->total_tokens = -1;
+    // Try to extract model name from response
+    char *model_name = extract_json_string(json_response, "model");
     
-    // Extract content from choices[0].message.content
-    // Look for "content": pattern in the message object
-    const char *message_start = strstr(json_response, "\"message\":");
-    if (!message_start) {
-        return -1;
+    // Call the new function with model name
+    int ret = parse_api_response_with_model(json_response, model_name, result);
+    
+    if (model_name) {
+        free(model_name);
     }
     
-    // Check if content field exists
-    const char *content_pos = strstr(message_start, "\"content\":");
-    if (!content_pos) {
-        // No content field - this is valid for tool calls
-        // Check if there are tool_calls instead
-        const char *tool_calls_pos = strstr(message_start, "\"tool_calls\":");
-        if (tool_calls_pos) {
-            // This is a tool call response with no content - valid, leave fields as NULL
-            // But still extract token usage before returning
-            const char *usage_start = strstr(json_response, "\"usage\":");
-            if (usage_start) {
-                result->prompt_tokens = extract_json_int(usage_start, "prompt_tokens");
-                result->completion_tokens = extract_json_int(usage_start, "completion_tokens");
-                result->total_tokens = extract_json_int(usage_start, "total_tokens");
-            }
-            return 0;
-        } else {
-            // No content and no tool_calls - invalid
-            return -1;
-        }
-    }
-    
-    const char *value_start = content_pos + strlen("\"content\":");
-    // Skip whitespace
-    while (*value_start && (*value_start == ' ' || *value_start == '\t' || *value_start == '\n' || *value_start == '\r')) {
-        value_start++;
-    }
-    
-    // Check if content is null (common for tool calls)
-    if (strncmp(value_start, "null", 4) == 0) {
-        // Content is null - this is valid for tool calls, leave result fields as NULL
-    } else if (*value_start == '"') {
-        // Content is a string - extract it normally
-        char *raw_content = extract_json_string(message_start, "content");
-        if (!raw_content) {
-            return -1; // Failed to extract content string
-        }
-        
-        // Unescape JSON strings (convert \n to actual newlines, etc.)
-        unescape_json_string(raw_content);
-        
-        // Separate thinking from response
-        separate_thinking_and_response(raw_content, &result->thinking_content, &result->response_content);
-        free(raw_content);
-    } else {
-        // Content is neither null nor a string - invalid format
-        return -1;
-    }
-    
-    // Extract token usage
-    const char *usage_start = strstr(json_response, "\"usage\":");
-    if (usage_start) {
-        result->prompt_tokens = extract_json_int(usage_start, "prompt_tokens");
-        result->completion_tokens = extract_json_int(usage_start, "completion_tokens");
-        result->total_tokens = extract_json_int(usage_start, "total_tokens");
-    }
-    
-    return 0;
+    return ret;
 }
 
 void print_formatted_response(const ParsedResponse *response) {
@@ -340,6 +300,102 @@ int parse_anthropic_response(const char *json_response, ParsedResponse *result) 
         if (result->prompt_tokens > 0 && result->completion_tokens > 0) {
             result->total_tokens = result->prompt_tokens + result->completion_tokens;
         }
+    }
+    
+    return 0;
+}
+
+int parse_api_response_with_model(const char *json_response, const char *model_name, ParsedResponse *result) {
+    if (!json_response || !result) {
+        return -1;
+    }
+    
+    // Initialize result
+    result->thinking_content = NULL;
+    result->response_content = NULL;
+    result->prompt_tokens = -1;
+    result->completion_tokens = -1;
+    result->total_tokens = -1;
+    
+    // Extract content from choices[0].message.content
+    // Look for "content": pattern in the message object
+    const char *message_start = strstr(json_response, "\"message\":");
+    if (!message_start) {
+        return -1;
+    }
+    
+    // Check if content field exists
+    const char *content_pos = strstr(message_start, "\"content\":");
+    if (!content_pos) {
+        // No content field - this is valid for tool calls
+        // Check if there are tool_calls instead
+        const char *tool_calls_pos = strstr(message_start, "\"tool_calls\":");
+        if (tool_calls_pos) {
+            // This is a tool call response with no content - valid, leave fields as NULL
+            // But still extract token usage before returning
+            const char *usage_start = strstr(json_response, "\"usage\":");
+            if (usage_start) {
+                result->prompt_tokens = extract_json_int(usage_start, "prompt_tokens");
+                result->completion_tokens = extract_json_int(usage_start, "completion_tokens");
+                result->total_tokens = extract_json_int(usage_start, "total_tokens");
+            }
+            return 0;
+        } else {
+            // No content and no tool_calls - invalid
+            return -1;
+        }
+    }
+    
+    const char *value_start = content_pos + strlen("\"content\":");
+    // Skip whitespace
+    while (*value_start && (*value_start == ' ' || *value_start == '\t' || *value_start == '\n' || *value_start == '\r')) {
+        value_start++;
+    }
+    
+    // Check if content is null (common for tool calls)
+    if (strncmp(value_start, "null", 4) == 0) {
+        // Content is null - this is valid for tool calls, leave result fields as NULL
+    } else if (*value_start == '"') {
+        // Content is a string - extract it normally
+        char *raw_content = extract_json_string(message_start, "content");
+        if (!raw_content) {
+            return -1; // Failed to extract content string
+        }
+        
+        // Unescape JSON strings (convert \n to actual newlines, etc.)
+        unescape_json_string(raw_content);
+        
+        // Use model-specific processing if available
+        ModelRegistry* registry = get_model_registry();
+        if (registry && model_name) {
+            ModelCapabilities* model = detect_model_capabilities(registry, model_name);
+            if (model && model->process_response) {
+                int ret = model->process_response(raw_content, result);
+                free(raw_content);
+                if (ret != 0) {
+                    return -1;
+                }
+            } else {
+                // Fallback to default processing
+                separate_thinking_and_response(raw_content, &result->thinking_content, &result->response_content);
+                free(raw_content);
+            }
+        } else {
+            // No model registry or model name, use default processing
+            separate_thinking_and_response(raw_content, &result->thinking_content, &result->response_content);
+            free(raw_content);
+        }
+    } else {
+        // Content is neither null nor a string - invalid format
+        return -1;
+    }
+    
+    // Extract token usage
+    const char *usage_start = strstr(json_response, "\"usage\":");
+    if (usage_start) {
+        result->prompt_tokens = extract_json_int(usage_start, "prompt_tokens");
+        result->completion_tokens = extract_json_int(usage_start, "completion_tokens");
+        result->total_tokens = extract_json_int(usage_start, "total_tokens");
     }
     
     return 0;

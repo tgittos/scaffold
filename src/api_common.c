@@ -1,5 +1,6 @@
 #include "api_common.h"
 #include "json_utils.h"
+#include "model_capabilities.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,6 +8,7 @@
 // Forward declaration for tool JSON generators
 extern char* generate_tools_json(const ToolRegistry *registry);
 extern char* generate_anthropic_tools_json(const ToolRegistry *registry);
+extern ModelRegistry* get_model_registry(void);
 
 // Use unified JSON escaping from json_utils.h
 
@@ -388,6 +390,122 @@ char* build_json_payload_common(const char* model, const char* system_prompt,
         char* tools_json = (system_at_top_level) ? 
                           generate_anthropic_tools_json(tools) : 
                           generate_tools_json(tools);
+        if (tools_json != NULL) {
+            written = snprintf(current, remaining, ", \"tools\": %s", tools_json);
+            free(tools_json);
+            if (written < 0 || written >= (int)remaining) {
+                free(json);
+                return NULL;
+            }
+            current += written;
+            remaining -= written;
+        }
+    }
+    
+    // Close JSON
+    written = snprintf(current, remaining, "}");
+    if (written < 0 || written >= (int)remaining) {
+        free(json);
+        return NULL;
+    }
+    
+    return json;
+}
+
+char* build_json_payload_model_aware(const char* model, const char* system_prompt,
+                                    const ConversationHistory* conversation,
+                                    const char* user_message, const char* max_tokens_param,
+                                    int max_tokens, const ToolRegistry* tools,
+                                    MessageFormatter formatter,
+                                    int system_at_top_level) {
+    // Calculate required buffer size
+    size_t total_size = calculate_json_payload_size(model, system_prompt, conversation, user_message, tools);
+    char* json = malloc(total_size);
+    if (json == NULL) return NULL;
+    
+    // Start building JSON
+    char* current = json;
+    size_t remaining = total_size;
+    
+    int written = snprintf(current, remaining, "{\"model\": \"%s\", \"messages\": [", model);
+    if (written < 0 || written >= (int)remaining) {
+        free(json);
+        return NULL;
+    }
+    current += written;
+    remaining -= written;
+    
+    // Build messages array - use Anthropic-specific builder if system_at_top_level (Anthropic API)
+    if (system_at_top_level) {
+        written = build_anthropic_messages_json(current, remaining, 
+                                               NULL,  // system prompt handled at top level
+                                               conversation, user_message, formatter,
+                                               system_at_top_level);
+    } else {
+        written = build_messages_json(current, remaining, 
+                                     system_prompt,
+                                     conversation, user_message, formatter,
+                                     system_at_top_level);
+    }
+    if (written < 0) {
+        free(json);
+        return NULL;
+    }
+    current += written;
+    remaining -= written;
+    
+    // Close messages array
+    written = snprintf(current, remaining, "]");
+    if (written < 0 || written >= (int)remaining) {
+        free(json);
+        return NULL;
+    }
+    current += written;
+    remaining -= written;
+    
+    // Add system prompt at top level if requested (Anthropic style)
+    if (system_at_top_level && system_prompt != NULL) {
+        char* escaped_system = json_escape_string(system_prompt);
+        if (escaped_system != NULL) {
+            written = snprintf(current, remaining, ", \"system\": \"%s\"", escaped_system);
+            free(escaped_system);
+            if (written < 0 || written >= (int)remaining) {
+                free(json);
+                return NULL;
+            }
+            current += written;
+            remaining -= written;
+        }
+    }
+    
+    // Add max_tokens if specified
+    if (max_tokens > 0 && max_tokens_param != NULL) {
+        written = snprintf(current, remaining, ", \"%s\": %d", max_tokens_param, max_tokens);
+        if (written < 0 || written >= (int)remaining) {
+            free(json);
+            return NULL;
+        }
+        current += written;
+        remaining -= written;
+    }
+    
+    // Add tools if available - use model-specific formatting
+    if (tools != NULL && tools->function_count > 0) {
+        char* tools_json = NULL;
+        
+        // Try to use model-specific tool formatting
+        ModelRegistry* registry = get_model_registry();
+        if (registry && model) {
+            tools_json = generate_model_tools_json(registry, model, tools);
+        }
+        
+        // Fall back to provider-specific formatting if model-specific not available
+        if (!tools_json) {
+            tools_json = (system_at_top_level) ? 
+                          generate_anthropic_tools_json(tools) : 
+                          generate_tools_json(tools);
+        }
+        
         if (tools_json != NULL) {
             written = snprintf(current, remaining, ", \"tools\": %s", tools_json);
             free(tools_json);

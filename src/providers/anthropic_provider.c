@@ -65,9 +65,9 @@ static char* anthropic_build_request_json(const LLMProvider* provider,
                                          const ToolRegistry* tools) {
     // Anthropic-specific request building - system prompt at top level
     // Use the specialized Anthropic message builder to handle tool_result validation
-    return build_json_payload_common(model, system_prompt, conversation,
-                                   user_message, provider->capabilities.max_tokens_param,
-                                   max_tokens, tools, format_anthropic_message, 1);
+    return build_json_payload_model_aware(model, system_prompt, conversation,
+                                        user_message, provider->capabilities.max_tokens_param,
+                                        max_tokens, tools, format_anthropic_message, 1);
 }
 
 static int anthropic_build_headers(const LLMProvider* provider,

@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 
+
 // ANSI color codes
 #define ANSI_RESET   "\033[0m"
 #define ANSI_GRAY    "\033[90m"
@@ -29,6 +30,18 @@ typedef struct {
 int parse_api_response(const char *json_response, ParsedResponse *result);
 
 /**
+ * Parse JSON response with model-specific capabilities
+ * 
+ * @param json_response Raw JSON response string
+ * @param model_name Name of the model being used
+ * @param result Pointer to ParsedResponse struct to store results
+ * @return 0 on success, -1 on error
+ * 
+ * Note: Caller must free result->thinking_content and result->response_content when done
+ */
+int parse_api_response_with_model(const char *json_response, const char *model_name, ParsedResponse *result);
+
+/**
  * Parse JSON response from Anthropic API and extract message content and token usage
  * 
  * @param json_response Raw JSON response string
@@ -53,5 +66,6 @@ void print_formatted_response(const ParsedResponse *response);
  * @param response Pointer to ParsedResponse struct to clean up
  */
 void cleanup_parsed_response(ParsedResponse *response);
+
 
 #endif /* OUTPUT_FORMATTER_H */

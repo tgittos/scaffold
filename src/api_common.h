@@ -66,4 +66,14 @@ char* build_json_payload_common(const char* model, const char* system_prompt,
                                MessageFormatter formatter,
                                int system_at_top_level);
 
+/**
+ * Model-aware JSON payload builder that uses model-specific tool formatting
+ */
+char* build_json_payload_model_aware(const char* model, const char* system_prompt,
+                                    const ConversationHistory* conversation,
+                                    const char* user_message, const char* max_tokens_param,
+                                    int max_tokens, const ToolRegistry* tools,
+                                    MessageFormatter formatter,
+                                    int system_at_top_level);
+
 #endif // API_COMMON_H

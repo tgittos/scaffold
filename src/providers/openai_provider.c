@@ -45,9 +45,9 @@ static char* openai_build_request_json(const LLMProvider* provider,
                                       int max_tokens,
                                       const ToolRegistry* tools) {
     // OpenAI-specific request building - system prompt in messages array
-    return build_json_payload_common(model, system_prompt, conversation,
-                                   user_message, provider->capabilities.max_tokens_param,
-                                   max_tokens, tools, format_openai_message, 0);
+    return build_json_payload_model_aware(model, system_prompt, conversation,
+                                        user_message, provider->capabilities.max_tokens_param,
+                                        max_tokens, tools, format_openai_message, 0);
 }
 
 static int openai_build_headers(const LLMProvider* provider,

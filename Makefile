@@ -9,9 +9,9 @@ TESTDIR = test
 DEPDIR = deps
 
 # Source files
-SOURCES = $(SRCDIR)/main.c $(SRCDIR)/ralph.c $(SRCDIR)/http_client.c $(SRCDIR)/env_loader.c $(SRCDIR)/output_formatter.c $(SRCDIR)/prompt_loader.c $(SRCDIR)/conversation_tracker.c $(SRCDIR)/conversation_compactor.c $(SRCDIR)/session_manager.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/debug_output.c $(SRCDIR)/api_common.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_display.c $(SRCDIR)/json_utils.c $(SRCDIR)/token_manager.c $(SRCDIR)/llm_provider.c $(SRCDIR)/providers/openai_provider.c $(SRCDIR)/providers/anthropic_provider.c $(SRCDIR)/providers/local_ai_provider.c
+SOURCES = $(SRCDIR)/main.c $(SRCDIR)/ralph.c $(SRCDIR)/http_client.c $(SRCDIR)/env_loader.c $(SRCDIR)/output_formatter.c $(SRCDIR)/prompt_loader.c $(SRCDIR)/conversation_tracker.c $(SRCDIR)/conversation_compactor.c $(SRCDIR)/session_manager.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/debug_output.c $(SRCDIR)/api_common.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_display.c $(SRCDIR)/json_utils.c $(SRCDIR)/token_manager.c $(SRCDIR)/llm_provider.c $(SRCDIR)/providers/openai_provider.c $(SRCDIR)/providers/anthropic_provider.c $(SRCDIR)/providers/local_ai_provider.c $(SRCDIR)/model_capabilities.c $(SRCDIR)/models/qwen_model.c $(SRCDIR)/models/deepseek_model.c $(SRCDIR)/models/gpt_model.c $(SRCDIR)/models/claude_model.c $(SRCDIR)/models/default_model.c
 OBJECTS = $(SOURCES:.c=.o)
-HEADERS = $(SRCDIR)/ralph.h $(SRCDIR)/http_client.h $(SRCDIR)/env_loader.h $(SRCDIR)/output_formatter.h $(SRCDIR)/prompt_loader.h $(SRCDIR)/conversation_tracker.h $(SRCDIR)/conversation_compactor.h $(SRCDIR)/session_manager.h $(SRCDIR)/tools_system.h $(SRCDIR)/shell_tool.h $(SRCDIR)/file_tools.h $(SRCDIR)/links_tool.h $(SRCDIR)/debug_output.h $(SRCDIR)/embedded_links.h $(SRCDIR)/api_common.h $(SRCDIR)/todo_manager.h $(SRCDIR)/todo_tool.h $(SRCDIR)/todo_display.h $(SRCDIR)/json_utils.h $(SRCDIR)/token_manager.h $(SRCDIR)/llm_provider.h
+HEADERS = $(SRCDIR)/ralph.h $(SRCDIR)/http_client.h $(SRCDIR)/env_loader.h $(SRCDIR)/output_formatter.h $(SRCDIR)/prompt_loader.h $(SRCDIR)/conversation_tracker.h $(SRCDIR)/conversation_compactor.h $(SRCDIR)/session_manager.h $(SRCDIR)/tools_system.h $(SRCDIR)/shell_tool.h $(SRCDIR)/file_tools.h $(SRCDIR)/links_tool.h $(SRCDIR)/debug_output.h $(SRCDIR)/embedded_links.h $(SRCDIR)/api_common.h $(SRCDIR)/todo_manager.h $(SRCDIR)/todo_tool.h $(SRCDIR)/todo_display.h $(SRCDIR)/json_utils.h $(SRCDIR)/token_manager.h $(SRCDIR)/llm_provider.h $(SRCDIR)/model_capabilities.h
 
 # Tools
 BIN2C = build/bin2c
@@ -29,7 +29,7 @@ TEST_ENV_SOURCES = $(TESTDIR)/test_env_loader.c $(SRCDIR)/env_loader.c $(TESTDIR
 TEST_ENV_OBJECTS = $(TEST_ENV_SOURCES:.c=.o)
 TEST_ENV_TARGET = $(TESTDIR)/test_env_loader
 
-TEST_OUTPUT_SOURCES = $(TESTDIR)/test_output_formatter.c $(SRCDIR)/output_formatter.c $(SRCDIR)/debug_output.c $(TESTDIR)/unity/unity.c
+TEST_OUTPUT_SOURCES = $(TESTDIR)/test_output_formatter.c $(SRCDIR)/output_formatter.c $(SRCDIR)/debug_output.c $(SRCDIR)/model_capabilities.c $(SRCDIR)/models/qwen_model.c $(SRCDIR)/models/deepseek_model.c $(SRCDIR)/models/gpt_model.c $(SRCDIR)/models/claude_model.c $(SRCDIR)/models/default_model.c $(TESTDIR)/unity/unity.c
 TEST_OUTPUT_OBJECTS = $(TEST_OUTPUT_SOURCES:.c=.o)
 TEST_OUTPUT_TARGET = $(TESTDIR)/test_output_formatter
 
@@ -53,7 +53,7 @@ TEST_FILE_SOURCES = $(TESTDIR)/test_file_tools.c $(SRCDIR)/file_tools.c $(SRCDIR
 TEST_FILE_OBJECTS = $(TEST_FILE_SOURCES:.c=.o)
 TEST_FILE_TARGET = $(TESTDIR)/test_file_tools
 
-TEST_RALPH_SOURCES = $(TESTDIR)/test_ralph.c $(TESTDIR)/mock_api_server.c $(SRCDIR)/ralph.c $(SRCDIR)/http_client.c $(SRCDIR)/env_loader.c $(SRCDIR)/output_formatter.c $(SRCDIR)/prompt_loader.c $(SRCDIR)/conversation_tracker.c $(SRCDIR)/conversation_compactor.c $(SRCDIR)/session_manager.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/debug_output.c $(SRCDIR)/api_common.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_display.c $(SRCDIR)/json_utils.c $(SRCDIR)/token_manager.c $(SRCDIR)/llm_provider.c $(SRCDIR)/providers/openai_provider.c $(SRCDIR)/providers/anthropic_provider.c $(SRCDIR)/providers/local_ai_provider.c $(TESTDIR)/unity/unity.c
+TEST_RALPH_SOURCES = $(TESTDIR)/test_ralph.c $(TESTDIR)/mock_api_server.c $(SRCDIR)/ralph.c $(SRCDIR)/http_client.c $(SRCDIR)/env_loader.c $(SRCDIR)/output_formatter.c $(SRCDIR)/prompt_loader.c $(SRCDIR)/conversation_tracker.c $(SRCDIR)/conversation_compactor.c $(SRCDIR)/session_manager.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/debug_output.c $(SRCDIR)/api_common.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_display.c $(SRCDIR)/json_utils.c $(SRCDIR)/token_manager.c $(SRCDIR)/llm_provider.c $(SRCDIR)/providers/openai_provider.c $(SRCDIR)/providers/anthropic_provider.c $(SRCDIR)/providers/local_ai_provider.c $(SRCDIR)/model_capabilities.c $(SRCDIR)/models/qwen_model.c $(SRCDIR)/models/deepseek_model.c $(SRCDIR)/models/gpt_model.c $(SRCDIR)/models/claude_model.c $(SRCDIR)/models/default_model.c $(TESTDIR)/unity/unity.c
 TEST_RALPH_OBJECTS = $(TEST_RALPH_SOURCES:.c=.o)
 TEST_RALPH_TARGET = $(TESTDIR)/test_ralph
 
@@ -79,7 +79,15 @@ TEST_CONVERSATION_COMPACTOR_SOURCES = $(TESTDIR)/test_conversation_compactor.c $
 TEST_CONVERSATION_COMPACTOR_OBJECTS = $(TEST_CONVERSATION_COMPACTOR_SOURCES:.c=.o)
 TEST_CONVERSATION_COMPACTOR_TARGET = $(TESTDIR)/test_conversation_compactor
 
-ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_HTTP_TARGET) $(TEST_ENV_TARGET) $(TEST_OUTPUT_TARGET) $(TEST_PROMPT_TARGET) $(TEST_CONVERSATION_TARGET) $(TEST_TOOLS_TARGET) $(TEST_SHELL_TARGET) $(TEST_FILE_TARGET) $(TEST_RALPH_TARGET) $(TEST_TODO_MANAGER_TARGET) $(TEST_TODO_TOOL_TARGET) $(TEST_RALPH_INTEGRATION_TARGET) $(TEST_TOKEN_MANAGER_TARGET) $(TEST_CONVERSATION_COMPACTOR_TARGET)
+TEST_INCOMPLETE_TASK_BUG_SOURCES = $(TESTDIR)/test_incomplete_task_bug.c $(SRCDIR)/ralph.c $(SRCDIR)/http_client.c $(SRCDIR)/env_loader.c $(SRCDIR)/output_formatter.c $(SRCDIR)/prompt_loader.c $(SRCDIR)/conversation_tracker.c $(SRCDIR)/conversation_compactor.c $(SRCDIR)/session_manager.c $(SRCDIR)/tools_system.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/debug_output.c $(SRCDIR)/api_common.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_display.c $(SRCDIR)/json_utils.c $(SRCDIR)/token_manager.c $(SRCDIR)/llm_provider.c $(SRCDIR)/providers/openai_provider.c $(SRCDIR)/providers/anthropic_provider.c $(SRCDIR)/providers/local_ai_provider.c $(SRCDIR)/model_capabilities.c $(SRCDIR)/models/qwen_model.c $(SRCDIR)/models/deepseek_model.c $(SRCDIR)/models/gpt_model.c $(SRCDIR)/models/claude_model.c $(SRCDIR)/models/default_model.c $(TESTDIR)/unity/unity.c
+TEST_INCOMPLETE_TASK_BUG_OBJECTS = $(TEST_INCOMPLETE_TASK_BUG_SOURCES:.c=.o)
+TEST_INCOMPLETE_TASK_BUG_TARGET = $(TESTDIR)/test_incomplete_task_bug
+
+TEST_MODEL_TOOLS_SOURCES = $(TESTDIR)/test_model_tools.c $(SRCDIR)/model_capabilities.c $(SRCDIR)/tools_system.c $(SRCDIR)/output_formatter.c $(SRCDIR)/shell_tool.c $(SRCDIR)/file_tools.c $(SRCDIR)/links_tool.c $(SRCDIR)/todo_tool.c $(SRCDIR)/todo_manager.c $(SRCDIR)/todo_display.c $(SRCDIR)/json_utils.c $(SRCDIR)/models/qwen_model.c $(SRCDIR)/models/deepseek_model.c $(SRCDIR)/models/gpt_model.c $(SRCDIR)/models/claude_model.c $(SRCDIR)/models/default_model.c $(TESTDIR)/unity/unity.c
+TEST_MODEL_TOOLS_OBJECTS = $(TEST_MODEL_TOOLS_SOURCES:.c=.o)
+TEST_MODEL_TOOLS_TARGET = $(TESTDIR)/test_model_tools
+
+ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_HTTP_TARGET) $(TEST_ENV_TARGET) $(TEST_OUTPUT_TARGET) $(TEST_PROMPT_TARGET) $(TEST_CONVERSATION_TARGET) $(TEST_TOOLS_TARGET) $(TEST_SHELL_TARGET) $(TEST_FILE_TARGET) $(TEST_RALPH_TARGET) $(TEST_TODO_MANAGER_TARGET) $(TEST_TODO_TOOL_TARGET) $(TEST_RALPH_INTEGRATION_TARGET) $(TEST_TOKEN_MANAGER_TARGET) $(TEST_CONVERSATION_COMPACTOR_TARGET) $(TEST_INCOMPLETE_TASK_BUG_TARGET) $(TEST_MODEL_TOOLS_TARGET)
 
 # Dependencies
 CURL_VERSION = 8.4.0
@@ -159,6 +167,7 @@ test: $(ALL_TEST_TARGETS)
 	./$(TEST_TODO_TOOL_TARGET)
 	./$(TEST_RALPH_INTEGRATION_TARGET)
 	./$(TEST_TOKEN_MANAGER_TARGET)
+	./$(TEST_MODEL_TOOLS_TARGET)
 
 check: test
 
@@ -208,6 +217,15 @@ $(TEST_TOKEN_MANAGER_TARGET): $(TEST_TOKEN_MANAGER_OBJECTS) $(CURL_LIB) $(MBEDTL
 $(TEST_CONVERSATION_COMPACTOR_TARGET): $(TEST_CONVERSATION_COMPACTOR_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
 	$(CC) -o $@ $(TEST_CONVERSATION_COMPACTOR_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
 
+$(TEST_INCOMPLETE_TASK_BUG_TARGET): $(TEST_INCOMPLETE_TASK_BUG_OBJECTS) $(EMBEDDED_LINKS_HEADER) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
+	$(CC) -o $@ $(TEST_INCOMPLETE_TASK_BUG_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
+
+$(TEST_MODEL_TOOLS_TARGET): $(TEST_MODEL_TOOLS_OBJECTS) $(EMBEDDED_LINKS_HEADER)
+	$(CC) -o $@ $(TEST_MODEL_TOOLS_OBJECTS)
+
+$(TEST_MODEL_CAPABILITIES_TARGET): $(TEST_MODEL_CAPABILITIES_OBJECTS)
+	$(CC) -o $@ $(TEST_MODEL_CAPABILITIES_OBJECTS)
+
 # Compile test files
 $(TESTDIR)/%.o: $(TESTDIR)/%.c $(HEADERS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
 	$(CC) $(CFLAGS) $(TEST_INCLUDES) -c $< -o $@
@@ -230,6 +248,7 @@ check-valgrind: $(ALL_TEST_TARGETS)
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_TODO_TOOL_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_TOKEN_MANAGER_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_CONVERSATION_COMPACTOR_TARGET).aarch64.elf
+	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_MODEL_CAPABILITIES_TARGET).aarch64.elf
 
 # Valgrind testing for all tests (including external libraries - may show false positives)
 check-valgrind-all: $(ALL_TEST_TARGETS)
