@@ -279,6 +279,33 @@ int ralph_load_config(RalphSession* session) {
         session->session_data.config.max_tokens_param = "max_tokens";
     }
     
+    // Auto-configure context window from model capabilities if not explicitly set
+    if (context_window_str == NULL || max_context_window_str == NULL) {
+        ModelRegistry* registry = get_model_registry();
+        if (registry && session->session_data.config.model) {
+            ModelCapabilities* model = detect_model_capabilities(registry, session->session_data.config.model);
+            if (model && model->max_context_length > 0) {
+                // Only override if environment variable wasn't set
+                if (context_window_str == NULL) {
+                    session->session_data.config.context_window = model->max_context_length;
+                    debug_printf("Auto-configured context window from model capabilities: %d tokens for model %s\n",
+                                model->max_context_length, session->session_data.config.model);
+                    printf("🔧 Auto-configured context window: %d tokens (based on %s capabilities)\n",
+                           model->max_context_length, session->session_data.config.model);
+                }
+                if (max_context_window_str == NULL) {
+                    session->session_data.config.max_context_window = model->max_context_length;
+                    debug_printf("Auto-configured max context window from model capabilities: %d tokens for model %s\n",
+                                model->max_context_length, session->session_data.config.model);
+                }
+            } else {
+                debug_printf("Using default context window (%d tokens) - no model capabilities found for model %s\n",
+                            session->session_data.config.context_window, 
+                            session->session_data.config.model ? session->session_data.config.model : "unknown");
+            }
+        }
+    }
+    
     return 0;
 }
 

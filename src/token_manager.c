@@ -226,6 +226,30 @@ int calculate_token_allocation(const SessionData* session, const char* user_mess
     // Calculate available response tokens
     int available_tokens = effective_context_window - total_prompt_tokens - safety_buffer;
     
+    // Apply model-specific output token limits based on actual model capabilities
+    if (session->config.model) {
+        // Get model-specific response limits
+        int max_response_cap = -1;  // No cap by default
+        
+        // Determine response cap based on model pattern
+        if (strstr(session->config.model, "claude") != NULL) {
+            max_response_cap = 60000;  // Claude models have ~64k output limit
+        } else if (strstr(session->config.model, "gpt") != NULL) {
+            max_response_cap = 4000;   // OpenAI GPT models have ~4k output limit 
+        } else if (strstr(session->config.model, "deepseek") != NULL) {
+            max_response_cap = 8000;   // DeepSeek models have ~8k output limit
+        } else if (strstr(session->config.model, "qwen") != NULL) {
+            max_response_cap = 8000;   // Qwen models have ~8k output limit
+        }
+        // Default/local models: no specific cap
+        
+        if (max_response_cap > 0 && available_tokens > max_response_cap) {
+            available_tokens = max_response_cap;
+            debug_printf("Applied model-specific response token cap: %d tokens for model %s\n", 
+                        max_response_cap, session->config.model);
+        }
+    }
+    
     // Note: If available_tokens < min_response_tokens, the caller should use
     // manage_conversation_tokens() which will attempt compaction
     
