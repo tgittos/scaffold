@@ -78,6 +78,7 @@ You will need to use Ralph to test your work.
 
 Ralph is configured by it's `.env` file to be live and talking to a real AI backend. The real AI API backend is running. It is always running.
 Do not assume API failures are OK because "you're tseting against a real API server". These API failures indicate problems with your code.
+Do not ask `ralph` to perform complex tasks that would change this codebase. If you need to test how ralph breaks down a complex request, make it a read only requeset.
 
 # Reminders
 - the development environment is configured with Cosmopolitan tooling in appropriate autotools compatible ENV vars.

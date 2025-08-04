@@ -290,7 +290,7 @@ int ralph_load_config(RalphSession* session) {
                     session->session_data.config.context_window = model->max_context_length;
                     debug_printf("Auto-configured context window from model capabilities: %d tokens for model %s\n",
                                 model->max_context_length, session->session_data.config.model);
-                    printf("🔧 Auto-configured context window: %d tokens (based on %s capabilities)\n",
+                    debug_printf("🔧 Auto-configured context window: %d tokens (based on %s capabilities)\n",
                            model->max_context_length, session->session_data.config.model);
                 }
                 if (max_context_window_str == NULL) {

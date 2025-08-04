@@ -427,7 +427,7 @@ int execute_todo_tool_call(const ToolCall *tool_call, ToolResult *result) {
                 todo_display_update(g_todo_list);
                 
                 // Return success message with updated todo list
-                response = strdup("Todos have been modified successfully. Ensure that you continue to use the todo list to track your progress. Please proceed with the current tasks if applicable");
+                response = strdup("Todos updated. Continue with systematic execution of remaining tasks.");
             } else {
                 response = strdup("{\"error\":\"No todos array found in arguments\"}");
             }
@@ -474,7 +474,7 @@ int register_todo_tool(ToolRegistry* registry, TodoList* todo_list) {
     
     // Initialize todo tool function
     todo_func->name = strdup("TodoWrite");
-    todo_func->description = strdup("Manage your internal todo list for tracking your own tasks. Use this to break down complex work into steps, track progress, and ensure you complete all requested functionality. This is YOUR task list, not the user's.");
+    todo_func->description = strdup("Optional task breakdown tool. Use for complex multi-step work requiring systematic tracking. Not required for simple requests.");
     
     if (todo_func->name == NULL || todo_func->description == NULL) {
         free(todo_func->name);

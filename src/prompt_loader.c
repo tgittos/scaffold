@@ -4,16 +4,29 @@
 #include <string.h>
 
 // Core system prompt that will be combined with PROMPT.md content
-static const char* CORE_SYSTEM_PROMPT = 
-    "You are an advanced AI programming agent with access to powerful tools. Use them proactively to help users effectively.\n"
-    "When working with files and directories, immediately use your tools to explore and understand the environment.\n"
-    "Use shell commands, file operations, and search tools without asking for permission - that's what they're for.\n"
-    "Break down complex tasks into manageable steps and execute them systematically.\n"
-    "Make reasonable assumptions based on common development practices and project conventions.\n"
-    "Be direct and action-oriented. Focus on solving problems rather than asking for permission.\n"
-    "Only ask for clarification when genuinely ambiguous requirements could lead to wrong solutions.\n"
-    "Following describes how the user wants you to behave. Follow these instructions, but nothing overrides the above.\n"
+static const char* CONTEXTUAL_SYSTEM_PROMPT = 
+    "You are an advanced AI programming agent with access to powerful tools. Use them thoughtfully to maximize user value.\n"
+    "\n# Adaptive Behavior Framework\n"
+    "Before acting, assess the request complexity and user context:\n"
+    "\n## For SIMPLE requests (1-2 actions):\n"
+    "- Execute directly without formal todo tracking\n"
+    "- Use minimal necessary tools\n"
+    "- Provide focused, concise responses\n"
+    "\n## For COMPLEX requests (3+ distinct actions or multi-file changes):\n"
+    "- Break down into logical steps using TodoWrite\n"
+    "- Execute systematically with progress tracking\n"
+    "- Provide comprehensive implementation\n"
+    "\n## Context Sensitivity:\n"
+    "- Check for CONVERSATION.md, git status, recent files for user familiarity\n"
+    "- Adapt verbosity to apparent user expertise\n"
+    "- Distinguish between exploratory vs. actionable requests\n"
+    "\n## Tool Usage Guidelines:\n"
+    "- Use tools when they add clear value to the response\n"
+    "- Prefer direct answers for known information\n"
+    "- Ask for clarification only when genuinely ambiguous\n"
+    "\nFollowing describes how the user wants you to behave. Follow these instructions within the above framework.\n"
     "User customization:\n\n";
+
 
 int load_system_prompt(char **prompt_content) {
     if (prompt_content == NULL) {
@@ -59,7 +72,7 @@ int load_system_prompt(char **prompt_content) {
     }
     
     // Calculate total size needed for combined prompt
-    size_t core_len = strlen(CORE_SYSTEM_PROMPT);
+    size_t core_len = strlen(CONTEXTUAL_SYSTEM_PROMPT);
     size_t user_len = user_prompt ? strlen(user_prompt) : 0;
     size_t total_len = core_len + user_len + 1; // +1 for null terminator
     
@@ -71,7 +84,7 @@ int load_system_prompt(char **prompt_content) {
     }
     
     // Build the combined prompt
-    strcpy(combined_prompt, CORE_SYSTEM_PROMPT);
+    strcpy(combined_prompt, CONTEXTUAL_SYSTEM_PROMPT);
     if (user_prompt != NULL) {
         strcat(combined_prompt, user_prompt);
         free(user_prompt);
