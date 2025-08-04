@@ -72,86 +72,193 @@ char* generate_tools_json(const ToolRegistry *registry) {
         return NULL;
     }
     
-    // Estimate size needed
-    size_t estimated_size = 1000 + (registry->function_count * 500);
-    char *json = malloc(estimated_size);
+    // Calculate required size accurately
+    size_t required_size = 2; // For "[" and "]"
+    
+    for (int i = 0; i < registry->function_count; i++) {
+        const ToolFunction *func = &registry->functions[i];
+        required_size += strlen(func->name) + strlen(func->description) + 200; // Base structure + safety margin
+        
+        if (i > 0) required_size += 2; // ", "
+        
+        for (int j = 0; j < func->parameter_count; j++) {
+            const ToolParameter *param = &func->parameters[j];
+            required_size += strlen(param->name) + strlen(param->type) + strlen(param->description) + 100;
+            
+            if (param->enum_values != NULL) {
+                for (int k = 0; k < param->enum_count; k++) {
+                    required_size += strlen(param->enum_values[k]) + 10; // quotes, comma, safety
+                }
+            }
+        }
+    }
+    
+    // Multiply by 2 for safety margin
+    required_size *= 2;
+    
+    char *json = malloc(required_size);
     if (json == NULL) {
         return NULL;
     }
     
-    strcpy(json, "[");
+    size_t pos = 0;
+    int ret = snprintf(json, required_size, "[");
+    if (ret < 0 || (size_t)ret >= required_size) {
+        free(json);
+        return NULL;
+    }
+    pos += ret;
     
     for (int i = 0; i < registry->function_count; i++) {
         const ToolFunction *func = &registry->functions[i];
         
         if (i > 0) {
-            strcat(json, ", ");
+            ret = snprintf(json + pos, required_size - pos, ", ");
+            if (ret < 0 || (size_t)ret >= required_size - pos) {
+                free(json);
+                return NULL;
+            }
+            pos += ret;
         }
         
-        strcat(json, "{\"type\": \"function\", \"function\": {");
-        strcat(json, "\"name\": \"");
-        strcat(json, func->name);
-        strcat(json, "\", \"description\": \"");
-        strcat(json, func->description);
-        strcat(json, "\"");
+        ret = snprintf(json + pos, required_size - pos, 
+            "{\"type\": \"function\", \"function\": {\"name\": \"%s\", \"description\": \"%s\"",
+            func->name, func->description);
+        if (ret < 0 || (size_t)ret >= required_size - pos) {
+            free(json);
+            return NULL;
+        }
+        pos += ret;
         
         if (func->parameter_count > 0) {
-            strcat(json, ", \"parameters\": {\"type\": \"object\", \"properties\": {");
+            ret = snprintf(json + pos, required_size - pos, ", \"parameters\": {\"type\": \"object\", \"properties\": {");
+            if (ret < 0 || (size_t)ret >= required_size - pos) {
+                free(json);
+                return NULL;
+            }
+            pos += ret;
             
             for (int j = 0; j < func->parameter_count; j++) {
                 const ToolParameter *param = &func->parameters[j];
                 
                 if (j > 0) {
-                    strcat(json, ", ");
+                    ret = snprintf(json + pos, required_size - pos, ", ");
+                    if (ret < 0 || (size_t)ret >= required_size - pos) {
+                        free(json);
+                        return NULL;
+                    }
+                    pos += ret;
                 }
                 
-                strcat(json, "\"");
-                strcat(json, param->name);
-                strcat(json, "\": {\"type\": \"");
-                strcat(json, param->type);
-                strcat(json, "\", \"description\": \"");
-                strcat(json, param->description);
-                strcat(json, "\"");
+                ret = snprintf(json + pos, required_size - pos, 
+                    "\"%s\": {\"type\": \"%s\", \"description\": \"%s\"",
+                    param->name, param->type, param->description);
+                if (ret < 0 || (size_t)ret >= required_size - pos) {
+                    free(json);
+                    return NULL;
+                }
+                pos += ret;
                 
                 // Add items schema for array types
                 if (strcmp(param->type, "array") == 0) {
-                    strcat(json, ", \"items\": {\"type\": \"object\"}");
+                    ret = snprintf(json + pos, required_size - pos, ", \"items\": {\"type\": \"object\"}");
+                    if (ret < 0 || (size_t)ret >= required_size - pos) {
+                        free(json);
+                        return NULL;
+                    }
+                    pos += ret;
                 }
                 
                 if (param->enum_values != NULL && param->enum_count > 0) {
-                    strcat(json, ", \"enum\": [");
-                    for (int k = 0; k < param->enum_count; k++) {
-                        if (k > 0) strcat(json, ", ");
-                        strcat(json, "\"");
-                        strcat(json, param->enum_values[k]);
-                        strcat(json, "\"");
+                    ret = snprintf(json + pos, required_size - pos, ", \"enum\": [");
+                    if (ret < 0 || (size_t)ret >= required_size - pos) {
+                        free(json);
+                        return NULL;
                     }
-                    strcat(json, "]");
+                    pos += ret;
+                    
+                    for (int k = 0; k < param->enum_count; k++) {
+                        if (k > 0) {
+                            ret = snprintf(json + pos, required_size - pos, ", ");
+                            if (ret < 0 || (size_t)ret >= required_size - pos) {
+                                free(json);
+                                return NULL;
+                            }
+                            pos += ret;
+                        }
+                        ret = snprintf(json + pos, required_size - pos, "\"%s\"", param->enum_values[k]);
+                        if (ret < 0 || (size_t)ret >= required_size - pos) {
+                            free(json);
+                            return NULL;
+                        }
+                        pos += ret;
+                    }
+                    
+                    ret = snprintf(json + pos, required_size - pos, "]");
+                    if (ret < 0 || (size_t)ret >= required_size - pos) {
+                        free(json);
+                        return NULL;
+                    }
+                    pos += ret;
                 }
                 
-                strcat(json, "}");
+                ret = snprintf(json + pos, required_size - pos, "}");
+                if (ret < 0 || (size_t)ret >= required_size - pos) {
+                    free(json);
+                    return NULL;
+                }
+                pos += ret;
             }
             
-            strcat(json, "}, \"required\": [");
+            ret = snprintf(json + pos, required_size - pos, "}, \"required\": [");
+            if (ret < 0 || (size_t)ret >= required_size - pos) {
+                free(json);
+                return NULL;
+            }
+            pos += ret;
+            
             int first_required = 1;
             for (int j = 0; j < func->parameter_count; j++) {
                 if (func->parameters[j].required) {
                     if (!first_required) {
-                        strcat(json, ", ");
+                        ret = snprintf(json + pos, required_size - pos, ", ");
+                        if (ret < 0 || (size_t)ret >= required_size - pos) {
+                            free(json);
+                            return NULL;
+                        }
+                        pos += ret;
                     }
-                    strcat(json, "\"");
-                    strcat(json, func->parameters[j].name);
-                    strcat(json, "\"");
+                    ret = snprintf(json + pos, required_size - pos, "\"%s\"", func->parameters[j].name);
+                    if (ret < 0 || (size_t)ret >= required_size - pos) {
+                        free(json);
+                        return NULL;
+                    }
+                    pos += ret;
                     first_required = 0;
                 }
             }
-            strcat(json, "]}");
+            
+            ret = snprintf(json + pos, required_size - pos, "]}");
+            if (ret < 0 || (size_t)ret >= required_size - pos) {
+                free(json);
+                return NULL;
+            }
+            pos += ret;
         }
         
-        strcat(json, "}}");
+        ret = snprintf(json + pos, required_size - pos, "}}");
+        if (ret < 0 || (size_t)ret >= required_size - pos) {
+            free(json);
+            return NULL;
+        }
+        pos += ret;
     }
     
-    strcat(json, "]");
+    ret = snprintf(json + pos, required_size - pos, "]");
+    if (ret < 0 || (size_t)ret >= required_size - pos) {
+        free(json);
+        return NULL;
+    }
     
     return json;
 }
@@ -681,6 +788,8 @@ int execute_tool_call(const ToolRegistry *registry, const ToolCall *tool_call, T
                 exec_result = execute_file_search_tool_call(tool_call, result);
             } else if (strcmp(tool_call->name, "file_info") == 0) {
                 exec_result = execute_file_info_tool_call(tool_call, result);
+            } else if (strcmp(tool_call->name, "file_delta") == 0) {
+                exec_result = execute_file_delta_tool_call(tool_call, result);
             } else if (strcmp(tool_call->name, "web_fetch") == 0) {
                 exec_result = execute_links_tool_call(tool_call, result);
             } else if (strcmp(tool_call->name, "TodoWrite") == 0) {

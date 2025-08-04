@@ -16,7 +16,7 @@ void test_register_file_tools(void) {
     
     int result = register_file_tools(&registry);
     TEST_ASSERT_EQUAL_INT(0, result);
-    TEST_ASSERT_EQUAL_INT(6, registry.function_count);
+    TEST_ASSERT_EQUAL_INT(7, registry.function_count);
     
     TEST_ASSERT_NOT_NULL(registry.functions);
     TEST_ASSERT_EQUAL_STRING("file_read", registry.functions[0].name);
@@ -25,6 +25,7 @@ void test_register_file_tools(void) {
     TEST_ASSERT_EQUAL_STRING("file_list", registry.functions[3].name);
     TEST_ASSERT_EQUAL_STRING("file_search", registry.functions[4].name);
     TEST_ASSERT_EQUAL_STRING("file_info", registry.functions[5].name);
+    TEST_ASSERT_EQUAL_STRING("file_delta", registry.functions[6].name);
     
     cleanup_tool_registry(&registry);
 }
@@ -260,6 +261,200 @@ void test_execute_file_write_tool_call(void) {
     unlink("write_tool_test.txt");
 }
 
+void test_split_lines_basic(void) {
+    const char* content = "line1\nline2\nline3";
+    int line_count;
+    
+    char** lines = split_lines(content, &line_count);
+    
+    TEST_ASSERT_EQUAL_INT(3, line_count);
+    TEST_ASSERT_NOT_NULL(lines);
+    TEST_ASSERT_EQUAL_STRING("line1", lines[0]);
+    TEST_ASSERT_EQUAL_STRING("line2", lines[1]);
+    TEST_ASSERT_EQUAL_STRING("line3", lines[2]);
+    
+    for (int i = 0; i < line_count; i++) {
+        free(lines[i]);
+    }
+    free(lines);
+}
+
+void test_split_lines_empty_content(void) {
+    const char* content = "";
+    int line_count;
+    
+    char** lines = split_lines(content, &line_count);
+    
+    TEST_ASSERT_EQUAL_INT(0, line_count);
+    TEST_ASSERT_NULL(lines);
+}
+
+void test_split_lines_single_line(void) {
+    const char* content = "single line";
+    int line_count;
+    
+    char** lines = split_lines(content, &line_count);
+    
+    TEST_ASSERT_EQUAL_INT(1, line_count);
+    TEST_ASSERT_NOT_NULL(lines);
+    TEST_ASSERT_EQUAL_STRING("single line", lines[0]);
+    
+    free(lines[0]);
+    free(lines);
+}
+
+void test_join_lines_basic(void) {
+    char* lines[] = {"line1", "line2", "line3"};
+    char* result = join_lines(lines, 3);
+    
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_STRING("line1\nline2\nline3\n", result);
+    
+    free(result);
+}
+
+void test_file_apply_delta_insert(void) {
+    // Create test file
+    FILE* test_file = fopen("delta_test.txt", "w");
+    TEST_ASSERT_NOT_NULL(test_file);
+    fprintf(test_file, "line1\nline2\nline3\n");
+    fclose(test_file);
+    
+    // Create delta patch to insert at line 2
+    DeltaPatch patch = {0};
+    patch.operations = malloc(sizeof(DeltaOperation));
+    patch.num_operations = 1;
+    patch.create_backup = 0;
+    
+    DeltaOperation* op = &patch.operations[0];
+    op->type = DELTA_INSERT;
+    op->start_line = 2;
+    op->line_count = 0;
+    op->num_lines = 1;
+    op->lines = malloc(sizeof(char*));
+    op->lines[0] = strdup("inserted_line");
+    op->context_before = NULL;
+    op->context_after = NULL;
+    
+    // Apply delta
+    FileErrorCode result = file_apply_delta("delta_test.txt", &patch);
+    TEST_ASSERT_EQUAL_INT(FILE_SUCCESS, result);
+    
+    // Verify result
+    char* content = NULL;
+    FileErrorCode read_result = file_read_content("delta_test.txt", 0, 0, &content);
+    TEST_ASSERT_EQUAL_INT(FILE_SUCCESS, read_result);
+    TEST_ASSERT_NOT_NULL(content);
+    TEST_ASSERT_TRUE(strstr(content, "line1\ninserted_line\nline2\nline3") != NULL);
+    
+    // Cleanup
+    free(content);
+    cleanup_delta_patch(&patch);
+    unlink("delta_test.txt");
+}
+
+void test_file_apply_delta_delete(void) {
+    // Create test file
+    FILE* test_file = fopen("delta_test2.txt", "w");
+    TEST_ASSERT_NOT_NULL(test_file);
+    fprintf(test_file, "line1\nline2\nline3\nline4\n");
+    fclose(test_file);
+    
+    // Create delta patch to delete line 2
+    DeltaPatch patch = {0};
+    patch.operations = malloc(sizeof(DeltaOperation));
+    patch.num_operations = 1;
+    patch.create_backup = 0;
+    
+    DeltaOperation* op = &patch.operations[0];
+    op->type = DELTA_DELETE;
+    op->start_line = 2;
+    op->line_count = 1;
+    op->num_lines = 0;
+    op->lines = NULL;
+    op->context_before = NULL;
+    op->context_after = NULL;
+    
+    // Apply delta
+    FileErrorCode result = file_apply_delta("delta_test2.txt", &patch);
+    TEST_ASSERT_EQUAL_INT(FILE_SUCCESS, result);
+    
+    // Verify result
+    char* content = NULL;
+    FileErrorCode read_result = file_read_content("delta_test2.txt", 0, 0, &content);
+    TEST_ASSERT_EQUAL_INT(FILE_SUCCESS, read_result);
+    TEST_ASSERT_NOT_NULL(content);
+    TEST_ASSERT_TRUE(strstr(content, "line1\nline3\nline4") != NULL);
+    TEST_ASSERT_NULL(strstr(content, "line2"));
+    
+    // Cleanup
+    free(content);
+    cleanup_delta_patch(&patch);
+    unlink("delta_test2.txt");
+}
+
+void test_file_apply_delta_replace(void) {
+    // Create test file
+    FILE* test_file = fopen("delta_test3.txt", "w");
+    TEST_ASSERT_NOT_NULL(test_file);
+    fprintf(test_file, "line1\nline2\nline3\n");
+    fclose(test_file);
+    
+    // Create delta patch to replace line 2
+    DeltaPatch patch = {0};
+    patch.operations = malloc(sizeof(DeltaOperation));
+    patch.num_operations = 1;
+    patch.create_backup = 0;
+    
+    DeltaOperation* op = &patch.operations[0];
+    op->type = DELTA_REPLACE;
+    op->start_line = 2;
+    op->line_count = 1;
+    op->num_lines = 1;
+    op->lines = malloc(sizeof(char*));
+    op->lines[0] = strdup("replaced_line");
+    op->context_before = NULL;
+    op->context_after = NULL;
+    
+    // Apply delta
+    FileErrorCode result = file_apply_delta("delta_test3.txt", &patch);
+    TEST_ASSERT_EQUAL_INT(FILE_SUCCESS, result);
+    
+    // Verify result
+    char* content = NULL;
+    FileErrorCode read_result = file_read_content("delta_test3.txt", 0, 0, &content);
+    TEST_ASSERT_EQUAL_INT(FILE_SUCCESS, read_result);
+    TEST_ASSERT_NOT_NULL(content);
+    TEST_ASSERT_TRUE(strstr(content, "line1\nreplaced_line\nline3") != NULL);
+    TEST_ASSERT_NULL(strstr(content, "line2"));
+    
+    // Cleanup
+    free(content);
+    cleanup_delta_patch(&patch);
+    unlink("delta_test3.txt");
+}
+
+void test_execute_file_delta_tool_call(void) {
+    ToolCall call;
+    call.id = strdup("test_delta_call");
+    call.name = strdup("file_delta");
+    call.arguments = strdup("{\"file_path\": \"test.txt\", \"operations\": []}");
+    
+    ToolResult result;
+    int exec_result = execute_file_delta_tool_call(&call, &result);
+    
+    TEST_ASSERT_EQUAL_INT(0, exec_result);
+    TEST_ASSERT_EQUAL_INT(0, result.success);  // Should fail since not fully implemented
+    TEST_ASSERT_NOT_NULL(result.result);
+    TEST_ASSERT_TRUE(strstr(result.result, "implementation in progress") != NULL);
+    
+    free(call.id);
+    free(call.name);
+    free(call.arguments);
+    free(result.tool_call_id);
+    free(result.result);
+}
+
 int main(void) {
     UNITY_BEGIN();
     
@@ -275,6 +470,14 @@ int main(void) {
     RUN_TEST(test_file_get_info_basic);
     RUN_TEST(test_execute_file_read_tool_call);
     RUN_TEST(test_execute_file_write_tool_call);
+    RUN_TEST(test_split_lines_basic);
+    RUN_TEST(test_split_lines_empty_content);
+    RUN_TEST(test_split_lines_single_line);
+    RUN_TEST(test_join_lines_basic);
+    RUN_TEST(test_file_apply_delta_insert);
+    RUN_TEST(test_file_apply_delta_delete);
+    RUN_TEST(test_file_apply_delta_replace);
+    RUN_TEST(test_execute_file_delta_tool_call);
     
     return UNITY_END();
 }

@@ -1,1 +1,3 @@
 - The CLI interface for this application supports a subset of Readline-like features. Research how to compile Readline with Cosmopolitan, and refactor the user input functionality to use Readline.
+- I want to build RAG into this agent, from scratch. Implement an HNSW in-memory vector db for embeddings with the ultimate goal of integrating into the agent for vector similarity search. Do not integrate the vector DB, just write it independently. Write a full test suite for it. Use https://github.com/coder/hnsw as a reference implementation in Python.
+- Integrate the in-memory vector DB to support RAG. I want a vector search tool, and vector CRUD tools so that the llm can manage the "memories" stored in it.

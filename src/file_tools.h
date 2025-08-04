@@ -257,6 +257,81 @@ void cleanup_directory_listing(DirectoryListing *listing);
 void cleanup_search_results(SearchResults *results);
 
 /**
+ * Delta operation types for file modifications
+ */
+typedef enum {
+    DELTA_INSERT = 0,   // Insert lines at position
+    DELTA_DELETE = 1,   // Delete lines in range
+    DELTA_REPLACE = 2   // Replace lines in range
+} DeltaOperationType;
+
+/**
+ * Structure representing a single delta operation
+ */
+typedef struct {
+    DeltaOperationType type;
+    int start_line;     // 1-based line number
+    int line_count;     // Number of lines affected (for delete/replace)
+    char **lines;       // Lines to insert/replace (NULL for delete)
+    int num_lines;      // Number of lines in lines array
+    char *context_before; // Optional context for validation
+    char *context_after;  // Optional context for validation
+} DeltaOperation;
+
+/**
+ * Structure for a complete delta patch
+ */
+typedef struct {
+    DeltaOperation *operations;
+    int num_operations;
+    int create_backup;
+    char *original_checksum; // Optional: verify file hasn't changed
+} DeltaPatch;
+
+/**
+ * Apply delta patch to file
+ * 
+ * @param file_path Path to file to modify
+ * @param patch Delta patch to apply
+ * @return FileErrorCode indicating success or failure
+ */
+FileErrorCode file_apply_delta(const char *file_path, const DeltaPatch *patch);
+
+/**
+ * Parse unified diff format into delta operations
+ * 
+ * @param diff_content Unified diff content
+ * @param patch Output delta patch (caller must free)
+ * @return FileErrorCode indicating success or failure
+ */
+FileErrorCode parse_unified_diff(const char *diff_content, DeltaPatch *patch);
+
+/**
+ * Generate unified diff between two file contents
+ * 
+ * @param original_content Original file content
+ * @param modified_content Modified file content
+ * @param file_path File path for diff header
+ * @param diff_output Output unified diff (caller must free)
+ * @return FileErrorCode indicating success or failure
+ */
+FileErrorCode generate_unified_diff(const char *original_content, const char *modified_content,
+                                   const char *file_path, char **diff_output);
+
+/**
+ * Clean up delta patch structure
+ * 
+ * @param patch DeltaPatch structure to cleanup
+ */
+void cleanup_delta_patch(DeltaPatch *patch);
+
+/**
+ * Helper functions for testing (exposed for unit tests)
+ */
+char** split_lines(const char *content, int *line_count);
+char* join_lines(char **lines, int line_count);
+
+/**
  * Tool call handlers for each file operation
  */
 int execute_file_read_tool_call(const ToolCall *tool_call, ToolResult *result);
@@ -265,5 +340,6 @@ int execute_file_append_tool_call(const ToolCall *tool_call, ToolResult *result)
 int execute_file_list_tool_call(const ToolCall *tool_call, ToolResult *result);
 int execute_file_search_tool_call(const ToolCall *tool_call, ToolResult *result);
 int execute_file_info_tool_call(const ToolCall *tool_call, ToolResult *result);
+int execute_file_delta_tool_call(const ToolCall *tool_call, ToolResult *result);
 
 #endif // FILE_TOOLS_H

@@ -1494,6 +1494,367 @@ static int register_single_tool(ToolRegistry *registry, const char *name, const 
     return 0;
 }
 
+// Helper function to split content into lines
+char** split_lines(const char *content, int *line_count) {
+    if (content == NULL || line_count == NULL) {
+        if (line_count) *line_count = 0;
+        return NULL;
+    }
+    
+    // Count lines first
+    int count = 1;
+    for (const char *p = content; *p; p++) {
+        if (*p == '\n') count++;
+    }
+    
+    // Handle empty content or content ending with newline
+    if (strlen(content) == 0) {
+        count = 0;
+    } else if (content[strlen(content) - 1] == '\n') {
+        count--; // Don't count empty line after final newline
+    }
+    
+    // For empty content, return NULL
+    if (count == 0) {
+        *line_count = 0;
+        return NULL;
+    }
+    
+    char **lines = malloc(count * sizeof(char*));
+    if (lines == NULL) {
+        *line_count = 0;
+        return NULL;
+    }
+    
+    // Split into lines
+    int line_idx = 0;
+    const char *start = content;
+    const char *end = content;
+    
+    while (line_idx < count && *end) {
+        // Find end of current line
+        while (*end && *end != '\n') end++;
+        
+        // Copy line (without newline)
+        int len = end - start;
+        lines[line_idx] = malloc(len + 1);
+        if (lines[line_idx] == NULL) {
+            // Cleanup on failure
+            for (int i = 0; i < line_idx; i++) {
+                free(lines[i]);
+            }
+            free(lines);
+            *line_count = 0;
+            return NULL;
+        }
+        
+        if (len > 0) {
+            memcpy(lines[line_idx], start, len);
+        }
+        lines[line_idx][len] = '\0';
+        line_idx++;
+        
+        // Move to next line
+        if (*end == '\n') end++;
+        start = end;
+    }
+    
+    *line_count = count;
+    return lines;
+}
+
+// Helper function to join lines back into content
+char* join_lines(char **lines, int line_count) {
+    if (lines == NULL || line_count <= 0) {
+        return safe_strdup("");
+    }
+    
+    // Calculate total size needed
+    size_t total_size = 1; // For null terminator
+    for (int i = 0; i < line_count; i++) {
+        if (lines[i] != NULL) {
+            total_size += strlen(lines[i]) + 1; // +1 for newline
+        }
+    }
+    
+    char *result = malloc(total_size);
+    if (result == NULL) return NULL;
+    
+    result[0] = '\0';
+    for (int i = 0; i < line_count; i++) {
+        if (lines[i] != NULL) {
+            strcat(result, lines[i]);
+            if (i < line_count - 1 || strlen(lines[i]) > 0) {
+                strcat(result, "\n");
+            }
+        }
+    }
+    
+    return result;
+}
+
+// Clean up delta patch structure
+void cleanup_delta_patch(DeltaPatch *patch) {
+    if (patch == NULL) return;
+    
+    if (patch->operations != NULL) {
+        for (int i = 0; i < patch->num_operations; i++) {
+            DeltaOperation *op = &patch->operations[i];
+            
+            if (op->lines != NULL) {
+                for (int j = 0; j < op->num_lines; j++) {
+                    free(op->lines[j]);
+                }
+                free(op->lines);
+            }
+            
+            free(op->context_before);
+            free(op->context_after);
+        }
+        free(patch->operations);
+    }
+    
+    free(patch->original_checksum);
+    memset(patch, 0, sizeof(DeltaPatch));
+}
+
+// Apply delta patch to file
+FileErrorCode file_apply_delta(const char *file_path, const DeltaPatch *patch) {
+    if (file_path == NULL || patch == NULL) {
+        return FILE_ERROR_INVALID_PATH;
+    }
+    
+    if (!file_validate_path(file_path)) {
+        return FILE_ERROR_INVALID_PATH;
+    }
+    
+    // Read current file content
+    char *original_content = NULL;
+    FileErrorCode read_result = file_read_content(file_path, 0, 0, &original_content);
+    if (read_result != FILE_SUCCESS) {
+        return read_result;
+    }
+    
+    // Split original content into lines
+    int original_line_count = 0;
+    char **original_lines = split_lines(original_content, &original_line_count);
+    free(original_content);
+    
+    if (original_lines == NULL && original_line_count > 0) {
+        return FILE_ERROR_MEMORY;
+    }
+    
+    // Create backup if requested
+    if (patch->create_backup) {
+        char *backup_path = NULL;
+        FileErrorCode backup_result = file_create_backup(file_path, &backup_path);
+        if (backup_result != FILE_SUCCESS) {
+            // Cleanup
+            for (int i = 0; i < original_line_count; i++) {
+                free(original_lines[i]);
+            }
+            free(original_lines);
+            return backup_result;
+        }
+        free(backup_path);
+    }
+    
+    // Apply operations in order
+    for (int op_idx = 0; op_idx < patch->num_operations; op_idx++) {
+        const DeltaOperation *op = &patch->operations[op_idx];
+        
+        // Validate line numbers
+        if (op->start_line < 1 || op->start_line > original_line_count + 1) {
+            // Cleanup
+            for (int i = 0; i < original_line_count; i++) {
+                free(original_lines[i]);
+            }
+            free(original_lines);
+            return FILE_ERROR_INVALID_PATH;
+        }
+        
+        // Convert to 0-based indexing
+        int start_idx = op->start_line - 1;
+        
+        switch (op->type) {
+            case DELTA_INSERT: {
+                if (op->lines == NULL || op->num_lines <= 0) break;
+                
+                // Create new lines array with extra space
+                int new_line_count = original_line_count + op->num_lines;
+                char **new_lines = malloc(new_line_count * sizeof(char*));
+                if (new_lines == NULL) {
+                    // Cleanup
+                    for (int i = 0; i < original_line_count; i++) {
+                        free(original_lines[i]);
+                    }
+                    free(original_lines);
+                    return FILE_ERROR_MEMORY;
+                }
+                
+                // Copy lines before insertion point
+                for (int i = 0; i < start_idx; i++) {
+                    new_lines[i] = original_lines[i];
+                }
+                
+                // Insert new lines
+                for (int i = 0; i < op->num_lines; i++) {
+                    new_lines[start_idx + i] = safe_strdup(op->lines[i]);
+                    if (new_lines[start_idx + i] == NULL) {
+                        // Cleanup on failure
+                        for (int j = 0; j < start_idx + i; j++) {
+                            free(new_lines[j]);
+                        }
+                        for (int j = start_idx; j < original_line_count; j++) {
+                            free(original_lines[j]);
+                        }
+                        free(new_lines);
+                        free(original_lines);
+                        return FILE_ERROR_MEMORY;
+                    }
+                }
+                
+                // Copy lines after insertion point
+                for (int i = start_idx; i < original_line_count; i++) {
+                    new_lines[i + op->num_lines] = original_lines[i];
+                }
+                
+                // Update arrays
+                free(original_lines);
+                original_lines = new_lines;
+                original_line_count = new_line_count;
+                break;
+            }
+            
+            case DELTA_DELETE: {
+                int end_idx = start_idx + op->line_count;
+                if (end_idx > original_line_count) {
+                    end_idx = original_line_count;
+                }
+                
+                // Free deleted lines
+                for (int i = start_idx; i < end_idx; i++) {
+                    free(original_lines[i]);
+                }
+                
+                // Shift remaining lines
+                int deleted_count = end_idx - start_idx;
+                for (int i = start_idx; i < original_line_count - deleted_count; i++) {
+                    original_lines[i] = original_lines[i + deleted_count];
+                }
+                
+                original_line_count -= deleted_count;
+                break;
+            }
+            
+            case DELTA_REPLACE: {
+                int end_idx = start_idx + op->line_count;
+                if (end_idx > original_line_count) {
+                    end_idx = original_line_count;
+                }
+                
+                // Free original lines in range
+                for (int i = start_idx; i < end_idx; i++) {
+                    free(original_lines[i]);
+                }
+                
+                int replaced_count = end_idx - start_idx;
+                int size_diff = op->num_lines - replaced_count;
+                
+                if (size_diff != 0) {
+                    // Need to resize array
+                    int new_line_count = original_line_count + size_diff;
+                    char **new_lines = malloc(new_line_count * sizeof(char*));
+                    if (new_lines == NULL) {
+                        // Cleanup
+                        for (int i = 0; i < start_idx; i++) {
+                            free(original_lines[i]);
+                        }
+                        for (int i = end_idx; i < original_line_count; i++) {
+                            free(original_lines[i]);
+                        }
+                        free(original_lines);
+                        return FILE_ERROR_MEMORY;
+                    }
+                    
+                    // Copy lines before replacement
+                    for (int i = 0; i < start_idx; i++) {
+                        new_lines[i] = original_lines[i];
+                    }
+                    
+                    // Copy lines after replacement
+                    for (int i = end_idx; i < original_line_count; i++) {
+                        new_lines[i + size_diff] = original_lines[i];
+                    }
+                    
+                    free(original_lines);
+                    original_lines = new_lines;
+                    original_line_count = new_line_count;
+                }
+                
+                // Insert replacement lines
+                for (int i = 0; i < op->num_lines; i++) {
+                    original_lines[start_idx + i] = safe_strdup(op->lines[i]);
+                    if (original_lines[start_idx + i] == NULL) {
+                        // Cleanup on failure
+                        for (int j = 0; j < original_line_count; j++) {
+                            if (j < start_idx || j >= start_idx + op->num_lines) {
+                                free(original_lines[j]);
+                            }
+                        }
+                        free(original_lines);
+                        return FILE_ERROR_MEMORY;
+                    }
+                }
+                break;
+            }
+        }
+    }
+    
+    // Join lines back into content
+    char *new_content = join_lines(original_lines, original_line_count);
+    
+    // Cleanup lines array
+    for (int i = 0; i < original_line_count; i++) {
+        free(original_lines[i]);
+    }
+    free(original_lines);
+    
+    if (new_content == NULL) {
+        return FILE_ERROR_MEMORY;
+    }
+    
+    // Write modified content back to file
+    FileErrorCode write_result = file_write_content(file_path, new_content, 0);
+    free(new_content);
+    
+    return write_result;
+}
+
+// Execute file delta tool call
+int execute_file_delta_tool_call(const ToolCall *tool_call, ToolResult *result) {
+    if (tool_call == NULL || result == NULL) return -1;
+    
+    // Initialize result structure
+    result->tool_call_id = NULL;
+    result->result = NULL;
+    result->success = 0;
+    
+    result->tool_call_id = safe_strdup(tool_call->id);
+    if (result->tool_call_id == NULL) return -1;
+    
+    // TODO: Parse JSON arguments to extract file_path and delta operations
+    // For now, return an error indicating implementation is needed
+    char result_msg[256] = {0}; // Initialize array
+    snprintf(result_msg, sizeof(result_msg),
+        "{\"success\": false, \"error\": \"Delta tool implementation in progress\"}");
+    
+    result->result = safe_strdup(result_msg);
+    result->success = 0;
+    
+    return (result->result != NULL) ? 0 : -1;
+}
+
 // Register all file tools
 int register_file_tools(ToolRegistry *registry) {
     if (registry == NULL) return -1;
@@ -1653,6 +2014,33 @@ int register_file_tools(ToolRegistry *registry) {
     }
     
     if (register_single_tool(registry, "file_info", "Get detailed file information and metadata", info_params, 1) != 0) {
+        return -1;
+    }
+    
+    // 7. Register file_delta tool
+    ToolParameter *delta_params = malloc(3 * sizeof(ToolParameter));
+    if (delta_params == NULL) return -1;
+    
+    delta_params[0] = (ToolParameter){"file_path", "string", "Path to file to modify", NULL, 0, 1};
+    delta_params[1] = (ToolParameter){"operations", "array", "Array of delta operations to apply", NULL, 0, 1};
+    delta_params[2] = (ToolParameter){"create_backup", "boolean", "Create backup before applying changes (default: false)", NULL, 0, 0};
+    
+    for (int i = 0; i < 3; i++) {
+        delta_params[i].name = safe_strdup(delta_params[i].name);
+        delta_params[i].type = safe_strdup(delta_params[i].type);
+        delta_params[i].description = safe_strdup(delta_params[i].description);
+        if (!delta_params[i].name || !delta_params[i].type || !delta_params[i].description) {
+            for (int j = 0; j <= i; j++) {
+                free(delta_params[j].name);
+                free(delta_params[j].type);
+                free(delta_params[j].description);
+            }
+            free(delta_params);
+            return -1;
+        }
+    }
+    
+    if (register_single_tool(registry, "file_delta", "Apply delta patch operations to file for efficient partial updates", delta_params, 3) != 0) {
         return -1;
     }
     
