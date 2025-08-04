@@ -29,15 +29,29 @@ This project is developed inside a Docker devcontainer, defined in `.devcontaine
 The container is pre-configured with access to the entire Cosmopolitan toolchain, including PATH configuration and environment variables.
 The container has a valid `.env` file that is configured to allow ralph to leverage real APIs
 
+## Code Style
+
+Write modern, memory safe defensive portable C code. Always initialize pointers, always free memory, always check your parameters before you use them as a few examples.
+Prefer functional programming techniques as far as you can accomplish them in C. This means immutability, or isolating mutable code, functions as
+first-order entities, operating on collections over single entities, etc.
+In general, prefer composition over inheretance when building complex ideas out of simple ones.
+Always observe SOLID, DRY and other clean coding principles as you work. Aggressively refactor code that is not fit for purpose.
+Try to keep functions on the shorter side, and break complex logic down into manageable chunks.
+
+## Testing
+
+## Technology
+
+## Architecture
+
+Ralph's architecture has been documented in `ARCHITECTURE.md` extensively.
+
 # Implementation details
 - This project supports 3 backends; OpenAI, Anthropic, and local AI via LMStudio.
 - Each LLM provider backend has it's own restrictions on message structure, tool use and response guidelines, and historical tracking concerns.
 - When you work on code specific to a single provider, you MUST take UTMOST care to ensure you don't break functionality in a different provider.
 
 # Development guidance
-- Prefer smaller functions to larger functions.
-- Prefer immutability where possible over mutability.
-- Favor composition over inheretance.
 - Follow memory safe programming at all times.
 - Code defensively
 - segfaults are critical issues and must be fixed immediately when encountered.
