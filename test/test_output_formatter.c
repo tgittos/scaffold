@@ -333,6 +333,34 @@ void test_parse_anthropic_response_malformed(void) {
     TEST_ASSERT_EQUAL(-1, ret);
 }
 
+void test_filter_tool_call_markup_from_response(void) {
+    // Test response from local model with tool call markup
+    const char *local_model_response = 
+        "{"
+        "\"choices\":[{"
+            "\"message\":{"
+                "\"content\":\"I'll help you with that task. <tool_call>{\\\"name\\\": \\\"file_read\\\", \\\"arguments\\\": {\\\"file_path\\\": \\\"/test/file.txt\\\"}}</tool_call> Let me read the file for you.\""
+            "}"
+        "}]"
+        "}";
+    
+    ParsedResponse result;
+    int ret = parse_api_response(local_model_response, &result);
+    
+    TEST_ASSERT_EQUAL(0, ret);
+    TEST_ASSERT_NOT_NULL(result.response_content);
+    
+    // The response content should NOT contain the raw <tool_call> markup
+    TEST_ASSERT_NULL(strstr(result.response_content, "<tool_call>"));
+    TEST_ASSERT_NULL(strstr(result.response_content, "</tool_call>"));
+    
+    // But should contain the descriptive text
+    TEST_ASSERT_NOT_NULL(strstr(result.response_content, "I'll help you"));
+    TEST_ASSERT_NOT_NULL(strstr(result.response_content, "Let me read the file"));
+    
+    cleanup_parsed_response(&result);
+}
+
 int main(void) {
     UNITY_BEGIN();
     
@@ -354,6 +382,9 @@ int main(void) {
     RUN_TEST(test_parse_anthropic_response_with_thinking);
     RUN_TEST(test_parse_anthropic_response_null_parameters);
     RUN_TEST(test_parse_anthropic_response_malformed);
+    
+    // Tool call markup filtering test
+    RUN_TEST(test_filter_tool_call_markup_from_response);
     
     return UNITY_END();
 }

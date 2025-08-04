@@ -113,6 +113,34 @@ static void unescape_json_string(char *str) {
     *dst = '\0';
 }
 
+// Filter out raw tool call markup from response content to prevent displaying it to users
+static void filter_tool_call_markup(char *str) {
+    if (!str) return;
+    
+    char *src = str;
+    char *dst = str;
+    
+    while (*src) {
+        // Look for <tool_call> start tag
+        if (strncmp(src, "<tool_call>", 11) == 0) {
+            // Find the corresponding </tool_call> end tag
+            const char *end_tag = strstr(src, "</tool_call>");
+            if (end_tag) {
+                // Skip everything from <tool_call> to </tool_call> inclusive
+                src = (char*)(end_tag + 12); // 12 = strlen("</tool_call>")
+                continue;
+            } else {
+                // Malformed - no closing tag found, just copy this character
+                *dst++ = *src++;
+            }
+        } else {
+            // Regular character, copy it
+            *dst++ = *src++;
+        }
+    }
+    *dst = '\0';
+}
+
 static int extract_json_int(const char *json, const char *key) {
     if (!json || !key) {
         return -1;
@@ -202,6 +230,8 @@ static void separate_thinking_and_response(const char *content, char **thinking,
             *response = malloc(response_len + 1);
             if (*response) {
                 strcpy(*response, response_start);
+                // Filter out raw tool call markup from response content
+                filter_tool_call_markup(*response);
             }
         }
     } else {
@@ -210,6 +240,8 @@ static void separate_thinking_and_response(const char *content, char **thinking,
         *response = malloc(content_len + 1);
         if (*response) {
             strcpy(*response, content);
+            // Filter out raw tool call markup from response content
+            filter_tool_call_markup(*response);
         }
     }
 }
