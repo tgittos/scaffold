@@ -540,8 +540,7 @@ void display_tool_execution_group_start(void) {
 
 void display_tool_execution_group_end(void) {
     if (tool_execution_group_active) {
-        printf(ANSI_CYAN SEPARATOR_LIGHT ANSI_RESET "\n");
-        printf(ANSI_CYAN ANSI_BOLD "▲ Tool Execution Complete" ANSI_RESET "\n\n");
+        printf("\n");
         tool_execution_group_active = false;
     }
 }
@@ -594,8 +593,7 @@ void display_system_info_group_start(void) {
 
 void display_system_info_group_end(void) {
     if (system_info_group_active) {
-        printf(ANSI_YELLOW SEPARATOR_LIGHT ANSI_RESET "\n");
-        printf(ANSI_YELLOW ANSI_BOLD "▲ System Information Complete" ANSI_RESET "\n\n");
+        printf("\n");
         system_info_group_active = false;
     }
 }
