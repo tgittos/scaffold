@@ -493,16 +493,15 @@ void print_formatted_response_improved(const ParsedResponse *response) {
 
 void display_tool_execution_group_start(void) {
     if (!tool_execution_group_active) {
-        // Professional header for tool execution section
-        printf(ANSI_CYAN "┌─ " ANSI_BOLD "Tool Execution" ANSI_RESET ANSI_CYAN " ─────────────────────────────────────────────────────────────────────┐" ANSI_RESET "\n");
-        printf(ANSI_CYAN "│" ANSI_RESET " ");
+        // Professional header for tool execution section with proper width (80 chars total)
+        printf(ANSI_CYAN "┌─ " ANSI_BOLD "Tool Execution" ANSI_RESET ANSI_CYAN " ─────────────────────────────────────────────────────────────┐" ANSI_RESET "\n");
         tool_execution_group_active = true;
     }
 }
 
 void display_tool_execution_group_end(void) {
     if (tool_execution_group_active) {
-        printf("\n" ANSI_CYAN "└──────────────────────────────────────────────────────────────────────────────────┘" ANSI_RESET "\n\n");
+        printf(ANSI_CYAN "└──────────────────────────────────────────────────────────────────────────────┘" ANSI_RESET "\n\n");
         tool_execution_group_active = false;
     }
 }
@@ -533,7 +532,9 @@ void log_tool_execution_improved(const char *tool_name, const char *arguments, b
     // Check if this is an informational check rather than a real failure
     bool is_info_check = !success && is_informational_check(tool_name, arguments);
     
-    // Print tool execution within the bordered section
+    // Print tool execution within the bordered section with proper indentation
+    printf(ANSI_CYAN "│" ANSI_RESET " ");
+    
     if (success) {
         printf(ANSI_GREEN "✓" ANSI_RESET " %s", tool_name);
     } else if (is_info_check) {
@@ -553,15 +554,15 @@ void log_tool_execution_improved(const char *tool_name, const char *arguments, b
         }
     }
     
-    printf("\n" ANSI_CYAN "│" ANSI_RESET " ");
+    printf("\n");
     
     // Show errors for actual failures with proper indentation
     if (!success && !is_info_check && result && strlen(result) > 0) {
-        printf("\n" ANSI_CYAN "│" ANSI_RESET "   " ANSI_RED "└─ Error: ");
+        printf(ANSI_CYAN "│" ANSI_RESET "   " ANSI_RED "└─ Error: ");
         if (strlen(result) > 80) {
-            printf("%.77s..." ANSI_RESET "\n" ANSI_CYAN "│" ANSI_RESET " ", result);
+            printf("%.77s..." ANSI_RESET "\n", result);
         } else {
-            printf("%s" ANSI_RESET "\n" ANSI_CYAN "│" ANSI_RESET " ", result);
+            printf("%s" ANSI_RESET "\n", result);
         }
     }
     
