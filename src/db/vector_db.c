@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <time.h>
+#include <pwd.h>
 
 typedef struct index_entry {
     char* name;
@@ -33,6 +34,47 @@ struct vector_db {
 };
 
 static void* flush_thread_func(void* arg);
+
+char* vector_db_get_default_directory(void) {
+    const char* home = getenv("HOME");
+    if (!home) {
+        struct passwd* pw = getpwuid(getuid());
+        if (pw) {
+            home = pw->pw_dir;
+        }
+    }
+    
+    if (!home) {
+        return NULL;
+    }
+    
+    char* path = malloc(strlen(home) + strlen("/.local/ralph") + 1);
+    if (!path) {
+        return NULL;
+    }
+    
+    sprintf(path, "%s/.local/ralph", home);
+    
+    struct stat st;
+    if (stat(path, &st) != 0) {
+        char local_path[strlen(home) + strlen("/.local") + 1];
+        sprintf(local_path, "%s/.local", home);
+        
+        if (stat(local_path, &st) != 0) {
+            if (mkdir(local_path, 0755) != 0) {
+                free(path);
+                return NULL;
+            }
+        }
+        
+        if (mkdir(path, 0755) != 0) {
+            free(path);
+            return NULL;
+        }
+    }
+    
+    return path;
+}
 
 static index_entry_t* find_index(const vector_db_t* db, const char* index_name) {
     index_entry_t* entry = db->indices;
@@ -65,6 +107,12 @@ vector_db_t* vector_db_create(void) {
         pthread_mutex_destroy(&db->flush_mutex);
         free(db);
         return NULL;
+    }
+    
+    char* default_dir = vector_db_get_default_directory();
+    if (default_dir) {
+        vector_db_enable_auto_flush(db, 30, default_dir, NULL, NULL);
+        free(default_dir);
     }
     
     return db;
@@ -591,6 +639,17 @@ vector_db_error_t vector_db_save_all(const vector_db_t* db, const char* director
         pthread_mutex_unlock((pthread_mutex_t*)&db->mutex);
         
         int result = hnswlib_save_index(entry->name, file_path);
+        
+        if (result == 0) {
+            char meta_path[8192];
+            snprintf(meta_path, sizeof(meta_path), "%s.meta", file_path);
+            FILE* meta = fopen(meta_path, "w");
+            if (meta) {
+                fprintf(meta, "%zu %zu\n", entry->config.dimension, entry->config.max_elements);
+                fprintf(meta, "%s\n", entry->config.metric ? entry->config.metric : "l2");
+                fclose(meta);
+            }
+        }
         
         pthread_rwlock_unlock(&entry->lock);
         pthread_mutex_lock((pthread_mutex_t*)&db->mutex);

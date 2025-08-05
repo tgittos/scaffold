@@ -367,6 +367,57 @@ void test_vector_db_auto_flush(void) {
     vector_db_destroy(db);
 }
 
+void test_vector_db_default_serialization(void) {
+    vector_db_t* db = vector_db_create();
+    TEST_ASSERT_NOT_NULL(db);
+    
+    char* default_dir = vector_db_get_default_directory();
+    TEST_ASSERT_NOT_NULL(default_dir);
+    
+    struct stat st;
+    int dir_exists = stat(default_dir, &st) == 0;
+    TEST_ASSERT_TRUE(dir_exists);
+    
+    index_config_t config = {
+        .dimension = 128,
+        .max_elements = 1000,
+        .M = 16,
+        .ef_construction = 200,
+        .random_seed = 100,
+        .metric = "l2"
+    };
+    
+    vector_db_error_t err = vector_db_create_index(db, "default_test_idx", &config);
+    TEST_ASSERT_EQUAL(VECTOR_DB_OK, err);
+    
+    vector_t* vec = vector_create(128);
+    TEST_ASSERT_NOT_NULL(vec);
+    fill_random_vector(vec);
+    
+    err = vector_db_add_vector(db, "default_test_idx", vec, 42);
+    TEST_ASSERT_EQUAL(VECTOR_DB_OK, err);
+    
+    err = vector_db_flush_now(db);
+    TEST_ASSERT_EQUAL(VECTOR_DB_OK, err);
+    
+    char index_path[1024];
+    snprintf(index_path, sizeof(index_path), "%s/default_test_idx.index", default_dir);
+    char meta_path[1024];
+    snprintf(meta_path, sizeof(meta_path), "%s/default_test_idx.index.meta", default_dir);
+    
+    int index_exists = stat(index_path, &st) == 0;
+    int meta_exists = stat(meta_path, &st) == 0;
+    TEST_ASSERT_TRUE(index_exists);
+    TEST_ASSERT_TRUE(meta_exists);
+    
+    unlink(index_path);
+    unlink(meta_path);
+    
+    vector_destroy(vec);
+    vector_db_destroy(db);
+    free(default_dir);
+}
+
 void test_vector_utilities(void) {
     vector_t* vec = vector_create(128);
     TEST_ASSERT_NOT_NULL(vec);
@@ -434,6 +485,7 @@ int main(void) {
     RUN_TEST(test_vector_db_update_delete);
     RUN_TEST(test_vector_db_save_load);
     RUN_TEST(test_vector_db_auto_flush);
+    RUN_TEST(test_vector_db_default_serialization);
     RUN_TEST(test_vector_utilities);
     RUN_TEST(test_vector_db_error_handling);
     

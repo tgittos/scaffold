@@ -93,6 +93,8 @@ vector_db_error_t vector_db_flush_now(vector_db_t* db);
 
 const char* vector_db_error_string(vector_db_error_t error);
 
+char* vector_db_get_default_directory(void);
+
 vector_t* vector_create(size_t dimension);
 void vector_destroy(vector_t* vector);
 vector_t* vector_clone(const vector_t* vector);
