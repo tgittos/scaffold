@@ -145,7 +145,7 @@ EMBEDDED_LINKS_HEADER := $(SRCDIR)/embedded_links.h
 COMMON_TEST_SOURCES := $(TESTDIR)/unity/unity.c
 TOOL_TEST_DEPS := $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/tools/vector_db_tool.c $(SRCDIR)/tools/memory_tool.c $(SRCDIR)/tools/pdf_tool.c $(SRCDIR)/tools/tool_result_builder.c
 MODEL_TEST_DEPS := $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(SRCDIR)/llm/embeddings.c $(SRCDIR)/llm/embeddings_service.c
-UTIL_TEST_DEPS := $(SRCDIR)/utils/json_escape.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/utils/common_utils.c $(SRCDIR)/utils/document_chunker.c $(SRCDIR)/utils/pdf_processor.c $(SRCDIR)/utils/context_retriever.c
+UTIL_TEST_DEPS := $(SRCDIR)/utils/json_escape.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/utils/common_utils.c $(SRCDIR)/utils/document_chunker.c $(SRCDIR)/utils/pdf_processor.c $(SRCDIR)/utils/context_retriever.c $(SRCDIR)/utils/config.c
 COMPLEX_TEST_DEPS := $(TOOL_TEST_DEPS) $(MODEL_TEST_DEPS) $(UTIL_TEST_DEPS) $(DB_C_SOURCES) $(SRCDIR)/pdf/pdf_extractor.c $(SRCDIR)/network/http_client.c
 
 # =============================================================================
@@ -333,8 +333,8 @@ $(TEST_MAIN_TARGET): $(TEST_MAIN_OBJECTS)
 $(TEST_ENV_TARGET): $(TEST_ENV_OBJECTS)
 	$(CC) -o $@ $(TEST_ENV_OBJECTS)
 
-$(TEST_CONFIG_TARGET): $(TEST_CONFIG_OBJECTS)
-	$(CC) -o $@ $(TEST_CONFIG_OBJECTS)
+$(TEST_CONFIG_TARGET): $(TEST_CONFIG_OBJECTS) $(CJSON_LIB)
+	$(CC) -o $@ $(TEST_CONFIG_OBJECTS) $(CJSON_LIB)
 
 $(TEST_PROMPT_TARGET): $(TEST_PROMPT_OBJECTS)
 	$(CC) -o $@ $(TEST_PROMPT_OBJECTS)

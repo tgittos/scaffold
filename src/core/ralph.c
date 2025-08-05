@@ -1,7 +1,7 @@
 #include "ralph.h"
 #include <cJSON.h>
 #include "env_loader.h"
-#include "config.h"
+#include "utils/config.h"
 #include "output_formatter.h"
 #include "prompt_loader.h"
 #include "shell_tool.h"
