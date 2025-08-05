@@ -1,5 +1,6 @@
-# Modern Makefile for ralph HTTP client
+# ralph Makefile - Optimized for AI assistance
 # Built with Cosmopolitan for universal binary compatibility
+# Structured for easy navigation and modification
 
 # =============================================================================
 # CONFIGURATION
@@ -24,6 +25,8 @@ HNSWLIB_VERSION := 0.8.0
 PDFIO_VERSION := 1.3.1
 ZLIB_VERSION := 1.3.1
 CJSON_VERSION := 1.7.18
+READLINE_VERSION := 8.2
+NCURSES_VERSION := 6.4
 
 # =============================================================================
 # SOURCE FILES
@@ -102,6 +105,8 @@ HNSWLIB_DIR = $(DEPDIR)/hnswlib-$(HNSWLIB_VERSION)
 PDFIO_DIR = $(DEPDIR)/pdfio-$(PDFIO_VERSION)
 ZLIB_DIR = $(DEPDIR)/zlib-$(ZLIB_VERSION)
 CJSON_DIR = $(DEPDIR)/cJSON-$(CJSON_VERSION)
+READLINE_DIR = $(DEPDIR)/readline-$(READLINE_VERSION)
+NCURSES_DIR = $(DEPDIR)/ncurses-$(NCURSES_VERSION)
 
 # Library files
 CURL_LIB = $(CURL_DIR)/lib/.libs/libcurl.a
@@ -111,15 +116,18 @@ MBEDTLS_LIB3 = $(MBEDTLS_DIR)/library/libmbedcrypto.a
 PDFIO_LIB = $(PDFIO_DIR)/libpdfio.a
 ZLIB_LIB = $(ZLIB_DIR)/libz.a
 CJSON_LIB = $(CJSON_DIR)/libcjson.a
+READLINE_LIB = $(READLINE_DIR)/libreadline.a
+HISTORY_LIB = $(READLINE_DIR)/libhistory.a
+NCURSES_LIB = $(NCURSES_DIR)/lib/libncurses.a
 
 # All required libraries
-ALL_LIBS := $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB)
+ALL_LIBS := $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(READLINE_LIB) $(HISTORY_LIB) $(NCURSES_LIB)
 
 # Include and library flags
-INCLUDES = -I$(CURL_DIR)/include -I$(MBEDTLS_DIR)/include -I$(HNSWLIB_DIR) -I$(PDFIO_DIR) -I$(ZLIB_DIR) -I$(CJSON_DIR) -I$(SRCDIR) -I$(SRCDIR)/core -I$(SRCDIR)/network -I$(SRCDIR)/llm -I$(SRCDIR)/session -I$(SRCDIR)/tools -I$(SRCDIR)/utils -I$(SRCDIR)/db -I$(SRCDIR)/pdf
+INCLUDES = -I$(CURL_DIR)/include -I$(MBEDTLS_DIR)/include -I$(HNSWLIB_DIR) -I$(PDFIO_DIR) -I$(ZLIB_DIR) -I$(CJSON_DIR) -I$(READLINE_DIR) -I$(READLINE_DIR)/readline -I$(NCURSES_DIR)/include -I$(SRCDIR) -I$(SRCDIR)/core -I$(SRCDIR)/network -I$(SRCDIR)/llm -I$(SRCDIR)/session -I$(SRCDIR)/tools -I$(SRCDIR)/utils -I$(SRCDIR)/db -I$(SRCDIR)/pdf
 TEST_INCLUDES = $(INCLUDES) -I$(TESTDIR)/unity -I$(TESTDIR) -I$(TESTDIR)/core -I$(TESTDIR)/network -I$(TESTDIR)/llm -I$(TESTDIR)/session -I$(TESTDIR)/tools -I$(TESTDIR)/utils
-LDFLAGS = -L$(CURL_DIR)/lib/.libs -L$(MBEDTLS_DIR)/library -L$(PDFIO_DIR) -L$(ZLIB_DIR) -L$(CJSON_DIR)
-LIBS = -lcurl -lmbedtls -lmbedx509 -lmbedcrypto $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm
+LDFLAGS = -L$(CURL_DIR)/lib/.libs -L$(MBEDTLS_DIR)/library -L$(PDFIO_DIR) -L$(ZLIB_DIR) -L$(CJSON_DIR) -L$(READLINE_DIR) -L$(NCURSES_DIR)/lib
+LIBS = -lcurl -lmbedtls -lmbedx509 -lmbedcrypto $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(READLINE_LIB) $(HISTORY_LIB) $(NCURSES_LIB) -lm
 
 # =============================================================================
 # TOOLS AND UTILITIES
@@ -141,49 +149,116 @@ UTIL_TEST_DEPS := $(SRCDIR)/utils/json_escape.c $(SRCDIR)/utils/output_formatter
 COMPLEX_TEST_DEPS := $(TOOL_TEST_DEPS) $(MODEL_TEST_DEPS) $(UTIL_TEST_DEPS) $(DB_C_SOURCES) $(SRCDIR)/pdf/pdf_extractor.c $(SRCDIR)/network/http_client.c
 
 # =============================================================================
-# TEST DEFINITIONS
+# TEST DEFINITIONS - Simple and explicit for easy AI navigation
 # =============================================================================
 
 # Simple tests (minimal dependencies)
-define SIMPLE_TEST
-TEST_$(1)_SOURCES = $(TESTDIR)/$(2)/test_$(3).c $(4) $(COMMON_TEST_SOURCES)
-TEST_$(1)_OBJECTS = $$(TEST_$(1)_SOURCES:.c=.o)
-TEST_$(1)_TARGET = $(TESTDIR)/test_$(3)
-endef
+TEST_MAIN_SOURCES = $(TESTDIR)/core/test_main.c $(COMMON_TEST_SOURCES)
+TEST_MAIN_OBJECTS = $(TEST_MAIN_SOURCES:.c=.o)
+TEST_MAIN_TARGET = $(TESTDIR)/test_main
+
+TEST_ENV_SOURCES = $(TESTDIR)/utils/test_env_loader.c $(SRCDIR)/utils/env_loader.c $(COMMON_TEST_SOURCES)
+TEST_ENV_OBJECTS = $(TEST_ENV_SOURCES:.c=.o)
+TEST_ENV_TARGET = $(TESTDIR)/test_env_loader
+
+TEST_CONFIG_SOURCES = $(TESTDIR)/utils/test_config.c $(SRCDIR)/utils/config.c $(COMMON_TEST_SOURCES)
+TEST_CONFIG_OBJECTS = $(TEST_CONFIG_SOURCES:.c=.o)
+TEST_CONFIG_TARGET = $(TESTDIR)/test_config
+
+TEST_PROMPT_SOURCES = $(TESTDIR)/utils/test_prompt_loader.c $(SRCDIR)/utils/prompt_loader.c $(COMMON_TEST_SOURCES)
+TEST_PROMPT_OBJECTS = $(TEST_PROMPT_SOURCES:.c=.o)
+TEST_PROMPT_TARGET = $(TESTDIR)/test_prompt_loader
+
+TEST_CONVERSATION_SOURCES = $(TESTDIR)/session/test_conversation_tracker.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/utils/json_escape.c $(COMMON_TEST_SOURCES)
+TEST_CONVERSATION_OBJECTS = $(TEST_CONVERSATION_SOURCES:.c=.o)
+TEST_CONVERSATION_TARGET = $(TESTDIR)/test_conversation_tracker
+
+TEST_TODO_MANAGER_SOURCES = $(TESTDIR)/tools/test_todo_manager.c $(SRCDIR)/tools/todo_manager.c $(COMMON_TEST_SOURCES)
+TEST_TODO_MANAGER_OBJECTS = $(TEST_TODO_MANAGER_SOURCES:.c=.o)
+TEST_TODO_MANAGER_TARGET = $(TESTDIR)/test_todo_manager
+
+TEST_TODO_TOOL_SOURCES = $(TESTDIR)/tools/test_todo_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(COMMON_TEST_SOURCES)
+TEST_TODO_TOOL_OBJECTS = $(TEST_TODO_TOOL_SOURCES:.c=.o)
+TEST_TODO_TOOL_TARGET = $(TESTDIR)/test_todo_tool
+
+TEST_PDF_EXTRACTOR_SOURCES = $(TESTDIR)/pdf/test_pdf_extractor.c $(SRCDIR)/pdf/pdf_extractor.c $(COMMON_TEST_SOURCES)
+TEST_PDF_EXTRACTOR_OBJECTS = $(TEST_PDF_EXTRACTOR_SOURCES:.c=.o)
+TEST_PDF_EXTRACTOR_TARGET = $(TESTDIR)/test_pdf_extractor
+
+TEST_DOCUMENT_CHUNKER_SOURCES = $(TESTDIR)/test_document_chunker.c $(SRCDIR)/utils/document_chunker.c $(COMMON_TEST_SOURCES)
+TEST_DOCUMENT_CHUNKER_OBJECTS = $(TEST_DOCUMENT_CHUNKER_SOURCES:.c=.o)
+TEST_DOCUMENT_CHUNKER_TARGET = $(TESTDIR)/test_document_chunker
 
 # Complex tests (with full dependencies)
-define COMPLEX_TEST
-TEST_$(1)_C_SOURCES = $(TESTDIR)/$(2)/test_$(3).c $(4) $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
-TEST_$(1)_CPP_SOURCES = $(DB_CPP_SOURCES)
-TEST_$(1)_OBJECTS = $$(TEST_$(1)_C_SOURCES:.c=.o) $$(TEST_$(1)_CPP_SOURCES:.cpp=.o)
-TEST_$(1)_TARGET = $(TESTDIR)/test_$(3)
-endef
+TEST_HTTP_C_SOURCES = $(TESTDIR)/network/test_http_client.c $(SRCDIR)/utils/env_loader.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
+TEST_HTTP_CPP_SOURCES = $(DB_CPP_SOURCES)
+TEST_HTTP_OBJECTS = $(TEST_HTTP_C_SOURCES:.c=.o) $(TEST_HTTP_CPP_SOURCES:.cpp=.o)
+TEST_HTTP_TARGET = $(TESTDIR)/test_http_client
 
-# Generate test definitions
-$(eval $(call SIMPLE_TEST,MAIN,core,main,))
-$(eval $(call SIMPLE_TEST,ENV,utils,env_loader,$(SRCDIR)/utils/env_loader.c))
-$(eval $(call SIMPLE_TEST,CONFIG,utils,config,$(SRCDIR)/utils/config.c))
-$(eval $(call SIMPLE_TEST,PROMPT,utils,prompt_loader,$(SRCDIR)/utils/prompt_loader.c))
-$(eval $(call SIMPLE_TEST,CONVERSATION,session,conversation_tracker,$(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/utils/json_escape.c))
-$(eval $(call SIMPLE_TEST,TODO_MANAGER,tools,todo_manager,$(SRCDIR)/tools/todo_manager.c))
-$(eval $(call SIMPLE_TEST,TODO_TOOL,tools,todo_tool,$(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c))
-$(eval $(call SIMPLE_TEST,PDF_EXTRACTOR,pdf,pdf_extractor,$(SRCDIR)/pdf/pdf_extractor.c))
-$(eval $(call SIMPLE_TEST,DOCUMENT_CHUNKER,,document_chunker,$(SRCDIR)/utils/document_chunker.c))
+TEST_OUTPUT_C_SOURCES = $(TESTDIR)/utils/test_output_formatter.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
+TEST_OUTPUT_CPP_SOURCES = $(DB_CPP_SOURCES)
+TEST_OUTPUT_OBJECTS = $(TEST_OUTPUT_C_SOURCES:.c=.o) $(TEST_OUTPUT_CPP_SOURCES:.cpp=.o)
+TEST_OUTPUT_TARGET = $(TESTDIR)/test_output_formatter
 
-$(eval $(call COMPLEX_TEST,HTTP,network,http_client,$(SRCDIR)/utils/env_loader.c))
-$(eval $(call COMPLEX_TEST,OUTPUT,utils,output_formatter,))
-$(eval $(call COMPLEX_TEST,TOOLS,tools,tools_system,))
-$(eval $(call COMPLEX_TEST,SHELL,tools,shell_tool,))
-$(eval $(call COMPLEX_TEST,FILE,tools,file_tools,))
-$(eval $(call COMPLEX_TEST,SMART_FILE,tools,smart_file_tools,))
-$(eval $(call COMPLEX_TEST,VECTOR_DB_TOOL,tools,vector_db_tool,$(SRCDIR)/utils/env_loader.c))
-$(eval $(call COMPLEX_TEST,MEMORY_TOOL,tools,memory_tool,))
-$(eval $(call COMPLEX_TEST,TOKEN_MANAGER,session,token_manager,$(SRCDIR)/session/token_manager.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/session/conversation_tracker.c))
-$(eval $(call COMPLEX_TEST,CONVERSATION_COMPACTOR,session,conversation_compactor,$(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/token_manager.c))
-$(eval $(call COMPLEX_TEST,RALPH,core,ralph,$(TESTDIR)/mock_api_server.c $(SRCDIR)/core/ralph.c $(SRCDIR)/utils/env_loader.c $(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/network/api_common.c $(SRCDIR)/session/token_manager.c $(SRCDIR)/llm/llm_provider.c $(SRCDIR)/llm/providers/openai_provider.c $(SRCDIR)/llm/providers/anthropic_provider.c $(SRCDIR)/llm/providers/local_ai_provider.c $(SRCDIR)/mcp/mcp_client.c))
-$(eval $(call COMPLEX_TEST,INCOMPLETE_TASK_BUG,core,incomplete_task_bug,$(SRCDIR)/core/ralph.c $(SRCDIR)/utils/env_loader.c $(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/network/api_common.c $(SRCDIR)/session/token_manager.c $(SRCDIR)/llm/llm_provider.c $(SRCDIR)/llm/providers/openai_provider.c $(SRCDIR)/llm/providers/anthropic_provider.c $(SRCDIR)/llm/providers/local_ai_provider.c $(SRCDIR)/mcp/mcp_client.c))
-$(eval $(call COMPLEX_TEST,MODEL_TOOLS,llm,model_tools,))
-$(eval $(call COMPLEX_TEST,MESSAGES_ARRAY_BUG,network,messages_array_bug,$(SRCDIR)/network/api_common.c $(SRCDIR)/session/conversation_tracker.c))
+TEST_TOOLS_C_SOURCES = $(TESTDIR)/tools/test_tools_system.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
+TEST_TOOLS_CPP_SOURCES = $(DB_CPP_SOURCES)
+TEST_TOOLS_OBJECTS = $(TEST_TOOLS_C_SOURCES:.c=.o) $(TEST_TOOLS_CPP_SOURCES:.cpp=.o)
+TEST_TOOLS_TARGET = $(TESTDIR)/test_tools_system
+
+TEST_SHELL_C_SOURCES = $(TESTDIR)/tools/test_shell_tool.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
+TEST_SHELL_CPP_SOURCES = $(DB_CPP_SOURCES)
+TEST_SHELL_OBJECTS = $(TEST_SHELL_C_SOURCES:.c=.o) $(TEST_SHELL_CPP_SOURCES:.cpp=.o)
+TEST_SHELL_TARGET = $(TESTDIR)/test_shell_tool
+
+TEST_FILE_C_SOURCES = $(TESTDIR)/tools/test_file_tools.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
+TEST_FILE_CPP_SOURCES = $(DB_CPP_SOURCES)
+TEST_FILE_OBJECTS = $(TEST_FILE_C_SOURCES:.c=.o) $(TEST_FILE_CPP_SOURCES:.cpp=.o)
+TEST_FILE_TARGET = $(TESTDIR)/test_file_tools
+
+TEST_SMART_FILE_C_SOURCES = $(TESTDIR)/tools/test_smart_file_tools.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
+TEST_SMART_FILE_CPP_SOURCES = $(DB_CPP_SOURCES)
+TEST_SMART_FILE_OBJECTS = $(TEST_SMART_FILE_C_SOURCES:.c=.o) $(TEST_SMART_FILE_CPP_SOURCES:.cpp=.o)
+TEST_SMART_FILE_TARGET = $(TESTDIR)/test_smart_file_tools
+
+TEST_VECTOR_DB_TOOL_C_SOURCES = $(TESTDIR)/tools/test_vector_db_tool.c $(SRCDIR)/utils/env_loader.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
+TEST_VECTOR_DB_TOOL_CPP_SOURCES = $(DB_CPP_SOURCES)
+TEST_VECTOR_DB_TOOL_OBJECTS = $(TEST_VECTOR_DB_TOOL_C_SOURCES:.c=.o) $(TEST_VECTOR_DB_TOOL_CPP_SOURCES:.cpp=.o)
+TEST_VECTOR_DB_TOOL_TARGET = $(TESTDIR)/test_vector_db_tool
+
+TEST_MEMORY_TOOL_C_SOURCES = $(TESTDIR)/tools/test_memory_tool.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
+TEST_MEMORY_TOOL_CPP_SOURCES = $(DB_CPP_SOURCES)
+TEST_MEMORY_TOOL_OBJECTS = $(TEST_MEMORY_TOOL_C_SOURCES:.c=.o) $(TEST_MEMORY_TOOL_CPP_SOURCES:.cpp=.o)
+TEST_MEMORY_TOOL_TARGET = $(TESTDIR)/test_memory_tool
+
+TEST_TOKEN_MANAGER_C_SOURCES = $(TESTDIR)/session/test_token_manager.c $(SRCDIR)/session/token_manager.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/session/conversation_tracker.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
+TEST_TOKEN_MANAGER_CPP_SOURCES = $(DB_CPP_SOURCES)
+TEST_TOKEN_MANAGER_OBJECTS = $(TEST_TOKEN_MANAGER_C_SOURCES:.c=.o) $(TEST_TOKEN_MANAGER_CPP_SOURCES:.cpp=.o)
+TEST_TOKEN_MANAGER_TARGET = $(TESTDIR)/test_token_manager
+
+TEST_CONVERSATION_COMPACTOR_C_SOURCES = $(TESTDIR)/session/test_conversation_compactor.c $(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/token_manager.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
+TEST_CONVERSATION_COMPACTOR_CPP_SOURCES = $(DB_CPP_SOURCES)
+TEST_CONVERSATION_COMPACTOR_OBJECTS = $(TEST_CONVERSATION_COMPACTOR_C_SOURCES:.c=.o) $(TEST_CONVERSATION_COMPACTOR_CPP_SOURCES:.cpp=.o)
+TEST_CONVERSATION_COMPACTOR_TARGET = $(TESTDIR)/test_conversation_compactor
+
+TEST_RALPH_C_SOURCES = $(TESTDIR)/core/test_ralph.c $(TESTDIR)/mock_api_server.c $(SRCDIR)/core/ralph.c $(SRCDIR)/utils/env_loader.c $(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/network/api_common.c $(SRCDIR)/session/token_manager.c $(SRCDIR)/llm/llm_provider.c $(SRCDIR)/llm/providers/openai_provider.c $(SRCDIR)/llm/providers/anthropic_provider.c $(SRCDIR)/llm/providers/local_ai_provider.c $(SRCDIR)/mcp/mcp_client.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
+TEST_RALPH_CPP_SOURCES = $(DB_CPP_SOURCES)
+TEST_RALPH_OBJECTS = $(TEST_RALPH_C_SOURCES:.c=.o) $(TEST_RALPH_CPP_SOURCES:.cpp=.o)
+TEST_RALPH_TARGET = $(TESTDIR)/test_ralph
+
+TEST_INCOMPLETE_TASK_BUG_C_SOURCES = $(TESTDIR)/core/test_incomplete_task_bug.c $(SRCDIR)/core/ralph.c $(SRCDIR)/utils/env_loader.c $(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/network/api_common.c $(SRCDIR)/session/token_manager.c $(SRCDIR)/llm/llm_provider.c $(SRCDIR)/llm/providers/openai_provider.c $(SRCDIR)/llm/providers/anthropic_provider.c $(SRCDIR)/llm/providers/local_ai_provider.c $(SRCDIR)/mcp/mcp_client.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
+TEST_INCOMPLETE_TASK_BUG_CPP_SOURCES = $(DB_CPP_SOURCES)
+TEST_INCOMPLETE_TASK_BUG_OBJECTS = $(TEST_INCOMPLETE_TASK_BUG_C_SOURCES:.c=.o) $(TEST_INCOMPLETE_TASK_BUG_CPP_SOURCES:.cpp=.o)
+TEST_INCOMPLETE_TASK_BUG_TARGET = $(TESTDIR)/test_incomplete_task_bug
+
+TEST_MODEL_TOOLS_C_SOURCES = $(TESTDIR)/llm/test_model_tools.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
+TEST_MODEL_TOOLS_CPP_SOURCES = $(DB_CPP_SOURCES)
+TEST_MODEL_TOOLS_OBJECTS = $(TEST_MODEL_TOOLS_C_SOURCES:.c=.o) $(TEST_MODEL_TOOLS_CPP_SOURCES:.cpp=.o)
+TEST_MODEL_TOOLS_TARGET = $(TESTDIR)/test_model_tools
+
+TEST_MESSAGES_ARRAY_BUG_C_SOURCES = $(TESTDIR)/network/test_messages_array_bug.c $(SRCDIR)/network/api_common.c $(SRCDIR)/session/conversation_tracker.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
+TEST_MESSAGES_ARRAY_BUG_CPP_SOURCES = $(DB_CPP_SOURCES)
+TEST_MESSAGES_ARRAY_BUG_OBJECTS = $(TEST_MESSAGES_ARRAY_BUG_C_SOURCES:.c=.o) $(TEST_MESSAGES_ARRAY_BUG_CPP_SOURCES:.cpp=.o)
+TEST_MESSAGES_ARRAY_BUG_TARGET = $(TESTDIR)/test_messages_array_bug
 
 # MCP test
 TEST_MCP_CLIENT_C_SOURCES = $(TESTDIR)/mcp/test_mcp_client.c $(SRCDIR)/mcp/mcp_client.c $(SRCDIR)/core/ralph.c $(SRCDIR)/utils/env_loader.c $(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/network/api_common.c $(SRCDIR)/session/token_manager.c $(SRCDIR)/llm/llm_provider.c $(SRCDIR)/llm/providers/openai_provider.c $(SRCDIR)/llm/providers/anthropic_provider.c $(SRCDIR)/llm/providers/local_ai_provider.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
@@ -248,7 +323,7 @@ $(TESTDIR)/unity/%.o: $(TESTDIR)/unity/%.c
 	$(CC) $(CFLAGS) $(TEST_INCLUDES) -c $< -o $@
 
 # =============================================================================
-# TEST BUILD RULES
+# TEST BUILD RULES - Simple and explicit
 # =============================================================================
 
 # Simple test linking (no external libraries)
@@ -257,6 +332,9 @@ $(TEST_MAIN_TARGET): $(TEST_MAIN_OBJECTS)
 
 $(TEST_ENV_TARGET): $(TEST_ENV_OBJECTS)
 	$(CC) -o $@ $(TEST_ENV_OBJECTS)
+
+$(TEST_CONFIG_TARGET): $(TEST_CONFIG_OBJECTS)
+	$(CC) -o $@ $(TEST_CONFIG_OBJECTS)
 
 $(TEST_PROMPT_TARGET): $(TEST_PROMPT_OBJECTS)
 	$(CC) -o $@ $(TEST_PROMPT_OBJECTS)
@@ -270,25 +348,18 @@ $(TEST_TODO_MANAGER_TARGET): $(TEST_TODO_MANAGER_OBJECTS)
 $(TEST_TODO_TOOL_TARGET): $(TEST_TODO_TOOL_OBJECTS)
 	$(CC) -o $@ $(TEST_TODO_TOOL_OBJECTS)
 
-$(TEST_DOCUMENT_CHUNKER_TARGET): $(TEST_DOCUMENT_CHUNKER_OBJECTS)
-	$(CC) -o $@ $(TEST_DOCUMENT_CHUNKER_OBJECTS)
-
-# PDF test
 $(TEST_PDF_EXTRACTOR_TARGET): $(TEST_PDF_EXTRACTOR_OBJECTS) $(PDFIO_LIB)
 	$(CC) -o $@ $(TEST_PDF_EXTRACTOR_OBJECTS) $(PDFIO_LIB) $(ZLIB_LIB) -lm
 
-# Complex tests with full linking
+$(TEST_DOCUMENT_CHUNKER_TARGET): $(TEST_DOCUMENT_CHUNKER_OBJECTS)
+	$(CC) -o $@ $(TEST_DOCUMENT_CHUNKER_OBJECTS)
+
+# Complex test linking (with full libraries)
 $(TEST_HTTP_TARGET): $(TEST_HTTP_OBJECTS) $(ALL_LIBS)
 	$(CC) $(LDFLAGS) -o $@ $(TEST_HTTP_OBJECTS) $(LIBS)
 
 $(TEST_OUTPUT_TARGET): $(TEST_OUTPUT_OBJECTS) $(ALL_LIBS)
 	$(CXX) -o $@ $(TEST_OUTPUT_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
-
-$(TEST_VECTOR_DB_TOOL_TARGET): $(TEST_VECTOR_DB_TOOL_OBJECTS) $(ALL_LIBS)
-	$(CXX) -o $@ $(TEST_VECTOR_DB_TOOL_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
-
-$(TEST_MEMORY_TOOL_TARGET): $(TEST_MEMORY_TOOL_OBJECTS) $(ALL_LIBS)
-	$(CXX) -o $@ $(TEST_MEMORY_TOOL_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
 
 $(TEST_TOOLS_TARGET): $(TEST_TOOLS_OBJECTS) $(ALL_LIBS)
 	$(CXX) -o $@ $(TEST_TOOLS_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
@@ -301,6 +372,12 @@ $(TEST_FILE_TARGET): $(TEST_FILE_OBJECTS) $(ALL_LIBS)
 
 $(TEST_SMART_FILE_TARGET): $(TEST_SMART_FILE_OBJECTS) $(ALL_LIBS)
 	$(CXX) -o $@ $(TEST_SMART_FILE_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
+
+$(TEST_VECTOR_DB_TOOL_TARGET): $(TEST_VECTOR_DB_TOOL_OBJECTS) $(ALL_LIBS)
+	$(CXX) -o $@ $(TEST_VECTOR_DB_TOOL_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
+
+$(TEST_MEMORY_TOOL_TARGET): $(TEST_MEMORY_TOOL_OBJECTS) $(ALL_LIBS)
+	$(CXX) -o $@ $(TEST_MEMORY_TOOL_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
 
 $(TEST_TOKEN_MANAGER_TARGET): $(TEST_TOKEN_MANAGER_OBJECTS) $(ALL_LIBS)
 	$(CC) -o $@ $(TEST_TOKEN_MANAGER_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm
@@ -331,6 +408,7 @@ $(TEST_VECTOR_DB_TARGET): $(TEST_VECTOR_DB_OBJECTS) $(HNSWLIB_DIR)/hnswlib/hnswl
 # =============================================================================
 
 test: $(ALL_TEST_TARGETS)
+	@echo "Running all tests..."
 	./$(TEST_MAIN_TARGET)
 	./$(TEST_HTTP_TARGET)
 	./$(TEST_ENV_TARGET)
@@ -354,11 +432,13 @@ test: $(ALL_TEST_TARGETS)
 	./$(TEST_VECTOR_DB_TARGET)
 	./$(TEST_PDF_EXTRACTOR_TARGET)
 	./$(TEST_DOCUMENT_CHUNKER_TARGET)
+	@echo "All tests completed"
 
 check: test
 
-# Valgrind testing (excluding HTTP tests due to external library noise)
+# Valgrind testing (safe subset)
 check-valgrind: $(ALL_TEST_TARGETS)
+	@echo "Running valgrind tests (excluding HTTP tests)..."
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_MAIN_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_ENV_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_OUTPUT_TARGET).aarch64.elf
@@ -377,9 +457,11 @@ check-valgrind: $(ALL_TEST_TARGETS)
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_VECTOR_DB_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_PDF_EXTRACTOR_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_DOCUMENT_CHUNKER_TARGET).aarch64.elf
+	@echo "Valgrind tests completed"
 
-# Valgrind testing for all tests (including external libraries - may show false positives)
+# Valgrind testing for all tests (may show false positives from external libraries)
 check-valgrind-all: $(ALL_TEST_TARGETS)
+	@echo "Running all valgrind tests (including HTTP - may show false positives)..."
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_MAIN_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_HTTP_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_ENV_TARGET).aarch64.elf
@@ -390,6 +472,7 @@ check-valgrind-all: $(ALL_TEST_TARGETS)
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_SHELL_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_FILE_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_RALPH_TARGET).aarch64.elf
+	@echo "All valgrind tests completed"
 
 # =============================================================================
 # DEPENDENCY MANAGEMENT
@@ -505,6 +588,48 @@ $(CJSON_LIB): | $(DEPDIR)
 	cd cJSON-$(CJSON_VERSION) && \
 	CC="$(CC)" AR="cosmoar" RANLIB="aarch64-linux-cosmo-ranlib" CFLAGS="-O2 -fno-stack-protector" \
 		$(MAKE) CC="$(CC)" AR="cosmoar" RANLIB="aarch64-linux-cosmo-ranlib" CFLAGS="-O2 -fno-stack-protector" libcjson.a
+
+# Build ncurses library
+$(NCURSES_LIB): | $(DEPDIR)
+	@echo "Building ncurses..."
+	@mkdir -p $(DEPDIR)
+	cd $(DEPDIR) && \
+	if [ ! -f ncurses-$(NCURSES_VERSION).tar.gz ]; then \
+		curl -L -o ncurses-$(NCURSES_VERSION).tar.gz https://ftp.gnu.org/gnu/ncurses/ncurses-$(NCURSES_VERSION).tar.gz || \
+		wget -O ncurses-$(NCURSES_VERSION).tar.gz https://ftp.gnu.org/gnu/ncurses/ncurses-$(NCURSES_VERSION).tar.gz; \
+	fi && \
+	if [ ! -d ncurses-$(NCURSES_VERSION) ]; then \
+		tar -xzf ncurses-$(NCURSES_VERSION).tar.gz; \
+	fi && \
+	cd ncurses-$(NCURSES_VERSION) && \
+	CC="$(CC)" AR="cosmoar" RANLIB="aarch64-linux-cosmo-ranlib" CFLAGS="-O2 -fno-stack-protector" \
+		./configure --disable-shared --enable-static --without-progs --without-tests --without-cxx-binding --without-ada && \
+	CC="$(CC)" AR="cosmoar" RANLIB="aarch64-linux-cosmo-ranlib" CFLAGS="-O2 -fno-stack-protector" \
+		$(MAKE) CC="$(CC)" AR="cosmoar" RANLIB="aarch64-linux-cosmo-ranlib"
+
+# Build Readline library
+$(READLINE_LIB) $(HISTORY_LIB): $(NCURSES_LIB)
+	@echo "Building Readline..."
+	@mkdir -p $(DEPDIR)
+	cd $(DEPDIR) && \
+	if [ ! -f readline-$(READLINE_VERSION).tar.gz ]; then \
+		curl -L -o readline-$(READLINE_VERSION).tar.gz https://ftp.gnu.org/gnu/readline/readline-$(READLINE_VERSION).tar.gz || \
+		wget -O readline-$(READLINE_VERSION).tar.gz https://ftp.gnu.org/gnu/readline/readline-$(READLINE_VERSION).tar.gz; \
+	fi && \
+	if [ ! -d readline-$(READLINE_VERSION) ]; then \
+		tar -xzf readline-$(READLINE_VERSION).tar.gz; \
+	fi && \
+	cd readline-$(READLINE_VERSION) && \
+	CC="$(CC)" AR="cosmoar" RANLIB="aarch64-linux-cosmo-ranlib" \
+		CFLAGS="-O2 -fno-stack-protector -I$$(pwd)/../ncurses-$(NCURSES_VERSION)/include" \
+		LDFLAGS="-L$$(pwd)/../ncurses-$(NCURSES_VERSION)/lib" \
+		./configure --disable-shared --enable-static && \
+	CC="$(CC)" AR="cosmoar" RANLIB="aarch64-linux-cosmo-ranlib" \
+		CFLAGS="-O2 -fno-stack-protector -I$$(pwd)/../ncurses-$(NCURSES_VERSION)/include" \
+		$(MAKE) CC="$(CC)" AR="cosmoar" RANLIB="aarch64-linux-cosmo-ranlib" && \
+	mkdir -p readline && \
+	cd readline && \
+	for f in ../*.h; do ln -sf "$$f" $$(basename "$$f"); done
 
 # =============================================================================
 # CLEAN TARGETS

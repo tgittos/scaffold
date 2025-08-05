@@ -63,7 +63,7 @@ platform specific binaries, such as .aarch64.elf (aarch64) and .com.dbg (amd64)
 - Source code is C
 - Compiled with Cosmopolitan
 - Inside a Docker devcontainer running Debian
-- Using `mbedtls` for TLS/SSL support, `readline` for CLI functionality, and `unity` for unit testing
+- Using `mbedtls` for TLS/SSL support, and `unity` for unit testing
 - With `valgrind`, `gdb` and all common C debugging tools preconfigured
 
 ## Architecture

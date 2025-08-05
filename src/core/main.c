@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <readline/readline.h>
+#include <readline/history.h>
 #include "ralph.h"
 #include "debug_output.h"
 
@@ -88,42 +90,47 @@ int main(int argc, char *argv[])
             printf("\n");
         }
         
-        char input_buffer[MAX_INPUT_SIZE];
+        // Initialize readline
+        using_history();
+        
+        char *input_line;
         
         while (1) {
-            printf("> ");
-            fflush(stdout);
+            // Read input line with readline
+            input_line = readline("> ");
             
-            // Read input line
-            if (fgets(input_buffer, sizeof(input_buffer), stdin) == NULL) {
+            // Check for EOF (Ctrl+D)
+            if (input_line == NULL) {
                 printf("\n");
                 break;
             }
             
-            // Remove trailing newline
-            size_t len = strlen(input_buffer);
-            if (len > 0 && input_buffer[len-1] == '\n') {
-                input_buffer[len-1] = '\0';
-            }
-            
             // Check for exit commands
-            if (strcmp(input_buffer, "quit") == 0 || strcmp(input_buffer, "exit") == 0) {
+            if (strcmp(input_line, "quit") == 0 || strcmp(input_line, "exit") == 0) {
                 printf("Goodbye!\n");
+                free(input_line);
                 break;
             }
             
             // Skip empty messages
-            if (strlen(input_buffer) == 0) {
+            if (strlen(input_line) == 0) {
+                free(input_line);
                 continue;
             }
             
+            // Add non-empty lines to history
+            add_history(input_line);
+            
             // Process the user message
             printf("\n");
-            int result = ralph_process_message(&session, input_buffer);
+            int result = ralph_process_message(&session, input_line);
             if (result != 0) {
                 fprintf(stderr, "Error: Failed to process message\n");
             }
             printf("\n");
+            
+            // Free the input line
+            free(input_line);
         }
         
         // Cleanup
