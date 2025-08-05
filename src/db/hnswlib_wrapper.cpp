@@ -1,0 +1,237 @@
+#include "hnswlib_wrapper.h"
+#include <hnswlib/hnswlib.h>
+#include <unordered_map>
+#include <memory>
+#include <string>
+#include <cstring>
+
+using namespace hnswlib;
+
+static std::unordered_map<std::string, std::unique_ptr<HierarchicalNSW<float>>> indexes;
+static std::unordered_map<std::string, std::unique_ptr<SpaceInterface<float>>> spaces;
+
+class L2SpaceWrapper : public L2Space {
+public:
+    L2SpaceWrapper(size_t dim) : L2Space(dim) {}
+};
+
+class InnerProductSpaceWrapper : public InnerProductSpace {
+public:
+    InnerProductSpaceWrapper(size_t dim) : InnerProductSpace(dim) {}
+};
+
+extern "C" {
+
+hnswlib_index_t hnswlib_create_index(const char* name, const hnswlib_index_config_t* config) {
+    try {
+        std::string index_name(name);
+        
+        if (indexes.find(index_name) != indexes.end()) {
+            return nullptr;
+        }
+        
+        std::unique_ptr<SpaceInterface<float>> space;
+        if (strcmp(config->metric, "l2") == 0) {
+            space = std::make_unique<L2SpaceWrapper>(config->dimension);
+        } else if (strcmp(config->metric, "ip") == 0) {
+            space = std::make_unique<InnerProductSpaceWrapper>(config->dimension);
+        } else {
+            return nullptr;
+        }
+        
+        auto index = std::make_unique<HierarchicalNSW<float>>(
+            space.get(), 
+            config->max_elements,
+            config->M,
+            config->ef_construction,
+            config->random_seed
+        );
+        
+        spaces[index_name] = std::move(space);
+        indexes[index_name] = std::move(index);
+        
+        return reinterpret_cast<hnswlib_index_t>(indexes[index_name].get());
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+int hnswlib_delete_index(const char* name) {
+    std::string index_name(name);
+    auto it = indexes.find(index_name);
+    if (it == indexes.end()) {
+        return -1;
+    }
+    
+    indexes.erase(it);
+    spaces.erase(index_name);
+    return 0;
+}
+
+int hnswlib_has_index(const char* name) {
+    return indexes.find(std::string(name)) != indexes.end() ? 1 : 0;
+}
+
+int hnswlib_add_vector(const char* name, const float* data, size_t label) {
+    try {
+        auto it = indexes.find(std::string(name));
+        if (it == indexes.end()) {
+            return -1;
+        }
+        
+        it->second->addPoint(data, label);
+        return 0;
+    } catch (...) {
+        return -1;
+    }
+}
+
+int hnswlib_update_vector(const char* name, const float* data, size_t label) {
+    try {
+        auto it = indexes.find(std::string(name));
+        if (it == indexes.end()) {
+            return -1;
+        }
+        
+        it->second->updatePoint(data, label, 1.0);
+        return 0;
+    } catch (...) {
+        return -1;
+    }
+}
+
+int hnswlib_delete_vector(const char* name, size_t label) {
+    try {
+        auto it = indexes.find(std::string(name));
+        if (it == indexes.end()) {
+            return -1;
+        }
+        
+        it->second->markDelete(label);
+        return 0;
+    } catch (...) {
+        return -1;
+    }
+}
+
+int hnswlib_get_vector(const char* name, size_t label, float* data) {
+    try {
+        auto it = indexes.find(std::string(name));
+        if (it == indexes.end()) {
+            return -1;
+        }
+        
+        std::vector<float> vec = it->second->getDataByLabel<float>(label);
+        auto space_it = spaces.find(std::string(name));
+        if (space_it == spaces.end()) {
+            return -1;
+        }
+        
+        size_t dim = space_it->second->get_data_size() / sizeof(float);
+        memcpy(data, vec.data(), dim * sizeof(float));
+        return 0;
+    } catch (...) {
+        return -1;
+    }
+}
+
+hnswlib_search_results_t* hnswlib_search(const char* name, const float* query, size_t k) {
+    try {
+        auto it = indexes.find(std::string(name));
+        if (it == indexes.end()) {
+            return nullptr;
+        }
+        
+        auto result = it->second->searchKnn(query, k);
+        
+        auto* results = new hnswlib_search_results_t;
+        results->count = result.size();
+        results->labels = new size_t[results->count];
+        results->distances = new float[results->count];
+        
+        for (size_t i = 0; i < results->count; i++) {
+            results->labels[results->count - 1 - i] = result.top().second;
+            results->distances[results->count - 1 - i] = result.top().first;
+            result.pop();
+        }
+        
+        return results;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void hnswlib_free_search_results(hnswlib_search_results_t* results) {
+    if (results) {
+        delete[] results->labels;
+        delete[] results->distances;
+        delete results;
+    }
+}
+
+int hnswlib_save_index(const char* name, const char* path) {
+    try {
+        auto it = indexes.find(std::string(name));
+        if (it == indexes.end()) {
+            return -1;
+        }
+        
+        it->second->saveIndex(std::string(path));
+        return 0;
+    } catch (...) {
+        return -1;
+    }
+}
+
+int hnswlib_load_index(const char* name, const char* path) {
+    try {
+        auto it = indexes.find(std::string(name));
+        if (it == indexes.end()) {
+            return -1;
+        }
+        
+        auto space_it = spaces.find(std::string(name));
+        if (space_it == spaces.end()) {
+            return -1;
+        }
+        
+        it->second->loadIndex(std::string(path), space_it->second.get());
+        return 0;
+    } catch (...) {
+        return -1;
+    }
+}
+
+int hnswlib_set_ef(const char* name, size_t ef) {
+    try {
+        auto it = indexes.find(std::string(name));
+        if (it == indexes.end()) {
+            return -1;
+        }
+        
+        it->second->setEf(ef);
+        return 0;
+    } catch (...) {
+        return -1;
+    }
+}
+
+size_t hnswlib_get_current_count(const char* name) {
+    auto it = indexes.find(std::string(name));
+    if (it == indexes.end()) {
+        return 0;
+    }
+    
+    return it->second->cur_element_count;
+}
+
+size_t hnswlib_get_max_elements(const char* name) {
+    auto it = indexes.find(std::string(name));
+    if (it == indexes.end()) {
+        return 0;
+    }
+    
+    return it->second->max_elements_;
+}
+
+}

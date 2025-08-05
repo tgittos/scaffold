@@ -4,6 +4,7 @@
 #include "file_tools.h"
 #include "links_tool.h"
 #include "todo_tool.h"
+#include "vector_db_tool.h"
 #include "output_formatter.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -794,6 +795,22 @@ int execute_tool_call(const ToolRegistry *registry, const ToolCall *tool_call, T
                 exec_result = execute_links_tool_call(tool_call, result);
             } else if (strcmp(tool_call->name, "TodoWrite") == 0) {
                 exec_result = execute_todo_tool_call(tool_call, result);
+            } else if (strcmp(tool_call->name, "vector_db_create_index") == 0) {
+                exec_result = execute_vector_db_create_index_tool_call(tool_call, result);
+            } else if (strcmp(tool_call->name, "vector_db_delete_index") == 0) {
+                exec_result = execute_vector_db_delete_index_tool_call(tool_call, result);
+            } else if (strcmp(tool_call->name, "vector_db_list_indices") == 0) {
+                exec_result = execute_vector_db_list_indices_tool_call(tool_call, result);
+            } else if (strcmp(tool_call->name, "vector_db_add_vector") == 0) {
+                exec_result = execute_vector_db_add_vector_tool_call(tool_call, result);
+            } else if (strcmp(tool_call->name, "vector_db_update_vector") == 0) {
+                exec_result = execute_vector_db_update_vector_tool_call(tool_call, result);
+            } else if (strcmp(tool_call->name, "vector_db_delete_vector") == 0) {
+                exec_result = execute_vector_db_delete_vector_tool_call(tool_call, result);
+            } else if (strcmp(tool_call->name, "vector_db_get_vector") == 0) {
+                exec_result = execute_vector_db_get_vector_tool_call(tool_call, result);
+            } else if (strcmp(tool_call->name, "vector_db_search") == 0) {
+                exec_result = execute_vector_db_search_tool_call(tool_call, result);
             } else {
                 // Tool found in registry but no implementation provided
                 result->result = strdup("Error: Tool execution not implemented");
@@ -913,6 +930,11 @@ int register_builtin_tools(ToolRegistry *registry) {
     
     // Register Links web browser tool
     if (register_links_tool(registry) != 0) {
+        return -1;
+    }
+    
+    // Register vector DB CRUD tool
+    if (register_vector_db_tool(registry) != 0) {
         return -1;
     }
     
