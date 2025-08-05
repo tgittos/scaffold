@@ -15,11 +15,7 @@ void tearDown(void) {
 
 void test_pdf_extractor_init_cleanup(void) {
     int result = pdf_extractor_init();
-    #ifdef HAVE_PDFIO
     TEST_ASSERT_EQUAL(0, result);
-    #else
-    TEST_ASSERT_EQUAL(-1, result);
-    #endif
     
     pdf_extractor_cleanup();
 }
@@ -60,16 +56,10 @@ void test_pdf_extract_text_nonexistent_file(void) {
     pdf_extraction_result_t *result = pdf_extract_text(nonexistent_file);
     TEST_ASSERT_NOT_NULL(result);
     
-    #ifdef HAVE_PDFIO
     // With PDFio, we should get an error about file not found
     TEST_ASSERT_NOT_NULL(result->error);
     TEST_ASSERT_NULL(result->text);
     TEST_ASSERT_EQUAL(0, result->page_count);
-    #else
-    // Without PDFio, we should get a "not compiled" error
-    TEST_ASSERT_NOT_NULL(result->error);
-    TEST_ASSERT_TRUE(strstr(result->error, "PDFio support not compiled") != NULL);
-    #endif
     
     pdf_free_extraction_result(result);
 }

@@ -5,9 +5,7 @@
 #include <errno.h>
 
 // PDFio headers
-#ifdef HAVE_PDFIO
 #include <pdfio.h>
-#endif
 
 static int pdf_extractor_initialized = 0;
 
@@ -16,14 +14,9 @@ int pdf_extractor_init(void) {
         return 0; // Already initialized
     }
     
-#ifdef HAVE_PDFIO
     // PDFio doesn't require global initialization
     pdf_extractor_initialized = 1;
     return 0;
-#else
-    // Return error if PDFio is not available
-    return -1;
-#endif
 }
 
 void pdf_extractor_cleanup(void) {
@@ -31,9 +24,7 @@ void pdf_extractor_cleanup(void) {
         return;
     }
     
-#ifdef HAVE_PDFIO
     // PDFio doesn't require global cleanup
-#endif
     
     pdf_extractor_initialized = 0;
 }
@@ -60,7 +51,6 @@ static pdf_extraction_result_t* create_error_result(const char* error_msg) {
     return result;
 }
 
-#ifdef HAVE_PDFIO
 static char* extract_text_from_page(pdfio_file_t *pdf, size_t page_num) {
     pdfio_obj_t *page = pdfioFileGetPage(pdf, page_num);
     if (!page) {
@@ -254,19 +244,14 @@ static pdf_extraction_result_t* pdf_extract_text_internal(const char* pdf_path,
     
     return result;
 }
-#endif
 
 pdf_extraction_result_t* pdf_extract_text(const char* pdf_path) {
     if (!pdf_path) {
         return create_error_result("PDF path is NULL");
     }
     
-#ifdef HAVE_PDFIO
     pdf_extraction_config_t config = pdf_get_default_config();
     return pdf_extract_text_internal(pdf_path, NULL, 0, &config);
-#else
-    return create_error_result("PDFio support not compiled");
-#endif
 }
 
 pdf_extraction_result_t* pdf_extract_text_with_config(const char* pdf_path, const pdf_extraction_config_t* config) {
@@ -274,12 +259,7 @@ pdf_extraction_result_t* pdf_extract_text_with_config(const char* pdf_path, cons
         return create_error_result("PDF path is NULL");
     }
     
-#ifdef HAVE_PDFIO
     return pdf_extract_text_internal(pdf_path, NULL, 0, config);
-#else
-    (void)config; // Suppress unused parameter warning
-    return create_error_result("PDFio support not compiled");
-#endif
 }
 
 pdf_extraction_result_t* pdf_extract_text_from_memory(const unsigned char* pdf_data, size_t data_size) {
@@ -287,12 +267,8 @@ pdf_extraction_result_t* pdf_extract_text_from_memory(const unsigned char* pdf_d
         return create_error_result("Invalid PDF data");
     }
     
-#ifdef HAVE_PDFIO
     pdf_extraction_config_t config = pdf_get_default_config();
     return pdf_extract_text_internal(NULL, pdf_data, data_size, &config);
-#else
-    return create_error_result("PDFio support not compiled");
-#endif
 }
 
 void pdf_free_extraction_result(pdf_extraction_result_t* result) {

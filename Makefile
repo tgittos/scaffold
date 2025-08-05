@@ -8,7 +8,7 @@
 # Compiler and build settings
 CC := cosmocc
 CXX := cosmoc++
-CFLAGS := -Wall -Wextra -Werror -O2 -std=c11
+CFLAGS := -Wall -Wextra -Werror -O2 -std=c11 -DHAVE_PDFIO
 CXXFLAGS := -Wall -Wextra -Werror -O2 -std=c++14 -Wno-unused-parameter -Wno-unused-function -Wno-type-limits
 TARGET := ralph
 
@@ -109,7 +109,7 @@ TEST_ENV_SOURCES = $(TESTDIR)/utils/test_env_loader.c $(SRCDIR)/utils/env_loader
 TEST_ENV_OBJECTS = $(TEST_ENV_SOURCES:.c=.o)
 TEST_ENV_TARGET = $(TESTDIR)/test_env_loader
 
-TEST_OUTPUT_C_SOURCES = $(TESTDIR)/utils/test_output_formatter.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/tools/vector_db_tool.c $(DB_C_SOURCES) $(SRCDIR)/utils/json_utils.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(SRCDIR)/llm/embeddings.c $(SRCDIR)/network/http_client.c $(TESTDIR)/unity/unity.c
+TEST_OUTPUT_C_SOURCES = $(TESTDIR)/utils/test_output_formatter.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/tools/vector_db_tool.c $(SRCDIR)/tools/memory_tool.c $(SRCDIR)/tools/pdf_tool.c $(SRCDIR)/pdf/pdf_extractor.c $(DB_C_SOURCES) $(SRCDIR)/utils/json_utils.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(SRCDIR)/llm/embeddings.c $(SRCDIR)/network/http_client.c $(TESTDIR)/unity/unity.c
 TEST_OUTPUT_CPP_SOURCES = $(DB_CPP_SOURCES)
 TEST_OUTPUT_OBJECTS = $(TEST_OUTPUT_C_SOURCES:.c=.o) $(TEST_OUTPUT_CPP_SOURCES:.cpp=.o)
 TEST_OUTPUT_TARGET = $(TESTDIR)/test_output_formatter
@@ -265,14 +265,6 @@ $(LINKS_BUNDLED):
 $(SRCDIR)/links_tool.o: $(SRCDIR)/links_tool.c $(EMBEDDED_LINKS_HEADER) $(HEADERS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(ZLIB_LIB) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
-# Compile PDF source files with PDFio
-$(SRCDIR)/pdf/%.o: $(SRCDIR)/pdf/%.c $(HEADERS) $(PDFIO_LIB)
-	@echo "Compiling $< with PDFio support"
-	$(CC) $(CFLAGS) $(INCLUDES) -DHAVE_PDFIO -c $< -o $@
-
-$(SRCDIR)/tools/pdf_tool.o: $(SRCDIR)/tools/pdf_tool.c $(HEADERS) $(PDFIO_LIB)
-	@echo "Compiling $< with PDFio support"
-	$(CC) $(CFLAGS) $(INCLUDES) -DHAVE_PDFIO -c $< -o $@
 
 # Compile other source files
 $(SRCDIR)/%.o: $(SRCDIR)/%.c $(HEADERS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(ZLIB_LIB) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
@@ -318,8 +310,8 @@ $(TEST_HTTP_TARGET): $(TEST_HTTP_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_
 $(TEST_ENV_TARGET): $(TEST_ENV_OBJECTS)
 	$(CC) -o $@ $(TEST_ENV_OBJECTS)
 
-$(TEST_OUTPUT_TARGET): $(TEST_OUTPUT_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
-	$(CXX) -o $@ $(TEST_OUTPUT_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) -lpthread
+$(TEST_OUTPUT_TARGET): $(TEST_OUTPUT_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB)
+	$(CXX) -o $@ $(TEST_OUTPUT_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) -lm -lpthread
 
 $(TEST_PROMPT_TARGET): $(TEST_PROMPT_OBJECTS)
 	$(CC) -o $@ $(TEST_PROMPT_OBJECTS)
@@ -381,10 +373,6 @@ $(TEST_PDF_EXTRACTOR_TARGET): $(TEST_PDF_EXTRACTOR_OBJECTS) $(PDFIO_LIB)
 $(TESTDIR)/%.o: $(TESTDIR)/%.c $(HEADERS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(ZLIB_LIB) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
 	$(CC) $(CFLAGS) $(TEST_INCLUDES) -c $< -o $@
 
-# Compile PDF test files with PDFio
-$(TESTDIR)/pdf/%.o: $(TESTDIR)/pdf/%.c $(HEADERS) $(PDFIO_LIB)
-	@echo "Compiling PDF test $< with PDFio support"
-	$(CC) $(CFLAGS) $(TEST_INCLUDES) -DHAVE_PDFIO -c $< -o $@
 
 $(TESTDIR)/unity/%.o: $(TESTDIR)/unity/%.c
 	$(CC) $(CFLAGS) $(TEST_INCLUDES) -c $< -o $@
