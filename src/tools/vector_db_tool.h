@@ -14,5 +14,7 @@ int execute_vector_db_delete_vector_tool_call(const ToolCall *tool_call, ToolRes
 int execute_vector_db_get_vector_tool_call(const ToolCall *tool_call, ToolResult *result);
 int execute_vector_db_search_tool_call(const ToolCall *tool_call, ToolResult *result);
 int execute_vector_db_add_text_tool_call(const ToolCall *tool_call, ToolResult *result);
+int execute_vector_db_add_chunked_text_tool_call(const ToolCall *tool_call, ToolResult *result);
+int execute_vector_db_add_pdf_document_tool_call(const ToolCall *tool_call, ToolResult *result);
 
 #endif

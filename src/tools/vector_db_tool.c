@@ -1,7 +1,9 @@
 #include "vector_db_tool.h"
 #include "../db/vector_db.h"
 #include "../utils/json_utils.h"
+#include "../utils/document_chunker.h"
 #include "../llm/embeddings.h"
+#include "../pdf/pdf_extractor.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -302,6 +304,47 @@ int register_vector_db_tool(ToolRegistry *registry) {
     
     if (register_single_vector_tool(registry, "vector_db_add_text", 
                                    "Add text content to index by generating embeddings", add_text_params, 3) != 0) {
+        return -1;
+    }
+    
+    // 10. Register vector_db_add_chunked_text
+    ToolParameter *add_chunked_params = malloc(5 * sizeof(ToolParameter));
+    if (add_chunked_params == NULL) return -1;
+    
+    add_chunked_params[0] = (ToolParameter){"index_name", "string", "Name of the index", NULL, 0, 1};
+    add_chunked_params[1] = (ToolParameter){"text", "string", "Text content to chunk, embed and store", NULL, 0, 1};
+    add_chunked_params[2] = (ToolParameter){"max_chunk_size", "number", "Maximum size of each chunk (default: 1000)", NULL, 0, 0};
+    add_chunked_params[3] = (ToolParameter){"overlap_size", "number", "Overlap between chunks (default: 200)", NULL, 0, 0};
+    add_chunked_params[4] = (ToolParameter){"metadata", "object", "Optional metadata to store with each chunk", NULL, 0, 0};
+    
+    for (int i = 0; i < 5; i++) {
+        add_chunked_params[i].name = safe_strdup(add_chunked_params[i].name);
+        add_chunked_params[i].type = safe_strdup(add_chunked_params[i].type);
+        add_chunked_params[i].description = safe_strdup(add_chunked_params[i].description);
+    }
+    
+    if (register_single_vector_tool(registry, "vector_db_add_chunked_text", 
+                                   "Add long text content by chunking, embedding and storing each chunk", add_chunked_params, 5) != 0) {
+        return -1;
+    }
+    
+    // 11. Register vector_db_add_pdf_document
+    ToolParameter *add_pdf_params = malloc(4 * sizeof(ToolParameter));
+    if (add_pdf_params == NULL) return -1;
+    
+    add_pdf_params[0] = (ToolParameter){"index_name", "string", "Name of the index", NULL, 0, 1};
+    add_pdf_params[1] = (ToolParameter){"pdf_path", "string", "Path to the PDF file to extract, chunk and store", NULL, 0, 1};
+    add_pdf_params[2] = (ToolParameter){"max_chunk_size", "number", "Maximum size of each chunk (default: 1500)", NULL, 0, 0};
+    add_pdf_params[3] = (ToolParameter){"overlap_size", "number", "Overlap between chunks (default: 300)", NULL, 0, 0};
+    
+    for (int i = 0; i < 4; i++) {
+        add_pdf_params[i].name = safe_strdup(add_pdf_params[i].name);
+        add_pdf_params[i].type = safe_strdup(add_pdf_params[i].type);
+        add_pdf_params[i].description = safe_strdup(add_pdf_params[i].description);
+    }
+    
+    if (register_single_vector_tool(registry, "vector_db_add_pdf_document", 
+                                   "Extract text from PDF, chunk it, and store chunks as embeddings", add_pdf_params, 4) != 0) {
         return -1;
     }
     
@@ -787,6 +830,271 @@ int execute_vector_db_add_text_tool_call(const ToolCall *tool_call, ToolResult *
     free(index_name);
     free(text);
     free(metadata);
+    
+    return 0;
+}
+
+int execute_vector_db_add_chunked_text_tool_call(const ToolCall *tool_call, ToolResult *result) {
+    if (tool_call == NULL || result == NULL) return -1;
+    
+    result->tool_call_id = safe_strdup(tool_call->id);
+    if (result->tool_call_id == NULL) return -1;
+    
+    char *index_name = extract_string_param(tool_call->arguments, "index_name");
+    char *text = extract_string_param(tool_call->arguments, "text");
+    double max_chunk_size = extract_number_param(tool_call->arguments, "max_chunk_size", 1000);
+    double overlap_size = extract_number_param(tool_call->arguments, "overlap_size", 200);
+    char *metadata = extract_string_param(tool_call->arguments, "metadata");
+    
+    if (index_name == NULL || text == NULL) {
+        result->result = safe_strdup("{\"success\": false, \"error\": \"Missing required parameters\"}");
+        result->success = 0;
+        free(index_name);
+        free(text);
+        free(metadata);
+        return 0;
+    }
+    
+    // Get API key from environment
+    const char *api_key = getenv("OPENAI_API_KEY");
+    if (api_key == NULL) {
+        result->result = safe_strdup("{\"success\": false, \"error\": \"OPENAI_API_KEY not set\"}");
+        result->success = 0;
+        free(index_name);
+        free(text);
+        free(metadata);
+        return 0;
+    }
+    
+    // Configure chunking
+    chunking_config_t config = chunker_get_default_config();
+    config.max_chunk_size = (size_t)max_chunk_size;
+    config.overlap_size = (size_t)overlap_size;
+    
+    // Chunk the document
+    chunking_result_t *chunks = chunk_document(text, &config);
+    if (!chunks || chunks->error) {
+        char error_response[512];
+        snprintf(error_response, sizeof(error_response),
+                "{\"success\": false, \"error\": \"Chunking failed: %s\"}", 
+                chunks ? chunks->error : "Unknown error");
+        result->result = safe_strdup(error_response);
+        result->success = 0;
+        free_chunking_result(chunks);
+        free(index_name);
+        free(text);
+        free(metadata);
+        return 0;
+    }
+    
+    // Initialize embeddings
+    embeddings_config_t embeddings_config;
+    if (embeddings_init(&embeddings_config, NULL, api_key, NULL) != 0) {
+        result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to initialize embeddings\"}");
+        result->success = 0;
+        free_chunking_result(chunks);
+        free(index_name);
+        free(text);
+        free(metadata);
+        return 0;
+    }
+    
+    vector_db_t *db = get_or_create_vector_db();
+    size_t successful_chunks = 0;
+    size_t failed_chunks = 0;
+    
+    // Process each chunk
+    for (size_t i = 0; i < chunks->chunk_count; i++) {
+        // Get embedding for this chunk
+        embedding_vector_t embedding;
+        if (embeddings_get_vector(&embeddings_config, chunks->chunks[i].text, &embedding) == 0) {
+            // Convert to vector_t format
+            vector_t vec = {
+                .data = embedding.data,
+                .dimension = embedding.dimension
+            };
+            
+            // Add to database
+            size_t label = vector_db_get_index_size(db, index_name);
+            vector_db_error_t err = vector_db_add_vector(db, index_name, &vec, label);
+            
+            if (err == VECTOR_DB_OK) {
+                successful_chunks++;
+            } else {
+                failed_chunks++;
+            }
+            
+            embeddings_free_vector(&embedding);
+        } else {
+            failed_chunks++;
+        }
+    }
+    
+    // Build response
+    char response[1024];
+    if (successful_chunks > 0) {
+        snprintf(response, sizeof(response),
+                "{\"success\": true, \"message\": \"Added %zu chunks successfully\", \"successful_chunks\": %zu, \"failed_chunks\": %zu, \"total_chunks\": %zu}",
+                successful_chunks, successful_chunks, failed_chunks, chunks->chunk_count);
+        result->success = 1;
+    } else {
+        snprintf(response, sizeof(response),
+                "{\"success\": false, \"error\": \"No chunks were successfully added\", \"failed_chunks\": %zu, \"total_chunks\": %zu}",
+                failed_chunks, chunks->chunk_count);
+        result->success = 0;
+    }
+    
+    result->result = safe_strdup(response);
+    
+    // Cleanup
+    embeddings_cleanup(&embeddings_config);
+    free_chunking_result(chunks);
+    free(index_name);
+    free(text);
+    free(metadata);
+    
+    return 0;
+}
+
+int execute_vector_db_add_pdf_document_tool_call(const ToolCall *tool_call, ToolResult *result) {
+    if (tool_call == NULL || result == NULL) return -1;
+    
+    result->tool_call_id = safe_strdup(tool_call->id);
+    if (result->tool_call_id == NULL) return -1;
+    
+    char *index_name = extract_string_param(tool_call->arguments, "index_name");
+    char *pdf_path = extract_string_param(tool_call->arguments, "pdf_path");
+    double max_chunk_size = extract_number_param(tool_call->arguments, "max_chunk_size", 1500);
+    double overlap_size = extract_number_param(tool_call->arguments, "overlap_size", 300);
+    
+    if (index_name == NULL || pdf_path == NULL) {
+        result->result = safe_strdup("{\"success\": false, \"error\": \"Missing required parameters\"}");
+        result->success = 0;
+        free(index_name);
+        free(pdf_path);
+        return 0;
+    }
+    
+    // Get API key from environment
+    const char *api_key = getenv("OPENAI_API_KEY");
+    if (api_key == NULL) {
+        result->result = safe_strdup("{\"success\": false, \"error\": \"OPENAI_API_KEY not set\"}");
+        result->success = 0;
+        free(index_name);
+        free(pdf_path);
+        return 0;
+    }
+    
+    // Initialize PDF extractor
+    if (pdf_extractor_init() != 0) {
+        result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to initialize PDF extractor\"}");
+        result->success = 0;
+        free(index_name);
+        free(pdf_path);
+        return 0;
+    }
+    
+    // Extract text from PDF
+    pdf_extraction_result_t *pdf_result = pdf_extract_text(pdf_path);
+    if (!pdf_result || pdf_result->error) {
+        char error_response[512];
+        snprintf(error_response, sizeof(error_response),
+                "{\"success\": false, \"error\": \"PDF extraction failed: %s\"}", 
+                pdf_result ? pdf_result->error : "Unknown error");
+        result->result = safe_strdup(error_response);
+        result->success = 0;
+        pdf_free_extraction_result(pdf_result);
+        free(index_name);
+        free(pdf_path);
+        return 0;
+    }
+    
+    // Configure chunking for PDF
+    chunking_config_t config = chunker_get_pdf_config();
+    config.max_chunk_size = (size_t)max_chunk_size;
+    config.overlap_size = (size_t)overlap_size;
+    
+    // Chunk the extracted text
+    chunking_result_t *chunks = chunk_document(pdf_result->text, &config);
+    if (!chunks || chunks->error) {
+        char error_response[512];
+        snprintf(error_response, sizeof(error_response),
+                "{\"success\": false, \"error\": \"Chunking failed: %s\"}", 
+                chunks ? chunks->error : "Unknown error");
+        result->result = safe_strdup(error_response);
+        result->success = 0;
+        free_chunking_result(chunks);
+        pdf_free_extraction_result(pdf_result);
+        free(index_name);
+        free(pdf_path);
+        return 0;
+    }
+    
+    // Initialize embeddings
+    embeddings_config_t embeddings_config;
+    if (embeddings_init(&embeddings_config, NULL, api_key, NULL) != 0) {
+        result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to initialize embeddings\"}");
+        result->success = 0;
+        free_chunking_result(chunks);
+        pdf_free_extraction_result(pdf_result);
+        free(index_name);
+        free(pdf_path);
+        return 0;
+    }
+    
+    vector_db_t *db = get_or_create_vector_db();
+    size_t successful_chunks = 0;
+    size_t failed_chunks = 0;
+    
+    // Process each chunk
+    for (size_t i = 0; i < chunks->chunk_count; i++) {
+        // Get embedding for this chunk
+        embedding_vector_t embedding;
+        if (embeddings_get_vector(&embeddings_config, chunks->chunks[i].text, &embedding) == 0) {
+            // Convert to vector_t format
+            vector_t vec = {
+                .data = embedding.data,
+                .dimension = embedding.dimension
+            };
+            
+            // Add to database
+            size_t label = vector_db_get_index_size(db, index_name);
+            vector_db_error_t err = vector_db_add_vector(db, index_name, &vec, label);
+            
+            if (err == VECTOR_DB_OK) {
+                successful_chunks++;
+            } else {
+                failed_chunks++;
+            }
+            
+            embeddings_free_vector(&embedding);
+        } else {
+            failed_chunks++;
+        }
+    }
+    
+    // Build response
+    char response[1024];
+    if (successful_chunks > 0) {
+        snprintf(response, sizeof(response),
+                "{\"success\": true, \"message\": \"Processed PDF and added %zu chunks successfully\", \"successful_chunks\": %zu, \"failed_chunks\": %zu, \"total_chunks\": %zu, \"pdf_pages\": %d}",
+                successful_chunks, successful_chunks, failed_chunks, chunks->chunk_count, pdf_result->page_count);
+        result->success = 1;
+    } else {
+        snprintf(response, sizeof(response),
+                "{\"success\": false, \"error\": \"No chunks were successfully added from PDF\", \"failed_chunks\": %zu, \"total_chunks\": %zu, \"pdf_pages\": %d}",
+                failed_chunks, chunks->chunk_count, pdf_result->page_count);
+        result->success = 0;
+    }
+    
+    result->result = safe_strdup(response);
+    
+    // Cleanup
+    embeddings_cleanup(&embeddings_config);
+    free_chunking_result(chunks);
+    pdf_free_extraction_result(pdf_result);
+    free(index_name);
+    free(pdf_path);
     
     return 0;
 }
