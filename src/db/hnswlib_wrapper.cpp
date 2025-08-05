@@ -147,7 +147,9 @@ int hnswlib_update_vector(const char* name, const float* data, size_t label) {
             return -1;
         }
         
-        it->second->updatePoint(data, label, 1.0);
+        // In hnswlib, calling addPoint with an existing label updates it
+        it->second->addPoint(data, label);
+        
         return 0;
     } catch (...) {
         return -1;
@@ -237,19 +239,38 @@ int hnswlib_save_index(const char* name, const char* path) {
     }
 }
 
-int hnswlib_load_index(const char* name, const char* path) {
+int hnswlib_load_index(const char* name, const char* path, const hnswlib_index_config_t* config) {
     try {
-        auto it = indexes.find(std::string(name));
-        if (it == indexes.end()) {
-            return -1;
+        if (!config) return -1;
+        
+        std::string index_name(name);
+        
+        // If index already exists, delete it first
+        auto existing = indexes.find(index_name);
+        if (existing != indexes.end()) {
+            indexes.erase(existing);
+            spaces.erase(index_name);
         }
         
-        auto space_it = spaces.find(std::string(name));
-        if (space_it == spaces.end()) {
-            return -1;
+        // Create space based on metric
+        std::unique_ptr<SpaceInterface<float>> space;
+        if (strcmp(config->metric, "ip") == 0) {
+            space = std::make_unique<InnerProductSpaceWrapper>(config->dimension);
+        } else if (strcmp(config->metric, "cosine") == 0) {
+            space = std::make_unique<CosineSpace>(config->dimension);
+        } else {
+            space = std::make_unique<L2SpaceWrapper>(config->dimension);
         }
         
-        it->second->loadIndex(std::string(path), space_it->second.get());
+        auto index = std::make_unique<HierarchicalNSW<float>>(space.get());
+        
+        // Load the index
+        index->loadIndex(std::string(path), space.get());
+        
+        // Store in maps
+        indexes[index_name] = std::move(index);
+        spaces[index_name] = std::move(space);
+        
         return 0;
     } catch (...) {
         return -1;
@@ -286,6 +307,11 @@ size_t hnswlib_get_max_elements(const char* name) {
     }
     
     return it->second->max_elements_;
+}
+
+void hnswlib_clear_all(void) {
+    indexes.clear();
+    spaces.clear();
 }
 
 }

@@ -81,6 +81,9 @@ void vector_db_destroy(vector_db_t* db) {
     while (entry) {
         index_entry_t* next = entry->next;
         
+        // Delete the index from hnswlib
+        hnswlib_delete_index(entry->name);
+        
         free(entry->name);
         free(entry->config.metric);
         pthread_rwlock_destroy(&entry->lock);
@@ -462,6 +465,17 @@ vector_db_error_t vector_db_save_index(const vector_db_t* db, const char* index_
     
     int result = hnswlib_save_index(index_name, file_path);
     
+    if (result == 0) {
+        char meta_path[4096];
+        snprintf(meta_path, sizeof(meta_path), "%s.meta", file_path);
+        FILE* meta = fopen(meta_path, "w");
+        if (meta) {
+            fprintf(meta, "%zu %zu\n", entry->config.dimension, entry->config.max_elements);
+            fprintf(meta, "%s\n", entry->config.metric ? entry->config.metric : "l2");
+            fclose(meta);
+        }
+    }
+    
     pthread_rwlock_unlock(&entry->lock);
     return (result == 0) ? VECTOR_DB_OK : VECTOR_DB_ERROR_FILE_IO;
 }
@@ -479,7 +493,37 @@ vector_db_error_t vector_db_load_index(vector_db_t* db, const char* index_name,
         return VECTOR_DB_ERROR_INVALID_PARAM;
     }
     
-    int result = hnswlib_load_index(index_name, file_path);
+    // Read metadata first to get config
+    char meta_path[4096];
+    snprintf(meta_path, sizeof(meta_path), "%s.meta", file_path);
+    FILE* meta = fopen(meta_path, "r");
+    
+    hnswlib_index_config_t hnswlib_config;
+    char metric[64] = "l2";
+    
+    if (meta) {
+        size_t dimension, max_elements;
+        if (fscanf(meta, "%zu %zu", &dimension, &max_elements) == 2) {
+            fscanf(meta, "%s", metric);
+            hnswlib_config.dimension = dimension;
+            hnswlib_config.max_elements = max_elements;
+        } else {
+            fclose(meta);
+            pthread_mutex_unlock(&db->mutex);
+            return VECTOR_DB_ERROR_FILE_IO;
+        }
+        fclose(meta);
+    } else {
+        pthread_mutex_unlock(&db->mutex);
+        return VECTOR_DB_ERROR_FILE_IO;
+    }
+    
+    hnswlib_config.metric = metric;
+    hnswlib_config.M = 16;
+    hnswlib_config.ef_construction = 200;
+    hnswlib_config.random_seed = 100;
+    
+    int result = hnswlib_load_index(index_name, file_path, &hnswlib_config);
     if (result != 0) {
         pthread_mutex_unlock(&db->mutex);
         return VECTOR_DB_ERROR_FILE_IO;
@@ -500,18 +544,13 @@ vector_db_error_t vector_db_load_index(vector_db_t* db, const char* index_name,
         return VECTOR_DB_ERROR_MEMORY;
     }
     
-    char meta_path[4096];
-    snprintf(meta_path, sizeof(meta_path), "%s.meta", file_path);
-    FILE* meta = fopen(meta_path, "r");
-    if (meta) {
-        fscanf(meta, "%zu %zu", &entry->config.dimension, &entry->config.max_elements);
-        char metric[64];
-        fscanf(meta, "%s", metric);
-        entry->config.metric = strdup(metric);
-        fclose(meta);
-    } else {
-        entry->config.metric = strdup("l2");
-    }
+    // Copy config from what we read
+    entry->config.dimension = hnswlib_config.dimension;
+    entry->config.max_elements = hnswlib_config.max_elements;
+    entry->config.metric = strdup(metric);
+    entry->config.M = hnswlib_config.M;
+    entry->config.ef_construction = hnswlib_config.ef_construction;
+    entry->config.random_seed = hnswlib_config.random_seed;
     
     if (pthread_rwlock_init(&entry->lock, NULL) != 0) {
         free(entry->config.metric);

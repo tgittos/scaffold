@@ -37,11 +37,13 @@ hnswlib_search_results_t* hnswlib_search(const char* name, const float* query, s
 void hnswlib_free_search_results(hnswlib_search_results_t* results);
 
 int hnswlib_save_index(const char* name, const char* path);
-int hnswlib_load_index(const char* name, const char* path);
+int hnswlib_load_index(const char* name, const char* path, const hnswlib_index_config_t* config);
 
 int hnswlib_set_ef(const char* name, size_t ef);
 size_t hnswlib_get_current_count(const char* name);
 size_t hnswlib_get_max_elements(const char* name);
+
+void hnswlib_clear_all(void);
 
 #ifdef __cplusplus
 }

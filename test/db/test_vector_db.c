@@ -1,5 +1,6 @@
 #include "unity.h"
 #include "db/vector_db.h"
+#include "db/hnswlib_wrapper.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -7,9 +8,15 @@
 #include <sys/stat.h>
 
 void setUp(void) {
+    // Clean up any leftover test files using rmdir
+    rmdir("/tmp/vector_db_test");
+    // Clear all indexes from hnswlib to ensure clean state
+    hnswlib_clear_all();
 }
 
 void tearDown(void) {
+    // Clean up test files after each test
+    rmdir("/tmp/vector_db_test");
 }
 
 static void fill_random_vector(vector_t* vec) {
@@ -212,6 +219,8 @@ void test_vector_db_update_delete(void) {
     vector_db_t* db = vector_db_create();
     TEST_ASSERT_NOT_NULL(db);
     
+    srand(42);  // Make random numbers deterministic
+    
     index_config_t config = {
         .dimension = 128,
         .max_elements = 10000,
@@ -294,13 +303,13 @@ void test_vector_db_save_load(void) {
     db = vector_db_create();
     TEST_ASSERT_NOT_NULL(db);
     
-    err = vector_db_load_index(db, "save_load_idx2", "/tmp/vector_db_test/test.index");
+    err = vector_db_load_index(db, "save_load_idx", "/tmp/vector_db_test/test.index");
     TEST_ASSERT_EQUAL(VECTOR_DB_OK, err);
     
     vector_t* retrieved = vector_create(128);
     TEST_ASSERT_NOT_NULL(retrieved);
     
-    err = vector_db_get_vector(db, "save_load_idx2", 42, retrieved);
+    err = vector_db_get_vector(db, "save_load_idx", 42, retrieved);
     TEST_ASSERT_EQUAL(VECTOR_DB_OK, err);
     
     for (size_t i = 0; i < 128; i++) {
