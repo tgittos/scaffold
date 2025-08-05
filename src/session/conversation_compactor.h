@@ -11,6 +11,8 @@ typedef struct {
     int min_segment_size;            // Minimum messages to compact at once
     int max_segment_size;            // Maximum messages to compact at once
     float compaction_ratio;          // Target reduction ratio (0.0-1.0)
+    int background_threshold;         // Token count to trigger background compaction
+    int store_in_vector_db;          // Whether to store compacted segments in vector DB
 } CompactionConfig;
 
 // Result of a compaction operation
@@ -53,6 +55,21 @@ int compact_conversation(SessionData* session,
                         const CompactionConfig* config,
                         int target_token_count,
                         CompactionResult* result);
+
+// Background compaction that triggers more frequently
+int background_compact_conversation(SessionData* session, 
+                                   const CompactionConfig* config,
+                                   CompactionResult* result);
+
+// Store conversation segment in vector database before compacting
+int store_conversation_segment_in_vector_db(const ConversationHistory* conversation,
+                                           int start_index, int end_index,
+                                           const char* summary_content);
+
+// Check if background compaction should be triggered
+int should_background_compact(const ConversationHistory* conversation,
+                             const CompactionConfig* config,
+                             int current_token_count);
 
 // Save compacted conversation back to CONVERSATION.md
 int save_compacted_conversation(const ConversationHistory* conversation);

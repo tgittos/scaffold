@@ -2,9 +2,13 @@
 #include "token_manager.h"
 #include "debug_output.h"
 #include "json_utils.h"
+#include "../db/vector_db_service.h"
+#include "../llm/embeddings_service.h"
+#include "../utils/common_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 // Default compaction configuration
 #define DEFAULT_PRESERVE_RECENT_MESSAGES 5
@@ -12,6 +16,11 @@
 #define DEFAULT_MIN_SEGMENT_SIZE 4
 #define DEFAULT_MAX_SEGMENT_SIZE 20
 #define DEFAULT_COMPACTION_RATIO 0.3f
+#define DEFAULT_BACKGROUND_THRESHOLD 0.4f  // 40% of context window
+#define DEFAULT_STORE_IN_VECTOR_DB 1       // Enable by default
+
+// Vector database constants
+#define CONVERSATION_INDEX_NAME "conversation_history"
 
 // Summarization prompt that preserves critical details
 static const char* SUMMARIZATION_PROMPT = 
@@ -59,6 +68,8 @@ void compaction_config_init(CompactionConfig* config) {
     config->min_segment_size = DEFAULT_MIN_SEGMENT_SIZE;
     config->max_segment_size = DEFAULT_MAX_SEGMENT_SIZE;
     config->compaction_ratio = DEFAULT_COMPACTION_RATIO;
+    config->background_threshold = (int)(8192 * DEFAULT_BACKGROUND_THRESHOLD); // Default to 40% of 8K context
+    config->store_in_vector_db = DEFAULT_STORE_IN_VECTOR_DB;
 }
 
 int should_compact_conversation(const ConversationHistory* conversation, 
@@ -391,6 +402,14 @@ int compact_conversation(SessionData* session,
         return -1;
     }
     
+    // Store in vector database before compacting (if enabled)
+    if (config->store_in_vector_db) {
+        if (store_conversation_segment_in_vector_db(&session->conversation, start_index, end_index, summary_content) != 0) {
+            debug_printf("Warning: Failed to store conversation segment in vector DB\n");
+            // Don't fail the operation for this
+        }
+    }
+    
     // Perform compaction
     int compact_result = compact_conversation_segment(&session->conversation, config, 
                                                      start_index, end_index, 
@@ -463,6 +482,208 @@ int save_compacted_conversation(const ConversationHistory* conversation) {
     
     fclose(file);
     debug_printf("Saved compacted conversation with %d messages\n", conversation->count);
+    return 0;
+}
+
+static vector_db_error_t ensure_conversation_index(void) {
+    size_t dimension = embeddings_service_get_dimension();
+    if (dimension == 0) {
+        return VECTOR_DB_ERROR_INVALID_PARAM;
+    }
+    
+    index_config_t config = vector_db_service_get_memory_config(dimension);
+    vector_db_error_t result = vector_db_service_ensure_index(CONVERSATION_INDEX_NAME, &config);
+    
+    // Free allocated metric string from config
+    free(config.metric);
+    return result;
+}
+
+
+int store_conversation_segment_in_vector_db(const ConversationHistory* conversation,
+                                           int start_index, int end_index,
+                                           const char* summary_content) {
+    if (conversation == NULL || summary_content == NULL) {
+        return -1;
+    }
+    
+    if (start_index < 0 || end_index >= conversation->count || start_index > end_index) {
+        return -1;
+    }
+    
+    // Check if embeddings service is configured
+    if (!embeddings_service_is_configured()) {
+        debug_printf("Embeddings service not configured, skipping vector DB storage\n");
+        return 0; // Not an error, just skip
+    }
+    
+    // Ensure conversation index exists
+    vector_db_error_t index_err = ensure_conversation_index();
+    if (index_err != VECTOR_DB_OK) {
+        debug_printf("Failed to ensure conversation index: %d\n", index_err);
+        return -1;
+    }
+    
+    // Build the full content to store: original conversation + summary
+    size_t total_size = strlen(summary_content) + 1024;
+    for (int i = start_index; i <= end_index; i++) {
+        const ConversationMessage* msg = &conversation->messages[i];
+        total_size += strlen(msg->content) + 256;
+    }
+    
+    char* full_content = malloc(total_size);
+    if (full_content == NULL) {
+        return -1;
+    }
+    
+    // Start with the summary
+    strcpy(full_content, "SUMMARY: ");
+    strcat(full_content, summary_content);
+    strcat(full_content, "\n\nORIGINAL CONVERSATION:\n");
+    
+    // Add original messages for complete context
+    for (int i = start_index; i <= end_index; i++) {
+        const ConversationMessage* msg = &conversation->messages[i];
+        
+        char message_header[256];
+        if (strcmp(msg->role, "tool") == 0) {
+            snprintf(message_header, sizeof(message_header), 
+                    "\n--- TOOL RESPONSE (%s) ---\n", 
+                    msg->tool_name ? msg->tool_name : "unknown");
+        } else {
+            snprintf(message_header, sizeof(message_header), 
+                    "\n--- %s MESSAGE ---\n", 
+                    strcmp(msg->role, "user") == 0 ? "USER" : "ASSISTANT");
+        }
+        
+        strcat(full_content, message_header);
+        strcat(full_content, msg->content);
+        strcat(full_content, "\n");
+    }
+    
+    // Generate embedding for the content
+    vector_t *embedding = embeddings_service_text_to_vector(full_content);
+    if (embedding == NULL) {
+        free(full_content);
+        debug_printf("Failed to generate embedding for conversation segment\n");
+        return -1;
+    }
+    
+    // Store in vector database
+    vector_db_t *vector_db = vector_db_service_get_database();
+    if (vector_db == NULL) {
+        free(full_content);
+        embeddings_service_free_vector(embedding);
+        return -1;
+    }
+    
+    // Use timestamp as label (simplified approach without metadata for now)
+    size_t label = (size_t)time(NULL);
+    
+    vector_db_error_t add_err = vector_db_add_vector(vector_db, CONVERSATION_INDEX_NAME, 
+                                                     embedding, label);
+    
+    free(full_content);
+    embeddings_service_free_vector(embedding);
+    
+    if (add_err != VECTOR_DB_OK) {
+        debug_printf("Failed to store conversation segment in vector DB: %d\n", add_err);
+        return -1;
+    }
+    
+    debug_printf("Stored conversation segment (messages %d-%d) in vector database\n", 
+                start_index, end_index);
+    printf("   💾 Stored conversation history in vector database for future retrieval\n");
+    
+    return 0;
+}
+
+int should_background_compact(const ConversationHistory* conversation,
+                             const CompactionConfig* config,
+                             int current_token_count) {
+    if (conversation == NULL || config == NULL) {
+        return 0;
+    }
+    
+    // Don't compact if we don't have enough messages to preserve
+    int min_messages_needed = config->preserve_recent_messages + config->min_segment_size;
+    if (conversation->count <= min_messages_needed) {
+        return 0;
+    }
+    
+    // Check if we've reached the background threshold
+    if (current_token_count >= config->background_threshold) {
+        debug_printf("Background compaction triggered: %d tokens >= %d threshold\n", 
+                    current_token_count, config->background_threshold);
+        return 1;
+    }
+    
+    return 0;
+}
+
+int background_compact_conversation(SessionData* session, 
+                                   const CompactionConfig* config,
+                                   CompactionResult* result) {
+    if (session == NULL || config == NULL || result == NULL) {
+        return -1;
+    }
+    
+    // Calculate current token usage
+    TokenConfig token_config;
+    token_config_init(&token_config, session->config.context_window, session->config.max_context_window);
+    
+    int current_tokens = 0;
+    for (int i = 0; i < session->conversation.count; i++) {
+        current_tokens += estimate_token_count(session->conversation.messages[i].content, &token_config);
+    }
+    
+    // Check if background compaction is needed
+    if (!should_background_compact(&session->conversation, config, current_tokens)) {
+        return 0;  // No compaction needed
+    }
+    
+    // User notification
+    printf("🔄 Background compaction triggered (%d tokens >= %d threshold)\n", 
+           current_tokens, config->background_threshold);
+    printf("   Proactively compacting conversation to maintain fast response times...\n");
+    
+    // Find segment to compact
+    int start_index, end_index;
+    if (find_compaction_segment(&session->conversation, config, &start_index, &end_index) != 0) {
+        return -1;
+    }
+    
+    // Generate summary
+    char* summary_content = NULL;
+    if (generate_conversation_summary(session, &session->conversation, start_index, end_index, &summary_content) != 0) {
+        return -1;
+    }
+    
+    // Store in vector database before compacting (if enabled)
+    if (config->store_in_vector_db) {
+        if (store_conversation_segment_in_vector_db(&session->conversation, start_index, end_index, summary_content) != 0) {
+            debug_printf("Warning: Failed to store conversation segment in vector DB\n");
+            // Don't fail the operation for this
+        }
+    }
+    
+    // Perform compaction
+    int compact_result = compact_conversation_segment(&session->conversation, config, 
+                                                     start_index, end_index, 
+                                                     summary_content, result);
+    
+    free(summary_content);
+    
+    if (compact_result != 0) {
+        return -1;
+    }
+    
+    // Save the compacted conversation
+    if (save_compacted_conversation(&session->conversation) != 0) {
+        debug_printf("Warning: Failed to save compacted conversation to file\n");
+        // Don't fail the operation for this
+    }
+    
     return 0;
 }
 

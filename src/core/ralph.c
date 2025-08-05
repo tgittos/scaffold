@@ -1131,19 +1131,42 @@ int manage_conversation_tokens(RalphSession* session, const char* user_message,
         return result;
     }
     
-    // If we have insufficient tokens for a good response, try compaction
-    if (usage->available_response_tokens < config->min_response_tokens * 2) {
-        debug_printf("Available response tokens (%d) below comfortable threshold, attempting compaction\n",
-                    usage->available_response_tokens);
+    // Check if background compaction should be triggered to maintain performance
+    CompactionConfig compact_config;
+    compaction_config_init(&compact_config);
+    
+    // Set background threshold based on context window size
+    compact_config.background_threshold = (int)(config->context_window * 0.4f);
+    
+    CompactionResult background_result;
+    int background_status = background_compact_conversation(&session->session_data, &compact_config, &background_result);
+    
+    if (background_status == 0 && background_result.tokens_saved > 0) {
+        // Background compaction succeeded, recalculate token allocation
+        debug_printf("Background compaction saved %d tokens, recalculating allocation\n", background_result.tokens_saved);
         
-        // Set up compaction configuration
-        CompactionConfig compact_config;
-        compaction_config_init(&compact_config);
+        cleanup_compaction_result(&background_result);
+        
+        // Recalculate with the compacted conversation
+        result = calculate_token_allocation(&session->session_data, user_message, config, usage);
+        if (result != 0) {
+            return result;
+        }
+        debug_printf("After background compaction: %d response tokens available\n", usage->available_response_tokens);
+    } else if (background_status == 0) {
+        // No background compaction was needed (tokens_saved == 0)
+        cleanup_compaction_result(&background_result);
+    }
+    
+    // If we have insufficient tokens for a good response, try emergency compaction
+    if (usage->available_response_tokens < config->min_response_tokens * 2) {
+        debug_printf("Available response tokens (%d) below comfortable threshold, attempting emergency compaction\n",
+                    usage->available_response_tokens);
         
         // Calculate target token count (aim for 70% of max context window)
         int target_tokens = (int)(config->max_context_window * 0.7);
         
-        // Attempt compaction using the embedded SessionData
+        // Attempt emergency compaction using the embedded SessionData
         CompactionResult compact_result;
         int compact_status = compact_conversation(&session->session_data, &compact_config, target_tokens, &compact_result);
         

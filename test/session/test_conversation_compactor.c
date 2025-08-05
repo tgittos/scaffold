@@ -327,6 +327,79 @@ void test_improved_token_estimation_efficiency(void) {
     TEST_ASSERT_GREATER_THAN_FLOAT(regular_ratio, json_ratio);  // JSON should be most efficient
 }
 
+void test_background_compaction_config(void) {
+    CompactionConfig config;
+    compaction_config_init(&config);
+    
+    // Test that background compaction settings are initialized
+    TEST_ASSERT_GREATER_THAN(0, config.background_threshold);
+    TEST_ASSERT_EQUAL(1, config.store_in_vector_db);
+}
+
+void test_should_background_compact_below_threshold(void) {
+    ConversationHistory conversation;
+    init_conversation_history(&conversation);
+    
+    // Add enough messages to avoid minimum checks
+    for (int i = 0; i < 15; i++) {
+        append_conversation_message(&conversation, "user", "Test message");
+    }
+    
+    CompactionConfig config;
+    compaction_config_init(&config);
+    config.background_threshold = 5000;  // High threshold
+    
+    int current_tokens = 1000;  // Below threshold
+    int should_compact = should_background_compact(&conversation, &config, current_tokens);
+    
+    TEST_ASSERT_EQUAL(0, should_compact);
+    
+    cleanup_conversation_history(&conversation);
+}
+
+void test_should_background_compact_above_threshold(void) {
+    ConversationHistory conversation;
+    init_conversation_history(&conversation);
+    
+    // Add enough messages to avoid minimum checks
+    for (int i = 0; i < 15; i++) {
+        append_conversation_message(&conversation, "user", "Test message");
+    }
+    
+    CompactionConfig config;
+    compaction_config_init(&config);
+    config.background_threshold = 1000;  // Low threshold
+    
+    int current_tokens = 2000;  // Above threshold
+    int should_compact = should_background_compact(&conversation, &config, current_tokens);
+    
+    TEST_ASSERT_EQUAL(1, should_compact);
+    
+    cleanup_conversation_history(&conversation);
+}
+
+void test_background_compact_conversation_no_compaction_needed(void) {
+    // Test that background_compact_conversation returns 0 when no compaction is needed
+    SessionData session;
+    session_data_init(&session);
+    
+    // Add a few messages (not enough to trigger compaction)
+    append_conversation_message(&session.conversation, "user", "Hello");
+    append_conversation_message(&session.conversation, "assistant", "Hi there!");
+    
+    CompactionConfig config;
+    compaction_config_init(&config);
+    config.background_threshold = 10000;  // Very high threshold
+    
+    CompactionResult result;
+    int status = background_compact_conversation(&session, &config, &result);
+    
+    // Should return 0 (success) but no compaction performed
+    TEST_ASSERT_EQUAL(0, status);
+    
+    session_data_cleanup(&session);
+}
+
 int main(void) {
     UNITY_BEGIN();
     
@@ -347,6 +420,12 @@ int main(void) {
     // Bug reproduction and regression tests
     RUN_TEST(test_original_token_limit_bug_reproduction);
     RUN_TEST(test_improved_token_estimation_efficiency);
+    
+    // Background compaction tests
+    RUN_TEST(test_background_compaction_config);
+    RUN_TEST(test_should_background_compact_below_threshold);
+    RUN_TEST(test_should_background_compact_above_threshold);
+    RUN_TEST(test_background_compact_conversation_no_compaction_needed);
     
     return UNITY_END();
 }
