@@ -1,3 +1,5 @@
-- The CLI interface for this application supports a subset of Readline-like features. Research how to compile Readline with Cosmopolitan, and refactor the user input functionality to use Readline.
+- Write and integrate a document chunker into the vector DB tools that store web content. The chunker should be optimized for long-form text and PDF content.
+- File searching seems to not be great. A lot of the time the LLM gets "File too large" errors, even though I'm sure the content of the file will comfortably fit into the backend LLM's context window. Investigate the handling of file searches, large files, and perform a refactor to make the agent capable of handling larger files
 - Write a model-context-protocol client module. Integrate it into the ralph client. Ensure the end user can configure MCP servers with a `ralph.config.json` file at either `~/.local/ralph` or `./ralph.config.json` similar to how Claude Code's MCP configuration works.
 - Write Github actions to use the devcontainer in this project to build ralph. Build ralph on PRs and merges, and release it on tags. Use Githubs releases feature.
+- The CLI interface for this application supports a subset of Readline-like features. Research how to compile Readline with Cosmopolitan, and refactor the user input functionality to use Readline.

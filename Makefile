@@ -22,6 +22,7 @@ BUILDDIR := build
 CURL_VERSION := 8.4.0
 MBEDTLS_VERSION := 3.5.1
 HNSWLIB_VERSION := 0.8.0
+MUPDF_VERSION := 1.24.3
 
 # =============================================================================
 # SOURCE FILES
@@ -52,7 +53,8 @@ TOOL_SOURCES := $(SRCDIR)/tools/tools_system.c \
                 $(SRCDIR)/tools/todo_tool.c \
                 $(SRCDIR)/tools/todo_display.c \
                 $(SRCDIR)/tools/vector_db_tool.c \
-                $(SRCDIR)/tools/memory_tool.c
+                $(SRCDIR)/tools/memory_tool.c \
+                $(SRCDIR)/tools/pdf_tool.c
 
 # Provider sources
 PROVIDER_SOURCES := $(SRCDIR)/llm/providers/openai_provider.c \
@@ -73,8 +75,11 @@ DB_C_SOURCES := $(SRCDIR)/db/vector_db.c
 DB_CPP_SOURCES := $(SRCDIR)/db/hnswlib_wrapper.cpp
 DB_SOURCES := $(DB_C_SOURCES) $(DB_CPP_SOURCES)
 
+# PDF sources
+PDF_SOURCES := $(SRCDIR)/pdf/pdf_extractor.c
+
 # All sources combined
-C_SOURCES := $(CORE_SOURCES) $(TOOL_SOURCES) $(PROVIDER_SOURCES) $(MODEL_SOURCES) $(SRCDIR)/db/vector_db.c
+C_SOURCES := $(CORE_SOURCES) $(TOOL_SOURCES) $(PROVIDER_SOURCES) $(MODEL_SOURCES) $(SRCDIR)/db/vector_db.c $(PDF_SOURCES)
 CPP_SOURCES := $(SRCDIR)/db/hnswlib_wrapper.cpp
 SOURCES := $(C_SOURCES) $(CPP_SOURCES)
 OBJECTS := $(C_SOURCES:.c=.o) $(CPP_SOURCES:.cpp=.o)
@@ -190,25 +195,32 @@ TEST_VECTOR_DB_CPP_OBJECTS = $(SRCDIR)/db/hnswlib_wrapper.o
 TEST_VECTOR_DB_OBJECTS = $(TEST_VECTOR_DB_C_OBJECTS) $(TEST_VECTOR_DB_CPP_OBJECTS)
 TEST_VECTOR_DB_TARGET = $(TESTDIR)/test_vector_db
 
-ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_HTTP_TARGET) $(TEST_ENV_TARGET) $(TEST_OUTPUT_TARGET) $(TEST_PROMPT_TARGET) $(TEST_CONVERSATION_TARGET) $(TEST_TOOLS_TARGET) $(TEST_SHELL_TARGET) $(TEST_FILE_TARGET) $(TEST_SMART_FILE_TARGET) $(TEST_RALPH_TARGET) $(TEST_TODO_MANAGER_TARGET) $(TEST_TODO_TOOL_TARGET) $(TEST_VECTOR_DB_TOOL_TARGET) $(TEST_MEMORY_TOOL_TARGET) $(TEST_TOKEN_MANAGER_TARGET) $(TEST_CONVERSATION_COMPACTOR_TARGET) $(TEST_INCOMPLETE_TASK_BUG_TARGET) $(TEST_MODEL_TOOLS_TARGET) $(TEST_MESSAGES_ARRAY_BUG_TARGET) $(TEST_VECTOR_DB_TARGET)
+TEST_PDF_EXTRACTOR_SOURCES = $(TESTDIR)/pdf/test_pdf_extractor.c $(SRCDIR)/pdf/pdf_extractor.c $(TESTDIR)/unity/unity.c
+TEST_PDF_EXTRACTOR_OBJECTS = $(TEST_PDF_EXTRACTOR_SOURCES:.c=.o)
+TEST_PDF_EXTRACTOR_TARGET = $(TESTDIR)/test_pdf_extractor
+
+ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_HTTP_TARGET) $(TEST_ENV_TARGET) $(TEST_OUTPUT_TARGET) $(TEST_PROMPT_TARGET) $(TEST_CONVERSATION_TARGET) $(TEST_TOOLS_TARGET) $(TEST_SHELL_TARGET) $(TEST_FILE_TARGET) $(TEST_SMART_FILE_TARGET) $(TEST_RALPH_TARGET) $(TEST_TODO_MANAGER_TARGET) $(TEST_TODO_TOOL_TARGET) $(TEST_VECTOR_DB_TOOL_TARGET) $(TEST_MEMORY_TOOL_TARGET) $(TEST_TOKEN_MANAGER_TARGET) $(TEST_CONVERSATION_COMPACTOR_TARGET) $(TEST_INCOMPLETE_TASK_BUG_TARGET) $(TEST_MODEL_TOOLS_TARGET) $(TEST_MESSAGES_ARRAY_BUG_TARGET) $(TEST_VECTOR_DB_TARGET) $(TEST_PDF_EXTRACTOR_TARGET)
 
 # Dependencies - remove duplicates (already defined above)
 # CURL_VERSION and MBEDTLS_VERSION already defined at line 20-21
 CURL_DIR = $(DEPDIR)/curl-$(CURL_VERSION)
 MBEDTLS_DIR = $(DEPDIR)/mbedtls-$(MBEDTLS_VERSION)
 HNSWLIB_DIR = $(DEPDIR)/hnswlib-$(HNSWLIB_VERSION)
+MUPDF_DIR = $(DEPDIR)/mupdf-$(MUPDF_VERSION)
 
 # Dependency paths
 CURL_LIB = $(CURL_DIR)/lib/.libs/libcurl.a
 MBEDTLS_LIB1 = $(MBEDTLS_DIR)/library/libmbedtls.a
 MBEDTLS_LIB2 = $(MBEDTLS_DIR)/library/libmbedx509.a  
 MBEDTLS_LIB3 = $(MBEDTLS_DIR)/library/libmbedcrypto.a
+MUPDF_LIB = $(MUPDF_DIR)/build/libmupdf.a
+MUPDF_THIRD_LIB = $(MUPDF_DIR)/build/libmupdf-third.a
 
 # Include and library flags
-INCLUDES = -I$(CURL_DIR)/include -I$(MBEDTLS_DIR)/include -I$(HNSWLIB_DIR) -I$(SRCDIR) -I$(SRCDIR)/core -I$(SRCDIR)/network -I$(SRCDIR)/llm -I$(SRCDIR)/session -I$(SRCDIR)/tools -I$(SRCDIR)/utils -I$(SRCDIR)/db
+INCLUDES = -I$(CURL_DIR)/include -I$(MBEDTLS_DIR)/include -I$(HNSWLIB_DIR) -I$(MUPDF_DIR)/include -I$(SRCDIR) -I$(SRCDIR)/core -I$(SRCDIR)/network -I$(SRCDIR)/llm -I$(SRCDIR)/session -I$(SRCDIR)/tools -I$(SRCDIR)/utils -I$(SRCDIR)/db -I$(SRCDIR)/pdf
 TEST_INCLUDES = $(INCLUDES) -I$(TESTDIR)/unity -I$(TESTDIR) -I$(TESTDIR)/core -I$(TESTDIR)/network -I$(TESTDIR)/llm -I$(TESTDIR)/session -I$(TESTDIR)/tools -I$(TESTDIR)/utils
-LDFLAGS = -L$(CURL_DIR)/lib/.libs -L$(MBEDTLS_DIR)/library
-LIBS = -lcurl -lmbedtls -lmbedx509 -lmbedcrypto
+LDFLAGS = -L$(CURL_DIR)/lib/.libs -L$(MBEDTLS_DIR)/library -L$(MUPDF_DIR)/build
+LIBS = -lcurl -lmbedtls -lmbedx509 -lmbedcrypto $(MUPDF_LIB) $(MUPDF_THIRD_LIB) -lm
 RALPH_TEST_LIBS = $(LIBS) -lpthread
 
 # Bundled Links binary
@@ -224,7 +236,13 @@ $(TEST_BUNDLED_LINKS): test_bundled_links.c $(SRCDIR)/tools/tools_system.o $(SRC
 
 # Build main executable
 $(TARGET): $(EMBEDDED_LINKS_HEADER) $(OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
-	$(CXX) $(LDFLAGS) -o $@ $(OBJECTS) $(LIBS) -lpthread
+	@if [ -f "$(MUPDF_LIB)" ] && [ -f "$(MUPDF_THIRD_LIB)" ]; then \
+		echo "Linking with MuPDF support"; \
+		$(CXX) $(LDFLAGS) -o $@ $(OBJECTS) $(LIBS) -lpthread; \
+	else \
+		echo "Linking without MuPDF support"; \
+		$(CXX) $(LDFLAGS) -o $@ $(OBJECTS) -lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lm -lpthread; \
+	fi
 
 # Build bin2c tool
 $(BIN2C): build/bin2c.c
@@ -249,6 +267,25 @@ $(LINKS_BUNDLED):
 # Compile source files (links_tool.o depends on embedded_links.h)
 $(SRCDIR)/links_tool.o: $(SRCDIR)/links_tool.c $(EMBEDDED_LINKS_HEADER) $(HEADERS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+
+# Compile PDF source files (with or without MuPDF)
+$(SRCDIR)/pdf/%.o: $(SRCDIR)/pdf/%.c $(HEADERS)
+	@if [ -f "$(MUPDF_LIB)" ] && [ -f "$(MUPDF_THIRD_LIB)" ]; then \
+		echo "Compiling $< with MuPDF support"; \
+		$(CC) $(CFLAGS) $(INCLUDES) -DHAVE_MUPDF -c $< -o $@; \
+	else \
+		echo "Compiling $< without MuPDF support"; \
+		$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@; \
+	fi
+
+$(SRCDIR)/tools/pdf_tool.o: $(SRCDIR)/tools/pdf_tool.c $(HEADERS)
+	@if [ -f "$(MUPDF_LIB)" ] && [ -f "$(MUPDF_THIRD_LIB)" ]; then \
+		echo "Compiling $< with MuPDF support"; \
+		$(CC) $(CFLAGS) $(INCLUDES) -DHAVE_MUPDF -c $< -o $@; \
+	else \
+		echo "Compiling $< without MuPDF support"; \
+		$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@; \
+	fi
 
 # Compile other source files
 $(SRCDIR)/%.o: $(SRCDIR)/%.c $(HEADERS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
@@ -280,6 +317,7 @@ test: $(ALL_TEST_TARGETS)
 	./$(TEST_INCOMPLETE_TASK_BUG_TARGET)
 	./$(TEST_MESSAGES_ARRAY_BUG_TARGET)
 	./$(TEST_VECTOR_DB_TARGET)
+	./$(TEST_PDF_EXTRACTOR_TARGET)
 
 check: test
 
@@ -348,9 +386,28 @@ $(TEST_MESSAGES_ARRAY_BUG_TARGET): $(TEST_MESSAGES_ARRAY_BUG_OBJECTS) $(EMBEDDED
 $(TEST_VECTOR_DB_TARGET): $(TEST_VECTOR_DB_OBJECTS) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
 	$(CXX) -o $@ $(TEST_VECTOR_DB_OBJECTS) -lpthread -lm
 
+$(TEST_PDF_EXTRACTOR_TARGET): $(TEST_PDF_EXTRACTOR_OBJECTS)
+	@if [ -f "$(MUPDF_LIB)" ] && [ -f "$(MUPDF_THIRD_LIB)" ]; then \
+		echo "Linking PDF test with MuPDF support"; \
+		$(CC) -o $@ $(TEST_PDF_EXTRACTOR_OBJECTS) $(MUPDF_LIB) $(MUPDF_THIRD_LIB) -lm; \
+	else \
+		echo "Linking PDF test without MuPDF support"; \
+		$(CC) -o $@ $(TEST_PDF_EXTRACTOR_OBJECTS) -lm; \
+	fi
+
 # Compile test files
 $(TESTDIR)/%.o: $(TESTDIR)/%.c $(HEADERS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
 	$(CC) $(CFLAGS) $(TEST_INCLUDES) -c $< -o $@
+
+# Compile PDF test files (with or without MuPDF)
+$(TESTDIR)/pdf/%.o: $(TESTDIR)/pdf/%.c $(HEADERS)
+	@if [ -f "$(MUPDF_LIB)" ] && [ -f "$(MUPDF_THIRD_LIB)" ]; then \
+		echo "Compiling PDF test $< with MuPDF support"; \
+		$(CC) $(CFLAGS) $(TEST_INCLUDES) -DHAVE_MUPDF -c $< -o $@; \
+	else \
+		echo "Compiling PDF test $< without MuPDF support"; \
+		$(CC) $(CFLAGS) $(TEST_INCLUDES) -c $< -o $@; \
+	fi
 
 $(TESTDIR)/unity/%.o: $(TESTDIR)/unity/%.c
 	$(CC) $(CFLAGS) $(TEST_INCLUDES) -c $< -o $@
@@ -373,6 +430,7 @@ check-valgrind: $(ALL_TEST_TARGETS)
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_CONVERSATION_COMPACTOR_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_MODEL_TOOLS_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_VECTOR_DB_TARGET).aarch64.elf
+	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_PDF_EXTRACTOR_TARGET).aarch64.elf
 
 # Valgrind testing for all tests (including external libraries - may show false positives)
 check-valgrind-all: $(ALL_TEST_TARGETS)
@@ -447,11 +505,27 @@ $(CURL_LIB): $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
 		--without-zstd --without-libpsl --without-nghttp2 && \
 	$(MAKE) CC="$(CC)"
 
+# Build MuPDF libraries
+$(MUPDF_LIB) $(MUPDF_THIRD_LIB): | $(DEPDIR)
+	@echo "Building MuPDF..."
+	@mkdir -p $(DEPDIR)
+	cd $(DEPDIR) && \
+	if [ ! -f mupdf-$(MUPDF_VERSION)-source.tar.gz ]; then \
+		curl -L -o mupdf-$(MUPDF_VERSION)-source.tar.gz https://github.com/ArtifexSoftware/mupdf/archive/$(MUPDF_VERSION).tar.gz || \
+		wget -O mupdf-$(MUPDF_VERSION)-source.tar.gz https://github.com/ArtifexSoftware/mupdf/archive/$(MUPDF_VERSION).tar.gz; \
+	fi && \
+	if [ ! -d mupdf-$(MUPDF_VERSION) ]; then \
+		tar -xzf mupdf-$(MUPDF_VERSION)-source.tar.gz; \
+	fi && \
+	cd mupdf-$(MUPDF_VERSION) && \
+	CC="$(CC)" CXX="$(CXX)" CFLAGS="-O2" CXXFLAGS="-O2" \
+		$(MAKE) libs
+
 # Clean targets
 clean:
 	rm -f $(OBJECTS) $(TEST_MAIN_OBJECTS) $(TEST_HTTP_OBJECTS) $(TEST_RALPH_OBJECTS) $(TARGET) $(ALL_TEST_TARGETS) $(TEST_BUNDLED_LINKS)
-	rm -f src/*.o test/*.o test/unity/*.o
-	rm -f *.aarch64.elf *.com.dbg *.dbg src/*.aarch64.elf src/*.com.dbg src/*.dbg test/*.aarch64.elf test/*.com.dbg test/*.dbg
+	rm -f src/*.o src/*/*.o test/*.o test/*/*.o test/unity/*.o
+	rm -f *.aarch64.elf *.com.dbg *.dbg src/*.aarch64.elf src/*/*.aarch64.elf src/*.com.dbg src/*/*.com.dbg src/*.dbg src/*/*.dbg test/*.aarch64.elf test/*/*.aarch64.elf test/*.com.dbg test/*/*.com.dbg test/*.dbg test/*/*.dbg
 	rm -f test/*.log test/*.trs test/test-suite.log
 	rm -f $(EMBEDDED_LINKS_HEADER)
 	# Clean non-tracked files from build directory (keep bin2c.c and links)

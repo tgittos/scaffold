@@ -6,6 +6,7 @@
 #include "todo_tool.h"
 #include "vector_db_tool.h"
 #include "memory_tool.h"
+#include "pdf_tool.h"
 #include "output_formatter.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -947,6 +948,11 @@ int register_builtin_tools(ToolRegistry *registry) {
     
     // Register memory tools
     if (register_memory_tools(registry) != 0) {
+        return -1;
+    }
+    
+    // Register PDF text extraction tool
+    if (register_pdf_tool(registry) != 0) {
         return -1;
     }
     
