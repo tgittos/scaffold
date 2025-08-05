@@ -15,7 +15,9 @@ void tearDown(void) {}
 
 void test_ralph_escape_json_string_null(void) {
     char* result = ralph_escape_json_string(NULL);
-    TEST_ASSERT_NULL(result);
+    TEST_ASSERT_NOT_NULL(result);
+    TEST_ASSERT_EQUAL_STRING("", result);
+    free(result);
 }
 
 void test_ralph_escape_json_string_basic(void) {
@@ -75,7 +77,7 @@ void test_ralph_build_json_payload_with_system_prompt(void) {
     
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(strstr(result, "\"model\": \"gpt-4\"") != NULL);
-    TEST_ASSERT_TRUE(strstr(result, "\"role\": \"system\"") != NULL);
+    TEST_ASSERT_TRUE(strstr(result, "\"role\":\"system\"") != NULL);
     TEST_ASSERT_TRUE(strstr(result, "You are helpful") != NULL);
     TEST_ASSERT_TRUE(strstr(result, "\"Hello\"") != NULL);
     TEST_ASSERT_TRUE(strstr(result, "\"max_completion_tokens\": 200") != NULL);

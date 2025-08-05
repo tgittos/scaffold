@@ -351,7 +351,7 @@ void test_parse_anthropic_tool_calls_with_tool_use(void) {
     TEST_ASSERT_EQUAL_STRING("toolu_01ABC", tool_calls[0].id);
     TEST_ASSERT_EQUAL_STRING("shell_execute", tool_calls[0].name);
     TEST_ASSERT_NOT_NULL(tool_calls[0].arguments);
-    TEST_ASSERT_NOT_NULL(strstr(tool_calls[0].arguments, "\"command\": \"ls -la\""));
+    TEST_ASSERT_NOT_NULL(strstr(tool_calls[0].arguments, "\"command\":\"ls -la\""));
     
     cleanup_tool_calls(tool_calls, call_count);
 }

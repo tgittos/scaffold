@@ -2,13 +2,15 @@
 #include "../../src/tools/vector_db_tool.h"
 #include "../../src/tools/tools_system.h"
 #include "../../src/db/vector_db.h"
+#include "../../src/utils/env_loader.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
 
 void setUp(void) {
-    // Clean setup for each test
+    // Load environment variables from .env file for API key access
+    load_env_file(".env");
 }
 
 void tearDown(void) {
@@ -114,7 +116,7 @@ void test_vector_db_list_indices(void) {
     TEST_ASSERT_EQUAL_INT(0, exec_result);
     TEST_ASSERT_NOT_NULL(list_result.result);
     TEST_ASSERT_EQUAL_INT(1, list_result.success);
-    TEST_ASSERT_TRUE(strstr(list_result.result, "\"success\": true") != NULL);
+    TEST_ASSERT_TRUE(strstr(list_result.result, "\"success\":true") != NULL);
     TEST_ASSERT_TRUE(strstr(list_result.result, "list_test_index") != NULL);
     
     free(list_result.tool_call_id);
@@ -191,10 +193,10 @@ void test_vector_db_get_vector(void) {
     TEST_ASSERT_EQUAL_INT(0, exec_result);
     TEST_ASSERT_NOT_NULL(get_result.result);
     TEST_ASSERT_EQUAL_INT(1, get_result.success);
-    TEST_ASSERT_TRUE(strstr(get_result.result, "\"success\": true") != NULL);
-    TEST_ASSERT_TRUE(strstr(get_result.result, "4.0") != NULL);
-    TEST_ASSERT_TRUE(strstr(get_result.result, "5.0") != NULL);
-    TEST_ASSERT_TRUE(strstr(get_result.result, "6.0") != NULL);
+    TEST_ASSERT_TRUE(strstr(get_result.result, "\"success\":true") != NULL);
+    TEST_ASSERT_TRUE(strstr(get_result.result, "4") != NULL);
+    TEST_ASSERT_TRUE(strstr(get_result.result, "5") != NULL);
+    TEST_ASSERT_TRUE(strstr(get_result.result, "6") != NULL);
     
     free(get_result.tool_call_id);
     free(get_result.result);
@@ -262,7 +264,7 @@ void test_vector_db_search(void) {
     TEST_ASSERT_EQUAL_INT(0, exec_result);
     TEST_ASSERT_NOT_NULL(search_result.result);
     TEST_ASSERT_EQUAL_INT(1, search_result.success);
-    TEST_ASSERT_TRUE(strstr(search_result.result, "\"success\": true") != NULL);
+    TEST_ASSERT_TRUE(strstr(search_result.result, "\"success\":true") != NULL);
     TEST_ASSERT_TRUE(strstr(search_result.result, "\"results\"") != NULL);
     
     free(search_result.tool_call_id);

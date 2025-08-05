@@ -17,14 +17,14 @@ static int g_request_id = 1;
 
 int mcp_client_init(MCPClient* client) {
     if (!client) {
-        debug_printf("MCP client is NULL\n");
+        debug_printf("MCP client is NULL\n\n");
         return -1;
     }
     
     memset(client, 0, sizeof(MCPClient));
     client->initialized = 1;
     
-    debug_printf("MCP client initialized\n");
+    debug_printf("MCP client initialized\n\n");
     return 0;
 }
 
@@ -40,7 +40,7 @@ int mcp_find_config_path(char* config_path, size_t path_size) {
             return -1;
         }
         strcpy(config_path, local_config);
-        debug_printf("Found MCP config at: %s\n", config_path);
+        debug_printf("Found MCP config at: %s\n\n", config_path);
         return 0;
     }
     
@@ -54,12 +54,12 @@ int mcp_find_config_path(char* config_path, size_t path_size) {
                 return -1;
             }
             strcpy(config_path, user_config);
-            debug_printf("Found MCP config at: %s\n", config_path);
+            debug_printf("Found MCP config at: %s\n\n", config_path);
             return 0;
         }
     }
     
-    debug_printf("No MCP configuration file found\n");
+    debug_printf("No MCP configuration file found\n\n");
     return -1;
 }
 
@@ -162,64 +162,6 @@ char* mcp_expand_env_vars(const char* input) {
     return output;
 }
 
-int mcp_parse_server_config(const char* json_str, const char* server_name, MCPServerConfig* config) {
-    if (!json_str || !server_name || !config) {
-        return -1;
-    }
-    
-    cJSON* json = cJSON_Parse(json_str);
-    if (!json) {
-        debug_printf("Failed to parse JSON for MCP config\n");
-        return -1;
-    }
-    
-    memset(config, 0, sizeof(MCPServerConfig));
-    config->name = strdup(server_name);
-    
-    // Extract server type
-    cJSON* type_json = cJSON_GetObjectItem(json, "type");
-    if (!cJSON_IsString(type_json)) {
-        debug_printf("Missing type for MCP server %s\n", server_name);
-        free(config->name);
-        cJSON_Delete(json);
-        return -1;
-    }
-    
-    const char* type_str = cJSON_GetStringValue(type_json);
-    if (strcmp(type_str, "stdio") == 0) {
-        config->type = MCP_SERVER_STDIO;
-    } else if (strcmp(type_str, "sse") == 0) {
-        config->type = MCP_SERVER_SSE;
-    } else if (strcmp(type_str, "http") == 0) {
-        config->type = MCP_SERVER_HTTP;
-    } else {
-        debug_printf("Unknown server type '%s' for server %s\n", type_str, server_name);
-        free(config->name);
-        cJSON_Delete(json);
-        return -1;
-    }
-    
-    // Extract command (for stdio servers)
-    cJSON* command_json = cJSON_GetObjectItem(json, "command");
-    if (cJSON_IsString(command_json)) {
-        const char* command_str = cJSON_GetStringValue(command_json);
-        config->command = mcp_expand_env_vars(command_str);
-    }
-    
-    // Extract URL (for SSE/HTTP servers)
-    cJSON* url_json = cJSON_GetObjectItem(json, "url");
-    if (cJSON_IsString(url_json)) {
-        const char* url_str = cJSON_GetStringValue(url_json);
-        config->url = mcp_expand_env_vars(url_str);
-    }
-    
-    config->enabled = 1;  // Enable by default
-    
-    cJSON_Delete(json);
-    debug_printf("Configured MCP server: %s (type: %d)\n", config->name, config->type);
-    return 0;
-}
-
 int mcp_client_load_config(MCPClient* client, const char* config_path) {
     if (!client || !config_path) {
         debug_printf("Invalid parameters for MCP config loading\n");
@@ -263,50 +205,176 @@ int mcp_client_load_config(MCPClient* client, const char* config_path) {
     
     config_json[file_size] = '\0';
     
-    // Note: json_validate doesn't exist in ralph's JSON utils
-    // We'll rely on the parser to validate the JSON
+    // Parse JSON
+    cJSON* root = cJSON_Parse(config_json);
+    free(config_json);
     
-    cJSON* json = cJSON_Parse(config_json);
-    if (!json) {
-        free(config_json);
-        debug_printf("Failed to parse JSON for MCP config\n");
+    if (!root) {
+        debug_printf("Failed to parse MCP config JSON\n");
         return -1;
     }
     
-    // Extract mcpServers object
-    cJSON* mcp_servers_json = cJSON_GetObjectItem(json, "mcpServers");
-    if (!cJSON_IsObject(mcp_servers_json)) {
-        free(config_json);
-        cJSON_Delete(json);
+    cJSON* mcp_servers = cJSON_GetObjectItem(root, "mcpServers");
+    if (!mcp_servers || !cJSON_IsObject(mcp_servers)) {
+        cJSON_Delete(root);
         debug_printf("No mcpServers object found in config\n");
         return -1;
     }
     
-    // For now, parse a single server as an example
-    // This is a simplified implementation - full parsing would iterate through all servers
-    
-    // For demonstration, let's assume there's a server named "example-server"
-    cJSON* example_server_json = cJSON_GetObjectItem(mcp_servers_json, "example-server");
-    if (cJSON_IsObject(example_server_json)) {
-        client->config.servers = malloc(sizeof(MCPServerConfig));
-        if (client->config.servers) {
-            char* server_json_str = cJSON_PrintUnformatted(example_server_json);
-            if (server_json_str && mcp_parse_server_config(server_json_str, "example-server", &client->config.servers[0]) == 0) {
-                client->config.server_count = 1;
-            } else {
-                free(client->config.servers);
-                client->config.servers = NULL;
-                client->config.server_count = 0;
-            }
-            free(server_json_str);
+    // Count servers - for objects we need to count children
+    int server_count = 0;
+    cJSON* count_item = mcp_servers->child;
+    while (count_item != NULL) {
+        if (cJSON_IsObject(count_item)) {
+            server_count++;
         }
-    } else {
-        debug_printf("No MCP servers found in configuration\n");
-        client->config.server_count = 0;
+        count_item = count_item->next;
     }
     
-    cJSON_Delete(json);
-    free(config_json);
+    if (server_count == 0) {
+        cJSON_Delete(root);
+        debug_printf("No MCP servers configured\n");
+        return 0;  // Not an error, just no servers
+    }
+    
+    // Allocate server configurations
+    client->config.servers = malloc(server_count * sizeof(MCPServerConfig));
+    if (!client->config.servers) {
+        cJSON_Delete(root);
+        debug_printf("Failed to allocate memory for MCP server configs\n");
+        return -1;
+    }
+    
+    client->config.server_count = 0;
+    
+    // Parse each server configuration
+    cJSON* server_item = NULL;
+    cJSON_ArrayForEach(server_item, mcp_servers) {
+        if (!cJSON_IsObject(server_item)) {
+            continue;
+        }
+        
+        MCPServerConfig* config = &client->config.servers[client->config.server_count];
+        memset(config, 0, sizeof(MCPServerConfig));
+        
+        // Server name (key)
+        config->name = strdup(server_item->string);
+        if (!config->name) {
+            continue;
+        }
+        
+        // Server type
+        cJSON* type_item = cJSON_GetObjectItem(server_item, "type");
+        if (!type_item || !cJSON_IsString(type_item)) {
+            debug_printf("Missing or invalid type for server %s\n", config->name);
+            free(config->name);
+            continue;
+        }
+        
+        const char* type_str = cJSON_GetStringValue(type_item);
+        if (strcmp(type_str, "stdio") == 0) {
+            config->type = MCP_SERVER_STDIO;
+        } else if (strcmp(type_str, "sse") == 0) {
+            config->type = MCP_SERVER_SSE;
+        } else if (strcmp(type_str, "http") == 0) {
+            config->type = MCP_SERVER_HTTP;
+        } else {
+            debug_printf("Unknown server type '%s' for server %s\n", type_str, config->name);
+            free(config->name);
+            continue;
+        }
+        
+        // Command (for stdio servers)
+        cJSON* command_item = cJSON_GetObjectItem(server_item, "command");
+        if (command_item && cJSON_IsString(command_item)) {
+            const char* command_str = cJSON_GetStringValue(command_item);
+            config->command = mcp_expand_env_vars(command_str);
+        }
+        
+        // URL (for SSE/HTTP servers)
+        cJSON* url_item = cJSON_GetObjectItem(server_item, "url");
+        if (url_item && cJSON_IsString(url_item)) {
+            const char* url_str = cJSON_GetStringValue(url_item);
+            config->url = mcp_expand_env_vars(url_str);
+        }
+        
+        // Arguments (for stdio servers)
+        cJSON* args_item = cJSON_GetObjectItem(server_item, "args");
+        if (args_item && cJSON_IsArray(args_item)) {
+            int arg_count = cJSON_GetArraySize(args_item);
+            if (arg_count > 0) {
+                config->args = malloc(arg_count * sizeof(char*));
+                if (config->args) {
+                    config->arg_count = 0;
+                    cJSON* arg_item = NULL;
+                    cJSON_ArrayForEach(arg_item, args_item) {
+                        if (cJSON_IsString(arg_item)) {
+                            const char* arg_str = cJSON_GetStringValue(arg_item);
+                            config->args[config->arg_count] = mcp_expand_env_vars(arg_str);
+                            if (config->args[config->arg_count]) {
+                                config->arg_count++;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Environment variables (for stdio servers)
+        cJSON* env_item = cJSON_GetObjectItem(server_item, "env");
+        if (env_item && cJSON_IsObject(env_item)) {
+            int env_count = cJSON_GetArraySize(env_item);
+            if (env_count > 0) {
+                config->env_keys = malloc(env_count * sizeof(char*));
+                config->env_values = malloc(env_count * sizeof(char*));
+                if (config->env_keys && config->env_values) {
+                    config->env_count = 0;
+                    cJSON* env_entry = NULL;
+                    cJSON_ArrayForEach(env_entry, env_item) {
+                        if (cJSON_IsString(env_entry)) {
+                            const char* env_value = cJSON_GetStringValue(env_entry);
+                            config->env_keys[config->env_count] = strdup(env_entry->string);
+                            config->env_values[config->env_count] = mcp_expand_env_vars(env_value);
+                            if (config->env_keys[config->env_count] && config->env_values[config->env_count]) {
+                                config->env_count++;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Headers (for SSE/HTTP servers)
+        cJSON* headers_item = cJSON_GetObjectItem(server_item, "headers");
+        if (headers_item && cJSON_IsObject(headers_item)) {
+            int header_count = cJSON_GetArraySize(headers_item);
+            if (header_count > 0) {
+                config->header_keys = malloc(header_count * sizeof(char*));
+                config->header_values = malloc(header_count * sizeof(char*));
+                if (config->header_keys && config->header_values) {
+                    config->header_count = 0;
+                    cJSON* header_entry = NULL;
+                    cJSON_ArrayForEach(header_entry, headers_item) {
+                        if (cJSON_IsString(header_entry)) {
+                            const char* header_value = cJSON_GetStringValue(header_entry);
+                            config->header_keys[config->header_count] = strdup(header_entry->string);
+                            config->header_values[config->header_count] = mcp_expand_env_vars(header_value);
+                            if (config->header_keys[config->header_count] && config->header_values[config->header_count]) {
+                                config->header_count++;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        config->enabled = 1;  // Enable by default
+        client->config.server_count++;
+        
+        debug_printf("Configured MCP server: %s (type: %s)\n", config->name, type_str);
+    }
+    
+    cJSON_Delete(root);
     
     // Store config path
     client->config.config_path = strdup(config_path);
@@ -446,32 +514,30 @@ int mcp_send_request(MCPServerState* server, const char* method, const char* par
         return -1;
     }
     
-    // Build JSON-RPC request using cJSON
-    cJSON* request_json = cJSON_CreateObject();
-    if (!request_json) {
-        debug_printf("Failed to create JSON object for MCP request\n");
-        return -1;
-    }
-    
-    cJSON_AddStringToObject(request_json, "jsonrpc", "2.0");
-    cJSON_AddStringToObject(request_json, "method", method);
-    cJSON_AddNumberToObject(request_json, "id", g_request_id++);
+    // Create JSON-RPC request
+    cJSON* request = cJSON_CreateObject();
+    cJSON_AddStringToObject(request, "jsonrpc", "2.0");
+    cJSON_AddStringToObject(request, "method", method);
+    cJSON_AddNumberToObject(request, "id", g_request_id++);
     
     if (params) {
-        // Parse params as JSON and add as object
         cJSON* params_json = cJSON_Parse(params);
         if (params_json) {
-            cJSON_AddItemToObject(request_json, "params", params_json);
+            cJSON_AddItemToObject(request, "params", params_json);
+        } else {
+            debug_printf("Failed to parse params JSON for method %s\n", method);
+            cJSON_Delete(request);
+            return -1;
         }
     }
     
-    char* request_str = cJSON_PrintUnformatted(request_json);
+    char* request_str = cJSON_Print(request);
+    cJSON_Delete(request);
+    
     if (!request_str) {
-        debug_printf("Failed to build JSON-RPC request\n");
-        cJSON_Delete(request_json);
+        debug_printf("Failed to serialize JSON-RPC request\n");
         return -1;
     }
-    cJSON_Delete(request_json);
     
     debug_printf("Sending MCP request to %s: %s\n", server->config.name, method);
     
@@ -622,18 +688,119 @@ int mcp_parse_tools(const char* response, ToolFunction** tools, int* tool_count)
         return -1;
     }
     
-    // Extract result object
-    cJSON* result_json = cJSON_GetObjectItem(json, "result");
-    if (!cJSON_IsObject(result_json)) {
+    cJSON* result = cJSON_GetObjectItem(json, "result");
+    if (!result) {
         debug_printf("No result field in MCP tools response\n");
         cJSON_Delete(json);
         return -1;
     }
     
-    // For now, return 0 tools - full implementation would parse the tools array
+    cJSON* tools_array = cJSON_GetObjectItem(result, "tools");
+    if (!tools_array || !cJSON_IsArray(tools_array)) {
+        debug_printf("No tools array in MCP response\n");
+        cJSON_Delete(json);
+        return -1;
+    }
+    
+    int count = cJSON_GetArraySize(tools_array);
+    if (count == 0) {
+        cJSON_Delete(json);
+        return 0;  // No tools, not an error
+    }
+    
+    ToolFunction* tool_functions = malloc(count * sizeof(ToolFunction));
+    if (!tool_functions) {
+        debug_printf("Failed to allocate memory for MCP tools\n");
+        cJSON_Delete(json);
+        return -1;
+    }
+    
+    int parsed_count = 0;
+    cJSON* tool_item = NULL;
+    cJSON_ArrayForEach(tool_item, tools_array) {
+        if (!cJSON_IsObject(tool_item)) {
+            continue;
+        }
+        
+        ToolFunction* func = &tool_functions[parsed_count];
+        memset(func, 0, sizeof(ToolFunction));
+        
+        // Tool name
+        cJSON* name_item = cJSON_GetObjectItem(tool_item, "name");
+        if (name_item && cJSON_IsString(name_item)) {
+            func->name = strdup(cJSON_GetStringValue(name_item));
+        } else {
+            continue;
+        }
+        
+        // Tool description
+        cJSON* desc_item = cJSON_GetObjectItem(tool_item, "description");
+        if (desc_item && cJSON_IsString(desc_item)) {
+            func->description = strdup(cJSON_GetStringValue(desc_item));
+        }
+        
+        // Tool parameters
+        cJSON* input_schema = cJSON_GetObjectItem(tool_item, "inputSchema");
+        if (input_schema && cJSON_IsObject(input_schema)) {
+            cJSON* properties = cJSON_GetObjectItem(input_schema, "properties");
+            cJSON* required = cJSON_GetObjectItem(input_schema, "required");
+            
+            if (properties && cJSON_IsObject(properties)) {
+                int param_count = cJSON_GetArraySize(properties);
+                if (param_count > 0) {
+                    func->parameters = malloc(param_count * sizeof(ToolParameter));
+                    if (func->parameters) {
+                        func->parameter_count = 0;
+                        
+                        cJSON* prop_item = NULL;
+                        cJSON_ArrayForEach(prop_item, properties) {
+                            if (!cJSON_IsObject(prop_item)) {
+                                continue;
+                            }
+                            
+                            ToolParameter* param = &func->parameters[func->parameter_count];
+                            memset(param, 0, sizeof(ToolParameter));
+                            
+                            param->name = strdup(prop_item->string);
+                            
+                            cJSON* type_item = cJSON_GetObjectItem(prop_item, "type");
+                            if (type_item && cJSON_IsString(type_item)) {
+                                param->type = strdup(cJSON_GetStringValue(type_item));
+                            }
+                            
+                            cJSON* desc_param = cJSON_GetObjectItem(prop_item, "description");
+                            if (desc_param && cJSON_IsString(desc_param)) {
+                                param->description = strdup(cJSON_GetStringValue(desc_param));
+                            }
+                            
+                            // Check if parameter is required
+                            if (required && cJSON_IsArray(required)) {
+                                cJSON* req_item = NULL;
+                                cJSON_ArrayForEach(req_item, required) {
+                                    if (cJSON_IsString(req_item) && 
+                                        strcmp(cJSON_GetStringValue(req_item), param->name) == 0) {
+                                        param->required = 1;
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            func->parameter_count++;
+                        }
+                    }
+                }
+            }
+        }
+        
+        parsed_count++;
+    }
+    
     cJSON_Delete(json);
     
-    debug_printf("MCP tool parsing partially implemented - returning 0 tools\n");
+    *tools = tool_functions;
+    *tool_count = parsed_count;
+    
+    debug_printf("Parsed %d MCP tools\n", parsed_count);
     return 0;
 }
 
@@ -664,9 +831,32 @@ int mcp_client_register_tools(MCPClient* client, ToolRegistry* registry) {
                 
                 debug_printf("Server %s provides %d tools\n", server->config.name, tool_count);
                 
-                // Register tools with registry would go here
-                // For now, just log that we would register them
-                debug_printf("Would register %d tools from server %s\n", tool_count, server->config.name);
+                // Register tools with registry
+                for (int j = 0; j < tool_count; j++) {
+                    ToolFunction* tool = &tools[j];
+                    
+                    // Create prefixed name to avoid conflicts
+                    char prefixed_name[256];
+                    snprintf(prefixed_name, sizeof(prefixed_name), "mcp_%s_%s", server->config.name, tool->name);
+                    
+                    // Find space in registry
+                    int registry_idx = registry->function_count;
+                    if (registry_idx >= 64) {  // Assuming max 64 tools
+                        debug_printf("Tool registry full, cannot register more MCP tools\n");
+                        break;
+                    }
+                    
+                    // Copy tool to registry
+                    ToolFunction* reg_tool = &registry->functions[registry_idx];
+                    reg_tool->name = strdup(prefixed_name);
+                    reg_tool->description = tool->description ? strdup(tool->description) : NULL;
+                    reg_tool->parameters = tool->parameters;  // Share parameters
+                    reg_tool->parameter_count = tool->parameter_count;
+                    
+                    registry->function_count++;
+                    
+                    debug_printf("Registered MCP tool: %s\n", prefixed_name);
+                }
             }
             
             free(response);
@@ -725,30 +915,24 @@ int mcp_client_execute_tool(MCPClient* client, const ToolCall* tool_call, ToolRe
     
     debug_printf("Executing MCP tool %s on server %s\n", tool_name, server_name);
     
-    // Build tool call parameters
-    cJSON* params_json = cJSON_CreateObject();
-    if (!params_json) {
-        debug_printf("Failed to create JSON object for MCP tool call parameters\n");
-        return -1;
-    }
-    
-    cJSON_AddStringToObject(params_json, "name", tool_name);
+    // Create tool call request
+    cJSON* params = cJSON_CreateObject();
+    cJSON_AddStringToObject(params, "name", tool_name);
     
     if (tool_call->arguments) {
-        // Parse arguments as JSON and add as object
-        cJSON* args_json = cJSON_Parse(tool_call->arguments);
-        if (args_json) {
-            cJSON_AddItemToObject(params_json, "arguments", args_json);
+        cJSON* arguments = cJSON_Parse(tool_call->arguments);
+        if (arguments) {
+            cJSON_AddItemToObject(params, "arguments", arguments);
         }
     }
     
-    char* params_str = cJSON_PrintUnformatted(params_json);
+    char* params_str = cJSON_Print(params);
+    cJSON_Delete(params);
+    
     if (!params_str) {
-        debug_printf("Failed to build MCP tool call parameters\n");
-        cJSON_Delete(params_json);
+        debug_printf("Failed to serialize MCP tool call parameters\n");
         return -1;
     }
-    cJSON_Delete(params_json);
     
     // Send tool call request
     char* response = NULL;
@@ -762,42 +946,59 @@ int mcp_client_execute_tool(MCPClient* client, const ToolCall* tool_call, ToolRe
     
     // Parse tool call response
     cJSON* response_json = cJSON_Parse(response);
+    free(response);
+    
     if (!response_json) {
-        free(response);
         debug_printf("Failed to parse MCP tool call response\n");
         return -1;
     }
     
-    // Check for error first
-    cJSON* error_json = cJSON_GetObjectItem(response_json, "error");
-    if (cJSON_IsObject(error_json)) {
-        cJSON* error_message_json = cJSON_GetObjectItem(error_json, "message");
-        const char* error_message = cJSON_IsString(error_message_json) ? cJSON_GetStringValue(error_message_json) : "Unknown MCP error";
-        result->tool_call_id = strdup(tool_call->id);
-        result->result = strdup(error_message);
-        result->success = 0;
-        cJSON_Delete(response_json);
-        free(response);
-        return 0;  // Successfully processed error
-    }
-    
-    // Extract result
-    cJSON* result_json = cJSON_GetObjectItem(response_json, "result");
-    if (!cJSON_IsObject(result_json)) {
-        cJSON_Delete(response_json);
-        free(response);
+    cJSON* result_obj = cJSON_GetObjectItem(response_json, "result");
+    if (!result_obj) {
         debug_printf("No result in MCP tool call response\n");
+        cJSON_Delete(response_json);
         return -1;
     }
     
-    // For now, just return the raw result - full implementation would parse content array
-    result->tool_call_id = strdup(tool_call->id);
-    result->result = cJSON_PrintUnformatted(result_json);
-    result->success = 1;
+    // Check for error
+    cJSON* error_obj = cJSON_GetObjectItem(response_json, "error");
+    if (error_obj) {
+        cJSON* message_obj = cJSON_GetObjectItem(error_obj, "message");
+        const char* error_msg = message_obj && cJSON_IsString(message_obj) ? 
+                               cJSON_GetStringValue(message_obj) : "Unknown MCP error";
+        
+        result->tool_call_id = strdup(tool_call->id);
+        result->result = strdup(error_msg);
+        result->success = 0;
+        
+        cJSON_Delete(response_json);
+        return 0;  // Successfully processed error
+    }
+    
+    // Get tool result content
+    cJSON* content_array = cJSON_GetObjectItem(result_obj, "content");
+    if (content_array && cJSON_IsArray(content_array)) {
+        // Combine all content items
+        cJSON* content_item = cJSON_GetArrayItem(content_array, 0);
+        if (content_item) {
+            cJSON* text_obj = cJSON_GetObjectItem(content_item, "text");
+            if (text_obj && cJSON_IsString(text_obj)) {
+                result->tool_call_id = strdup(tool_call->id);
+                result->result = strdup(cJSON_GetStringValue(text_obj));
+                result->success = 1;
+            }
+        }
+    }
+    
+    if (!result->result) {
+        // Fallback: stringify entire result
+        char* result_str = cJSON_Print(result_obj);
+        result->tool_call_id = strdup(tool_call->id);
+        result->result = result_str ? result_str : strdup("Empty MCP result");
+        result->success = 1;
+    }
     
     cJSON_Delete(response_json);
-    
-    free(response);
     
     debug_printf("Successfully executed MCP tool %s\n", tool_call->name);
     return 0;
