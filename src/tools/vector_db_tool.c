@@ -1,6 +1,6 @@
 #include "vector_db_tool.h"
 #include "../db/vector_db_service.h"
-#include "../utils/json_utils.h"
+#include <cJSON.h>
 #include "../utils/document_chunker.h"
 #include "../llm/embeddings_service.h"
 #include "../pdf/pdf_extractor.h"
@@ -346,30 +346,35 @@ int execute_vector_db_list_indices_tool_call(const ToolCall *tool_call, ToolResu
     size_t count = 0;
     char **indices = vector_db_list_indices(db, &count);
     
-    JsonBuilder builder;
-    if (json_builder_init(&builder) != 0) {
+    cJSON* json = cJSON_CreateObject();
+    if (!json) {
         result->result = safe_strdup("{\"success\": false, \"error\": \"Memory allocation failed\"}");
         result->success = 0;
         return 0;
     }
     
-    json_builder_start_object(&builder);
-    json_builder_add_boolean(&builder, "success", 1);
-    json_builder_add_separator(&builder);
-    json_builder_add_string(&builder, "indices", "[");
+    cJSON_AddBoolToObject(json, "success", cJSON_True);
+    
+    cJSON* indices_array = cJSON_CreateArray();
+    if (!indices_array) {
+        cJSON_Delete(json);
+        result->result = safe_strdup("{\"success\": false, \"error\": \"Memory allocation failed\"}");
+        result->success = 0;
+        return 0;
+    }
     
     for (size_t i = 0; i < count; i++) {
-        if (i > 0) json_builder_add_string_no_key(&builder, ", ");
-        json_builder_add_string_no_key(&builder, "\"");
-        json_builder_add_string_no_key(&builder, indices[i]);
-        json_builder_add_string_no_key(&builder, "\"");
+        cJSON* index_name = cJSON_CreateString(indices[i]);
+        if (index_name) {
+            cJSON_AddItemToArray(indices_array, index_name);
+        }
         free(indices[i]);
     }
     
-    json_builder_add_string_no_key(&builder, "]");
-    json_builder_end_object(&builder);
+    cJSON_AddItemToObject(json, "indices", indices_array);
     
-    result->result = json_builder_finalize(&builder);
+    result->result = cJSON_PrintUnformatted(json);
+    cJSON_Delete(json);
     result->success = 1;
     
     free(indices);
@@ -539,26 +544,29 @@ int execute_vector_db_get_vector_tool_call(const ToolCall *tool_call, ToolResult
     vector_db_error_t err = vector_db_get_vector(db, index_name, (size_t)label, &vec);
     
     if (err == VECTOR_DB_OK) {
-        JsonBuilder builder;
-        json_builder_init(&builder);
-        json_builder_start_object(&builder);
-        json_builder_add_boolean(&builder, "success", 1);
-        json_builder_add_separator(&builder);
-        json_builder_add_integer(&builder, "label", (int)label);
-        json_builder_add_separator(&builder);
-        json_builder_add_string(&builder, "vector", "[");
-        
-        for (size_t i = 0; i < vec.dimension; i++) {
-            if (i > 0) json_builder_add_string_no_key(&builder, ", ");
-            char val_str[64];
-            snprintf(val_str, sizeof(val_str), "%.6f", vec.data[i]);
-            json_builder_add_string_no_key(&builder, val_str);
+        cJSON* json = cJSON_CreateObject();
+        if (json) {
+            cJSON_AddBoolToObject(json, "success", cJSON_True);
+            cJSON_AddNumberToObject(json, "label", (double)label);
+            
+            cJSON* vector_array = cJSON_CreateArray();
+            if (vector_array) {
+                for (size_t i = 0; i < vec.dimension; i++) {
+                    cJSON* val = cJSON_CreateNumber((double)vec.data[i]);
+                    if (val) {
+                        cJSON_AddItemToArray(vector_array, val);
+                    }
+                }
+                cJSON_AddItemToObject(json, "vector", vector_array);
+            }
+            
+            result->result = cJSON_PrintUnformatted(json);
+            cJSON_Delete(json);
+            result->success = 1;
+        } else {
+            result->result = safe_strdup("{\"success\": false, \"error\": \"Memory allocation failed\"}");
+            result->success = 0;
         }
-        
-        json_builder_add_string_no_key(&builder, "]");
-        json_builder_end_object(&builder);
-        result->result = json_builder_finalize(&builder);
-        result->success = 1;
     } else {
         char response[512];
         snprintf(response, sizeof(response), 
@@ -600,27 +608,30 @@ int execute_vector_db_search_tool_call(const ToolCall *tool_call, ToolResult *re
     search_results_t *results = vector_db_search(db, index_name, &query, (size_t)k);
     
     if (results != NULL) {
-        JsonBuilder builder;
-        json_builder_init(&builder);
-        json_builder_start_object(&builder);
-        json_builder_add_boolean(&builder, "success", 1);
-        json_builder_add_separator(&builder);
-        json_builder_add_string(&builder, "results", "[");
-        
-        for (size_t i = 0; i < results->count; i++) {
-            if (i > 0) json_builder_add_string_no_key(&builder, ", ");
-            char result_str[256];
-            snprintf(result_str, sizeof(result_str), 
-                    "{\"label\": %zu, \"distance\": %.6f}", 
-                    results->results[i].label, 
-                    results->results[i].distance);
-            json_builder_add_string_no_key(&builder, result_str);
+        cJSON* json = cJSON_CreateObject();
+        if (json) {
+            cJSON_AddBoolToObject(json, "success", cJSON_True);
+            
+            cJSON* results_array = cJSON_CreateArray();
+            if (results_array) {
+                for (size_t i = 0; i < results->count; i++) {
+                    cJSON* result_item = cJSON_CreateObject();
+                    if (result_item) {
+                        cJSON_AddNumberToObject(result_item, "label", (double)results->results[i].label);
+                        cJSON_AddNumberToObject(result_item, "distance", results->results[i].distance);
+                        cJSON_AddItemToArray(results_array, result_item);
+                    }
+                }
+                cJSON_AddItemToObject(json, "results", results_array);
+            }
+            
+            result->result = cJSON_PrintUnformatted(json);
+            cJSON_Delete(json);
+            result->success = 1;
+        } else {
+            result->result = safe_strdup("{\"success\": false, \"error\": \"Memory allocation failed\"}");
+            result->success = 0;
         }
-        
-        json_builder_add_string_no_key(&builder, "]");
-        json_builder_end_object(&builder);
-        result->result = json_builder_finalize(&builder);
-        result->success = 1;
         
         vector_db_free_search_results(results);
     } else {

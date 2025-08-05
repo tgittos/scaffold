@@ -1,6 +1,7 @@
 #include "pdf_tool.h"
+#include "json_escape.h"
 #include "../pdf/pdf_extractor.h"
-#include "../utils/json_utils.h"
+#include <cJSON.h>
 #include "../utils/document_chunker.h"
 #include "../llm/embeddings_service.h"
 #include "../db/vector_db_service.h"

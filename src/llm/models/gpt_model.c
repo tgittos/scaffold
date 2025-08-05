@@ -1,7 +1,8 @@
 #include "model_capabilities.h"
+#include "json_escape.h"
 #include "output_formatter.h"
 #include "tools_system.h"
-#include "json_utils.h"
+#include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

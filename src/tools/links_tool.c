@@ -1,7 +1,8 @@
 #include "links_tool.h"
+#include "json_escape.h"
 #include "embedded_links.h"
 #include "memory_tool.h"
-#include "json_utils.h"
+#include <cJSON.h>
 #include "../utils/pdf_processor.h"
 #include "../db/vector_db_service.h"
 #include "../utils/common_utils.h"

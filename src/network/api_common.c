@@ -1,14 +1,15 @@
 #include "api_common.h"
-#include "json_utils.h"
+#include <cJSON.h>
 #include "model_capabilities.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "json_escape.h"
 
 // Model registry is now used for all tool handling
 extern ModelRegistry* get_model_registry(void);
 
-// Use unified JSON escaping from json_utils.h
+#include "json_escape.h"
 
 size_t calculate_json_payload_size(const char* model, const char* system_prompt,
                                   const ConversationHistory* conversation,
@@ -46,26 +47,28 @@ int format_openai_message(char* buffer, size_t buffer_size,
     
     if (strcmp(message->role, "tool") == 0 && message->tool_call_id != NULL) {
         // Build tool message
-        JsonBuilder builder = {0};
-        if (json_builder_init(&builder) != 0) return -1;
+        cJSON* json = cJSON_CreateObject();
+        if (!json) return -1;
         
-        json_builder_start_object(&builder);
-        json_builder_add_string(&builder, "role", "tool");
-        json_builder_add_separator(&builder);
-        json_builder_add_string(&builder, "content", message->content);
-        json_builder_add_separator(&builder);
-        json_builder_add_string(&builder, "tool_call_id", message->tool_call_id);
-        json_builder_end_object(&builder);
+        cJSON_AddStringToObject(json, "role", "tool");
+        cJSON_AddStringToObject(json, "content", message->content);
+        cJSON_AddStringToObject(json, "tool_call_id", message->tool_call_id);
         
-        message_json = json_builder_finalize(&builder);
-        json_builder_cleanup(&builder);
+        message_json = cJSON_PrintUnformatted(json);
+        cJSON_Delete(json);
     } else if (strcmp(message->role, "assistant") == 0 && 
                strstr(message->content, "\"tool_calls\"") != NULL) {
         // This is an assistant message with tool calls - use the content as-is (it's already JSON)
         message_json = strdup(message->content);
     } else {
         // Regular message
-        message_json = json_build_message(message->role, message->content);
+        cJSON* json = cJSON_CreateObject();
+        if (json) {
+            cJSON_AddStringToObject(json, "role", message->role);
+            cJSON_AddStringToObject(json, "content", message->content);
+            message_json = cJSON_PrintUnformatted(json);
+            cJSON_Delete(json);
+        }
     }
     
     if (message_json == NULL) return -1;
@@ -91,7 +94,6 @@ int format_anthropic_message(char* buffer, size_t buffer_size,
                             const ConversationMessage* message,
                             int is_first_message) {
     char *message_json = NULL;
-    JsonBuilder builder = {0};
     
     // Validate message fields first
     if (message == NULL || message->role == NULL || message->content == NULL) {
@@ -100,36 +102,29 @@ int format_anthropic_message(char* buffer, size_t buffer_size,
     
     if (strcmp(message->role, "tool") == 0) {
         // Tool results in Anthropic are user messages with tool_result content
-        if (json_builder_init(&builder) != 0) return -1;
         
-        json_builder_start_object(&builder);
-        json_builder_add_string(&builder, "role", "user");
-        json_builder_add_separator(&builder);
-        json_builder_add_object(&builder, "content", NULL);
-        
-        // Build content array manually for complex structure
-        json_builder_cleanup(&builder);
-        
-        if (message->tool_call_id != NULL) {
-            message_json = malloc(strlen(message->content) * 2 + 200);
-            if (message_json) {
-                char *escaped_content = json_escape_string(message->content);
-                snprintf(message_json, strlen(message->content) * 2 + 200,
-                        "{\"role\": \"user\", \"content\": [{\"type\": \"tool_result\", "
-                        "\"tool_use_id\": \"%s\", \"content\": \"%s\"}]}",
-                        message->tool_call_id, escaped_content ? escaped_content : "");
-                free(escaped_content);
+        cJSON* json = cJSON_CreateObject();
+        if (json) {
+            cJSON_AddStringToObject(json, "role", "user");
+            
+            cJSON* content_array = cJSON_CreateArray();
+            if (content_array) {
+                cJSON* tool_result = cJSON_CreateObject();
+                if (tool_result) {
+                    cJSON_AddStringToObject(tool_result, "type", "tool_result");
+                    cJSON_AddStringToObject(tool_result, "content", message->content);
+                    
+                    if (message->tool_call_id != NULL) {
+                        cJSON_AddStringToObject(tool_result, "tool_use_id", message->tool_call_id);
+                    }
+                    
+                    cJSON_AddItemToArray(content_array, tool_result);
+                }
+                cJSON_AddItemToObject(json, "content", content_array);
             }
-        } else {
-            message_json = malloc(strlen(message->content) * 2 + 150);
-            if (message_json) {
-                char *escaped_content = json_escape_string(message->content);
-                snprintf(message_json, strlen(message->content) * 2 + 150,
-                        "{\"role\": \"user\", \"content\": [{\"type\": \"tool_result\", "
-                        "\"content\": \"%s\"}]}",
-                        escaped_content ? escaped_content : "");
-                free(escaped_content);
-            }
+            
+            message_json = cJSON_PrintUnformatted(json);
+            cJSON_Delete(json);
         }
     } else if (strcmp(message->role, "assistant") == 0 && 
                strstr(message->content, "\"tool_use\"") != NULL) {
@@ -149,19 +144,43 @@ int format_anthropic_message(char* buffer, size_t buffer_size,
                     }
                 } else {
                     // Fallback to escaped content
-                    message_json = json_build_message(message->role, message->content);
+                    cJSON* json = cJSON_CreateObject();
+        if (json) {
+            cJSON_AddStringToObject(json, "role", message->role);
+            cJSON_AddStringToObject(json, "content", message->content);
+            message_json = cJSON_PrintUnformatted(json);
+            cJSON_Delete(json);
+        }
                 }
             } else {
                 // Fallback to escaped content
-                message_json = json_build_message(message->role, message->content);
+                cJSON* json = cJSON_CreateObject();
+        if (json) {
+            cJSON_AddStringToObject(json, "role", message->role);
+            cJSON_AddStringToObject(json, "content", message->content);
+            message_json = cJSON_PrintUnformatted(json);
+            cJSON_Delete(json);
+        }
             }
         } else {
             // Fallback to escaped content
-            message_json = json_build_message(message->role, message->content);
+            cJSON* json = cJSON_CreateObject();
+        if (json) {
+            cJSON_AddStringToObject(json, "role", message->role);
+            cJSON_AddStringToObject(json, "content", message->content);
+            message_json = cJSON_PrintUnformatted(json);
+            cJSON_Delete(json);
+        }
         }
     } else {
         // Regular message
-        message_json = json_build_message(message->role, message->content);
+        cJSON* json = cJSON_CreateObject();
+        if (json) {
+            cJSON_AddStringToObject(json, "role", message->role);
+            cJSON_AddStringToObject(json, "content", message->content);
+            message_json = cJSON_PrintUnformatted(json);
+            cJSON_Delete(json);
+        }
     }
     
     if (message_json == NULL) return -1;

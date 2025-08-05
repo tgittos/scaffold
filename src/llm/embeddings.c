@@ -1,6 +1,6 @@
 #include "embeddings.h"
 #include "../network/http_client.h"
-#include "../utils/json_utils.h"
+#include <cJSON.h>
 #include "../utils/debug_output.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,18 +36,18 @@ static char* build_embeddings_request(const char *model, const char *text) {
         return NULL;
     }
     
-    JsonBuilder builder;
-    if (json_builder_init(&builder) != 0) {
+    cJSON* json = cJSON_CreateObject();
+    if (!json) {
         return NULL;
     }
     
-    json_builder_start_object(&builder);
-    json_builder_add_string(&builder, "model", model);
-    json_builder_add_separator(&builder);
-    json_builder_add_string(&builder, "input", text);
-    json_builder_end_object(&builder);
+    cJSON_AddStringToObject(json, "model", model);
+    cJSON_AddStringToObject(json, "input", text);
     
-    return json_builder_finalize(&builder);
+    char* json_string = cJSON_PrintUnformatted(json);
+    cJSON_Delete(json);
+    
+    return json_string;
 }
 
 static int parse_embedding_response(const char *response, embedding_vector_t *embedding) {

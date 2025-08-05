@@ -1,10 +1,13 @@
 #include "session_manager.h"
 #include "debug_output.h"
 #include "http_client.h"
-#include "json_utils.h"
+#include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "json_escape.h"
+
+#include "json_escape.h"
 
 void session_data_init(SessionData* session) {
     if (session == NULL) return;

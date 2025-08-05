@@ -1,8 +1,8 @@
 #include "conversation_tracker.h"
-#include "json_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <cJSON.h>
 
 #define INITIAL_CAPACITY 10
 #define GROWTH_FACTOR 2
@@ -92,15 +92,6 @@ static int add_message_to_history(ConversationHistory *history, const char *role
     return 0;
 }
 
-// Wrapper around unified JSON parser for backward compatibility
-static char* extract_json_field(const char *json, const char *field_name) {
-    JsonParser parser = {0};
-    if (json_parser_init(&parser, json) != 0) {
-        return NULL;
-    }
-    
-    return json_parser_extract_string(&parser, field_name);
-}
 
 static char* read_dynamic_line(FILE *file) {
     size_t buffer_size = INITIAL_LINE_BUFFER_SIZE;
@@ -160,10 +151,25 @@ int load_conversation_history(ConversationHistory *history) {
         }
         
         // Parse JSON line
-        char *role = extract_json_field(line, "role");
-        char *content = extract_json_field(line, "content");
-        char *tool_call_id = extract_json_field(line, "tool_call_id");
-        char *tool_name = extract_json_field(line, "tool_name");
+        char *role = NULL;
+        char *content = NULL;
+        char *tool_call_id = NULL;
+        char *tool_name = NULL;
+        
+        cJSON *json = cJSON_Parse(line);
+        if (json != NULL) {
+            cJSON *role_item = cJSON_GetObjectItem(json, "role");
+            cJSON *content_item = cJSON_GetObjectItem(json, "content");
+            cJSON *tool_call_id_item = cJSON_GetObjectItem(json, "tool_call_id");
+            cJSON *tool_name_item = cJSON_GetObjectItem(json, "tool_name");
+            
+            if (cJSON_IsString(role_item)) role = strdup(cJSON_GetStringValue(role_item));
+            if (cJSON_IsString(content_item)) content = strdup(cJSON_GetStringValue(content_item));
+            if (cJSON_IsString(tool_call_id_item)) tool_call_id = strdup(cJSON_GetStringValue(tool_call_id_item));
+            if (cJSON_IsString(tool_name_item)) tool_name = strdup(cJSON_GetStringValue(tool_name_item));
+            
+            cJSON_Delete(json);
+        }
         
         if (role != NULL && content != NULL) {
             if (add_message_to_history(history, role, content, tool_call_id, tool_name) != 0) {
@@ -204,8 +210,19 @@ int append_conversation_message(ConversationHistory *history, const char *role, 
         return -1;
     }
     
-    // Build JSON message using unified builder
-    char *json_message = json_build_message(role, content);
+    // Build JSON message using cJSON
+    cJSON *json = cJSON_CreateObject();
+    if (json == NULL) {
+        fclose(file);
+        return -1;
+    }
+    
+    cJSON_AddStringToObject(json, "role", role);
+    cJSON_AddStringToObject(json, "content", content);
+    
+    char *json_message = cJSON_PrintUnformatted(json);
+    cJSON_Delete(json);
+    
     if (json_message == NULL) {
         fclose(file);
         return -1;
@@ -235,25 +252,20 @@ int append_tool_message(ConversationHistory *history, const char *content, const
         return -1;
     }
     
-    // Build JSON message using unified builder
-    JsonBuilder builder = {0};
-    if (json_builder_init(&builder) != 0) {
+    // Build JSON message using cJSON
+    cJSON *json = cJSON_CreateObject();
+    if (json == NULL) {
         fclose(file);
         return -1;
     }
     
-    json_builder_start_object(&builder);
-    json_builder_add_string(&builder, "role", "tool");
-    json_builder_add_separator(&builder);
-    json_builder_add_string(&builder, "content", content);
-    json_builder_add_separator(&builder);
-    json_builder_add_string(&builder, "tool_call_id", tool_call_id);
-    json_builder_add_separator(&builder);
-    json_builder_add_string(&builder, "tool_name", tool_name);
-    json_builder_end_object(&builder);
+    cJSON_AddStringToObject(json, "role", "tool");
+    cJSON_AddStringToObject(json, "content", content);
+    cJSON_AddStringToObject(json, "tool_call_id", tool_call_id);
+    cJSON_AddStringToObject(json, "tool_name", tool_name);
     
-    char *json_message = json_builder_finalize(&builder);
-    json_builder_cleanup(&builder);
+    char *json_message = cJSON_PrintUnformatted(json);
+    cJSON_Delete(json);
     
     if (json_message == NULL) {
         fclose(file);

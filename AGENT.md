@@ -5,15 +5,8 @@ This file drives the behavior of the Claude Code agent.
 # ralph Project
 
 ralph is a highly portable C codebase compiled using Cosmopolitan (see ./COSMOPOLITAN.md for details)
-Source code lives in `src/` and tests live in `/test`. Tests use `unity` which is vendored in `test/unity`
-
-Major modules:
-- Core logic is in `src/core`
-- network code in `src/network`
-- user-session related code is in `src/session`
-- LLM specific systems in `src/llm`
-- LLM tools are in `src/tools`
-- `src/utils` contains generic utility code
+Source code lives in `src/` and tests live in `test/`. Tests use `unity` which is vendored in `test/unity`
+The architecture is documented as a mermaid diagram in `ARCHITECTURE.md`, and a code overview available in `CODE_OVERVIEW.md`
 
 The code base is large and has most basic functionality implemented. Use `ripgrep` to search for code that may already be implemented.
 

@@ -1,7 +1,7 @@
 #include "conversation_compactor.h"
 #include "token_manager.h"
 #include "debug_output.h"
-#include "json_utils.h"
+#include <cJSON.h>
 #include "../db/vector_db_service.h"
 #include "../llm/embeddings_service.h"
 #include "../utils/common_utils.h"
@@ -447,39 +447,33 @@ int save_compacted_conversation(const ConversationHistory* conversation) {
         const ConversationMessage* msg = &conversation->messages[i];
         
         // Build JSON message
-        JsonBuilder builder = {0};
-        if (json_builder_init(&builder) != 0) {
+        cJSON* json_message = cJSON_CreateObject();
+        if (!json_message) {
             fclose(file);
             return -1;
         }
         
-        json_builder_start_object(&builder);
-        json_builder_add_string(&builder, "role", msg->role);
-        json_builder_add_separator(&builder);
-        json_builder_add_string(&builder, "content", msg->content);
+        cJSON_AddStringToObject(json_message, "role", msg->role);
+        cJSON_AddStringToObject(json_message, "content", msg->content);
         
         if (msg->tool_call_id != NULL) {
-            json_builder_add_separator(&builder);
-            json_builder_add_string(&builder, "tool_call_id", msg->tool_call_id);
+            cJSON_AddStringToObject(json_message, "tool_call_id", msg->tool_call_id);
         }
         
         if (msg->tool_name != NULL) {
-            json_builder_add_separator(&builder);
-            json_builder_add_string(&builder, "tool_name", msg->tool_name);
+            cJSON_AddStringToObject(json_message, "tool_name", msg->tool_name);
         }
         
-        json_builder_end_object(&builder);
+        char* json_string = cJSON_PrintUnformatted(json_message);
+        cJSON_Delete(json_message);
         
-        char* json_message = json_builder_finalize(&builder);
-        json_builder_cleanup(&builder);
-        
-        if (json_message == NULL) {
+        if (json_string == NULL) {
             fclose(file);
             return -1;
         }
         
-        fprintf(file, "%s\n", json_message);
-        free(json_message);
+        fprintf(file, "%s\n", json_string);
+        free(json_string);
     }
     
     fclose(file);

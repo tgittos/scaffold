@@ -1,5 +1,5 @@
 #include "ralph.h"
-#include "json_utils.h"
+#include <cJSON.h>
 #include "env_loader.h"
 #include "output_formatter.h"
 #include "prompt_loader.h"
@@ -19,14 +19,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <curl/curl.h>
+#include "json_escape.h"
 
 // Tool-specific functions are now handled through ModelCapabilities
 
-// Use unified JSON escaping from json_utils.h
+#include "json_escape.h"
 
 // Compatibility wrapper for tests - use json_escape_string instead in new code
 char* ralph_escape_json_string(const char* str) {
-    if (str == NULL) return NULL;
     return json_escape_string(str);
 }
 
@@ -331,11 +331,38 @@ int ralph_init_session(RalphSession* session) {
         fprintf(stderr, "Warning: Failed to load custom tools configuration\n");
     }
     
+    // Initialize MCP client
+    if (mcp_client_init(&session->mcp_client) != 0) {
+        fprintf(stderr, "Warning: Failed to initialize MCP client\n");
+    } else {
+        // Try to find and load MCP configuration
+        char config_path[512];
+        if (mcp_find_config_path(config_path, sizeof(config_path)) == 0) {
+            if (mcp_client_load_config(&session->mcp_client, config_path) == 0) {
+                // Connect to MCP servers
+                if (mcp_client_connect_servers(&session->mcp_client) == 0) {
+                    // Register MCP tools with the tool registry
+                    if (mcp_client_register_tools(&session->mcp_client, &session->tools) != 0) {
+                        fprintf(stderr, "Warning: Failed to register MCP tools\n");
+                    }
+                } else {
+                    fprintf(stderr, "Warning: Failed to connect to MCP servers\n");
+                }
+            } else {
+                fprintf(stderr, "Warning: Failed to load MCP configuration\n");
+            }
+        }
+        // No warning if config file not found - MCP is optional
+    }
+    
     return 0;
 }
 
 void ralph_cleanup_session(RalphSession* session) {
     if (session == NULL) return;
+    
+    // Cleanup MCP client
+    mcp_client_cleanup(&session->mcp_client);
     
     // Clear global tool reference before destroying the todo list
     clear_todo_tool_reference();
@@ -558,7 +585,17 @@ int ralph_execute_tool_workflow(RalphSession* session, ToolCall* tool_calls, int
     }
     
     for (int i = 0; i < call_count; i++) {
-        if (execute_tool_call(&session->tools, &tool_calls[i], &results[i]) != 0) {
+        int tool_executed = 0;
+        
+        // Check if this is an MCP tool call
+        if (strncmp(tool_calls[i].name, "mcp_", 4) == 0) {
+            if (mcp_client_execute_tool(&session->mcp_client, &tool_calls[i], &results[i]) == 0) {
+                tool_executed = 1;
+            }
+        }
+        
+        // If not an MCP tool or MCP execution failed, try standard tool execution
+        if (!tool_executed && execute_tool_call(&session->tools, &tool_calls[i], &results[i]) != 0) {
             fprintf(stderr, "Warning: Failed to execute tool call %s\n", tool_calls[i].name);
             results[i].tool_call_id = strdup(tool_calls[i].id);
             results[i].result = strdup("Tool execution failed");
@@ -849,7 +886,17 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
             // Store mapping from result index to tool call index
             tool_call_indices[executed_count] = i;
             
-            if (execute_tool_call(&session->tools, &tool_calls[i], &results[executed_count]) != 0) {
+            int tool_executed = 0;
+            
+            // Check if this is an MCP tool call
+            if (strncmp(tool_calls[i].name, "mcp_", 4) == 0) {
+                if (mcp_client_execute_tool(&session->mcp_client, &tool_calls[i], &results[executed_count]) == 0) {
+                    tool_executed = 1;
+                }
+            }
+            
+            // If not an MCP tool or MCP execution failed, try standard tool execution
+            if (!tool_executed && execute_tool_call(&session->tools, &tool_calls[i], &results[executed_count]) != 0) {
                 fprintf(stderr, "Warning: Failed to execute tool call %s in iteration %d\n", 
                        tool_calls[i].name, loop_count);
                 results[executed_count].tool_call_id = strdup(tool_calls[i].id);

@@ -1,6 +1,6 @@
 #include "llm_provider.h"
 #include "api_common.h"
-#include "json_utils.h"
+#include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

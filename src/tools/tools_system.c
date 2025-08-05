@@ -1,5 +1,5 @@
 #include "tools_system.h"
-#include "json_utils.h"
+#include <cJSON.h>
 #include "shell_tool.h"
 #include "file_tools.h"
 #include "links_tool.h"
@@ -368,22 +368,37 @@ char* generate_anthropic_tools_json(const ToolRegistry *registry) {
     return json;
 }
 
-// Wrapper around unified JSON parser for tool calls
-static char* extract_json_string(const char *json, const char *key) {
-    JsonParser parser = {0};
-    if (json_parser_init(&parser, json) != 0) {
+// Helper functions for JSON extraction with proper cleanup
+static char* extract_string_from_json(const char *json, const char *key) {
+    cJSON *json_obj = cJSON_Parse(json);
+    if (json_obj == NULL) {
         return NULL;
     }
-    return json_parser_extract_string(&parser, key);
+    
+    cJSON *item = cJSON_GetObjectItem(json_obj, key);
+    char *result = NULL;
+    if (cJSON_IsString(item)) {
+        result = strdup(cJSON_GetStringValue(item));
+    }
+    
+    cJSON_Delete(json_obj);
+    return result;
 }
 
-// Wrapper around unified JSON parser for tool objects
-static char* extract_json_object(const char *json, const char *key) {
-    JsonParser parser = {0};
-    if (json_parser_init(&parser, json) != 0) {
+static char* extract_object_from_json(const char *json, const char *key) {
+    cJSON *json_obj = cJSON_Parse(json);
+    if (json_obj == NULL) {
         return NULL;
     }
-    return json_parser_extract_object(&parser, key);
+    
+    cJSON *item = cJSON_GetObjectItem(json_obj, key);
+    char *result = NULL;
+    if (item != NULL) {
+        result = cJSON_PrintUnformatted(item);
+    }
+    
+    cJSON_Delete(json_obj);
+    return result;
 }
 
 int parse_tool_calls(const char *json_response, ToolCall **tool_calls, int *call_count) {
@@ -432,12 +447,12 @@ int parse_tool_calls(const char *json_response, ToolCall **tool_calls, int *call
         }
         
         call->id = strdup("custom_call_1"); // Generate an ID
-        call->name = extract_json_string(call_json, "name");
-        call->arguments = extract_json_object(call_json, "arguments");
+        call->name = extract_string_from_json(call_json, "name");
+        call->arguments = extract_object_from_json(call_json, "arguments");
         
         // If arguments is not an object, try string format
         if (call->arguments == NULL) {
-            call->arguments = extract_json_string(call_json, "arguments");
+            call->arguments = extract_string_from_json(call_json, "arguments");
             if (call->arguments == NULL) {
                 call->arguments = strdup("{}");
             } else {
@@ -557,15 +572,15 @@ int parse_tool_calls(const char *json_response, ToolCall **tool_calls, int *call
         
         // Parse the tool call
         ToolCall *call = &calls[parsed_count];
-        call->id = extract_json_string(call_json, "id");
+        call->id = extract_string_from_json(call_json, "id");
         call->name = NULL;
         call->arguments = NULL;
         
         // Extract function name and arguments from nested function object
-        char *function_obj = extract_json_object(call_json, "function");
+        char *function_obj = extract_object_from_json(call_json, "function");
         if (function_obj != NULL) {
-            call->name = extract_json_string(function_obj, "name");
-            call->arguments = extract_json_string(function_obj, "arguments");
+            call->name = extract_string_from_json(function_obj, "name");
+            call->arguments = extract_string_from_json(function_obj, "arguments");
             if (call->arguments != NULL) {
                 // Unescape JSON string arguments
                 unescape_json_string(call->arguments);
@@ -701,13 +716,13 @@ int parse_anthropic_tool_calls(const char *json_response, ToolCall **tool_calls,
         
         // Parse the tool use object
         ToolCall *call = &(*tool_calls)[parsed_count];
-        call->id = extract_json_string(tool_obj, "id");
-        call->name = extract_json_string(tool_obj, "name");
-        call->arguments = extract_json_object(tool_obj, "input");
+        call->id = extract_string_from_json(tool_obj, "id");
+        call->name = extract_string_from_json(tool_obj, "name");
+        call->arguments = extract_object_from_json(tool_obj, "input");
         
         // If arguments is not an object, try string format
         if (call->arguments == NULL) {
-            call->arguments = extract_json_string(tool_obj, "input");
+            call->arguments = extract_string_from_json(tool_obj, "input");
             if (call->arguments == NULL) {
                 call->arguments = strdup("{}");
             } else {
