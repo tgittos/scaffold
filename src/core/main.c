@@ -135,6 +135,12 @@ int main(int argc, char *argv[])
         fprintf(stderr, "  No arguments: Interactive mode\n");
         fprintf(stderr, "  With message: Single message mode\n");
         fprintf(stderr, "  --debug: Enable debug output (pale yellow stderr)\n");
+        fprintf(stderr, "\n");
+        fprintf(stderr, "Configuration:\n");
+        fprintf(stderr, "  Ralph generates ./ralph.config.json on first run\n");
+        fprintf(stderr, "  Set OPENAI_API_KEY environment variable or edit config file\n");
+        fprintf(stderr, "  Config priority: ./ralph.config.json > ~/.local/ralph/config.json\n");
+        fprintf(stderr, "\n");
         fprintf(stderr, "Example: %s \"Hello, how are you?\"\n", argv[0]);
         fprintf(stderr, "Example: %s --debug \"Hello, how are you?\"\n", argv[0]);
         return EXIT_FAILURE;

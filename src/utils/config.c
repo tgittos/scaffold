@@ -5,6 +5,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <errno.h>
 
 static ralph_config_t *g_config = NULL;
@@ -60,6 +61,83 @@ static char* get_user_config_dir(void)
     
     sprintf(config_dir, "%s/.local/ralph", home);
     return config_dir;
+}
+
+static int ensure_directory_exists(const char *path)
+{
+    struct stat st;
+    if (stat(path, &st) == 0) {
+        return S_ISDIR(st.st_mode) ? 0 : -1;
+    }
+    
+    // Create directory with parents
+    char *path_copy = strdup(path);
+    if (!path_copy) return -1;
+    
+    char *p = path_copy;
+    while (*p) {
+        if (*p == '/' && p != path_copy) {
+            *p = '\0';
+            mkdir(path_copy, 0755);
+            *p = '/';
+        }
+        p++;
+    }
+    
+    int result = mkdir(path_copy, 0755);
+    free(path_copy);
+    return (result == 0 || errno == EEXIST) ? 0 : -1;
+}
+
+static void config_generate_default_file(void)
+{
+    if (!g_config) return;
+    
+    // Try to generate in current directory first
+    const char *local_path = "./ralph.config.json";
+    
+    // Check if we can write to current directory
+    if (access(".", W_OK) == 0) {
+        // Pre-fill OpenAI API key from environment if available
+        const char *env_openai_key = getenv("OPENAI_API_KEY");
+        if (env_openai_key) {
+            free(g_config->openai_api_key);
+            g_config->openai_api_key = strdup(env_openai_key);
+            config_update_api_key_selection(g_config);
+        }
+        
+        if (config_save_to_file(local_path) == 0) {
+            printf("Generated default config file: %s\n", local_path);
+            printf("Edit this file to configure your API keys and settings.\n");
+            return;
+        }
+    }
+    
+    // Fall back to user config directory
+    char *user_config_dir = get_user_config_dir();
+    if (user_config_dir) {
+        if (ensure_directory_exists(user_config_dir) == 0) {
+            char *user_config_file = malloc(strlen(user_config_dir) + strlen("/config.json") + 1);
+            if (user_config_file) {
+                sprintf(user_config_file, "%s/config.json", user_config_dir);
+                
+                // Pre-fill OpenAI API key from environment if available
+                const char *env_openai_key = getenv("OPENAI_API_KEY");
+                if (env_openai_key) {
+                    free(g_config->openai_api_key);
+                    g_config->openai_api_key = strdup(env_openai_key);
+                    config_update_api_key_selection(g_config);
+                }
+                
+                if (config_save_to_file(user_config_file) == 0) {
+                    printf("Generated default config file: %s\n", user_config_file);
+                    printf("Edit this file to configure your API keys and settings.\n");
+                }
+                free(user_config_file);
+            }
+        }
+        free(user_config_dir);
+    }
 }
 
 
@@ -265,6 +343,11 @@ int config_init(void)
             }
             free(user_config_dir);
         }
+    }
+    
+    // If no config was loaded, generate a default config file
+    if (!config_loaded) {
+        config_generate_default_file();
     }
     
     
