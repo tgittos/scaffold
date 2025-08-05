@@ -23,6 +23,7 @@ CURL_VERSION := 8.4.0
 MBEDTLS_VERSION := 3.5.1
 HNSWLIB_VERSION := 0.8.0
 MUPDF_VERSION := 1.24.3
+ZLIB_VERSION := 1.3.1
 
 # =============================================================================
 # SOURCE FILES
@@ -207,6 +208,7 @@ CURL_DIR = $(DEPDIR)/curl-$(CURL_VERSION)
 MBEDTLS_DIR = $(DEPDIR)/mbedtls-$(MBEDTLS_VERSION)
 HNSWLIB_DIR = $(DEPDIR)/hnswlib-$(HNSWLIB_VERSION)
 MUPDF_DIR = $(DEPDIR)/mupdf-$(MUPDF_VERSION)
+ZLIB_DIR = $(DEPDIR)/zlib-$(ZLIB_VERSION)
 
 # Dependency paths
 CURL_LIB = $(CURL_DIR)/lib/.libs/libcurl.a
@@ -215,12 +217,13 @@ MBEDTLS_LIB2 = $(MBEDTLS_DIR)/library/libmbedx509.a
 MBEDTLS_LIB3 = $(MBEDTLS_DIR)/library/libmbedcrypto.a
 MUPDF_LIB = $(MUPDF_DIR)/build/libmupdf.a
 MUPDF_THIRD_LIB = $(MUPDF_DIR)/build/libmupdf-third.a
+ZLIB_LIB = $(ZLIB_DIR)/libz.a
 
 # Include and library flags
-INCLUDES = -I$(CURL_DIR)/include -I$(MBEDTLS_DIR)/include -I$(HNSWLIB_DIR) -I$(MUPDF_DIR)/include -I$(SRCDIR) -I$(SRCDIR)/core -I$(SRCDIR)/network -I$(SRCDIR)/llm -I$(SRCDIR)/session -I$(SRCDIR)/tools -I$(SRCDIR)/utils -I$(SRCDIR)/db -I$(SRCDIR)/pdf
+INCLUDES = -I$(CURL_DIR)/include -I$(MBEDTLS_DIR)/include -I$(HNSWLIB_DIR) -I$(MUPDF_DIR)/include -I$(ZLIB_DIR) -I$(SRCDIR) -I$(SRCDIR)/core -I$(SRCDIR)/network -I$(SRCDIR)/llm -I$(SRCDIR)/session -I$(SRCDIR)/tools -I$(SRCDIR)/utils -I$(SRCDIR)/db -I$(SRCDIR)/pdf
 TEST_INCLUDES = $(INCLUDES) -I$(TESTDIR)/unity -I$(TESTDIR) -I$(TESTDIR)/core -I$(TESTDIR)/network -I$(TESTDIR)/llm -I$(TESTDIR)/session -I$(TESTDIR)/tools -I$(TESTDIR)/utils
-LDFLAGS = -L$(CURL_DIR)/lib/.libs -L$(MBEDTLS_DIR)/library -L$(MUPDF_DIR)/build
-LIBS = -lcurl -lmbedtls -lmbedx509 -lmbedcrypto $(MUPDF_LIB) $(MUPDF_THIRD_LIB) -lm
+LDFLAGS = -L$(CURL_DIR)/lib/.libs -L$(MBEDTLS_DIR)/library -L$(MUPDF_DIR)/build -L$(ZLIB_DIR)
+LIBS = -lcurl -lmbedtls -lmbedx509 -lmbedcrypto $(MUPDF_LIB) $(MUPDF_THIRD_LIB) $(ZLIB_LIB) -lm
 RALPH_TEST_LIBS = $(LIBS) -lpthread
 
 # Bundled Links binary
@@ -235,13 +238,13 @@ $(TEST_BUNDLED_LINKS): test_bundled_links.c $(SRCDIR)/tools/tools_system.o $(SRC
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< $(SRCDIR)/tools/tools_system.o $(SRCDIR)/tools/links_tool.o $(SRCDIR)/tools/shell_tool.o $(SRCDIR)/tools/file_tools.o
 
 # Build main executable
-$(TARGET): $(EMBEDDED_LINKS_HEADER) $(OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
+$(TARGET): $(EMBEDDED_LINKS_HEADER) $(OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(ZLIB_LIB) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
 	@if [ -f "$(MUPDF_LIB)" ] && [ -f "$(MUPDF_THIRD_LIB)" ]; then \
 		echo "Linking with MuPDF support"; \
 		$(CXX) $(LDFLAGS) -o $@ $(OBJECTS) $(LIBS) -lpthread; \
 	else \
 		echo "Linking without MuPDF support"; \
-		$(CXX) $(LDFLAGS) -o $@ $(OBJECTS) -lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lm -lpthread; \
+		$(CXX) $(LDFLAGS) -o $@ $(OBJECTS) -lcurl -lmbedtls -lmbedx509 -lmbedcrypto $(ZLIB_LIB) -lm -lpthread; \
 	fi
 
 # Build bin2c tool
@@ -265,7 +268,7 @@ $(LINKS_BUNDLED):
 	fi
 
 # Compile source files (links_tool.o depends on embedded_links.h)
-$(SRCDIR)/links_tool.o: $(SRCDIR)/links_tool.c $(EMBEDDED_LINKS_HEADER) $(HEADERS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
+$(SRCDIR)/links_tool.o: $(SRCDIR)/links_tool.c $(EMBEDDED_LINKS_HEADER) $(HEADERS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(ZLIB_LIB) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 # Compile PDF source files (with or without MuPDF)
@@ -288,11 +291,11 @@ $(SRCDIR)/tools/pdf_tool.o: $(SRCDIR)/tools/pdf_tool.c $(HEADERS)
 	fi
 
 # Compile other source files
-$(SRCDIR)/%.o: $(SRCDIR)/%.c $(HEADERS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
+$(SRCDIR)/%.o: $(SRCDIR)/%.c $(HEADERS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(ZLIB_LIB) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 # Compile C++ source files
-$(SRCDIR)/%.o: $(SRCDIR)/%.cpp $(HEADERS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
+$(SRCDIR)/%.o: $(SRCDIR)/%.cpp $(HEADERS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(ZLIB_LIB) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
 # Test targets
@@ -396,7 +399,7 @@ $(TEST_PDF_EXTRACTOR_TARGET): $(TEST_PDF_EXTRACTOR_OBJECTS)
 	fi
 
 # Compile test files
-$(TESTDIR)/%.o: $(TESTDIR)/%.c $(HEADERS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
+$(TESTDIR)/%.o: $(TESTDIR)/%.c $(HEADERS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(ZLIB_LIB) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
 	$(CC) $(CFLAGS) $(TEST_INCLUDES) -c $< -o $@
 
 # Compile PDF test files (with or without MuPDF)
@@ -503,6 +506,23 @@ $(CURL_LIB): $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
 		--disable-gopher --disable-manual --disable-ipv6 --disable-ftp \
 		--disable-file --disable-ntlm --disable-crypto-auth --disable-digest-auth --disable-negotiate-auth --with-mbedtls --without-zlib --without-brotli \
 		--without-zstd --without-libpsl --without-nghttp2 && \
+	$(MAKE) CC="$(CC)"
+
+# Build zlib library
+$(ZLIB_LIB): | $(DEPDIR)
+	@echo "Building zlib..."
+	@mkdir -p $(DEPDIR)
+	cd $(DEPDIR) && \
+	if [ ! -f zlib-$(ZLIB_VERSION).tar.gz ]; then \
+		curl -L -o zlib-$(ZLIB_VERSION).tar.gz https://zlib.net/current/zlib.tar.gz || \
+		wget -O zlib-$(ZLIB_VERSION).tar.gz https://zlib.net/current/zlib.tar.gz; \
+	fi && \
+	if [ ! -d zlib-$(ZLIB_VERSION) ]; then \
+		tar -xzf zlib-$(ZLIB_VERSION).tar.gz; \
+	fi && \
+	cd zlib-$(ZLIB_VERSION) && \
+	CC="$(CC)" CFLAGS="-O2" \
+		./configure --static && \
 	$(MAKE) CC="$(CC)"
 
 # Build MuPDF libraries
