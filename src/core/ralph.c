@@ -13,6 +13,7 @@
 #include "session_manager.h"
 #include "model_capabilities.h"
 #include "memory_tool.h"
+#include "../utils/context_retriever.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -154,20 +155,53 @@ char* ralph_build_json_payload_with_todos(const RalphSession* session,
     
     if (user_message != NULL && strlen(user_message) > 0) {
         memories = retrieve_relevant_memories(user_message);
-        if (memories != NULL) {
-            // Add memories to the system prompt
-            const char* memory_section = "\n\n# Relevant Memories\n"
-                                       "The following memories may be relevant to the current conversation:\n";
+        
+        // Also retrieve relevant context from vector database
+        context_result_t* context = retrieve_relevant_context(user_message, 5);
+        char* formatted_context = NULL;
+        if (context && !context->error && context->item_count > 0) {
+            formatted_context = format_context_for_prompt(context);
+        }
+        
+        if (memories != NULL || formatted_context != NULL) {
+            size_t new_len = strlen(enhanced_prompt) + 1;
             
-            size_t new_len = strlen(enhanced_prompt) + strlen(memory_section) + strlen(memories) + 4;
-            char* prompt_with_memories = malloc(new_len);
-            if (prompt_with_memories != NULL) {
-                snprintf(prompt_with_memories, new_len, "%s%s%s\n", enhanced_prompt, memory_section, memories);
-                final_prompt = prompt_with_memories;
+            // Calculate size for memories section
+            if (memories != NULL) {
+                const char* memory_section = "\n\n# Relevant Memories\n"
+                                           "The following memories may be relevant to the current conversation:\n";
+                new_len += strlen(memory_section) + strlen(memories) + 2;
+            }
+            
+            // Calculate size for context section  
+            if (formatted_context != NULL) {
+                new_len += strlen(formatted_context) + 2;
+            }
+            
+            char* enhanced_final_prompt = malloc(new_len);
+            if (enhanced_final_prompt != NULL) {
+                strcpy(enhanced_final_prompt, enhanced_prompt);
+                
+                if (memories != NULL) {
+                    const char* memory_section = "\n\n# Relevant Memories\n"
+                                               "The following memories may be relevant to the current conversation:\n";
+                    strcat(enhanced_final_prompt, memory_section);
+                    strcat(enhanced_final_prompt, memories);
+                    strcat(enhanced_final_prompt, "\n");
+                }
+                
+                if (formatted_context != NULL) {
+                    strcat(enhanced_final_prompt, formatted_context);
+                }
+                
+                final_prompt = enhanced_final_prompt;
                 free(enhanced_prompt);
             }
-            free(memories);
         }
+        
+        free(memories);
+        free(formatted_context);
+        free_context_result(context);
     }
     
     char* result = ralph_build_json_payload(session->session_data.config.model, final_prompt,
@@ -192,20 +226,53 @@ char* ralph_build_anthropic_json_payload_with_todos(const RalphSession* session,
     
     if (user_message != NULL && strlen(user_message) > 0) {
         memories = retrieve_relevant_memories(user_message);
-        if (memories != NULL) {
-            // Add memories to the system prompt
-            const char* memory_section = "\n\n# Relevant Memories\n"
-                                       "The following memories may be relevant to the current conversation:\n";
+        
+        // Also retrieve relevant context from vector database
+        context_result_t* context = retrieve_relevant_context(user_message, 5);
+        char* formatted_context = NULL;
+        if (context && !context->error && context->item_count > 0) {
+            formatted_context = format_context_for_prompt(context);
+        }
+        
+        if (memories != NULL || formatted_context != NULL) {
+            size_t new_len = strlen(enhanced_prompt) + 1;
             
-            size_t new_len = strlen(enhanced_prompt) + strlen(memory_section) + strlen(memories) + 4;
-            char* prompt_with_memories = malloc(new_len);
-            if (prompt_with_memories != NULL) {
-                snprintf(prompt_with_memories, new_len, "%s%s%s\n", enhanced_prompt, memory_section, memories);
-                final_prompt = prompt_with_memories;
+            // Calculate size for memories section
+            if (memories != NULL) {
+                const char* memory_section = "\n\n# Relevant Memories\n"
+                                           "The following memories may be relevant to the current conversation:\n";
+                new_len += strlen(memory_section) + strlen(memories) + 2;
+            }
+            
+            // Calculate size for context section  
+            if (formatted_context != NULL) {
+                new_len += strlen(formatted_context) + 2;
+            }
+            
+            char* enhanced_final_prompt = malloc(new_len);
+            if (enhanced_final_prompt != NULL) {
+                strcpy(enhanced_final_prompt, enhanced_prompt);
+                
+                if (memories != NULL) {
+                    const char* memory_section = "\n\n# Relevant Memories\n"
+                                               "The following memories may be relevant to the current conversation:\n";
+                    strcat(enhanced_final_prompt, memory_section);
+                    strcat(enhanced_final_prompt, memories);
+                    strcat(enhanced_final_prompt, "\n");
+                }
+                
+                if (formatted_context != NULL) {
+                    strcat(enhanced_final_prompt, formatted_context);
+                }
+                
+                final_prompt = enhanced_final_prompt;
                 free(enhanced_prompt);
             }
-            free(memories);
         }
+        
+        free(memories);
+        free(formatted_context);
+        free_context_result(context);
     }
     
     char* result = ralph_build_anthropic_json_payload(session->session_data.config.model, final_prompt,

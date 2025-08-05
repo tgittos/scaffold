@@ -18,6 +18,10 @@ static vector_db_t* get_or_create_vector_db(void) {
     return global_vector_db;
 }
 
+vector_db_t* get_global_vector_db(void) {
+    return get_or_create_vector_db();
+}
+
 static char* safe_strdup(const char *str) {
     if (str == NULL) return NULL;
     return strdup(str);

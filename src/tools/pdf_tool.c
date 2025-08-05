@@ -1,9 +1,15 @@
 #include "pdf_tool.h"
 #include "../pdf/pdf_extractor.h"
 #include "../utils/json_utils.h"
+#include "../utils/document_chunker.h"
+#include "../llm/embeddings.h"
+#include "../db/vector_db.h"
+#include "vector_db_tool.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <time.h>
 
 static char* safe_strdup(const char *str) {
     if (str == NULL) return NULL;
@@ -63,6 +69,112 @@ static int extract_number_param(const char *json, const char *param_name, int de
     return (int)value;
 }
 
+static embeddings_config_t* get_embeddings_config(void) {
+    static embeddings_config_t config = {0};
+    static int initialized = 0;
+    
+    if (!initialized) {
+        // Initialize with environment variables or defaults
+        const char *api_key = getenv("OPENAI_API_KEY");
+        const char *model = getenv("EMBEDDING_MODEL");
+        const char *api_url = getenv("OPENAI_API_URL");
+        
+        if (!model) model = "text-embedding-3-small";
+        
+        if (embeddings_init(&config, model, api_key, api_url) == 0) {
+            initialized = 1;
+        }
+    }
+    
+    return initialized ? &config : NULL;
+}
+
+static void auto_process_pdf_for_vector_storage(const char *file_path, const char *extracted_text) {
+    if (!file_path || !extracted_text || strlen(extracted_text) == 0) {
+        return; // Skip if no content
+    }
+    
+    // Get vector database
+    vector_db_t *vector_db = get_global_vector_db();
+    if (!vector_db) {
+        return; // Skip if no vector DB
+    }
+    
+    // Ensure we have a "documents" index for PDFs
+    if (!vector_db_has_index(vector_db, "documents")) {
+        index_config_t index_config = {
+            .dimension = 1536,  // text-embedding-3-small dimension
+            .max_elements = 10000,
+            .M = 16,
+            .ef_construction = 200,
+            .random_seed = 100,
+            .metric = "cosine"
+        };
+        
+        // Create index if it doesn't exist (ignore error if it already exists)
+        vector_db_create_index(vector_db, "documents", &index_config);
+    }
+    
+    // Chunk the document
+    chunking_config_t chunk_config = chunker_get_pdf_config();
+    chunking_result_t *chunks = chunk_document(extracted_text, &chunk_config);
+    
+    if (!chunks || chunks->error || chunks->chunk_count == 0) {
+        free_chunking_result(chunks);
+        return; // Skip if chunking failed
+    }
+    
+    // Get embeddings configuration
+    embeddings_config_t *embed_config = get_embeddings_config();
+    if (!embed_config) {
+        free_chunking_result(chunks);
+        return; // Skip if embeddings not configured
+    }
+    
+    // Process each chunk
+    size_t vectors_stored = 0;
+    for (size_t i = 0; i < chunks->chunk_count; i++) {
+        document_chunk_t *chunk = &chunks->chunks[i];
+        
+        // Generate embedding for chunk
+        embedding_vector_t embedding = {0};
+        if (embeddings_get_vector(embed_config, chunk->text, &embedding) != 0) {
+            continue; // Skip this chunk if embedding fails
+        }
+        
+        // Create vector for storage
+        vector_t vector = {
+            .data = embedding.data,
+            .dimension = embedding.dimension
+        };
+        
+        // Generate unique label for this chunk
+        // Use hash of file path + chunk index as label
+        size_t label = 0;
+        const char *path = file_path;
+        for (const char *p = path; *p; p++) {
+            label = label * 31 + *p;
+        }
+        label = label * 1000 + i; // Add chunk index
+        
+        // Store vector in database
+        vector_db_error_t db_error = vector_db_add_vector(vector_db, "documents", &vector, label);
+        if (db_error == VECTOR_DB_OK) {
+            vectors_stored++;
+        }
+        
+        // Don't free embedding.data - it's now owned by the vector
+        embedding.data = NULL;
+        embeddings_free_vector(&embedding);
+    }
+    
+    // Cleanup
+    free_chunking_result(chunks);
+    
+    // Note: We don't report the vector storage results to avoid cluttering the main response
+    // The AI will get the extracted text as before, but the content is now also searchable
+}
+
 int execute_pdf_extract_text_tool_call(const ToolCall *tool_call, ToolResult *result) {
     if (!tool_call || !result) return -1;
     
@@ -114,7 +226,12 @@ int execute_pdf_extract_text_tool_call(const ToolCall *tool_call, ToolResult *re
         result->result = safe_strdup(error_response);
         result->success = 0;
     } else {
-        // Success - build JSON response with extracted text
+        // Success - automatically process for vector storage
+        if (extraction_result->text && extraction_result->length > 0) {
+            auto_process_pdf_for_vector_storage(file_path, extraction_result->text);
+        }
+        
+        // Build JSON response with extracted text
         size_t response_size = extraction_result->length + 512; // Extra space for JSON structure
         char *response = malloc(response_size);
         if (response) {

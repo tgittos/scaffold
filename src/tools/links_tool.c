@@ -2,6 +2,9 @@
 #include "embedded_links.h"
 #include "memory_tool.h"
 #include "json_utils.h"
+#include "../utils/pdf_processor.h"
+#include "../db/vector_db.h"
+#include "vector_db_tool.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -205,6 +208,49 @@ int execute_links_tool_call(const ToolCall *tool_call, ToolResult *result) {
     if (!url) {
         result->result = strdup("Error: Missing or invalid 'url' parameter");
         return 0;
+    }
+    
+    // Check if this is a PDF URL
+    if (is_pdf_url(url)) {
+        // Process PDF automatically
+        vector_db_t *vector_db = get_global_vector_db();
+        if (vector_db) {
+            // Ensure we have a "documents" index for PDFs
+            index_config_t index_config = {
+                .dimension = 1536,  // text-embedding-3-small dimension
+                .max_elements = 10000,
+                .M = 16,
+                .ef_construction = 200,
+                .random_seed = 100,
+                .metric = "cosine"
+            };
+            
+            // Create index if it doesn't exist (ignore error if it already exists)
+            vector_db_create_index(vector_db, "documents", &index_config);
+            
+            // Process the PDF
+            pdf_processing_result_t *pdf_result = process_pdf_from_url(url, vector_db, "documents");
+            if (pdf_result) {
+                if (pdf_result->error) {
+                    // PDF processing failed, fall back to normal web fetch
+                    free_pdf_processing_result(pdf_result);
+                } else {
+                    // PDF processing succeeded
+                    char success_msg[512];
+                    snprintf(success_msg, sizeof(success_msg),
+                            "PDF successfully processed: %zu chunks, %zu embeddings generated, %zu vectors stored in database",
+                            pdf_result->chunks_processed, pdf_result->embeddings_generated, pdf_result->vectors_stored);
+                    
+                    result->result = strdup(success_msg);
+                    result->success = 1;
+                    
+                    free_pdf_processing_result(pdf_result);
+                    free(url);
+                    return 0;
+                }
+            }
+        }
+        // If PDF processing failed or vector DB not available, continue with normal fetch
     }
     
     // URL is ready to use, no conversion needed with NSS support

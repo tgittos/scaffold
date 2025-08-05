@@ -37,6 +37,8 @@ CORE_SOURCES := $(SRCDIR)/core/main.c \
                 $(SRCDIR)/utils/output_formatter.c \
                 $(SRCDIR)/utils/prompt_loader.c \
                 $(SRCDIR)/utils/document_chunker.c \
+                $(SRCDIR)/utils/pdf_processor.c \
+                $(SRCDIR)/utils/context_retriever.c \
                 $(SRCDIR)/session/conversation_tracker.c \
                 $(SRCDIR)/session/conversation_compactor.c \
                 $(SRCDIR)/session/session_manager.c \
