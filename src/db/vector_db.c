@@ -285,10 +285,10 @@ vector_db_error_t vector_db_add_vector(vector_db_t* db, const char* index_name,
     pthread_rwlock_wrlock(&entry->lock);
     pthread_mutex_unlock(&db->mutex);
     
-    int success = hnswlib_add_vector(index_name, vector->data, label);
+    int result = hnswlib_add_vector(index_name, vector->data, label);
     
     pthread_rwlock_unlock(&entry->lock);
-    return success ? VECTOR_DB_OK : VECTOR_DB_ERROR_MEMORY;
+    return (result == 0) ? VECTOR_DB_OK : VECTOR_DB_ERROR_MEMORY;
 }
 
 vector_db_error_t vector_db_add_vectors(vector_db_t* db, const char* index_name,
@@ -329,10 +329,10 @@ vector_db_error_t vector_db_update_vector(vector_db_t* db, const char* index_nam
     pthread_rwlock_wrlock(&entry->lock);
     pthread_mutex_unlock(&db->mutex);
     
-    int success = hnswlib_update_vector(index_name, vector->data, label);
+    int result = hnswlib_update_vector(index_name, vector->data, label);
     
     pthread_rwlock_unlock(&entry->lock);
-    return success ? VECTOR_DB_OK : VECTOR_DB_ERROR_ELEMENT_NOT_FOUND;
+    return (result == 0) ? VECTOR_DB_OK : VECTOR_DB_ERROR_ELEMENT_NOT_FOUND;
 }
 
 vector_db_error_t vector_db_delete_vector(vector_db_t* db, const char* index_name, size_t label) {
@@ -350,10 +350,10 @@ vector_db_error_t vector_db_delete_vector(vector_db_t* db, const char* index_nam
     pthread_rwlock_wrlock(&entry->lock);
     pthread_mutex_unlock(&db->mutex);
     
-    int success = hnswlib_delete_vector(index_name, label);
+    int result = hnswlib_delete_vector(index_name, label);
     
     pthread_rwlock_unlock(&entry->lock);
-    return success ? VECTOR_DB_OK : VECTOR_DB_ERROR_ELEMENT_NOT_FOUND;
+    return (result == 0) ? VECTOR_DB_OK : VECTOR_DB_ERROR_ELEMENT_NOT_FOUND;
 }
 
 vector_db_error_t vector_db_get_vector(const vector_db_t* db, const char* index_name,
@@ -381,10 +381,10 @@ vector_db_error_t vector_db_get_vector(const vector_db_t* db, const char* index_
     pthread_rwlock_rdlock(&entry->lock);
     pthread_mutex_unlock((pthread_mutex_t*)&db->mutex);
     
-    int success = hnswlib_get_vector(index_name, label, vector->data);
+    int result = hnswlib_get_vector(index_name, label, vector->data);
     
     pthread_rwlock_unlock(&entry->lock);
-    return success ? VECTOR_DB_OK : VECTOR_DB_ERROR_ELEMENT_NOT_FOUND;
+    return (result == 0) ? VECTOR_DB_OK : VECTOR_DB_ERROR_ELEMENT_NOT_FOUND;
 }
 
 search_results_t* vector_db_search(const vector_db_t* db, const char* index_name,
@@ -460,10 +460,10 @@ vector_db_error_t vector_db_save_index(const vector_db_t* db, const char* index_
     pthread_rwlock_rdlock(&entry->lock);
     pthread_mutex_unlock((pthread_mutex_t*)&db->mutex);
     
-    int success = hnswlib_save_index(index_name, file_path);
+    int result = hnswlib_save_index(index_name, file_path);
     
     pthread_rwlock_unlock(&entry->lock);
-    return success ? VECTOR_DB_OK : VECTOR_DB_ERROR_FILE_IO;
+    return (result == 0) ? VECTOR_DB_OK : VECTOR_DB_ERROR_FILE_IO;
 }
 
 vector_db_error_t vector_db_load_index(vector_db_t* db, const char* index_name,
@@ -479,8 +479,8 @@ vector_db_error_t vector_db_load_index(vector_db_t* db, const char* index_name,
         return VECTOR_DB_ERROR_INVALID_PARAM;
     }
     
-    int success = hnswlib_load_index(index_name, file_path);
-    if (!success) {
+    int result = hnswlib_load_index(index_name, file_path);
+    if (result != 0) {
         pthread_mutex_unlock(&db->mutex);
         return VECTOR_DB_ERROR_FILE_IO;
     }
@@ -551,12 +551,12 @@ vector_db_error_t vector_db_save_all(const vector_db_t* db, const char* director
         pthread_rwlock_rdlock(&entry->lock);
         pthread_mutex_unlock((pthread_mutex_t*)&db->mutex);
         
-        int success = hnswlib_save_index(entry->name, file_path);
+        int result = hnswlib_save_index(entry->name, file_path);
         
         pthread_rwlock_unlock(&entry->lock);
         pthread_mutex_lock((pthread_mutex_t*)&db->mutex);
         
-        vector_db_error_t err = success ? VECTOR_DB_OK : VECTOR_DB_ERROR_FILE_IO;
+        vector_db_error_t err = (result == 0) ? VECTOR_DB_OK : VECTOR_DB_ERROR_FILE_IO;
         
         if (err != VECTOR_DB_OK) {
             pthread_mutex_unlock((pthread_mutex_t*)&db->mutex);
@@ -618,10 +618,10 @@ vector_db_error_t vector_db_set_ef_search(vector_db_t* db, const char* index_nam
     pthread_rwlock_wrlock(&entry->lock);
     pthread_mutex_unlock(&db->mutex);
     
-    int success = hnswlib_set_ef(index_name, ef);
+    int result = hnswlib_set_ef(index_name, ef);
     
     pthread_rwlock_unlock(&entry->lock);
-    return success ? VECTOR_DB_OK : VECTOR_DB_ERROR_INVALID_PARAM;
+    return (result == 0) ? VECTOR_DB_OK : VECTOR_DB_ERROR_INVALID_PARAM;
 }
 
 size_t vector_db_get_index_size(const vector_db_t* db, const char* index_name) {

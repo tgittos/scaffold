@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 #include <cstring>
+#include <cmath>
 
 using namespace hnswlib;
 
@@ -18,6 +19,57 @@ public:
 class InnerProductSpaceWrapper : public InnerProductSpace {
 public:
     InnerProductSpaceWrapper(size_t dim) : InnerProductSpace(dim) {}
+};
+
+class CosineSpace : public SpaceInterface<float> {
+    size_t data_size_;
+    size_t dim_;
+
+public:
+    CosineSpace(size_t dim) {
+        dim_ = dim;
+        data_size_ = dim * sizeof(float);
+    }
+
+    size_t get_data_size() {
+        return data_size_;
+    }
+
+    DISTFUNC<float> get_dist_func() {
+        return CosineDistanceSIMD;
+    }
+
+    void *get_dist_func_param() {
+        return &dim_;
+    }
+
+    ~CosineSpace() {}
+
+    static float CosineDistanceSIMD(const void *pVect1v, const void *pVect2v, const void *qty_ptr) {
+        float *pVect1 = (float *) pVect1v;
+        float *pVect2 = (float *) pVect2v;
+        size_t qty = *((size_t *) qty_ptr);
+
+        float dot = 0.0f;
+        float norm1 = 0.0f;
+        float norm2 = 0.0f;
+
+        for (size_t i = 0; i < qty; i++) {
+            dot += pVect1[i] * pVect2[i];
+            norm1 += pVect1[i] * pVect1[i];
+            norm2 += pVect2[i] * pVect2[i];
+        }
+
+        // Avoid division by zero
+        if (norm1 == 0.0f || norm2 == 0.0f) {
+            return 1.0f;
+        }
+
+        // Cosine similarity = dot / (norm1 * norm2)
+        // Distance = 1 - cosine_similarity
+        float similarity = dot / (sqrtf(norm1) * sqrtf(norm2));
+        return 1.0f - similarity;
+    }
 };
 
 extern "C" {
@@ -35,6 +87,8 @@ hnswlib_index_t hnswlib_create_index(const char* name, const hnswlib_index_confi
             space = std::make_unique<L2SpaceWrapper>(config->dimension);
         } else if (strcmp(config->metric, "ip") == 0) {
             space = std::make_unique<InnerProductSpaceWrapper>(config->dimension);
+        } else if (strcmp(config->metric, "cosine") == 0) {
+            space = std::make_unique<CosineSpace>(config->dimension);
         } else {
             return nullptr;
         }
