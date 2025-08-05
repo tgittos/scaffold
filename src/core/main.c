@@ -79,6 +79,7 @@ int main(int argc, char *argv[])
                                         "and ask what you can help with today. Keep it warm, concise, and engaging. "
                                         "Make it feel personal and conversational, not like a static template.";
             
+            // Send initial greeting (indicator will be cleared immediately)
             int result = ralph_process_message(&session, greeting_prompt);
             if (result != 0) {
                 // Fallback to basic message if AI greeting fails

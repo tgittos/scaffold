@@ -962,10 +962,17 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
     debug_printf("Making API request to %s\n", session->session_data.config.api_url);
     debug_printf("POST data: %s\n\n", post_data);
     
+    // Display subtle thinking indicator to user
+    fprintf(stdout, "\033[36m•\033[0m ");
+    fflush(stdout);
+    
     struct HTTPResponse response = {0};
     int result = -1;
     
     if (http_post_with_headers(session->session_data.config.api_url, post_data, headers, &response) == 0) {
+        // Clear the thinking indicator
+        fprintf(stdout, "\r\033[K");  // Move to start of line and clear it
+        fflush(stdout);
         debug_printf("Got API response: %s\n", response.data);
         // Parse the response based on API type
         ParsedResponse parsed_response;
