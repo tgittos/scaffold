@@ -1,4 +1,3 @@
-- Update the README.md to include an overview of code modules and where to find major functionality.
 - Write a model-context-protocol client module. Integrate it into the ralph client. Ensure the end user can configure MCP servers with a `ralph.config.json` file at either `~/.local/ralph` or `./ralph.config.json` similar to how Claude Code's MCP configuration works.
 - Write Github actions to use the devcontainer in this project to build ralph. Build ralph on PRs and merges, and release it on tags. Use Githubs releases feature.
 - The CLI interface for this application supports a subset of Readline-like features. Research how to compile Readline with Cosmopolitan, and refactor the user input functionality to use Readline.
