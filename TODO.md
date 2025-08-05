@@ -1,2 +1,5 @@
-- Write Github actions to use the devcontainer in this project to build ralph. Build ralph on PRs and merges, and release it on tags. Use Githubs releases feature.
+- Read this StackOverflow answer: https://stackoverflow.com/a/46824233 - refactor the Makefile to make use of these techniques. Ensure you don't lose functionality.
+- Refactor the conversation tracking system to just save every message sent to and received by the AI is stored in the vector db, not in a file. Ensure the agent queries the vector DB for recent history, in a sliding window. The agent should also be able to get more conversation history via tools if it needs. Implement missing vector DB functionality if you find you are unable to search by time frames in the vector DB.
+- Research how to get Readline compiled and integrated into Ralph. Ensure Readline links successfully against Ralph.
 - The CLI interface for this application supports a subset of Readline-like features. Research how to compile Readline with Cosmopolitan, and refactor the user input functionality to use Readline.
+- Write Github actions to use the devcontainer in this project to build ralph. Build ralph on PRs and merges, and release it on tags. Use Githubs releases feature.

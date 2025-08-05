@@ -34,7 +34,7 @@ CORE_SOURCES := $(SRCDIR)/core/main.c \
                 $(SRCDIR)/core/ralph.c \
                 $(SRCDIR)/network/http_client.c \
                 $(SRCDIR)/network/api_common.c \
-                $(SRCDIR)/utils/env_loader.c \
+                $(SRCDIR)/utils/config.c \
                 $(SRCDIR)/utils/output_formatter.c \
                 $(SRCDIR)/utils/prompt_loader.c \
                 $(SRCDIR)/utils/document_chunker.c \
@@ -162,6 +162,7 @@ endef
 # Generate test definitions
 $(eval $(call SIMPLE_TEST,MAIN,core,main,))
 $(eval $(call SIMPLE_TEST,ENV,utils,env_loader,$(SRCDIR)/utils/env_loader.c))
+$(eval $(call SIMPLE_TEST,CONFIG,utils,config,$(SRCDIR)/utils/config.c))
 $(eval $(call SIMPLE_TEST,PROMPT,utils,prompt_loader,$(SRCDIR)/utils/prompt_loader.c))
 $(eval $(call SIMPLE_TEST,CONVERSATION,session,conversation_tracker,$(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/utils/json_escape.c))
 $(eval $(call SIMPLE_TEST,TODO_MANAGER,tools,todo_manager,$(SRCDIR)/tools/todo_manager.c))
@@ -198,7 +199,7 @@ TEST_VECTOR_DB_OBJECTS = $(TEST_VECTOR_DB_C_OBJECTS) $(TEST_VECTOR_DB_CPP_OBJECT
 TEST_VECTOR_DB_TARGET = $(TESTDIR)/test_vector_db
 
 # Collect all test targets
-ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_ENV_TARGET) $(TEST_PROMPT_TARGET) $(TEST_CONVERSATION_TARGET) $(TEST_TODO_MANAGER_TARGET) $(TEST_TODO_TOOL_TARGET) $(TEST_PDF_EXTRACTOR_TARGET) $(TEST_DOCUMENT_CHUNKER_TARGET) $(TEST_HTTP_TARGET) $(TEST_OUTPUT_TARGET) $(TEST_TOOLS_TARGET) $(TEST_SHELL_TARGET) $(TEST_FILE_TARGET) $(TEST_SMART_FILE_TARGET) $(TEST_VECTOR_DB_TOOL_TARGET) $(TEST_MEMORY_TOOL_TARGET) $(TEST_TOKEN_MANAGER_TARGET) $(TEST_CONVERSATION_COMPACTOR_TARGET) $(TEST_RALPH_TARGET) $(TEST_INCOMPLETE_TASK_BUG_TARGET) $(TEST_MODEL_TOOLS_TARGET) $(TEST_MESSAGES_ARRAY_BUG_TARGET) $(TEST_VECTOR_DB_TARGET) $(TEST_MCP_CLIENT_TARGET)
+ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_ENV_TARGET) $(TEST_CONFIG_TARGET) $(TEST_PROMPT_TARGET) $(TEST_CONVERSATION_TARGET) $(TEST_TODO_MANAGER_TARGET) $(TEST_TODO_TOOL_TARGET) $(TEST_PDF_EXTRACTOR_TARGET) $(TEST_DOCUMENT_CHUNKER_TARGET) $(TEST_HTTP_TARGET) $(TEST_OUTPUT_TARGET) $(TEST_TOOLS_TARGET) $(TEST_SHELL_TARGET) $(TEST_FILE_TARGET) $(TEST_SMART_FILE_TARGET) $(TEST_VECTOR_DB_TOOL_TARGET) $(TEST_MEMORY_TOOL_TARGET) $(TEST_TOKEN_MANAGER_TARGET) $(TEST_CONVERSATION_COMPACTOR_TARGET) $(TEST_RALPH_TARGET) $(TEST_INCOMPLETE_TASK_BUG_TARGET) $(TEST_MODEL_TOOLS_TARGET) $(TEST_MESSAGES_ARRAY_BUG_TARGET) $(TEST_VECTOR_DB_TARGET) $(TEST_MCP_CLIENT_TARGET)
 
 # =============================================================================
 # BUILD RULES

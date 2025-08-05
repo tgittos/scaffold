@@ -1,6 +1,7 @@
 #include "ralph.h"
 #include <cJSON.h>
 #include "env_loader.h"
+#include "config.h"
 #include "output_formatter.h"
 #include "prompt_loader.h"
 #include "shell_tool.h"
@@ -378,81 +379,51 @@ void ralph_cleanup_session(RalphSession* session) {
     
     // Cleanup session data (handles conversation and config cleanup)
     session_data_cleanup(&session->session_data);
+    
+    // Cleanup configuration system
+    config_cleanup();
 }
 
 int ralph_load_config(RalphSession* session) {
     if (session == NULL) return -1;
     
-    // Load environment variables from .env file (optional)
-    if (load_env_file(".env") != 0) {
-        // .env file is optional, just print debug message
-        debug_printf("No .env file found, using environment variables or defaults\n");
+    // Initialize the new configuration system
+    if (config_init() != 0) {
+        fprintf(stderr, "Error: Failed to initialize configuration system\n");
+        return -1;
     }
     
-    // Reinitialize embeddings service with new environment variables
+    ralph_config_t *config = config_get();
+    if (!config) {
+        fprintf(stderr, "Error: Failed to get configuration instance\n");
+        return -1;
+    }
+    
+    // Reinitialize embeddings service with new configuration
     embeddings_service_reinitialize();
     
     // Try to load system prompt from PROMPT.md (optional)
     load_system_prompt(&session->session_data.config.system_prompt);
     
-    // Get API URL from environment variable, default to OpenAI
-    const char *url = getenv("API_URL");
-    if (url == NULL) {
-        url = "https://api.openai.com/v1/chat/completions";
-    }
-    session->session_data.config.api_url = strdup(url);
-    if (session->session_data.config.api_url == NULL) return -1;
-    
-    // Get model from environment variable, default to o4-mini
-    const char *model = getenv("MODEL");
-    if (model == NULL) {
-        model = "o4-mini-2025-04-16";
-    }
-    session->session_data.config.model = strdup(model);
-    if (session->session_data.config.model == NULL) return -1;
-    
-    // Get API key (optional for local servers)
-    const char *api_key = NULL;
-    if (strstr(session->session_data.config.api_url, "api.anthropic.com") != NULL) {
-        api_key = getenv("ANTHROPIC_API_KEY");
-    } else {
-        api_key = getenv("OPENAI_API_KEY");
+    // Copy configuration values from global config to session config
+    if (config->api_url) {
+        session->session_data.config.api_url = strdup(config->api_url);
+        if (session->session_data.config.api_url == NULL) return -1;
     }
     
-    if (api_key != NULL) {
-        session->session_data.config.api_key = strdup(api_key);
+    if (config->model) {
+        session->session_data.config.model = strdup(config->model);
+        if (session->session_data.config.model == NULL) return -1;
+    }
+    
+    if (config->api_key) {
+        session->session_data.config.api_key = strdup(config->api_key);
         if (session->session_data.config.api_key == NULL) return -1;
     }
     
-    // Get context window size from environment variable
-    const char *context_window_str = getenv("CONTEXT_WINDOW");
-    session->session_data.config.context_window = 8192;  // Default for many models
-    if (context_window_str != NULL) {
-        int parsed_window = atoi(context_window_str);
-        if (parsed_window > 0) {
-            session->session_data.config.context_window = parsed_window;
-        }
-    }
-    
-    // Get maximum context window size from environment variable
-    const char *max_context_window_str = getenv("MAX_CONTEXT_WINDOW");
-    session->session_data.config.max_context_window = session->session_data.config.context_window;  // Default to same as context_window
-    if (max_context_window_str != NULL) {
-        int parsed_max_window = atoi(max_context_window_str);
-        if (parsed_max_window > 0) {
-            session->session_data.config.max_context_window = parsed_max_window;
-        }
-    }
-    
-    // Get max response tokens from environment variable (optional override)
-    const char *max_tokens_str = getenv("MAX_TOKENS");
-    session->session_data.config.max_tokens = -1;  // Will be calculated later if not set
-    if (max_tokens_str != NULL) {
-        int parsed_tokens = atoi(max_tokens_str);
-        if (parsed_tokens > 0) {
-            session->session_data.config.max_tokens = parsed_tokens;
-        }
-    }
+    session->session_data.config.context_window = config->context_window;
+    session->session_data.config.max_context_window = config->max_context_window;
+    session->session_data.config.max_tokens = config->max_tokens;
     
     // Determine API type and correct parameter name for max tokens
     if (strstr(session->session_data.config.api_url, "api.openai.com") != NULL) {
@@ -466,25 +437,18 @@ int ralph_load_config(RalphSession* session) {
         session->session_data.config.max_tokens_param = "max_tokens";
     }
     
-    // Auto-configure context window from model capabilities if not explicitly set
-    if (context_window_str == NULL || max_context_window_str == NULL) {
+    // Auto-configure context window from model capabilities if using defaults
+    if (session->session_data.config.context_window == 8192) { // Default value
         ModelRegistry* registry = get_model_registry();
         if (registry && session->session_data.config.model) {
             ModelCapabilities* model = detect_model_capabilities(registry, session->session_data.config.model);
             if (model && model->max_context_length > 0) {
-                // Only override if environment variable wasn't set
-                if (context_window_str == NULL) {
-                    session->session_data.config.context_window = model->max_context_length;
-                    debug_printf("Auto-configured context window from model capabilities: %d tokens for model %s\n",
-                                model->max_context_length, session->session_data.config.model);
-                    debug_printf("🔧 Auto-configured context window: %d tokens (based on %s capabilities)\n",
-                           model->max_context_length, session->session_data.config.model);
-                }
-                if (max_context_window_str == NULL) {
-                    session->session_data.config.max_context_window = model->max_context_length;
-                    debug_printf("Auto-configured max context window from model capabilities: %d tokens for model %s\n",
-                                model->max_context_length, session->session_data.config.model);
-                }
+                session->session_data.config.context_window = model->max_context_length;
+                session->session_data.config.max_context_window = model->max_context_length;
+                debug_printf("Auto-configured context window from model capabilities: %d tokens for model %s\n",
+                            model->max_context_length, session->session_data.config.model);
+                debug_printf("🔧 Auto-configured context window: %d tokens (based on %s capabilities)\n",
+                       model->max_context_length, session->session_data.config.model);
             } else {
                 debug_printf("Using default context window (%d tokens) - no model capabilities found for model %s\n",
                             session->session_data.config.context_window, 

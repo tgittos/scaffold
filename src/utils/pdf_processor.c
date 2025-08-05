@@ -3,6 +3,7 @@
 #include "../pdf/pdf_extractor.h"
 #include "../utils/document_chunker.h"
 #include "../llm/embeddings.h"
+#include "config.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -79,10 +80,20 @@ static embeddings_config_t* get_embeddings_config(void) {
     static int initialized = 0;
     
     if (!initialized) {
-        // Initialize with environment variables or defaults
-        const char *api_key = getenv("OPENAI_API_KEY");
-        const char *model = getenv("EMBEDDING_MODEL");
-        const char *api_url = getenv("OPENAI_API_URL");
+        // Initialize with configuration system or defaults
+        ralph_config_t *global_config = config_get();
+        const char *api_key, *model, *api_url;
+        
+        if (global_config) {
+            api_key = global_config->openai_api_key;
+            model = global_config->embedding_model;
+            api_url = global_config->openai_api_url;
+        } else {
+            // Fallback to environment variables
+            api_key = getenv("OPENAI_API_KEY");
+            model = getenv("EMBEDDING_MODEL");
+            api_url = getenv("OPENAI_API_URL");
+        }
         
         if (!model) model = "text-embedding-3-small";
         
