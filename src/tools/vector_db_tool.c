@@ -1,6 +1,7 @@
 #include "vector_db_tool.h"
 #include "../db/vector_db.h"
 #include "../utils/json_utils.h"
+#include "../llm/embeddings.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -282,6 +283,25 @@ int register_vector_db_tool(ToolRegistry *registry) {
     
     if (register_single_vector_tool(registry, "vector_db_search", 
                                    "Search for nearest neighbors", search_params, 3) != 0) {
+        return -1;
+    }
+    
+    // 9. Register vector_db_add_text
+    ToolParameter *add_text_params = malloc(3 * sizeof(ToolParameter));
+    if (add_text_params == NULL) return -1;
+    
+    add_text_params[0] = (ToolParameter){"index_name", "string", "Name of the index", NULL, 0, 1};
+    add_text_params[1] = (ToolParameter){"text", "string", "Text content to embed and store", NULL, 0, 1};
+    add_text_params[2] = (ToolParameter){"metadata", "object", "Optional metadata to store with the text", NULL, 0, 0};
+    
+    for (int i = 0; i < 3; i++) {
+        add_text_params[i].name = safe_strdup(add_text_params[i].name);
+        add_text_params[i].type = safe_strdup(add_text_params[i].type);
+        add_text_params[i].description = safe_strdup(add_text_params[i].description);
+    }
+    
+    if (register_single_vector_tool(registry, "vector_db_add_text", 
+                                   "Add text content to index by generating embeddings", add_text_params, 3) != 0) {
         return -1;
     }
     
@@ -676,5 +696,97 @@ int execute_vector_db_search_tool_call(const ToolCall *tool_call, ToolResult *re
     
     free(query.data);
     free(index_name);
+    return 0;
+}
+
+int execute_vector_db_add_text_tool_call(const ToolCall *tool_call, ToolResult *result) {
+    if (tool_call == NULL || result == NULL) return -1;
+    
+    result->tool_call_id = safe_strdup(tool_call->id);
+    if (result->tool_call_id == NULL) return -1;
+    
+    char *index_name = extract_string_param(tool_call->arguments, "index_name");
+    char *text = extract_string_param(tool_call->arguments, "text");
+    char *metadata = extract_string_param(tool_call->arguments, "metadata");
+    
+    if (index_name == NULL || text == NULL) {
+        result->result = safe_strdup("{\"success\": false, \"error\": \"Missing required parameters\"}");
+        result->success = 0;
+        free(index_name);
+        free(text);
+        free(metadata);
+        return 0;
+    }
+    
+    // Get API key from environment
+    const char *api_key = getenv("OPENAI_API_KEY");
+    if (api_key == NULL) {
+        result->result = safe_strdup("{\"success\": false, \"error\": \"OPENAI_API_KEY not set\"}");
+        result->success = 0;
+        free(index_name);
+        free(text);
+        free(metadata);
+        return 0;
+    }
+    
+    // Initialize embeddings configuration
+    embeddings_config_t embeddings_config;
+    if (embeddings_init(&embeddings_config, NULL, api_key, NULL) != 0) {
+        result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to initialize embeddings\"}");
+        result->success = 0;
+        free(index_name);
+        free(text);
+        free(metadata);
+        return 0;
+    }
+    
+    // Get embedding for the text
+    embedding_vector_t embedding;
+    if (embeddings_get_vector(&embeddings_config, text, &embedding) != 0) {
+        result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to get embedding from OpenAI\"}");
+        result->success = 0;
+        embeddings_cleanup(&embeddings_config);
+        free(index_name);
+        free(text);
+        free(metadata);
+        return 0;
+    }
+    
+    // Convert to vector_t format
+    vector_t vec = {
+        .data = embedding.data,
+        .dimension = embedding.dimension
+    };
+    
+    vector_db_t *db = get_or_create_vector_db();
+    
+    // Auto-generate label based on current index size
+    size_t label = vector_db_get_index_size(db, index_name);
+    
+    // Add vector to database
+    vector_db_error_t err = vector_db_add_vector(db, index_name, &vec, label);
+    
+    char response[1024];
+    if (err == VECTOR_DB_OK) {
+        snprintf(response, sizeof(response), 
+                "{\"success\": true, \"label\": %zu, \"message\": \"Text embedded and added successfully\", \"dimension\": %zu, \"text_preview\": \"%.50s...\"}", 
+                label, embedding.dimension, text);
+        result->success = 1;
+    } else {
+        snprintf(response, sizeof(response), 
+                "{\"success\": false, \"error\": \"%s\"}", 
+                vector_db_error_string(err));
+        result->success = 0;
+    }
+    
+    result->result = safe_strdup(response);
+    
+    // Cleanup
+    embeddings_free_vector(&embedding);
+    embeddings_cleanup(&embeddings_config);
+    free(index_name);
+    free(text);
+    free(metadata);
+    
     return 0;
 }

@@ -22,8 +22,8 @@ void test_register_vector_db_tool(void) {
     int result = register_vector_db_tool(&registry);
     TEST_ASSERT_EQUAL_INT(0, result);
     
-    // Should have registered 8 tools
-    TEST_ASSERT_EQUAL_INT(8, registry.function_count);
+    // Should have registered 9 tools
+    TEST_ASSERT_EQUAL_INT(9, registry.function_count);
     
     // Check tool names
     const char *expected_tools[] = {
@@ -34,10 +34,11 @@ void test_register_vector_db_tool(void) {
         "vector_db_update_vector",
         "vector_db_delete_vector",
         "vector_db_get_vector",
-        "vector_db_search"
+        "vector_db_search",
+        "vector_db_add_text"
     };
     
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < 9; i++) {
         TEST_ASSERT_EQUAL_STRING(expected_tools[i], registry.functions[i].name);
     }
     
@@ -422,6 +423,81 @@ void test_vector_db_error_handling(void) {
     free(invalid_dim_result.result);
 }
 
+void test_vector_db_add_text(void) {
+    // Skip test if OPENAI_API_KEY is not set
+    if (getenv("OPENAI_API_KEY") == NULL) {
+        TEST_IGNORE_MESSAGE("OPENAI_API_KEY not set, skipping test_vector_db_add_text");
+        return;
+    }
+    
+    // First create an index with appropriate dimension for text embeddings
+    ToolCall create_call = {
+        .id = "create_id",
+        .name = "vector_db_create_index",
+        .arguments = "{\"index_name\": \"text_test_index\", \"dimension\": 1536}"  // text-embedding-3-small dimension
+    };
+    
+    ToolResult create_result = {0};
+    execute_vector_db_create_index_tool_call(&create_call, &create_result);
+    TEST_ASSERT_EQUAL_INT(1, create_result.success);
+    free(create_result.tool_call_id);
+    free(create_result.result);
+    
+    // Now add text to the index
+    ToolCall add_text_call = {
+        .id = "add_text_id",
+        .name = "vector_db_add_text",
+        .arguments = "{\"index_name\": \"text_test_index\", \"text\": \"This is a test document about machine learning and AI.\"}"
+    };
+    
+    ToolResult add_result = {0};
+    int exec_result = execute_vector_db_add_text_tool_call(&add_text_call, &add_result);
+    
+    TEST_ASSERT_EQUAL_INT(0, exec_result);
+    TEST_ASSERT_NOT_NULL(add_result.result);
+    TEST_ASSERT_EQUAL_INT(1, add_result.success);
+    TEST_ASSERT_TRUE(strstr(add_result.result, "\"success\": true") != NULL);
+    TEST_ASSERT_TRUE(strstr(add_result.result, "\"label\": 0") != NULL);
+    TEST_ASSERT_TRUE(strstr(add_result.result, "Text embedded and added successfully") != NULL);
+    TEST_ASSERT_TRUE(strstr(add_result.result, "\"dimension\": 1536") != NULL);
+    
+    free(add_result.tool_call_id);
+    free(add_result.result);
+    
+    // Clean up
+    ToolCall delete_call = {
+        .id = "delete_id",
+        .name = "vector_db_delete_index",
+        .arguments = "{\"index_name\": \"text_test_index\"}"
+    };
+    
+    ToolResult delete_result = {0};
+    execute_vector_db_delete_index_tool_call(&delete_call, &delete_result);
+    free(delete_result.tool_call_id);
+    free(delete_result.result);
+}
+
+void test_vector_db_add_text_error_handling(void) {
+    // Test missing required parameters
+    ToolCall bad_call = {
+        .id = "bad_id",
+        .name = "vector_db_add_text",
+        .arguments = "{\"index_name\": \"test_index\"}"  // Missing text
+    };
+    
+    ToolResult bad_result = {0};
+    int exec_result = execute_vector_db_add_text_tool_call(&bad_call, &bad_result);
+    
+    TEST_ASSERT_EQUAL_INT(0, exec_result);
+    TEST_ASSERT_NOT_NULL(bad_result.result);
+    TEST_ASSERT_EQUAL_INT(0, bad_result.success);
+    TEST_ASSERT_TRUE(strstr(bad_result.result, "\"success\": false") != NULL);
+    TEST_ASSERT_TRUE(strstr(bad_result.result, "Missing required parameters") != NULL);
+    
+    free(bad_result.tool_call_id);
+    free(bad_result.result);
+}
+
 int main(void) {
     UNITY_BEGIN();
     
@@ -436,6 +512,8 @@ int main(void) {
     RUN_TEST(test_vector_db_delete_vector);
     RUN_TEST(test_vector_db_delete_index);
     RUN_TEST(test_vector_db_error_handling);
+    RUN_TEST(test_vector_db_add_text);
+    RUN_TEST(test_vector_db_add_text_error_handling);
     
     return UNITY_END();
 }

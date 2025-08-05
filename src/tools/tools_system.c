@@ -811,6 +811,8 @@ int execute_tool_call(const ToolRegistry *registry, const ToolCall *tool_call, T
                 exec_result = execute_vector_db_get_vector_tool_call(tool_call, result);
             } else if (strcmp(tool_call->name, "vector_db_search") == 0) {
                 exec_result = execute_vector_db_search_tool_call(tool_call, result);
+            } else if (strcmp(tool_call->name, "vector_db_add_text") == 0) {
+                exec_result = execute_vector_db_add_text_tool_call(tool_call, result);
             } else {
                 // Tool found in registry but no implementation provided
                 result->result = strdup("Error: Tool execution not implemented");

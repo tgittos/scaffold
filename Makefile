@@ -56,7 +56,8 @@ TOOL_SOURCES := $(SRCDIR)/tools/tools_system.c \
 # Provider sources
 PROVIDER_SOURCES := $(SRCDIR)/llm/providers/openai_provider.c \
                     $(SRCDIR)/llm/providers/anthropic_provider.c \
-                    $(SRCDIR)/llm/providers/local_ai_provider.c
+                    $(SRCDIR)/llm/providers/local_ai_provider.c \
+                    $(SRCDIR)/llm/embeddings.c
 
 # Model sources
 MODEL_SOURCES := $(SRCDIR)/llm/model_capabilities.c \
@@ -101,7 +102,7 @@ TEST_ENV_SOURCES = $(TESTDIR)/utils/test_env_loader.c $(SRCDIR)/utils/env_loader
 TEST_ENV_OBJECTS = $(TEST_ENV_SOURCES:.c=.o)
 TEST_ENV_TARGET = $(TESTDIR)/test_env_loader
 
-TEST_OUTPUT_C_SOURCES = $(TESTDIR)/utils/test_output_formatter.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/tools/vector_db_tool.c $(DB_C_SOURCES) $(SRCDIR)/utils/json_utils.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(TESTDIR)/unity/unity.c
+TEST_OUTPUT_C_SOURCES = $(TESTDIR)/utils/test_output_formatter.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/tools/vector_db_tool.c $(DB_C_SOURCES) $(SRCDIR)/utils/json_utils.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(SRCDIR)/llm/embeddings.c $(SRCDIR)/network/http_client.c $(TESTDIR)/unity/unity.c
 TEST_OUTPUT_CPP_SOURCES = $(DB_CPP_SOURCES)
 TEST_OUTPUT_OBJECTS = $(TEST_OUTPUT_C_SOURCES:.c=.o) $(TEST_OUTPUT_CPP_SOURCES:.cpp=.o)
 TEST_OUTPUT_TARGET = $(TESTDIR)/test_output_formatter
@@ -114,27 +115,27 @@ TEST_CONVERSATION_SOURCES = $(TESTDIR)/session/test_conversation_tracker.c $(SRC
 TEST_CONVERSATION_OBJECTS = $(TEST_CONVERSATION_SOURCES:.c=.o)
 TEST_CONVERSATION_TARGET = $(TESTDIR)/test_conversation_tracker
 
-TEST_TOOLS_C_SOURCES = $(TESTDIR)/tools/test_tools_system.c $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/tools/vector_db_tool.c $(DB_C_SOURCES) $(SRCDIR)/utils/json_utils.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(TESTDIR)/unity/unity.c
+TEST_TOOLS_C_SOURCES = $(TESTDIR)/tools/test_tools_system.c $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/tools/vector_db_tool.c $(DB_C_SOURCES) $(SRCDIR)/utils/json_utils.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(SRCDIR)/llm/embeddings.c $(SRCDIR)/network/http_client.c $(TESTDIR)/unity/unity.c
 TEST_TOOLS_CPP_SOURCES = $(DB_CPP_SOURCES)
 TEST_TOOLS_OBJECTS = $(TEST_TOOLS_C_SOURCES:.c=.o) $(TEST_TOOLS_CPP_SOURCES:.cpp=.o)
 TEST_TOOLS_TARGET = $(TESTDIR)/test_tools_system
 
-TEST_SHELL_C_SOURCES = $(TESTDIR)/tools/test_shell_tool.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/tools/vector_db_tool.c $(DB_C_SOURCES) $(SRCDIR)/utils/json_utils.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(TESTDIR)/unity/unity.c
+TEST_SHELL_C_SOURCES = $(TESTDIR)/tools/test_shell_tool.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/tools/vector_db_tool.c $(DB_C_SOURCES) $(SRCDIR)/utils/json_utils.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(SRCDIR)/llm/embeddings.c $(SRCDIR)/network/http_client.c $(TESTDIR)/unity/unity.c
 TEST_SHELL_CPP_SOURCES = $(DB_CPP_SOURCES)
 TEST_SHELL_OBJECTS = $(TEST_SHELL_C_SOURCES:.c=.o) $(TEST_SHELL_CPP_SOURCES:.cpp=.o)
 TEST_SHELL_TARGET = $(TESTDIR)/test_shell_tool
 
-TEST_FILE_C_SOURCES = $(TESTDIR)/tools/test_file_tools.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/tools/vector_db_tool.c $(DB_C_SOURCES) $(SRCDIR)/utils/json_utils.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(TESTDIR)/unity/unity.c
+TEST_FILE_C_SOURCES = $(TESTDIR)/tools/test_file_tools.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/tools/vector_db_tool.c $(DB_C_SOURCES) $(SRCDIR)/utils/json_utils.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(SRCDIR)/llm/embeddings.c $(SRCDIR)/network/http_client.c $(TESTDIR)/unity/unity.c
 TEST_FILE_CPP_SOURCES = $(DB_CPP_SOURCES)
 TEST_FILE_OBJECTS = $(TEST_FILE_C_SOURCES:.c=.o) $(TEST_FILE_CPP_SOURCES:.cpp=.o)
 TEST_FILE_TARGET = $(TESTDIR)/test_file_tools
 
-TEST_SMART_FILE_C_SOURCES = $(TESTDIR)/tools/test_smart_file_tools.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/tools/vector_db_tool.c $(DB_C_SOURCES) $(SRCDIR)/utils/json_utils.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(TESTDIR)/unity/unity.c
+TEST_SMART_FILE_C_SOURCES = $(TESTDIR)/tools/test_smart_file_tools.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/tools/vector_db_tool.c $(DB_C_SOURCES) $(SRCDIR)/utils/json_utils.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(SRCDIR)/llm/embeddings.c $(SRCDIR)/network/http_client.c $(TESTDIR)/unity/unity.c
 TEST_SMART_FILE_CPP_SOURCES = $(DB_CPP_SOURCES)
 TEST_SMART_FILE_OBJECTS = $(TEST_SMART_FILE_C_SOURCES:.c=.o) $(TEST_SMART_FILE_CPP_SOURCES:.cpp=.o)
 TEST_SMART_FILE_TARGET = $(TESTDIR)/test_smart_file_tools
 
-TEST_RALPH_C_SOURCES = $(TESTDIR)/core/test_ralph.c $(TESTDIR)/mock_api_server.c $(SRCDIR)/core/ralph.c $(SRCDIR)/network/http_client.c $(SRCDIR)/utils/env_loader.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/network/api_common.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/tools/vector_db_tool.c $(DB_C_SOURCES) $(SRCDIR)/utils/json_utils.c $(SRCDIR)/session/token_manager.c $(SRCDIR)/llm/llm_provider.c $(SRCDIR)/llm/providers/openai_provider.c $(SRCDIR)/llm/providers/anthropic_provider.c $(SRCDIR)/llm/providers/local_ai_provider.c $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(TESTDIR)/unity/unity.c
+TEST_RALPH_C_SOURCES = $(TESTDIR)/core/test_ralph.c $(TESTDIR)/mock_api_server.c $(SRCDIR)/core/ralph.c $(SRCDIR)/network/http_client.c $(SRCDIR)/utils/env_loader.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/network/api_common.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/tools/vector_db_tool.c $(DB_C_SOURCES) $(SRCDIR)/utils/json_utils.c $(SRCDIR)/session/token_manager.c $(SRCDIR)/llm/llm_provider.c $(SRCDIR)/llm/providers/openai_provider.c $(SRCDIR)/llm/providers/anthropic_provider.c $(SRCDIR)/llm/providers/local_ai_provider.c $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(SRCDIR)/llm/embeddings.c $(TESTDIR)/unity/unity.c
 TEST_RALPH_CPP_SOURCES = $(DB_CPP_SOURCES)
 TEST_RALPH_OBJECTS = $(TEST_RALPH_C_SOURCES:.c=.o) $(TEST_RALPH_CPP_SOURCES:.cpp=.o)
 TEST_RALPH_TARGET = $(TESTDIR)/test_ralph
@@ -149,7 +150,7 @@ TEST_TODO_TOOL_SOURCES = $(TESTDIR)/tools/test_todo_tool.c $(SRCDIR)/tools/todo_
 TEST_TODO_TOOL_OBJECTS = $(TEST_TODO_TOOL_SOURCES:.c=.o)
 TEST_TODO_TOOL_TARGET = $(TESTDIR)/test_todo_tool
 
-TEST_VECTOR_DB_TOOL_C_SOURCES = $(TESTDIR)/tools/test_vector_db_tool.c $(SRCDIR)/tools/vector_db_tool.c $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/db/vector_db.c $(SRCDIR)/utils/json_utils.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(TESTDIR)/unity/unity.c
+TEST_VECTOR_DB_TOOL_C_SOURCES = $(TESTDIR)/tools/test_vector_db_tool.c $(SRCDIR)/tools/vector_db_tool.c $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/db/vector_db.c $(SRCDIR)/utils/json_utils.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(SRCDIR)/llm/embeddings.c $(SRCDIR)/network/http_client.c $(TESTDIR)/unity/unity.c
 TEST_VECTOR_DB_TOOL_CPP_SOURCES = $(SRCDIR)/db/hnswlib_wrapper.cpp
 TEST_VECTOR_DB_TOOL_OBJECTS = $(TEST_VECTOR_DB_TOOL_C_SOURCES:.c=.o) $(TEST_VECTOR_DB_TOOL_CPP_SOURCES:.cpp=.o)
 TEST_VECTOR_DB_TOOL_TARGET = $(TESTDIR)/test_vector_db_tool
@@ -163,17 +164,17 @@ TEST_CONVERSATION_COMPACTOR_SOURCES = $(TESTDIR)/session/test_conversation_compa
 TEST_CONVERSATION_COMPACTOR_OBJECTS = $(TEST_CONVERSATION_COMPACTOR_SOURCES:.c=.o)
 TEST_CONVERSATION_COMPACTOR_TARGET = $(TESTDIR)/test_conversation_compactor
 
-TEST_INCOMPLETE_TASK_BUG_C_SOURCES = $(TESTDIR)/core/test_incomplete_task_bug.c $(SRCDIR)/core/ralph.c $(SRCDIR)/network/http_client.c $(SRCDIR)/utils/env_loader.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/network/api_common.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/tools/vector_db_tool.c $(DB_C_SOURCES) $(SRCDIR)/utils/json_utils.c $(SRCDIR)/session/token_manager.c $(SRCDIR)/llm/llm_provider.c $(SRCDIR)/llm/providers/openai_provider.c $(SRCDIR)/llm/providers/anthropic_provider.c $(SRCDIR)/llm/providers/local_ai_provider.c $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(TESTDIR)/unity/unity.c
+TEST_INCOMPLETE_TASK_BUG_C_SOURCES = $(TESTDIR)/core/test_incomplete_task_bug.c $(SRCDIR)/core/ralph.c $(SRCDIR)/network/http_client.c $(SRCDIR)/utils/env_loader.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/network/api_common.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/tools/vector_db_tool.c $(DB_C_SOURCES) $(SRCDIR)/utils/json_utils.c $(SRCDIR)/session/token_manager.c $(SRCDIR)/llm/llm_provider.c $(SRCDIR)/llm/providers/openai_provider.c $(SRCDIR)/llm/providers/anthropic_provider.c $(SRCDIR)/llm/providers/local_ai_provider.c $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(SRCDIR)/llm/embeddings.c $(TESTDIR)/unity/unity.c
 TEST_INCOMPLETE_TASK_BUG_CPP_SOURCES = $(DB_CPP_SOURCES)
 TEST_INCOMPLETE_TASK_BUG_OBJECTS = $(TEST_INCOMPLETE_TASK_BUG_C_SOURCES:.c=.o) $(TEST_INCOMPLETE_TASK_BUG_CPP_SOURCES:.cpp=.o)
 TEST_INCOMPLETE_TASK_BUG_TARGET = $(TESTDIR)/test_incomplete_task_bug
 
-TEST_MODEL_TOOLS_C_SOURCES = $(TESTDIR)/llm/test_model_tools.c $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/tools/tools_system.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/tools/vector_db_tool.c $(DB_C_SOURCES) $(SRCDIR)/utils/json_utils.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(TESTDIR)/unity/unity.c
+TEST_MODEL_TOOLS_C_SOURCES = $(TESTDIR)/llm/test_model_tools.c $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/tools/tools_system.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/tools/vector_db_tool.c $(DB_C_SOURCES) $(SRCDIR)/utils/json_utils.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(SRCDIR)/llm/embeddings.c $(SRCDIR)/network/http_client.c $(TESTDIR)/unity/unity.c
 TEST_MODEL_TOOLS_CPP_SOURCES = $(DB_CPP_SOURCES)
 TEST_MODEL_TOOLS_OBJECTS = $(TEST_MODEL_TOOLS_C_SOURCES:.c=.o) $(TEST_MODEL_TOOLS_CPP_SOURCES:.cpp=.o)
 TEST_MODEL_TOOLS_TARGET = $(TESTDIR)/test_model_tools
 
-TEST_MESSAGES_ARRAY_BUG_C_SOURCES = $(TESTDIR)/network/test_messages_array_bug.c $(SRCDIR)/network/api_common.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/utils/json_utils.c $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/tools/tools_system.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/tools/vector_db_tool.c $(DB_C_SOURCES) $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(TESTDIR)/unity/unity.c
+TEST_MESSAGES_ARRAY_BUG_C_SOURCES = $(TESTDIR)/network/test_messages_array_bug.c $(SRCDIR)/network/api_common.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/utils/json_utils.c $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/tools/tools_system.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/tools/vector_db_tool.c $(DB_C_SOURCES) $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(SRCDIR)/llm/embeddings.c $(SRCDIR)/network/http_client.c $(TESTDIR)/unity/unity.c
 TEST_MESSAGES_ARRAY_BUG_CPP_SOURCES = $(DB_CPP_SOURCES)
 TEST_MESSAGES_ARRAY_BUG_OBJECTS = $(TEST_MESSAGES_ARRAY_BUG_C_SOURCES:.c=.o) $(TEST_MESSAGES_ARRAY_BUG_CPP_SOURCES:.cpp=.o)
 TEST_MESSAGES_ARRAY_BUG_TARGET = $(TESTDIR)/test_messages_array_bug
@@ -287,8 +288,8 @@ $(TEST_HTTP_TARGET): $(TEST_HTTP_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_
 $(TEST_ENV_TARGET): $(TEST_ENV_OBJECTS)
 	$(CC) -o $@ $(TEST_ENV_OBJECTS)
 
-$(TEST_OUTPUT_TARGET): $(TEST_OUTPUT_OBJECTS)
-	$(CXX) -o $@ $(TEST_OUTPUT_OBJECTS) -lpthread
+$(TEST_OUTPUT_TARGET): $(TEST_OUTPUT_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
+	$(CXX) -o $@ $(TEST_OUTPUT_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) -lpthread
 
 $(TEST_PROMPT_TARGET): $(TEST_PROMPT_OBJECTS)
 	$(CC) -o $@ $(TEST_PROMPT_OBJECTS)
@@ -296,17 +297,17 @@ $(TEST_PROMPT_TARGET): $(TEST_PROMPT_OBJECTS)
 $(TEST_CONVERSATION_TARGET): $(TEST_CONVERSATION_OBJECTS)
 	$(CC) -o $@ $(TEST_CONVERSATION_OBJECTS)
 
-$(TEST_TOOLS_TARGET): $(TEST_TOOLS_OBJECTS)
-	$(CXX) -o $@ $(TEST_TOOLS_OBJECTS) -lpthread
+$(TEST_TOOLS_TARGET): $(TEST_TOOLS_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
+	$(CXX) -o $@ $(TEST_TOOLS_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) -lpthread
 
-$(TEST_SHELL_TARGET): $(TEST_SHELL_OBJECTS)
-	$(CXX) -o $@ $(TEST_SHELL_OBJECTS) -lpthread
+$(TEST_SHELL_TARGET): $(TEST_SHELL_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
+	$(CXX) -o $@ $(TEST_SHELL_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) -lpthread
 
-$(TEST_FILE_TARGET): $(TEST_FILE_OBJECTS)
-	$(CXX) -o $@ $(TEST_FILE_OBJECTS) -lpthread
+$(TEST_FILE_TARGET): $(TEST_FILE_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
+	$(CXX) -o $@ $(TEST_FILE_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) -lpthread
 
-$(TEST_SMART_FILE_TARGET): $(TEST_SMART_FILE_OBJECTS)
-	$(CXX) -o $@ $(TEST_SMART_FILE_OBJECTS) -lpthread
+$(TEST_SMART_FILE_TARGET): $(TEST_SMART_FILE_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
+	$(CXX) -o $@ $(TEST_SMART_FILE_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) -lpthread
 
 $(TEST_RALPH_TARGET): $(TEST_RALPH_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
 	$(CXX) $(LDFLAGS) -o $@ $(TEST_RALPH_OBJECTS) $(RALPH_TEST_LIBS)
@@ -317,8 +318,8 @@ $(TEST_TODO_MANAGER_TARGET): $(TEST_TODO_MANAGER_OBJECTS)
 $(TEST_TODO_TOOL_TARGET): $(TEST_TODO_TOOL_OBJECTS)
 	$(CC) -o $@ $(TEST_TODO_TOOL_OBJECTS)
 
-$(TEST_VECTOR_DB_TOOL_TARGET): $(TEST_VECTOR_DB_TOOL_OBJECTS) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
-	$(CXX) -o $@ $(TEST_VECTOR_DB_TOOL_OBJECTS) -lpthread -lm
+$(TEST_VECTOR_DB_TOOL_TARGET): $(TEST_VECTOR_DB_TOOL_OBJECTS) $(HNSWLIB_DIR)/hnswlib/hnswlib.h $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
+	$(CXX) -o $@ $(TEST_VECTOR_DB_TOOL_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) -lpthread -lm
 
 
 $(TEST_TOKEN_MANAGER_TARGET): $(TEST_TOKEN_MANAGER_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
@@ -330,11 +331,11 @@ $(TEST_CONVERSATION_COMPACTOR_TARGET): $(TEST_CONVERSATION_COMPACTOR_OBJECTS) $(
 $(TEST_INCOMPLETE_TASK_BUG_TARGET): $(TEST_INCOMPLETE_TASK_BUG_OBJECTS) $(EMBEDDED_LINKS_HEADER) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
 	$(CXX) -o $@ $(TEST_INCOMPLETE_TASK_BUG_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) -lpthread
 
-$(TEST_MODEL_TOOLS_TARGET): $(TEST_MODEL_TOOLS_OBJECTS) $(EMBEDDED_LINKS_HEADER)
-	$(CXX) -o $@ $(TEST_MODEL_TOOLS_OBJECTS) -lpthread
+$(TEST_MODEL_TOOLS_TARGET): $(TEST_MODEL_TOOLS_OBJECTS) $(EMBEDDED_LINKS_HEADER) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
+	$(CXX) -o $@ $(TEST_MODEL_TOOLS_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) -lpthread
 
-$(TEST_MESSAGES_ARRAY_BUG_TARGET): $(TEST_MESSAGES_ARRAY_BUG_OBJECTS) $(EMBEDDED_LINKS_HEADER)
-	$(CXX) -o $@ $(TEST_MESSAGES_ARRAY_BUG_OBJECTS) -lpthread
+$(TEST_MESSAGES_ARRAY_BUG_TARGET): $(TEST_MESSAGES_ARRAY_BUG_OBJECTS) $(EMBEDDED_LINKS_HEADER) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
+	$(CXX) -o $@ $(TEST_MESSAGES_ARRAY_BUG_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) -lpthread
 
 $(TEST_VECTOR_DB_TARGET): $(TEST_VECTOR_DB_OBJECTS) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
 	$(CXX) -o $@ $(TEST_VECTOR_DB_OBJECTS) -lpthread -lm
