@@ -1,5 +1,7 @@
 #include "links_tool.h"
 #include "embedded_links.h"
+#include "memory_tool.h"
+#include "json_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -215,6 +217,47 @@ int execute_links_tool_call(const ToolCall *tool_call, ToolResult *result) {
         // Success - return the text content
         result->result = content;
         result->success = 1;
+        
+        // Optionally store important web content in memory
+        // Create a summary of the fetched content for memory storage
+        size_t content_len = strlen(content);
+        if (content_len > 200) {  // Only store if content is substantial
+            char summary[512];
+            // Take first 200 chars as summary
+            snprintf(summary, sizeof(summary), "Web content from %s: %.200s...", url, content);
+            
+            // Create memory storage request
+            ToolCall memory_call = {
+                .id = "auto_web_memory",
+                .name = "remember",
+                .arguments = NULL
+            };
+            
+            // Build the memory arguments
+            char* escaped_summary = json_escape_string(summary);
+            char* escaped_url = json_escape_string(url);
+            if (escaped_summary && escaped_url) {
+                size_t args_len = strlen(escaped_summary) + strlen(escaped_url) + 256;
+                memory_call.arguments = malloc(args_len);
+                if (memory_call.arguments) {
+                    snprintf(memory_call.arguments, args_len,
+                        "{\"content\": \"%s\", \"type\": \"web_content\", \"source\": \"%s\", \"importance\": \"normal\"}",
+                        escaped_summary, escaped_url);
+                    
+                    // Execute memory storage (ignore result - this is optional)
+                    ToolResult memory_result = {0};
+                    execute_remember_tool_call(&memory_call, &memory_result);
+                    
+                    // Clean up memory result
+                    if (memory_result.result) free(memory_result.result);
+                    if (memory_result.tool_call_id) free(memory_result.tool_call_id);
+                    
+                    free(memory_call.arguments);
+                }
+                free(escaped_summary);
+                free(escaped_url);
+            }
+        }
     } else {
         // Error fetching URL
         char error_msg[512];

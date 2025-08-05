@@ -5,6 +5,7 @@
 #include "links_tool.h"
 #include "todo_tool.h"
 #include "vector_db_tool.h"
+#include "memory_tool.h"
 #include "output_formatter.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -813,6 +814,10 @@ int execute_tool_call(const ToolRegistry *registry, const ToolCall *tool_call, T
                 exec_result = execute_vector_db_search_tool_call(tool_call, result);
             } else if (strcmp(tool_call->name, "vector_db_add_text") == 0) {
                 exec_result = execute_vector_db_add_text_tool_call(tool_call, result);
+            } else if (strcmp(tool_call->name, "remember") == 0) {
+                exec_result = execute_remember_tool_call(tool_call, result);
+            } else if (strcmp(tool_call->name, "recall_memories") == 0) {
+                exec_result = execute_recall_memories_tool_call(tool_call, result);
             } else {
                 // Tool found in registry but no implementation provided
                 result->result = strdup("Error: Tool execution not implemented");
@@ -937,6 +942,11 @@ int register_builtin_tools(ToolRegistry *registry) {
     
     // Register vector DB CRUD tool
     if (register_vector_db_tool(registry) != 0) {
+        return -1;
+    }
+    
+    // Register memory tools
+    if (register_memory_tools(registry) != 0) {
         return -1;
     }
     

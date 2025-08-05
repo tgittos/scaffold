@@ -12,6 +12,7 @@
 #include "conversation_compactor.h"
 #include "session_manager.h"
 #include "model_capabilities.h"
+#include "memory_tool.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -45,6 +46,50 @@ char* ralph_build_anthropic_json_payload(const char* model, const char* system_p
     return build_json_payload_common(model, system_prompt, conversation, user_message,
                                     "max_tokens", max_tokens, tools,
                                     format_anthropic_message, 1);
+}
+
+// Helper function to retrieve relevant memories based on user message
+static char* retrieve_relevant_memories(const char* query) {
+    if (query == NULL || strlen(query) == 0) return NULL;
+    
+    // Create a tool call to recall memories
+    ToolCall memory_call = {
+        .id = "internal_memory_recall",
+        .name = "recall_memories",
+        .arguments = NULL
+    };
+    
+    // Build arguments JSON
+    char* escaped_query = json_escape_string(query);
+    if (escaped_query == NULL) return NULL;
+    
+    size_t args_len = strlen(escaped_query) + 64;
+    memory_call.arguments = malloc(args_len);
+    if (memory_call.arguments == NULL) {
+        free(escaped_query);
+        return NULL;
+    }
+    
+    snprintf(memory_call.arguments, args_len, "{\"query\": \"%s\", \"k\": 3}", escaped_query);
+    free(escaped_query);
+    
+    // Execute the recall
+    ToolResult result = {0};
+    int exec_result = execute_recall_memories_tool_call(&memory_call, &result);
+    free(memory_call.arguments);
+    
+    if (exec_result != 0 || !result.success) {
+        if (result.result) free(result.result);
+        if (result.tool_call_id) free(result.tool_call_id);
+        return NULL;
+    }
+    
+    // Extract memories from result
+    char* memories = result.result ? strdup(result.result) : NULL;
+    free(result.result);
+    free(result.tool_call_id);
+    
+    return memories;
 }
 
 char* ralph_build_enhanced_system_prompt(const RalphSession* session) {
@@ -103,12 +148,34 @@ char* ralph_build_json_payload_with_todos(const RalphSession* session,
     char* enhanced_prompt = ralph_build_enhanced_system_prompt(session);
     if (enhanced_prompt == NULL) return NULL;
     
-    char* result = ralph_build_json_payload(session->session_data.config.model, enhanced_prompt,
+    // Retrieve relevant memories if there's a user message
+    char* memories = NULL;
+    char* final_prompt = enhanced_prompt;
+    
+    if (user_message != NULL && strlen(user_message) > 0) {
+        memories = retrieve_relevant_memories(user_message);
+        if (memories != NULL) {
+            // Add memories to the system prompt
+            const char* memory_section = "\n\n# Relevant Memories\n"
+                                       "The following memories may be relevant to the current conversation:\n";
+            
+            size_t new_len = strlen(enhanced_prompt) + strlen(memory_section) + strlen(memories) + 4;
+            char* prompt_with_memories = malloc(new_len);
+            if (prompt_with_memories != NULL) {
+                snprintf(prompt_with_memories, new_len, "%s%s%s\n", enhanced_prompt, memory_section, memories);
+                final_prompt = prompt_with_memories;
+                free(enhanced_prompt);
+            }
+            free(memories);
+        }
+    }
+    
+    char* result = ralph_build_json_payload(session->session_data.config.model, final_prompt,
                                           &session->session_data.conversation, user_message,
                                           session->session_data.config.max_tokens_param, max_tokens,
                                           &session->tools);
     
-    free(enhanced_prompt);
+    free(final_prompt);
     return result;
 }
 
@@ -119,11 +186,33 @@ char* ralph_build_anthropic_json_payload_with_todos(const RalphSession* session,
     char* enhanced_prompt = ralph_build_enhanced_system_prompt(session);
     if (enhanced_prompt == NULL) return NULL;
     
-    char* result = ralph_build_anthropic_json_payload(session->session_data.config.model, enhanced_prompt,
+    // Retrieve relevant memories if there's a user message
+    char* memories = NULL;
+    char* final_prompt = enhanced_prompt;
+    
+    if (user_message != NULL && strlen(user_message) > 0) {
+        memories = retrieve_relevant_memories(user_message);
+        if (memories != NULL) {
+            // Add memories to the system prompt
+            const char* memory_section = "\n\n# Relevant Memories\n"
+                                       "The following memories may be relevant to the current conversation:\n";
+            
+            size_t new_len = strlen(enhanced_prompt) + strlen(memory_section) + strlen(memories) + 4;
+            char* prompt_with_memories = malloc(new_len);
+            if (prompt_with_memories != NULL) {
+                snprintf(prompt_with_memories, new_len, "%s%s%s\n", enhanced_prompt, memory_section, memories);
+                final_prompt = prompt_with_memories;
+                free(enhanced_prompt);
+            }
+            free(memories);
+        }
+    }
+    
+    char* result = ralph_build_anthropic_json_payload(session->session_data.config.model, final_prompt,
                                                     &session->session_data.conversation, user_message,
                                                     max_tokens, &session->tools);
     
-    free(enhanced_prompt);
+    free(final_prompt);
     return result;
 }
 
