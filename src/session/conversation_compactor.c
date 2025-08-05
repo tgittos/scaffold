@@ -191,7 +191,7 @@ int generate_conversation_summary(const SessionData* session,
         const ConversationMessage* msg = &conversation->messages[i];
         
         // Format message with clear boundaries
-        char message_header[256];
+        char message_header[256] = {0};
         if (strcmp(msg->role, "tool") == 0) {
             snprintf(message_header, sizeof(message_header), 
                     "\n--- TOOL RESPONSE (%s) ---\n", 
@@ -231,6 +231,8 @@ int generate_conversation_summary(const SessionData* session,
         return -1;
     }
     
+    // Initialize the buffer to ensure it's clean
+    memset(full_prompt, 0, prompt_size);
     strcpy(full_prompt, SUMMARIZATION_PROMPT);
     strcat(full_prompt, segment_text);
     strcat(full_prompt, "\n--- END OF SEGMENT TO SUMMARIZE ---\n");
@@ -536,6 +538,9 @@ int store_conversation_segment_in_vector_db(const ConversationHistory* conversat
         return -1;
     }
     
+    // Initialize the buffer to ensure it's clean
+    memset(full_content, 0, total_size);
+    
     // Start with the summary
     strcpy(full_content, "SUMMARY: ");
     strcat(full_content, summary_content);
@@ -545,7 +550,7 @@ int store_conversation_segment_in_vector_db(const ConversationHistory* conversat
     for (int i = start_index; i <= end_index; i++) {
         const ConversationMessage* msg = &conversation->messages[i];
         
-        char message_header[256];
+        char message_header[256] = {0};
         if (strcmp(msg->role, "tool") == 0) {
             snprintf(message_header, sizeof(message_header), 
                     "\n--- TOOL RESPONSE (%s) ---\n", 

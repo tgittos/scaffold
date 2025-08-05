@@ -115,7 +115,7 @@ int session_make_api_request(const SessionData* session, const char* payload,
     *response_content = NULL;
     
     // Setup headers
-    char auth_header[512];
+    char auth_header[512] = {0};
     char anthropic_version[128] = "anthropic-version: 2023-06-01";
     char content_type[64] = "Content-Type: application/json";
     const char *headers[4] = {NULL, NULL, NULL, NULL};

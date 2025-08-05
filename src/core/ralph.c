@@ -1138,7 +1138,7 @@ int manage_conversation_tokens(RalphSession* session, const char* user_message,
     // Set background threshold based on context window size
     compact_config.background_threshold = (int)(config->context_window * 0.4f);
     
-    CompactionResult background_result;
+    CompactionResult background_result = {0};
     int background_status = background_compact_conversation(&session->session_data, &compact_config, &background_result);
     
     if (background_status == 0 && background_result.tokens_saved > 0) {
@@ -1167,7 +1167,7 @@ int manage_conversation_tokens(RalphSession* session, const char* user_message,
         int target_tokens = (int)(config->max_context_window * 0.7);
         
         // Attempt emergency compaction using the embedded SessionData
-        CompactionResult compact_result;
+        CompactionResult compact_result = {0};
         int compact_status = compact_conversation(&session->session_data, &compact_config, target_tokens, &compact_result);
         
         if (compact_status == 0 && compact_result.tokens_saved > 0) {

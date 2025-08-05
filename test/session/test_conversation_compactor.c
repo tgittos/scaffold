@@ -88,8 +88,8 @@ void test_find_compaction_segment_simple(void) {
     
     // Add messages - ensure we have enough for compaction
     for (int i = 0; i < 15; i++) {
-        char user_msg[100];
-        char assistant_msg[100];
+        char user_msg[100] = {0};
+        char assistant_msg[100] = {0};
         snprintf(user_msg, sizeof(user_msg), "User message %d", i);
         snprintf(assistant_msg, sizeof(assistant_msg), "Assistant response %d", i);
         
@@ -117,8 +117,8 @@ void test_find_compaction_segment_with_tool_messages(void) {
     
     // Add regular messages
     for (int i = 0; i < 10; i++) {
-        char user_msg[100];
-        char assistant_msg[100];
+        char user_msg[100] = {0};
+        char assistant_msg[100] = {0};
         snprintf(user_msg, sizeof(user_msg), "User message %d", i);
         snprintf(assistant_msg, sizeof(assistant_msg), "Assistant response %d", i);
         
@@ -271,8 +271,8 @@ void test_original_token_limit_bug_reproduction(void) {
     
     // Add a large conversation history that would trigger the bug
     for (int i = 0; i < 50; i++) {
-        char user_msg[500];
-        char assistant_msg[2000];
+        char user_msg[500] = {0};
+        char assistant_msg[2000] = {0};
         snprintf(user_msg, sizeof(user_msg), "User message %d with some content that adds tokens", i);
         snprintf(assistant_msg, sizeof(assistant_msg), 
                 "Long assistant response %d with technical details, code examples, "

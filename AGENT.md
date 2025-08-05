@@ -58,6 +58,13 @@ Any upstream related API errors in tests are due to **your code**, either in the
 As you work, segfaults are critical issues and must be fixed immediately when encountered. Start investigating using `valgrind`.
 Your work is not considered complete unless it is accompanied by automated unit tests and has been checked through `valgrind`.
 
+`valgrind` will sometimes fail with a SIGPIPE error if you're running timeout tests. This is ok.
+
+## Debugging
+
+You can use all normal C/C++ debug tooling on Cosmopolitan C projects. You must only remember that you need to check it against
+platform specific binaries, such as .aarch64.elf (aarch64) and .com.dbg (amd64)
+
 ## Technology
 
 - Source code is C
