@@ -4,42 +4,24 @@
 #include <string.h>
 #include <errno.h>
 
-// MuPDF headers - these will be available after we integrate MuPDF
-#ifdef HAVE_MUPDF
-#include <mupdf/fitz.h>
+// PDFio headers
+#ifdef HAVE_PDFIO
+#include <pdfio.h>
 #endif
 
 static int pdf_extractor_initialized = 0;
-#ifdef HAVE_MUPDF
-static fz_context *global_ctx = NULL;
-#endif
 
 int pdf_extractor_init(void) {
     if (pdf_extractor_initialized) {
         return 0; // Already initialized
     }
     
-#ifdef HAVE_MUPDF
-    // Initialize MuPDF context
-    global_ctx = fz_new_context(NULL, NULL, FZ_STORE_UNLIMITED);
-    if (!global_ctx) {
-        return -1;
-    }
-    
-    // Register document handlers
-    fz_try(global_ctx) {
-        fz_register_document_handlers(global_ctx);
-    }
-    fz_catch(global_ctx) {
-        fz_drop_context(global_ctx);
-        global_ctx = NULL;
-        return -1;
-    }
-    
+#ifdef HAVE_PDFIO
+    // PDFio doesn't require global initialization
     pdf_extractor_initialized = 1;
     return 0;
 #else
-    // For now, return error if MuPDF is not available
+    // Return error if PDFio is not available
     return -1;
 #endif
 }
@@ -49,11 +31,8 @@ void pdf_extractor_cleanup(void) {
         return;
     }
     
-#ifdef HAVE_MUPDF
-    if (global_ctx) {
-        fz_drop_context(global_ctx);
-        global_ctx = NULL;
-    }
+#ifdef HAVE_PDFIO
+    // PDFio doesn't require global cleanup
 #endif
     
     pdf_extractor_initialized = 0;
@@ -81,31 +60,108 @@ static pdf_extraction_result_t* create_error_result(const char* error_msg) {
     return result;
 }
 
-#ifdef HAVE_MUPDF
-static char* extract_text_from_stext_page(fz_context *ctx, fz_stext_page *stext_page) {
-    fz_buffer *buffer = NULL;
-    char *text = NULL;
+#ifdef HAVE_PDFIO
+static char* extract_text_from_page(pdfio_file_t *pdf, size_t page_num) {
+    pdfio_obj_t *page = pdfioFileGetPage(pdf, page_num);
+    if (!page) {
+        return NULL;
+    }
     
-    fz_try(ctx) {
-        buffer = fz_new_buffer(ctx, 1024);
-        fz_print_stext_page_as_text(ctx, buffer, stext_page);
-        
-        size_t len = fz_buffer_storage(ctx, buffer, NULL);
-        text = malloc(len + 1);
-        if (text) {
-            memcpy(text, fz_buffer_storage(ctx, buffer, NULL), len);
-            text[len] = '\0';
+    size_t num_streams = pdfioPageGetNumStreams(page);
+    char *full_text = NULL;
+    size_t full_text_len = 0;
+    size_t full_text_cap = 0;
+    
+    // Process all streams on the page
+    for (size_t j = 0; j < num_streams; j++) {
+        pdfio_stream_t *st = pdfioPageOpenStream(page, j, true);
+        if (!st) {
+            continue;
         }
-    }
-    fz_always(ctx) {
-        fz_drop_buffer(ctx, buffer);
-    }
-    fz_catch(ctx) {
-        free(text);
-        text = NULL;
+        
+        // Extract text tokens from the stream, based on pdfiototext.c
+        char buffer[1024];
+        bool first = true;
+        while (pdfioStreamGetToken(st, buffer, sizeof(buffer))) {
+            if (buffer[0] == '(') {
+                // Text string - extract content after the opening parenthesis
+                size_t token_len = strlen(buffer + 1);
+                if (token_len > 0) {
+                    // Add space before token if not first
+                    if (!first) {
+                        if (full_text_len >= full_text_cap) {
+                            full_text_cap = full_text_cap ? full_text_cap * 2 : 1024;
+                            char *new_text = realloc(full_text, full_text_cap + 1);
+                            if (!new_text) {
+                                free(full_text);
+                                pdfioStreamClose(st);
+                                return NULL;
+                            }
+                            full_text = new_text;
+                        }
+                        full_text[full_text_len++] = ' ';
+                    } else {
+                        first = false;
+                    }
+                    
+                    // Ensure we have enough space
+                    while (full_text_len + token_len >= full_text_cap) {
+                        full_text_cap = full_text_cap ? full_text_cap * 2 : 1024;
+                        char *new_text = realloc(full_text, full_text_cap + 1);
+                        if (!new_text) {
+                            free(full_text);
+                            pdfioStreamClose(st);
+                            return NULL;
+                        }
+                        full_text = new_text;
+                    }
+                    
+                    // Copy the token
+                    memcpy(full_text + full_text_len, buffer + 1, token_len);
+                    full_text_len += token_len;
+                }
+            } else if (!strcmp(buffer, "Td") || !strcmp(buffer, "TD") || !strcmp(buffer, "T*") || 
+                       !strcmp(buffer, "'") || !strcmp(buffer, "\"")) {
+                // Text positioning commands - add newline
+                if (!first) {
+                    if (full_text_len >= full_text_cap) {
+                        full_text_cap = full_text_cap ? full_text_cap * 2 : 1024;
+                        char *new_text = realloc(full_text, full_text_cap + 1);
+                        if (!new_text) {
+                            free(full_text);
+                            pdfioStreamClose(st);
+                            return NULL;
+                        }
+                        full_text = new_text;
+                    }
+                    full_text[full_text_len++] = '\n';
+                    first = true;
+                }
+            }
+        }
+        
+        if (!first && full_text_len > 0 && full_text[full_text_len - 1] != '\n') {
+            if (full_text_len >= full_text_cap) {
+                full_text_cap = full_text_cap ? full_text_cap * 2 : 1024;
+                char *new_text = realloc(full_text, full_text_cap + 1);
+                if (!new_text) {
+                    free(full_text);
+                    pdfioStreamClose(st);
+                    return NULL;
+                }
+                full_text = new_text;
+            }
+            full_text[full_text_len++] = '\n';
+        }
+        
+        pdfioStreamClose(st);
     }
     
-    return text;
+    if (full_text) {
+        full_text[full_text_len] = '\0';
+    }
+    
+    return full_text;
 }
 
 static pdf_extraction_result_t* pdf_extract_text_internal(const char* pdf_path, 
@@ -121,10 +177,7 @@ static pdf_extraction_result_t* pdf_extract_text_internal(const char* pdf_path,
         config = &default_config;
     }
     
-    fz_document *doc = NULL;
-    fz_page *page = NULL;
-    fz_stext_page *stext_page = NULL;
-    fz_stext_options stext_options = { 0 };
+    pdfio_file_t *pdf = NULL;
     pdf_extraction_result_t *result = NULL;
     char *full_text = NULL;
     size_t total_length = 0;
@@ -140,86 +193,64 @@ static pdf_extraction_result_t* pdf_extract_text_internal(const char* pdf_path,
     result->page_count = 0;
     result->error = NULL;
     
-    fz_try(global_ctx) {
-        // Open document
-        if (pdf_path) {
-            doc = fz_open_document(global_ctx, pdf_path);
-        } else if (pdf_data && data_size > 0) {
-            fz_stream *stream = fz_open_memory(global_ctx, pdf_data, data_size);
-            doc = fz_open_document_with_stream(global_ctx, "pdf", stream);
-            fz_drop_stream(global_ctx, stream);
-        } else {
-            fz_throw(global_ctx, FZ_ERROR_ARGUMENT, "No PDF source provided");
-        }
-        
-        if (!doc) {
-            fz_throw(global_ctx, FZ_ERROR_GENERIC, "Failed to open PDF document");
-        }
-        
-        int total_pages = fz_count_pages(global_ctx, doc);
-        int start_page = (config->start_page >= 0) ? config->start_page : 0;
-        int end_page = (config->end_page >= 0) ? config->end_page : total_pages - 1;
-        
-        // Validate page range
-        if (start_page >= total_pages) start_page = total_pages - 1;
-        if (end_page >= total_pages) end_page = total_pages - 1;
-        if (start_page > end_page) start_page = end_page;
-        
-        // Extract text from each page
-        for (int page_num = start_page; page_num <= end_page; page_num++) {
-            page = fz_load_page(global_ctx, doc, page_num);
-            if (!page) continue;
-            
-            // Create structured text page
-            stext_page = fz_new_stext_page_from_page(global_ctx, page, &stext_options);
-            if (stext_page) {
-                char *page_text = extract_text_from_stext_page(global_ctx, stext_page);
-                if (page_text) {
-                    size_t page_text_len = strlen(page_text);
-                    if (page_text_len > 0) {
-                        // Reallocate full_text to accommodate new page text
-                        size_t new_size = total_length + page_text_len + 2; // +2 for newline and null terminator
-                        char *new_full_text = realloc(full_text, new_size);
-                        if (new_full_text) {
-                            full_text = new_full_text;
-                            if (total_length > 0) {
-                                strcat(full_text + total_length, "\n");
-                                total_length++;
-                            } else {
-                                full_text[0] = '\0';
-                            }
-                            strcat(full_text + total_length, page_text);
-                            total_length += page_text_len;
-                            page_count++;
-                        }
+    // Open document
+    if (pdf_path) {
+        pdf = pdfioFileOpen(pdf_path, NULL, NULL, NULL, NULL);
+    } else if (pdf_data && data_size > 0) {
+        // PDFio doesn't support direct memory input - return error for now
+        result->error = strdup("Memory-based PDF reading not supported with PDFio");
+        return result;
+    } else {
+        result->error = strdup("No PDF source provided");
+        return result;
+    }
+    
+    if (!pdf) {
+        result->error = strdup("Failed to open PDF document");
+        return result;
+    }
+    
+    size_t total_pages = pdfioFileGetNumPages(pdf);
+    size_t start_page = (config->start_page >= 0) ? (size_t)config->start_page : 0;
+    size_t end_page = (config->end_page >= 0) ? (size_t)config->end_page : total_pages - 1;
+    
+    // Validate page range
+    if (start_page >= total_pages) start_page = total_pages - 1;
+    if (end_page >= total_pages) end_page = total_pages - 1;
+    if (start_page > end_page) start_page = end_page;
+    
+    // Extract text from each page
+    for (size_t page_num = start_page; page_num <= end_page; page_num++) {
+        char *page_text = extract_text_from_page(pdf, page_num);
+        if (page_text) {
+            size_t page_text_len = strlen(page_text);
+            if (page_text_len > 0) {
+                // Reallocate full_text to accommodate new page text
+                size_t new_size = total_length + page_text_len + 2; // +2 for newline and null terminator
+                char *new_full_text = realloc(full_text, new_size);
+                if (new_full_text) {
+                    full_text = new_full_text;
+                    if (total_length > 0) {
+                        strcat(full_text + total_length, "\n");
+                        total_length++;
+                    } else {
+                        full_text[0] = '\0';
                     }
-                    free(page_text);
+                    strcat(full_text + total_length, page_text);
+                    total_length += page_text_len;
+                    page_count++;
                 }
-                fz_drop_stext_page(global_ctx, stext_page);
-                stext_page = NULL;
             }
-            
-            fz_drop_page(global_ctx, page);
-            page = NULL;
-        }
-        
-        // Set results
-        result->text = full_text;
-        result->length = total_length;
-        result->page_count = page_count;
-        full_text = NULL; // Transfer ownership to result
-    }
-    fz_always(global_ctx) {
-        if (stext_page) fz_drop_stext_page(global_ctx, stext_page);
-        if (page) fz_drop_page(global_ctx, page);
-        if (doc) fz_drop_document(global_ctx, doc);
-    }
-    fz_catch(global_ctx) {
-        free(full_text);
-        if (result) {
-            result->error = strdup(fz_caught_message(global_ctx));
+            free(page_text);
         }
     }
+    
+    pdfioFileClose(pdf);
+    
+    // Set results
+    result->text = full_text;
+    result->length = total_length;
+    result->page_count = page_count;
     
     return result;
 }
@@ -230,11 +261,11 @@ pdf_extraction_result_t* pdf_extract_text(const char* pdf_path) {
         return create_error_result("PDF path is NULL");
     }
     
-#ifdef HAVE_MUPDF
+#ifdef HAVE_PDFIO
     pdf_extraction_config_t config = pdf_get_default_config();
     return pdf_extract_text_internal(pdf_path, NULL, 0, &config);
 #else
-    return create_error_result("MuPDF support not compiled");
+    return create_error_result("PDFio support not compiled");
 #endif
 }
 
@@ -243,11 +274,11 @@ pdf_extraction_result_t* pdf_extract_text_with_config(const char* pdf_path, cons
         return create_error_result("PDF path is NULL");
     }
     
-#ifdef HAVE_MUPDF
+#ifdef HAVE_PDFIO
     return pdf_extract_text_internal(pdf_path, NULL, 0, config);
 #else
     (void)config; // Suppress unused parameter warning
-    return create_error_result("MuPDF support not compiled");
+    return create_error_result("PDFio support not compiled");
 #endif
 }
 
@@ -256,11 +287,11 @@ pdf_extraction_result_t* pdf_extract_text_from_memory(const unsigned char* pdf_d
         return create_error_result("Invalid PDF data");
     }
     
-#ifdef HAVE_MUPDF
+#ifdef HAVE_PDFIO
     pdf_extraction_config_t config = pdf_get_default_config();
     return pdf_extract_text_internal(NULL, pdf_data, data_size, &config);
 #else
-    return create_error_result("MuPDF support not compiled");
+    return create_error_result("PDFio support not compiled");
 #endif
 }
 

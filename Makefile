@@ -22,7 +22,7 @@ BUILDDIR := build
 CURL_VERSION := 8.4.0
 MBEDTLS_VERSION := 3.5.1
 HNSWLIB_VERSION := 0.8.0
-MUPDF_VERSION := 1.24.3
+PDFIO_VERSION := 1.3.1
 ZLIB_VERSION := 1.3.1
 
 # =============================================================================
@@ -207,7 +207,7 @@ ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_HTTP_TARGET) $(TEST_ENV_TARGET) $(
 CURL_DIR = $(DEPDIR)/curl-$(CURL_VERSION)
 MBEDTLS_DIR = $(DEPDIR)/mbedtls-$(MBEDTLS_VERSION)
 HNSWLIB_DIR = $(DEPDIR)/hnswlib-$(HNSWLIB_VERSION)
-MUPDF_DIR = $(DEPDIR)/mupdf-$(MUPDF_VERSION)
+PDFIO_DIR = $(DEPDIR)/pdfio-$(PDFIO_VERSION)
 ZLIB_DIR = $(DEPDIR)/zlib-$(ZLIB_VERSION)
 
 # Dependency paths
@@ -215,15 +215,14 @@ CURL_LIB = $(CURL_DIR)/lib/.libs/libcurl.a
 MBEDTLS_LIB1 = $(MBEDTLS_DIR)/library/libmbedtls.a
 MBEDTLS_LIB2 = $(MBEDTLS_DIR)/library/libmbedx509.a  
 MBEDTLS_LIB3 = $(MBEDTLS_DIR)/library/libmbedcrypto.a
-MUPDF_LIB = $(MUPDF_DIR)/build/libmupdf.a
-MUPDF_THIRD_LIB = $(MUPDF_DIR)/build/libmupdf-third.a
+PDFIO_LIB = $(PDFIO_DIR)/libpdfio.a
 ZLIB_LIB = $(ZLIB_DIR)/libz.a
 
 # Include and library flags
-INCLUDES = -I$(CURL_DIR)/include -I$(MBEDTLS_DIR)/include -I$(HNSWLIB_DIR) -I$(MUPDF_DIR)/include -I$(ZLIB_DIR) -I$(SRCDIR) -I$(SRCDIR)/core -I$(SRCDIR)/network -I$(SRCDIR)/llm -I$(SRCDIR)/session -I$(SRCDIR)/tools -I$(SRCDIR)/utils -I$(SRCDIR)/db -I$(SRCDIR)/pdf
+INCLUDES = -I$(CURL_DIR)/include -I$(MBEDTLS_DIR)/include -I$(HNSWLIB_DIR) -I$(PDFIO_DIR) -I$(ZLIB_DIR) -I$(SRCDIR) -I$(SRCDIR)/core -I$(SRCDIR)/network -I$(SRCDIR)/llm -I$(SRCDIR)/session -I$(SRCDIR)/tools -I$(SRCDIR)/utils -I$(SRCDIR)/db -I$(SRCDIR)/pdf
 TEST_INCLUDES = $(INCLUDES) -I$(TESTDIR)/unity -I$(TESTDIR) -I$(TESTDIR)/core -I$(TESTDIR)/network -I$(TESTDIR)/llm -I$(TESTDIR)/session -I$(TESTDIR)/tools -I$(TESTDIR)/utils
-LDFLAGS = -L$(CURL_DIR)/lib/.libs -L$(MBEDTLS_DIR)/library -L$(MUPDF_DIR)/build -L$(ZLIB_DIR)
-LIBS = -lcurl -lmbedtls -lmbedx509 -lmbedcrypto $(MUPDF_LIB) $(MUPDF_THIRD_LIB) $(ZLIB_LIB) -lm
+LDFLAGS = -L$(CURL_DIR)/lib/.libs -L$(MBEDTLS_DIR)/library -L$(PDFIO_DIR) -L$(ZLIB_DIR)
+LIBS = -lcurl -lmbedtls -lmbedx509 -lmbedcrypto $(PDFIO_LIB) $(ZLIB_LIB) -lm
 RALPH_TEST_LIBS = $(LIBS) -lpthread
 
 # Bundled Links binary
@@ -238,14 +237,9 @@ $(TEST_BUNDLED_LINKS): test_bundled_links.c $(SRCDIR)/tools/tools_system.o $(SRC
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< $(SRCDIR)/tools/tools_system.o $(SRCDIR)/tools/links_tool.o $(SRCDIR)/tools/shell_tool.o $(SRCDIR)/tools/file_tools.o
 
 # Build main executable
-$(TARGET): $(EMBEDDED_LINKS_HEADER) $(OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(ZLIB_LIB) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
-	@if [ -f "$(MUPDF_LIB)" ] && [ -f "$(MUPDF_THIRD_LIB)" ]; then \
-		echo "Linking with MuPDF support"; \
-		$(CXX) $(LDFLAGS) -o $@ $(OBJECTS) $(LIBS) -lpthread; \
-	else \
-		echo "Linking without MuPDF support"; \
-		$(CXX) $(LDFLAGS) -o $@ $(OBJECTS) -lcurl -lmbedtls -lmbedx509 -lmbedcrypto $(ZLIB_LIB) -lm -lpthread; \
-	fi
+$(TARGET): $(EMBEDDED_LINKS_HEADER) $(OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(ZLIB_LIB) $(HNSWLIB_DIR)/hnswlib/hnswlib.h $(PDFIO_LIB)
+	@echo "Linking with PDFio support"
+	$(CXX) $(LDFLAGS) -o $@ $(OBJECTS) $(LIBS) -lpthread
 
 # Build bin2c tool
 $(BIN2C): build/bin2c.c
@@ -271,24 +265,14 @@ $(LINKS_BUNDLED):
 $(SRCDIR)/links_tool.o: $(SRCDIR)/links_tool.c $(EMBEDDED_LINKS_HEADER) $(HEADERS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(ZLIB_LIB) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
-# Compile PDF source files (with or without MuPDF)
-$(SRCDIR)/pdf/%.o: $(SRCDIR)/pdf/%.c $(HEADERS)
-	@if [ -f "$(MUPDF_LIB)" ] && [ -f "$(MUPDF_THIRD_LIB)" ]; then \
-		echo "Compiling $< with MuPDF support"; \
-		$(CC) $(CFLAGS) $(INCLUDES) -DHAVE_MUPDF -c $< -o $@; \
-	else \
-		echo "Compiling $< without MuPDF support"; \
-		$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@; \
-	fi
+# Compile PDF source files with PDFio
+$(SRCDIR)/pdf/%.o: $(SRCDIR)/pdf/%.c $(HEADERS) $(PDFIO_LIB)
+	@echo "Compiling $< with PDFio support"
+	$(CC) $(CFLAGS) $(INCLUDES) -DHAVE_PDFIO -c $< -o $@
 
-$(SRCDIR)/tools/pdf_tool.o: $(SRCDIR)/tools/pdf_tool.c $(HEADERS)
-	@if [ -f "$(MUPDF_LIB)" ] && [ -f "$(MUPDF_THIRD_LIB)" ]; then \
-		echo "Compiling $< with MuPDF support"; \
-		$(CC) $(CFLAGS) $(INCLUDES) -DHAVE_MUPDF -c $< -o $@; \
-	else \
-		echo "Compiling $< without MuPDF support"; \
-		$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@; \
-	fi
+$(SRCDIR)/tools/pdf_tool.o: $(SRCDIR)/tools/pdf_tool.c $(HEADERS) $(PDFIO_LIB)
+	@echo "Compiling $< with PDFio support"
+	$(CC) $(CFLAGS) $(INCLUDES) -DHAVE_PDFIO -c $< -o $@
 
 # Compile other source files
 $(SRCDIR)/%.o: $(SRCDIR)/%.c $(HEADERS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(ZLIB_LIB) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
@@ -389,28 +373,18 @@ $(TEST_MESSAGES_ARRAY_BUG_TARGET): $(TEST_MESSAGES_ARRAY_BUG_OBJECTS) $(EMBEDDED
 $(TEST_VECTOR_DB_TARGET): $(TEST_VECTOR_DB_OBJECTS) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
 	$(CXX) -o $@ $(TEST_VECTOR_DB_OBJECTS) -lpthread -lm
 
-$(TEST_PDF_EXTRACTOR_TARGET): $(TEST_PDF_EXTRACTOR_OBJECTS)
-	@if [ -f "$(MUPDF_LIB)" ] && [ -f "$(MUPDF_THIRD_LIB)" ]; then \
-		echo "Linking PDF test with MuPDF support"; \
-		$(CC) -o $@ $(TEST_PDF_EXTRACTOR_OBJECTS) $(MUPDF_LIB) $(MUPDF_THIRD_LIB) -lm; \
-	else \
-		echo "Linking PDF test without MuPDF support"; \
-		$(CC) -o $@ $(TEST_PDF_EXTRACTOR_OBJECTS) -lm; \
-	fi
+$(TEST_PDF_EXTRACTOR_TARGET): $(TEST_PDF_EXTRACTOR_OBJECTS) $(PDFIO_LIB)
+	@echo "Linking PDF test with PDFio support"
+	$(CC) -o $@ $(TEST_PDF_EXTRACTOR_OBJECTS) $(PDFIO_LIB) $(ZLIB_LIB) -lm
 
 # Compile test files
 $(TESTDIR)/%.o: $(TESTDIR)/%.c $(HEADERS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(ZLIB_LIB) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
 	$(CC) $(CFLAGS) $(TEST_INCLUDES) -c $< -o $@
 
-# Compile PDF test files (with or without MuPDF)
-$(TESTDIR)/pdf/%.o: $(TESTDIR)/pdf/%.c $(HEADERS)
-	@if [ -f "$(MUPDF_LIB)" ] && [ -f "$(MUPDF_THIRD_LIB)" ]; then \
-		echo "Compiling PDF test $< with MuPDF support"; \
-		$(CC) $(CFLAGS) $(TEST_INCLUDES) -DHAVE_MUPDF -c $< -o $@; \
-	else \
-		echo "Compiling PDF test $< without MuPDF support"; \
-		$(CC) $(CFLAGS) $(TEST_INCLUDES) -c $< -o $@; \
-	fi
+# Compile PDF test files with PDFio
+$(TESTDIR)/pdf/%.o: $(TESTDIR)/pdf/%.c $(HEADERS) $(PDFIO_LIB)
+	@echo "Compiling PDF test $< with PDFio support"
+	$(CC) $(CFLAGS) $(TEST_INCLUDES) -DHAVE_PDFIO -c $< -o $@
 
 $(TESTDIR)/unity/%.o: $(TESTDIR)/unity/%.c
 	$(CC) $(CFLAGS) $(TEST_INCLUDES) -c $< -o $@
@@ -525,21 +499,26 @@ $(ZLIB_LIB): | $(DEPDIR)
 		./configure --static && \
 	$(MAKE) CC="$(CC)"
 
-# Build MuPDF libraries
-$(MUPDF_LIB) $(MUPDF_THIRD_LIB): | $(DEPDIR)
-	@echo "Building MuPDF..."
+# Build PDFio library
+$(PDFIO_LIB): $(ZLIB_LIB) | $(DEPDIR)
+	@echo "Building PDFio..."
 	@mkdir -p $(DEPDIR)
 	cd $(DEPDIR) && \
-	if [ ! -f mupdf-$(MUPDF_VERSION)-source.tar.gz ]; then \
-		curl -L -o mupdf-$(MUPDF_VERSION)-source.tar.gz https://github.com/ArtifexSoftware/mupdf/archive/$(MUPDF_VERSION).tar.gz || \
-		wget -O mupdf-$(MUPDF_VERSION)-source.tar.gz https://github.com/ArtifexSoftware/mupdf/archive/$(MUPDF_VERSION).tar.gz; \
+	if [ ! -f pdfio-$(PDFIO_VERSION).tar.gz ]; then \
+		curl -L -o pdfio-$(PDFIO_VERSION).tar.gz https://github.com/michaelrsweet/pdfio/archive/v$(PDFIO_VERSION).tar.gz || \
+		wget -O pdfio-$(PDFIO_VERSION).tar.gz https://github.com/michaelrsweet/pdfio/archive/v$(PDFIO_VERSION).tar.gz; \
 	fi && \
-	if [ ! -d mupdf-$(MUPDF_VERSION) ]; then \
-		tar -xzf mupdf-$(MUPDF_VERSION)-source.tar.gz; \
+	if [ ! -d pdfio-$(PDFIO_VERSION) ]; then \
+		tar -xzf pdfio-$(PDFIO_VERSION).tar.gz; \
 	fi && \
-	cd mupdf-$(MUPDF_VERSION) && \
-	CC="$(CC)" CXX="$(CXX)" CFLAGS="-O2" CXXFLAGS="-O2" \
-		$(MAKE) libs
+	cd pdfio-$(PDFIO_VERSION) && \
+	if [ ! -f Makefile ]; then \
+		CC="$(CC)" AR="cosmoar" RANLIB="aarch64-linux-cosmo-ranlib" CFLAGS="-O2 -I$$(pwd)/../zlib-$(ZLIB_VERSION)" LDFLAGS="-L$$(pwd)/../zlib-$(ZLIB_VERSION)" \
+			./configure --disable-shared --enable-static; \
+	fi && \
+	if [ -f ../pdfio-ar-fix.patch ]; then patch -p0 < ../pdfio-ar-fix.patch || true; fi && \
+	CC="$(CC)" AR="cosmoar" RANLIB="aarch64-linux-cosmo-ranlib" CFLAGS="-O2 -I$$(pwd)/../zlib-$(ZLIB_VERSION)" LDFLAGS="-L$$(pwd)/../zlib-$(ZLIB_VERSION)" \
+		$(MAKE) libpdfio.a
 
 # Clean targets
 clean:

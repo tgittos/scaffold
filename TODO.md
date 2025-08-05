@@ -1,4 +1,4 @@
-- Remove MuPDF and integrate the PDFio https://www.msweet.org/pdfio/ library as a dependency. Update the Makefile to build PDFio with Cosmopolitan and link into Ralph
+- Make PDFio always compile and remove the conditional compilation
 - Write and integrate a document chunker into the vector DB tools that store web content, including PDF files. The chunker should be optimized for long-form text and PDF content
 - File searching seems to not be great. A lot of the time the LLM gets "File too large" errors, even though I'm sure the content of the file will comfortably fit into the backend LLM's context window. Investigate the handling of file searches, large files, and perform a refactor to make the agent capable of handling larger files
 - Write a model-context-protocol client module. Integrate it into the ralph client. Ensure the end user can configure MCP servers with a `ralph.config.json` file at either `~/.local/ralph` or `./ralph.config.json` similar to how Claude Code's MCP configuration works.
