@@ -8,6 +8,7 @@
 #include "todo_display.h"
 #include "debug_output.h"
 #include "api_common.h"
+#include "../llm/embeddings_service.h"
 #include "token_manager.h"
 #include "conversation_compactor.h"
 #include "session_manager.h"
@@ -360,6 +361,9 @@ int ralph_load_config(RalphSession* session) {
         // .env file is optional, just print debug message
         debug_printf("No .env file found, using environment variables or defaults\n");
     }
+    
+    // Reinitialize embeddings service with new environment variables
+    embeddings_service_reinitialize();
     
     // Try to load system prompt from PROMPT.md (optional)
     load_system_prompt(&session->session_data.config.system_prompt);

@@ -2,8 +2,9 @@
 #include "../pdf/pdf_extractor.h"
 #include "../utils/json_utils.h"
 #include "../utils/document_chunker.h"
-#include "../llm/embeddings.h"
-#include "../db/vector_db.h"
+#include "../llm/embeddings_service.h"
+#include "../db/vector_db_service.h"
+#include "../utils/common_utils.h"
 #include "vector_db_tool.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,63 +12,7 @@
 #include <sys/stat.h>
 #include <time.h>
 
-static char* safe_strdup(const char *str) {
-    if (str == NULL) return NULL;
-    return strdup(str);
-}
 
-static char* extract_string_param(const char *json, const char *param_name) {
-    char search_key[256] = {0};
-    snprintf(search_key, sizeof(search_key), "\"%s\":", param_name);
-    
-    const char *start = strstr(json, search_key);
-    if (start == NULL) {
-        return NULL;
-    }
-    
-    start += strlen(search_key);
-    while (*start == ' ' || *start == '\t') start++;
-    
-    if (*start != '"') return NULL;
-    start++; // Skip opening quote
-    
-    const char *end = start;
-    while (*end != '\0' && *end != '"') {
-        if (*end == '\\' && *(end + 1) != '\0') {
-            end += 2; // Skip escaped character
-        } else {
-            end++;
-        }
-    }
-    
-    if (*end != '"') return NULL;
-    
-    size_t len = end - start;
-    char *result = malloc(len + 1);
-    if (result == NULL) return NULL;
-    
-    memcpy(result, start, len);
-    result[len] = '\0';
-    
-    return result;
-}
-
-static int extract_number_param(const char *json, const char *param_name, int default_value) {
-    char search_key[256] = {0};
-    snprintf(search_key, sizeof(search_key), "\"%s\":", param_name);
-    
-    const char *start = strstr(json, search_key);
-    if (start == NULL) return default_value;
-    
-    start += strlen(search_key);
-    while (*start == ' ' || *start == '\t') start++;
-    
-    char *end;
-    long value = strtol(start, &end, 10);
-    if (end == start) return default_value;
-    
-    return (int)value;
-}
 
 static embeddings_config_t* get_embeddings_config(void) {
     static embeddings_config_t config = {0};
@@ -95,7 +40,7 @@ static void auto_process_pdf_for_vector_storage(const char *file_path, const cha
     }
     
     // Get vector database
-    vector_db_t *vector_db = get_global_vector_db();
+    vector_db_t *vector_db = vector_db_service_get_database();
     if (!vector_db) {
         return; // Skip if no vector DB
     }
@@ -186,9 +131,9 @@ int execute_pdf_extract_text_tool_call(const ToolCall *tool_call, ToolResult *re
     
     // Extract parameters from tool call arguments
     char *file_path = extract_string_param(tool_call->arguments, "file_path");
-    int start_page = extract_number_param(tool_call->arguments, "start_page", -1);
-    int end_page = extract_number_param(tool_call->arguments, "end_page", -1);
-    int preserve_layout = extract_number_param(tool_call->arguments, "preserve_layout", 1);
+    int start_page = (int)extract_number_param(tool_call->arguments, "start_page", -1);
+    int end_page = (int)extract_number_param(tool_call->arguments, "end_page", -1);
+    int preserve_layout = (int)extract_number_param(tool_call->arguments, "preserve_layout", 1);
     
     if (!file_path) {
         result->result = safe_strdup("{\"success\": false, \"error\": \"Missing required parameter: file_path\"}");

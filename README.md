@@ -74,12 +74,17 @@ Every interaction with Ralph is a masterclass. It explains its reasoning, teache
 ### 🔄 **Conversational Context That Never Breaks**
 Ralph remembers everything from your session. Built that authentication system two hours ago? Ralph knows exactly how it works when you want to add features. Ran into an error? Ralph remembers the solution when similar issues come up. It's like pair programming with someone who has perfect memory and infinite patience.
 
+### 🧠 **Eidetic Memory That Never Forgets**
+Ralph now has perfect, permanent memory. Every bug you've solved, every architecture decision you've made, every quirky workaround for that legacy system - Ralph remembers it all forever. It learns your coding style, remembers your team's conventions, and recalls solutions from months ago when similar problems arise. You're not just getting an AI assistant; you're getting a programming partner with photographic memory who gets smarter every time you use it.
+
 ### ⚡ **Scriptable Superpowers**
 One-shot mode means Ralph becomes part of your development infrastructure:
 - **Pre-commit hooks** that refactor code automatically
 - **CI/CD pipelines** that fix failing tests
 - **Automated code reviews** that catch issues before humans even look
 - **Documentation generators** that actually understand your code
+- **PDF processing** that extracts and indexes technical documentation
+- **Knowledge base building** that learns from your entire codebase
 - **AGENT.md support** - Define custom AI behavior with the [agent.md](https://agent.md/) specification
 
 ## Universal Compatibility
@@ -104,6 +109,9 @@ export ANTHROPIC_API_KEY=sk-ant-your-key-here
 
 # Start building the future
 ./ralph "Let's build something amazing"
+
+# Enable persistent memory and PDF processing (optional)
+# Ralph will automatically create vector databases for long-term memory
 ```
 
 ### Option 2: Build from Source
@@ -154,6 +162,7 @@ CONTEXT_WINDOW=131072
 | `MAX_TOKENS` | Max response tokens | Auto-calculated |
 | `OPENAI_API_KEY` | OpenAI API key | None |
 | `ANTHROPIC_API_KEY` | Anthropic API key | None |
+| `EMBEDDING_MODEL` | Embedding model for vector storage | `text-embedding-3-small` |
 
 ### Advanced Token Management
 
@@ -226,6 +235,45 @@ Sets up GitHub Actions, configures publishing, explains semantic versioning]
 
 **The Learning Accelerator**: Ralph doesn't just give you fish - it teaches you to fish while helping you build an entire fishing industry.
 
+### 🧠 **The "Perfect Programming Partner" Scenario**
+```bash
+$ ./ralph
+> I'm getting a weird CORS error when calling our payment API
+
+[Ralph: "I remember you had a similar CORS issue 3 months ago with the user service. 
+You fixed it by adding specific headers in the preflight response..."
+Recalls exact solution from memory]
+
+> remember that our team decided to use JWT with 15-minute expiry for security
+
+[Ralph: "Stored that security decision. I'll remember this for future authentication work."
+Permanently stores team conventions]
+
+> Why did we choose Redis over Memcached again?
+
+[Ralph: "You chose Redis because you needed pub/sub for real-time notifications and 
+data persistence for session storage. This was decided on March 15th when..."
+Recalls exact reasoning from months ago]
+
+> I'm refactoring the payment service. What patterns should I follow?
+
+[Ralph: "Based on your previous work, you prefer the Repository pattern with dependency 
+injection. You also always validate inputs with Joi schemas and use async/await with 
+proper error boundaries. Here's how you structured the user service..."
+Applies learned patterns from your past work]
+
+> This legacy PHP code is driving me insane. How did we handle this before?
+
+[Ralph: "I remember you dealt with similar legacy PHP code in the invoice system. 
+You created a wrapper service that gradually migrated functionality while maintaining 
+the existing API. Here's the exact approach..."
+Recalls solutions to similar problems]
+
+# Result: An AI partner that learns YOUR way of coding and remembers EVERYTHING
+```
+
+**The Perfect Memory**: Ralph becomes an extension of your own brain - remembering every solution, learning every pattern, and growing smarter with every interaction. It's not just AI assistance; it's AI that becomes YOU.
+
 ## Automation and Integration
 
 ### 🔄 **Git Workflow Automation**
@@ -262,6 +310,15 @@ make 2>&1 | ./ralph "Fix these build errors and explain what went wrong"
 
 # Test failure debugging
 pytest --tb=short 2>&1 | ./ralph "Debug these test failures and provide fixes"
+
+# Learn from your mistakes and successes
+./ralph "remember this regex solution for parsing email addresses - it handles edge cases the others missed"
+
+# Store team decisions permanently
+./ralph "remember we decided against microservices for this project because the team is too small"
+
+# Recall solutions from previous projects
+./ralph "What was that tricky database migration approach we used last year?"
 ```
 
 ### 🎛️ **Custom AI Behavior**
@@ -282,13 +339,13 @@ Focus on scalability, reliability, and maintainability.
 ## Why Ralph Changes Everything
 
 ### For Individual Developers
-Ralph transforms you from someone who googles "how to" into someone who just *does*. No more context switching between Stack Overflow tabs, no more deciphering cryptic error messages alone, no more getting stuck on APIs you've never used. Ralph is your 24/7 senior developer who never gets impatient with your questions.
+Ralph transforms you from someone who googles "how to" into someone who just *does*. No more context switching between Stack Overflow tabs, no more deciphering cryptic error messages alone, no more getting stuck on APIs you've never used. Ralph is your 24/7 senior developer with perfect memory who never gets impatient with your questions and learns from every mistake you make together.
 
 ### For Teams
-Ralph democratizes expertise across your entire team. Junior developers can tackle senior-level problems with Ralph's guidance. Senior developers can focus on architecture while Ralph handles the implementation details. Code reviews become collaborative learning sessions instead of gatekeeping exercises.
+Ralph democratizes expertise across your entire team while building institutional memory that never leaves. Junior developers can tackle senior-level problems with Ralph's guidance. Senior developers can focus on architecture while Ralph handles the implementation details. When team members leave, their knowledge stays in Ralph's memory. Code reviews become collaborative learning sessions that improve the entire team's collective intelligence.
 
 ### For Companies
-Ralph is the ultimate force multiplier for development velocity. It reduces onboarding time from months to weeks, turns every developer into a polyglot programmer, and ensures knowledge isn't locked in individual heads. When your entire team has access to expert-level AI assistance, innovation accelerates exponentially.
+Ralph is the ultimate force multiplier for development velocity with permanent institutional memory. It reduces onboarding time from months to weeks, turns every developer into a polyglot programmer, and ensures critical knowledge never walks out the door when employees leave. Ralph learns from every bug fix, every architecture decision, every successful pattern - building a permanent knowledge base that makes your entire organization smarter over time.
 
 ## Universal Deployment
 

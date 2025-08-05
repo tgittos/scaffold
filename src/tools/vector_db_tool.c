@@ -1,130 +1,17 @@
 #include "vector_db_tool.h"
-#include "../db/vector_db.h"
+#include "../db/vector_db_service.h"
 #include "../utils/json_utils.h"
 #include "../utils/document_chunker.h"
-#include "../llm/embeddings.h"
+#include "../llm/embeddings_service.h"
 #include "../pdf/pdf_extractor.h"
+#include "../utils/common_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 
-static vector_db_t *global_vector_db = NULL;
-
-static vector_db_t* get_or_create_vector_db(void) {
-    if (global_vector_db == NULL) {
-        global_vector_db = vector_db_create();
-    }
-    return global_vector_db;
-}
-
 vector_db_t* get_global_vector_db(void) {
-    return get_or_create_vector_db();
-}
-
-static char* safe_strdup(const char *str) {
-    if (str == NULL) return NULL;
-    return strdup(str);
-}
-
-static char* extract_string_param(const char *json, const char *param_name) {
-    char search_key[256] = {0};
-    snprintf(search_key, sizeof(search_key), "\"%s\":", param_name);
-    
-    const char *start = strstr(json, search_key);
-    if (start == NULL) {
-        return NULL;
-    }
-    
-    start += strlen(search_key);
-    while (*start == ' ' || *start == '\t') start++;
-    
-    if (*start != '"') return NULL;
-    start++; // Skip opening quote
-    
-    const char *end = start;
-    while (*end != '\0' && *end != '"') {
-        if (*end == '\\' && *(end + 1) != '\0') {
-            end += 2; // Skip escaped character
-        } else {
-            end++;
-        }
-    }
-    
-    if (*end != '"') return NULL;
-    
-    size_t len = end - start;
-    char *result = malloc(len + 1);
-    if (result == NULL) return NULL;
-    
-    memcpy(result, start, len);
-    result[len] = '\0';
-    
-    return result;
-}
-
-static double extract_number_param(const char *json, const char *param_name, double default_value) {
-    char search_key[256] = {0};
-    snprintf(search_key, sizeof(search_key), "\"%s\":", param_name);
-    
-    const char *start = strstr(json, search_key);
-    if (start == NULL) return default_value;
-    
-    start += strlen(search_key);
-    while (*start == ' ' || *start == '\t') start++;
-    
-    char *end;
-    double value = strtod(start, &end);
-    if (end == start) return default_value;
-    
-    return value;
-}
-
-static int extract_array_numbers(const char *json, const char *param_name, float **out_array, size_t *out_size) {
-    char search_key[256] = {0};
-    snprintf(search_key, sizeof(search_key), "\"%s\":", param_name);
-    
-    const char *start = strstr(json, search_key);
-    if (start == NULL) return -1;
-    
-    start += strlen(search_key);
-    while (*start == ' ' || *start == '\t') start++;
-    
-    if (*start != '[') return -1;
-    start++; // Skip '['
-    
-    // Count elements first
-    size_t count = 0;
-    const char *p = start;
-    while (*p != ']' && *p != '\0') {
-        char *end;
-        strtod(p, &end);
-        if (end > p) {
-            count++;
-            p = end;
-            while (*p == ' ' || *p == ',' || *p == '\t') p++;
-        } else {
-            p++;
-        }
-    }
-    
-    if (count == 0) return -1;
-    
-    *out_array = malloc(count * sizeof(float));
-    if (*out_array == NULL) return -1;
-    
-    *out_size = count;
-    
-    // Parse values
-    p = start;
-    for (size_t i = 0; i < count; i++) {
-        char *end;
-        (*out_array)[i] = (float)strtod(p, &end);
-        p = end;
-        while (*p == ' ' || *p == ',' || *p == '\t') p++;
-    }
-    
-    return 0;
+    return vector_db_service_get_database();
 }
 
 static int register_single_vector_tool(ToolRegistry *registry, const char *name, 
@@ -376,7 +263,7 @@ int execute_vector_db_create_index_tool_call(const ToolCall *tool_call, ToolResu
         return 0;
     }
     
-    vector_db_t *db = get_or_create_vector_db();
+    vector_db_t *db = vector_db_service_get_database();
     if (db == NULL) {
         result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to create vector database\"}");
         result->success = 0;
@@ -428,7 +315,7 @@ int execute_vector_db_delete_index_tool_call(const ToolCall *tool_call, ToolResu
         return 0;
     }
     
-    vector_db_t *db = get_or_create_vector_db();
+    vector_db_t *db = vector_db_service_get_database();
     vector_db_error_t err = vector_db_delete_index(db, index_name);
     
     char response[512];
@@ -455,7 +342,7 @@ int execute_vector_db_list_indices_tool_call(const ToolCall *tool_call, ToolResu
     result->tool_call_id = safe_strdup(tool_call->id);
     if (result->tool_call_id == NULL) return -1;
     
-    vector_db_t *db = get_or_create_vector_db();
+    vector_db_t *db = vector_db_service_get_database();
     size_t count = 0;
     char **indices = vector_db_list_indices(db, &count);
     
@@ -511,7 +398,7 @@ int execute_vector_db_add_vector_tool_call(const ToolCall *tool_call, ToolResult
         .dimension = dimension
     };
     
-    vector_db_t *db = get_or_create_vector_db();
+    vector_db_t *db = vector_db_service_get_database();
     
     // Auto-generate label based on current index size
     size_t label = vector_db_get_index_size(db, index_name);
@@ -560,7 +447,7 @@ int execute_vector_db_update_vector_tool_call(const ToolCall *tool_call, ToolRes
         .dimension = dimension
     };
     
-    vector_db_t *db = get_or_create_vector_db();
+    vector_db_t *db = vector_db_service_get_database();
     vector_db_error_t err = vector_db_update_vector(db, index_name, &vec, (size_t)label);
     
     char response[512];
@@ -597,7 +484,7 @@ int execute_vector_db_delete_vector_tool_call(const ToolCall *tool_call, ToolRes
         return 0;
     }
     
-    vector_db_t *db = get_or_create_vector_db();
+    vector_db_t *db = vector_db_service_get_database();
     vector_db_error_t err = vector_db_delete_vector(db, index_name, (size_t)label);
     
     char response[512];
@@ -633,7 +520,7 @@ int execute_vector_db_get_vector_tool_call(const ToolCall *tool_call, ToolResult
         return 0;
     }
     
-    vector_db_t *db = get_or_create_vector_db();
+    vector_db_t *db = vector_db_service_get_database();
     
     // First get dimension to allocate vector
     size_t dimension = 512; // Default, will be updated
@@ -709,7 +596,7 @@ int execute_vector_db_search_tool_call(const ToolCall *tool_call, ToolResult *re
         .dimension = dimension
     };
     
-    vector_db_t *db = get_or_create_vector_db();
+    vector_db_t *db = vector_db_service_get_database();
     search_results_t *results = vector_db_search(db, index_name, &query, (size_t)k);
     
     if (results != NULL) {
@@ -778,7 +665,7 @@ int execute_vector_db_add_text_tool_call(const ToolCall *tool_call, ToolResult *
     
     // Initialize embeddings configuration
     embeddings_config_t embeddings_config;
-    if (embeddings_init(&embeddings_config, NULL, api_key, NULL) != 0) {
+    if (embeddings_init(&embeddings_config, "text-embedding-3-small", api_key, NULL) != 0) {
         result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to initialize embeddings\"}");
         result->success = 0;
         free(index_name);
@@ -805,7 +692,7 @@ int execute_vector_db_add_text_tool_call(const ToolCall *tool_call, ToolResult *
         .dimension = embedding.dimension
     };
     
-    vector_db_t *db = get_or_create_vector_db();
+    vector_db_t *db = vector_db_service_get_database();
     
     // Auto-generate label based on current index size
     size_t label = vector_db_get_index_size(db, index_name);
@@ -893,7 +780,7 @@ int execute_vector_db_add_chunked_text_tool_call(const ToolCall *tool_call, Tool
     
     // Initialize embeddings
     embeddings_config_t embeddings_config;
-    if (embeddings_init(&embeddings_config, NULL, api_key, NULL) != 0) {
+    if (embeddings_init(&embeddings_config, "text-embedding-3-small", api_key, NULL) != 0) {
         result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to initialize embeddings\"}");
         result->success = 0;
         free_chunking_result(chunks);
@@ -903,7 +790,7 @@ int execute_vector_db_add_chunked_text_tool_call(const ToolCall *tool_call, Tool
         return 0;
     }
     
-    vector_db_t *db = get_or_create_vector_db();
+    vector_db_t *db = vector_db_service_get_database();
     size_t successful_chunks = 0;
     size_t failed_chunks = 0;
     
@@ -1036,7 +923,7 @@ int execute_vector_db_add_pdf_document_tool_call(const ToolCall *tool_call, Tool
     
     // Initialize embeddings
     embeddings_config_t embeddings_config;
-    if (embeddings_init(&embeddings_config, NULL, api_key, NULL) != 0) {
+    if (embeddings_init(&embeddings_config, "text-embedding-3-small", api_key, NULL) != 0) {
         result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to initialize embeddings\"}");
         result->success = 0;
         free_chunking_result(chunks);
@@ -1046,7 +933,7 @@ int execute_vector_db_add_pdf_document_tool_call(const ToolCall *tool_call, Tool
         return 0;
     }
     
-    vector_db_t *db = get_or_create_vector_db();
+    vector_db_t *db = vector_db_service_get_database();
     size_t successful_chunks = 0;
     size_t failed_chunks = 0;
     

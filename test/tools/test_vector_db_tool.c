@@ -22,8 +22,8 @@ void test_register_vector_db_tool(void) {
     int result = register_vector_db_tool(&registry);
     TEST_ASSERT_EQUAL_INT(0, result);
     
-    // Should have registered 9 tools
-    TEST_ASSERT_EQUAL_INT(9, registry.function_count);
+    // Should have registered 11 tools
+    TEST_ASSERT_EQUAL_INT(11, registry.function_count);
     
     // Check tool names
     const char *expected_tools[] = {
@@ -35,10 +35,12 @@ void test_register_vector_db_tool(void) {
         "vector_db_delete_vector",
         "vector_db_get_vector",
         "vector_db_search",
-        "vector_db_add_text"
+        "vector_db_add_text",
+        "vector_db_add_chunked_text",
+        "vector_db_add_pdf_document"
     };
     
-    for (int i = 0; i < 9; i++) {
+    for (int i = 0; i < 11; i++) {
         TEST_ASSERT_EQUAL_STRING(expected_tools[i], registry.functions[i].name);
     }
     

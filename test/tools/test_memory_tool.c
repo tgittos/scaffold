@@ -89,7 +89,7 @@ void test_remember_tool_no_api_key(void) {
     TEST_ASSERT_EQUAL_INT(0, exec_result);
     TEST_ASSERT_NOT_NULL(result.result);
     TEST_ASSERT_EQUAL_INT(0, result.success);
-    TEST_ASSERT_TRUE(strstr(result.result, "OPENAI_API_KEY environment variable not set") != NULL);
+    TEST_ASSERT_TRUE(strstr(result.result, "Embeddings service not configured") != NULL);
     
     free(result.tool_call_id);
     free(result.result);
@@ -165,7 +165,7 @@ void test_recall_memories_no_api_key(void) {
     TEST_ASSERT_EQUAL_INT(0, exec_result);
     TEST_ASSERT_NOT_NULL(result.result);
     TEST_ASSERT_EQUAL_INT(0, result.success);
-    TEST_ASSERT_TRUE(strstr(result.result, "OPENAI_API_KEY environment variable not set") != NULL);
+    TEST_ASSERT_TRUE(strstr(result.result, "Embeddings service not configured") != NULL);
     
     free(result.tool_call_id);
     free(result.result);

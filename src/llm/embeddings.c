@@ -1,6 +1,7 @@
 #include "embeddings.h"
 #include "../network/http_client.h"
 #include "../utils/json_utils.h"
+#include "../utils/debug_output.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,6 +30,12 @@ int embeddings_init(embeddings_config_t *config, const char *model,
 }
 
 static char* build_embeddings_request(const char *model, const char *text) {
+    if (model == NULL || text == NULL || strlen(text) == 0) {
+        fprintf(stderr, "Error: model and non-empty text parameters are required for embeddings request\n");
+        debug_printf("Debug: model=%s, text=%s\n", model ? model : "NULL", text ? text : "NULL");
+        return NULL;
+    }
+    
     JsonBuilder builder;
     if (json_builder_init(&builder) != 0) {
         return NULL;
@@ -123,15 +130,18 @@ int embeddings_get_vector(const embeddings_config_t *config, const char *text,
         return -1;
     }
     
+    debug_printf("Embeddings request JSON: %s\n", request_json);
+    
     // Set up headers
     const char *headers[10];
     int header_count = 0;
     
-    headers[header_count++] = "Content-Type: application/json";
+    // Don't add Content-Type here - http_client already adds it by default
     
     char auth_header[512];
     snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", config->api_key);
     headers[header_count++] = auth_header;
+    headers[header_count] = NULL; // Null-terminate the headers array
     
     // Make API request
     struct HTTPResponse response = {0};

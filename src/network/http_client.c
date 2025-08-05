@@ -129,6 +129,12 @@ int http_get_with_config(const char *url, const char **headers,
     int return_code = 0;
     struct curl_slist *curl_headers = NULL;
     
+    // Initialize response struct to avoid valgrind errors
+    if (response != NULL) {
+        response->data = NULL;
+        response->size = 0;
+    }
+    
     if (url == NULL || response == NULL || config == NULL) {
         fprintf(stderr, "Error: Invalid parameters\n");
         return -1;

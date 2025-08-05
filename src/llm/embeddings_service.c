@@ -1,0 +1,162 @@
+#include "embeddings_service.h"
+#include "../utils/common_utils.h"
+#include <stdlib.h>
+#include <string.h>
+#include <pthread.h>
+
+struct embeddings_service {
+    embeddings_config_t config;
+    int configured;
+    pthread_mutex_t mutex;
+};
+
+static embeddings_service_t* g_embeddings_instance = NULL;
+static pthread_once_t g_embeddings_once = PTHREAD_ONCE_INIT;
+
+static void create_embeddings_instance(void) {
+    g_embeddings_instance = malloc(sizeof(embeddings_service_t));
+    if (g_embeddings_instance == NULL) {
+        return;
+    }
+    
+    memset(g_embeddings_instance, 0, sizeof(embeddings_service_t));
+    
+    if (pthread_mutex_init(&g_embeddings_instance->mutex, NULL) != 0) {
+        free(g_embeddings_instance);
+        g_embeddings_instance = NULL;
+        return;
+    }
+    
+    // Initialize with environment variables
+    const char *api_key = getenv("OPENAI_API_KEY");
+    const char *model = getenv("EMBEDDING_MODEL");
+    const char *api_url = getenv("OPENAI_API_URL");
+    
+    if (!model) model = "text-embedding-3-small";
+    
+    if (api_key && embeddings_init(&g_embeddings_instance->config, model, api_key, api_url) == 0) {
+        g_embeddings_instance->configured = 1;
+    }
+}
+
+embeddings_service_t* embeddings_service_get_instance(void) {
+    pthread_once(&g_embeddings_once, create_embeddings_instance);
+    return g_embeddings_instance;
+}
+
+int embeddings_service_is_configured(void) {
+    embeddings_service_t* service = embeddings_service_get_instance();
+    return service != NULL && service->configured;
+}
+
+int embeddings_service_get_vector(const char *text, embedding_vector_t *embedding) {
+    if (text == NULL || embedding == NULL) {
+        return -1;
+    }
+    
+    embeddings_service_t* service = embeddings_service_get_instance();
+    if (service == NULL || !service->configured) {
+        return -1;
+    }
+    
+    pthread_mutex_lock(&service->mutex);
+    int result = embeddings_get_vector(&service->config, text, embedding);
+    pthread_mutex_unlock(&service->mutex);
+    
+    return result;
+}
+
+vector_t* embeddings_service_text_to_vector(const char *text) {
+    if (text == NULL) {
+        return NULL;
+    }
+    
+    embedding_vector_t embedding = {0};
+    if (embeddings_service_get_vector(text, &embedding) != 0) {
+        return NULL;
+    }
+    
+    vector_t* vector = malloc(sizeof(vector_t));
+    if (vector == NULL) {
+        embeddings_free_vector(&embedding);
+        return NULL;
+    }
+    
+    vector->data = embedding.data;
+    vector->dimension = embedding.dimension;
+    
+    return vector;
+}
+
+size_t embeddings_service_get_dimension(void) {
+    embeddings_service_t* service = embeddings_service_get_instance();
+    if (service == NULL || !service->configured) {
+        return 0;
+    }
+    
+    // For text-embedding-3-small, dimension is 1536
+    // This could be made configurable or queried from the service
+    return 1536;
+}
+
+const char* embeddings_service_get_model(void) {
+    embeddings_service_t* service = embeddings_service_get_instance();
+    if (service == NULL || !service->configured) {
+        return NULL;
+    }
+    
+    return service->config.model;
+}
+
+void embeddings_service_free_vector(vector_t* vector) {
+    if (vector != NULL) {
+        free(vector->data);
+        free(vector);
+    }
+}
+
+int embeddings_service_reinitialize(void) {
+    embeddings_service_t* service = embeddings_service_get_instance();
+    if (service == NULL) {
+        return -1;
+    }
+    
+    pthread_mutex_lock(&service->mutex);
+    
+    // Clean up existing configuration
+    if (service->configured) {
+        embeddings_cleanup(&service->config);
+        service->configured = 0;
+    }
+    
+    // Reinitialize with current environment variables
+    const char *api_key = getenv("OPENAI_API_KEY");
+    const char *model = getenv("EMBEDDING_MODEL");
+    const char *api_url = getenv("OPENAI_API_URL");
+    
+    if (!model) model = "text-embedding-3-small";
+    
+    if (api_key && embeddings_init(&service->config, model, api_key, api_url) == 0) {
+        service->configured = 1;
+    }
+    
+    int result = service->configured ? 0 : -1;
+    pthread_mutex_unlock(&service->mutex);
+    
+    return result;
+}
+
+void embeddings_service_cleanup(void) {
+    if (g_embeddings_instance != NULL) {
+        pthread_mutex_lock(&g_embeddings_instance->mutex);
+        if (g_embeddings_instance->configured) {
+            embeddings_cleanup(&g_embeddings_instance->config);
+            g_embeddings_instance->configured = 0;
+        }
+        pthread_mutex_unlock(&g_embeddings_instance->mutex);
+        
+        pthread_mutex_destroy(&g_embeddings_instance->mutex);
+        free(g_embeddings_instance);
+        g_embeddings_instance = NULL;
+    }
+}

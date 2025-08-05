@@ -1,7 +1,8 @@
 #include "memory_tool.h"
-#include "../db/vector_db.h"
-#include "../utils/json_utils.h"
-#include "../llm/embeddings.h"
+#include "../db/vector_db_service.h"
+#include "../llm/embeddings_service.h"
+#include "../utils/common_utils.h"
+#include "tool_result_builder.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,102 +10,21 @@
 #include <errno.h>
 
 #define MEMORY_INDEX_NAME "long_term_memory"
-#define MEMORY_DIMENSION 1536  // OpenAI text-embedding-3-small dimension
 
-static vector_db_t *global_vector_db = NULL;
 static size_t next_memory_id = 0;
 
-static vector_db_t* get_or_create_vector_db(void) {
-    if (global_vector_db == NULL) {
-        global_vector_db = vector_db_create();
-        
-        // Create memory index if it doesn't exist
-        if (!vector_db_has_index(global_vector_db, MEMORY_INDEX_NAME)) {
-            index_config_t config = {
-                .dimension = MEMORY_DIMENSION,
-                .max_elements = 100000,
-                .M = 16,
-                .ef_construction = 200,
-                .random_seed = 42,
-                .metric = "cosine"
-            };
-            vector_db_create_index(global_vector_db, MEMORY_INDEX_NAME, &config);
-        }
-    }
-    return global_vector_db;
-}
-
-static char* safe_strdup(const char *str) {
-    if (str == NULL) return NULL;
-    return strdup(str);
-}
-
-static char* extract_string_param(const char *json, const char *param_name) {
-    char search_key[256] = {0};
-    snprintf(search_key, sizeof(search_key), "\"%s\":", param_name);
-    
-    const char *start = strstr(json, search_key);
-    if (start == NULL) {
-        return NULL;
+static vector_db_error_t ensure_memory_index(void) {
+    size_t dimension = embeddings_service_get_dimension();
+    if (dimension == 0) {
+        return VECTOR_DB_ERROR_INVALID_PARAM;
     }
     
-    start += strlen(search_key);
-    while (*start == ' ' || *start == '\t') start++;
+    index_config_t config = vector_db_service_get_memory_config(dimension);
+    vector_db_error_t result = vector_db_service_ensure_index(MEMORY_INDEX_NAME, &config);
     
-    if (*start != '"') return NULL;
-    start++; // Skip opening quote
-    
-    const char *end = start;
-    while (*end != '\0' && *end != '"') {
-        if (*end == '\\' && *(end + 1) != '\0') {
-            end += 2; // Skip escaped character
-        } else {
-            end++;
-        }
-    }
-    
-    if (*end != '"') return NULL;
-    
-    size_t len = end - start;
-    char *result = malloc(len + 1);
-    if (result == NULL) return NULL;
-    
-    // Copy and handle escape sequences
-    size_t j = 0;
-    for (size_t i = 0; i < len; i++) {
-        if (start[i] == '\\' && i + 1 < len) {
-            switch (start[i + 1]) {
-                case 'n': result[j++] = '\n'; i++; break;
-                case 't': result[j++] = '\t'; i++; break;
-                case 'r': result[j++] = '\r'; i++; break;
-                case '"': result[j++] = '"'; i++; break;
-                case '\\': result[j++] = '\\'; i++; break;
-                default: result[j++] = start[i]; break;
-            }
-        } else {
-            result[j++] = start[i];
-        }
-    }
-    result[j] = '\0';
-    
+    // Free allocated metric string from config
+    free(config.metric);
     return result;
-}
-
-static double extract_number_param(const char *json, const char *param_name, double default_value) {
-    char search_key[256] = {0};
-    snprintf(search_key, sizeof(search_key), "\"%s\":", param_name);
-    
-    const char *start = strstr(json, search_key);
-    if (start == NULL) return default_value;
-    
-    start += strlen(search_key);
-    while (*start == ' ' || *start == '\t') start++;
-    
-    char *end;
-    double value = strtod(start, &end);
-    if (end == start) return default_value;
-    
-    return value;
 }
 
 static char* get_current_timestamp(void) {
@@ -144,122 +64,117 @@ static char* create_memory_metadata(const char *memory_type, const char *source,
 int execute_remember_tool_call(const ToolCall *tool_call, ToolResult *result) {
     if (tool_call == NULL || result == NULL) return -1;
     
-    result->tool_call_id = safe_strdup(tool_call->id);
-    if (result->tool_call_id == NULL) return -1;
+    // Create result builder
+    tool_result_builder_t* builder = tool_result_builder_create(tool_call->id);
+    if (builder == NULL) return -1;
     
+    // Extract parameters first to check for missing required params
     char *content = extract_string_param(tool_call->arguments, "content");
     char *memory_type = extract_string_param(tool_call->arguments, "type");
     char *source = extract_string_param(tool_call->arguments, "source");
     char *importance = extract_string_param(tool_call->arguments, "importance");
     
+    
     if (content == NULL) {
-        result->result = safe_strdup("{\"success\": false, \"error\": \"Missing required parameter: content\"}");
-        result->success = 0;
-        free(memory_type);
-        free(source);
-        free(importance);
-        return 0;
+        tool_result_builder_set_error(builder, "Missing required parameter: content");
+        ToolResult* temp_result = tool_result_builder_finalize(builder);
+        if (temp_result) {
+            *result = *temp_result;
+            free(temp_result);
+        }
+        goto cleanup;
     }
     
-    // Get API key from environment
-    const char *api_key = getenv("OPENAI_API_KEY");
-    if (api_key == NULL) {
-        result->result = safe_strdup("{\"success\": false, \"error\": \"OPENAI_API_KEY environment variable not set\"}");
-        result->success = 0;
-        free(content);
-        free(memory_type);
-        free(source);
-        free(importance);
-        return 0;
+    // Check embeddings service
+    if (!embeddings_service_is_configured()) {
+        tool_result_builder_set_error(builder, "Embeddings service not configured. OPENAI_API_KEY environment variable required");
+        ToolResult* temp_result = tool_result_builder_finalize(builder);
+        if (temp_result) {
+            *result = *temp_result;
+            free(temp_result);
+        }
+        goto cleanup;
     }
     
-    // Initialize embeddings
-    embeddings_config_t embed_config;
-    if (embeddings_init(&embed_config, "text-embedding-3-small", api_key, NULL) != 0) {
-        result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to initialize embeddings\"}");
-        result->success = 0;
-        free(content);
-        free(memory_type);
-        free(source);
-        free(importance);
-        return 0;
+    // Ensure memory index exists
+    vector_db_error_t index_err = ensure_memory_index();
+    if (index_err != VECTOR_DB_OK) {
+        tool_result_builder_set_error(builder, "Failed to initialize memory index: %s", 
+                                    vector_db_error_string(index_err));
+        ToolResult* temp_result = tool_result_builder_finalize(builder);
+        if (temp_result) {
+            *result = *temp_result;
+            free(temp_result);
+        }
+        goto cleanup;
     }
     
-    // Get embedding for content
-    embedding_vector_t embedding;
-    if (embeddings_get_vector(&embed_config, content, &embedding) != 0) {
-        result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to generate embedding\"}");
-        result->success = 0;
-        embeddings_cleanup(&embed_config);
-        free(content);
-        free(memory_type);
-        free(source);
-        free(importance);
-        return 0;
+    // Generate embedding
+    vector_t* vector = embeddings_service_text_to_vector(content);
+    if (vector == NULL) {
+        tool_result_builder_set_error(builder, "Failed to generate embedding for content");
+        ToolResult* temp_result = tool_result_builder_finalize(builder);
+        if (temp_result) {
+            *result = *temp_result;
+            free(temp_result);
+        }
+        goto cleanup;
     }
     
-    // Get or create vector DB
-    vector_db_t *db = get_or_create_vector_db();
+    // Get vector database
+    vector_db_t *db = vector_db_service_get_database();
     if (db == NULL) {
-        result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to access vector database\"}");
-        result->success = 0;
-        embeddings_free_vector(&embedding);
-        embeddings_cleanup(&embed_config);
-        free(content);
-        free(memory_type);
-        free(source);
-        free(importance);
-        return 0;
+        tool_result_builder_set_error(builder, "Failed to access vector database");
+        ToolResult* temp_result = tool_result_builder_finalize(builder);
+        if (temp_result) {
+            *result = *temp_result;
+            free(temp_result);
+        }
+        embeddings_service_free_vector(vector);
+        goto cleanup;
     }
     
     // Create metadata
     char *metadata = create_memory_metadata(memory_type, source, importance);
     if (metadata == NULL) {
-        result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to create metadata\"}");
-        result->success = 0;
-        embeddings_free_vector(&embedding);
-        embeddings_cleanup(&embed_config);
-        free(content);
-        free(memory_type);
-        free(source);
-        free(importance);
-        return 0;
+        tool_result_builder_set_error(builder, "Failed to create metadata");
+        ToolResult* temp_result = tool_result_builder_finalize(builder);
+        if (temp_result) {
+            *result = *temp_result;
+            free(temp_result);
+        }
+        embeddings_service_free_vector(vector);
+        goto cleanup;
     }
     
-    // Convert embedding to vector_t
-    vector_t vec = {
-        .data = embedding.data,
-        .dimension = embedding.dimension
-    };
-    
-    // Add vector with metadata stored at the memory_id
-    vector_db_error_t err = vector_db_add_vector(db, MEMORY_INDEX_NAME, &vec, next_memory_id - 1);
+    // Store vector
+    size_t memory_id = next_memory_id - 1;
+    vector_db_error_t err = vector_db_add_vector(db, MEMORY_INDEX_NAME, vector, memory_id);
     
     if (err == VECTOR_DB_OK) {
-        // Store the actual content and metadata separately (in a real system, this would be in a key-value store)
-        // For now, we'll include it in the success response
-        char response[2048];
-        snprintf(response, sizeof(response),
+        tool_result_builder_set_success(builder, 
             "{\"success\": true, \"memory_id\": %zu, \"message\": \"Memory stored successfully\", \"metadata\": %s}",
-            next_memory_id - 1, metadata);
-        result->result = safe_strdup(response);
-        result->success = 1;
+            memory_id, metadata);
     } else {
-        char error_msg[512];
-        snprintf(error_msg, sizeof(error_msg),
-            "{\"success\": false, \"error\": \"Failed to store memory: %s\"}",
-            vector_db_error_string(err));
-        result->result = safe_strdup(error_msg);
-        result->success = 0;
+        tool_result_builder_set_error(builder, "Failed to store memory: %s", 
+                                    vector_db_error_string(err));
+    }
+    
+    ToolResult* temp_result = tool_result_builder_finalize(builder);
+    if (temp_result) {
+        *result = *temp_result;
+        free(temp_result);
     }
     
     // Cleanup
-    embeddings_cleanup(&embed_config);
+    embeddings_service_free_vector(vector);
+    free(metadata);
+    
+cleanup:
     free(content);
     free(memory_type);
     free(source);
     free(importance);
-    free(metadata);
     
     return 0;
 }
@@ -267,69 +182,70 @@ int execute_remember_tool_call(const ToolCall *tool_call, ToolResult *result) {
 int execute_recall_memories_tool_call(const ToolCall *tool_call, ToolResult *result) {
     if (tool_call == NULL || result == NULL) return -1;
     
-    result->tool_call_id = safe_strdup(tool_call->id);
-    if (result->tool_call_id == NULL) return -1;
+    // Create result builder
+    tool_result_builder_t* builder = tool_result_builder_create(tool_call->id);
+    if (builder == NULL) return -1;
     
+    // Extract parameters first to check for missing required params
     char *query = extract_string_param(tool_call->arguments, "query");
     double k = extract_number_param(tool_call->arguments, "k", 5);
     
     if (query == NULL) {
-        result->result = safe_strdup("{\"success\": false, \"error\": \"Missing required parameter: query\"}");
-        result->success = 0;
-        return 0;
-    }
-    
-    // Get API key from environment
-    const char *api_key = getenv("OPENAI_API_KEY");
-    if (api_key == NULL) {
-        result->result = safe_strdup("{\"success\": false, \"error\": \"OPENAI_API_KEY environment variable not set\"}");
-        result->success = 0;
+        tool_result_builder_set_error(builder, "Missing required parameter: query");
+        ToolResult* temp_result = tool_result_builder_finalize(builder);
+        if (temp_result) {
+            *result = *temp_result;
+            free(temp_result);
+        }
         free(query);
         return 0;
     }
     
-    // Initialize embeddings
-    embeddings_config_t embed_config;
-    if (embeddings_init(&embed_config, "text-embedding-3-small", api_key, NULL) != 0) {
-        result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to initialize embeddings\"}");
-        result->success = 0;
+    // Check embeddings service
+    if (!embeddings_service_is_configured()) {
+        tool_result_builder_set_error(builder, "Embeddings service not configured. OPENAI_API_KEY environment variable required");
+        ToolResult* temp_result = tool_result_builder_finalize(builder);
+        if (temp_result) {
+            *result = *temp_result;
+            free(temp_result);
+        }
         free(query);
         return 0;
     }
     
-    // Get embedding for query
-    embedding_vector_t embedding;
-    if (embeddings_get_vector(&embed_config, query, &embedding) != 0) {
-        result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to generate query embedding\"}");
-        result->success = 0;
-        embeddings_cleanup(&embed_config);
+    // Generate query embedding
+    vector_t* query_vector = embeddings_service_text_to_vector(query);
+    if (query_vector == NULL) {
+        tool_result_builder_set_error(builder, "Failed to generate query embedding");
+        ToolResult* temp_result = tool_result_builder_finalize(builder);
+        if (temp_result) {
+            *result = *temp_result;
+            free(temp_result);
+        }
         free(query);
         return 0;
     }
     
-    // Get vector DB
-    vector_db_t *db = get_or_create_vector_db();
+    // Get vector database
+    vector_db_t *db = vector_db_service_get_database();
     if (db == NULL) {
-        result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to access vector database\"}");
-        result->success = 0;
-        embeddings_free_vector(&embedding);
-        embeddings_cleanup(&embed_config);
+        tool_result_builder_set_error(builder, "Failed to access vector database");
+        ToolResult* temp_result = tool_result_builder_finalize(builder);
+        if (temp_result) {
+            *result = *temp_result;
+            free(temp_result);
+        }
+        embeddings_service_free_vector(query_vector);
         free(query);
         return 0;
     }
-    
-    // Convert embedding to vector_t
-    vector_t query_vec = {
-        .data = embedding.data,
-        .dimension = embedding.dimension
-    };
     
     // Search for similar vectors
-    search_results_t *search_results = vector_db_search(db, MEMORY_INDEX_NAME, &query_vec, (size_t)k);
+    search_results_t *search_results = vector_db_search(db, MEMORY_INDEX_NAME, query_vector, (size_t)k);
     
     if (search_results == NULL || search_results->count == 0) {
-        result->result = safe_strdup("{\"success\": true, \"memories\": [], \"message\": \"No relevant memories found\"}");
-        result->success = 1;
+        tool_result_builder_set_success_json(builder, 
+            "{\"success\": true, \"memories\": [], \"message\": \"No relevant memories found\"}");
     } else {
         // Build response with memory IDs and distances
         char response[4096] = "{\"success\": true, \"memories\": [";
@@ -345,16 +261,20 @@ int execute_recall_memories_tool_call(const ToolCall *tool_call, ToolResult *res
         }
         
         strcat(response, "], \"message\": \"Found relevant memories\"}");
-        result->result = safe_strdup(response);
-        result->success = 1;
+        tool_result_builder_set_success_json(builder, response);
+    }
+    
+    ToolResult* temp_result = tool_result_builder_finalize(builder);
+    if (temp_result) {
+        *result = *temp_result;
+        free(temp_result);
     }
     
     // Cleanup
     if (search_results != NULL) {
         vector_db_free_search_results(search_results);
     }
-    embeddings_free_vector(&embedding);
-    embeddings_cleanup(&embed_config);
+    embeddings_service_free_vector(query_vector);
     free(query);
     
     return 0;

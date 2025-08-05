@@ -3,7 +3,8 @@
 #include "memory_tool.h"
 #include "json_utils.h"
 #include "../utils/pdf_processor.h"
-#include "../db/vector_db.h"
+#include "../db/vector_db_service.h"
+#include "../utils/common_utils.h"
 #include "vector_db_tool.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -213,7 +214,7 @@ int execute_links_tool_call(const ToolCall *tool_call, ToolResult *result) {
     // Check if this is a PDF URL
     if (is_pdf_url(url)) {
         // Process PDF automatically
-        vector_db_t *vector_db = get_global_vector_db();
+        vector_db_t *vector_db = vector_db_service_get_database();
         if (vector_db) {
             // Ensure we have a "documents" index for PDFs
             index_config_t index_config = {

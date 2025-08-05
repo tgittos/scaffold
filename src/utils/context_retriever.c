@@ -1,14 +1,11 @@
 #include "context_retriever.h"
-#include "../tools/vector_db_tool.h"
-#include "../llm/embeddings.h"
+#include "../db/vector_db_service.h"
+#include "../llm/embeddings_service.h"
+#include "common_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-static char* safe_strdup(const char *str) {
-    if (str == NULL) return NULL;
-    return strdup(str);
-}
 
 static context_result_t* create_error_result(const char *error_msg) {
     context_result_t *result = malloc(sizeof(context_result_t));
@@ -21,33 +18,21 @@ static context_result_t* create_error_result(const char *error_msg) {
     return result;
 }
 
-static embeddings_config_t* get_embeddings_config(void) {
-    static embeddings_config_t config = {0};
-    static int initialized = 0;
-    
-    if (!initialized) {
-        // Initialize with environment variables or defaults
-        const char *api_key = getenv("OPENAI_API_KEY");
-        const char *model = getenv("EMBEDDING_MODEL");
-        const char *api_url = getenv("OPENAI_API_URL");
-        
-        if (!model) model = "text-embedding-3-small";
-        
-        if (embeddings_init(&config, model, api_key, api_url) == 0) {
-            initialized = 1;
-        }
-    }
-    
-    return initialized ? &config : NULL;
-}
 
 context_result_t* retrieve_relevant_context(const char *user_message, size_t max_results) {
-    if (!user_message || max_results == 0) {
-        return create_error_result("Invalid parameters");
+    if (!user_message || max_results == 0 || strlen(user_message) == 0) {
+        // Return empty result for empty messages (not an error)
+        context_result_t *result = malloc(sizeof(context_result_t));
+        if (!result) return create_error_result("Memory allocation failed");
+        
+        result->items = NULL;
+        result->item_count = 0;
+        result->error = NULL;
+        return result;
     }
     
     // Get vector database
-    vector_db_t *vector_db = get_global_vector_db();
+    vector_db_t *vector_db = vector_db_service_get_database();
     if (!vector_db) {
         return create_error_result("Vector database not available");
     }
@@ -64,32 +49,22 @@ context_result_t* retrieve_relevant_context(const char *user_message, size_t max
         return result;
     }
     
-    // Get embeddings configuration
-    embeddings_config_t *embed_config = get_embeddings_config();
-    if (!embed_config) {
+    // Check embeddings service
+    if (!embeddings_service_is_configured()) {
         return create_error_result("Embeddings not configured");
     }
     
     // Generate embedding for user message
-    embedding_vector_t query_embedding = {0};
-    if (embeddings_get_vector(embed_config, user_message, &query_embedding) != 0) {
+    vector_t *query_vector = embeddings_service_text_to_vector(user_message);
+    if (!query_vector) {
         return create_error_result("Failed to generate embedding for query");
     }
     
-    // Create vector for search
-    vector_t query_vector = {
-        .data = query_embedding.data,
-        .dimension = query_embedding.dimension
-    };
-    
     // Search vector database
-    search_results_t *search_results = vector_db_search(vector_db, "documents", &query_vector, max_results);
-    
-    // Clean up query embedding (data is now owned by query_vector)
-    query_embedding.data = NULL;
-    embeddings_free_vector(&query_embedding);
+    search_results_t *search_results = vector_db_search(vector_db, "documents", query_vector, max_results);
     
     if (!search_results) {
+        embeddings_service_free_vector(query_vector);
         return create_error_result("Vector search failed");
     }
     
@@ -97,6 +72,7 @@ context_result_t* retrieve_relevant_context(const char *user_message, size_t max
     context_result_t *result = malloc(sizeof(context_result_t));
     if (!result) {
         vector_db_free_search_results(search_results);
+        embeddings_service_free_vector(query_vector);
         return create_error_result("Memory allocation failed");
     }
     
@@ -131,6 +107,7 @@ context_result_t* retrieve_relevant_context(const char *user_message, size_t max
     }
     
     vector_db_free_search_results(search_results);
+    embeddings_service_free_vector(query_vector);
     return result;
 }
 

@@ -29,19 +29,19 @@ The code base is large and has most basic functionality implemented. Use `ripgre
 
 This project is developed inside a Docker devcontainer, defined in `.devcontainer/devcontainer.json` and `.devcontainer/Dockerfile`.
 The container is pre-configured with access to the entire Cosmopolitan toolchain, including PATH configuration and environment variables.
-The container has a valid `.env` file that is configured to allow ralph to leverage real APIs
+The container has a valid `.env` file that is configured to allow ralph to leverage real APIs.
 You may use apt to install missing tooling that you need, however do not use it to install libraries as dependencies of ralph, as that will break ralph's portability.
+Run ralph with `--debug` to see all HTTP requests and data exchange from upstream LLM providers.
 
 ## Code Style
 
 Write modern, memory safe defensive portable C code. Always initialize pointers, always free memory, always check your parameters before you use them as a few examples.
-Prefer functional programming techniques as far as you can accomplish them in C. This means immutability, or isolating mutable code, functions as
-first-order entities, operating on collections over single entities, etc.
+Prefer functional programming techniques as far as you can accomplish them in C. This means immutability, or isolating mutable code, functions as first-order entities, operating on collections over single entities, etc.
 In general, prefer composition over inheretance when building complex ideas out of simple ones.
 Always observe SOLID, DRY and other clean coding principles as you work. Aggressively refactor code that is not fit for purpose.
 Try to keep functions on the shorter side, and break complex logic down into small, easily testable chunks.
-Never write TODOs, placeholder code, or anything that won't satisfy the current requirement completely. If you encounter something that you either don't want to, or can't,
-write the complete implementation of, redesign or restructure your solution to be decomposable.
+Never write TODOs, placeholder code, or anything that won't satisfy the current requirement completely. If you encounter something that you either don't want to, or can't, write the complete implementation of, redesign or restructure your solution to be decomposable.
+Prefer changing code to writing new code - we use source control, we can go back if we need. We don't want a lot of dead code littering this codebase.
 
 ## Testing
 
