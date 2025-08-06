@@ -52,9 +52,8 @@ int main(int argc, char *argv[])
         return (result == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
     } else if (argc == 1 || (argc == 2 && debug_mode)) {
         // Interactive mode
-        printf("Ralph Interactive Mode\n");
-        printf("Type 'quit' or 'exit' to end the conversation.\n");
-        printf("Press Enter on empty line to send multi-line messages.\n\n");
+        printf("\033[1mRalph\033[0m - AI Assistant\n");
+        printf("Commands: quit, exit | Ctrl+D to end\n\n");
         
         // Initialize Ralph session
         RalphSession session;
@@ -138,16 +137,15 @@ int main(int argc, char *argv[])
         return EXIT_SUCCESS;
     } else {
         // Invalid arguments
-        fprintf(stderr, "Usage: %s [--debug] [\"<message>\"]\n", argv[0]);
-        fprintf(stderr, "  No arguments: Interactive mode\n");
-        fprintf(stderr, "  With message: Single message mode\n");
-        fprintf(stderr, "  --debug: Enable debug output (pale yellow stderr)\n");
-        fprintf(stderr, "\n");
-        fprintf(stderr, "Configuration:\n");
-        fprintf(stderr, "  Ralph generates ./ralph.config.json on first run\n");
-        fprintf(stderr, "  Set OPENAI_API_KEY environment variable or edit config file\n");
-        fprintf(stderr, "  Config priority: ./ralph.config.json > ~/.local/ralph/config.json\n");
-        fprintf(stderr, "\n");
+        fprintf(stderr, "\033[1mUsage:\033[0m %s [options] [message]\n\n", argv[0]);
+        fprintf(stderr, "\033[1mModes:\033[0m\n");
+        fprintf(stderr, "  %s                    Interactive chat mode\n", argv[0]);
+        fprintf(stderr, "  %s \"question\"         Single question mode\n\n", argv[0]);
+        fprintf(stderr, "\033[1mOptions:\033[0m\n");
+        fprintf(stderr, "  --debug               Show API debug output\n\n");
+        fprintf(stderr, "\033[1mSetup:\033[0m\n");
+        fprintf(stderr, "  1. Export OPENAI_API_KEY=<your-key> or\n");
+        fprintf(stderr, "  2. Edit ./ralph.config.json after first run\n");
         fprintf(stderr, "Example: %s \"Hello, how are you?\"\n", argv[0]);
         fprintf(stderr, "Example: %s --debug \"Hello, how are you?\"\n", argv[0]);
         return EXIT_FAILURE;

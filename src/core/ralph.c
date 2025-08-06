@@ -347,10 +347,10 @@ int ralph_init_session(RalphSession* session) {
                         fprintf(stderr, "Warning: Failed to register MCP tools\n");
                     }
                 } else {
-                    fprintf(stderr, "Warning: Failed to connect to MCP servers\n");
+                    // Silent fail - MCP connection is optional
                 }
             } else {
-                fprintf(stderr, "Warning: Failed to load MCP configuration\n");
+                // Silent fail - MCP is optional
             }
         }
         // No warning if config file not found - MCP is optional
@@ -709,8 +709,21 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
         }
         
         if (parse_result != 0) {
-            fprintf(stderr, "Error: Failed to parse API response for tool loop iteration %d\n", loop_count);
-            printf("%s\n", response.data);
+            // Check for common API key errors and provide user-friendly messages
+            if (strstr(response.data, "didn't provide an API key") != NULL || 
+                strstr(response.data, "Incorrect API key") != NULL ||
+                strstr(response.data, "invalid_api_key") != NULL) {
+                fprintf(stderr, "\n❌ API key missing or invalid.\n");
+                fprintf(stderr, "   Please add your API key to ralph.config.json\n");
+            } else if (strstr(response.data, "\"error\"") != NULL) {
+                fprintf(stderr, "\n❌ API request failed during tool execution.\n");
+                if (debug_enabled) {
+                    fprintf(stderr, "Debug: %s\n", response.data);
+                }
+            } else {
+                fprintf(stderr, "Error: Failed to parse API response for tool loop iteration %d\n", loop_count);
+                printf("%s\n", response.data);
+            }
             cleanup_response(&response);
             free(post_data);
             cleanup_executed_tool_tracker(&tracker);
@@ -981,9 +994,6 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
     int result = -1;
     
     if (http_post_with_headers(session->session_data.config.api_url, post_data, headers, &response) == 0) {
-        // Clear the thinking indicator
-        fprintf(stdout, "\r\033[K");  // Move to start of line and clear it
-        fflush(stdout);
         debug_printf("Got API response: %s\n", response.data);
         // Parse the response based on API type
         ParsedResponse parsed_response;
@@ -995,13 +1005,34 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
         }
         
         if (parse_result != 0) {
-            fprintf(stderr, "Error: Failed to parse API response\n");
-            printf("%s\n", response.data);  // Fallback to raw output
+            // Clear the thinking indicator before showing error
+            fprintf(stdout, "\r\033[K");
+            fflush(stdout);
+            
+            // Check for common API key errors and provide user-friendly messages
+            if (strstr(response.data, "didn't provide an API key") != NULL || 
+                strstr(response.data, "Incorrect API key") != NULL ||
+                strstr(response.data, "invalid_api_key") != NULL) {
+                fprintf(stderr, "❌ API key missing or invalid.\n");
+                fprintf(stderr, "   Please add your API key to ralph.config.json\n");
+            } else if (strstr(response.data, "\"error\"") != NULL) {
+                fprintf(stderr, "❌ API request failed. Check your configuration.\n");
+                if (debug_enabled) {
+                    fprintf(stderr, "Debug: %s\n", response.data);
+                }
+            } else {
+                fprintf(stderr, "Error: Failed to parse API response\n");
+                printf("%s\n", response.data);  // Fallback to raw output
+            }
             cleanup_response(&response);
             free(post_data);
             curl_global_cleanup();
             return -1;
         }
+        
+        // Clear the thinking indicator on success
+        fprintf(stdout, "\r\033[K");
+        fflush(stdout);
         
         const char* message_content = parsed_response.response_content ? 
                                      parsed_response.response_content : 

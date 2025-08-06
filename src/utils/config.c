@@ -107,8 +107,7 @@ static void config_generate_default_file(void)
         }
         
         if (config_save_to_file(local_path) == 0) {
-            printf("Generated default config file: %s\n", local_path);
-            printf("Edit this file to configure your API keys and settings.\n");
+            fprintf(stderr, "[Config] Created %s (add API keys to enable)\n\n", local_path);
             return;
         }
     }
@@ -130,8 +129,7 @@ static void config_generate_default_file(void)
                 }
                 
                 if (config_save_to_file(user_config_file) == 0) {
-                    printf("Generated default config file: %s\n", user_config_file);
-                    printf("Edit this file to configure your API keys and settings.\n");
+                    fprintf(stderr, "[Config] Created %s (add API keys to enable)\n\n", user_config_file);
                 }
                 free(user_config_file);
             }
@@ -266,8 +264,10 @@ int config_save_to_file(const char *filepath)
         cJSON_AddStringToObject(json, "model", g_config->model);
     if (g_config->anthropic_api_key)
         cJSON_AddStringToObject(json, "anthropic_api_key", g_config->anthropic_api_key);
-    if (g_config->openai_api_key)
-        cJSON_AddStringToObject(json, "openai_api_key", g_config->openai_api_key);
+    
+    // Always include openai_api_key field, even if empty
+    cJSON_AddStringToObject(json, "openai_api_key", g_config->openai_api_key ? g_config->openai_api_key : "");
+    
     if (g_config->openai_api_url)
         cJSON_AddStringToObject(json, "openai_api_url", g_config->openai_api_url);
     if (g_config->embedding_model)
