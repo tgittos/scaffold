@@ -92,21 +92,28 @@ static void config_generate_default_file(void)
 {
     if (!g_config) return;
     
+    // Pre-fill API keys from environment
+    const char *env_openai_key = getenv("OPENAI_API_KEY");
+    const char *env_anthropic_key = getenv("ANTHROPIC_API_KEY");
+    
+    // Always set OpenAI key (empty string if not in env)
+    free(g_config->openai_api_key);
+    g_config->openai_api_key = strdup(env_openai_key ? env_openai_key : "");
+    
+    // Always set Anthropic key (empty string if not in env)
+    free(g_config->anthropic_api_key);
+    g_config->anthropic_api_key = strdup(env_anthropic_key ? env_anthropic_key : "");
+    
+    // Update API selection based on which keys are available
+    config_update_api_key_selection(g_config);
+    
     // Try to generate in current directory first
     const char *local_path = "./ralph.config.json";
     
     // Check if we can write to current directory
     if (access(".", W_OK) == 0) {
-        // Pre-fill OpenAI API key from environment if available
-        const char *env_openai_key = getenv("OPENAI_API_KEY");
-        if (env_openai_key) {
-            free(g_config->openai_api_key);
-            g_config->openai_api_key = strdup(env_openai_key);
-            config_update_api_key_selection(g_config);
-        }
-        
         if (config_save_to_file(local_path) == 0) {
-            fprintf(stderr, "[Config] Created %s (add API keys to enable)\n\n", local_path);
+            fprintf(stderr, "[Config] Created %s with API keys from environment\n\n", local_path);
             return;
         }
     }
@@ -119,16 +126,8 @@ static void config_generate_default_file(void)
             if (user_config_file) {
                 sprintf(user_config_file, "%s/config.json", user_config_dir);
                 
-                // Pre-fill OpenAI API key from environment if available
-                const char *env_openai_key = getenv("OPENAI_API_KEY");
-                if (env_openai_key) {
-                    free(g_config->openai_api_key);
-                    g_config->openai_api_key = strdup(env_openai_key);
-                    config_update_api_key_selection(g_config);
-                }
-                
                 if (config_save_to_file(user_config_file) == 0) {
-                    fprintf(stderr, "[Config] Created %s (add API keys to enable)\n\n", user_config_file);
+                    fprintf(stderr, "[Config] Created %s with API keys from environment\n\n", user_config_file);
                 }
                 free(user_config_file);
             }
@@ -343,6 +342,22 @@ int config_init(void)
         config_generate_default_file();
     }
     
+    // Always override with environment variables if they exist
+    const char *env_openai_key = getenv("OPENAI_API_KEY");
+    const char *env_anthropic_key = getenv("ANTHROPIC_API_KEY");
+    
+    if (env_openai_key) {
+        free(g_config->openai_api_key);
+        g_config->openai_api_key = strdup(env_openai_key);
+    }
+    
+    if (env_anthropic_key) {
+        free(g_config->anthropic_api_key);
+        g_config->anthropic_api_key = strdup(env_anthropic_key);
+    }
+    
+    // Update API selection based on available keys
+    config_update_api_key_selection(g_config);
     
     return 0;
 }

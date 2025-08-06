@@ -63,6 +63,7 @@ TOOL_SOURCES := $(SRCDIR)/tools/tools_system.c \
                 $(SRCDIR)/tools/vector_db_tool.c \
                 $(SRCDIR)/tools/memory_tool.c \
                 $(SRCDIR)/tools/pdf_tool.c \
+                $(SRCDIR)/tools/conversation_history_tool.c \
                 $(SRCDIR)/tools/tool_result_builder.c
 
 # MCP system
@@ -146,7 +147,7 @@ EMBEDDED_LINKS_HEADER := $(SRCDIR)/embedded_links.h
 
 # Common test dependencies - most tests need these core components
 COMMON_TEST_SOURCES := $(TESTDIR)/unity/unity.c
-TOOL_TEST_DEPS := $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/tools/vector_db_tool.c $(SRCDIR)/tools/memory_tool.c $(SRCDIR)/tools/pdf_tool.c $(SRCDIR)/tools/tool_result_builder.c
+TOOL_TEST_DEPS := $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/tools/vector_db_tool.c $(SRCDIR)/tools/memory_tool.c $(SRCDIR)/tools/pdf_tool.c $(SRCDIR)/tools/conversation_history_tool.c $(SRCDIR)/tools/tool_result_builder.c
 MODEL_TEST_DEPS := $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(SRCDIR)/llm/embeddings.c $(SRCDIR)/llm/embeddings_service.c
 UTIL_TEST_DEPS := $(SRCDIR)/utils/json_escape.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/utils/common_utils.c $(SRCDIR)/utils/document_chunker.c $(SRCDIR)/utils/pdf_processor.c $(SRCDIR)/utils/context_retriever.c $(SRCDIR)/utils/config.c
 COMPLEX_TEST_DEPS := $(TOOL_TEST_DEPS) $(MODEL_TEST_DEPS) $(UTIL_TEST_DEPS) $(DB_C_SOURCES) $(SRCDIR)/pdf/pdf_extractor.c $(SRCDIR)/network/http_client.c
@@ -175,6 +176,11 @@ TEST_PROMPT_TARGET = $(TESTDIR)/test_prompt_loader
 TEST_CONVERSATION_SOURCES = $(TESTDIR)/session/test_conversation_tracker.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/utils/json_escape.c $(COMMON_TEST_SOURCES)
 TEST_CONVERSATION_OBJECTS = $(TEST_CONVERSATION_SOURCES:.c=.o)
 TEST_CONVERSATION_TARGET = $(TESTDIR)/test_conversation_tracker
+
+TEST_CONVERSATION_VDB_C_SOURCES = $(TESTDIR)/session/test_conversation_vector_db.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/db/document_store.c $(SRCDIR)/db/vector_db.c $(SRCDIR)/db/metadata_store.c $(SRCDIR)/llm/embeddings.c $(SRCDIR)/llm/embeddings_service.c $(SRCDIR)/network/http_client.c $(SRCDIR)/utils/json_escape.c $(SRCDIR)/utils/env_loader.c $(SRCDIR)/utils/config.c $(SRCDIR)/utils/debug_output.c $(COMMON_TEST_SOURCES)
+TEST_CONVERSATION_VDB_CPP_SOURCES = $(DB_CPP_SOURCES)
+TEST_CONVERSATION_VDB_OBJECTS = $(TEST_CONVERSATION_VDB_C_SOURCES:.c=.o) $(TEST_CONVERSATION_VDB_CPP_SOURCES:.cpp=.o)
+TEST_CONVERSATION_VDB_TARGET = $(TESTDIR)/test_conversation_vector_db
 
 TEST_TODO_MANAGER_SOURCES = $(TESTDIR)/tools/test_todo_manager.c $(SRCDIR)/tools/todo_manager.c $(COMMON_TEST_SOURCES)
 TEST_TODO_MANAGER_OBJECTS = $(TEST_TODO_MANAGER_SOURCES:.c=.o)
@@ -290,7 +296,7 @@ TEST_DOCUMENT_STORE_OBJECTS = $(TEST_DOCUMENT_STORE_C_OBJECTS) $(TEST_DOCUMENT_S
 TEST_DOCUMENT_STORE_TARGET = $(TESTDIR)/test_document_store
 
 # Collect all test targets
-ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_ENV_TARGET) $(TEST_CONFIG_TARGET) $(TEST_PROMPT_TARGET) $(TEST_CONVERSATION_TARGET) $(TEST_TODO_MANAGER_TARGET) $(TEST_TODO_TOOL_TARGET) $(TEST_PDF_EXTRACTOR_TARGET) $(TEST_DOCUMENT_CHUNKER_TARGET) $(TEST_HTTP_TARGET) $(TEST_OUTPUT_TARGET) $(TEST_TOOLS_TARGET) $(TEST_SHELL_TARGET) $(TEST_FILE_TARGET) $(TEST_SMART_FILE_TARGET) $(TEST_VECTOR_DB_TOOL_TARGET) $(TEST_MEMORY_TOOL_TARGET) $(TEST_MEMORY_MGMT_TARGET) $(TEST_TOKEN_MANAGER_TARGET) $(TEST_CONVERSATION_COMPACTOR_TARGET) $(TEST_RALPH_TARGET) $(TEST_INCOMPLETE_TASK_BUG_TARGET) $(TEST_MODEL_TOOLS_TARGET) $(TEST_MESSAGES_ARRAY_BUG_TARGET) $(TEST_VECTOR_DB_TARGET) $(TEST_DOCUMENT_STORE_TARGET) $(TEST_MCP_CLIENT_TARGET)
+ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_ENV_TARGET) $(TEST_CONFIG_TARGET) $(TEST_PROMPT_TARGET) $(TEST_CONVERSATION_TARGET) $(TEST_CONVERSATION_VDB_TARGET) $(TEST_TODO_MANAGER_TARGET) $(TEST_TODO_TOOL_TARGET) $(TEST_PDF_EXTRACTOR_TARGET) $(TEST_DOCUMENT_CHUNKER_TARGET) $(TEST_HTTP_TARGET) $(TEST_OUTPUT_TARGET) $(TEST_TOOLS_TARGET) $(TEST_SHELL_TARGET) $(TEST_FILE_TARGET) $(TEST_SMART_FILE_TARGET) $(TEST_VECTOR_DB_TOOL_TARGET) $(TEST_MEMORY_TOOL_TARGET) $(TEST_MEMORY_MGMT_TARGET) $(TEST_TOKEN_MANAGER_TARGET) $(TEST_CONVERSATION_COMPACTOR_TARGET) $(TEST_RALPH_TARGET) $(TEST_INCOMPLETE_TASK_BUG_TARGET) $(TEST_MODEL_TOOLS_TARGET) $(TEST_MESSAGES_ARRAY_BUG_TARGET) $(TEST_VECTOR_DB_TARGET) $(TEST_DOCUMENT_STORE_TARGET) $(TEST_MCP_CLIENT_TARGET)
 
 # =============================================================================
 # BUILD RULES
@@ -355,8 +361,11 @@ $(TEST_CONFIG_TARGET): $(TEST_CONFIG_OBJECTS) $(CJSON_LIB)
 $(TEST_PROMPT_TARGET): $(TEST_PROMPT_OBJECTS)
 	$(CC) -o $@ $(TEST_PROMPT_OBJECTS)
 
-$(TEST_CONVERSATION_TARGET): $(TEST_CONVERSATION_OBJECTS) $(CJSON_LIB)
-	$(CC) -o $@ $(TEST_CONVERSATION_OBJECTS) $(CJSON_LIB)
+$(TEST_CONVERSATION_TARGET): $(TEST_CONVERSATION_OBJECTS) $(ALL_LIBS)
+	$(CXX) -o $@ test/session/test_conversation_tracker.o src/session/conversation_tracker.o $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/llm/embeddings.o src/llm/embeddings_service.o src/network/http_client.o src/utils/json_escape.o src/utils/env_loader.o src/utils/config.o src/utils/debug_output.o src/utils/common_utils.o test/unity/unity.o $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
+
+$(TEST_CONVERSATION_VDB_TARGET): $(TEST_CONVERSATION_VDB_OBJECTS) $(ALL_LIBS)
+	$(CXX) -o $@ test/session/test_conversation_vector_db.o src/session/conversation_tracker.o $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/llm/embeddings.o src/llm/embeddings_service.o src/network/http_client.o src/utils/json_escape.o src/utils/env_loader.o src/utils/config.o src/utils/debug_output.o src/utils/common_utils.o test/unity/unity.o $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
 
 $(TEST_TODO_MANAGER_TARGET): $(TEST_TODO_MANAGER_OBJECTS)
 	$(CC) -o $@ $(TEST_TODO_MANAGER_OBJECTS)
@@ -375,13 +384,13 @@ $(TEST_HTTP_TARGET): $(TEST_HTTP_OBJECTS) $(ALL_LIBS)
 	$(CC) $(LDFLAGS) -o $@ $(TEST_HTTP_OBJECTS) $(LIBS)
 
 $(TEST_OUTPUT_TARGET): $(TEST_OUTPUT_OBJECTS) $(ALL_LIBS)
-	$(CXX) -o $@ $(TEST_OUTPUT_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
+	$(CXX) -o $@ $(TEST_OUTPUT_OBJECTS) src/session/conversation_tracker.o $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
 
 $(TEST_TOOLS_TARGET): $(TEST_TOOLS_OBJECTS) $(ALL_LIBS)
-	$(CXX) -o $@ $(TEST_TOOLS_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
+	$(CXX) -o $@ $(TEST_TOOLS_OBJECTS) src/session/conversation_tracker.o $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
 
 $(TEST_SHELL_TARGET): $(TEST_SHELL_OBJECTS) $(ALL_LIBS)
-	$(CXX) -o $@ $(TEST_SHELL_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
+	$(CXX) -o $@ $(TEST_SHELL_OBJECTS) src/session/conversation_tracker.o $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
 
 $(TEST_FILE_TARGET): $(TEST_FILE_OBJECTS) $(ALL_LIBS)
 	$(CXX) -o $@ $(TEST_FILE_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
@@ -437,6 +446,7 @@ test: $(ALL_TEST_TARGETS)
 	./$(TEST_OUTPUT_TARGET)
 	./$(TEST_PROMPT_TARGET)
 	./$(TEST_CONVERSATION_TARGET)
+	./$(TEST_CONVERSATION_VDB_TARGET)
 	./$(TEST_TOOLS_TARGET)
 	./$(TEST_SHELL_TARGET)
 	./$(TEST_FILE_TARGET)
@@ -467,6 +477,7 @@ check-valgrind: $(ALL_TEST_TARGETS)
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_OUTPUT_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_PROMPT_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_CONVERSATION_TARGET).aarch64.elf
+	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_CONVERSATION_VDB_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_TOOLS_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_SHELL_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_FILE_TARGET).aarch64.elf
@@ -491,6 +502,7 @@ check-valgrind-all: $(ALL_TEST_TARGETS)
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_OUTPUT_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_PROMPT_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_CONVERSATION_TARGET).aarch64.elf
+	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_CONVERSATION_VDB_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_TOOLS_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_SHELL_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_FILE_TARGET).aarch64.elf

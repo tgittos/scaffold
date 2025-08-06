@@ -64,4 +64,24 @@ void cleanup_conversation_history(ConversationHistory *history);
  */
 void init_conversation_history(ConversationHistory *history);
 
+/**
+ * Load extended conversation history from vector database
+ * 
+ * @param history Pointer to ConversationHistory structure to populate
+ * @param days_back Number of days to look back (0 for all history)
+ * @param max_messages Maximum number of messages to retrieve
+ * @return 0 on success, -1 on failure
+ */
+int load_extended_conversation_history(ConversationHistory *history, int days_back, size_t max_messages);
+
+/**
+ * Search conversation history for relevant messages
+ * 
+ * @param query The search query text
+ * @param max_results Maximum number of results to return
+ * @return ConversationHistory structure with relevant messages, or NULL on failure
+ *         Caller must free with cleanup_conversation_history
+ */
+ConversationHistory* search_conversation_history(const char *query, size_t max_results);
+
 #endif // CONVERSATION_TRACKER_H

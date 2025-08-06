@@ -35,6 +35,7 @@ Always observe SOLID, DRY and other clean coding principles as you work. Aggress
 Try to keep functions on the shorter side, and break complex logic down into small, easily testable chunks.
 Never write TODOs, placeholder code, or anything that won't satisfy the current requirement completely. If you encounter something that you either don't want to, or can't, write the complete implementation of, redesign or restructure your solution to be decomposable.
 Prefer changing code to writing new code - we use source control, we can go back if we need. We don't want a lot of dead code littering this codebase.
+Try to delete as much code as you can (while still being productive, not destructive). Code that isn't written doesn't cause bugs. Aggressively remove dead code and remove unneded functionality during refactors.
 
 ## Testing
 
