@@ -422,7 +422,6 @@ int ralph_load_config(RalphSession* session) {
     }
     
     session->session_data.config.context_window = config->context_window;
-    session->session_data.config.max_context_window = config->max_context_window;
     session->session_data.config.max_tokens = config->max_tokens;
     
     // Determine API type and correct parameter name for max tokens
@@ -444,7 +443,6 @@ int ralph_load_config(RalphSession* session) {
             ModelCapabilities* model = detect_model_capabilities(registry, session->session_data.config.model);
             if (model && model->max_context_length > 0) {
                 session->session_data.config.context_window = model->max_context_length;
-                session->session_data.config.max_context_window = model->max_context_length;
                 debug_printf("Auto-configured context window from model capabilities: %d tokens for model %s\n",
                             model->max_context_length, session->session_data.config.model);
                 debug_printf("🔧 Auto-configured context window: %d tokens (based on %s capabilities)\n",
@@ -663,7 +661,7 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
         
         // Recalculate token allocation for this iteration
         TokenConfig token_config;
-        token_config_init(&token_config, session->session_data.config.context_window, session->session_data.config.max_context_window);
+        token_config_init(&token_config, session->session_data.config.context_window);
         TokenUsage token_usage;
         if (manage_conversation_tokens(session, "", &token_config, &token_usage) != 0) {
             fprintf(stderr, "Error: Failed to calculate token allocation for tool loop iteration %d\n", loop_count);
@@ -921,7 +919,7 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
     
     // Initialize token configuration and calculate optimal allocation
     TokenConfig token_config;
-    token_config_init(&token_config, session->session_data.config.context_window, session->session_data.config.max_context_window);
+    token_config_init(&token_config, session->session_data.config.context_window);
     
     TokenUsage token_usage;
     if (manage_conversation_tokens(session, user_message, &token_config, &token_usage) != 0) {
@@ -1212,8 +1210,8 @@ int manage_conversation_tokens(RalphSession* session, const char* user_message,
         debug_printf("Available response tokens (%d) below comfortable threshold, attempting emergency compaction\n",
                     usage->available_response_tokens);
         
-        // Calculate target token count (aim for 70% of max context window)
-        int target_tokens = (int)(config->max_context_window * 0.7);
+        // Calculate target token count (aim for 70% of context window)
+        int target_tokens = (int)(config->context_window * 0.7);
         
         // Attempt emergency compaction using the embedded SessionData
         CompactionResult compact_result = {0};

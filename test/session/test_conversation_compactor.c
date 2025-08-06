@@ -263,7 +263,7 @@ void test_cleanup_compaction_result(void) {
 void test_original_token_limit_bug_reproduction(void) {
     // Reproduce the original bug from CONVERSATION.md where agent hit 150 token limit
     TokenConfig config;
-    token_config_init(&config, 200000, 200000);  // Large context like Claude
+    token_config_init(&config, 200000);  // Large context like Claude
     
     // Test the scenario: large conversation with TodoWrite attempt
     ConversationHistory conversation = {0};
@@ -303,7 +303,7 @@ void test_original_token_limit_bug_reproduction(void) {
 
 void test_improved_token_estimation_efficiency(void) {
     TokenConfig config;
-    token_config_init(&config, 8192, 8192);
+    token_config_init(&config, 8192);
     
     // Test code content (should be more efficient)
     const char* code_text = "```python\ndef hello():\n    print('Hello world')\n```";

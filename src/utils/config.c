@@ -18,7 +18,6 @@ static void config_set_defaults(ralph_config_t *config)
     config->api_url = strdup("https://api.openai.com/v1/chat/completions");
     config->model = strdup("o4-mini-2025-04-16");
     config->context_window = 8192;
-    config->max_context_window = 8192;
     config->max_tokens = -1;
     
     // Initialize other pointers to NULL
@@ -227,11 +226,6 @@ int config_load_from_file(const char *filepath)
         g_config->context_window = item->valueint;
     }
     
-    item = cJSON_GetObjectItem(json, "max_context_window");
-    if (cJSON_IsNumber(item) && item->valueint > 0) {
-        g_config->max_context_window = item->valueint;
-    }
-    
     item = cJSON_GetObjectItem(json, "max_tokens");
     if (cJSON_IsNumber(item)) {
         g_config->max_tokens = item->valueint;
@@ -276,7 +270,6 @@ int config_save_to_file(const char *filepath)
         cJSON_AddStringToObject(json, "system_prompt", g_config->system_prompt);
     
     cJSON_AddNumberToObject(json, "context_window", g_config->context_window);
-    cJSON_AddNumberToObject(json, "max_context_window", g_config->max_context_window);
     cJSON_AddNumberToObject(json, "max_tokens", g_config->max_tokens);
     
     // Convert to string
@@ -412,11 +405,6 @@ int config_set(const char *key, const char *value)
             int parsed = atoi(value);
             if (parsed > 0) g_config->context_window = parsed;
         }
-    } else if (strcmp(key, "max_context_window") == 0) {
-        if (value) {
-            int parsed = atoi(value);
-            if (parsed > 0) g_config->max_context_window = parsed;
-        }
     } else if (strcmp(key, "max_tokens") == 0) {
         if (value) {
             int parsed = atoi(value);
@@ -465,8 +453,6 @@ int config_get_int(const char *key, int default_value)
     
     if (strcmp(key, "context_window") == 0) {
         return g_config->context_window;
-    } else if (strcmp(key, "max_context_window") == 0) {
-        return g_config->max_context_window;
     } else if (strcmp(key, "max_tokens") == 0) {
         return g_config->max_tokens;
     }

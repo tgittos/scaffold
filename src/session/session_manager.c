@@ -43,7 +43,6 @@ void session_data_copy_config(SessionData* dest, const SessionConfig* src) {
     dest->config.api_key = src->api_key ? strdup(src->api_key) : NULL;
     dest->config.system_prompt = src->system_prompt ? strdup(src->system_prompt) : NULL;
     dest->config.context_window = src->context_window;
-    dest->config.max_context_window = src->max_context_window;
     dest->config.api_type = src->api_type;
 }
 

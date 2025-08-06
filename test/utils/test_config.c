@@ -38,7 +38,6 @@ void setUp(void) {
     unsetenv("OPENAI_API_URL");
     unsetenv("EMBEDDING_MODEL");
     unsetenv("CONTEXT_WINDOW");
-    unsetenv("MAX_CONTEXT_WINDOW");
     unsetenv("MAX_TOKENS");
 }
 
@@ -69,7 +68,6 @@ void test_config_init_with_defaults(void) {
     TEST_ASSERT_EQUAL_STRING("https://api.openai.com/v1/chat/completions", config->api_url);
     TEST_ASSERT_EQUAL_STRING("o4-mini-2025-04-16", config->model);
     TEST_ASSERT_EQUAL(8192, config->context_window);
-    TEST_ASSERT_EQUAL(8192, config->max_context_window);
     TEST_ASSERT_EQUAL(-1, config->max_tokens);
 }
 
@@ -84,7 +82,6 @@ void test_config_init_with_anthropic_config(void) {
         "  \"model\": \"claude-3-sonnet-20240229\",\n"
         "  \"anthropic_api_key\": \"test-key\",\n"
         "  \"context_window\": 4096,\n"
-        "  \"max_context_window\": 4096,\n"
         "  \"max_tokens\": 1000\n"
         "}\n";
     
@@ -100,7 +97,6 @@ void test_config_init_with_anthropic_config(void) {
     TEST_ASSERT_EQUAL_STRING("test-key", config->api_key); // Should be set from anthropic_api_key
     TEST_ASSERT_EQUAL_STRING("test-key", config->anthropic_api_key);
     TEST_ASSERT_EQUAL(4096, config->context_window);
-    TEST_ASSERT_EQUAL(4096, config->max_context_window);
     TEST_ASSERT_EQUAL(1000, config->max_tokens);
     
     // Clean up

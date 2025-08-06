@@ -14,20 +14,14 @@
 #define DEFAULT_SAFETY_BUFFER_RATIO 0.02f  // 2% of context window - reduced due to better estimation
 #define DEFAULT_CHARS_PER_TOKEN 5.5f       // Modern tokenizers: ~1 token per word (4-6 chars)
 
-void token_config_init(TokenConfig* config, int context_window, int max_context_window) {
+void token_config_init(TokenConfig* config, int context_window) {
     if (config == NULL) return;
     
     config->context_window = context_window > 0 ? context_window : 8192;
-    config->max_context_window = max_context_window > 0 ? max_context_window : config->context_window;
     config->min_response_tokens = DEFAULT_MIN_RESPONSE_TOKENS;
     config->safety_buffer_base = DEFAULT_SAFETY_BUFFER_BASE;
     config->safety_buffer_ratio = DEFAULT_SAFETY_BUFFER_RATIO;
     config->chars_per_token = DEFAULT_CHARS_PER_TOKEN;
-    
-    // Ensure max_context_window is at least as large as context_window
-    if (config->max_context_window < config->context_window) {
-        config->max_context_window = config->context_window;
-    }
 }
 
 int estimate_token_count(const char* text, const TokenConfig* config) {
@@ -87,7 +81,7 @@ int get_dynamic_safety_buffer(const TokenConfig* config, int estimated_prompt_to
 int validate_token_config(const TokenConfig* config) {
     if (config == NULL) return -1;
     
-    if (config->context_window <= 0 || config->max_context_window <= 0) {
+    if (config->context_window <= 0) {
         debug_printf("Invalid context window configuration\n");
         return -1;
     }
@@ -182,15 +176,8 @@ int calculate_token_allocation(const SessionData* session, const char* user_mess
         return -1;
     }
     
-    // Start with the configured context window
+    // Use the configured context window
     int effective_context_window = config->context_window;
-    
-    // Use max_context_window if available and needed
-    if (config->max_context_window > config->context_window) {
-        effective_context_window = config->max_context_window;
-        debug_printf("Using expanded context window: %d -> %d\n", 
-                    config->context_window, effective_context_window);
-    }
     
     usage->context_window_used = effective_context_window;
     

@@ -13,7 +13,6 @@ typedef struct {
     char *embedding_model;
     char *system_prompt;
     int context_window;
-    int max_context_window;
     int max_tokens;
     
     // Configuration file paths

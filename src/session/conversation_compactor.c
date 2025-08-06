@@ -309,7 +309,7 @@ int compact_conversation_segment(ConversationHistory* conversation,
     
     // Calculate tokens saved (rough estimate)
     TokenConfig token_config;
-    token_config_init(&token_config, 8192, 8192);
+    token_config_init(&token_config, 8192);
     
     int original_tokens = 0;
     for (int i = start_index; i <= end_index; i++) {
@@ -376,7 +376,7 @@ int compact_conversation(SessionData* session,
     
     // Calculate current token usage
     TokenConfig token_config;
-    token_config_init(&token_config, session->config.context_window, session->config.max_context_window);
+    token_config_init(&token_config, session->config.context_window);
     
     int current_tokens = 0;
     for (int i = 0; i < session->conversation.count; i++) {
@@ -629,7 +629,7 @@ int background_compact_conversation(SessionData* session,
     
     // Calculate current token usage
     TokenConfig token_config;
-    token_config_init(&token_config, session->config.context_window, session->config.max_context_window);
+    token_config_init(&token_config, session->config.context_window);
     
     int current_tokens = 0;
     for (int i = 0; i < session->conversation.count; i++) {

@@ -158,7 +158,6 @@ CONTEXT_WINDOW=131072
 | `API_URL` | API endpoint URL | `https://api.openai.com/v1/chat/completions` |
 | `MODEL` | Model identifier | `gpt-4o-mini` |
 | `CONTEXT_WINDOW` | Model context window size | `8192` |
-| `MAX_CONTEXT_WINDOW` | Maximum context window allowed | Same as `CONTEXT_WINDOW` |
 | `MAX_TOKENS` | Max response tokens | Auto-calculated |
 | `OPENAI_API_KEY` | OpenAI API key | None |
 | `ANTHROPIC_API_KEY` | Anthropic API key | None |
@@ -168,7 +167,7 @@ CONTEXT_WINDOW=131072
 
 Ralph features intelligent token management that ensures models always have enough context for meaningful responses:
 
-- **Dynamic Context Window Usage**: Automatically uses `MAX_CONTEXT_WINDOW` when the conversation exceeds `CONTEXT_WINDOW`
+- **Dynamic Token Allocation**: Automatically calculates optimal token distribution based on conversation history
 - **Intelligent Safety Buffers**: Calculates safety buffers dynamically based on context complexity (5% of context window + base buffer)
 - **Conversation History Trimming**: Automatically trims older messages when context limits are reached, preserving recent tool interactions
 - **Minimum Response Guarantee**: Always reserves at least 150 tokens for model responses

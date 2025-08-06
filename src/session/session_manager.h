@@ -11,7 +11,6 @@ typedef struct {
     char* api_key;
     char* system_prompt;
     int context_window;
-    int max_context_window;
     int max_tokens;
     const char* max_tokens_param;
     int api_type;  // 0=OpenAI, 1=Anthropic, 2=Local

@@ -8,7 +8,6 @@
 // Token calculation configuration
 typedef struct {
     int context_window;           // Current model context window
-    int max_context_window;       // Maximum allowed context window
     int min_response_tokens;      // Minimum tokens reserved for response
     int safety_buffer_base;       // Base safety buffer tokens
     float safety_buffer_ratio;    // Additional buffer as ratio of context
@@ -25,7 +24,7 @@ typedef struct {
 } TokenUsage;
 
 // Initialize token configuration with sensible defaults
-void token_config_init(TokenConfig* config, int context_window, int max_context_window);
+void token_config_init(TokenConfig* config, int context_window);
 
 // Estimate token count from text
 int estimate_token_count(const char* text, const TokenConfig* config);
