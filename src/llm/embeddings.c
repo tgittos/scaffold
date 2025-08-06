@@ -157,7 +157,7 @@ int embeddings_get_vector(const embeddings_config_t *config, const char *text,
     
     // Check for API errors
     if (strstr(response.data, "\"error\"") != NULL) {
-        fprintf(stderr, "API Error: %s\n", response.data);
+        debug_fprintf(stderr, "API Error: %s\n", response.data);
         cleanup_response(&response);
         return -1;
     }

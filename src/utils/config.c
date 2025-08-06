@@ -255,10 +255,9 @@ int config_save_to_file(const char *filepath)
         cJSON_AddStringToObject(json, "api_url", g_config->api_url);
     if (g_config->model)
         cJSON_AddStringToObject(json, "model", g_config->model);
-    if (g_config->anthropic_api_key)
-        cJSON_AddStringToObject(json, "anthropic_api_key", g_config->anthropic_api_key);
     
-    // Always include openai_api_key field, even if empty
+    // Always include both API key fields, even if empty
+    cJSON_AddStringToObject(json, "anthropic_api_key", g_config->anthropic_api_key ? g_config->anthropic_api_key : "");
     cJSON_AddStringToObject(json, "openai_api_key", g_config->openai_api_key ? g_config->openai_api_key : "");
     
     if (g_config->openai_api_url)
