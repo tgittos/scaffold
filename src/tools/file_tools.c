@@ -1134,15 +1134,31 @@ int execute_file_write_tool_call(const ToolCall *tool_call, ToolResult *result) 
         return 0;
     }
     
+    // Count lines in content for user visibility
+    int line_count = 1;
+    size_t content_len = strlen(content);
+    for (size_t i = 0; i < content_len; i++) {
+        if (content[i] == '\n') line_count++;
+    }
+    
+    // Log user-visible information about the write operation
+    printf("Writing to file: %s\n", file_path);
+    printf("  %d lines (%zu bytes)%s\n", 
+           line_count, content_len, create_backup ? " [with backup]" : "");
+    
     FileErrorCode error = file_write_content(file_path, content, create_backup);
     
     char result_msg[512];
     if (error == FILE_SUCCESS) {
+        printf("  File written successfully\n");
+        
         snprintf(result_msg, sizeof(result_msg),
-            "{\"success\": true, \"file_path\": \"%s\", \"bytes_written\": %zu, \"backup_created\": %s}",
-            file_path, strlen(content), create_backup ? "true" : "false");
+            "{\"success\": true, \"file_path\": \"%s\", \"lines_written\": %d, \"bytes_written\": %zu, \"backup_created\": %s}",
+            file_path, line_count, content_len, create_backup ? "true" : "false");
         result->success = 1;
     } else {
+        printf("  Error: %s\n", file_error_message(error));
+        
         snprintf(result_msg, sizeof(result_msg),
             "{\"success\": false, \"error\": \"%s\", \"file_path\": \"%s\"}",
             file_error_message(error), file_path);
@@ -1173,15 +1189,30 @@ int execute_file_append_tool_call(const ToolCall *tool_call, ToolResult *result)
         return 0;
     }
     
+    // Count lines in content for user visibility
+    int line_count = 1;
+    size_t content_len = strlen(content);
+    for (size_t i = 0; i < content_len; i++) {
+        if (content[i] == '\n') line_count++;
+    }
+    
+    // Log user-visible information about the append operation
+    printf("Appending to file: %s\n", file_path);
+    printf("  Adding %d lines (%zu bytes)\n", line_count, content_len);
+    
     FileErrorCode error = file_append_content(file_path, content);
     
     char result_msg[512];
     if (error == FILE_SUCCESS) {
+        printf("  Content appended successfully\n");
+        
         snprintf(result_msg, sizeof(result_msg),
-            "{\"success\": true, \"file_path\": \"%s\", \"bytes_appended\": %zu}",
-            file_path, strlen(content));
+            "{\"success\": true, \"file_path\": \"%s\", \"lines_appended\": %d, \"bytes_appended\": %zu}",
+            file_path, line_count, content_len);
         result->success = 1;
     } else {
+        printf("  Error: %s\n", file_error_message(error));
+        
         snprintf(result_msg, sizeof(result_msg),
             "{\"success\": false, \"error\": \"%s\", \"file_path\": \"%s\"}",
             file_error_message(error), file_path);
@@ -1211,10 +1242,23 @@ int execute_file_list_tool_call(const ToolCall *tool_call, ToolResult *result) {
     char *pattern = extract_string_param(tool_call->arguments, "pattern");
     int include_hidden = extract_bool_param(tool_call->arguments, "include_hidden", 0);
     
+    // Log user-visible information about the directory listing operation
+    printf("Listing directory: %s\n", directory_path);
+    if (pattern != NULL) {
+        printf("  Pattern filter: %s\n", pattern);
+    }
+    if (include_hidden) {
+        printf("  Including hidden files\n");
+    }
+    
     DirectoryListing listing;
     FileErrorCode error = file_list_directory(directory_path, pattern, include_hidden, 0, &listing);
     
     if (error == FILE_SUCCESS) {
+        // Show user-friendly summary
+        printf("  Found %d entries (%d files, %d directories)\n", 
+               listing.count, listing.total_files, listing.total_directories);
+        
         // Build JSON response
         size_t result_size = listing.count * 200 + 1000;
         char *json_result = malloc(result_size);
@@ -1249,6 +1293,8 @@ int execute_file_list_tool_call(const ToolCall *tool_call, ToolResult *result) {
         
         cleanup_directory_listing(&listing);
     } else {
+        printf("  Error: %s\n", file_error_message(error));
+        
         char error_msg[256];
         snprintf(error_msg, sizeof(error_msg),
             "{\"success\": false, \"error\": \"%s\", \"directory_path\": \"%s\"}",
@@ -1283,6 +1329,17 @@ int execute_file_search_tool_call(const ToolCall *tool_call, ToolResult *result)
     int max_tokens = extract_int_param(tool_call->arguments, "max_tokens", 0);
     int max_results = extract_int_param(tool_call->arguments, "max_results", 0);
     
+    // Log user-visible information about the search operation
+    printf("Searching for pattern: \"%s\"\n", pattern);
+    printf("  Search path: %s\n", search_path);
+    printf("  Case sensitive: %s\n", case_sensitive ? "yes" : "no");
+    if (max_results > 0) {
+        printf("  Max results: %d\n", max_results);
+    }
+    if (max_tokens > 0) {
+        printf("  Token limit: %d\n", max_tokens);
+    }
+    
     SearchResults search_results;
     FileErrorCode error;
     
@@ -1295,6 +1352,10 @@ int execute_file_search_tool_call(const ToolCall *tool_call, ToolResult *result)
     }
     
     if (error == FILE_SUCCESS) {
+        // Show user-friendly summary
+        printf("  Found %d matches in %d files\n", 
+               search_results.total_matches, search_results.files_searched);
+        
         size_t result_size = search_results.count * 300 + 1000;
         char *json_result = malloc(result_size);
         if (json_result != NULL) {
@@ -1327,6 +1388,8 @@ int execute_file_search_tool_call(const ToolCall *tool_call, ToolResult *result)
         
         cleanup_search_results(&search_results);
     } else {
+        printf("  Error: %s\n", file_error_message(error));
+        
         char error_msg[256];
         snprintf(error_msg, sizeof(error_msg),
             "{\"success\": false, \"error\": \"%s\", \"search_path\": \"%s\"}",
@@ -1353,10 +1416,21 @@ int execute_file_info_tool_call(const ToolCall *tool_call, ToolResult *result) {
         return 0;
     }
     
+    // Log user-visible information about the info operation
+    printf("Getting file info: %s\n", file_path);
+    
     FileInfo info;
     FileErrorCode error = file_get_info(file_path, &info);
     
     if (error == FILE_SUCCESS) {
+        // Show user-friendly summary
+        printf("  %s (%ld bytes)\n", 
+               info.is_directory ? "Directory" : "File", info.size);
+        printf("  Permissions: %s%s%s\n", 
+               info.is_readable ? "r" : "-",
+               info.is_writable ? "w" : "-",
+               info.is_executable ? "x" : "-");
+        
         char result_msg[1000];
         snprintf(result_msg, sizeof(result_msg),
             "{\"success\": true, \"path\": \"%s\", \"size\": %ld, "
@@ -1374,6 +1448,8 @@ int execute_file_info_tool_call(const ToolCall *tool_call, ToolResult *result) {
         
         cleanup_file_info(&info);
     } else {
+        printf("  Error: %s\n", file_error_message(error));
+        
         char error_msg[256];
         snprintf(error_msg, sizeof(error_msg),
             "{\"success\": false, \"error\": \"%s\", \"file_path\": \"%s\"}",
@@ -1400,9 +1476,23 @@ int execute_file_read_tool_call(const ToolCall *tool_call, ToolResult *result) {
         return 0;
     }
     
+    // Log user-visible information about the file read operation
+    printf("Reading file: %s\n", file_path);
+    
     int start_line = extract_int_param(tool_call->arguments, "start_line", 0);
     int end_line = extract_int_param(tool_call->arguments, "end_line", 0);
     int max_tokens = extract_int_param(tool_call->arguments, "max_tokens", 0);
+    
+    // Show range information if specified
+    if (start_line > 0 && end_line > 0) {
+        printf("  Range: lines %d-%d\n", start_line, end_line);
+    } else if (start_line > 0) {
+        printf("  Range: from line %d\n", start_line);
+    }
+    
+    if (max_tokens > 0) {
+        printf("  Token limit: %d (smart truncation enabled)\n", max_tokens);
+    }
     
     char *content = NULL;
     int was_truncated = 0;
@@ -1416,6 +1506,16 @@ int execute_file_read_tool_call(const ToolCall *tool_call, ToolResult *result) {
     }
     
     if (error == FILE_SUCCESS && content != NULL) {
+        // Count lines in the content for user visibility
+        int line_count = 1;
+        for (const char *p = content; *p; p++) {
+            if (*p == '\n') line_count++;
+        }
+        
+        // Show user-friendly summary
+        printf("  Read %d lines (%zu bytes)%s\n", 
+               line_count, strlen(content), was_truncated ? " [truncated]" : "");
+        
         // Escape content for JSON
         char *escaped_content = json_escape_string(content);
         char *escaped_file_path = json_escape_string(file_path);
@@ -1427,7 +1527,7 @@ int execute_file_read_tool_call(const ToolCall *tool_call, ToolResult *result) {
             if (json_result != NULL) {
                 snprintf(json_result, result_size, 
                     "{\"success\": true, \"file_path\": \"%s\", \"content\": \"%s\", \"lines_read\": %d, \"truncated\": %s}",
-                    escaped_file_path, escaped_content, (end_line > start_line) ? (end_line - start_line + 1) : -1, 
+                    escaped_file_path, escaped_content, line_count, 
                     was_truncated ? "true" : "false");
                 result->result = json_result;
                 result->success = 1;
@@ -1444,6 +1544,8 @@ int execute_file_read_tool_call(const ToolCall *tool_call, ToolResult *result) {
         free(escaped_file_path);
         free(content);
     } else {
+        printf("  Error: %s\n", file_error_message(error));
+        
         char error_msg[256];
         snprintf(error_msg, sizeof(error_msg), 
             "{\"success\": false, \"error\": \"%s\", \"file_path\": \"%s\"}", 
