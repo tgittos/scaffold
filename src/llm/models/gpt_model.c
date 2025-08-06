@@ -171,6 +171,46 @@ static ModelCapabilities gpt_model = {
     .max_context_length = 128000
 };
 
+// O-series model capabilities (o1, o4, etc.) - same as GPT
+static ModelCapabilities o_series_model = {
+    .model_pattern = "o1",  // Matches o1-mini, o1-preview, etc.
+    .supports_thinking_tags = 0,
+    .thinking_start_tag = NULL,
+    .thinking_end_tag = NULL,
+    .process_response = gpt_process_response,
+    .supports_function_calling = 1,
+    .generate_tools_json = generate_tools_json,
+    .parse_tool_calls = parse_tool_calls,
+    .format_tool_result_message = generate_single_tool_message,
+    .format_assistant_tool_message = gpt_format_assistant_tool_message,
+    .supports_structured_output = 1,
+    .supports_json_mode = 1,
+    .max_context_length = 128000
+};
+
+// O4 model capabilities - same as GPT/O1
+static ModelCapabilities o4_model = {
+    .model_pattern = "o4",  // Matches o4-mini, o4-2025, etc.
+    .supports_thinking_tags = 0,
+    .thinking_start_tag = NULL,
+    .thinking_end_tag = NULL,
+    .process_response = gpt_process_response,
+    .supports_function_calling = 1,
+    .generate_tools_json = generate_tools_json,
+    .parse_tool_calls = parse_tool_calls,
+    .format_tool_result_message = generate_single_tool_message,
+    .format_assistant_tool_message = gpt_format_assistant_tool_message,
+    .supports_structured_output = 1,
+    .supports_json_mode = 1,
+    .max_context_length = 128000
+};
+
 int register_gpt_models(ModelRegistry* registry) {
-    return register_model_capabilities(registry, &gpt_model);
+    int result = register_model_capabilities(registry, &gpt_model);
+    if (result != 0) return result;
+    
+    result = register_model_capabilities(registry, &o_series_model);
+    if (result != 0) return result;
+    
+    return register_model_capabilities(registry, &o4_model);
 }

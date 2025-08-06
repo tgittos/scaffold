@@ -1058,6 +1058,8 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
         
         if (tool_parse_result == 0 && raw_call_count > 0) {
             debug_printf("Found %d tool calls in raw response\n", raw_call_count);
+            debug_printf("Response content before display: [%s]\n", 
+                        parsed_response.response_content ? parsed_response.response_content : "NULL");
             
             // Display the AI's initial response content before executing tools
             print_formatted_response_improved(&parsed_response);
@@ -1131,6 +1133,8 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
                 cleanup_tool_calls(tool_calls, call_count);
             } else {
                 // No tool calls - normal response handling
+                debug_printf("No tool calls path - response_content: [%s]\n", 
+                            parsed_response.response_content ? parsed_response.response_content : "NULL");
                 print_formatted_response_improved(&parsed_response);
                 
                 // Save user message

@@ -134,6 +134,36 @@ static void filter_tool_call_markup(char *str) {
                 // Malformed - no closing tag found, just copy this character
                 *dst++ = *src++;
             }
+        } 
+        // Filter out memory tool JSON patterns like {"type": "write", "memory": {...}}
+        else if (strncmp(src, "{\"type\":", 8) == 0) {
+            // Check if this is a memory tool call pattern
+            const char *memory_check = strstr(src, "\"memory\":");
+            if (memory_check && memory_check < src + 100) { // Check within reasonable distance
+                // Find the end of this JSON object by counting braces
+                int brace_count = 0;
+                const char *json_end = src;
+                while (*json_end != '\0') {
+                    if (*json_end == '{') brace_count++;
+                    else if (*json_end == '}') {
+                        brace_count--;
+                        if (brace_count == 0) {
+                            // Found the end of the JSON object
+                            src = (char*)(json_end + 1);
+                            // Skip trailing whitespace after the JSON
+                            while (*src && (*src == ' ' || *src == '\n' || *src == '\r' || *src == '\t')) {
+                                src++;
+                            }
+                            break;
+                        }
+                    }
+                    json_end++;
+                }
+                continue;
+            } else {
+                // Not a memory tool call, copy the character
+                *dst++ = *src++;
+            }
         } else {
             // Regular character, copy it
             *dst++ = *src++;

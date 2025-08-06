@@ -201,6 +201,118 @@ cleanup:
     return 0;
 }
 
+int execute_forget_memory_tool_call(const ToolCall *tool_call, ToolResult *result) {
+    if (tool_call == NULL || result == NULL) return -1;
+    
+    // Create result builder
+    tool_result_builder_t* builder = tool_result_builder_create(tool_call->id);
+    if (builder == NULL) return -1;
+    
+    // Extract memory_id parameter
+    double memory_id_num = extract_number_param(tool_call->arguments, "memory_id", -1);
+    
+    if (memory_id_num < 0) {
+        tool_result_builder_set_error(builder, "Missing or invalid required parameter: memory_id");
+        ToolResult* temp_result = tool_result_builder_finalize(builder);
+        if (temp_result) {
+            *result = *temp_result;
+            free(temp_result);
+        }
+        return 0;
+    }
+    
+    size_t memory_id = (size_t)memory_id_num;
+    
+    // Get vector database
+    vector_db_t *db = vector_db_service_get_database();
+    if (db == NULL) {
+        tool_result_builder_set_error(builder, "Failed to access vector database");
+        ToolResult* temp_result = tool_result_builder_finalize(builder);
+        if (temp_result) {
+            *result = *temp_result;
+            free(temp_result);
+        }
+        return 0;
+    }
+    
+    // Get metadata store
+    metadata_store_t* meta_store = metadata_store_get_instance();
+    if (meta_store == NULL) {
+        tool_result_builder_set_error(builder, "Failed to access metadata store");
+        ToolResult* temp_result = tool_result_builder_finalize(builder);
+        if (temp_result) {
+            *result = *temp_result;
+            free(temp_result);
+        }
+        return 0;
+    }
+    
+    // Try to get the memory metadata first to verify it exists
+    ChunkMetadata* chunk = metadata_store_get(meta_store, MEMORY_INDEX_NAME, memory_id);
+    if (chunk == NULL) {
+        tool_result_builder_set_error(builder, "Memory with ID %zu not found", memory_id);
+        ToolResult* temp_result = tool_result_builder_finalize(builder);
+        if (temp_result) {
+            *result = *temp_result;
+            free(temp_result);
+        }
+        return 0;
+    }
+    
+    // Store some info about the deleted memory for the response
+    char* memory_type = chunk->type ? strdup(chunk->type) : strdup("unknown");
+    char* content_preview = NULL;
+    if (chunk->content) {
+        size_t len = strlen(chunk->content);
+        if (len > 50) {
+            content_preview = malloc(54);
+            if (content_preview) {
+                strncpy(content_preview, chunk->content, 50);
+                strcpy(content_preview + 50, "...");
+            }
+        } else {
+            content_preview = strdup(chunk->content);
+        }
+    }
+    metadata_store_free_chunk(chunk);
+    
+    // Delete from vector database
+    vector_db_error_t err = vector_db_delete_vector(db, MEMORY_INDEX_NAME, memory_id);
+    bool vector_deleted = (err == VECTOR_DB_OK || err == VECTOR_DB_ERROR_ELEMENT_NOT_FOUND);
+    
+    // Delete from metadata store
+    bool metadata_deleted = (metadata_store_delete(meta_store, MEMORY_INDEX_NAME, memory_id) == 0);
+    
+    if (vector_deleted && metadata_deleted) {
+        char response[1024];
+        snprintf(response, sizeof(response),
+            "{\"success\": true, \"memory_id\": %zu, \"message\": \"Memory deleted successfully\", \"deleted\": {\"type\": \"%s\", \"preview\": \"%s\"}}",
+            memory_id, memory_type, content_preview ? content_preview : "");
+        tool_result_builder_set_success_json(builder, response);
+    } else if (metadata_deleted) {
+        // Metadata deleted but vector might have already been missing
+        char response[1024];
+        snprintf(response, sizeof(response),
+            "{\"success\": true, \"memory_id\": %zu, \"message\": \"Memory metadata deleted (vector was already absent)\", \"deleted\": {\"type\": \"%s\"}}",
+            memory_id, memory_type);
+        tool_result_builder_set_success_json(builder, response);
+    } else {
+        tool_result_builder_set_error(builder, "Failed to delete memory with ID %zu", memory_id);
+    }
+    
+    ToolResult* temp_result = tool_result_builder_finalize(builder);
+    if (temp_result) {
+        *result = *temp_result;
+        free(temp_result);
+    }
+    
+    // Cleanup
+    free(memory_type);
+    free(content_preview);
+    
+    return 0;
+}
+
 int execute_recall_memories_tool_call(const ToolCall *tool_call, ToolResult *result) {
     if (tool_call == NULL || result == NULL) return -1;
     
@@ -347,7 +459,7 @@ int register_memory_tools(ToolRegistry *registry) {
     // Allocate space for new tools
     int current_count = registry->function_count;
     ToolFunction *new_functions = realloc(registry->functions, 
-                                         (current_count + 2) * sizeof(ToolFunction));
+                                         (current_count + 3) * sizeof(ToolFunction));
     if (new_functions == NULL) return -1;
     
     registry->functions = new_functions;
@@ -428,7 +540,27 @@ int register_memory_tools(ToolRegistry *registry) {
         .parameter_count = 2
     };
     
-    registry->function_count = current_count + 2;
+    // 3. Register forget_memory tool
+    ToolParameter *forget_params = malloc(1 * sizeof(ToolParameter));
+    if (forget_params == NULL) return -1;
+    
+    forget_params[0] = (ToolParameter){
+        .name = safe_strdup("memory_id"),
+        .type = safe_strdup("number"),
+        .description = safe_strdup("The ID of the memory to delete"),
+        .enum_values = NULL,
+        .enum_count = 0,
+        .required = 1
+    };
+    
+    registry->functions[current_count + 2] = (ToolFunction){
+        .name = safe_strdup("forget_memory"),
+        .description = safe_strdup("Delete a specific memory from long-term storage by its ID"),
+        .parameters = forget_params,
+        .parameter_count = 1
+    };
+    
+    registry->function_count = current_count + 3;
     
     return 0;
 }

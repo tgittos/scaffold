@@ -838,6 +838,8 @@ int execute_tool_call(const ToolRegistry *registry, const ToolCall *tool_call, T
                 exec_result = execute_remember_tool_call(tool_call, result);
             } else if (strcmp(tool_call->name, "recall_memories") == 0) {
                 exec_result = execute_recall_memories_tool_call(tool_call, result);
+            } else if (strcmp(tool_call->name, "forget_memory") == 0) {
+                exec_result = execute_forget_memory_tool_call(tool_call, result);
             } else {
                 // Tool found in registry but no implementation provided
                 result->result = strdup("Error: Tool execution not implemented");

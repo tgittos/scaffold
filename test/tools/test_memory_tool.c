@@ -24,12 +24,13 @@ void test_register_memory_tools(void) {
     int result = register_memory_tools(&registry);
     TEST_ASSERT_EQUAL_INT(0, result);
     
-    // Should have registered 2 tools
-    TEST_ASSERT_EQUAL_INT(initial_count + 2, registry.function_count);
+    // Should have registered 3 tools
+    TEST_ASSERT_EQUAL_INT(initial_count + 3, registry.function_count);
     
     // Check tool names
     int found_remember = 0;
     int found_recall = 0;
+    int found_forget = 0;
     
     for (int i = 0; i < registry.function_count; i++) {
         if (strcmp(registry.functions[i].name, "remember") == 0) {
@@ -44,10 +45,17 @@ void test_register_memory_tools(void) {
                                    registry.functions[i].description);
             TEST_ASSERT_EQUAL_INT(2, registry.functions[i].parameter_count);
         }
+        if (strcmp(registry.functions[i].name, "forget_memory") == 0) {
+            found_forget = 1;
+            TEST_ASSERT_EQUAL_STRING("Delete a specific memory from long-term storage by its ID", 
+                                   registry.functions[i].description);
+            TEST_ASSERT_EQUAL_INT(1, registry.functions[i].parameter_count);
+        }
     }
     
     TEST_ASSERT_TRUE(found_remember);
     TEST_ASSERT_TRUE(found_recall);
+    TEST_ASSERT_TRUE(found_forget);
     
     cleanup_tool_registry(&registry);
 }
@@ -216,6 +224,49 @@ void test_recall_memories_with_valid_query(void) {
     free(result.result);
 }
 
+void test_forget_memory_tool_missing_id(void) {
+    ToolCall tool_call = {
+        .id = "test_forget",
+        .name = "forget_memory",
+        .arguments = "{}"
+    };
+    
+    ToolResult result = {0};
+    int exec_result = execute_forget_memory_tool_call(&tool_call, &result);
+    
+    TEST_ASSERT_EQUAL_INT(0, exec_result);
+    TEST_ASSERT_NOT_NULL(result.result);
+    TEST_ASSERT_EQUAL_INT(0, result.success);
+    TEST_ASSERT_TRUE(strstr(result.result, "Missing or invalid required parameter: memory_id") != NULL);
+    
+    free(result.tool_call_id);
+    free(result.result);
+}
+
+void test_forget_memory_tool_nonexistent_id(void) {
+    if (getenv("OPENAI_API_KEY") == NULL) {
+        TEST_IGNORE_MESSAGE("OPENAI_API_KEY not set, skipping integration test");
+        return;
+    }
+    
+    ToolCall tool_call = {
+        .id = "test_forget",
+        .name = "forget_memory",
+        .arguments = "{\"memory_id\": 999999}"
+    };
+    
+    ToolResult result = {0};
+    int exec_result = execute_forget_memory_tool_call(&tool_call, &result);
+    
+    TEST_ASSERT_EQUAL_INT(0, exec_result);
+    TEST_ASSERT_NOT_NULL(result.result);
+    TEST_ASSERT_EQUAL_INT(0, result.success);
+    TEST_ASSERT_TRUE(strstr(result.result, "Memory with ID 999999 not found") != NULL);
+    
+    free(result.tool_call_id);
+    free(result.result);
+}
+
 void test_memory_tool_json_escaping(void) {
     if (getenv("OPENAI_API_KEY") == NULL) {
         TEST_IGNORE_MESSAGE("OPENAI_API_KEY not set, skipping integration test");
@@ -302,6 +353,8 @@ int main(void) {
     RUN_TEST(test_recall_memories_missing_query);
     RUN_TEST(test_recall_memories_no_api_key);
     RUN_TEST(test_recall_memories_with_valid_query);
+    RUN_TEST(test_forget_memory_tool_missing_id);
+    RUN_TEST(test_forget_memory_tool_nonexistent_id);
     RUN_TEST(test_memory_tool_json_escaping);
     RUN_TEST(test_memory_persistence_across_calls);
     

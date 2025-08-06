@@ -36,6 +36,7 @@ test/unity/.aarch64/
 # Runtime files
 CONVERSATION.md
 ralph.config.json
+ralph.config.json.backup
 
 # AI tooling
 .claude

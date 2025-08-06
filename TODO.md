@@ -1,2 +1,4 @@
+- Remove the user facing delete tool now that the user can ask the agent to forget directly.
+- The tool handling in the tools system is a giant if-then-else statement. This is unmaintainable. Re-architect and refactor the tool handling to be clear and maintainable.
 - Implement a new tool called the `TaskTool`. This tool should essentially invoke Ralph in one-shot mode in a sub-process, and return the result to the main agent. This tool is intended to expand Ralphs context window by allowing Ralph to dispatch task descriptions similar to the ones in this TODO, and retrieve the results once the task is done.
 - Write Github actions to use the devcontainer in this project to build ralph. Build ralph on PRs and merges, and release it on tags. Use Githubs releases feature.

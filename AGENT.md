@@ -8,7 +8,7 @@ ralph is a highly portable C codebase compiled using Cosmopolitan (see ./COSMOPO
 Source code lives in `src/` and tests live in `test/`. Tests use `unity` which is vendored in `test/unity`
 The architecture is documented as a mermaid diagram in `ARCHITECTURE.md`, and a code overview available in `CODE_OVERVIEW.md`
 
-The code base is large and has most basic functionality implemented. Use `ripgrep` to search for code that may already be implemented.
+The code base is large and has most functionality implemented. Use `ripgrep` to search for code that may already be implemented.
 
 ## Build and Commands
 
