@@ -27,78 +27,6 @@ static int compare_documents_by_timestamp(const void* a, const void* b) {
     return 0;
 }
 
-// Helper function to check if a message has tool_use content
-static int has_tool_use_id(const char* content, const char* tool_call_id) {
-    if (!content || !tool_call_id) return 0;
-    
-    char search_pattern[256];
-    snprintf(search_pattern, sizeof(search_pattern), "\"id\": \"%s\"", tool_call_id);
-    if (strstr(content, search_pattern)) return 1;
-    
-    snprintf(search_pattern, sizeof(search_pattern), "\"id\":\"%s\"", tool_call_id);
-    return strstr(content, search_pattern) != NULL;
-}
-
-// Function to filter out orphaned tool results that don't have corresponding tool_use blocks
-static void filter_orphaned_tool_results(ConversationHistory* history) {
-    if (!history || history->count == 0) return;
-    
-    int write_idx = 0;
-    
-    for (int i = 0; i < history->count; i++) {
-        ConversationMessage* msg = &history->messages[i];
-        
-        // If it's a tool result, check if it has a corresponding tool_use in the previous assistant message
-        if (strcmp(msg->role, "tool") == 0 && msg->tool_call_id != NULL) {
-            int found_tool_use = 0;
-            
-            // Look backwards for the most recent assistant message
-            for (int j = write_idx - 1; j >= 0; j--) {
-                ConversationMessage* prev_msg = &history->messages[j];
-                
-                if (strcmp(prev_msg->role, "assistant") == 0) {
-                    if (has_tool_use_id(prev_msg->content, msg->tool_call_id)) {
-                        found_tool_use = 1;
-                    }
-                    break; // Stop at first assistant message
-                }
-                
-                // If we hit a user message, stop looking
-                if (strcmp(prev_msg->role, "user") == 0) {
-                    break;
-                }
-            }
-            
-            if (!found_tool_use) {
-                // Skip this orphaned tool result
-                free(msg->role);
-                free(msg->content);
-                free(msg->tool_call_id);
-                free(msg->tool_name);
-                continue;
-            }
-        }
-        
-        // Keep this message
-        if (write_idx != i) {
-            history->messages[write_idx] = *msg;
-        }
-        write_idx++;
-    }
-    
-    // Update count to reflect filtered messages
-    history->count = write_idx;
-}
-
-void init_conversation_history(ConversationHistory *history) {
-    if (history == NULL) {
-        return;
-    }
-    
-    history->messages = NULL;
-    history->count = 0;
-    history->capacity = 0;
-}
 
 static int resize_conversation_history(ConversationHistory *history) {
     if (history == NULL) {
@@ -115,6 +43,167 @@ static int resize_conversation_history(ConversationHistory *history) {
     history->messages = new_messages;
     history->capacity = new_capacity;
     return 0;
+}
+
+// Function to load complete conversation turns ensuring no broken tool sequences
+static int load_complete_conversation_turns(ConversationHistory* history, time_t start_time, time_t end_time, size_t max_turns) {
+    document_store_t* store = document_store_get_instance();
+    if (!store) return -1;
+    
+    // Get all messages in the time range without limit to avoid breaking sequences
+    document_search_results_t* results = document_store_search_by_time(
+        store, CONVERSATION_INDEX, start_time, end_time, 0); // 0 = no limit
+        
+    if (!results || results->count == 0) {
+        if (results) document_store_free_results(results);
+        return 0;
+    }
+    
+    // Sort by timestamp to ensure chronological order
+    qsort(results->documents, results->count, sizeof(document_t*), compare_documents_by_timestamp);
+    
+    // Group messages into conversation turns and select the most recent complete turns
+    typedef struct {
+        ConversationMessage* messages;
+        size_t count;
+        size_t capacity;
+        time_t start_time;
+        time_t end_time;
+    } ConversationTurn;
+    
+    ConversationTurn* turns = NULL;
+    size_t turns_count = 0;
+    size_t turns_capacity = 0;
+    ConversationTurn* current_turn = NULL;
+    
+    // Process messages and group into conversation turns
+    for (size_t i = 0; i < results->count; i++) {
+        document_t* doc = results->documents[i];
+        if (!doc || !doc->content) continue;
+        
+        // Parse metadata
+        char *role = NULL;
+        char *tool_call_id = NULL;
+        char *tool_name = NULL;
+        
+        if (doc->metadata_json) {
+            cJSON *metadata = cJSON_Parse(doc->metadata_json);
+            if (metadata) {
+                cJSON *role_item = cJSON_GetObjectItem(metadata, "role");
+                cJSON *tool_call_id_item = cJSON_GetObjectItem(metadata, "tool_call_id");
+                cJSON *tool_name_item = cJSON_GetObjectItem(metadata, "tool_name");
+                
+                if (cJSON_IsString(role_item)) role = strdup(cJSON_GetStringValue(role_item));
+                if (cJSON_IsString(tool_call_id_item)) tool_call_id = strdup(cJSON_GetStringValue(tool_call_id_item));
+                if (cJSON_IsString(tool_name_item)) tool_name = strdup(cJSON_GetStringValue(tool_name_item));
+                
+                cJSON_Delete(metadata);
+            }
+        }
+        
+        if (!role && doc->source) role = strdup(doc->source);
+        if (!role) {
+            free(tool_call_id);
+            free(tool_name);
+            continue;
+        }
+        
+        // Start a new turn on user message
+        if (strcmp(role, "user") == 0) {
+            // Finish current turn if it exists
+            current_turn = NULL;
+            
+            // Create new turn
+            if (turns_count >= turns_capacity) {
+                turns_capacity = (turns_capacity == 0) ? 4 : turns_capacity * 2;
+                ConversationTurn* new_turns = realloc(turns, turns_capacity * sizeof(ConversationTurn));
+                if (!new_turns) {
+                    free(role); free(tool_call_id); free(tool_name);
+                    goto cleanup;
+                }
+                turns = new_turns;
+            }
+            
+            current_turn = &turns[turns_count++];
+            current_turn->messages = NULL;
+            current_turn->count = 0;
+            current_turn->capacity = 0;
+            current_turn->start_time = doc->timestamp;
+            current_turn->end_time = doc->timestamp;
+        }
+        
+        // Add message to current turn
+        if (current_turn) {
+            if (current_turn->count >= current_turn->capacity) {
+                current_turn->capacity = (current_turn->capacity == 0) ? 4 : current_turn->capacity * 2;
+                ConversationMessage* new_messages = realloc(current_turn->messages, 
+                    current_turn->capacity * sizeof(ConversationMessage));
+                if (!new_messages) {
+                    free(role); free(tool_call_id); free(tool_name);
+                    goto cleanup;
+                }
+                current_turn->messages = new_messages;
+            }
+            
+            current_turn->messages[current_turn->count].role = role;
+            current_turn->messages[current_turn->count].content = strdup(doc->content);
+            current_turn->messages[current_turn->count].tool_call_id = tool_call_id;
+            current_turn->messages[current_turn->count].tool_name = tool_name;
+            current_turn->count++;
+            current_turn->end_time = doc->timestamp;
+        } else {
+            free(role); free(tool_call_id); free(tool_name);
+        }
+    }
+    
+    // Add the most recent complete turns to history
+    size_t turns_to_add = (max_turns > 0 && turns_count > max_turns) ? max_turns : turns_count;
+    size_t start_turn = (turns_count > turns_to_add) ? turns_count - turns_to_add : 0;
+    
+    for (size_t t = start_turn; t < turns_count; t++) {
+        ConversationTurn* turn = &turns[t];
+        
+        for (size_t m = 0; m < turn->count; m++) {
+            if (history->count >= history->capacity) {
+                if (resize_conversation_history(history) != 0) {
+                    goto cleanup;
+                }
+            }
+            
+            history->messages[history->count] = turn->messages[m];
+            history->count++;
+            // Don't free the message data since we're transferring ownership
+        }
+        // Clear the messages array but don't free individual messages
+        turn->count = 0;
+    }
+    
+cleanup:
+    // Clean up turns (only free the arrays, not individual messages if transferred)
+    for (size_t t = 0; t < turns_count; t++) {
+        ConversationTurn* turn = &turns[t];
+        for (size_t m = 0; m < turn->count; m++) {
+            free(turn->messages[m].role);
+            free(turn->messages[m].content);
+            free(turn->messages[m].tool_call_id);
+            free(turn->messages[m].tool_name);
+        }
+        free(turn->messages);
+    }
+    free(turns);
+    
+    document_store_free_results(results);
+    return 0;
+}
+
+void init_conversation_history(ConversationHistory *history) {
+    if (history == NULL) {
+        return;
+    }
+    
+    history->messages = NULL;
+    history->count = 0;
+    history->capacity = 0;
 }
 
 // Use unified JSON escaping from json_utils.h
@@ -207,7 +296,7 @@ int load_conversation_history(ConversationHistory *history) {
     
     init_conversation_history(history);
     
-    // Load recent conversation from vector database
+    // Load recent conversation from vector database using complete turns
     document_store_t* store = document_store_get_instance();
     if (store == NULL) {
         // No document store available - return empty history
@@ -217,76 +306,13 @@ int load_conversation_history(ConversationHistory *history) {
     // Ensure the conversation index exists
     document_store_ensure_index(store, CONVERSATION_INDEX, CONVERSATION_EMBEDDING_DIM, 10000);
     
-    // Get recent messages (sliding window)
+    // Load complete conversation turns from the last 7 days
     time_t now = time(NULL);
     time_t start_time = now - (7 * 24 * 60 * 60); // Last 7 days
     
-    document_search_results_t* results = document_store_search_by_time(
-        store, CONVERSATION_INDEX, start_time, now, SLIDING_WINDOW_SIZE);
-    
-    if (results != NULL && results->count > 0) {
-        // Sort results by timestamp to ensure chronological order
-        qsort(results->documents, results->count, sizeof(document_t*), compare_documents_by_timestamp);
-        
-        // Add messages to history in chronological order
-        for (size_t i = 0; i < results->count; i++) {
-            document_t* doc = results->documents[i];
-            if (doc == NULL) continue;
-            
-            // Parse metadata to get role and tool info
-            char *role = NULL;
-            char *tool_call_id = NULL;
-            char *tool_name = NULL;
-            
-            if (doc->metadata_json != NULL) {
-                cJSON *metadata = cJSON_Parse(doc->metadata_json);
-                if (metadata != NULL) {
-                    cJSON *role_item = cJSON_GetObjectItem(metadata, "role");
-                    cJSON *tool_call_id_item = cJSON_GetObjectItem(metadata, "tool_call_id");
-                    cJSON *tool_name_item = cJSON_GetObjectItem(metadata, "tool_name");
-                    
-                    if (cJSON_IsString(role_item)) role = strdup(cJSON_GetStringValue(role_item));
-                    if (cJSON_IsString(tool_call_id_item)) tool_call_id = strdup(cJSON_GetStringValue(tool_call_id_item));
-                    if (cJSON_IsString(tool_name_item)) tool_name = strdup(cJSON_GetStringValue(tool_name_item));
-                    
-                    cJSON_Delete(metadata);
-                }
-            }
-            
-            // Use source as role if not in metadata
-            if (role == NULL && doc->source != NULL) {
-                role = strdup(doc->source);
-            }
-            
-            if (role != NULL && doc->content != NULL) {
-                // Don't save to vector DB again - just add to in-memory history
-                if (history->count >= history->capacity) {
-                    if (resize_conversation_history(history) != 0) {
-                        free(role);
-                        free(tool_call_id);
-                        free(tool_name);
-                        document_store_free_results(results);
-                        return -1;
-                    }
-                }
-                
-                history->messages[history->count].role = role;
-                history->messages[history->count].content = strdup(doc->content);
-                history->messages[history->count].tool_call_id = tool_call_id;
-                history->messages[history->count].tool_name = tool_name;
-                history->count++;
-            } else {
-                free(role);
-                free(tool_call_id);
-                free(tool_name);
-            }
-        }
-        
-        document_store_free_results(results);
-        
-        // Filter out orphaned tool results to ensure valid sequences
-        filter_orphaned_tool_results(history);
-    }
+    // Load the most recent 10 complete conversation turns (instead of individual messages)
+    // This ensures we don't break tool call sequences
+    load_complete_conversation_turns(history, start_time, now, 10);
     
     return 0;
 }
@@ -353,73 +379,12 @@ int load_extended_conversation_history(ConversationHistory *history, int days_ba
         start_time = now - (days_back * 24 * 60 * 60);
     }
     
-    // Get messages from the time range
-    document_search_results_t* results = document_store_search_by_time(
-        store, CONVERSATION_INDEX, start_time, now, max_messages);
+    // Convert max_messages to approximate number of conversation turns
+    // Assuming average of 3-4 messages per turn (user + assistant + tools)
+    size_t max_turns = (max_messages + 3) / 4;
     
-    if (results != NULL && results->count > 0) {
-        // Sort results by timestamp to ensure chronological order
-        qsort(results->documents, results->count, sizeof(document_t*), compare_documents_by_timestamp);
-        
-        // Add messages to history
-        for (size_t i = 0; i < results->count; i++) {
-            document_t* doc = results->documents[i];
-            if (doc == NULL) continue;
-            
-            // Parse metadata to get role and tool info
-            char *role = NULL;
-            char *tool_call_id = NULL;
-            char *tool_name = NULL;
-            
-            if (doc->metadata_json != NULL) {
-                cJSON *metadata = cJSON_Parse(doc->metadata_json);
-                if (metadata != NULL) {
-                    cJSON *role_item = cJSON_GetObjectItem(metadata, "role");
-                    cJSON *tool_call_id_item = cJSON_GetObjectItem(metadata, "tool_call_id");
-                    cJSON *tool_name_item = cJSON_GetObjectItem(metadata, "tool_name");
-                    
-                    if (cJSON_IsString(role_item)) role = strdup(cJSON_GetStringValue(role_item));
-                    if (cJSON_IsString(tool_call_id_item)) tool_call_id = strdup(cJSON_GetStringValue(tool_call_id_item));
-                    if (cJSON_IsString(tool_name_item)) tool_name = strdup(cJSON_GetStringValue(tool_name_item));
-                    
-                    cJSON_Delete(metadata);
-                }
-            }
-            
-            // Use source as role if not in metadata
-            if (role == NULL && doc->source != NULL) {
-                role = strdup(doc->source);
-            }
-            
-            if (role != NULL && doc->content != NULL) {
-                // Add to in-memory history without saving to DB again
-                if (history->count >= history->capacity) {
-                    if (resize_conversation_history(history) != 0) {
-                        free(role);
-                        free(tool_call_id);
-                        free(tool_name);
-                        document_store_free_results(results);
-                        return -1;
-                    }
-                }
-                
-                history->messages[history->count].role = role;
-                history->messages[history->count].content = strdup(doc->content);
-                history->messages[history->count].tool_call_id = tool_call_id;
-                history->messages[history->count].tool_name = tool_name;
-                history->count++;
-            } else {
-                free(role);
-                free(tool_call_id);
-                free(tool_name);
-            }
-        }
-        
-        document_store_free_results(results);
-        
-        // Filter out orphaned tool results to ensure valid sequences
-        filter_orphaned_tool_results(history);
-    }
+    // Load complete conversation turns instead of individual messages
+    load_complete_conversation_turns(history, start_time, now, max_turns);
     
     return 0;
 }
@@ -515,8 +480,8 @@ ConversationHistory* search_conversation_history(const char *query, size_t max_r
     
     document_store_free_results(results);
     
-    // Filter out orphaned tool results to ensure valid sequences
-    filter_orphaned_tool_results(history);
+    // Messages are loaded in chronological order - no filtering needed
+    // since search results maintain context
     
     return history;
 }
