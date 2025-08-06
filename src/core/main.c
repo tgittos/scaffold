@@ -5,6 +5,7 @@
 #include <readline/history.h>
 #include "ralph.h"
 #include "debug_output.h"
+#include "../cli/memory_commands.h"
 
 #define MAX_INPUT_SIZE 8192
 
@@ -92,6 +93,9 @@ int main(int argc, char *argv[])
         // Initialize readline
         using_history();
         
+        // Initialize memory commands
+        memory_commands_init();
+        
         char *input_line;
         
         while (1) {
@@ -120,6 +124,17 @@ int main(int argc, char *argv[])
             // Add non-empty lines to history
             add_history(input_line);
             
+            // Check for slash commands
+            if (input_line[0] == '/') {
+                // Process memory commands
+                if (process_memory_command(input_line) == 0) {
+                    // Command was handled
+                    free(input_line);
+                    continue;
+                }
+                // If not a recognized slash command, let it fall through to AI
+            }
+            
             // Process the user message
             printf("\n");
             int result = ralph_process_message(&session, input_line);
@@ -133,6 +148,7 @@ int main(int argc, char *argv[])
         }
         
         // Cleanup
+        memory_commands_cleanup();
         ralph_cleanup_session(&session);
         return EXIT_SUCCESS;
     } else {

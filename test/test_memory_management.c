@@ -1,0 +1,294 @@
+#include "../test/unity/unity.h"
+#include "../src/db/metadata_store.h"
+#include "../src/cli/memory_commands.h"
+#include "../src/db/vector_db_service.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <time.h>
+
+void setUp(void) {
+    // Clean up any existing test data
+    const char* home = getenv("HOME");
+    if (home != NULL) {
+        char cmd[512] = {0};  // Initialize to avoid valgrind warnings
+        snprintf(cmd, sizeof(cmd), "rm -rf %s/.local/ralph/metadata/test_index 2>/dev/null", home);
+        system(cmd);
+    }
+}
+
+void tearDown(void) {
+    // Clean up test data
+    const char* home = getenv("HOME");
+    if (home != NULL) {
+        char cmd[512];
+        snprintf(cmd, sizeof(cmd), "rm -rf %s/.local/ralph/metadata/test_index 2>/dev/null", home);
+        system(cmd);
+    }
+}
+
+void test_metadata_store_create_and_destroy(void) {
+    metadata_store_t* store = metadata_store_create("/tmp/test_metadata");
+    TEST_ASSERT_NOT_NULL(store);
+    
+    metadata_store_destroy(store);
+}
+
+void test_metadata_store_save_and_get(void) {
+    setUp();  // Ensure clean state
+    
+    metadata_store_t* store = metadata_store_get_instance();
+    TEST_ASSERT_NOT_NULL(store);
+    
+    ChunkMetadata metadata = {
+        .chunk_id = 12345,
+        .content = "This is test content",
+        .index_name = "test_index",
+        .type = "test",
+        .source = "unit_test",
+        .importance = "high",
+        .timestamp = time(NULL),
+        .custom_metadata = "{\"test\": true}"
+    };
+    
+    // Save metadata
+    int result = metadata_store_save(store, &metadata);
+    TEST_ASSERT_EQUAL(0, result);
+    
+    // Retrieve metadata
+    ChunkMetadata* retrieved = metadata_store_get(store, "test_index", 12345);
+    TEST_ASSERT_NOT_NULL(retrieved);
+    TEST_ASSERT_EQUAL(12345, retrieved->chunk_id);
+    TEST_ASSERT_EQUAL_STRING("This is test content", retrieved->content);
+    TEST_ASSERT_EQUAL_STRING("test", retrieved->type);
+    TEST_ASSERT_EQUAL_STRING("unit_test", retrieved->source);
+    TEST_ASSERT_EQUAL_STRING("high", retrieved->importance);
+    
+    metadata_store_free_chunk(retrieved);
+}
+
+void test_metadata_store_delete(void) {
+    setUp();  // Ensure clean state
+    
+    metadata_store_t* store = metadata_store_get_instance();
+    TEST_ASSERT_NOT_NULL(store);
+    
+    ChunkMetadata metadata = {
+        .chunk_id = 99999,
+        .content = "Delete me",
+        .index_name = "test_index",
+        .type = "temp",
+        .source = "test",
+        .importance = "low",
+        .timestamp = time(NULL),
+        .custom_metadata = NULL
+    };
+    
+    // Save metadata
+    int result = metadata_store_save(store, &metadata);
+    TEST_ASSERT_EQUAL(0, result);
+    
+    // Verify it exists
+    ChunkMetadata* exists = metadata_store_get(store, "test_index", 99999);
+    TEST_ASSERT_NOT_NULL(exists);
+    metadata_store_free_chunk(exists);
+    
+    // Delete it
+    result = metadata_store_delete(store, "test_index", 99999);
+    TEST_ASSERT_EQUAL(0, result);
+    
+    // Verify it's gone
+    ChunkMetadata* gone = metadata_store_get(store, "test_index", 99999);
+    TEST_ASSERT_NULL(gone);
+}
+
+void test_metadata_store_list(void) {
+    // Use a unique test index for this test to avoid conflicts
+    const char* test_index = "test_index_list";
+    
+    // Clean up any existing data for this specific index
+    const char* home = getenv("HOME");
+    if (home != NULL) {
+        char cmd[512];
+        snprintf(cmd, sizeof(cmd), "rm -rf %s/.local/ralph/metadata/%s 2>/dev/null", home, test_index);
+        system(cmd);
+    }
+    
+    metadata_store_t* store = metadata_store_get_instance();
+    TEST_ASSERT_NOT_NULL(store);
+    
+    // Add multiple chunks
+    for (size_t i = 1; i <= 3; i++) {
+        char content[128];
+        snprintf(content, sizeof(content), "Test content %zu", i);
+        
+        ChunkMetadata metadata = {
+            .chunk_id = i * 100000 + i,  // Use unique IDs to avoid conflicts
+            .content = content,
+            .index_name = (char*)test_index,
+            .type = "test",
+            .source = "unit_test",
+            .importance = "normal",
+            .timestamp = time(NULL),
+            .custom_metadata = NULL
+        };
+        
+        int result = metadata_store_save(store, &metadata);
+        TEST_ASSERT_EQUAL(0, result);
+    }
+    
+    // List all chunks
+    size_t count = 0;
+    ChunkMetadata** chunks = metadata_store_list(store, test_index, &count);
+    TEST_ASSERT_NOT_NULL(chunks);
+    TEST_ASSERT_EQUAL(3, count);
+    
+    // Verify chunks
+    for (size_t i = 0; i < count; i++) {
+        TEST_ASSERT_NOT_NULL(chunks[i]);
+        TEST_ASSERT_NOT_NULL(chunks[i]->content);
+    }
+    
+    metadata_store_free_chunks(chunks, count);
+    
+    // Clean up after test
+    if (home != NULL) {
+        char cmd[512];
+        snprintf(cmd, sizeof(cmd), "rm -rf %s/.local/ralph/metadata/%s 2>/dev/null", home, test_index);
+        system(cmd);
+    }
+}
+
+void test_metadata_store_search(void) {
+    setUp();  // Ensure clean state
+    
+    metadata_store_t* store = metadata_store_get_instance();
+    TEST_ASSERT_NOT_NULL(store);
+    
+    // Add chunks with different content
+    ChunkMetadata metadata1 = {
+        .chunk_id = 10001,
+        .content = "The quick brown fox",
+        .index_name = "test_index",
+        .type = "animal",
+        .source = "test",
+        .importance = "normal",
+        .timestamp = time(NULL),
+        .custom_metadata = NULL
+    };
+    
+    ChunkMetadata metadata2 = {
+        .chunk_id = 10002,
+        .content = "The lazy dog",
+        .index_name = "test_index",
+        .type = "animal",
+        .source = "test",
+        .importance = "normal",
+        .timestamp = time(NULL),
+        .custom_metadata = NULL
+    };
+    
+    ChunkMetadata metadata3 = {
+        .chunk_id = 10003,
+        .content = "Programming is fun",
+        .index_name = "test_index",
+        .type = "tech",
+        .source = "test",
+        .importance = "normal",
+        .timestamp = time(NULL),
+        .custom_metadata = NULL
+    };
+    
+    metadata_store_save(store, &metadata1);
+    metadata_store_save(store, &metadata2);
+    metadata_store_save(store, &metadata3);
+    
+    // Search for "animal" in type
+    size_t count = 0;
+    ChunkMetadata** results = metadata_store_search(store, "test_index", "animal", &count);
+    TEST_ASSERT_NOT_NULL(results);
+    TEST_ASSERT_EQUAL(2, count);
+    metadata_store_free_chunks(results, count);
+    
+    // Search for "fox" in content
+    results = metadata_store_search(store, "test_index", "fox", &count);
+    TEST_ASSERT_NOT_NULL(results);
+    TEST_ASSERT_EQUAL(1, count);
+    TEST_ASSERT_EQUAL(10001, results[0]->chunk_id);
+    metadata_store_free_chunks(results, count);
+    
+    // Search for non-existent term
+    results = metadata_store_search(store, "test_index", "nonexistent", &count);
+    TEST_ASSERT_NULL(results);
+    TEST_ASSERT_EQUAL(0, count);
+}
+
+void test_metadata_store_update(void) {
+    setUp();  // Ensure clean state
+    
+    metadata_store_t* store = metadata_store_get_instance();
+    TEST_ASSERT_NOT_NULL(store);
+    
+    ChunkMetadata metadata = {
+        .chunk_id = 55555,
+        .content = "Original content",
+        .index_name = "test_index",
+        .type = "original",
+        .source = "test",
+        .importance = "low",
+        .timestamp = time(NULL),
+        .custom_metadata = NULL
+    };
+    
+    // Save original
+    int result = metadata_store_save(store, &metadata);
+    TEST_ASSERT_EQUAL(0, result);
+    
+    // Update it
+    metadata.content = "Updated content";
+    metadata.type = "updated";
+    metadata.importance = "high";
+    
+    result = metadata_store_update(store, &metadata);
+    TEST_ASSERT_EQUAL(0, result);
+    
+    // Verify update
+    ChunkMetadata* updated = metadata_store_get(store, "test_index", 55555);
+    TEST_ASSERT_NOT_NULL(updated);
+    TEST_ASSERT_EQUAL_STRING("Updated content", updated->content);
+    TEST_ASSERT_EQUAL_STRING("updated", updated->type);
+    TEST_ASSERT_EQUAL_STRING("high", updated->importance);
+    
+    metadata_store_free_chunk(updated);
+}
+
+void test_memory_command_parsing(void) {
+    // Test that memory commands are recognized
+    int result = process_memory_command("/memory help");
+    TEST_ASSERT_EQUAL(0, result);
+    
+    // Test that non-memory commands are rejected
+    result = process_memory_command("/other command");
+    TEST_ASSERT_EQUAL(-1, result);
+    
+    result = process_memory_command("not a slash command");
+    TEST_ASSERT_EQUAL(-1, result);
+}
+
+int main(void) {
+    UNITY_BEGIN();
+    
+    // Metadata store tests
+    RUN_TEST(test_metadata_store_create_and_destroy);
+    RUN_TEST(test_metadata_store_save_and_get);
+    RUN_TEST(test_metadata_store_delete);
+    RUN_TEST(test_metadata_store_list);
+    RUN_TEST(test_metadata_store_search);
+    RUN_TEST(test_metadata_store_update);
+    
+    // Memory command tests
+    RUN_TEST(test_memory_command_parsing);
+    
+    return UNITY_END();
+}

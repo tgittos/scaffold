@@ -3,6 +3,7 @@
 #include "debug_output.h"
 #include <cJSON.h>
 #include "../db/vector_db_service.h"
+#include "../db/metadata_store.h"
 #include "../llm/embeddings_service.h"
 #include "../utils/common_utils.h"
 #include <stdio.h>
@@ -582,17 +583,38 @@ int store_conversation_segment_in_vector_db(const ConversationHistory* conversat
     vector_db_error_t add_err = vector_db_add_vector(vector_db, CONVERSATION_INDEX_NAME, 
                                                      embedding, label);
     
-    free(full_content);
-    embeddings_service_free_vector(embedding);
-    
-    if (add_err != VECTOR_DB_OK) {
+    if (add_err == VECTOR_DB_OK) {
+        // Store metadata and full content
+        metadata_store_t* meta_store = metadata_store_get_instance();
+        if (meta_store != NULL) {
+            ChunkMetadata chunk = {
+                .chunk_id = label,
+                .content = full_content,
+                .index_name = (char*)CONVERSATION_INDEX_NAME,
+                .type = "conversation_segment",
+                .source = "conversation_compactor",
+                .importance = "normal",
+                .timestamp = (time_t)label,
+                .custom_metadata = NULL
+            };
+            
+            if (metadata_store_save(meta_store, &chunk) != 0) {
+                debug_printf("Warning: Failed to store metadata for conversation segment\n");
+            }
+        }
+        
+        debug_printf("Stored conversation segment (messages %d-%d) in vector database\n", 
+                    start_index, end_index);
+        printf("   💾 Stored conversation history in vector database for future retrieval\n");
+    } else {
         debug_printf("Failed to store conversation segment in vector DB: %d\n", add_err);
+        free(full_content);
+        embeddings_service_free_vector(embedding);
         return -1;
     }
     
-    debug_printf("Stored conversation segment (messages %d-%d) in vector database\n", 
-                start_index, end_index);
-    printf("   💾 Stored conversation history in vector database for future retrieval\n");
+    free(full_content);
+    embeddings_service_free_vector(embedding);
     
     return 0;
 }

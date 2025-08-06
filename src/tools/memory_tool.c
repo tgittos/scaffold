@@ -1,7 +1,10 @@
 #include "memory_tool.h"
 #include "../db/vector_db_service.h"
+#include "../db/metadata_store.h"
 #include "../llm/embeddings_service.h"
 #include "../utils/common_utils.h"
+#include "../utils/json_escape.h"
+#include "../utils/debug_output.h"
 #include "tool_result_builder.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -152,6 +155,25 @@ int execute_remember_tool_call(const ToolCall *tool_call, ToolResult *result) {
     vector_db_error_t err = vector_db_add_vector(db, MEMORY_INDEX_NAME, vector, memory_id);
     
     if (err == VECTOR_DB_OK) {
+        // Store metadata and content
+        metadata_store_t* meta_store = metadata_store_get_instance();
+        if (meta_store != NULL) {
+            ChunkMetadata chunk = {
+                .chunk_id = memory_id,
+                .content = content,
+                .index_name = (char*)MEMORY_INDEX_NAME,
+                .type = memory_type ? memory_type : "general",
+                .source = source ? source : "conversation",
+                .importance = importance ? importance : "normal",
+                .timestamp = time(NULL),
+                .custom_metadata = metadata
+            };
+            
+            if (metadata_store_save(meta_store, &chunk) != 0) {
+                debug_printf("Warning: Failed to store metadata for memory %zu\n", memory_id);
+            }
+        }
+        
         tool_result_builder_set_success(builder, 
             "{\"success\": true, \"memory_id\": %zu, \"message\": \"Memory stored successfully\", \"metadata\": %s}",
             memory_id, metadata);
@@ -247,22 +269,61 @@ int execute_recall_memories_tool_call(const ToolCall *tool_call, ToolResult *res
         tool_result_builder_set_success_json(builder, 
             "{\"success\": true, \"memories\": [], \"message\": \"No relevant memories found\"}");
     } else {
-        // Build response with memory IDs and distances
-        char response[4096] = "{\"success\": true, \"memories\": [";
+        // Build response with memory content
+        metadata_store_t* meta_store = metadata_store_get_instance();
+        char* response = malloc(65536); // Allocate more space for content
+        if (response == NULL) {
+            tool_result_builder_set_error(builder, "Memory allocation failed");
+            goto recall_cleanup;
+        }
+        
+        strcpy(response, "{\"success\": true, \"memories\": [");
         char *p = response + strlen(response);
         
         for (size_t i = 0; i < search_results->count; i++) {
             if (i > 0) {
                 p += sprintf(p, ", ");
             }
-            p += sprintf(p, "{\"memory_id\": %zu, \"similarity\": %.4f}",
-                        search_results->results[i].label,
-                        1.0 - search_results->results[i].distance); // Convert distance to similarity
+            
+            size_t memory_id = search_results->results[i].label;
+            float similarity = 1.0 - search_results->results[i].distance;
+            
+            // Try to get content from metadata store
+            ChunkMetadata* chunk = NULL;
+            if (meta_store != NULL) {
+                chunk = metadata_store_get(meta_store, MEMORY_INDEX_NAME, memory_id);
+            }
+            
+            p += sprintf(p, "{\"memory_id\": %zu, \"similarity\": %.4f", memory_id, similarity);
+            
+            if (chunk != NULL && chunk->content != NULL) {
+                // Escape content for JSON
+                char* escaped_content = json_escape_string(chunk->content);
+                if (escaped_content != NULL) {
+                    p += sprintf(p, ", \"content\": \"%s\"", escaped_content);
+                    free(escaped_content);
+                }
+                
+                if (chunk->type != NULL) {
+                    p += sprintf(p, ", \"type\": \"%s\"", chunk->type);
+                }
+                
+                if (chunk->source != NULL) {
+                    p += sprintf(p, ", \"source\": \"%s\"", chunk->source);
+                }
+                
+                metadata_store_free_chunk(chunk);
+            }
+            
+            p += sprintf(p, "}");
         }
         
         strcat(response, "], \"message\": \"Found relevant memories\"}");
         tool_result_builder_set_success_json(builder, response);
+        free(response);
     }
+    
+recall_cleanup:
     
     ToolResult* temp_result = tool_result_builder_finalize(builder);
     if (temp_result) {
