@@ -24,87 +24,69 @@ int register_shell_tool(ToolRegistry *registry) {
         return -1;
     }
     
-    // Expand registry if needed
-    ToolFunction *new_functions = realloc(registry->functions, 
-                                         (registry->function_count + 1) * sizeof(ToolFunction));
-    if (new_functions == NULL) {
-        return -1;
-    }
-    
-    registry->functions = new_functions;
-    ToolFunction *shell_func = &registry->functions[registry->function_count];
-    
-    // Initialize shell tool function
-    shell_func->name = strdup("shell_execute");
-    shell_func->description = strdup("Execute shell commands on the host system. Returns stdout, stderr, exit code, and execution time.");
-    
-    if (shell_func->name == NULL || shell_func->description == NULL) {
-        free(shell_func->name);
-        free(shell_func->description);
-        return -1;
-    }
-    
     // Define parameters
-    shell_func->parameter_count = 4;
-    shell_func->parameters = malloc(4 * sizeof(ToolParameter));
-    if (shell_func->parameters == NULL) {
-        free(shell_func->name);
-        free(shell_func->description);
-        return -1;
-    }
+    ToolParameter parameters[4];
     
     // Parameter 1: command (required)
-    shell_func->parameters[0].name = strdup("command");
-    shell_func->parameters[0].type = strdup("string");
-    shell_func->parameters[0].description = strdup("Shell command to execute");
-    shell_func->parameters[0].enum_values = NULL;
-    shell_func->parameters[0].enum_count = 0;
-    shell_func->parameters[0].required = 1;
+    parameters[0].name = strdup("command");
+    parameters[0].type = strdup("string");
+    parameters[0].description = strdup("Shell command to execute");
+    parameters[0].enum_values = NULL;
+    parameters[0].enum_count = 0;
+    parameters[0].required = 1;
     
     // Parameter 2: working_directory (optional)
-    shell_func->parameters[1].name = strdup("working_directory");
-    shell_func->parameters[1].type = strdup("string");
-    shell_func->parameters[1].description = strdup("Working directory for command execution (optional)");
-    shell_func->parameters[1].enum_values = NULL;
-    shell_func->parameters[1].enum_count = 0;
-    shell_func->parameters[1].required = 0;
+    parameters[1].name = strdup("working_directory");
+    parameters[1].type = strdup("string");
+    parameters[1].description = strdup("Working directory for command execution (optional)");
+    parameters[1].enum_values = NULL;
+    parameters[1].enum_count = 0;
+    parameters[1].required = 0;
     
     // Parameter 3: timeout_seconds (optional)
-    shell_func->parameters[2].name = strdup("timeout_seconds");
-    shell_func->parameters[2].type = strdup("number");
-    shell_func->parameters[2].description = strdup("Timeout in seconds (0 for no timeout, max 300)");
-    shell_func->parameters[2].enum_values = NULL;
-    shell_func->parameters[2].enum_count = 0;
-    shell_func->parameters[2].required = 0;
+    parameters[2].name = strdup("timeout_seconds");
+    parameters[2].type = strdup("number");
+    parameters[2].description = strdup("Timeout in seconds (0 for no timeout, max 300)");
+    parameters[2].enum_values = NULL;
+    parameters[2].enum_count = 0;
+    parameters[2].required = 0;
     
     // Parameter 4: capture_stderr (optional)
-    shell_func->parameters[3].name = strdup("capture_stderr");
-    shell_func->parameters[3].type = strdup("boolean");
-    shell_func->parameters[3].description = strdup("Whether to capture stderr separately (default: true)");
-    shell_func->parameters[3].enum_values = NULL;
-    shell_func->parameters[3].enum_count = 0;
-    shell_func->parameters[3].required = 0;
+    parameters[3].name = strdup("capture_stderr");
+    parameters[3].type = strdup("boolean");
+    parameters[3].description = strdup("Whether to capture stderr separately (default: true)");
+    parameters[3].enum_values = NULL;
+    parameters[3].enum_count = 0;
+    parameters[3].required = 0;
     
     // Check for allocation failures
     for (int i = 0; i < 4; i++) {
-        if (shell_func->parameters[i].name == NULL || 
-            shell_func->parameters[i].type == NULL ||
-            shell_func->parameters[i].description == NULL) {
+        if (parameters[i].name == NULL || 
+            parameters[i].type == NULL ||
+            parameters[i].description == NULL) {
             // Cleanup on failure
             for (int j = 0; j <= i; j++) {
-                free(shell_func->parameters[j].name);
-                free(shell_func->parameters[j].type);
-                free(shell_func->parameters[j].description);
+                free(parameters[j].name);
+                free(parameters[j].type);
+                free(parameters[j].description);
             }
-            free(shell_func->parameters);
-            free(shell_func->name);
-            free(shell_func->description);
             return -1;
         }
     }
     
-    registry->function_count++;
-    return 0;
+    // Register the tool using the new system
+    int result = register_tool(registry, "shell_execute", 
+                              "Execute shell commands on the host system. Returns stdout, stderr, exit code, and execution time.",
+                              parameters, 4, execute_shell_tool_call);
+    
+    // Clean up temporary parameter storage
+    for (int i = 0; i < 4; i++) {
+        free(parameters[i].name);
+        free(parameters[i].type);
+        free(parameters[i].description);
+    }
+    
+    return result;
 }
 
 int validate_shell_command(const char *command) {

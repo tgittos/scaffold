@@ -67,6 +67,127 @@ void init_tool_registry(ToolRegistry *registry) {
     registry->function_count = 0;
 }
 
+int register_tool(ToolRegistry *registry, const char *name, const char *description, 
+                  ToolParameter *parameters, int param_count, tool_execute_func_t execute_func) {
+    if (registry == NULL || name == NULL || description == NULL || execute_func == NULL) {
+        return -1;
+    }
+    
+    // Reallocate the functions array to accommodate the new tool
+    ToolFunction *new_functions = realloc(registry->functions, 
+                                          (registry->function_count + 1) * sizeof(ToolFunction));
+    if (new_functions == NULL) {
+        return -1;
+    }
+    
+    registry->functions = new_functions;
+    ToolFunction *func = &registry->functions[registry->function_count];
+    
+    // Initialize the new tool function
+    func->name = strdup(name);
+    func->description = strdup(description);
+    func->parameter_count = param_count;
+    func->execute_func = execute_func;
+    
+    if (func->name == NULL || func->description == NULL) {
+        free(func->name);
+        free(func->description);
+        return -1;
+    }
+    
+    // Copy parameters if provided
+    if (param_count > 0 && parameters != NULL) {
+        func->parameters = malloc(param_count * sizeof(ToolParameter));
+        if (func->parameters == NULL) {
+            free(func->name);
+            free(func->description);
+            return -1;
+        }
+        
+        // Deep copy each parameter
+        for (int i = 0; i < param_count; i++) {
+            ToolParameter *src_param = &parameters[i];
+            ToolParameter *dst_param = &func->parameters[i];
+            
+            dst_param->name = strdup(src_param->name);
+            dst_param->type = strdup(src_param->type);
+            dst_param->description = strdup(src_param->description);
+            dst_param->required = src_param->required;
+            dst_param->enum_count = src_param->enum_count;
+            
+            if (dst_param->name == NULL || dst_param->type == NULL || dst_param->description == NULL) {
+                // Cleanup on failure
+                for (int j = 0; j <= i; j++) {
+                    free(func->parameters[j].name);
+                    free(func->parameters[j].type);
+                    free(func->parameters[j].description);
+                }
+                free(func->parameters);
+                free(func->name);
+                free(func->description);
+                return -1;
+            }
+            
+            // Copy enum values if present
+            if (src_param->enum_count > 0 && src_param->enum_values != NULL) {
+                dst_param->enum_values = malloc(src_param->enum_count * sizeof(char*));
+                if (dst_param->enum_values == NULL) {
+                    // Cleanup on failure
+                    for (int j = 0; j <= i; j++) {
+                        free(func->parameters[j].name);
+                        free(func->parameters[j].type);
+                        free(func->parameters[j].description);
+                        if (j < i && func->parameters[j].enum_values != NULL) {
+                            for (int k = 0; k < func->parameters[j].enum_count; k++) {
+                                free(func->parameters[j].enum_values[k]);
+                            }
+                            free(func->parameters[j].enum_values);
+                        }
+                    }
+                    free(func->parameters);
+                    free(func->name);
+                    free(func->description);
+                    return -1;
+                }
+                
+                for (int j = 0; j < src_param->enum_count; j++) {
+                    dst_param->enum_values[j] = strdup(src_param->enum_values[j]);
+                    if (dst_param->enum_values[j] == NULL) {
+                        // Cleanup on failure
+                        for (int k = 0; k < j; k++) {
+                            free(dst_param->enum_values[k]);
+                        }
+                        free(dst_param->enum_values);
+                        // Continue cleanup for other parameters...
+                        for (int k = 0; k <= i; k++) {
+                            free(func->parameters[k].name);
+                            free(func->parameters[k].type);
+                            free(func->parameters[k].description);
+                            if (k < i && func->parameters[k].enum_values != NULL) {
+                                for (int l = 0; l < func->parameters[k].enum_count; l++) {
+                                    free(func->parameters[k].enum_values[l]);
+                                }
+                                free(func->parameters[k].enum_values);
+                            }
+                        }
+                        free(func->parameters);
+                        free(func->name);
+                        free(func->description);
+                        return -1;
+                    }
+                }
+            } else {
+                dst_param->enum_values = NULL;
+            }
+        }
+    } else {
+        func->parameters = NULL;
+    }
+    
+    registry->function_count++;
+    return 0;
+}
+
 // register_demo_tool function removed - users should implement their own tool registration
 // Users can extend this file with their own register_tool function to add custom tools
 
@@ -785,67 +906,11 @@ int execute_tool_call(const ToolRegistry *registry, const ToolCall *tool_call, T
         return -1;
     }
     
-    // Execute the tool - we'll log everything at the end
-    int exec_result = 0;
-    
     // Look for the tool in the registry
     for (int i = 0; i < registry->function_count; i++) {
         if (strcmp(registry->functions[i].name, tool_call->name) == 0) {
-            // Handle specific tool implementations
-            if (strcmp(tool_call->name, "shell_execute") == 0) {
-                exec_result = execute_shell_tool_call(tool_call, result);
-            } else if (strcmp(tool_call->name, "file_read") == 0) {
-                exec_result = execute_file_read_tool_call(tool_call, result);
-            } else if (strcmp(tool_call->name, "file_write") == 0) {
-                exec_result = execute_file_write_tool_call(tool_call, result);
-            } else if (strcmp(tool_call->name, "file_append") == 0) {
-                exec_result = execute_file_append_tool_call(tool_call, result);
-            } else if (strcmp(tool_call->name, "file_list") == 0) {
-                exec_result = execute_file_list_tool_call(tool_call, result);
-            } else if (strcmp(tool_call->name, "file_search") == 0) {
-                exec_result = execute_file_search_tool_call(tool_call, result);
-            } else if (strcmp(tool_call->name, "file_info") == 0) {
-                exec_result = execute_file_info_tool_call(tool_call, result);
-            } else if (strcmp(tool_call->name, "file_delta") == 0) {
-                exec_result = execute_file_delta_tool_call(tool_call, result);
-            } else if (strcmp(tool_call->name, "web_fetch") == 0) {
-                exec_result = execute_links_tool_call(tool_call, result);
-            } else if (strcmp(tool_call->name, "TodoWrite") == 0) {
-                exec_result = execute_todo_tool_call(tool_call, result);
-            } else if (strcmp(tool_call->name, "vector_db_create_index") == 0) {
-                exec_result = execute_vector_db_create_index_tool_call(tool_call, result);
-            } else if (strcmp(tool_call->name, "vector_db_delete_index") == 0) {
-                exec_result = execute_vector_db_delete_index_tool_call(tool_call, result);
-            } else if (strcmp(tool_call->name, "vector_db_list_indices") == 0) {
-                exec_result = execute_vector_db_list_indices_tool_call(tool_call, result);
-            } else if (strcmp(tool_call->name, "vector_db_add_vector") == 0) {
-                exec_result = execute_vector_db_add_vector_tool_call(tool_call, result);
-            } else if (strcmp(tool_call->name, "vector_db_update_vector") == 0) {
-                exec_result = execute_vector_db_update_vector_tool_call(tool_call, result);
-            } else if (strcmp(tool_call->name, "vector_db_delete_vector") == 0) {
-                exec_result = execute_vector_db_delete_vector_tool_call(tool_call, result);
-            } else if (strcmp(tool_call->name, "vector_db_get_vector") == 0) {
-                exec_result = execute_vector_db_get_vector_tool_call(tool_call, result);
-            } else if (strcmp(tool_call->name, "vector_db_search") == 0) {
-                exec_result = execute_vector_db_search_tool_call(tool_call, result);
-            } else if (strcmp(tool_call->name, "vector_db_add_text") == 0) {
-                exec_result = execute_vector_db_add_text_tool_call(tool_call, result);
-            } else if (strcmp(tool_call->name, "vector_db_add_chunked_text") == 0) {
-                exec_result = execute_vector_db_add_chunked_text_tool_call(tool_call, result);
-            } else if (strcmp(tool_call->name, "vector_db_add_pdf_document") == 0) {
-                exec_result = execute_vector_db_add_pdf_document_tool_call(tool_call, result);
-            } else if (strcmp(tool_call->name, "remember") == 0) {
-                exec_result = execute_remember_tool_call(tool_call, result);
-            } else if (strcmp(tool_call->name, "recall_memories") == 0) {
-                exec_result = execute_recall_memories_tool_call(tool_call, result);
-            } else if (strcmp(tool_call->name, "forget_memory") == 0) {
-                exec_result = execute_forget_memory_tool_call(tool_call, result);
-            } else {
-                // Tool found in registry but no implementation provided
-                result->result = strdup("Error: Tool execution not implemented");
-                result->success = 0;
-                exec_result = 0;
-            }
+            // Execute the tool using its registered function pointer
+            int exec_result = registry->functions[i].execute_func(tool_call, result);
             
             // Log the result after execution with improved formatting
             log_tool_execution_improved(tool_call->name, tool_call->arguments, result->success, result->result);

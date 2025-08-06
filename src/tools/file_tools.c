@@ -1456,30 +1456,6 @@ int execute_file_read_tool_call(const ToolCall *tool_call, ToolResult *result) {
     return 0;
 }
 
-// Helper function to register a single tool
-static int register_single_tool(ToolRegistry *registry, const char *name, const char *description, 
-                                ToolParameter *params, int param_count) {
-    ToolFunction *new_functions = realloc(registry->functions, 
-                                         (registry->function_count + 1) * sizeof(ToolFunction));
-    if (new_functions == NULL) return -1;
-    
-    registry->functions = new_functions;
-    ToolFunction *func = &registry->functions[registry->function_count];
-    
-    func->name = safe_strdup(name);
-    func->description = safe_strdup(description);
-    func->parameter_count = param_count;
-    func->parameters = params;
-    
-    if (func->name == NULL || func->description == NULL) {
-        free(func->name);
-        free(func->description);
-        return -1;
-    }
-    
-    registry->function_count++;
-    return 0;
-}
 
 // Helper function to split content into lines
 char** split_lines(const char *content, int *line_count) {
@@ -1847,189 +1823,387 @@ int register_file_tools(ToolRegistry *registry) {
     if (registry == NULL) return -1;
     
     // 1. Register file_read tool
-    ToolParameter *read_params = malloc(4 * sizeof(ToolParameter));
-    if (read_params == NULL) return -1;
+    ToolParameter read_parameters[4];
     
-    read_params[0] = (ToolParameter){"file_path", "string", "Path to the file to read", NULL, 0, 1};
-    read_params[1] = (ToolParameter){"start_line", "number", "Starting line number (1-based, 0 for entire file)", NULL, 0, 0};
-    read_params[2] = (ToolParameter){"end_line", "number", "Ending line number (1-based, 0 for to end of file)", NULL, 0, 0};
-    read_params[3] = (ToolParameter){"max_tokens", "number", "Maximum tokens to return (0 for no limit, enables smart truncation)", NULL, 0, 0};
+    // Parameter 1: file_path (required)
+    read_parameters[0].name = strdup("file_path");
+    read_parameters[0].type = strdup("string");
+    read_parameters[0].description = strdup("Path to the file to read");
+    read_parameters[0].enum_values = NULL;
+    read_parameters[0].enum_count = 0;
+    read_parameters[0].required = 1;
     
+    // Parameter 2: start_line (optional)
+    read_parameters[1].name = strdup("start_line");
+    read_parameters[1].type = strdup("number");
+    read_parameters[1].description = strdup("Starting line number (1-based, 0 for entire file)");
+    read_parameters[1].enum_values = NULL;
+    read_parameters[1].enum_count = 0;
+    read_parameters[1].required = 0;
+    
+    // Parameter 3: end_line (optional)
+    read_parameters[2].name = strdup("end_line");
+    read_parameters[2].type = strdup("number");
+    read_parameters[2].description = strdup("Ending line number (1-based, 0 for to end of file)");
+    read_parameters[2].enum_values = NULL;
+    read_parameters[2].enum_count = 0;
+    read_parameters[2].required = 0;
+    
+    // Parameter 4: max_tokens (optional)
+    read_parameters[3].name = strdup("max_tokens");
+    read_parameters[3].type = strdup("number");
+    read_parameters[3].description = strdup("Maximum tokens to return (0 for no limit, enables smart truncation)");
+    read_parameters[3].enum_values = NULL;
+    read_parameters[3].enum_count = 0;
+    read_parameters[3].required = 0;
+    
+    // Check for allocation failures
     for (int i = 0; i < 4; i++) {
-        read_params[i].name = safe_strdup(read_params[i].name);
-        read_params[i].type = safe_strdup(read_params[i].type);
-        read_params[i].description = safe_strdup(read_params[i].description);
-        if (!read_params[i].name || !read_params[i].type || !read_params[i].description) {
+        if (read_parameters[i].name == NULL || 
+            read_parameters[i].type == NULL ||
+            read_parameters[i].description == NULL) {
+            // Cleanup on failure
             for (int j = 0; j <= i; j++) {
-                free(read_params[j].name);
-                free(read_params[j].type);
-                free(read_params[j].description);
+                free(read_parameters[j].name);
+                free(read_parameters[j].type);
+                free(read_parameters[j].description);
             }
-            free(read_params);
             return -1;
         }
     }
     
-    if (register_single_tool(registry, "file_read", "Read file contents with optional line range and smart truncation", read_params, 4) != 0) {
-        return -1;
+    // Register the tool using the new system
+    int result = register_tool(registry, "file_read", 
+                              "Read file contents with optional line range and smart truncation",
+                              read_parameters, 4, execute_file_read_tool_call);
+    
+    // Clean up temporary parameter storage
+    for (int i = 0; i < 4; i++) {
+        free(read_parameters[i].name);
+        free(read_parameters[i].type);
+        free(read_parameters[i].description);
     }
     
-    // 2. Register file_write tool  
-    ToolParameter *write_params = malloc(3 * sizeof(ToolParameter));
-    if (write_params == NULL) return -1;
+    if (result != 0) return -1;
     
-    write_params[0] = (ToolParameter){"file_path", "string", "Path to the file to write", NULL, 0, 1};
-    write_params[1] = (ToolParameter){"content", "string", "Content to write to file", NULL, 0, 1};
-    write_params[2] = (ToolParameter){"create_backup", "boolean", "Create backup before overwriting (default: false)", NULL, 0, 0};
+    // 2. Register file_write tool
+    ToolParameter write_parameters[3];
     
+    // Parameter 1: file_path (required)
+    write_parameters[0].name = strdup("file_path");
+    write_parameters[0].type = strdup("string");
+    write_parameters[0].description = strdup("Path to the file to write");
+    write_parameters[0].enum_values = NULL;
+    write_parameters[0].enum_count = 0;
+    write_parameters[0].required = 1;
+    
+    // Parameter 2: content (required)
+    write_parameters[1].name = strdup("content");
+    write_parameters[1].type = strdup("string");
+    write_parameters[1].description = strdup("Content to write to file");
+    write_parameters[1].enum_values = NULL;
+    write_parameters[1].enum_count = 0;
+    write_parameters[1].required = 1;
+    
+    // Parameter 3: create_backup (optional)
+    write_parameters[2].name = strdup("create_backup");
+    write_parameters[2].type = strdup("boolean");
+    write_parameters[2].description = strdup("Create backup before overwriting (default: false)");
+    write_parameters[2].enum_values = NULL;
+    write_parameters[2].enum_count = 0;
+    write_parameters[2].required = 0;
+    
+    // Check for allocation failures
     for (int i = 0; i < 3; i++) {
-        write_params[i].name = safe_strdup(write_params[i].name);
-        write_params[i].type = safe_strdup(write_params[i].type);
-        write_params[i].description = safe_strdup(write_params[i].description);
-        if (!write_params[i].name || !write_params[i].type || !write_params[i].description) {
+        if (write_parameters[i].name == NULL || 
+            write_parameters[i].type == NULL ||
+            write_parameters[i].description == NULL) {
+            // Cleanup on failure
             for (int j = 0; j <= i; j++) {
-                free(write_params[j].name);
-                free(write_params[j].type);
-                free(write_params[j].description);
+                free(write_parameters[j].name);
+                free(write_parameters[j].type);
+                free(write_parameters[j].description);
             }
-            free(write_params);
             return -1;
         }
     }
     
-    if (register_single_tool(registry, "file_write", "Write content to file with optional backup", write_params, 3) != 0) {
-        return -1;
+    // Register the tool using the new system
+    result = register_tool(registry, "file_write", 
+                          "Write content to file with optional backup",
+                          write_parameters, 3, execute_file_write_tool_call);
+    
+    // Clean up temporary parameter storage
+    for (int i = 0; i < 3; i++) {
+        free(write_parameters[i].name);
+        free(write_parameters[i].type);
+        free(write_parameters[i].description);
     }
+    
+    if (result != 0) return -1;
     
     // 3. Register file_append tool
-    ToolParameter *append_params = malloc(2 * sizeof(ToolParameter));
-    if (append_params == NULL) return -1;
+    ToolParameter append_parameters[2];
     
-    append_params[0] = (ToolParameter){"file_path", "string", "Path to the file to append to", NULL, 0, 1};
-    append_params[1] = (ToolParameter){"content", "string", "Content to append to file", NULL, 0, 1};
+    // Parameter 1: file_path (required)
+    append_parameters[0].name = strdup("file_path");
+    append_parameters[0].type = strdup("string");
+    append_parameters[0].description = strdup("Path to the file to append to");
+    append_parameters[0].enum_values = NULL;
+    append_parameters[0].enum_count = 0;
+    append_parameters[0].required = 1;
     
+    // Parameter 2: content (required)
+    append_parameters[1].name = strdup("content");
+    append_parameters[1].type = strdup("string");
+    append_parameters[1].description = strdup("Content to append to file");
+    append_parameters[1].enum_values = NULL;
+    append_parameters[1].enum_count = 0;
+    append_parameters[1].required = 1;
+    
+    // Check for allocation failures
     for (int i = 0; i < 2; i++) {
-        append_params[i].name = safe_strdup(append_params[i].name);
-        append_params[i].type = safe_strdup(append_params[i].type);
-        append_params[i].description = safe_strdup(append_params[i].description);
-        if (!append_params[i].name || !append_params[i].type || !append_params[i].description) {
+        if (append_parameters[i].name == NULL || 
+            append_parameters[i].type == NULL ||
+            append_parameters[i].description == NULL) {
+            // Cleanup on failure
             for (int j = 0; j <= i; j++) {
-                free(append_params[j].name);
-                free(append_params[j].type);
-                free(append_params[j].description);
+                free(append_parameters[j].name);
+                free(append_parameters[j].type);
+                free(append_parameters[j].description);
             }
-            free(append_params);
             return -1;
         }
     }
     
-    if (register_single_tool(registry, "file_append", "Append content to existing file", append_params, 2) != 0) {
-        return -1;
+    // Register the tool using the new system
+    result = register_tool(registry, "file_append", 
+                          "Append content to existing file",
+                          append_parameters, 2, execute_file_append_tool_call);
+    
+    // Clean up temporary parameter storage
+    for (int i = 0; i < 2; i++) {
+        free(append_parameters[i].name);
+        free(append_parameters[i].type);
+        free(append_parameters[i].description);
     }
+    
+    if (result != 0) return -1;
     
     // 4. Register file_list tool
-    ToolParameter *list_params = malloc(3 * sizeof(ToolParameter));
-    if (list_params == NULL) return -1;
+    ToolParameter list_parameters[3];
     
-    list_params[0] = (ToolParameter){"directory_path", "string", "Path to directory to list", NULL, 0, 1};
-    list_params[1] = (ToolParameter){"pattern", "string", "Optional pattern to filter files", NULL, 0, 0};
-    list_params[2] = (ToolParameter){"include_hidden", "boolean", "Include hidden files (default: false)", NULL, 0, 0};
+    // Parameter 1: directory_path (required)
+    list_parameters[0].name = strdup("directory_path");
+    list_parameters[0].type = strdup("string");
+    list_parameters[0].description = strdup("Path to directory to list");
+    list_parameters[0].enum_values = NULL;
+    list_parameters[0].enum_count = 0;
+    list_parameters[0].required = 1;
     
+    // Parameter 2: pattern (optional)
+    list_parameters[1].name = strdup("pattern");
+    list_parameters[1].type = strdup("string");
+    list_parameters[1].description = strdup("Optional pattern to filter files");
+    list_parameters[1].enum_values = NULL;
+    list_parameters[1].enum_count = 0;
+    list_parameters[1].required = 0;
+    
+    // Parameter 3: include_hidden (optional)
+    list_parameters[2].name = strdup("include_hidden");
+    list_parameters[2].type = strdup("boolean");
+    list_parameters[2].description = strdup("Include hidden files (default: false)");
+    list_parameters[2].enum_values = NULL;
+    list_parameters[2].enum_count = 0;
+    list_parameters[2].required = 0;
+    
+    // Check for allocation failures
     for (int i = 0; i < 3; i++) {
-        list_params[i].name = safe_strdup(list_params[i].name);
-        list_params[i].type = safe_strdup(list_params[i].type);
-        list_params[i].description = safe_strdup(list_params[i].description);
-        if (!list_params[i].name || !list_params[i].type || !list_params[i].description) {
+        if (list_parameters[i].name == NULL || 
+            list_parameters[i].type == NULL ||
+            list_parameters[i].description == NULL) {
+            // Cleanup on failure
             for (int j = 0; j <= i; j++) {
-                free(list_params[j].name);
-                free(list_params[j].type);
-                free(list_params[j].description);
+                free(list_parameters[j].name);
+                free(list_parameters[j].type);
+                free(list_parameters[j].description);
             }
-            free(list_params);
             return -1;
         }
     }
     
-    if (register_single_tool(registry, "file_list", "List directory contents with optional filtering", list_params, 3) != 0) {
-        return -1;
+    // Register the tool using the new system
+    result = register_tool(registry, "file_list", 
+                          "List directory contents with optional filtering",
+                          list_parameters, 3, execute_file_list_tool_call);
+    
+    // Clean up temporary parameter storage
+    for (int i = 0; i < 3; i++) {
+        free(list_parameters[i].name);
+        free(list_parameters[i].type);
+        free(list_parameters[i].description);
     }
+    
+    if (result != 0) return -1;
     
     // 5. Register file_search tool
-    ToolParameter *search_params = malloc(5 * sizeof(ToolParameter));
-    if (search_params == NULL) return -1;
+    ToolParameter search_parameters[5];
     
-    search_params[0] = (ToolParameter){"search_path", "string", "File or directory path to search", NULL, 0, 1};
-    search_params[1] = (ToolParameter){"pattern", "string", "Text pattern to search for", NULL, 0, 1};
-    search_params[2] = (ToolParameter){"case_sensitive", "boolean", "Case sensitive search (default: true)", NULL, 0, 0};
-    search_params[3] = (ToolParameter){"max_tokens", "number", "Maximum tokens for search results (0 for no limit)", NULL, 0, 0};
-    search_params[4] = (ToolParameter){"max_results", "number", "Maximum number of search results (0 for no limit)", NULL, 0, 0};
+    // Parameter 1: search_path (required)
+    search_parameters[0].name = strdup("search_path");
+    search_parameters[0].type = strdup("string");
+    search_parameters[0].description = strdup("File or directory path to search");
+    search_parameters[0].enum_values = NULL;
+    search_parameters[0].enum_count = 0;
+    search_parameters[0].required = 1;
     
+    // Parameter 2: pattern (required)
+    search_parameters[1].name = strdup("pattern");
+    search_parameters[1].type = strdup("string");
+    search_parameters[1].description = strdup("Text pattern to search for");
+    search_parameters[1].enum_values = NULL;
+    search_parameters[1].enum_count = 0;
+    search_parameters[1].required = 1;
+    
+    // Parameter 3: case_sensitive (optional)
+    search_parameters[2].name = strdup("case_sensitive");
+    search_parameters[2].type = strdup("boolean");
+    search_parameters[2].description = strdup("Case sensitive search (default: true)");
+    search_parameters[2].enum_values = NULL;
+    search_parameters[2].enum_count = 0;
+    search_parameters[2].required = 0;
+    
+    // Parameter 4: max_tokens (optional)
+    search_parameters[3].name = strdup("max_tokens");
+    search_parameters[3].type = strdup("number");
+    search_parameters[3].description = strdup("Maximum tokens for search results (0 for no limit)");
+    search_parameters[3].enum_values = NULL;
+    search_parameters[3].enum_count = 0;
+    search_parameters[3].required = 0;
+    
+    // Parameter 5: max_results (optional)
+    search_parameters[4].name = strdup("max_results");
+    search_parameters[4].type = strdup("number");
+    search_parameters[4].description = strdup("Maximum number of search results (0 for no limit)");
+    search_parameters[4].enum_values = NULL;
+    search_parameters[4].enum_count = 0;
+    search_parameters[4].required = 0;
+    
+    // Check for allocation failures
     for (int i = 0; i < 5; i++) {
-        search_params[i].name = safe_strdup(search_params[i].name);
-        search_params[i].type = safe_strdup(search_params[i].type);
-        search_params[i].description = safe_strdup(search_params[i].description);
-        if (!search_params[i].name || !search_params[i].type || !search_params[i].description) {
+        if (search_parameters[i].name == NULL || 
+            search_parameters[i].type == NULL ||
+            search_parameters[i].description == NULL) {
+            // Cleanup on failure
             for (int j = 0; j <= i; j++) {
-                free(search_params[j].name);
-                free(search_params[j].type);
-                free(search_params[j].description);
+                free(search_parameters[j].name);
+                free(search_parameters[j].type);
+                free(search_parameters[j].description);
             }
-            free(search_params);
             return -1;
         }
     }
     
-    if (register_single_tool(registry, "file_search", "Search for text patterns in files with intelligent result limiting", search_params, 5) != 0) {
-        return -1;
+    // Register the tool using the new system
+    result = register_tool(registry, "file_search", 
+                          "Search for text patterns in files with intelligent result limiting",
+                          search_parameters, 5, execute_file_search_tool_call);
+    
+    // Clean up temporary parameter storage
+    for (int i = 0; i < 5; i++) {
+        free(search_parameters[i].name);
+        free(search_parameters[i].type);
+        free(search_parameters[i].description);
     }
+    
+    if (result != 0) return -1;
     
     // 6. Register file_info tool
-    ToolParameter *info_params = malloc(1 * sizeof(ToolParameter));
-    if (info_params == NULL) return -1;
+    ToolParameter info_parameters[1];
     
-    info_params[0] = (ToolParameter){"file_path", "string", "Path to file to get information about", NULL, 0, 1};
+    // Parameter 1: file_path (required)
+    info_parameters[0].name = strdup("file_path");
+    info_parameters[0].type = strdup("string");
+    info_parameters[0].description = strdup("Path to file to get information about");
+    info_parameters[0].enum_values = NULL;
+    info_parameters[0].enum_count = 0;
+    info_parameters[0].required = 1;
     
-    info_params[0].name = safe_strdup(info_params[0].name);
-    info_params[0].type = safe_strdup(info_params[0].type);
-    info_params[0].description = safe_strdup(info_params[0].description);
-    if (!info_params[0].name || !info_params[0].type || !info_params[0].description) {
-        free(info_params[0].name);
-        free(info_params[0].type);
-        free(info_params[0].description);
-        free(info_params);
+    // Check for allocation failures
+    if (info_parameters[0].name == NULL || 
+        info_parameters[0].type == NULL ||
+        info_parameters[0].description == NULL) {
+        free(info_parameters[0].name);
+        free(info_parameters[0].type);
+        free(info_parameters[0].description);
         return -1;
     }
     
-    if (register_single_tool(registry, "file_info", "Get detailed file information and metadata", info_params, 1) != 0) {
-        return -1;
-    }
+    // Register the tool using the new system
+    result = register_tool(registry, "file_info", 
+                          "Get detailed file information and metadata",
+                          info_parameters, 1, execute_file_info_tool_call);
+    
+    // Clean up temporary parameter storage
+    free(info_parameters[0].name);
+    free(info_parameters[0].type);
+    free(info_parameters[0].description);
+    
+    if (result != 0) return -1;
     
     // 7. Register file_delta tool
-    ToolParameter *delta_params = malloc(3 * sizeof(ToolParameter));
-    if (delta_params == NULL) return -1;
+    ToolParameter delta_parameters[3];
     
-    delta_params[0] = (ToolParameter){"file_path", "string", "Path to file to modify", NULL, 0, 1};
-    delta_params[1] = (ToolParameter){"operations", "array", "Array of delta operations to apply", NULL, 0, 1};
-    delta_params[2] = (ToolParameter){"create_backup", "boolean", "Create backup before applying changes (default: false)", NULL, 0, 0};
+    // Parameter 1: file_path (required)
+    delta_parameters[0].name = strdup("file_path");
+    delta_parameters[0].type = strdup("string");
+    delta_parameters[0].description = strdup("Path to file to modify");
+    delta_parameters[0].enum_values = NULL;
+    delta_parameters[0].enum_count = 0;
+    delta_parameters[0].required = 1;
     
+    // Parameter 2: operations (required)
+    delta_parameters[1].name = strdup("operations");
+    delta_parameters[1].type = strdup("array");
+    delta_parameters[1].description = strdup("Array of delta operations to apply");
+    delta_parameters[1].enum_values = NULL;
+    delta_parameters[1].enum_count = 0;
+    delta_parameters[1].required = 1;
+    
+    // Parameter 3: create_backup (optional)
+    delta_parameters[2].name = strdup("create_backup");
+    delta_parameters[2].type = strdup("boolean");
+    delta_parameters[2].description = strdup("Create backup before applying changes (default: false)");
+    delta_parameters[2].enum_values = NULL;
+    delta_parameters[2].enum_count = 0;
+    delta_parameters[2].required = 0;
+    
+    // Check for allocation failures
     for (int i = 0; i < 3; i++) {
-        delta_params[i].name = safe_strdup(delta_params[i].name);
-        delta_params[i].type = safe_strdup(delta_params[i].type);
-        delta_params[i].description = safe_strdup(delta_params[i].description);
-        if (!delta_params[i].name || !delta_params[i].type || !delta_params[i].description) {
+        if (delta_parameters[i].name == NULL || 
+            delta_parameters[i].type == NULL ||
+            delta_parameters[i].description == NULL) {
+            // Cleanup on failure
             for (int j = 0; j <= i; j++) {
-                free(delta_params[j].name);
-                free(delta_params[j].type);
-                free(delta_params[j].description);
+                free(delta_parameters[j].name);
+                free(delta_parameters[j].type);
+                free(delta_parameters[j].description);
             }
-            free(delta_params);
             return -1;
         }
     }
     
-    if (register_single_tool(registry, "file_delta", "Apply delta patch operations to file for efficient partial updates", delta_params, 3) != 0) {
-        return -1;
+    // Register the tool using the new system
+    result = register_tool(registry, "file_delta", 
+                          "Apply delta patch operations to file for efficient partial updates",
+                          delta_parameters, 3, execute_file_delta_tool_call);
+    
+    // Clean up temporary parameter storage
+    for (int i = 0; i < 3; i++) {
+        free(delta_parameters[i].name);
+        free(delta_parameters[i].type);
+        free(delta_parameters[i].description);
     }
     
-    return 0;
+    return result;
 }

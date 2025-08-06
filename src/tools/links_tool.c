@@ -319,38 +319,41 @@ int execute_links_tool_call(const ToolCall *tool_call, ToolResult *result) {
 }
 
 int register_links_tool(ToolRegistry *registry) {
-    if (!registry) return -1;
-    
-    // Reallocate functions array
-    ToolFunction *new_functions = realloc(registry->functions, 
-                                         (registry->function_count + 1) * sizeof(ToolFunction));
-    if (!new_functions) return -1;
-    
-    registry->functions = new_functions;
-    ToolFunction *func = &registry->functions[registry->function_count];
-    
-    // Set function details
-    func->name = strdup("web_fetch");
-    func->description = strdup("Fetch web page content using bundled Links browser in text mode");
-    func->parameter_count = 1;
-    
-    // Allocate parameters
-    func->parameters = malloc(sizeof(ToolParameter));
-    if (!func->parameters) {
-        free(func->name);
-        free(func->description);
+    if (registry == NULL) {
         return -1;
     }
     
-    // URL parameter
-    func->parameters[0].name = strdup("url");
-    func->parameters[0].type = strdup("string");
-    func->parameters[0].description = strdup("The URL to fetch");
-    func->parameters[0].required = 1;
-    func->parameters[0].enum_values = NULL;
-    func->parameters[0].enum_count = 0;
+    // Define parameters
+    ToolParameter parameters[1];
     
-    registry->function_count++;
+    // Parameter 1: url (required)
+    parameters[0].name = strdup("url");
+    parameters[0].type = strdup("string");
+    parameters[0].description = strdup("The URL to fetch");
+    parameters[0].enum_values = NULL;
+    parameters[0].enum_count = 0;
+    parameters[0].required = 1;
     
-    return 0;
+    // Check for allocation failures
+    if (parameters[0].name == NULL || 
+        parameters[0].type == NULL ||
+        parameters[0].description == NULL) {
+        // Cleanup on failure
+        free(parameters[0].name);
+        free(parameters[0].type);
+        free(parameters[0].description);
+        return -1;
+    }
+    
+    // Register the tool using the new system
+    int result = register_tool(registry, "web_fetch", 
+                              "Fetch web page content using bundled Links browser in text mode",
+                              parameters, 1, execute_links_tool_call);
+    
+    // Clean up temporary parameter storage
+    free(parameters[0].name);
+    free(parameters[0].type);
+    free(parameters[0].description);
+    
+    return result;
 }

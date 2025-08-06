@@ -16,16 +16,6 @@ typedef struct {
 } ToolParameter;
 
 /**
- * Structure representing a tool function definition
- */
-typedef struct {
-    char *name;
-    char *description;
-    ToolParameter *parameters;
-    int parameter_count;
-} ToolFunction;
-
-/**
  * Structure representing a tool call from the model
  */
 typedef struct {
@@ -42,6 +32,20 @@ typedef struct {
     char *result;       // Tool execution result as string
     int success;        // 1 if successful, 0 if error
 } ToolResult;
+
+// Forward declaration for the execution function type
+typedef int (*tool_execute_func_t)(const ToolCall *tool_call, ToolResult *result);
+
+/**
+ * Structure representing a tool function definition
+ */
+typedef struct {
+    char *name;
+    char *description;
+    ToolParameter *parameters;
+    int parameter_count;
+    tool_execute_func_t execute_func;  // Function pointer for tool execution
+} ToolFunction;
 
 /**
  * Structure containing all available tools
@@ -76,12 +80,18 @@ int register_builtin_tools(ToolRegistry *registry);
 int load_tools_config(ToolRegistry *registry, const char *config_file);
 
 /**
- * Register a custom tool (users should implement this function)
+ * Register a tool with the registry
  * 
- * Example implementation for users to extend:
- * int register_tool(ToolRegistry *registry, const char *name, const char *description, 
- *                   ToolParameter *parameters, int param_count);
+ * @param registry Pointer to ToolRegistry structure
+ * @param name Tool name
+ * @param description Tool description
+ * @param parameters Array of tool parameters
+ * @param param_count Number of parameters
+ * @param execute_func Function pointer for tool execution
+ * @return 0 on success, -1 on failure
  */
+int register_tool(ToolRegistry *registry, const char *name, const char *description, 
+                  ToolParameter *parameters, int param_count, tool_execute_func_t execute_func);
 
 /**
  * Generate JSON tools array for API request (OpenAI format)

@@ -455,112 +455,143 @@ recall_cleanup:
 
 int register_memory_tools(ToolRegistry *registry) {
     if (registry == NULL) return -1;
-    
-    // Allocate space for new tools
-    int current_count = registry->function_count;
-    ToolFunction *new_functions = realloc(registry->functions, 
-                                         (current_count + 3) * sizeof(ToolFunction));
-    if (new_functions == NULL) return -1;
-    
-    registry->functions = new_functions;
+    int result;
     
     // 1. Register remember tool
-    ToolParameter *remember_params = malloc(4 * sizeof(ToolParameter));
-    if (remember_params == NULL) return -1;
+    ToolParameter remember_parameters[4];
     
-    remember_params[0] = (ToolParameter){
-        .name = safe_strdup("content"),
-        .type = safe_strdup("string"),
-        .description = safe_strdup("The content to remember"),
-        .enum_values = NULL,
-        .enum_count = 0,
-        .required = 1
-    };
+    remember_parameters[0].name = strdup("content");
+    remember_parameters[0].type = strdup("string");
+    remember_parameters[0].description = strdup("The content to remember");
+    remember_parameters[0].enum_values = NULL;
+    remember_parameters[0].enum_count = 0;
+    remember_parameters[0].required = 1;
     
-    remember_params[1] = (ToolParameter){
-        .name = safe_strdup("type"),
-        .type = safe_strdup("string"),
-        .description = safe_strdup("Type of memory (e.g., 'user_preference', 'fact', 'instruction', 'correction')"),
-        .enum_values = NULL,
-        .enum_count = 0,
-        .required = 0
-    };
+    remember_parameters[1].name = strdup("type");
+    remember_parameters[1].type = strdup("string");
+    remember_parameters[1].description = strdup("Type of memory (e.g., 'user_preference', 'fact', 'instruction', 'correction')");
+    remember_parameters[1].enum_values = NULL;
+    remember_parameters[1].enum_count = 0;
+    remember_parameters[1].required = 0;
     
-    remember_params[2] = (ToolParameter){
-        .name = safe_strdup("source"),
-        .type = safe_strdup("string"),
-        .description = safe_strdup("Source of the memory (e.g., 'conversation', 'web', 'file')"),
-        .enum_values = NULL,
-        .enum_count = 0,
-        .required = 0
-    };
+    remember_parameters[2].name = strdup("source");
+    remember_parameters[2].type = strdup("string");
+    remember_parameters[2].description = strdup("Source of the memory (e.g., 'conversation', 'web', 'file')");
+    remember_parameters[2].enum_values = NULL;
+    remember_parameters[2].enum_count = 0;
+    remember_parameters[2].required = 0;
     
-    remember_params[3] = (ToolParameter){
-        .name = safe_strdup("importance"),
-        .type = safe_strdup("string"),
-        .description = safe_strdup("Importance level: 'low', 'normal', 'high', 'critical'"),
-        .enum_values = NULL,
-        .enum_count = 0,
-        .required = 0
-    };
+    remember_parameters[3].name = strdup("importance");
+    remember_parameters[3].type = strdup("string");
+    remember_parameters[3].description = strdup("Importance level: 'low', 'normal', 'high', 'critical'");
+    remember_parameters[3].enum_values = NULL;
+    remember_parameters[3].enum_count = 0;
+    remember_parameters[3].required = 0;
     
-    registry->functions[current_count] = (ToolFunction){
-        .name = safe_strdup("remember"),
-        .description = safe_strdup("Store important information in long-term memory for future reference"),
-        .parameters = remember_params,
-        .parameter_count = 4
-    };
+    // Check for allocation failures
+    for (int i = 0; i < 4; i++) {
+        if (remember_parameters[i].name == NULL || 
+            remember_parameters[i].type == NULL ||
+            remember_parameters[i].description == NULL) {
+            // Cleanup on failure
+            for (int j = 0; j <= i; j++) {
+                free(remember_parameters[j].name);
+                free(remember_parameters[j].type);
+                free(remember_parameters[j].description);
+            }
+            return -1;
+        }
+    }
+    
+    // Register the tool using the new system
+    result = register_tool(registry, "remember", 
+                          "Store important information in long-term memory for future reference",
+                          remember_parameters, 4, execute_remember_tool_call);
+    
+    // Clean up temporary parameter storage
+    for (int i = 0; i < 4; i++) {
+        free(remember_parameters[i].name);
+        free(remember_parameters[i].type);
+        free(remember_parameters[i].description);
+    }
+    
+    if (result != 0) return -1;
     
     // 2. Register recall_memories tool
-    ToolParameter *recall_params = malloc(2 * sizeof(ToolParameter));
-    if (recall_params == NULL) return -1;
+    ToolParameter recall_parameters[2];
     
-    recall_params[0] = (ToolParameter){
-        .name = safe_strdup("query"),
-        .type = safe_strdup("string"),
-        .description = safe_strdup("Query to search for relevant memories"),
-        .enum_values = NULL,
-        .enum_count = 0,
-        .required = 1
-    };
+    recall_parameters[0].name = strdup("query");
+    recall_parameters[0].type = strdup("string");
+    recall_parameters[0].description = strdup("Query to search for relevant memories");
+    recall_parameters[0].enum_values = NULL;
+    recall_parameters[0].enum_count = 0;
+    recall_parameters[0].required = 1;
     
-    recall_params[1] = (ToolParameter){
-        .name = safe_strdup("k"),
-        .type = safe_strdup("number"),
-        .description = safe_strdup("Number of memories to retrieve (default: 5)"),
-        .enum_values = NULL,
-        .enum_count = 0,
-        .required = 0
-    };
+    recall_parameters[1].name = strdup("k");
+    recall_parameters[1].type = strdup("number");
+    recall_parameters[1].description = strdup("Number of memories to retrieve (default: 5)");
+    recall_parameters[1].enum_values = NULL;
+    recall_parameters[1].enum_count = 0;
+    recall_parameters[1].required = 0;
     
-    registry->functions[current_count + 1] = (ToolFunction){
-        .name = safe_strdup("recall_memories"),
-        .description = safe_strdup("Search and retrieve relevant memories based on a query"),
-        .parameters = recall_params,
-        .parameter_count = 2
-    };
+    // Check for allocation failures
+    for (int i = 0; i < 2; i++) {
+        if (recall_parameters[i].name == NULL || 
+            recall_parameters[i].type == NULL ||
+            recall_parameters[i].description == NULL) {
+            // Cleanup on failure
+            for (int j = 0; j <= i; j++) {
+                free(recall_parameters[j].name);
+                free(recall_parameters[j].type);
+                free(recall_parameters[j].description);
+            }
+            return -1;
+        }
+    }
+    
+    // Register the tool using the new system
+    result = register_tool(registry, "recall_memories", 
+                          "Search and retrieve relevant memories based on a query",
+                          recall_parameters, 2, execute_recall_memories_tool_call);
+    
+    // Clean up temporary parameter storage
+    for (int i = 0; i < 2; i++) {
+        free(recall_parameters[i].name);
+        free(recall_parameters[i].type);
+        free(recall_parameters[i].description);
+    }
+    
+    if (result != 0) return -1;
     
     // 3. Register forget_memory tool
-    ToolParameter *forget_params = malloc(1 * sizeof(ToolParameter));
-    if (forget_params == NULL) return -1;
+    ToolParameter forget_parameters[1];
     
-    forget_params[0] = (ToolParameter){
-        .name = safe_strdup("memory_id"),
-        .type = safe_strdup("number"),
-        .description = safe_strdup("The ID of the memory to delete"),
-        .enum_values = NULL,
-        .enum_count = 0,
-        .required = 1
-    };
+    forget_parameters[0].name = strdup("memory_id");
+    forget_parameters[0].type = strdup("number");
+    forget_parameters[0].description = strdup("The ID of the memory to delete");
+    forget_parameters[0].enum_values = NULL;
+    forget_parameters[0].enum_count = 0;
+    forget_parameters[0].required = 1;
     
-    registry->functions[current_count + 2] = (ToolFunction){
-        .name = safe_strdup("forget_memory"),
-        .description = safe_strdup("Delete a specific memory from long-term storage by its ID"),
-        .parameters = forget_params,
-        .parameter_count = 1
-    };
+    // Check for allocation failures
+    if (forget_parameters[0].name == NULL || 
+        forget_parameters[0].type == NULL ||
+        forget_parameters[0].description == NULL) {
+        free(forget_parameters[0].name);
+        free(forget_parameters[0].type);
+        free(forget_parameters[0].description);
+        return -1;
+    }
     
-    registry->function_count = current_count + 3;
+    // Register the tool using the new system
+    result = register_tool(registry, "forget_memory", 
+                          "Delete a specific memory from long-term storage by its ID",
+                          forget_parameters, 1, execute_forget_memory_tool_call);
     
-    return 0;
+    // Clean up temporary parameter storage
+    free(forget_parameters[0].name);
+    free(forget_parameters[0].type);
+    free(forget_parameters[0].description);
+    
+    return result;
 }

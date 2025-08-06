@@ -462,59 +462,37 @@ int register_todo_tool(ToolRegistry* registry, TodoList* todo_list) {
     // Store reference to todo list for tool calls
     g_todo_list = todo_list;
     
-    // Expand registry if needed
-    ToolFunction *new_functions = realloc(registry->functions, 
-                                         (registry->function_count + 1) * sizeof(ToolFunction));
-    if (new_functions == NULL) {
+    // Define parameters
+    ToolParameter parameters[1];
+    
+    // Parameter 1: todos (required)
+    parameters[0].name = strdup("todos");
+    parameters[0].type = strdup("array");
+    parameters[0].description = strdup("Array of todo items with id, content, status, and priority");
+    parameters[0].enum_values = NULL;
+    parameters[0].enum_count = 0;
+    parameters[0].required = 1;
+    
+    // Check for allocation failures
+    if (parameters[0].name == NULL || 
+        parameters[0].type == NULL ||
+        parameters[0].description == NULL) {
+        // Cleanup on failure
+        free(parameters[0].name);
+        free(parameters[0].type);
+        free(parameters[0].description);
         return -1;
     }
     
-    registry->functions = new_functions;
-    ToolFunction *todo_func = &registry->functions[registry->function_count];
+    // Register the tool using the new system
+    int result = register_tool(registry, "TodoWrite", 
+                              "Optional task breakdown tool. Use for complex multi-step work requiring systematic tracking. Not required for simple requests.",
+                              parameters, 1, execute_todo_tool_call);
     
-    // Initialize todo tool function
-    todo_func->name = strdup("TodoWrite");
-    todo_func->description = strdup("Optional task breakdown tool. Use for complex multi-step work requiring systematic tracking. Not required for simple requests.");
+    // Clean up temporary parameter storage
+    free(parameters[0].name);
+    free(parameters[0].type);
+    free(parameters[0].description);
     
-    if (todo_func->name == NULL || todo_func->description == NULL) {
-        free(todo_func->name);
-        free(todo_func->description);
-        return -1;
-    }
-    
-    // Define parameters - simplified for now
-    todo_func->parameter_count = 1;
-    todo_func->parameters = malloc(1 * sizeof(ToolParameter));
-    if (todo_func->parameters == NULL) {
-        free(todo_func->name);
-        free(todo_func->description);
-        return -1;
-    }
-    
-    // Parameter: todos array
-    todo_func->parameters[0].name = strdup("todos");
-    todo_func->parameters[0].type = strdup("array");
-    todo_func->parameters[0].description = strdup("Array of todo items with id, content, status, and priority");
-    todo_func->parameters[0].required = 1;
-    todo_func->parameters[0].enum_values = NULL;
-    todo_func->parameters[0].enum_count = 0;
-    
-    if (todo_func->parameters[0].name == NULL || 
-        todo_func->parameters[0].type == NULL || 
-        todo_func->parameters[0].description == NULL) {
-        free(todo_func->name);
-        free(todo_func->description);
-        free(todo_func->parameters[0].name);
-        free(todo_func->parameters[0].type);
-        free(todo_func->parameters[0].description);
-        free(todo_func->parameters);
-        return -1;
-    }
-    
-    // Note: Execution is handled by the main execute_tool_call function
-    // which calls execute_todo_tool_call based on the tool name
-    
-    registry->function_count++;
-    
-    return 0;
+    return result;
 }

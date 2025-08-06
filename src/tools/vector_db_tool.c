@@ -14,271 +14,626 @@ vector_db_t* get_global_vector_db(void) {
     return vector_db_service_get_database();
 }
 
-static int register_single_vector_tool(ToolRegistry *registry, const char *name, 
-                                      const char *description, ToolParameter *params, int param_count) {
-    ToolFunction *new_functions = realloc(registry->functions, 
-                                         (registry->function_count + 1) * sizeof(ToolFunction));
-    if (new_functions == NULL) return -1;
-    
-    registry->functions = new_functions;
-    ToolFunction *func = &registry->functions[registry->function_count];
-    
-    func->name = safe_strdup(name);
-    func->description = safe_strdup(description);
-    func->parameter_count = param_count;
-    func->parameters = params;
-    
-    if (func->name == NULL || func->description == NULL) {
-        free(func->name);
-        free(func->description);
-        return -1;
-    }
-    
-    registry->function_count++;
-    return 0;
-}
-
 int register_vector_db_tool(ToolRegistry *registry) {
     if (registry == NULL) return -1;
+    int result;
     
     // 1. Register vector_db_create_index
-    ToolParameter *create_params = malloc(6 * sizeof(ToolParameter));
-    if (create_params == NULL) return -1;
+    ToolParameter create_parameters[6];
     
-    create_params[0] = (ToolParameter){"index_name", "string", "Name of the index to create", NULL, 0, 1};
-    create_params[1] = (ToolParameter){"dimension", "number", "Dimension of vectors", NULL, 0, 1};
-    create_params[2] = (ToolParameter){"max_elements", "number", "Maximum number of elements", NULL, 0, 0};
-    create_params[3] = (ToolParameter){"M", "number", "M parameter for HNSW algorithm (default: 16)", NULL, 0, 0};
-    create_params[4] = (ToolParameter){"ef_construction", "number", "Construction parameter (default: 200)", NULL, 0, 0};
-    create_params[5] = (ToolParameter){"metric", "string", "Distance metric: 'l2', 'cosine', or 'ip' (default: 'l2')", NULL, 0, 0};
+    create_parameters[0].name = strdup("index_name");
+    create_parameters[0].type = strdup("string");
+    create_parameters[0].description = strdup("Name of the index to create");
+    create_parameters[0].enum_values = NULL;
+    create_parameters[0].enum_count = 0;
+    create_parameters[0].required = 1;
+    
+    create_parameters[1].name = strdup("dimension");
+    create_parameters[1].type = strdup("number");
+    create_parameters[1].description = strdup("Dimension of vectors");
+    create_parameters[1].enum_values = NULL;
+    create_parameters[1].enum_count = 0;
+    create_parameters[1].required = 1;
+    
+    create_parameters[2].name = strdup("max_elements");
+    create_parameters[2].type = strdup("number");
+    create_parameters[2].description = strdup("Maximum number of elements");
+    create_parameters[2].enum_values = NULL;
+    create_parameters[2].enum_count = 0;
+    create_parameters[2].required = 0;
+    
+    create_parameters[3].name = strdup("M");
+    create_parameters[3].type = strdup("number");
+    create_parameters[3].description = strdup("M parameter for HNSW algorithm (default: 16)");
+    create_parameters[3].enum_values = NULL;
+    create_parameters[3].enum_count = 0;
+    create_parameters[3].required = 0;
+    
+    create_parameters[4].name = strdup("ef_construction");
+    create_parameters[4].type = strdup("number");
+    create_parameters[4].description = strdup("Construction parameter (default: 200)");
+    create_parameters[4].enum_values = NULL;
+    create_parameters[4].enum_count = 0;
+    create_parameters[4].required = 0;
+    
+    create_parameters[5].name = strdup("metric");
+    create_parameters[5].type = strdup("string");
+    create_parameters[5].description = strdup("Distance metric: 'l2', 'cosine', or 'ip' (default: 'l2')");
+    create_parameters[5].enum_values = NULL;
+    create_parameters[5].enum_count = 0;
+    create_parameters[5].required = 0;
     
     for (int i = 0; i < 6; i++) {
-        create_params[i].name = safe_strdup(create_params[i].name);
-        create_params[i].type = safe_strdup(create_params[i].type);
-        create_params[i].description = safe_strdup(create_params[i].description);
+        if (create_parameters[i].name == NULL || 
+            create_parameters[i].type == NULL ||
+            create_parameters[i].description == NULL) {
+            for (int j = 0; j <= i; j++) {
+                free(create_parameters[j].name);
+                free(create_parameters[j].type);
+                free(create_parameters[j].description);
+            }
+            return -1;
+        }
     }
     
-    if (register_single_vector_tool(registry, "vector_db_create_index", 
-                                   "Create a new vector index", create_params, 6) != 0) {
-        return -1;
+    result = register_tool(registry, "vector_db_create_index", 
+                          "Create a new vector index",
+                          create_parameters, 6, execute_vector_db_create_index_tool_call);
+    
+    for (int i = 0; i < 6; i++) {
+        free(create_parameters[i].name);
+        free(create_parameters[i].type);
+        free(create_parameters[i].description);
     }
+    
+    if (result != 0) return -1;
     
     // 2. Register vector_db_delete_index
-    ToolParameter *delete_params = malloc(1 * sizeof(ToolParameter));
-    if (delete_params == NULL) return -1;
+    ToolParameter delete_parameters[1];
     
-    delete_params[0] = (ToolParameter){"index_name", "string", "Name of the index to delete", NULL, 0, 1};
-    delete_params[0].name = safe_strdup(delete_params[0].name);
-    delete_params[0].type = safe_strdup(delete_params[0].type);
-    delete_params[0].description = safe_strdup(delete_params[0].description);
+    delete_parameters[0].name = strdup("index_name");
+    delete_parameters[0].type = strdup("string");
+    delete_parameters[0].description = strdup("Name of the index to delete");
+    delete_parameters[0].enum_values = NULL;
+    delete_parameters[0].enum_count = 0;
+    delete_parameters[0].required = 1;
     
-    if (register_single_vector_tool(registry, "vector_db_delete_index", 
-                                   "Delete an existing vector index", delete_params, 1) != 0) {
+    if (delete_parameters[0].name == NULL || 
+        delete_parameters[0].type == NULL ||
+        delete_parameters[0].description == NULL) {
+        free(delete_parameters[0].name);
+        free(delete_parameters[0].type);
+        free(delete_parameters[0].description);
         return -1;
     }
+    
+    result = register_tool(registry, "vector_db_delete_index", 
+                          "Delete an existing vector index",
+                          delete_parameters, 1, execute_vector_db_delete_index_tool_call);
+    
+    free(delete_parameters[0].name);
+    free(delete_parameters[0].type);
+    free(delete_parameters[0].description);
+    
+    if (result != 0) return -1;
     
     // 3. Register vector_db_list_indices
-    ToolParameter *list_params = NULL; // No parameters
+    result = register_tool(registry, "vector_db_list_indices", 
+                          "List all vector indices",
+                          NULL, 0, execute_vector_db_list_indices_tool_call);
     
-    if (register_single_vector_tool(registry, "vector_db_list_indices", 
-                                   "List all vector indices", list_params, 0) != 0) {
-        return -1;
-    }
+    if (result != 0) return -1;
     
     // 4. Register vector_db_add_vector
-    ToolParameter *add_params = malloc(3 * sizeof(ToolParameter));
-    if (add_params == NULL) return -1;
+    ToolParameter add_parameters[3];
     
-    add_params[0] = (ToolParameter){"index_name", "string", "Name of the index", NULL, 0, 1};
-    add_params[1] = (ToolParameter){"vector", "array", "Vector data as array of numbers", NULL, 0, 1};
-    add_params[2] = (ToolParameter){"metadata", "object", "Optional metadata to store with vector", NULL, 0, 0};
+    add_parameters[0].name = strdup("index_name");
+    add_parameters[0].type = strdup("string");
+    add_parameters[0].description = strdup("Name of the index");
+    add_parameters[0].enum_values = NULL;
+    add_parameters[0].enum_count = 0;
+    add_parameters[0].required = 1;
+    
+    add_parameters[1].name = strdup("vector");
+    add_parameters[1].type = strdup("array");
+    add_parameters[1].description = strdup("Vector data as array of numbers");
+    add_parameters[1].enum_values = NULL;
+    add_parameters[1].enum_count = 0;
+    add_parameters[1].required = 1;
+    
+    add_parameters[2].name = strdup("metadata");
+    add_parameters[2].type = strdup("object");
+    add_parameters[2].description = strdup("Optional metadata to store with vector");
+    add_parameters[2].enum_values = NULL;
+    add_parameters[2].enum_count = 0;
+    add_parameters[2].required = 0;
     
     for (int i = 0; i < 3; i++) {
-        add_params[i].name = safe_strdup(add_params[i].name);
-        add_params[i].type = safe_strdup(add_params[i].type);
-        add_params[i].description = safe_strdup(add_params[i].description);
+        if (add_parameters[i].name == NULL || 
+            add_parameters[i].type == NULL ||
+            add_parameters[i].description == NULL) {
+            for (int j = 0; j <= i; j++) {
+                free(add_parameters[j].name);
+                free(add_parameters[j].type);
+                free(add_parameters[j].description);
+            }
+            return -1;
+        }
     }
     
-    if (register_single_vector_tool(registry, "vector_db_add_vector", 
-                                   "Add a vector to an index", add_params, 3) != 0) {
-        return -1;
+    result = register_tool(registry, "vector_db_add_vector", 
+                          "Add a vector to an index",
+                          add_parameters, 3, execute_vector_db_add_vector_tool_call);
+    
+    for (int i = 0; i < 3; i++) {
+        free(add_parameters[i].name);
+        free(add_parameters[i].type);
+        free(add_parameters[i].description);
     }
+    
+    if (result != 0) return -1;
     
     // 5. Register vector_db_update_vector
-    ToolParameter *update_params = malloc(4 * sizeof(ToolParameter));
-    if (update_params == NULL) return -1;
+    ToolParameter update_parameters[4];
     
-    update_params[0] = (ToolParameter){"index_name", "string", "Name of the index", NULL, 0, 1};
-    update_params[1] = (ToolParameter){"label", "number", "Label/ID of the vector to update", NULL, 0, 1};
-    update_params[2] = (ToolParameter){"vector", "array", "New vector data", NULL, 0, 1};
-    update_params[3] = (ToolParameter){"metadata", "object", "Optional new metadata", NULL, 0, 0};
+    update_parameters[0].name = strdup("index_name");
+    update_parameters[0].type = strdup("string");
+    update_parameters[0].description = strdup("Name of the index");
+    update_parameters[0].enum_values = NULL;
+    update_parameters[0].enum_count = 0;
+    update_parameters[0].required = 1;
+    
+    update_parameters[1].name = strdup("label");
+    update_parameters[1].type = strdup("number");
+    update_parameters[1].description = strdup("Label/ID of the vector to update");
+    update_parameters[1].enum_values = NULL;
+    update_parameters[1].enum_count = 0;
+    update_parameters[1].required = 1;
+    
+    update_parameters[2].name = strdup("vector");
+    update_parameters[2].type = strdup("array");
+    update_parameters[2].description = strdup("New vector data");
+    update_parameters[2].enum_values = NULL;
+    update_parameters[2].enum_count = 0;
+    update_parameters[2].required = 1;
+    
+    update_parameters[3].name = strdup("metadata");
+    update_parameters[3].type = strdup("object");
+    update_parameters[3].description = strdup("Optional new metadata");
+    update_parameters[3].enum_values = NULL;
+    update_parameters[3].enum_count = 0;
+    update_parameters[3].required = 0;
     
     for (int i = 0; i < 4; i++) {
-        update_params[i].name = safe_strdup(update_params[i].name);
-        update_params[i].type = safe_strdup(update_params[i].type);
-        update_params[i].description = safe_strdup(update_params[i].description);
+        if (update_parameters[i].name == NULL || 
+            update_parameters[i].type == NULL ||
+            update_parameters[i].description == NULL) {
+            for (int j = 0; j <= i; j++) {
+                free(update_parameters[j].name);
+                free(update_parameters[j].type);
+                free(update_parameters[j].description);
+            }
+            return -1;
+        }
     }
     
-    if (register_single_vector_tool(registry, "vector_db_update_vector", 
-                                   "Update an existing vector", update_params, 4) != 0) {
-        return -1;
+    result = register_tool(registry, "vector_db_update_vector", 
+                          "Update an existing vector",
+                          update_parameters, 4, execute_vector_db_update_vector_tool_call);
+    
+    for (int i = 0; i < 4; i++) {
+        free(update_parameters[i].name);
+        free(update_parameters[i].type);
+        free(update_parameters[i].description);
     }
+    
+    if (result != 0) return -1;
     
     // 6. Register vector_db_delete_vector
-    ToolParameter *delete_vec_params = malloc(2 * sizeof(ToolParameter));
-    if (delete_vec_params == NULL) return -1;
+    ToolParameter delete_vec_parameters[2];
     
-    delete_vec_params[0] = (ToolParameter){"index_name", "string", "Name of the index", NULL, 0, 1};
-    delete_vec_params[1] = (ToolParameter){"label", "number", "Label/ID of the vector to delete", NULL, 0, 1};
+    delete_vec_parameters[0].name = strdup("index_name");
+    delete_vec_parameters[0].type = strdup("string");
+    delete_vec_parameters[0].description = strdup("Name of the index");
+    delete_vec_parameters[0].enum_values = NULL;
+    delete_vec_parameters[0].enum_count = 0;
+    delete_vec_parameters[0].required = 1;
+    
+    delete_vec_parameters[1].name = strdup("label");
+    delete_vec_parameters[1].type = strdup("number");
+    delete_vec_parameters[1].description = strdup("Label/ID of the vector to delete");
+    delete_vec_parameters[1].enum_values = NULL;
+    delete_vec_parameters[1].enum_count = 0;
+    delete_vec_parameters[1].required = 1;
     
     for (int i = 0; i < 2; i++) {
-        delete_vec_params[i].name = safe_strdup(delete_vec_params[i].name);
-        delete_vec_params[i].type = safe_strdup(delete_vec_params[i].type);
-        delete_vec_params[i].description = safe_strdup(delete_vec_params[i].description);
+        if (delete_vec_parameters[i].name == NULL || 
+            delete_vec_parameters[i].type == NULL ||
+            delete_vec_parameters[i].description == NULL) {
+            for (int j = 0; j <= i; j++) {
+                free(delete_vec_parameters[j].name);
+                free(delete_vec_parameters[j].type);
+                free(delete_vec_parameters[j].description);
+            }
+            return -1;
+        }
     }
     
-    if (register_single_vector_tool(registry, "vector_db_delete_vector", 
-                                   "Delete a vector from an index", delete_vec_params, 2) != 0) {
-        return -1;
+    result = register_tool(registry, "vector_db_delete_vector", 
+                          "Delete a vector from an index",
+                          delete_vec_parameters, 2, execute_vector_db_delete_vector_tool_call);
+    
+    for (int i = 0; i < 2; i++) {
+        free(delete_vec_parameters[i].name);
+        free(delete_vec_parameters[i].type);
+        free(delete_vec_parameters[i].description);
     }
+    
+    if (result != 0) return -1;
     
     // 7. Register vector_db_get_vector
-    ToolParameter *get_params = malloc(2 * sizeof(ToolParameter));
-    if (get_params == NULL) return -1;
+    ToolParameter get_parameters[2];
     
-    get_params[0] = (ToolParameter){"index_name", "string", "Name of the index", NULL, 0, 1};
-    get_params[1] = (ToolParameter){"label", "number", "Label/ID of the vector to retrieve", NULL, 0, 1};
+    get_parameters[0].name = strdup("index_name");
+    get_parameters[0].type = strdup("string");
+    get_parameters[0].description = strdup("Name of the index");
+    get_parameters[0].enum_values = NULL;
+    get_parameters[0].enum_count = 0;
+    get_parameters[0].required = 1;
+    
+    get_parameters[1].name = strdup("label");
+    get_parameters[1].type = strdup("number");
+    get_parameters[1].description = strdup("Label/ID of the vector to retrieve");
+    get_parameters[1].enum_values = NULL;
+    get_parameters[1].enum_count = 0;
+    get_parameters[1].required = 1;
     
     for (int i = 0; i < 2; i++) {
-        get_params[i].name = safe_strdup(get_params[i].name);
-        get_params[i].type = safe_strdup(get_params[i].type);
-        get_params[i].description = safe_strdup(get_params[i].description);
+        if (get_parameters[i].name == NULL || 
+            get_parameters[i].type == NULL ||
+            get_parameters[i].description == NULL) {
+            for (int j = 0; j <= i; j++) {
+                free(get_parameters[j].name);
+                free(get_parameters[j].type);
+                free(get_parameters[j].description);
+            }
+            return -1;
+        }
     }
     
-    if (register_single_vector_tool(registry, "vector_db_get_vector", 
-                                   "Retrieve a vector by label", get_params, 2) != 0) {
-        return -1;
+    result = register_tool(registry, "vector_db_get_vector", 
+                          "Retrieve a vector by label",
+                          get_parameters, 2, execute_vector_db_get_vector_tool_call);
+    
+    for (int i = 0; i < 2; i++) {
+        free(get_parameters[i].name);
+        free(get_parameters[i].type);
+        free(get_parameters[i].description);
     }
+    
+    if (result != 0) return -1;
     
     // 8. Register vector_db_search
-    ToolParameter *search_params = malloc(3 * sizeof(ToolParameter));
-    if (search_params == NULL) return -1;
+    ToolParameter search_parameters[3];
     
-    search_params[0] = (ToolParameter){"index_name", "string", "Name of the index to search", NULL, 0, 1};
-    search_params[1] = (ToolParameter){"query_vector", "array", "Query vector data", NULL, 0, 1};
-    search_params[2] = (ToolParameter){"k", "number", "Number of nearest neighbors to return", NULL, 0, 1};
+    search_parameters[0].name = strdup("index_name");
+    search_parameters[0].type = strdup("string");
+    search_parameters[0].description = strdup("Name of the index to search");
+    search_parameters[0].enum_values = NULL;
+    search_parameters[0].enum_count = 0;
+    search_parameters[0].required = 1;
+    
+    search_parameters[1].name = strdup("query_vector");
+    search_parameters[1].type = strdup("array");
+    search_parameters[1].description = strdup("Query vector data");
+    search_parameters[1].enum_values = NULL;
+    search_parameters[1].enum_count = 0;
+    search_parameters[1].required = 1;
+    
+    search_parameters[2].name = strdup("k");
+    search_parameters[2].type = strdup("number");
+    search_parameters[2].description = strdup("Number of nearest neighbors to return");
+    search_parameters[2].enum_values = NULL;
+    search_parameters[2].enum_count = 0;
+    search_parameters[2].required = 1;
     
     for (int i = 0; i < 3; i++) {
-        search_params[i].name = safe_strdup(search_params[i].name);
-        search_params[i].type = safe_strdup(search_params[i].type);
-        search_params[i].description = safe_strdup(search_params[i].description);
+        if (search_parameters[i].name == NULL || 
+            search_parameters[i].type == NULL ||
+            search_parameters[i].description == NULL) {
+            for (int j = 0; j <= i; j++) {
+                free(search_parameters[j].name);
+                free(search_parameters[j].type);
+                free(search_parameters[j].description);
+            }
+            return -1;
+        }
     }
     
-    if (register_single_vector_tool(registry, "vector_db_search", 
-                                   "Search for nearest neighbors", search_params, 3) != 0) {
-        return -1;
+    result = register_tool(registry, "vector_db_search", 
+                          "Search for nearest neighbors",
+                          search_parameters, 3, execute_vector_db_search_tool_call);
+    
+    for (int i = 0; i < 3; i++) {
+        free(search_parameters[i].name);
+        free(search_parameters[i].type);
+        free(search_parameters[i].description);
     }
+    
+    if (result != 0) return -1;
     
     // 9. Register vector_db_add_text
-    ToolParameter *add_text_params = malloc(3 * sizeof(ToolParameter));
-    if (add_text_params == NULL) return -1;
+    ToolParameter add_text_parameters[3];
     
-    add_text_params[0] = (ToolParameter){"index_name", "string", "Name of the index", NULL, 0, 1};
-    add_text_params[1] = (ToolParameter){"text", "string", "Text content to embed and store", NULL, 0, 1};
-    add_text_params[2] = (ToolParameter){"metadata", "object", "Optional metadata to store with the text", NULL, 0, 0};
+    add_text_parameters[0].name = strdup("index_name");
+    add_text_parameters[0].type = strdup("string");
+    add_text_parameters[0].description = strdup("Name of the index");
+    add_text_parameters[0].enum_values = NULL;
+    add_text_parameters[0].enum_count = 0;
+    add_text_parameters[0].required = 1;
+    
+    add_text_parameters[1].name = strdup("text");
+    add_text_parameters[1].type = strdup("string");
+    add_text_parameters[1].description = strdup("Text content to embed and store");
+    add_text_parameters[1].enum_values = NULL;
+    add_text_parameters[1].enum_count = 0;
+    add_text_parameters[1].required = 1;
+    
+    add_text_parameters[2].name = strdup("metadata");
+    add_text_parameters[2].type = strdup("object");
+    add_text_parameters[2].description = strdup("Optional metadata to store with the text");
+    add_text_parameters[2].enum_values = NULL;
+    add_text_parameters[2].enum_count = 0;
+    add_text_parameters[2].required = 0;
     
     for (int i = 0; i < 3; i++) {
-        add_text_params[i].name = safe_strdup(add_text_params[i].name);
-        add_text_params[i].type = safe_strdup(add_text_params[i].type);
-        add_text_params[i].description = safe_strdup(add_text_params[i].description);
+        if (add_text_parameters[i].name == NULL || 
+            add_text_parameters[i].type == NULL ||
+            add_text_parameters[i].description == NULL) {
+            for (int j = 0; j <= i; j++) {
+                free(add_text_parameters[j].name);
+                free(add_text_parameters[j].type);
+                free(add_text_parameters[j].description);
+            }
+            return -1;
+        }
     }
     
-    if (register_single_vector_tool(registry, "vector_db_add_text", 
-                                   "Add text content to index by generating embeddings", add_text_params, 3) != 0) {
-        return -1;
+    result = register_tool(registry, "vector_db_add_text", 
+                          "Add text content to index by generating embeddings",
+                          add_text_parameters, 3, execute_vector_db_add_text_tool_call);
+    
+    for (int i = 0; i < 3; i++) {
+        free(add_text_parameters[i].name);
+        free(add_text_parameters[i].type);
+        free(add_text_parameters[i].description);
     }
+    
+    if (result != 0) return -1;
     
     // 10. Register vector_db_add_chunked_text
-    ToolParameter *add_chunked_params = malloc(5 * sizeof(ToolParameter));
-    if (add_chunked_params == NULL) return -1;
+    ToolParameter add_chunked_parameters[5];
     
-    add_chunked_params[0] = (ToolParameter){"index_name", "string", "Name of the index", NULL, 0, 1};
-    add_chunked_params[1] = (ToolParameter){"text", "string", "Text content to chunk, embed and store", NULL, 0, 1};
-    add_chunked_params[2] = (ToolParameter){"max_chunk_size", "number", "Maximum size of each chunk (default: 1000)", NULL, 0, 0};
-    add_chunked_params[3] = (ToolParameter){"overlap_size", "number", "Overlap between chunks (default: 200)", NULL, 0, 0};
-    add_chunked_params[4] = (ToolParameter){"metadata", "object", "Optional metadata to store with each chunk", NULL, 0, 0};
+    add_chunked_parameters[0].name = strdup("index_name");
+    add_chunked_parameters[0].type = strdup("string");
+    add_chunked_parameters[0].description = strdup("Name of the index");
+    add_chunked_parameters[0].enum_values = NULL;
+    add_chunked_parameters[0].enum_count = 0;
+    add_chunked_parameters[0].required = 1;
+    
+    add_chunked_parameters[1].name = strdup("text");
+    add_chunked_parameters[1].type = strdup("string");
+    add_chunked_parameters[1].description = strdup("Text content to chunk, embed and store");
+    add_chunked_parameters[1].enum_values = NULL;
+    add_chunked_parameters[1].enum_count = 0;
+    add_chunked_parameters[1].required = 1;
+    
+    add_chunked_parameters[2].name = strdup("max_chunk_size");
+    add_chunked_parameters[2].type = strdup("number");
+    add_chunked_parameters[2].description = strdup("Maximum size of each chunk (default: 1000)");
+    add_chunked_parameters[2].enum_values = NULL;
+    add_chunked_parameters[2].enum_count = 0;
+    add_chunked_parameters[2].required = 0;
+    
+    add_chunked_parameters[3].name = strdup("overlap_size");
+    add_chunked_parameters[3].type = strdup("number");
+    add_chunked_parameters[3].description = strdup("Overlap between chunks (default: 200)");
+    add_chunked_parameters[3].enum_values = NULL;
+    add_chunked_parameters[3].enum_count = 0;
+    add_chunked_parameters[3].required = 0;
+    
+    add_chunked_parameters[4].name = strdup("metadata");
+    add_chunked_parameters[4].type = strdup("object");
+    add_chunked_parameters[4].description = strdup("Optional metadata to store with each chunk");
+    add_chunked_parameters[4].enum_values = NULL;
+    add_chunked_parameters[4].enum_count = 0;
+    add_chunked_parameters[4].required = 0;
     
     for (int i = 0; i < 5; i++) {
-        add_chunked_params[i].name = safe_strdup(add_chunked_params[i].name);
-        add_chunked_params[i].type = safe_strdup(add_chunked_params[i].type);
-        add_chunked_params[i].description = safe_strdup(add_chunked_params[i].description);
+        if (add_chunked_parameters[i].name == NULL || 
+            add_chunked_parameters[i].type == NULL ||
+            add_chunked_parameters[i].description == NULL) {
+            for (int j = 0; j <= i; j++) {
+                free(add_chunked_parameters[j].name);
+                free(add_chunked_parameters[j].type);
+                free(add_chunked_parameters[j].description);
+            }
+            return -1;
+        }
     }
     
-    if (register_single_vector_tool(registry, "vector_db_add_chunked_text", 
-                                   "Add long text content by chunking, embedding and storing each chunk", add_chunked_params, 5) != 0) {
-        return -1;
+    result = register_tool(registry, "vector_db_add_chunked_text", 
+                          "Add long text content by chunking, embedding and storing each chunk",
+                          add_chunked_parameters, 5, execute_vector_db_add_chunked_text_tool_call);
+    
+    for (int i = 0; i < 5; i++) {
+        free(add_chunked_parameters[i].name);
+        free(add_chunked_parameters[i].type);
+        free(add_chunked_parameters[i].description);
     }
+    
+    if (result != 0) return -1;
     
     // 11. Register vector_db_add_pdf_document
-    ToolParameter *add_pdf_params = malloc(4 * sizeof(ToolParameter));
-    if (add_pdf_params == NULL) return -1;
+    ToolParameter add_pdf_parameters[4];
     
-    add_pdf_params[0] = (ToolParameter){"index_name", "string", "Name of the index", NULL, 0, 1};
-    add_pdf_params[1] = (ToolParameter){"pdf_path", "string", "Path to the PDF file to extract, chunk and store", NULL, 0, 1};
-    add_pdf_params[2] = (ToolParameter){"max_chunk_size", "number", "Maximum size of each chunk (default: 1500)", NULL, 0, 0};
-    add_pdf_params[3] = (ToolParameter){"overlap_size", "number", "Overlap between chunks (default: 300)", NULL, 0, 0};
+    add_pdf_parameters[0].name = strdup("index_name");
+    add_pdf_parameters[0].type = strdup("string");
+    add_pdf_parameters[0].description = strdup("Name of the index");
+    add_pdf_parameters[0].enum_values = NULL;
+    add_pdf_parameters[0].enum_count = 0;
+    add_pdf_parameters[0].required = 1;
+    
+    add_pdf_parameters[1].name = strdup("pdf_path");
+    add_pdf_parameters[1].type = strdup("string");
+    add_pdf_parameters[1].description = strdup("Path to the PDF file to extract, chunk and store");
+    add_pdf_parameters[1].enum_values = NULL;
+    add_pdf_parameters[1].enum_count = 0;
+    add_pdf_parameters[1].required = 1;
+    
+    add_pdf_parameters[2].name = strdup("max_chunk_size");
+    add_pdf_parameters[2].type = strdup("number");
+    add_pdf_parameters[2].description = strdup("Maximum size of each chunk (default: 1500)");
+    add_pdf_parameters[2].enum_values = NULL;
+    add_pdf_parameters[2].enum_count = 0;
+    add_pdf_parameters[2].required = 0;
+    
+    add_pdf_parameters[3].name = strdup("overlap_size");
+    add_pdf_parameters[3].type = strdup("number");
+    add_pdf_parameters[3].description = strdup("Overlap between chunks (default: 300)");
+    add_pdf_parameters[3].enum_values = NULL;
+    add_pdf_parameters[3].enum_count = 0;
+    add_pdf_parameters[3].required = 0;
     
     for (int i = 0; i < 4; i++) {
-        add_pdf_params[i].name = safe_strdup(add_pdf_params[i].name);
-        add_pdf_params[i].type = safe_strdup(add_pdf_params[i].type);
-        add_pdf_params[i].description = safe_strdup(add_pdf_params[i].description);
+        if (add_pdf_parameters[i].name == NULL || 
+            add_pdf_parameters[i].type == NULL ||
+            add_pdf_parameters[i].description == NULL) {
+            for (int j = 0; j <= i; j++) {
+                free(add_pdf_parameters[j].name);
+                free(add_pdf_parameters[j].type);
+                free(add_pdf_parameters[j].description);
+            }
+            return -1;
+        }
     }
     
-    if (register_single_vector_tool(registry, "vector_db_add_pdf_document", 
-                                   "Extract text from PDF, chunk it, and store chunks as embeddings", add_pdf_params, 4) != 0) {
-        return -1;
+    result = register_tool(registry, "vector_db_add_pdf_document", 
+                          "Extract text from PDF, chunk it, and store chunks as embeddings",
+                          add_pdf_parameters, 4, execute_vector_db_add_pdf_document_tool_call);
+    
+    for (int i = 0; i < 4; i++) {
+        free(add_pdf_parameters[i].name);
+        free(add_pdf_parameters[i].type);
+        free(add_pdf_parameters[i].description);
     }
+    
+    if (result != 0) return -1;
     
     // 12. Register vector_db_search_text
-    ToolParameter *search_text_params = malloc(3 * sizeof(ToolParameter));
-    if (search_text_params == NULL) return -1;
+    ToolParameter search_text_parameters[3];
     
-    search_text_params[0] = (ToolParameter){"index_name", "string", "Name of the index to search", NULL, 0, 1};
-    search_text_params[1] = (ToolParameter){"query", "string", "Query text to search for", NULL, 0, 1};
-    search_text_params[2] = (ToolParameter){"k", "number", "Number of results to return (default: 5)", NULL, 0, 0};
+    search_text_parameters[0].name = strdup("index_name");
+    search_text_parameters[0].type = strdup("string");
+    search_text_parameters[0].description = strdup("Name of the index to search");
+    search_text_parameters[0].enum_values = NULL;
+    search_text_parameters[0].enum_count = 0;
+    search_text_parameters[0].required = 1;
+    
+    search_text_parameters[1].name = strdup("query");
+    search_text_parameters[1].type = strdup("string");
+    search_text_parameters[1].description = strdup("Query text to search for");
+    search_text_parameters[1].enum_values = NULL;
+    search_text_parameters[1].enum_count = 0;
+    search_text_parameters[1].required = 1;
+    
+    search_text_parameters[2].name = strdup("k");
+    search_text_parameters[2].type = strdup("number");
+    search_text_parameters[2].description = strdup("Number of results to return (default: 5)");
+    search_text_parameters[2].enum_values = NULL;
+    search_text_parameters[2].enum_count = 0;
+    search_text_parameters[2].required = 0;
     
     for (int i = 0; i < 3; i++) {
-        search_text_params[i].name = safe_strdup(search_text_params[i].name);
-        search_text_params[i].type = safe_strdup(search_text_params[i].type);
-        search_text_params[i].description = safe_strdup(search_text_params[i].description);
+        if (search_text_parameters[i].name == NULL || 
+            search_text_parameters[i].type == NULL ||
+            search_text_parameters[i].description == NULL) {
+            for (int j = 0; j <= i; j++) {
+                free(search_text_parameters[j].name);
+                free(search_text_parameters[j].type);
+                free(search_text_parameters[j].description);
+            }
+            return -1;
+        }
     }
     
-    if (register_single_vector_tool(registry, "vector_db_search_text", 
-                                   "Search for similar text content in the vector database", search_text_params, 3) != 0) {
-        return -1;
+    result = register_tool(registry, "vector_db_search_text", 
+                          "Search for similar text content in the vector database",
+                          search_text_parameters, 3, execute_vector_db_search_text_tool_call);
+    
+    for (int i = 0; i < 3; i++) {
+        free(search_text_parameters[i].name);
+        free(search_text_parameters[i].type);
+        free(search_text_parameters[i].description);
     }
+    
+    if (result != 0) return -1;
     
     // 13. Register vector_db_search_by_time
-    ToolParameter *search_time_params = malloc(4 * sizeof(ToolParameter));
-    if (search_time_params == NULL) return -1;
+    ToolParameter search_time_parameters[4];
     
-    search_time_params[0] = (ToolParameter){"index_name", "string", "Name of the index to search", NULL, 0, 1};
-    search_time_params[1] = (ToolParameter){"start_time", "number", "Start timestamp (Unix epoch, default: 0)", NULL, 0, 0};
-    search_time_params[2] = (ToolParameter){"end_time", "number", "End timestamp (Unix epoch, default: now)", NULL, 0, 0};
-    search_time_params[3] = (ToolParameter){"limit", "number", "Maximum number of results (default: 100)", NULL, 0, 0};
+    search_time_parameters[0].name = strdup("index_name");
+    search_time_parameters[0].type = strdup("string");
+    search_time_parameters[0].description = strdup("Name of the index to search");
+    search_time_parameters[0].enum_values = NULL;
+    search_time_parameters[0].enum_count = 0;
+    search_time_parameters[0].required = 1;
+    
+    search_time_parameters[1].name = strdup("start_time");
+    search_time_parameters[1].type = strdup("number");
+    search_time_parameters[1].description = strdup("Start timestamp (Unix epoch, default: 0)");
+    search_time_parameters[1].enum_values = NULL;
+    search_time_parameters[1].enum_count = 0;
+    search_time_parameters[1].required = 0;
+    
+    search_time_parameters[2].name = strdup("end_time");
+    search_time_parameters[2].type = strdup("number");
+    search_time_parameters[2].description = strdup("End timestamp (Unix epoch, default: now)");
+    search_time_parameters[2].enum_values = NULL;
+    search_time_parameters[2].enum_count = 0;
+    search_time_parameters[2].required = 0;
+    
+    search_time_parameters[3].name = strdup("limit");
+    search_time_parameters[3].type = strdup("number");
+    search_time_parameters[3].description = strdup("Maximum number of results (default: 100)");
+    search_time_parameters[3].enum_values = NULL;
+    search_time_parameters[3].enum_count = 0;
+    search_time_parameters[3].required = 0;
     
     for (int i = 0; i < 4; i++) {
-        search_time_params[i].name = safe_strdup(search_time_params[i].name);
-        search_time_params[i].type = safe_strdup(search_time_params[i].type);
-        search_time_params[i].description = safe_strdup(search_time_params[i].description);
+        if (search_time_parameters[i].name == NULL || 
+            search_time_parameters[i].type == NULL ||
+            search_time_parameters[i].description == NULL) {
+            for (int j = 0; j <= i; j++) {
+                free(search_time_parameters[j].name);
+                free(search_time_parameters[j].type);
+                free(search_time_parameters[j].description);
+            }
+            return -1;
+        }
     }
     
-    if (register_single_vector_tool(registry, "vector_db_search_by_time", 
-                                   "Search for documents within a time range", search_time_params, 4) != 0) {
-        return -1;
+    result = register_tool(registry, "vector_db_search_by_time", 
+                          "Search for documents within a time range",
+                          search_time_parameters, 4, execute_vector_db_search_by_time_tool_call);
+    
+    for (int i = 0; i < 4; i++) {
+        free(search_time_parameters[i].name);
+        free(search_time_parameters[i].type);
+        free(search_time_parameters[i].description);
     }
     
-    return 0;
+    return result;
 }
 
 int execute_vector_db_create_index_tool_call(const ToolCall *tool_call, ToolResult *result) {

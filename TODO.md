@@ -1,4 +1,3 @@
-- The tool handling in the tools system is a giant if-then-else statement. This is unmaintainable. Re-architect and refactor the tool handling to be clear and maintainable.
 - The file tools don't reveal much to the user about what files the agent is reading and what directories it's looking in.
 - Investigate the feasibility of moving all AI driven memory storage (conversation tracking, remembering things the user asks, etc) into a background process. This would mean that memory operations aren't logged to the user, but that's ok. If it seems possible, compose a plan for this refactor and execute it.
 - Implement a new tool called the `TaskTool`. This tool should essentially invoke Ralph in one-shot mode in a sub-process, and return the result to the main agent. This tool is intended to expand Ralphs context window by allowing Ralph to dispatch task descriptions similar to the ones in this TODO, and retrieve the results once the task is done.

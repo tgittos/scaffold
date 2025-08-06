@@ -209,62 +209,71 @@ int execute_pdf_extract_text_tool_call(const ToolCall *tool_call, ToolResult *re
 }
 
 int register_pdf_tool(ToolRegistry *registry) {
-    if (!registry) return -1;
-    
-    // Reallocate functions array
-    ToolFunction *new_functions = realloc(registry->functions, 
-                                         (registry->function_count + 1) * sizeof(ToolFunction));
-    if (!new_functions) return -1;
-    
-    registry->functions = new_functions;
-    ToolFunction *func = &registry->functions[registry->function_count];
-    
-    // Set function details
-    func->name = safe_strdup("pdf_extract_text");
-    func->description = safe_strdup("Extract text content from a PDF file");
-    func->parameter_count = 4;
-    
-    // Allocate parameters
-    func->parameters = malloc(4 * sizeof(ToolParameter));
-    if (!func->parameters) {
-        free(func->name);
-        free(func->description);
+    if (registry == NULL) {
         return -1;
     }
     
-    // file_path parameter (required)
-    func->parameters[0].name = safe_strdup("file_path");
-    func->parameters[0].type = safe_strdup("string");
-    func->parameters[0].description = safe_strdup("Path to the PDF file to extract text from");
-    func->parameters[0].required = 1;
-    func->parameters[0].enum_values = NULL;
-    func->parameters[0].enum_count = 0;
+    // Define parameters
+    ToolParameter parameters[4];
     
-    // start_page parameter (optional)
-    func->parameters[1].name = safe_strdup("start_page");
-    func->parameters[1].type = safe_strdup("number");
-    func->parameters[1].description = safe_strdup("First page to extract (0-based, -1 for all pages)");
-    func->parameters[1].required = 0;
-    func->parameters[1].enum_values = NULL;
-    func->parameters[1].enum_count = 0;
+    // Parameter 1: file_path (required)
+    parameters[0].name = strdup("file_path");
+    parameters[0].type = strdup("string");
+    parameters[0].description = strdup("Path to the PDF file to extract text from");
+    parameters[0].enum_values = NULL;
+    parameters[0].enum_count = 0;
+    parameters[0].required = 1;
     
-    // end_page parameter (optional)
-    func->parameters[2].name = safe_strdup("end_page");
-    func->parameters[2].type = safe_strdup("number");
-    func->parameters[2].description = safe_strdup("Last page to extract (0-based, -1 for all pages)");
-    func->parameters[2].required = 0;
-    func->parameters[2].enum_values = NULL;
-    func->parameters[2].enum_count = 0;
+    // Parameter 2: start_page (optional)
+    parameters[1].name = strdup("start_page");
+    parameters[1].type = strdup("number");
+    parameters[1].description = strdup("First page to extract (0-based, -1 for all pages)");
+    parameters[1].enum_values = NULL;
+    parameters[1].enum_count = 0;
+    parameters[1].required = 0;
     
-    // preserve_layout parameter (optional)
-    func->parameters[3].name = safe_strdup("preserve_layout");
-    func->parameters[3].type = safe_strdup("number");
-    func->parameters[3].description = safe_strdup("Whether to preserve layout formatting (1 for yes, 0 for no)");
-    func->parameters[3].required = 0;
-    func->parameters[3].enum_values = NULL;
-    func->parameters[3].enum_count = 0;
+    // Parameter 3: end_page (optional)
+    parameters[2].name = strdup("end_page");
+    parameters[2].type = strdup("number");
+    parameters[2].description = strdup("Last page to extract (0-based, -1 for all pages)");
+    parameters[2].enum_values = NULL;
+    parameters[2].enum_count = 0;
+    parameters[2].required = 0;
     
-    registry->function_count++;
+    // Parameter 4: preserve_layout (optional)
+    parameters[3].name = strdup("preserve_layout");
+    parameters[3].type = strdup("number");
+    parameters[3].description = strdup("Whether to preserve layout formatting (1 for yes, 0 for no)");
+    parameters[3].enum_values = NULL;
+    parameters[3].enum_count = 0;
+    parameters[3].required = 0;
     
-    return 0;
+    // Check for allocation failures
+    for (int i = 0; i < 4; i++) {
+        if (parameters[i].name == NULL || 
+            parameters[i].type == NULL ||
+            parameters[i].description == NULL) {
+            // Cleanup on failure
+            for (int j = 0; j <= i; j++) {
+                free(parameters[j].name);
+                free(parameters[j].type);
+                free(parameters[j].description);
+            }
+            return -1;
+        }
+    }
+    
+    // Register the tool using the new system
+    int result = register_tool(registry, "pdf_extract_text", 
+                              "Extract text content from a PDF file",
+                              parameters, 4, execute_pdf_extract_text_tool_call);
+    
+    // Clean up temporary parameter storage
+    for (int i = 0; i < 4; i++) {
+        free(parameters[i].name);
+        free(parameters[i].type);
+        free(parameters[i].description);
+    }
+    
+    return result;
 }
