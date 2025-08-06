@@ -514,7 +514,7 @@ vector_db_error_t vector_db_save_index(const vector_db_t* db, const char* index_
     int result = hnswlib_save_index(index_name, file_path);
     
     if (result == 0) {
-        char meta_path[4096];
+        char meta_path[4096] = {0};
         snprintf(meta_path, sizeof(meta_path), "%s.meta", file_path);
         FILE* meta = fopen(meta_path, "w");
         if (meta) {
@@ -542,7 +542,7 @@ vector_db_error_t vector_db_load_index(vector_db_t* db, const char* index_name,
     }
     
     // Read metadata first to get config
-    char meta_path[4096];
+    char meta_path[4096] = {0};
     snprintf(meta_path, sizeof(meta_path), "%s.meta", file_path);
     FILE* meta = fopen(meta_path, "r");
     
@@ -632,7 +632,7 @@ vector_db_error_t vector_db_save_all(const vector_db_t* db, const char* director
     
     index_entry_t* entry = db->indices;
     while (entry) {
-        char file_path[4096];
+        char file_path[4096] = {0};
         snprintf(file_path, sizeof(file_path), "%s/%s.index", directory, entry->name);
         
         pthread_rwlock_rdlock(&entry->lock);
@@ -641,7 +641,7 @@ vector_db_error_t vector_db_save_all(const vector_db_t* db, const char* director
         int result = hnswlib_save_index(entry->name, file_path);
         
         if (result == 0) {
-            char meta_path[8192];
+            char meta_path[8192] = {0};
             snprintf(meta_path, sizeof(meta_path), "%s.meta", file_path);
             FILE* meta = fopen(meta_path, "w");
             if (meta) {
@@ -682,11 +682,11 @@ vector_db_error_t vector_db_load_all(vector_db_t* db, const char* directory) {
     while ((entry = readdir(dir)) != NULL) {
         size_t len = strlen(entry->d_name);
         if (len > 6 && strcmp(entry->d_name + len - 6, ".index") == 0) {
-            char index_name[256];
+            char index_name[256] = {0};
             memcpy(index_name, entry->d_name, len - 6);
             index_name[len - 6] = '\0';
             
-            char file_path[4096];
+            char file_path[4096] = {0};
             snprintf(file_path, sizeof(file_path), "%s/%s", directory, entry->d_name);
             
             vector_db_error_t err = vector_db_load_index(db, index_name, file_path);

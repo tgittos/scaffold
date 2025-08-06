@@ -129,7 +129,7 @@ int hnswlib_has_index(const char* name) {
 int hnswlib_add_vector(const char* name, const float* data, size_t label) {
     try {
         auto it = indexes.find(std::string(name));
-        if (it == indexes.end()) {
+        if (it == indexes.end() || !it->second) {
             return -1;
         }
         
@@ -143,7 +143,7 @@ int hnswlib_add_vector(const char* name, const float* data, size_t label) {
 int hnswlib_update_vector(const char* name, const float* data, size_t label) {
     try {
         auto it = indexes.find(std::string(name));
-        if (it == indexes.end()) {
+        if (it == indexes.end() || !it->second) {
             return -1;
         }
         
@@ -159,7 +159,7 @@ int hnswlib_update_vector(const char* name, const float* data, size_t label) {
 int hnswlib_delete_vector(const char* name, size_t label) {
     try {
         auto it = indexes.find(std::string(name));
-        if (it == indexes.end()) {
+        if (it == indexes.end() || !it->second) {
             return -1;
         }
         
@@ -173,13 +173,13 @@ int hnswlib_delete_vector(const char* name, size_t label) {
 int hnswlib_get_vector(const char* name, size_t label, float* data) {
     try {
         auto it = indexes.find(std::string(name));
-        if (it == indexes.end()) {
+        if (it == indexes.end() || !it->second) {
             return -1;
         }
         
         std::vector<float> vec = it->second->getDataByLabel<float>(label);
         auto space_it = spaces.find(std::string(name));
-        if (space_it == spaces.end()) {
+        if (space_it == spaces.end() || !space_it->second) {
             return -1;
         }
         
@@ -194,7 +194,7 @@ int hnswlib_get_vector(const char* name, size_t label, float* data) {
 hnswlib_search_results_t* hnswlib_search(const char* name, const float* query, size_t k) {
     try {
         auto it = indexes.find(std::string(name));
-        if (it == indexes.end()) {
+        if (it == indexes.end() || !it->second) {
             return nullptr;
         }
         
@@ -228,7 +228,7 @@ void hnswlib_free_search_results(hnswlib_search_results_t* results) {
 int hnswlib_save_index(const char* name, const char* path) {
     try {
         auto it = indexes.find(std::string(name));
-        if (it == indexes.end()) {
+        if (it == indexes.end() || !it->second) {
             return -1;
         }
         
@@ -280,7 +280,7 @@ int hnswlib_load_index(const char* name, const char* path, const hnswlib_index_c
 int hnswlib_set_ef(const char* name, size_t ef) {
     try {
         auto it = indexes.find(std::string(name));
-        if (it == indexes.end()) {
+        if (it == indexes.end() || !it->second) {
             return -1;
         }
         
@@ -293,7 +293,7 @@ int hnswlib_set_ef(const char* name, size_t ef) {
 
 size_t hnswlib_get_current_count(const char* name) {
     auto it = indexes.find(std::string(name));
-    if (it == indexes.end()) {
+    if (it == indexes.end() || !it->second) {
         return 0;
     }
     
@@ -302,7 +302,7 @@ size_t hnswlib_get_current_count(const char* name) {
 
 size_t hnswlib_get_max_elements(const char* name) {
     auto it = indexes.find(std::string(name));
-    if (it == indexes.end()) {
+    if (it == indexes.end() || !it->second) {
         return 0;
     }
     
