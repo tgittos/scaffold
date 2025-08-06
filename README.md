@@ -220,6 +220,7 @@ Ralph uses a JSON configuration file (`ralph.config.json`) for setup:
     "api_url": "https://api.anthropic.com/v1/messages",
     "model": "claude-3-5-sonnet-20241022",
     "anthropic_api_key": "sk-ant-your-key",
+    "openai_api_key": "sk-your-openai-key",
     "context_window": 200000,
     "max_tokens": -1
 }
@@ -230,6 +231,7 @@ Ralph uses a JSON configuration file (`ralph.config.json`) for setup:
 {
     "api_url": "http://localhost:1234/v1/chat/completions",
     "model": "qwen/qwen-2.5-coder-32b",
+    "openai_api_key": "sk-your-openai-key",
     "context_window": 32768,
     "max_tokens": -1
 }
@@ -246,6 +248,8 @@ Ralph uses a JSON configuration file (`ralph.config.json`) for setup:
 | `max_tokens` | Max response tokens (-1 for auto) | `-1` |
 | `openai_api_key` | OpenAI API key | None |
 | `anthropic_api_key` | Anthropic API key | None |
+
+**Important:** An OpenAI API key is required for vector embeddings and memory functionality, even when using Anthropic or local models. The `openai_api_key` is used for generating embeddings with OpenAI's `text-embedding-3-small` model.
 
 ## Real-World Usage Examples
 
