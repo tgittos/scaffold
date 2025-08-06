@@ -235,15 +235,6 @@ Ralph uses a JSON configuration file (`ralph.config.json`) for setup:
 }
 ```
 
-**Ollama:**
-```json
-{
-    "api_url": "http://localhost:11434/v1/chat/completions",
-    "model": "llama3.3:latest",
-    "context_window": 131072,
-    "max_tokens": -1
-}
-```
 
 ### Configuration Options
 
