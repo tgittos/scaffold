@@ -16,7 +16,7 @@ static void config_set_defaults(ralph_config_t *config)
     
     // Set default values
     config->api_url = strdup("https://api.openai.com/v1/chat/completions");
-    config->model = strdup("o4-mini-2025-04-16");
+    config->model = strdup("gpt-4o-mini");
     config->context_window = 8192;
     config->max_tokens = -1;
     
