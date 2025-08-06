@@ -38,6 +38,12 @@ This document provides a comprehensive overview of Ralph's codebase structure an
 - **`conversation_compactor.c/h`** - Intelligent conversation history compression
 - **`token_manager.c/h`** - Token counting and context window management
 
+#### `src/mcp/` - Model Context Protocol
+- **`mcp_client.c/h`** - MCP client implementation for external AI tool integration
+
+#### `src/cli/` - Command Line Interface
+- **`memory_commands.c/h`** - CLI commands for memory management operations
+
 #### `src/tools/` - AI Tool System
 - **`tools_system.c/h`** - Core tool execution framework
 - **`tools_system_safe.c`** - Safe tool execution environment
@@ -108,6 +114,10 @@ The test directory mirrors the source structure:
 #### `test/db/` - Database Tests
 - **`test_vector_db.c`** - Vector database core tests
 
+#### `test/mcp/` - MCP Integration Tests
+- **`test_mcp_client.c`** - MCP client functionality tests
+- **`test_mcp_integration.c`** - MCP protocol integration tests
+
 #### `test/utils/` - Utility Tests
 - **`test_env_loader.c`** - Configuration loading tests
 - **`test_output_formatter.c`** - Output formatting tests
@@ -136,6 +146,9 @@ The `src/network/` directory provides a robust HTTP client with provider-specifi
 
 ### 6. **PDF Processing Pipeline**
 The `src/pdf/` directory enables document ingestion and knowledge extraction from PDF files.
+
+### 7. **MCP Protocol Integration**
+The `src/mcp/` directory provides Model Context Protocol support, enabling Ralph to automatically integrate external AI tools and services as needed to complete tasks.
 
 ## Development Workflow
 

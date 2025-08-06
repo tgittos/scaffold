@@ -14,6 +14,12 @@ Ralph doesn't just generate boilerplate - it crafts production-ready solutions t
 ### 🔍 **Internet-Powered Research Engine**
 Stuck on an obscure API? Need to understand a new framework? Ralph can research the latest documentation, browse GitHub repos, analyze StackOverflow discussions, and synthesize the information into actionable insights - all while you grab coffee.
 
+### 📄 **Document Processing Superpowers**
+Ralph doesn't just read code - it devours PDF documentation, technical specs, and research papers. Drop a 500-page API manual on Ralph, and it instantly indexes every function, stores semantic relationships, and answers questions about edge cases buried on page 347. Your entire technical library becomes instantly searchable and conversational.
+
+### 🧠 **MCP Protocol Integration**
+Ralph automatically connects to MCP-enabled tools and services when it needs them to complete your tasks. Ask Ralph to deploy to AWS, and it seamlessly uses AWS MCP tools behind the scenes. Need database optimization? Ralph automatically connects to your database through MCP. Your entire development ecosystem becomes Ralph's invisible superpower.
+
 ### 🤝 **Your AI Pair Programming Partner**
 Ralph reviews your code with the precision of a senior architect, catches bugs before they hit production, suggests optimizations you never considered, and explains complex codebases like a patient mentor. It's the pair programmer who makes you better, not just faster.
 
@@ -60,6 +66,57 @@ Type 'quit' or 'exit' to end the conversation.
 
 **This is how development should feel**: Natural conversation that turns ideas into production-ready code through collaborative iteration. No context switching, no losing your train of thought, no starting over when you get stuck.
 
+### 🎯 **The Document Processing Revolution**
+
+```bash
+$ ./ralph "Process this AWS API documentation PDF and help me integrate S3 with my Node.js app"
+
+[Ralph ingests 847-page PDF, creates semantic index, extracts code examples]
+
+Ralph: I've processed the entire AWS S3 API documentation. I found 23 relevant endpoints 
+for your Node.js integration. The SDK examples on pages 156-203 show the exact patterns 
+you need. Let me create a complete integration...
+
+[Ralph generates full S3 service module with error handling, retry logic, and tests]
+
+> How do I handle large file uploads efficiently?
+
+[Ralph recalls page 445 about multipart uploads, implements streaming solution]
+
+> What about security best practices?
+
+[Ralph references section 12.3 on IAM policies, generates secure configuration]
+```
+
+### 🔧 **Complex Multi-Step Execution**
+
+```bash
+$ ./ralph
+> I need to refactor our authentication system, add rate limiting, and update the docs
+
+Ralph: I'll handle this comprehensive refactor systematically. Let me start by auditing 
+your current authentication implementation...
+
+[Ralph analyzes entire codebase, identifies security issues]
+
+Ralph: Found 3 critical issues in password handling. Now designing new JWT architecture 
+with refresh tokens...
+
+[Implements secure auth system with proper token rotation]
+
+Ralph: Auth system complete. Adding Redis-backed rate limiting middleware...
+
+[Creates rate limiting with configurable thresholds and Redis persistence]
+
+Ralph: Rate limiting deployed. Updating API documentation with new endpoints...
+
+[Generates comprehensive API docs with examples and security notes]
+
+Ralph: Full refactor complete! Added tests covering all new functionality.
+
+# Result: Complex multi-component system delivered seamlessly
+```
+
 ## The Force Multiplier Effect
 
 ### 🎯 **From Concept to Code in Minutes**
@@ -74,17 +131,20 @@ Every interaction with Ralph is a masterclass. It explains its reasoning, teache
 ### 🔄 **Conversational Context That Never Breaks**
 Ralph remembers everything from your session. Built that authentication system two hours ago? Ralph knows exactly how it works when you want to add features. Ran into an error? Ralph remembers the solution when similar issues come up. It's like pair programming with someone who has perfect memory and infinite patience.
 
-### 🧠 **Eidetic Memory That Never Forgets**
-Ralph now has perfect, permanent memory. Every bug you've solved, every architecture decision you've made, every quirky workaround for that legacy system - Ralph remembers it all forever. It learns your coding style, remembers your team's conventions, and recalls solutions from months ago when similar problems arise. You're not just getting an AI assistant; you're getting a programming partner with photographic memory who gets smarter every time you use it.
+### 🧠 **Vector-Powered Semantic Memory That Never Forgets**
+Ralph doesn't just remember - it understands. Using advanced vector embeddings, Ralph builds semantic maps of everything: every bug you've solved, every architecture decision, every clever workaround. When you mention "authentication issues," Ralph instantly recalls not just what you said about auth, but similar security patterns, related debugging sessions, and that brilliant JWT solution from three months ago. It's like having a search engine for your entire programming experience that actually gets what you mean, not just what you typed.
 
 ### ⚡ **Scriptable Superpowers**
 One-shot mode means Ralph becomes part of your development infrastructure:
 - **Pre-commit hooks** that refactor code automatically
-- **CI/CD pipelines** that fix failing tests
-- **Automated code reviews** that catch issues before humans even look
-- **Documentation generators** that actually understand your code
-- **PDF processing** that extracts and indexes technical documentation
-- **Knowledge base building** that learns from your entire codebase
+- **CI/CD pipelines** that fix failing tests and update documentation
+- **Automated code reviews** that catch security issues before humans even look
+- **Documentation generators** that process PDF specs and generate living docs
+- **PDF processing pipelines** that turn technical manuals into searchable knowledge
+- **Vector database operations** that build semantic code indexes
+- **MCP protocol integration** that brings external AI tools into Ralph's workflow
+- **Memory systems** that learn from every interaction and never forget solutions
+- **Shell automation** that handles complex multi-command workflows safely
 - **AGENT.md support** - Define custom AI behavior with the [agent.md](https://agent.md/) specification
 
 ## Universal Compatibility
@@ -273,6 +333,34 @@ Recalls solutions to similar problems]
 
 **The Perfect Memory**: Ralph becomes an extension of your own brain - remembering every solution, learning every pattern, and growing smarter with every interaction. It's not just AI assistance; it's AI that becomes YOU.
 
+### 📚 **The Technical Library Transformation**
+
+```bash
+$ ./ralph "Process these React documentation PDFs and help me optimize our component architecture"
+
+[Ralph ingests 1,200 pages of React docs, Next.js guides, and performance whitepapers]
+
+Ralph: I've indexed your entire React library. I found 47 optimization patterns across 
+the documentation. Your current components violate 3 key performance principles I 
+discovered on pages 234, 567, and 891. Let me show you the fixes...
+
+[Creates optimized component architecture with lazy loading and memoization]
+
+> remember this optimization approach for future React projects
+
+Ralph: ✅ Stored semantic memory: "React optimization architecture with lazy loading 
+pattern - 40% performance improvement on large component trees"
+
+> Three months later...
+> I'm having performance issues with this Vue.js app
+
+Ralph: I remember you solved similar performance issues with React using lazy loading 
+and component memoization. The same principles apply to Vue - let me adapt that 
+optimization pattern...
+
+[Applies learned patterns from React to Vue, cross-framework knowledge transfer]
+```
+
 ## Automation and Integration
 
 ### 🔄 **Git Workflow Automation**
@@ -304,20 +392,43 @@ script:
 # Build error assistant
 make 2>&1 | ./ralph "Fix these build errors and explain what went wrong"
 
-# Automated documentation
-./ralph "Generate API documentation for all functions in src/" 
+# Automated documentation with PDF processing
+./ralph "Process the API spec PDF and generate comprehensive documentation with examples" 
 
 # Test failure debugging
 pytest --tb=short 2>&1 | ./ralph "Debug these test failures and provide fixes"
 
-# Learn from your mistakes and successes
+# Ralph automatically uses MCP tools as needed
+./ralph "Optimize our AWS infrastructure costs"
+# Ralph automatically connects to AWS MCP tools to analyze and optimize
+
+# Advanced memory operations
 ./ralph "remember this regex solution for parsing email addresses - it handles edge cases the others missed"
 
-# Store team decisions permanently
-./ralph "remember we decided against microservices for this project because the team is too small"
+# Vector-powered knowledge recall
+./ralph "What was that database optimization technique we used for the payment service?"
 
-# Recall solutions from previous projects
-./ralph "What was that tricky database migration approach we used last year?"
+# PDF-powered research
+./ralph "Search the PostgreSQL documentation for best practices on connection pooling"
+```
+
+### 🔌 **MCP Protocol Integration**
+```bash
+# Ask Ralph to do something - it automatically uses the right MCP tools
+./ralph "Deploy this app to production and set up monitoring"
+# Ralph automatically uses AWS/Docker/monitoring MCP tools as needed
+
+./ralph "Optimize these slow database queries"
+# Ralph connects to your database through MCP and analyzes performance
+
+./ralph "Review our recent commits for security issues" 
+# Ralph uses GitHub MCP integration to analyze repository history
+
+./ralph "Set up automated backups for our user data"
+# Ralph uses cloud provider MCP tools to configure backup systems
+
+./ralph "Migrate this SQLite data to PostgreSQL"
+# Ralph uses database MCP tools to handle the migration seamlessly
 ```
 
 ### 🎛️ **Custom AI Behavior**
