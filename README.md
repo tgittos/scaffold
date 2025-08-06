@@ -162,16 +162,19 @@ One-shot mode means Ralph becomes part of your development infrastructure:
 wget https://github.com/bluetongueai/ralph/releases/latest/download/ralph
 chmod +x ralph
 
-# Set your API key
-export OPENAI_API_KEY=sk-your-key-here
-# or
-export ANTHROPIC_API_KEY=sk-ant-your-key-here
+# Configure Ralph with your API key
+echo '{
+  "api_url": "https://api.openai.com/v1/chat/completions",
+  "model": "gpt-4o",
+  "openai_api_key": "sk-your-key-here",
+  "context_window": 128000,
+  "max_tokens": -1
+}' > ralph.config.json
 
 # Start building the future
 ./ralph "Let's build something amazing"
 
-# Enable persistent memory and PDF processing (optional)
-# Ralph will automatically create vector databases for long-term memory
+# Ralph automatically creates vector databases for long-term memory and PDF processing
 ```
 
 ### Option 2: Build from Source
@@ -185,55 +188,73 @@ make
 
 ## Configuration
 
-Ralph uses environment variables and `.env` files for configuration:
+Ralph uses a JSON configuration file (`ralph.config.json`) for setup:
 
-```bash
-# OpenAI API
-OPENAI_API_KEY=sk-your-api-key
-API_URL=https://api.openai.com/v1/chat/completions
-MODEL=gpt-4o
-CONTEXT_WINDOW=128000
+```json
+{
+    "api_url": "https://api.anthropic.com/v1/messages",
+    "model": "claude-sonnet-4-20250514",
+    "anthropic_api_key": "sk-ant-your-key-here",
+    "openai_api_key": "sk-your-openai-key-here",
+    "context_window": 8192,
+    "max_tokens": -1
+}
+```
 
-# Anthropic API
-ANTHROPIC_API_KEY=sk-ant-your-api-key
-API_URL=https://api.anthropic.com/v1/messages
-MODEL=claude-3-5-sonnet-20241022
-CONTEXT_WINDOW=200000
+### Configuration Examples
 
-# Local LM Studio
-API_URL=http://localhost:1234/v1/chat/completions
-MODEL=qwen/qwen-2.5-coder-32b
-CONTEXT_WINDOW=32768
+**OpenAI Configuration:**
+```json
+{
+    "api_url": "https://api.openai.com/v1/chat/completions",
+    "model": "gpt-4o",
+    "openai_api_key": "sk-your-openai-key",
+    "context_window": 128000,
+    "max_tokens": -1
+}
+```
 
-# Ollama
-API_URL=http://localhost:11434/v1/chat/completions  
-MODEL=llama3.3:latest
-CONTEXT_WINDOW=131072
+**Anthropic Configuration:**
+```json
+{
+    "api_url": "https://api.anthropic.com/v1/messages",
+    "model": "claude-3-5-sonnet-20241022",
+    "anthropic_api_key": "sk-ant-your-key",
+    "context_window": 200000,
+    "max_tokens": -1
+}
+```
+
+**Local LM Studio:**
+```json
+{
+    "api_url": "http://localhost:1234/v1/chat/completions",
+    "model": "qwen/qwen-2.5-coder-32b",
+    "context_window": 32768,
+    "max_tokens": -1
+}
+```
+
+**Ollama:**
+```json
+{
+    "api_url": "http://localhost:11434/v1/chat/completions",
+    "model": "llama3.3:latest",
+    "context_window": 131072,
+    "max_tokens": -1
+}
 ```
 
 ### Configuration Options
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `API_URL` | API endpoint URL | `https://api.openai.com/v1/chat/completions` |
-| `MODEL` | Model identifier | `gpt-4o-mini` |
-| `CONTEXT_WINDOW` | Model context window size | `8192` |
-| `MAX_TOKENS` | Max response tokens | Auto-calculated |
-| `OPENAI_API_KEY` | OpenAI API key | None |
-| `ANTHROPIC_API_KEY` | Anthropic API key | None |
-| `EMBEDDING_MODEL` | Embedding model for vector storage | `text-embedding-3-small` |
-
-### Advanced Token Management
-
-Ralph features intelligent token management that ensures models always have enough context for meaningful responses:
-
-- **Dynamic Token Allocation**: Automatically calculates optimal token distribution based on conversation history
-- **Intelligent Safety Buffers**: Calculates safety buffers dynamically based on context complexity (5% of context window + base buffer)
-- **Conversation History Trimming**: Automatically trims older messages when context limits are reached, preserving recent tool interactions
-- **Minimum Response Guarantee**: Always reserves at least 150 tokens for model responses
-- **Accurate Token Estimation**: Uses improved token counting (3.5 chars/token) with overhead for JSON structure and tools
-
-The system prioritizes response quality by maximizing available response tokens while ensuring the prompt fits within context limits.
+| Field | Description | Default |
+|-------|-------------|---------|
+| `api_url` | API endpoint URL | `https://api.openai.com/v1/chat/completions` |
+| `model` | Model identifier | `gpt-4o-mini` |
+| `context_window` | Model context window size | `8192` |
+| `max_tokens` | Max response tokens (-1 for auto) | `-1` |
+| `openai_api_key` | OpenAI API key | None |
+| `anthropic_api_key` | Anthropic API key | None |
 
 ## Real-World Usage Examples
 
@@ -471,7 +492,14 @@ Ralph is the ultimate force multiplier for development velocity with permanent i
 # The future of programming is one download away
 wget https://github.com/bluetongueai/ralph/releases/latest/download/ralph
 chmod +x ralph
-export OPENAI_API_KEY=your-key-here
+
+# Create config file
+echo '{
+  "openai_api_key": "your-key-here",
+  "model": "gpt-4o",
+  "context_window": 128000
+}' > ralph.config.json
+
 ./ralph "Transform me into a 10x developer"
 ```
 
