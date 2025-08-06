@@ -1193,50 +1193,50 @@ int manage_conversation_tokens(RalphSession* session, const char* user_message,
     int background_status = background_compact_conversation(&session->session_data, &compact_config, &background_result);
     
     if (background_status == 0 && background_result.tokens_saved > 0) {
-        // Background compaction succeeded, recalculate token allocation
-        debug_printf("Background compaction saved %d tokens, recalculating allocation\n", background_result.tokens_saved);
+        // Background trimming succeeded, recalculate token allocation
+        debug_printf("Background trimming saved %d tokens, recalculating allocation\n", background_result.tokens_saved);
         
         cleanup_compaction_result(&background_result);
         
-        // Recalculate with the compacted conversation
+        // Recalculate with the trimmed conversation
         result = calculate_token_allocation(&session->session_data, user_message, config, usage);
         if (result != 0) {
             return result;
         }
-        debug_printf("After background compaction: %d response tokens available\n", usage->available_response_tokens);
+        debug_printf("After background trimming: %d response tokens available\n", usage->available_response_tokens);
     } else if (background_status == 0) {
-        // No background compaction was needed (tokens_saved == 0)
+        // No background trimming was needed (tokens_saved == 0)
         cleanup_compaction_result(&background_result);
     }
     
-    // If we have insufficient tokens for a good response, try emergency compaction
+    // If we have insufficient tokens for a good response, try emergency trimming
     if (usage->available_response_tokens < config->min_response_tokens * 2) {
-        debug_printf("Available response tokens (%d) below comfortable threshold, attempting emergency compaction\n",
+        debug_printf("Available response tokens (%d) below comfortable threshold, attempting emergency trimming\n",
                     usage->available_response_tokens);
         
         // Calculate target token count (aim for 70% of context window)
         int target_tokens = (int)(config->context_window * 0.7);
         
-        // Attempt emergency compaction using the embedded SessionData
+        // Attempt emergency trimming using the embedded SessionData
         CompactionResult compact_result = {0};
         int compact_status = compact_conversation(&session->session_data, &compact_config, target_tokens, &compact_result);
         
         if (compact_status == 0 && compact_result.tokens_saved > 0) {
-            // Compaction succeeded, recalculate token allocation
-            debug_printf("Compaction saved %d tokens, recalculating allocation\n", compact_result.tokens_saved);
+            // Trimming succeeded, recalculate token allocation
+            debug_printf("Trimming saved %d tokens, recalculating allocation\n", compact_result.tokens_saved);
             
             cleanup_compaction_result(&compact_result);
             
-            // Recalculate with the compacted conversation (conversation is already updated in session_data)
+            // Recalculate with the trimmed conversation (conversation is already updated in session_data)
             result = calculate_token_allocation(&session->session_data, user_message, config, usage);
             if (result == 0) {
-                debug_printf("After compaction: %d response tokens available\n", usage->available_response_tokens);
+                debug_printf("After trimming: %d response tokens available\n", usage->available_response_tokens);
             }
             
             return result;
         } else {
-            // Compaction failed or wasn't helpful
-            debug_printf("Compaction failed or ineffective, using original allocation\n");
+            // Trimming failed or wasn't helpful
+            debug_printf("Trimming failed or ineffective, using original allocation\n");
             cleanup_compaction_result(&compact_result);
         }
     }
