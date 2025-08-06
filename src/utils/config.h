@@ -10,6 +10,7 @@ typedef struct {
     char *anthropic_api_key;
     char *openai_api_key;
     char *openai_api_url;
+    char *embedding_api_url;
     char *embedding_model;
     char *system_prompt;
     int context_window;

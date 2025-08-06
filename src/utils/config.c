@@ -25,6 +25,7 @@ static void config_set_defaults(ralph_config_t *config)
     config->anthropic_api_key = NULL;
     config->openai_api_key = NULL;
     config->openai_api_url = NULL;
+    config->embedding_api_url = NULL;
     config->embedding_model = NULL;
     config->system_prompt = NULL;
     config->config_file_path = NULL;
@@ -208,6 +209,12 @@ int config_load_from_file(const char *filepath)
         g_config->openai_api_url = strdup(item->valuestring);
     }
     
+    item = cJSON_GetObjectItem(json, "embedding_api_url");
+    if (cJSON_IsString(item)) {
+        free(g_config->embedding_api_url);
+        g_config->embedding_api_url = strdup(item->valuestring);
+    }
+    
     item = cJSON_GetObjectItem(json, "embedding_model");
     if (cJSON_IsString(item)) {
         free(g_config->embedding_model);
@@ -262,6 +269,8 @@ int config_save_to_file(const char *filepath)
     
     if (g_config->openai_api_url)
         cJSON_AddStringToObject(json, "openai_api_url", g_config->openai_api_url);
+    if (g_config->embedding_api_url)
+        cJSON_AddStringToObject(json, "embedding_api_url", g_config->embedding_api_url);
     if (g_config->embedding_model)
         cJSON_AddStringToObject(json, "embedding_model", g_config->embedding_model);
     if (g_config->system_prompt)
@@ -376,6 +385,7 @@ void config_cleanup(void)
     free(g_config->anthropic_api_key);
     free(g_config->openai_api_key);
     free(g_config->openai_api_url);
+    free(g_config->embedding_api_url);
     free(g_config->embedding_model);
     free(g_config->system_prompt);
     free(g_config->config_file_path);
@@ -408,6 +418,9 @@ int config_set(const char *key, const char *value)
     } else if (strcmp(key, "openai_api_url") == 0) {
         free(g_config->openai_api_url);
         g_config->openai_api_url = value ? strdup(value) : NULL;
+    } else if (strcmp(key, "embedding_api_url") == 0) {
+        free(g_config->embedding_api_url);
+        g_config->embedding_api_url = value ? strdup(value) : NULL;
     } else if (strcmp(key, "embedding_model") == 0) {
         free(g_config->embedding_model);
         g_config->embedding_model = value ? strdup(value) : NULL;
@@ -452,6 +465,8 @@ const char* config_get_string(const char *key)
         return g_config->openai_api_key;
     } else if (strcmp(key, "openai_api_url") == 0) {
         return g_config->openai_api_url;
+    } else if (strcmp(key, "embedding_api_url") == 0) {
+        return g_config->embedding_api_url;
     } else if (strcmp(key, "embedding_model") == 0) {
         return g_config->embedding_model;
     } else if (strcmp(key, "system_prompt") == 0) {

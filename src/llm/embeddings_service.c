@@ -33,7 +33,8 @@ static void create_embeddings_instance(void) {
     if (config) {
         const char *api_key = config->openai_api_key;
         const char *model = config->embedding_model;
-        const char *api_url = config->openai_api_url;
+        // Prefer embedding_api_url, fall back to openai_api_url
+        const char *api_url = config->embedding_api_url ? config->embedding_api_url : config->openai_api_url;
         
         if (!model) model = "text-embedding-3-small";
         
@@ -151,7 +152,8 @@ int embeddings_service_reinitialize(void) {
     if (config) {
         api_key = config->openai_api_key;
         model = config->embedding_model;
-        api_url = config->openai_api_url;
+        // Prefer embedding_api_url, fall back to openai_api_url
+        api_url = config->embedding_api_url ? config->embedding_api_url : config->openai_api_url;
     } else {
         // Fallback to environment variables
         api_key = getenv("OPENAI_API_KEY");
