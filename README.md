@@ -177,6 +177,22 @@ echo '{
 # Ralph automatically creates vector databases for long-term memory and PDF processing
 ```
 
+### Option 1.5: Auto-Configuration with Environment Variables
+```bash
+# Download the latest release
+wget https://github.com/bluetongueai/ralph/releases/latest/download/ralph
+chmod +x ralph
+
+# Set your API keys as environment variables
+export OPENAI_API_KEY="sk-your-openai-key-here"
+export ANTHROPIC_API_KEY="sk-ant-your-anthropic-key-here"  # optional
+
+# Ralph automatically creates a config file using your environment variables
+./ralph "Let's build something amazing"
+
+# Ralph detects your API keys and auto-configures itself on first run
+```
+
 ### Option 2: Build from Source
 ```bash
 git clone https://github.com/bluetongueai/ralph
@@ -250,6 +266,19 @@ Ralph uses a JSON configuration file (`ralph.config.json`) for setup:
 | `anthropic_api_key` | Anthropic API key | None |
 
 **Important:** An OpenAI API key is required for vector embeddings and memory functionality, even when using Anthropic or local models. The `openai_api_key` is used for generating embeddings with OpenAI's `text-embedding-3-small` model.
+
+### Environment Variable Auto-Configuration
+
+Ralph automatically detects and uses the following environment variables to configure itself:
+
+| Environment Variable | Description | Usage |
+|---------------------|-------------|--------|
+| `OPENAI_API_KEY` | OpenAI API key | Used for both chat and embeddings (always required) |
+| `ANTHROPIC_API_KEY` | Anthropic API key | Used when connecting to Anthropic models |
+| `EMBEDDING_MODEL` | Embedding model override | Defaults to `text-embedding-3-small` |
+| `OPENAI_API_URL` | OpenAI API URL override | For custom OpenAI-compatible endpoints |
+
+When you first run Ralph, it automatically creates a `ralph.config.json` file using any API keys found in your environment variables. This means you can skip manual configuration entirely by simply setting your API keys as environment variables before running Ralph.
 
 ## Real-World Usage Examples
 
@@ -488,7 +517,11 @@ Ralph is the ultimate force multiplier for development velocity with permanent i
 wget https://github.com/bluetongueai/ralph/releases/latest/download/ralph
 chmod +x ralph
 
-# Create config file
+# Option 1: Use environment variables (recommended)
+export OPENAI_API_KEY="your-key-here"
+./ralph "Transform me into a 10x developer"
+
+# Option 2: Create config file manually
 echo '{
   "openai_api_key": "your-key-here",
   "model": "gpt-4o",
