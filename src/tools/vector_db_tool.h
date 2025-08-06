@@ -25,5 +25,7 @@ int execute_vector_db_search_tool_call(const ToolCall *tool_call, ToolResult *re
 int execute_vector_db_add_text_tool_call(const ToolCall *tool_call, ToolResult *result);
 int execute_vector_db_add_chunked_text_tool_call(const ToolCall *tool_call, ToolResult *result);
 int execute_vector_db_add_pdf_document_tool_call(const ToolCall *tool_call, ToolResult *result);
+int execute_vector_db_search_text_tool_call(const ToolCall *tool_call, ToolResult *result);
+int execute_vector_db_search_by_time_tool_call(const ToolCall *tool_call, ToolResult *result);
 
 #endif

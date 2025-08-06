@@ -1,8 +1,8 @@
 #include "vector_db_tool.h"
 #include "../db/vector_db_service.h"
+#include "../db/document_store.h"
 #include <cJSON.h>
 #include "../utils/document_chunker.h"
-#include "../llm/embeddings_service.h"
 #include "../pdf/pdf_extractor.h"
 #include "../utils/common_utils.h"
 #include <stdio.h>
@@ -236,6 +236,45 @@ int register_vector_db_tool(ToolRegistry *registry) {
     
     if (register_single_vector_tool(registry, "vector_db_add_pdf_document", 
                                    "Extract text from PDF, chunk it, and store chunks as embeddings", add_pdf_params, 4) != 0) {
+        return -1;
+    }
+    
+    // 12. Register vector_db_search_text
+    ToolParameter *search_text_params = malloc(3 * sizeof(ToolParameter));
+    if (search_text_params == NULL) return -1;
+    
+    search_text_params[0] = (ToolParameter){"index_name", "string", "Name of the index to search", NULL, 0, 1};
+    search_text_params[1] = (ToolParameter){"query", "string", "Query text to search for", NULL, 0, 1};
+    search_text_params[2] = (ToolParameter){"k", "number", "Number of results to return (default: 5)", NULL, 0, 0};
+    
+    for (int i = 0; i < 3; i++) {
+        search_text_params[i].name = safe_strdup(search_text_params[i].name);
+        search_text_params[i].type = safe_strdup(search_text_params[i].type);
+        search_text_params[i].description = safe_strdup(search_text_params[i].description);
+    }
+    
+    if (register_single_vector_tool(registry, "vector_db_search_text", 
+                                   "Search for similar text content in the vector database", search_text_params, 3) != 0) {
+        return -1;
+    }
+    
+    // 13. Register vector_db_search_by_time
+    ToolParameter *search_time_params = malloc(4 * sizeof(ToolParameter));
+    if (search_time_params == NULL) return -1;
+    
+    search_time_params[0] = (ToolParameter){"index_name", "string", "Name of the index to search", NULL, 0, 1};
+    search_time_params[1] = (ToolParameter){"start_time", "number", "Start timestamp (Unix epoch, default: 0)", NULL, 0, 0};
+    search_time_params[2] = (ToolParameter){"end_time", "number", "End timestamp (Unix epoch, default: now)", NULL, 0, 0};
+    search_time_params[3] = (ToolParameter){"limit", "number", "Maximum number of results (default: 100)", NULL, 0, 0};
+    
+    for (int i = 0; i < 4; i++) {
+        search_time_params[i].name = safe_strdup(search_time_params[i].name);
+        search_time_params[i].type = safe_strdup(search_time_params[i].type);
+        search_time_params[i].description = safe_strdup(search_time_params[i].description);
+    }
+    
+    if (register_single_vector_tool(registry, "vector_db_search_by_time", 
+                                   "Search for documents within a time range", search_time_params, 4) != 0) {
         return -1;
     }
     
@@ -663,10 +702,12 @@ int execute_vector_db_add_text_tool_call(const ToolCall *tool_call, ToolResult *
         return 0;
     }
     
-    // Get API key from environment
-    const char *api_key = getenv("OPENAI_API_KEY");
-    if (api_key == NULL) {
-        result->result = safe_strdup("{\"success\": false, \"error\": \"OPENAI_API_KEY not set\"}");
+    // Use document store for unified storage
+    document_store_t *doc_store = document_store_get_instance();
+    
+    // Ensure index exists
+    if (document_store_ensure_index(doc_store, index_name, 1536, 10000) != 0) {
+        result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to ensure index exists\"}");
         result->success = 0;
         free(index_name);
         free(text);
@@ -674,61 +715,25 @@ int execute_vector_db_add_text_tool_call(const ToolCall *tool_call, ToolResult *
         return 0;
     }
     
-    // Initialize embeddings configuration
-    embeddings_config_t embeddings_config;
-    if (embeddings_init(&embeddings_config, "text-embedding-3-small", api_key, NULL) != 0) {
-        result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to initialize embeddings\"}");
-        result->success = 0;
-        free(index_name);
-        free(text);
-        free(metadata);
-        return 0;
-    }
-    
-    // Get embedding for the text
-    embedding_vector_t embedding;
-    if (embeddings_get_vector(&embeddings_config, text, &embedding) != 0) {
-        result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to get embedding from OpenAI\"}");
-        result->success = 0;
-        embeddings_cleanup(&embeddings_config);
-        free(index_name);
-        free(text);
-        free(metadata);
-        return 0;
-    }
-    
-    // Convert to vector_t format
-    vector_t vec = {
-        .data = embedding.data,
-        .dimension = embedding.dimension
-    };
-    
-    vector_db_t *db = vector_db_service_get_database();
-    
-    // Auto-generate label based on current index size
-    size_t label = vector_db_get_index_size(db, index_name);
-    
-    // Add vector to database
-    vector_db_error_t err = vector_db_add_vector(db, index_name, &vec, label);
+    // Add text with embedding to document store
+    int add_result = document_store_add_text(doc_store, index_name, text, "text", "api", metadata);
     
     char response[1024];
-    if (err == VECTOR_DB_OK) {
+    if (add_result == 0) {
+        size_t doc_count = vector_db_get_index_size(vector_db_service_get_database(), index_name);
         snprintf(response, sizeof(response), 
-                "{\"success\": true, \"label\": %zu, \"message\": \"Text embedded and added successfully\", \"dimension\": %zu, \"text_preview\": \"%.50s...\"}", 
-                label, embedding.dimension, text);
+                "{\"success\": true, \"id\": %zu, \"message\": \"Text embedded and stored successfully\", \"text_preview\": \"%.50s...\"}", 
+                doc_count - 1, text);
         result->success = 1;
     } else {
         snprintf(response, sizeof(response), 
-                "{\"success\": false, \"error\": \"%s\"}", 
-                vector_db_error_string(err));
+                "{\"success\": false, \"error\": \"Failed to store document\"}");
         result->success = 0;
     }
     
     result->result = safe_strdup(response);
     
     // Cleanup
-    embeddings_free_vector(&embedding);
-    embeddings_cleanup(&embeddings_config);
     free(index_name);
     free(text);
     free(metadata);
@@ -757,17 +762,6 @@ int execute_vector_db_add_chunked_text_tool_call(const ToolCall *tool_call, Tool
         return 0;
     }
     
-    // Get API key from environment
-    const char *api_key = getenv("OPENAI_API_KEY");
-    if (api_key == NULL) {
-        result->result = safe_strdup("{\"success\": false, \"error\": \"OPENAI_API_KEY not set\"}");
-        result->success = 0;
-        free(index_name);
-        free(text);
-        free(metadata);
-        return 0;
-    }
-    
     // Configure chunking
     chunking_config_t config = chunker_get_default_config();
     config.max_chunk_size = (size_t)max_chunk_size;
@@ -789,10 +783,12 @@ int execute_vector_db_add_chunked_text_tool_call(const ToolCall *tool_call, Tool
         return 0;
     }
     
-    // Initialize embeddings
-    embeddings_config_t embeddings_config;
-    if (embeddings_init(&embeddings_config, "text-embedding-3-small", api_key, NULL) != 0) {
-        result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to initialize embeddings\"}");
+    // Use document store to add chunked text
+    document_store_t *doc_store = document_store_get_instance();
+    
+    // Ensure index exists
+    if (document_store_ensure_index(doc_store, index_name, 1536, 10000) != 0) {
+        result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to ensure index exists\"}");
         result->success = 0;
         free_chunking_result(chunks);
         free(index_name);
@@ -801,32 +797,18 @@ int execute_vector_db_add_chunked_text_tool_call(const ToolCall *tool_call, Tool
         return 0;
     }
     
-    vector_db_t *db = vector_db_service_get_database();
     size_t successful_chunks = 0;
     size_t failed_chunks = 0;
     
     // Process each chunk
     for (size_t i = 0; i < chunks->chunk_count; i++) {
-        // Get embedding for this chunk
-        embedding_vector_t embedding;
-        if (embeddings_get_vector(&embeddings_config, chunks->chunks[i].text, &embedding) == 0) {
-            // Convert to vector_t format
-            vector_t vec = {
-                .data = embedding.data,
-                .dimension = embedding.dimension
-            };
-            
-            // Add to database
-            size_t label = vector_db_get_index_size(db, index_name);
-            vector_db_error_t err = vector_db_add_vector(db, index_name, &vec, label);
-            
-            if (err == VECTOR_DB_OK) {
-                successful_chunks++;
-            } else {
-                failed_chunks++;
-            }
-            
-            embeddings_free_vector(&embedding);
+        // Add chunk text to document store (it will handle embedding internally)
+        int add_result = document_store_add_text(doc_store, index_name, 
+                                                chunks->chunks[i].text, 
+                                                "chunk", "api", metadata);
+        
+        if (add_result == 0) {
+            successful_chunks++;
         } else {
             failed_chunks++;
         }
@@ -849,7 +831,6 @@ int execute_vector_db_add_chunked_text_tool_call(const ToolCall *tool_call, Tool
     result->result = safe_strdup(response);
     
     // Cleanup
-    embeddings_cleanup(&embeddings_config);
     free_chunking_result(chunks);
     free(index_name);
     free(text);
@@ -871,16 +852,6 @@ int execute_vector_db_add_pdf_document_tool_call(const ToolCall *tool_call, Tool
     
     if (index_name == NULL || pdf_path == NULL) {
         result->result = safe_strdup("{\"success\": false, \"error\": \"Missing required parameters\"}");
-        result->success = 0;
-        free(index_name);
-        free(pdf_path);
-        return 0;
-    }
-    
-    // Get API key from environment
-    const char *api_key = getenv("OPENAI_API_KEY");
-    if (api_key == NULL) {
-        result->result = safe_strdup("{\"success\": false, \"error\": \"OPENAI_API_KEY not set\"}");
         result->success = 0;
         free(index_name);
         free(pdf_path);
@@ -932,10 +903,12 @@ int execute_vector_db_add_pdf_document_tool_call(const ToolCall *tool_call, Tool
         return 0;
     }
     
-    // Initialize embeddings
-    embeddings_config_t embeddings_config;
-    if (embeddings_init(&embeddings_config, "text-embedding-3-small", api_key, NULL) != 0) {
-        result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to initialize embeddings\"}");
+    // Use document store to add PDF chunks
+    document_store_t *doc_store = document_store_get_instance();
+    
+    // Ensure index exists
+    if (document_store_ensure_index(doc_store, index_name, 1536, 10000) != 0) {
+        result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to ensure index exists\"}");
         result->success = 0;
         free_chunking_result(chunks);
         pdf_free_extraction_result(pdf_result);
@@ -944,32 +917,24 @@ int execute_vector_db_add_pdf_document_tool_call(const ToolCall *tool_call, Tool
         return 0;
     }
     
-    vector_db_t *db = vector_db_service_get_database();
     size_t successful_chunks = 0;
     size_t failed_chunks = 0;
     
     // Process each chunk
     for (size_t i = 0; i < chunks->chunk_count; i++) {
-        // Get embedding for this chunk
-        embedding_vector_t embedding;
-        if (embeddings_get_vector(&embeddings_config, chunks->chunks[i].text, &embedding) == 0) {
-            // Convert to vector_t format
-            vector_t vec = {
-                .data = embedding.data,
-                .dimension = embedding.dimension
-            };
-            
-            // Add to database
-            size_t label = vector_db_get_index_size(db, index_name);
-            vector_db_error_t err = vector_db_add_vector(db, index_name, &vec, label);
-            
-            if (err == VECTOR_DB_OK) {
-                successful_chunks++;
-            } else {
-                failed_chunks++;
-            }
-            
-            embeddings_free_vector(&embedding);
+        // Build metadata with PDF info
+        char metadata_json[512];
+        snprintf(metadata_json, sizeof(metadata_json), 
+                "{\"source\": \"pdf\", \"file\": \"%s\", \"page_count\": %d}", 
+                pdf_path, pdf_result->page_count);
+        
+        // Add chunk text to document store (it will handle embedding internally)
+        int add_result = document_store_add_text(doc_store, index_name, 
+                                                chunks->chunks[i].text, 
+                                                "pdf_chunk", "pdf", metadata_json);
+        
+        if (add_result == 0) {
+            successful_chunks++;
         } else {
             failed_chunks++;
         }
@@ -992,11 +957,157 @@ int execute_vector_db_add_pdf_document_tool_call(const ToolCall *tool_call, Tool
     result->result = safe_strdup(response);
     
     // Cleanup
-    embeddings_cleanup(&embeddings_config);
     free_chunking_result(chunks);
     pdf_free_extraction_result(pdf_result);
     free(index_name);
     free(pdf_path);
     
+    return 0;
+}
+
+int execute_vector_db_search_text_tool_call(const ToolCall *tool_call, ToolResult *result) {
+    if (tool_call == NULL || result == NULL) return -1;
+    
+    result->tool_call_id = safe_strdup(tool_call->id);
+    if (result->tool_call_id == NULL) return -1;
+    
+    char *index_name = extract_string_param(tool_call->arguments, "index_name");
+    char *query_text = extract_string_param(tool_call->arguments, "query");
+    double k = extract_number_param(tool_call->arguments, "k", 5);
+    
+    if (index_name == NULL || query_text == NULL) {
+        result->result = safe_strdup("{\"success\": false, \"error\": \"Missing required parameters\"}");
+        result->success = 0;
+        free(index_name);
+        free(query_text);
+        return 0;
+    }
+    
+    document_store_t *doc_store = document_store_get_instance();
+    document_search_results_t *search_results = document_store_search_text(doc_store, index_name, query_text, (size_t)k);
+    
+    if (search_results != NULL) {
+        cJSON* json = cJSON_CreateObject();
+        if (json) {
+            cJSON_AddBoolToObject(json, "success", cJSON_True);
+            cJSON_AddNumberToObject(json, "count", search_results->count);
+            
+            cJSON* results_array = cJSON_CreateArray();
+            if (results_array) {
+                for (size_t i = 0; i < search_results->count; i++) {
+                    if (search_results->documents[i]) {
+                        cJSON* result_item = cJSON_CreateObject();
+                        if (result_item) {
+                            cJSON_AddNumberToObject(result_item, "id", search_results->documents[i]->id);
+                            cJSON_AddStringToObject(result_item, "content", search_results->documents[i]->content ? search_results->documents[i]->content : "");
+                            cJSON_AddStringToObject(result_item, "type", search_results->documents[i]->type ? search_results->documents[i]->type : "text");
+                            cJSON_AddStringToObject(result_item, "source", search_results->documents[i]->source ? search_results->documents[i]->source : "unknown");
+                            if (search_results->distances) {
+                                cJSON_AddNumberToObject(result_item, "distance", search_results->distances[i]);
+                            }
+                            cJSON_AddNumberToObject(result_item, "timestamp", search_results->documents[i]->timestamp);
+                            
+                            if (search_results->documents[i]->metadata_json) {
+                                cJSON* metadata = cJSON_Parse(search_results->documents[i]->metadata_json);
+                                if (metadata) {
+                                    cJSON_AddItemToObject(result_item, "metadata", metadata);
+                                }
+                            }
+                            
+                            cJSON_AddItemToArray(results_array, result_item);
+                        }
+                    }
+                }
+                cJSON_AddItemToObject(json, "results", results_array);
+            }
+            
+            result->result = cJSON_PrintUnformatted(json);
+            cJSON_Delete(json);
+            result->success = 1;
+        } else {
+            result->result = safe_strdup("{\"success\": false, \"error\": \"Memory allocation failed\"}");
+            result->success = 0;
+        }
+        
+        document_store_free_results(search_results);
+    } else {
+        result->result = safe_strdup("{\"success\": false, \"error\": \"Search failed or no results found\"}");
+        result->success = 0;
+    }
+    
+    free(index_name);
+    free(query_text);
+    return 0;
+}
+
+int execute_vector_db_search_by_time_tool_call(const ToolCall *tool_call, ToolResult *result) {
+    if (tool_call == NULL || result == NULL) return -1;
+    
+    result->tool_call_id = safe_strdup(tool_call->id);
+    if (result->tool_call_id == NULL) return -1;
+    
+    char *index_name = extract_string_param(tool_call->arguments, "index_name");
+    double start_time = extract_number_param(tool_call->arguments, "start_time", 0);
+    double end_time = extract_number_param(tool_call->arguments, "end_time", time(NULL));
+    double limit = extract_number_param(tool_call->arguments, "limit", 100);
+    
+    if (index_name == NULL) {
+        result->result = safe_strdup("{\"success\": false, \"error\": \"Missing required index_name\"}");
+        result->success = 0;
+        free(index_name);
+        return 0;
+    }
+    
+    document_store_t *doc_store = document_store_get_instance();
+    document_search_results_t *search_results = document_store_search_by_time(doc_store, index_name, 
+                                                                             (time_t)start_time, (time_t)end_time, (size_t)limit);
+    
+    if (search_results != NULL) {
+        cJSON* json = cJSON_CreateObject();
+        if (json) {
+            cJSON_AddBoolToObject(json, "success", cJSON_True);
+            cJSON_AddNumberToObject(json, "count", search_results->count);
+            
+            cJSON* results_array = cJSON_CreateArray();
+            if (results_array) {
+                for (size_t i = 0; i < search_results->count; i++) {
+                    if (search_results->documents[i]) {
+                        cJSON* result_item = cJSON_CreateObject();
+                        if (result_item) {
+                            cJSON_AddNumberToObject(result_item, "id", search_results->documents[i]->id);
+                            cJSON_AddStringToObject(result_item, "content", search_results->documents[i]->content ? search_results->documents[i]->content : "");
+                            cJSON_AddStringToObject(result_item, "type", search_results->documents[i]->type ? search_results->documents[i]->type : "text");
+                            cJSON_AddStringToObject(result_item, "source", search_results->documents[i]->source ? search_results->documents[i]->source : "unknown");
+                            cJSON_AddNumberToObject(result_item, "timestamp", search_results->documents[i]->timestamp);
+                            
+                            if (search_results->documents[i]->metadata_json) {
+                                cJSON* metadata = cJSON_Parse(search_results->documents[i]->metadata_json);
+                                if (metadata) {
+                                    cJSON_AddItemToObject(result_item, "metadata", metadata);
+                                }
+                            }
+                            
+                            cJSON_AddItemToArray(results_array, result_item);
+                        }
+                    }
+                }
+                cJSON_AddItemToObject(json, "results", results_array);
+            }
+            
+            result->result = cJSON_PrintUnformatted(json);
+            cJSON_Delete(json);
+            result->success = 1;
+        } else {
+            result->result = safe_strdup("{\"success\": false, \"error\": \"Memory allocation failed\"}");
+            result->success = 0;
+        }
+        
+        document_store_free_results(search_results);
+    } else {
+        result->result = safe_strdup("{\"success\": false, \"error\": \"No documents found in time range\"}");
+        result->success = 0;
+    }
+    
+    free(index_name);
     return 0;
 }

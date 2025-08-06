@@ -2,19 +2,23 @@
 #include "../../src/tools/vector_db_tool.h"
 #include "../../src/tools/tools_system.h"
 #include "../../src/db/vector_db.h"
-#include "../../src/utils/env_loader.h"
+#include "../../src/utils/config.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <unistd.h>
 
 void setUp(void) {
-    // Load environment variables from .env file for API key access
-    load_env_file(".env");
+    // Remove existing config to force regeneration with env vars
+    remove("./ralph.config.json");
+    // Initialize config system
+    config_init();
 }
 
 void tearDown(void) {
     // Clean up after each test
+    config_cleanup();
 }
 
 void test_register_vector_db_tool(void) {
@@ -24,8 +28,8 @@ void test_register_vector_db_tool(void) {
     int result = register_vector_db_tool(&registry);
     TEST_ASSERT_EQUAL_INT(0, result);
     
-    // Should have registered 11 tools
-    TEST_ASSERT_EQUAL_INT(11, registry.function_count);
+    // Should have registered 13 tools (added search_text and search_by_time)
+    TEST_ASSERT_EQUAL_INT(13, registry.function_count);
     
     // Check tool names
     const char *expected_tools[] = {
@@ -428,12 +432,6 @@ void test_vector_db_error_handling(void) {
 }
 
 void test_vector_db_add_text(void) {
-    // Skip test if OPENAI_API_KEY is not set
-    if (getenv("OPENAI_API_KEY") == NULL) {
-        TEST_IGNORE_MESSAGE("OPENAI_API_KEY not set, skipping test_vector_db_add_text");
-        return;
-    }
-    
     // First create an index with appropriate dimension for text embeddings
     ToolCall create_call = {
         .id = "create_id",
@@ -461,9 +459,8 @@ void test_vector_db_add_text(void) {
     TEST_ASSERT_NOT_NULL(add_result.result);
     TEST_ASSERT_EQUAL_INT(1, add_result.success);
     TEST_ASSERT_TRUE(strstr(add_result.result, "\"success\": true") != NULL);
-    TEST_ASSERT_TRUE(strstr(add_result.result, "\"label\": 0") != NULL);
-    TEST_ASSERT_TRUE(strstr(add_result.result, "Text embedded and added successfully") != NULL);
-    TEST_ASSERT_TRUE(strstr(add_result.result, "\"dimension\": 1536") != NULL);
+    TEST_ASSERT_TRUE(strstr(add_result.result, "\"id\": 0") != NULL);
+    TEST_ASSERT_TRUE(strstr(add_result.result, "Text embedded and stored successfully") != NULL);
     
     free(add_result.tool_call_id);
     free(add_result.result);
