@@ -44,7 +44,7 @@ When developing, practice test-driven-development in the following way:
 - write a test that describes your desired behavior; new feature, or the **result** of a bug fix, ensuring the test **fails**
 - fix the test by implementing the new feature or bug fix
 
-Tests write to `CONVERSATION.md`, so it should be deleted before peforming a full test run.
+Tests may write temporary conversation files during testing, so clean up test artifacts before performing a full test run.
 
 Unit tests should be written against mocks where possible, however tests that need an LLM can be run against a real, live API.
 The development environment is configured so that integration tests will successfully connect to a real LLM API.
