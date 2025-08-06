@@ -14,7 +14,6 @@ static void print_help(void) {
     printf("\033[1m/memory list [index]\033[0m - List all chunks (optionally from specific index)\n");
     printf("\033[1m/memory search <query>\033[0m - Search chunks by content or metadata\n");
     printf("\033[1m/memory show <chunk_id>\033[0m - Show details of a specific chunk\n");
-    printf("\033[1m/memory delete <chunk_id>\033[0m - Delete a chunk from memory\n");
     printf("\033[1m/memory edit <chunk_id> <field> <value>\033[0m - Edit chunk metadata\n");
     printf("\033[1m/memory indices\033[0m - List all available indices\n");
     printf("\033[1m/memory stats [index]\033[0m - Show statistics for an index\n");
@@ -200,63 +199,6 @@ static int cmd_show(const char* args) {
     return 0;
 }
 
-static int cmd_delete(const char* args) {
-    if (args == NULL || strlen(args) == 0) {
-        printf("❌ Please provide a chunk ID\n");
-        printf("Usage: /memory delete <chunk_id>\n");
-        return -1;
-    }
-    
-    size_t chunk_id = strtoull(args, NULL, 10);
-    
-    metadata_store_t* store = metadata_store_get_instance();
-    if (store == NULL) {
-        printf("❌ Failed to access metadata store\n");
-        return -1;
-    }
-    
-    vector_db_t* db = vector_db_service_get_database();
-    if (db == NULL) {
-        printf("❌ Failed to access vector database\n");
-        return -1;
-    }
-    
-    // Try to find and delete from default index first
-    const char* index_name = "long_term_memory";
-    ChunkMetadata* chunk = metadata_store_get(store, index_name, chunk_id);
-    
-    if (chunk == NULL) {
-        // Try conversation index
-        index_name = "conversation_history";
-        chunk = metadata_store_get(store, index_name, chunk_id);
-    }
-    
-    if (chunk == NULL) {
-        printf("❌ Chunk #%zu not found\n", chunk_id);
-        return -1;
-    }
-    
-    // Delete from vector database
-    vector_db_error_t err = vector_db_delete_vector(db, index_name, chunk_id);
-    if (err != VECTOR_DB_OK && err != VECTOR_DB_ERROR_ELEMENT_NOT_FOUND) {
-        printf("⚠️  Warning: Failed to delete from vector database: %s\n", 
-               vector_db_error_string(err));
-    }
-    
-    // Delete metadata
-    if (metadata_store_delete(store, index_name, chunk_id) != 0) {
-        printf("❌ Failed to delete metadata\n");
-        metadata_store_free_chunk(chunk);
-        return -1;
-    }
-    
-    printf("✅ Successfully deleted chunk #%zu", chunk_id);
-    if (chunk->type) printf(" [%s]", chunk->type);
-    printf("\n");
-    
-    metadata_store_free_chunk(chunk);
-    return 0;
-}
 
 static int cmd_edit(const char* args) {
     if (args == NULL || strlen(args) == 0) {
@@ -485,8 +427,6 @@ int process_memory_command(const char* command) {
         return cmd_search(subargs);
     } else if (strcmp(subcommand, "show") == 0) {
         return cmd_show(subargs);
-    } else if (strcmp(subcommand, "delete") == 0) {
-        return cmd_delete(subargs);
     } else if (strcmp(subcommand, "edit") == 0) {
         return cmd_edit(subargs);
     } else if (strcmp(subcommand, "indices") == 0) {
