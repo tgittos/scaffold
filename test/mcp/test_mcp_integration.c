@@ -5,12 +5,40 @@
 #include <stdlib.h>
 #include <string.h>
 
+static char *saved_ralph_config_backup = NULL;
+
 void setUp(void) {
-    // Set up function
+    // Back up existing ralph.config.json file if it exists
+    FILE *ralph_config_file = fopen("ralph.config.json", "r");
+    if (ralph_config_file) {
+        fseek(ralph_config_file, 0, SEEK_END);
+        long file_size = ftell(ralph_config_file);
+        fseek(ralph_config_file, 0, SEEK_SET);
+        
+        saved_ralph_config_backup = malloc(file_size + 1);
+        if (saved_ralph_config_backup) {
+            fread(saved_ralph_config_backup, 1, file_size, ralph_config_file);
+            saved_ralph_config_backup[file_size] = '\0';
+        }
+        fclose(ralph_config_file);
+        unlink("ralph.config.json");  // Remove temporarily
+    }
 }
 
 void tearDown(void) {
-    // Clean up function
+    // Clean up test files
+    unlink("ralph.config.json");
+    
+    // Restore backed up ralph.config.json file if it existed
+    if (saved_ralph_config_backup) {
+        FILE *ralph_config_file = fopen("ralph.config.json", "w");
+        if (ralph_config_file) {
+            fwrite(saved_ralph_config_backup, 1, strlen(saved_ralph_config_backup), ralph_config_file);
+            fclose(ralph_config_file);
+        }
+        free(saved_ralph_config_backup);
+        saved_ralph_config_backup = NULL;
+    }
 }
 
 void test_mcp_client_basic_initialization(void) {

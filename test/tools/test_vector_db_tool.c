@@ -9,9 +9,25 @@
 #include <math.h>
 #include <unistd.h>
 
+static char *saved_ralph_config_backup = NULL;
+
 void setUp(void) {
-    // Remove existing config to force regeneration with env vars
-    remove("./ralph.config.json");
+    // Back up existing ralph.config.json file if it exists
+    FILE *ralph_config_file = fopen("ralph.config.json", "r");
+    if (ralph_config_file) {
+        fseek(ralph_config_file, 0, SEEK_END);
+        long file_size = ftell(ralph_config_file);
+        fseek(ralph_config_file, 0, SEEK_SET);
+        
+        saved_ralph_config_backup = malloc(file_size + 1);
+        if (saved_ralph_config_backup) {
+            fread(saved_ralph_config_backup, 1, file_size, ralph_config_file);
+            saved_ralph_config_backup[file_size] = '\0';
+        }
+        fclose(ralph_config_file);
+        remove("ralph.config.json");  // Remove temporarily
+    }
+    
     // Initialize config system
     config_init();
 }
@@ -19,6 +35,18 @@ void setUp(void) {
 void tearDown(void) {
     // Clean up after each test
     config_cleanup();
+    remove("ralph.config.json");
+    
+    // Restore backed up ralph.config.json file if it existed
+    if (saved_ralph_config_backup) {
+        FILE *ralph_config_file = fopen("ralph.config.json", "w");
+        if (ralph_config_file) {
+            fwrite(saved_ralph_config_backup, 1, strlen(saved_ralph_config_backup), ralph_config_file);
+            fclose(ralph_config_file);
+        }
+        free(saved_ralph_config_backup);
+        saved_ralph_config_backup = NULL;
+    }
 }
 
 void test_register_vector_db_tool(void) {
