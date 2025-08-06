@@ -1,6 +1,7 @@
 #include "document_store.h"
 #include "vector_db_service.h"
 #include "metadata_store.h"
+#include "hnswlib_wrapper.h"
 #include "../utils/config.h"
 #include "../llm/embeddings_service.h"
 #include <stdio.h>
@@ -8,6 +9,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <unistd.h>
 #include <cJSON.h>
 
 struct document_store {
@@ -17,6 +19,33 @@ struct document_store {
 };
 
 static document_store_t* singleton_instance = NULL;
+
+// Helper function to recursively remove a directory
+static int rmdir_recursive(const char* path) {
+    DIR* dir = opendir(path);
+    if (dir == NULL) return 0; // Directory doesn't exist, nothing to remove
+    
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+        
+        char full_path[1024];
+        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
+        
+        struct stat st;
+        if (stat(full_path, &st) == 0) {
+            if (S_ISDIR(st.st_mode)) {
+                rmdir_recursive(full_path);
+            } else {
+                unlink(full_path);
+            }
+        }
+    }
+    closedir(dir);
+    return rmdir(path);
+}
 
 static char* get_document_path(document_store_t* store, const char* index_name) {
     if (store == NULL || index_name == NULL) return NULL;
@@ -93,6 +122,49 @@ document_store_t* document_store_get_instance(void) {
         singleton_instance = document_store_create(NULL);
     }
     return singleton_instance;
+}
+
+void document_store_reset_instance(void) {
+    // Clear persistent data before destroying the instance
+    if (singleton_instance != NULL && singleton_instance->base_path != NULL) {
+        char docs_path[512];
+        snprintf(docs_path, sizeof(docs_path), "%s/documents", singleton_instance->base_path);
+        rmdir_recursive(docs_path);
+        
+        // Also clear any metadata files
+        char metadata_path[512];
+        snprintf(metadata_path, sizeof(metadata_path), "%s/metadata", singleton_instance->base_path);
+        rmdir_recursive(metadata_path);
+        
+        // Clear vector index files
+        char index_path[512];
+        snprintf(index_path, sizeof(index_path), "%s/indexes", singleton_instance->base_path);
+        rmdir_recursive(index_path);
+    }
+    
+    if (singleton_instance != NULL) {
+        document_store_destroy(singleton_instance);
+        singleton_instance = NULL;
+    }
+    
+    // Also clear the vector database
+    hnswlib_clear_all();
+}
+
+void document_store_clear_conversations(void) {
+    if (singleton_instance == NULL) return;
+    
+    // Clear only conversation-related data
+    char conv_path[512];
+    if (singleton_instance->base_path != NULL) {
+        snprintf(conv_path, sizeof(conv_path), "%s/documents/conversations", singleton_instance->base_path);
+        rmdir_recursive(conv_path);
+    }
+    
+    // Clear conversation index from vector DB
+    if (singleton_instance->vector_db != NULL) {
+        vector_db_delete_index(singleton_instance->vector_db, "conversations");
+    }
 }
 
 static int save_document(document_store_t* store, const char* index_name, size_t id,

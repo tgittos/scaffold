@@ -13,6 +13,83 @@
 #define CONVERSATION_EMBEDDING_DIM 1536
 #define SLIDING_WINDOW_SIZE 20  // Number of recent messages to retrieve
 
+// Comparison function for sorting documents by timestamp
+static int compare_documents_by_timestamp(const void* a, const void* b) {
+    const document_t* doc_a = *(const document_t**)a;
+    const document_t* doc_b = *(const document_t**)b;
+    
+    if (doc_a == NULL && doc_b == NULL) return 0;
+    if (doc_a == NULL) return 1;
+    if (doc_b == NULL) return -1;
+    
+    if (doc_a->timestamp < doc_b->timestamp) return -1;
+    if (doc_a->timestamp > doc_b->timestamp) return 1;
+    return 0;
+}
+
+// Helper function to check if a message has tool_use content
+static int has_tool_use_id(const char* content, const char* tool_call_id) {
+    if (!content || !tool_call_id) return 0;
+    
+    char search_pattern[256];
+    snprintf(search_pattern, sizeof(search_pattern), "\"id\": \"%s\"", tool_call_id);
+    if (strstr(content, search_pattern)) return 1;
+    
+    snprintf(search_pattern, sizeof(search_pattern), "\"id\":\"%s\"", tool_call_id);
+    return strstr(content, search_pattern) != NULL;
+}
+
+// Function to filter out orphaned tool results that don't have corresponding tool_use blocks
+static void filter_orphaned_tool_results(ConversationHistory* history) {
+    if (!history || history->count == 0) return;
+    
+    int write_idx = 0;
+    
+    for (int i = 0; i < history->count; i++) {
+        ConversationMessage* msg = &history->messages[i];
+        
+        // If it's a tool result, check if it has a corresponding tool_use in the previous assistant message
+        if (strcmp(msg->role, "tool") == 0 && msg->tool_call_id != NULL) {
+            int found_tool_use = 0;
+            
+            // Look backwards for the most recent assistant message
+            for (int j = write_idx - 1; j >= 0; j--) {
+                ConversationMessage* prev_msg = &history->messages[j];
+                
+                if (strcmp(prev_msg->role, "assistant") == 0) {
+                    if (has_tool_use_id(prev_msg->content, msg->tool_call_id)) {
+                        found_tool_use = 1;
+                    }
+                    break; // Stop at first assistant message
+                }
+                
+                // If we hit a user message, stop looking
+                if (strcmp(prev_msg->role, "user") == 0) {
+                    break;
+                }
+            }
+            
+            if (!found_tool_use) {
+                // Skip this orphaned tool result
+                free(msg->role);
+                free(msg->content);
+                free(msg->tool_call_id);
+                free(msg->tool_name);
+                continue;
+            }
+        }
+        
+        // Keep this message
+        if (write_idx != i) {
+            history->messages[write_idx] = *msg;
+        }
+        write_idx++;
+    }
+    
+    // Update count to reflect filtered messages
+    history->count = write_idx;
+}
+
 void init_conversation_history(ConversationHistory *history) {
     if (history == NULL) {
         return;
@@ -148,6 +225,9 @@ int load_conversation_history(ConversationHistory *history) {
         store, CONVERSATION_INDEX, start_time, now, SLIDING_WINDOW_SIZE);
     
     if (results != NULL && results->count > 0) {
+        // Sort results by timestamp to ensure chronological order
+        qsort(results->documents, results->count, sizeof(document_t*), compare_documents_by_timestamp);
+        
         // Add messages to history in chronological order
         for (size_t i = 0; i < results->count; i++) {
             document_t* doc = results->documents[i];
@@ -203,6 +283,9 @@ int load_conversation_history(ConversationHistory *history) {
         }
         
         document_store_free_results(results);
+        
+        // Filter out orphaned tool results to ensure valid sequences
+        filter_orphaned_tool_results(history);
     }
     
     return 0;
@@ -275,6 +358,9 @@ int load_extended_conversation_history(ConversationHistory *history, int days_ba
         store, CONVERSATION_INDEX, start_time, now, max_messages);
     
     if (results != NULL && results->count > 0) {
+        // Sort results by timestamp to ensure chronological order
+        qsort(results->documents, results->count, sizeof(document_t*), compare_documents_by_timestamp);
+        
         // Add messages to history
         for (size_t i = 0; i < results->count; i++) {
             document_t* doc = results->documents[i];
@@ -330,6 +416,9 @@ int load_extended_conversation_history(ConversationHistory *history, int days_ba
         }
         
         document_store_free_results(results);
+        
+        // Filter out orphaned tool results to ensure valid sequences
+        filter_orphaned_tool_results(history);
     }
     
     return 0;
@@ -365,6 +454,9 @@ ConversationHistory* search_conversation_history(const char *query, size_t max_r
     }
     
     init_conversation_history(history);
+    
+    // Sort results by timestamp to ensure chronological order
+    qsort(results->documents, results->count, sizeof(document_t*), compare_documents_by_timestamp);
     
     // Add search results to history
     for (size_t i = 0; i < results->count; i++) {
@@ -422,5 +514,9 @@ ConversationHistory* search_conversation_history(const char *query, size_t max_r
     }
     
     document_store_free_results(results);
+    
+    // Filter out orphaned tool results to ensure valid sequences
+    filter_orphaned_tool_results(history);
+    
     return history;
 }

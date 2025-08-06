@@ -71,4 +71,10 @@ int document_store_ensure_index(document_store_t* store, const char* index_name,
 
 char** document_store_list_indices(document_store_t* store, size_t* count);
 
+// Reset the singleton instance (useful for tests)
+void document_store_reset_instance(void);
+
+// Clear only conversation data (useful for individual tests)
+void document_store_clear_conversations(void);
+
 #endif

@@ -1,13 +1,15 @@
 #include "unity.h"
 #include "ralph.h"
 #include "mock_api_server.h"
+#include "../src/db/document_store.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
 void setUp(void) {
-    // No file cleanup needed - using vector database for conversation storage
+    // Reset document store completely to ensure clean state between tests
+    document_store_reset_instance();
 }
 void tearDown(void) {}
 

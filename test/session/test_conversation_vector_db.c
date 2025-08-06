@@ -10,6 +10,9 @@
 void setUp(void) {
     // Initialize config to load API key from environment
     config_init();
+    
+    // Clear only conversation data to avoid interfering with other vector DB operations
+    document_store_clear_conversations();
 }
 
 void tearDown(void) {
@@ -129,14 +132,26 @@ void test_tool_messages_in_vector_db(void) {
     ConversationHistory history;
     init_conversation_history(&history);
     
+    // Use a unique tool ID to avoid conflicts with other tests
+    char unique_tool_id[64];
+    snprintf(unique_tool_id, sizeof(unique_tool_id), "tool_test_%ld", (long)time(NULL));
+    
+    // Add an assistant message with a tool_use block first
+    char assistant_message_with_tool[256];
+    snprintf(assistant_message_with_tool, sizeof(assistant_message_with_tool), 
+             "I'll help you create a file. {\"id\": \"%s\", \"type\": \"function\", \"function\": {\"name\": \"file_write\"}}", 
+             unique_tool_id);
+    int assistant_result = append_conversation_message(&history, "assistant", assistant_message_with_tool);
+    TEST_ASSERT_EQUAL(0, assistant_result);
+    
     // Add a tool message
-    int result = append_tool_message(&history, "File created successfully", "tool_123", "file_write");
+    int result = append_tool_message(&history, "File created successfully", unique_tool_id, "file_write");
     
     TEST_ASSERT_EQUAL(0, result);
-    TEST_ASSERT_EQUAL(1, history.count);
-    TEST_ASSERT_EQUAL_STRING("tool", history.messages[0].role);
-    TEST_ASSERT_EQUAL_STRING("tool_123", history.messages[0].tool_call_id);
-    TEST_ASSERT_EQUAL_STRING("file_write", history.messages[0].tool_name);
+    TEST_ASSERT_EQUAL(2, history.count);
+    TEST_ASSERT_EQUAL_STRING("tool", history.messages[1].role);
+    TEST_ASSERT_EQUAL_STRING(unique_tool_id, history.messages[1].tool_call_id);
+    TEST_ASSERT_EQUAL_STRING("file_write", history.messages[1].tool_name);
     
     cleanup_conversation_history(&history);
     
@@ -152,7 +167,7 @@ void test_tool_messages_in_vector_db(void) {
     for (int i = 0; i < loaded_history.count; i++) {
         if (strcmp(loaded_history.messages[i].role, "tool") == 0 &&
             loaded_history.messages[i].tool_call_id != NULL &&
-            strcmp(loaded_history.messages[i].tool_call_id, "tool_123") == 0) {
+            strcmp(loaded_history.messages[i].tool_call_id, unique_tool_id) == 0) {
             found_tool_msg = 1;
             TEST_ASSERT_EQUAL_STRING("file_write", loaded_history.messages[i].tool_name);
             break;
@@ -193,10 +208,11 @@ void test_sliding_window_retrieval(void) {
 int main(void) {
     UNITY_BEGIN();
     
+    // Run tool message test first to avoid interference from other tests
+    RUN_TEST(test_tool_messages_in_vector_db);
     RUN_TEST(test_conversation_stored_in_vector_db);
     RUN_TEST(test_extended_conversation_history);
     RUN_TEST(test_search_conversation_history);
-    RUN_TEST(test_tool_messages_in_vector_db);
     RUN_TEST(test_sliding_window_retrieval);
     
     return UNITY_END();
