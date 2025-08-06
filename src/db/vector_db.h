@@ -84,7 +84,7 @@ size_t vector_db_get_index_size(const vector_db_t* db, const char* index_name);
 size_t vector_db_get_index_capacity(const vector_db_t* db, const char* index_name);
 
 typedef void (*vector_db_flush_callback_t)(const vector_db_t* db, void* user_data);
-vector_db_error_t vector_db_enable_auto_flush(vector_db_t* db, size_t interval_seconds,
+vector_db_error_t vector_db_enable_auto_flush(vector_db_t* db, size_t interval_ms,
                                             const char* directory,
                                             vector_db_flush_callback_t callback,
                                             void* user_data);

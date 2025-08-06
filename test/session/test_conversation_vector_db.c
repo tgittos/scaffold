@@ -1,6 +1,7 @@
 #include "../unity/unity.h"
 #include "../../src/session/conversation_tracker.h"
 #include "../../src/db/document_store.h"
+#include "../../src/db/vector_db_service.h"
 #include "../../src/utils/config.h"
 #include <string.h>
 #include <stdio.h>
@@ -10,12 +11,12 @@
 void setUp(void) {
     // Initialize config to load API key from environment
     config_init();
-    
-    // Clear only conversation data to avoid interfering with other vector DB operations
-    document_store_clear_conversations();
 }
 
 void tearDown(void) {
+    // Clear conversation data after each test to prevent interference
+    document_store_clear_conversations();
+    
     // Cleanup config
     config_cleanup();
 }
@@ -66,6 +67,9 @@ void test_conversation_stored_in_vector_db(void) {
     TEST_ASSERT_TRUE(found_assistant_msg);
     
     cleanup_conversation_history(&loaded_history);
+    
+    // Clear conversation data to prevent test interference
+    document_store_clear_conversations();
 }
 
 void test_extended_conversation_history(void) {
@@ -91,6 +95,9 @@ void test_extended_conversation_history(void) {
     TEST_ASSERT_GREATER_OR_EQUAL(4, extended_history.count);
     
     cleanup_conversation_history(&extended_history);
+    
+    // Clear conversation data to prevent test interference
+    document_store_clear_conversations();
 }
 
 void test_search_conversation_history(void) {
@@ -126,6 +133,9 @@ void test_search_conversation_history(void) {
         cleanup_conversation_history(search_results);
         free(search_results);
     }
+    
+    // Clear conversation data to prevent test interference
+    document_store_clear_conversations();
 }
 
 void test_tool_messages_in_vector_db(void) {
@@ -177,6 +187,9 @@ void test_tool_messages_in_vector_db(void) {
     TEST_ASSERT_TRUE(found_tool_msg);
     
     cleanup_conversation_history(&loaded_history);
+    
+    // Clear conversation data to prevent test interference
+    document_store_clear_conversations();
 }
 
 void test_sliding_window_retrieval(void) {
@@ -203,6 +216,9 @@ void test_sliding_window_retrieval(void) {
     TEST_ASSERT_LESS_OR_EQUAL(20, windowed_history.count);
     
     cleanup_conversation_history(&windowed_history);
+    
+    // Clear conversation data to prevent test interference
+    document_store_clear_conversations();
 }
 
 int main(void) {

@@ -25,7 +25,7 @@ struct vector_db {
     
     pthread_t flush_thread;
     bool flush_enabled;
-    size_t flush_interval;
+    size_t flush_interval_ms;
     char* flush_directory;
     vector_db_flush_callback_t flush_callback;
     void* flush_user_data;
@@ -111,7 +111,7 @@ vector_db_t* vector_db_create(void) {
     
     char* default_dir = vector_db_get_default_directory();
     if (default_dir) {
-        vector_db_enable_auto_flush(db, 30, default_dir, NULL, NULL);
+        vector_db_enable_auto_flush(db, 100, default_dir, NULL, NULL); // 100ms auto-flush
         free(default_dir);
     }
     
@@ -765,7 +765,11 @@ static void* flush_thread_func(void* arg) {
         
         struct timespec ts;
         clock_gettime(CLOCK_REALTIME, &ts);
-        ts.tv_sec += db->flush_interval;
+        
+        // Convert milliseconds to nanoseconds and add to current time
+        long long total_ns = ts.tv_nsec + (db->flush_interval_ms * 1000000LL);
+        ts.tv_sec += total_ns / 1000000000LL;
+        ts.tv_nsec = total_ns % 1000000000LL;
         
         int ret = pthread_cond_timedwait(&db->flush_cond, &db->flush_mutex, &ts);
         
@@ -795,11 +799,11 @@ static void* flush_thread_func(void* arg) {
     return NULL;
 }
 
-vector_db_error_t vector_db_enable_auto_flush(vector_db_t* db, size_t interval_seconds,
+vector_db_error_t vector_db_enable_auto_flush(vector_db_t* db, size_t interval_ms,
                                             const char* directory,
                                             vector_db_flush_callback_t callback,
                                             void* user_data) {
-    if (!db || interval_seconds == 0 || !directory) {
+    if (!db || interval_ms == 0 || !directory) {
         return VECTOR_DB_ERROR_INVALID_PARAM;
     }
     
@@ -810,7 +814,7 @@ vector_db_error_t vector_db_enable_auto_flush(vector_db_t* db, size_t interval_s
         return VECTOR_DB_ERROR_INVALID_PARAM;
     }
     
-    db->flush_interval = interval_seconds;
+    db->flush_interval_ms = interval_ms;
     db->flush_directory = strdup(directory);
     if (!db->flush_directory) {
         pthread_mutex_unlock(&db->flush_mutex);

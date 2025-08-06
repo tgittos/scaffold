@@ -108,8 +108,8 @@ static int load_complete_conversation_turns(ConversationHistory* history, time_t
             continue;
         }
         
-        // Start a new turn on user message
-        if (strcmp(role, "user") == 0) {
+        // Start a new turn on user message or assistant message (if no current turn)
+        if (strcmp(role, "user") == 0 || (strcmp(role, "assistant") == 0 && current_turn == NULL)) {
             // Finish current turn if it exists
             current_turn = NULL;
             

@@ -2,11 +2,13 @@
 #include "conversation_compactor.h"
 #include "conversation_tracker.h"
 #include "ralph.h"
+#include "../src/db/document_store.h"
 #include <string.h>
 #include <stdlib.h>
 
 void setUp(void) {
-    // This is run before each test
+    // Clear conversation data to ensure test isolation
+    document_store_clear_conversations();
 }
 
 void tearDown(void) {
