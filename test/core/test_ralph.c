@@ -7,9 +7,7 @@
 #include <unistd.h>
 
 void setUp(void) {
-    // Clean up any existing CONVERSATION.md file before each test
-    // This ensures tests don't interfere with each other
-    remove("CONVERSATION.md");
+    // No file cleanup needed - using vector database for conversation storage
 }
 void tearDown(void) {}
 

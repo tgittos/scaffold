@@ -4,6 +4,7 @@
 #include <cJSON.h>
 #include "../db/vector_db_service.h"
 #include "../db/metadata_store.h"
+#include "../db/document_store.h"
 #include "../llm/embeddings_service.h"
 #include "../utils/common_utils.h"
 #include <stdio.h>
@@ -22,6 +23,9 @@
 
 // Vector database constants
 #define CONVERSATION_INDEX_NAME "conversation_history"
+
+// Forward declarations
+static vector_db_error_t ensure_conversation_index(void);
 
 // Summarization prompt that preserves critical details
 static const char* SUMMARIZATION_PROMPT = 
@@ -438,47 +442,23 @@ int save_compacted_conversation(const ConversationHistory* conversation) {
         return -1;
     }
     
-    // Rewrite the entire conversation file
-    FILE* file = fopen("CONVERSATION.md", "w");
-    if (file == NULL) {
-        return -1;
+    // Save compacted conversation to vector database only
+    // The vector database is already updated by the conversation tracker
+    // when messages are added, so we just need to ensure the index exists
+    document_store_t* store = document_store_get_instance();
+    if (store == NULL) {
+        debug_printf("Warning: No document store available for saving compacted conversation\n");
+        return 0; // Don't fail if store is not available
     }
     
-    for (int i = 0; i < conversation->count; i++) {
-        const ConversationMessage* msg = &conversation->messages[i];
-        
-        // Build JSON message
-        cJSON* json_message = cJSON_CreateObject();
-        if (!json_message) {
-            fclose(file);
-            return -1;
-        }
-        
-        cJSON_AddStringToObject(json_message, "role", msg->role);
-        cJSON_AddStringToObject(json_message, "content", msg->content);
-        
-        if (msg->tool_call_id != NULL) {
-            cJSON_AddStringToObject(json_message, "tool_call_id", msg->tool_call_id);
-        }
-        
-        if (msg->tool_name != NULL) {
-            cJSON_AddStringToObject(json_message, "tool_name", msg->tool_name);
-        }
-        
-        char* json_string = cJSON_PrintUnformatted(json_message);
-        cJSON_Delete(json_message);
-        
-        if (json_string == NULL) {
-            fclose(file);
-            return -1;
-        }
-        
-        fprintf(file, "%s\n", json_string);
-        free(json_string);
+    // Ensure the conversation index exists
+    vector_db_error_t err = ensure_conversation_index();
+    if (err != VECTOR_DB_OK) {
+        debug_printf("Warning: Failed to ensure conversation index: %d\n", err);
+        // Don't fail the operation for this
     }
     
-    fclose(file);
-    debug_printf("Saved compacted conversation with %d messages\n", conversation->count);
+    debug_printf("Compacted conversation with %d messages (vector DB already updated)\n", conversation->count);
     return 0;
 }
 

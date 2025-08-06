@@ -14,12 +14,9 @@ RUN apt-get update && apt-get install -y \
     procps \
     && rm -rf /var/lib/apt/lists/*
 
+RUN touch ~/.bashrc && chmod +x ~/.bashrc
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
-RUN export NVM_DIR="$HOME/.nvm" && \
-    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" && \
-    [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
-RUN nvm install 22 && nvm use 22
-RUN npm install -g @anthropic-ai/claude-code
+RUN . ~/.nvm/nvm.sh && . ~/.bashrc && nvm install node && npm i -g @anthropic-ai/claude-code
 
 RUN wget https://cosmo.zip/pub/cosmocc/cosmocc-4.0.2.zip && \
     unzip cosmocc-4.0.2.zip -d /opt/cosmos && \

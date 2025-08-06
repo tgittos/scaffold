@@ -6,8 +6,7 @@
 #include <string.h>
 
 void setUp(void) {
-    // Clean up any existing conversation file
-    remove("CONVERSATION.md");
+    // No file cleanup needed - using vector database for conversation storage
 }
 
 void tearDown(void) {

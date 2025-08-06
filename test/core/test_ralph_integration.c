@@ -9,13 +9,11 @@
 
 void setUp(void) {
     // Clean up any temporary files before each test
-    remove("CONVERSATION.md");
     system("rm -f /tmp/test_*");
 }
 
 void tearDown(void) {
     // Clean up any temporary files after each test
-    remove("CONVERSATION.md");
     system("rm -f /tmp/test_*");
 }
 

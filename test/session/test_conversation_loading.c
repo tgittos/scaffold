@@ -4,20 +4,20 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Test loading the actual CONVERSATION.md file and verifying all messages are loaded correctly
+// Test loading conversation from vector database and verifying all messages are loaded correctly
 int test_conversation_loading_from_file() {
-    printf("Testing conversation loading from CONVERSATION.md...\n");
+    printf("Testing conversation loading from vector database...\n");
     
     ConversationHistory history = {0};
     
-    // Load the actual CONVERSATION.md file
+    // Load conversation history from vector database
     int result = load_conversation_history(&history);
     if (result != 0) {
         printf("ERROR: Failed to load conversation history\n");
         return -1;
     }
     
-    printf("Loaded %d messages from CONVERSATION.md:\n", history.count);
+    printf("Loaded %d messages from vector database:\n", history.count);
     for (int i = 0; i < history.count; i++) {
         const ConversationMessage* msg = &history.messages[i];
         printf("  Message %d:\n", i);
@@ -79,7 +79,7 @@ int test_conversation_loading_from_file() {
 }
 
 int main() {
-    printf("Testing conversation loading with real CONVERSATION.md file...\n");
+    printf("Testing conversation loading from vector database...\n");
     
     int result = test_conversation_loading_from_file();
     
