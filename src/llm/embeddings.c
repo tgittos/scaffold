@@ -1,10 +1,36 @@
 #include "embeddings.h"
+#include "embedding_provider.h"
 #include "../network/http_client.h"
 #include <cJSON.h>
 #include "../utils/debug_output.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+// Provider registration functions
+int register_openai_embedding_provider(EmbeddingProviderRegistry* registry);
+int register_local_embedding_provider(EmbeddingProviderRegistry* registry);
+
+// Global embedding provider registry
+static EmbeddingProviderRegistry g_embedding_registry = {0};
+static int g_embedding_registry_initialized = 0;
+
+static int init_embedding_registry_once(void) {
+    if (g_embedding_registry_initialized) {
+        return 0;
+    }
+    
+    if (init_embedding_provider_registry(&g_embedding_registry) != 0) {
+        return -1;
+    }
+    
+    // Register built-in providers (order matters - specific providers first, fallback last)
+    register_openai_embedding_provider(&g_embedding_registry);
+    register_local_embedding_provider(&g_embedding_registry);
+    
+    g_embedding_registry_initialized = 1;
+    return 0;
+}
 
 static char* safe_strdup(const char *str) {
     if (str == NULL) return NULL;
@@ -13,109 +39,55 @@ static char* safe_strdup(const char *str) {
 
 int embeddings_init(embeddings_config_t *config, const char *model, 
                     const char *api_key, const char *api_url) {
-    if (config == NULL || api_key == NULL) {
+    if (config == NULL) {
         return -1;
     }
     
-    config->model = safe_strdup(model ? model : "text-embedding-3-small");
-    config->api_key = safe_strdup(api_key);
-    config->api_url = safe_strdup(api_url ? api_url : "https://api.openai.com/v1/embeddings");
+    // Initialize provider registry if not done yet
+    if (init_embedding_registry_once() != 0) {
+        return -1;
+    }
     
-    if (config->model == NULL || config->api_key == NULL || config->api_url == NULL) {
+    // Set default URL if not provided
+    const char *url = api_url ? api_url : "https://api.openai.com/v1/embeddings";
+    
+    // Detect provider based on URL
+    EmbeddingProvider *provider = detect_embedding_provider_for_url(&g_embedding_registry, url);
+    if (provider == NULL) {
+        fprintf(stderr, "Error: No suitable embedding provider found for URL: %s\n", url);
+        return -1;
+    }
+    
+    // Use default model from provider if not specified
+    const char *final_model = model;
+    if (final_model == NULL && provider->capabilities.default_model) {
+        final_model = provider->capabilities.default_model;
+    }
+    if (final_model == NULL) {
+        final_model = "text-embedding-3-small"; // Ultimate fallback
+    }
+    
+    config->model = safe_strdup(final_model);
+    config->api_key = safe_strdup(api_key);
+    config->api_url = safe_strdup(url);
+    config->provider = provider;
+    
+    if (config->model == NULL || config->api_url == NULL) {
         embeddings_cleanup(config);
         return -1;
     }
     
-    return 0;
-}
-
-static char* build_embeddings_request(const char *model, const char *text) {
-    if (model == NULL || text == NULL || strlen(text) == 0) {
-        fprintf(stderr, "Error: model and non-empty text parameters are required for embeddings request\n");
-        debug_printf("Debug: model=%s, text=%s\n", model ? model : "NULL", text ? text : "NULL");
-        return NULL;
-    }
-    
-    cJSON* json = cJSON_CreateObject();
-    if (!json) {
-        return NULL;
-    }
-    
-    cJSON_AddStringToObject(json, "model", model);
-    cJSON_AddStringToObject(json, "input", text);
-    
-    char* json_string = cJSON_PrintUnformatted(json);
-    cJSON_Delete(json);
-    
-    return json_string;
-}
-
-static int parse_embedding_response(const char *response, embedding_vector_t *embedding) {
-    if (response == NULL || embedding == NULL) {
-        return -1;
-    }
-    
-    // Find the data array in the response
-    const char *data_start = strstr(response, "\"data\"");
-    if (data_start == NULL) {
-        fprintf(stderr, "Error: No data field in embeddings response\n");
-        return -1;
-    }
-    
-    // Find the embedding array
-    const char *embedding_start = strstr(data_start, "\"embedding\"");
-    if (embedding_start == NULL) {
-        fprintf(stderr, "Error: No embedding field in response\n");
-        return -1;
-    }
-    
-    // Find the array start
-    const char *array_start = strchr(embedding_start, '[');
-    if (array_start == NULL) {
-        fprintf(stderr, "Error: No embedding array in response\n");
-        return -1;
-    }
-    array_start++; // Skip '['
-    
-    // Count the number of values
-    size_t count = 0;
-    const char *p = array_start;
-    while (*p != ']' && *p != '\0') {
-        char *end;
-        strtod(p, &end);
-        if (end > p) {
-            count++;
-            p = end;
-            while (*p == ' ' || *p == ',' || *p == '\t' || *p == '\n') p++;
-        } else {
-            p++;
-        }
-    }
-    
-    if (count == 0) {
-        fprintf(stderr, "Error: Empty embedding array\n");
-        return -1;
-    }
-    
-    // Allocate memory for the embedding
-    embedding->data = malloc(count * sizeof(float));
-    if (embedding->data == NULL) {
-        fprintf(stderr, "Error: Failed to allocate memory for embedding\n");
-        return -1;
-    }
-    embedding->dimension = count;
-    
-    // Parse the values
-    p = array_start;
-    for (size_t i = 0; i < count; i++) {
-        char *end;
-        embedding->data[i] = (float)strtod(p, &end);
-        p = end;
-        while (*p == ' ' || *p == ',' || *p == '\t' || *p == '\n') p++;
+    // Check if auth is required but not provided
+    if (provider->capabilities.requires_auth && (api_key == NULL || strlen(api_key) == 0)) {
+        fprintf(stderr, "Warning: Provider %s requires authentication but no API key provided\n", 
+                provider->capabilities.name);
+        // Don't fail here - some providers might work without auth in certain configurations
     }
     
     return 0;
 }
+
+// These functions are now handled by individual providers
 
 int embeddings_get_vector(const embeddings_config_t *config, const char *text, 
                           embedding_vector_t *embedding) {
@@ -123,8 +95,15 @@ int embeddings_get_vector(const embeddings_config_t *config, const char *text,
         return -1;
     }
     
-    // Build request JSON
-    char *request_json = build_embeddings_request(config->model, text);
+    if (config->provider == NULL) {
+        fprintf(stderr, "Error: No embedding provider configured\n");
+        return -1;
+    }
+    
+    EmbeddingProvider *provider = config->provider;
+    
+    // Build request JSON using provider
+    char *request_json = provider->build_request_json(provider, config->model, text);
     if (request_json == NULL) {
         fprintf(stderr, "Error: Failed to build embeddings request\n");
         return -1;
@@ -132,16 +111,19 @@ int embeddings_get_vector(const embeddings_config_t *config, const char *text,
     
     debug_printf("Embeddings request JSON: %s\n", request_json);
     
-    // Set up headers
+    // Set up headers using provider
     const char *headers[10];
-    int header_count = 0;
+    int header_count = provider->build_headers(provider, config->api_key, headers, 10);
+    if (header_count < 0) {
+        fprintf(stderr, "Error: Failed to build headers\n");
+        free(request_json);
+        return -1;
+    }
     
-    // Don't add Content-Type here - http_client already adds it by default
-    
-    char auth_header[512];
-    snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", config->api_key);
-    headers[header_count++] = auth_header;
-    headers[header_count] = NULL; // Null-terminate the headers array
+    // Null-terminate the headers array
+    if (header_count < 10) {
+        headers[header_count] = NULL;
+    }
     
     // Make API request
     struct HTTPResponse response = {0};
@@ -162,8 +144,10 @@ int embeddings_get_vector(const embeddings_config_t *config, const char *text,
         return -1;
     }
     
-    // Parse the response
-    result = parse_embedding_response(response.data, embedding);
+    debug_printf("Embeddings response: %s\n", response.data);
+    
+    // Parse the response using provider
+    result = provider->parse_response(provider, response.data, embedding);
     cleanup_response(&response);
     
     return result;
@@ -185,5 +169,6 @@ void embeddings_cleanup(embeddings_config_t *config) {
         config->model = NULL;
         config->api_key = NULL;
         config->api_url = NULL;
+        config->provider = NULL; // Provider is not owned by config, just a reference
     }
 }

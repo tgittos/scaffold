@@ -3,6 +3,9 @@
 
 #include <stddef.h>
 
+// Forward declaration
+struct EmbeddingProvider;
+
 typedef struct {
     float *data;
     size_t dimension;
@@ -12,6 +15,7 @@ typedef struct {
     char *model;
     char *api_key;
     char *api_url;
+    struct EmbeddingProvider *provider; // Added provider support
 } embeddings_config_t;
 
 /**
