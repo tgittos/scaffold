@@ -615,8 +615,8 @@ $(PDFIO_LIB): $(ZLIB_LIB) | $(DEPDIR)
 		CC="$(CC)" AR="cosmoar" RANLIB="aarch64-linux-cosmo-ranlib" CFLAGS="-O2 -I$$(pwd)/../zlib-$(ZLIB_VERSION)" LDFLAGS="-L$$(pwd)/../zlib-$(ZLIB_VERSION)" \
 			./configure --disable-shared --enable-static; \
 	fi && \
-	if [ -f ../pdfio-ar-fix.patch ]; then patch -p0 < ../pdfio-ar-fix.patch || true; fi && \
-	CC="$(CC)" AR="cosmoar" RANLIB="aarch64-linux-cosmo-ranlib" CFLAGS="-O2 -I$$(pwd)/../zlib-$(ZLIB_VERSION)" LDFLAGS="-L$$(pwd)/../zlib-$(ZLIB_VERSION)" \
+	sed -i 's|^AR[[:space:]]*=.*|AR\t\t=\tcosmoar|' Makefile && \
+	CC="$(CC)" AR="cosmoar" RANLIB="cosmoranlib" CFLAGS="-O2 -I$$(pwd)/../zlib-$(ZLIB_VERSION)" LDFLAGS="-L$$(pwd)/../zlib-$(ZLIB_VERSION)" \
 		$(MAKE) libpdfio.a
 
 # Build cJSON library
