@@ -335,9 +335,10 @@ int execute_recall_memories_tool_call(const ToolCall *tool_call, ToolResult *res
         return 0;
     }
     
-    // Check embeddings service
-    if (!embeddings_service_is_configured()) {
-        tool_result_builder_set_error(builder, "Embeddings service not configured. OPENAI_API_KEY environment variable required");
+    // Get metadata store for text search
+    metadata_store_t* meta_store = metadata_store_get_instance();
+    if (meta_store == NULL) {
+        tool_result_builder_set_error(builder, "Failed to access metadata store");
         ToolResult* temp_result = tool_result_builder_finalize(builder);
         if (temp_result) {
             *result = *temp_result;
@@ -347,67 +348,116 @@ int execute_recall_memories_tool_call(const ToolCall *tool_call, ToolResult *res
         return 0;
     }
     
-    // Generate query embedding
-    vector_t* query_vector = embeddings_service_text_to_vector(query);
-    if (query_vector == NULL) {
-        tool_result_builder_set_error(builder, "Failed to generate query embedding");
-        ToolResult* temp_result = tool_result_builder_finalize(builder);
-        if (temp_result) {
-            *result = *temp_result;
-            free(temp_result);
+    // First, perform text-based search
+    size_t text_count = 0;
+    ChunkMetadata** text_results = metadata_store_search(meta_store, MEMORY_INDEX_NAME, query, &text_count);
+    
+    // Then perform vector similarity search if embeddings are available
+    search_results_t *vector_results = NULL;
+    if (embeddings_service_is_configured()) {
+        // Generate query embedding
+        vector_t* query_vector = embeddings_service_text_to_vector(query);
+        if (query_vector != NULL) {
+            // Get vector database
+            vector_db_t *db = vector_db_service_get_database();
+            if (db != NULL) {
+                // Search for similar vectors (get more than k to merge with text results)
+                vector_results = vector_db_search(db, MEMORY_INDEX_NAME, query_vector, (size_t)(k * 2));
+            }
+            embeddings_service_free_vector(query_vector);
         }
-        free(query);
-        return 0;
     }
     
-    // Get vector database
-    vector_db_t *db = vector_db_service_get_database();
-    if (db == NULL) {
-        tool_result_builder_set_error(builder, "Failed to access vector database");
-        ToolResult* temp_result = tool_result_builder_finalize(builder);
-        if (temp_result) {
-            *result = *temp_result;
-            free(temp_result);
-        }
-        embeddings_service_free_vector(query_vector);
-        free(query);
-        return 0;
+    // Build combined result set using a simple scoring system
+    typedef struct {
+        size_t memory_id;
+        float score;
+        ChunkMetadata* chunk;
+        bool from_text_search;
+    } ScoredResult;
+    
+    size_t max_results = (text_count + (vector_results ? vector_results->count : 0));
+    ScoredResult* scored_results = calloc(max_results, sizeof(ScoredResult));
+    if (scored_results == NULL) {
+        tool_result_builder_set_error(builder, "Memory allocation failed");
+        goto recall_cleanup;
     }
     
-    // Search for similar vectors
-    search_results_t *search_results = vector_db_search(db, MEMORY_INDEX_NAME, query_vector, (size_t)k);
+    size_t result_count = 0;
     
-    if (search_results == NULL || search_results->count == 0) {
+    // Add text search results with high scores (exact matches)
+    for (size_t i = 0; i < text_count && i < (size_t)k; i++) {
+        scored_results[result_count].memory_id = text_results[i]->chunk_id;
+        scored_results[result_count].score = 1.0; // Perfect score for text matches
+        scored_results[result_count].chunk = text_results[i];
+        scored_results[result_count].from_text_search = true;
+        result_count++;
+    }
+    
+    // Add vector search results, avoiding duplicates
+    if (vector_results != NULL) {
+        for (size_t i = 0; i < vector_results->count; i++) {
+            size_t memory_id = vector_results->results[i].label;
+            float similarity = 1.0 - vector_results->results[i].distance;
+            
+            // Check if this ID is already in results from text search
+            bool is_duplicate = false;
+            for (size_t j = 0; j < result_count; j++) {
+                if (scored_results[j].memory_id == memory_id) {
+                    // Boost score if found in both searches
+                    scored_results[j].score = (scored_results[j].score + similarity) / 2.0 + 0.1;
+                    is_duplicate = true;
+                    break;
+                }
+            }
+            
+            if (!is_duplicate && result_count < (size_t)k) {
+                scored_results[result_count].memory_id = memory_id;
+                scored_results[result_count].score = similarity;
+                scored_results[result_count].chunk = metadata_store_get(meta_store, MEMORY_INDEX_NAME, memory_id);
+                scored_results[result_count].from_text_search = false;
+                result_count++;
+            }
+        }
+    }
+    
+    // Sort results by score (descending)
+    for (size_t i = 0; result_count > 0 && i < result_count - 1; i++) {
+        for (size_t j = i + 1; j < result_count; j++) {
+            if (scored_results[j].score > scored_results[i].score) {
+                ScoredResult temp = scored_results[i];
+                scored_results[i] = scored_results[j];
+                scored_results[j] = temp;
+            }
+        }
+    }
+    
+    // Build response
+    if (result_count == 0) {
         tool_result_builder_set_success_json(builder, 
             "{\"success\": true, \"memories\": [], \"message\": \"No relevant memories found\"}");
     } else {
-        // Build response with memory content
-        metadata_store_t* meta_store = metadata_store_get_instance();
         char* response = malloc(65536); // Allocate more space for content
         if (response == NULL) {
             tool_result_builder_set_error(builder, "Memory allocation failed");
-            goto recall_cleanup;
+            goto recall_cleanup_scored;
         }
         
         strcpy(response, "{\"success\": true, \"memories\": [");
         char *p = response + strlen(response);
         
-        for (size_t i = 0; i < search_results->count; i++) {
+        size_t output_count = result_count > (size_t)k ? (size_t)k : result_count;
+        for (size_t i = 0; i < output_count; i++) {
             if (i > 0) {
                 p += sprintf(p, ", ");
             }
             
-            size_t memory_id = search_results->results[i].label;
-            float similarity = 1.0 - search_results->results[i].distance;
+            p += sprintf(p, "{\"memory_id\": %zu, \"score\": %.4f, \"match_type\": \"%s\"", 
+                         scored_results[i].memory_id, 
+                         scored_results[i].score,
+                         scored_results[i].from_text_search ? "text" : "semantic");
             
-            // Try to get content from metadata store
-            ChunkMetadata* chunk = NULL;
-            if (meta_store != NULL) {
-                chunk = metadata_store_get(meta_store, MEMORY_INDEX_NAME, memory_id);
-            }
-            
-            p += sprintf(p, "{\"memory_id\": %zu, \"similarity\": %.4f", memory_id, similarity);
-            
+            ChunkMetadata* chunk = scored_results[i].chunk;
             if (chunk != NULL && chunk->content != NULL) {
                 // Escape content for JSON
                 char* escaped_content = json_escape_string(chunk->content);
@@ -424,16 +474,27 @@ int execute_recall_memories_tool_call(const ToolCall *tool_call, ToolResult *res
                     p += sprintf(p, ", \"source\": \"%s\"", chunk->source);
                 }
                 
-                metadata_store_free_chunk(chunk);
+                if (chunk->importance != NULL) {
+                    p += sprintf(p, ", \"importance\": \"%s\"", chunk->importance);
+                }
             }
             
             p += sprintf(p, "}");
         }
         
-        strcat(response, "], \"message\": \"Found relevant memories\"}");
+        strcat(response, "], \"message\": \"Found relevant memories using hybrid search\"}");
         tool_result_builder_set_success_json(builder, response);
         free(response);
     }
+    
+recall_cleanup_scored:
+    // Clean up scored results
+    for (size_t i = 0; i < result_count; i++) {
+        if (!scored_results[i].from_text_search && scored_results[i].chunk != NULL) {
+            metadata_store_free_chunk(scored_results[i].chunk);
+        }
+    }
+    free(scored_results);
     
 recall_cleanup:
     
@@ -444,10 +505,12 @@ recall_cleanup:
     }
     
     // Cleanup
-    if (search_results != NULL) {
-        vector_db_free_search_results(search_results);
+    if (text_results != NULL) {
+        metadata_store_free_chunks(text_results, text_count);
     }
-    embeddings_service_free_vector(query_vector);
+    if (vector_results != NULL) {
+        vector_db_free_search_results(vector_results);
+    }
     free(query);
     
     return 0;
