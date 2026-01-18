@@ -20,4 +20,11 @@ void debug_printf(const char *format, ...);
 // Debug fprintf - only outputs if debug is enabled, in pale yellow
 void debug_fprintf(FILE *stream, const char *format, ...);
 
+// Debug print JSON - summarizes large numeric arrays (like embeddings) for readability
+// Returns a newly allocated string that must be freed by the caller, or NULL on error
+char* debug_summarize_json(const char *json);
+
+// Debug printf for JSON responses - automatically summarizes large arrays
+void debug_printf_json(const char *prefix, const char *json);
+
 #endif // DEBUG_OUTPUT_H
