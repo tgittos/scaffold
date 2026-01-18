@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
     valgrind \
     ripgrep \
     procps \
+    libatomic1 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN touch ~/.bashrc && chmod +x ~/.bashrc
