@@ -70,4 +70,4 @@ platform specific binaries, such as .aarch64.elf (aarch64) and .com.dbg (amd64)
 
 ## Architecture
 
-Ralph's architecture has been documented in `ARCHITECTURE.md` extensively.
+Ralph's architecture has been documented in `@ARCHITECTURE.md` and `@CODE_OVERVIEW.md` extensively.
