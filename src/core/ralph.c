@@ -769,9 +769,10 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
         // Save assistant response to conversation
         if (tool_parse_result == 0 && call_count > 0) {
             // For responses with tool calls, use model-specific formatting
-            char* formatted_message = format_model_assistant_tool_message(model_registry, 
+            // Use parsed assistant_content, not raw response.data (which contains full API response JSON)
+            char* formatted_message = format_model_assistant_tool_message(model_registry,
                                                                          session->session_data.config.model,
-                                                                         response.data, tool_calls, call_count);
+                                                                         assistant_content, tool_calls, call_count);
             if (formatted_message) {
                 if (append_conversation_message(&session->session_data.conversation, "assistant", formatted_message) != 0) {
                     fprintf(stderr, "Warning: Failed to save assistant response with tool calls to conversation history\n");
@@ -1004,7 +1005,7 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
     int result = -1;
     
     if (http_post_with_headers(session->session_data.config.api_url, post_data, headers, &response) == 0) {
-        debug_printf("Got API response: %s\n", response.data);
+        debug_printf_json("Got API response: ", response.data);
         // Parse the response based on API type
         ParsedResponse parsed_response;
         int parse_result;

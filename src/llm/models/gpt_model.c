@@ -60,27 +60,36 @@ static char* gpt_format_assistant_tool_message(const char* response_content,
         
         char* current = message;
         size_t remaining = total_size;
-        
-        // Start the message structure
-        int written = snprintf(current, remaining, "{");
+
+        // Start the message structure with role field (required by OpenAI API)
+        int written = snprintf(current, remaining, "{\"role\": \"assistant\", ");
         if (written < 0 || written >= (int)remaining) {
             free(message);
             return NULL;
         }
         current += written;
         remaining -= written;
-        
-        // Add content if present
+
+        // Add content field (required by OpenAI API, can be null or empty string)
         if (response_content && strlen(response_content) > 0) {
             char* escaped_content = json_escape_string(response_content);
             if (!escaped_content) {
                 free(message);
                 return NULL;
             }
-            
+
             written = snprintf(current, remaining, "\"content\": \"%s\", ", escaped_content);
             free(escaped_content);
-            
+
+            if (written < 0 || written >= (int)remaining) {
+                free(message);
+                return NULL;
+            }
+            current += written;
+            remaining -= written;
+        } else {
+            // OpenAI requires content field even when null for tool call messages
+            written = snprintf(current, remaining, "\"content\": null, ");
             if (written < 0 || written >= (int)remaining) {
                 free(message);
                 return NULL;
@@ -88,7 +97,7 @@ static char* gpt_format_assistant_tool_message(const char* response_content,
             current += written;
             remaining -= written;
         }
-        
+
         // Add tool_calls array
         written = snprintf(current, remaining, "\"tool_calls\": [");
         if (written < 0 || written >= (int)remaining) {
