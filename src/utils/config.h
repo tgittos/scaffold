@@ -15,7 +15,12 @@ typedef struct {
     char *system_prompt;
     int context_window;
     int max_tokens;
-    
+
+    // API retry configuration
+    int api_max_retries;        // Default: 3
+    int api_retry_delay_ms;     // Default: 1000 (1 second)
+    float api_backoff_factor;   // Default: 2.0
+
     // Configuration file paths
     char *config_file_path;
     bool config_loaded;
@@ -81,11 +86,20 @@ const char* config_get_string(const char *key);
 
 /**
  * Get an integer configuration value by key
- * 
+ *
  * @param key Configuration key
  * @param default_value Default value if key not found
  * @return Configuration value or default_value
  */
 int config_get_int(const char *key, int default_value);
+
+/**
+ * Get a float configuration value by key
+ *
+ * @param key Configuration key
+ * @param default_value Default value if key not found
+ * @return Configuration value or default_value
+ */
+float config_get_float(const char *key, float default_value);
 
 #endif /* CONFIG_H */

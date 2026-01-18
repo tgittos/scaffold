@@ -9,6 +9,7 @@
 #include "todo_display.h"
 #include "debug_output.h"
 #include "api_common.h"
+#include "api_error.h"
 #include "../llm/embeddings_service.h"
 #include "token_manager.h"
 #include "conversation_compactor.h"
@@ -691,7 +692,18 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
         debug_printf("Making API request for tool loop iteration %d\n", loop_count);
         
         if (http_post_with_headers(session->session_data.config.api_url, post_data, headers, &response) != 0) {
-            fprintf(stderr, "API request failed for tool loop iteration %d\n", loop_count);
+            APIError err;
+            get_last_api_error(&err);
+
+            fprintf(stderr, "\n%s\n", api_error_user_message(&err));
+
+            if (err.attempts_made > 1) {
+                fprintf(stderr, "   (Retried %d times)\n", err.attempts_made);
+            }
+
+            debug_printf("HTTP status: %ld, Error: %s\n",
+                        err.http_status, err.error_message);
+
             free(post_data);
             cleanup_executed_tool_tracker(&tracker);
             return -1;
