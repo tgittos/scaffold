@@ -532,7 +532,7 @@ Test cases:
 
 ## Implementation Order
 
-1. **Step 1**: Add config fields (`max_subagents`, `subagent_timeout`) to config.h/c
+1. ~~**Step 1**: Add config fields (`max_subagents`, `subagent_timeout`) to config.h/c~~ ✓ DONE
 2. **Step 2**: Create subagent_tool.h with all declarations
 3. **Step 3**: Implement SubagentManager (init, cleanup)
 4. **Step 4**: Implement `subagent_spawn()` with fork/exec
@@ -565,8 +565,8 @@ Test cases:
 - `test/tools/test_subagent_tool.c` - Unit tests
 
 ### Modified Files
-- `src/utils/config.h` - Add config fields
-- `src/utils/config.c` - Parse new config fields
+- `src/utils/config.h` - Add config fields ✓
+- `src/utils/config.c` - Parse new config fields ✓
 - `src/core/ralph.h` - Add SubagentManager to RalphSession
 - `src/core/ralph.c` - Initialize/cleanup SubagentManager
 - `src/core/main.c` - Handle --subagent flag

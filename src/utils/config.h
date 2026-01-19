@@ -21,6 +21,10 @@ typedef struct {
     int api_retry_delay_ms;     // Default: 1000 (1 second)
     float api_backoff_factor;   // Default: 2.0
 
+    // Subagent configuration
+    int max_subagents;          // Default: 5
+    int subagent_timeout;       // Default: 300 seconds
+
     // Configuration file paths
     char *config_file_path;
     bool config_loaded;
