@@ -517,22 +517,46 @@ static char* construct_openai_assistant_message_with_tools(const char* content,
             free(message);
             return NULL;
         }
-        
-        char tool_call_json[512];
-        int tool_written = snprintf(tool_call_json, sizeof(tool_call_json),
-                                   "%s{\"id\": \"%s\", \"type\": \"function\", \"function\": {\"name\": \"%s\", \"arguments\": \"%s\"}}",
-                                   i > 0 ? ", " : "",
-                                   tool_calls[i].id ? tool_calls[i].id : "",
-                                   tool_calls[i].name ? tool_calls[i].name : "",
-                                   escaped_args);
-        free(escaped_args);
-        
-        if (tool_written < 0 || tool_written >= (int)sizeof(tool_call_json)) {
+
+        // Dynamically calculate buffer size needed for this tool call
+        const char* id = tool_calls[i].id ? tool_calls[i].id : "";
+        const char* name = tool_calls[i].name ? tool_calls[i].name : "";
+        // Buffer needs: prefix (2) + id + json structure (~80) + name + arguments
+        size_t tool_json_size = strlen(id) + strlen(name) + strlen(escaped_args) + 100;
+        char* tool_call_json = malloc(tool_json_size);
+        if (tool_call_json == NULL) {
+            free(escaped_args);
             free(message);
             return NULL;
         }
-        
+
+        int tool_written = snprintf(tool_call_json, tool_json_size,
+                                   "%s{\"id\": \"%s\", \"type\": \"function\", \"function\": {\"name\": \"%s\", \"arguments\": \"%s\"}}",
+                                   i > 0 ? ", " : "",
+                                   id, name, escaped_args);
+        free(escaped_args);
+
+        if (tool_written < 0 || tool_written >= (int)tool_json_size) {
+            free(tool_call_json);
+            free(message);
+            return NULL;
+        }
+
+        // Reallocate message buffer if needed
+        size_t current_len = strlen(message);
+        size_t needed_len = current_len + strlen(tool_call_json) + 3; // +3 for "]}" and null
+        if (needed_len > base_size + content_size + tools_size) {
+            char* new_message = realloc(message, needed_len + 100);
+            if (new_message == NULL) {
+                free(tool_call_json);
+                free(message);
+                return NULL;
+            }
+            message = new_message;
+        }
+
         strcat(message, tool_call_json);
+        free(tool_call_json);
     }
     
     strcat(message, "]}");
@@ -706,7 +730,7 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
         // Make API request
         struct HTTPResponse response = {0};
         debug_printf("Making API request for tool loop iteration %d\n", loop_count);
-        
+
         if (http_post_with_headers(session->session_data.config.api_url, post_data, headers, &response) != 0) {
             APIError err;
             get_last_api_error(&err);
@@ -1131,7 +1155,7 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
                         parsed_response.response_content, raw_tool_calls, raw_call_count);
                     content_to_save = constructed_message;
                 }
-                
+
                 if (content_to_save != NULL) {
                     if (append_conversation_message(&session->session_data.conversation, "assistant", content_to_save) != 0) {
                         fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");

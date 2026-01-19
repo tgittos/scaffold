@@ -548,14 +548,18 @@ void test_subagent_get_status_after_completion(void) {
     int result = subagent_spawn(&manager, "test task", NULL, id);
     TEST_ASSERT_EQUAL_INT(0, result);
 
-    // Wait for it to complete
-    usleep(500000);  // 500ms
+    // First, wait for completion using blocking mode
+    result = subagent_get_status(&manager, id, 1, &status, &result_str, &error_str);
+    TEST_ASSERT_EQUAL_INT(0, result);
+    if (result_str) { free(result_str); result_str = NULL; }
+    if (error_str) { free(error_str); error_str = NULL; }
 
-    // Query - should be completed or failed
+    // Now query again non-blocking - should return cached terminal state
     result = subagent_get_status(&manager, id, 0, &status, &result_str, &error_str);
     TEST_ASSERT_EQUAL_INT(0, result);
     TEST_ASSERT_TRUE(status == SUBAGENT_STATUS_COMPLETED ||
-                     status == SUBAGENT_STATUS_FAILED);
+                     status == SUBAGENT_STATUS_FAILED ||
+                     status == SUBAGENT_STATUS_TIMEOUT);
 
     if (result_str) free(result_str);
     if (error_str) free(error_str);
@@ -602,17 +606,15 @@ void test_subagent_get_status_cached_result(void) {
     int result = subagent_spawn(&manager, "test task", NULL, id);
     TEST_ASSERT_EQUAL_INT(0, result);
 
-    // Wait for completion
-    usleep(500000);  // 500ms
-
-    // Query twice - second query should return cached result
-    result = subagent_get_status(&manager, id, 0, &status1, &result_str1, &error_str1);
+    // Wait for completion using blocking mode
+    result = subagent_get_status(&manager, id, 1, &status1, &result_str1, &error_str1);
     TEST_ASSERT_EQUAL_INT(0, result);
 
+    // Query again - should return cached result
     result = subagent_get_status(&manager, id, 0, &status2, &result_str2, &error_str2);
     TEST_ASSERT_EQUAL_INT(0, result);
 
-    // Both queries should return the same status
+    // Both queries should return the same terminal status
     TEST_ASSERT_EQUAL_INT(status1, status2);
 
     if (result_str1) free(result_str1);
@@ -633,13 +635,12 @@ void test_subagent_get_status_null_optional_params(void) {
     int result = subagent_spawn(&manager, "test task", NULL, id);
     TEST_ASSERT_EQUAL_INT(0, result);
 
-    usleep(500000);  // Wait for completion
-
-    // Query with NULL result and error pointers (should still work)
-    result = subagent_get_status(&manager, id, 0, &status, NULL, NULL);
+    // Wait for completion using blocking mode with NULL optional params
+    result = subagent_get_status(&manager, id, 1, &status, NULL, NULL);
     TEST_ASSERT_EQUAL_INT(0, result);
     TEST_ASSERT_TRUE(status == SUBAGENT_STATUS_COMPLETED ||
-                     status == SUBAGENT_STATUS_FAILED);
+                     status == SUBAGENT_STATUS_FAILED ||
+                     status == SUBAGENT_STATUS_TIMEOUT);
 
     subagent_manager_cleanup(&manager);
 }

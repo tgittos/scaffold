@@ -2,9 +2,11 @@
 #include "../utils/config.h"
 #include "../core/ralph.h"
 #include "../session/conversation_tracker.h"
+#include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <sys/wait.h>
 #include <fcntl.h>
@@ -16,6 +18,12 @@
  * Set during tool registration, used by execute_subagent_tool_call and
  * execute_subagent_status_tool_call since those functions can't receive
  * the manager pointer through their signature.
+ *
+ * THREAD-SAFETY NOTE: This global pointer makes the subagent tool module
+ * non-reentrant and not thread-safe. Only one SubagentManager can be active
+ * at a time per process. If concurrent sessions were ever needed, this would
+ * require refactoring to pass the manager through the tool execution context.
+ * For the current single-threaded CLI design, this is acceptable.
  */
 static SubagentManager *g_subagent_manager = NULL;
 
@@ -344,6 +352,59 @@ int read_subagent_output(Subagent *sub) {
 }
 
 /**
+ * Handle process exit status and update subagent state accordingly.
+ * Reads any remaining output, then sets status to COMPLETED or FAILED
+ * based on the process exit code or signal.
+ *
+ * @param sub Pointer to the Subagent structure
+ * @param proc_status Process status from waitpid()
+ */
+static void handle_process_exit(Subagent *sub, int proc_status) {
+    if (sub == NULL) {
+        return;
+    }
+
+    // Read any remaining output
+    read_subagent_output(sub);
+
+    if (WIFEXITED(proc_status) && WEXITSTATUS(proc_status) == 0) {
+        // Successful exit - move output to result
+        sub->status = SUBAGENT_STATUS_COMPLETED;
+        sub->result = sub->output;
+        sub->output = NULL;
+        sub->output_len = 0;
+    } else {
+        // Failed exit - create error message
+        sub->status = SUBAGENT_STATUS_FAILED;
+
+        char error_msg[256];
+        if (WIFEXITED(proc_status)) {
+            snprintf(error_msg, sizeof(error_msg),
+                     "Subagent exited with code %d", WEXITSTATUS(proc_status));
+        } else if (WIFSIGNALED(proc_status)) {
+            snprintf(error_msg, sizeof(error_msg),
+                     "Subagent killed by signal %d", WTERMSIG(proc_status));
+        } else {
+            snprintf(error_msg, sizeof(error_msg), "Subagent process failed");
+        }
+
+        // Append captured output if available for debugging
+        if (sub->output != NULL && sub->output_len > 0) {
+            size_t error_len = strlen(error_msg) + sub->output_len + 32;
+            char *full_error = malloc(error_len);
+            if (full_error != NULL) {
+                snprintf(full_error, error_len, "%s. Output: %s", error_msg, sub->output);
+                sub->error = full_error;
+            } else {
+                sub->error = strdup(error_msg);
+            }
+        } else {
+            sub->error = strdup(error_msg);
+        }
+    }
+}
+
+/**
  * Poll all running subagents for status changes (non-blocking).
  * Returns the number of subagents that changed state.
  */
@@ -382,28 +443,8 @@ int subagent_poll_all(SubagentManager *manager) {
         pid_t result = waitpid(sub->pid, &proc_status, WNOHANG);
 
         if (result == sub->pid) {
-            // Process has exited
-            read_subagent_output(sub);
-
-            if (WIFEXITED(proc_status) && WEXITSTATUS(proc_status) == 0) {
-                sub->status = SUBAGENT_STATUS_COMPLETED;
-                sub->result = sub->output;
-                sub->output = NULL;
-                sub->output_len = 0;
-            } else {
-                sub->status = SUBAGENT_STATUS_FAILED;
-                if (WIFEXITED(proc_status)) {
-                    char error_msg[64];
-                    snprintf(error_msg, sizeof(error_msg), "Subagent exited with code %d", WEXITSTATUS(proc_status));
-                    sub->error = strdup(error_msg);
-                } else if (WIFSIGNALED(proc_status)) {
-                    char error_msg[64];
-                    snprintf(error_msg, sizeof(error_msg), "Subagent killed by signal %d", WTERMSIG(proc_status));
-                    sub->error = strdup(error_msg);
-                } else {
-                    sub->error = strdup("Subagent process failed");
-                }
-            }
+            // Process has exited - delegate to helper
+            handle_process_exit(sub, proc_status);
             changed++;
         } else if (result == -1 && errno != ECHILD) {
             // Error in waitpid
@@ -675,41 +716,8 @@ int subagent_get_status(SubagentManager *manager, const char *subagent_id, int w
         pid_t waitpid_result = waitpid(sub->pid, &proc_status, WNOHANG);
 
         if (waitpid_result == sub->pid) {
-            // Process has exited
-            read_subagent_output(sub);
-
-            if (WIFEXITED(proc_status) && WEXITSTATUS(proc_status) == 0) {
-                sub->status = SUBAGENT_STATUS_COMPLETED;
-                sub->result = sub->output;
-                sub->output = NULL;
-                sub->output_len = 0;
-            } else {
-                sub->status = SUBAGENT_STATUS_FAILED;
-                // Include captured output in error message for debugging
-                char error_msg[256];
-                if (WIFEXITED(proc_status)) {
-                    snprintf(error_msg, sizeof(error_msg),
-                             "Subagent exited with code %d", WEXITSTATUS(proc_status));
-                } else if (WIFSIGNALED(proc_status)) {
-                    snprintf(error_msg, sizeof(error_msg),
-                             "Subagent killed by signal %d", WTERMSIG(proc_status));
-                } else {
-                    snprintf(error_msg, sizeof(error_msg), "Subagent process failed");
-                }
-                // Append captured output if available
-                if (sub->output != NULL && sub->output_len > 0) {
-                    size_t error_len = strlen(error_msg) + sub->output_len + 32;
-                    char *full_error = malloc(error_len);
-                    if (full_error != NULL) {
-                        snprintf(full_error, error_len, "%s. Output: %s", error_msg, sub->output);
-                        sub->error = full_error;
-                    } else {
-                        sub->error = strdup(error_msg);
-                    }
-                } else {
-                    sub->error = strdup(error_msg);
-                }
-            }
+            // Process has exited - delegate to helper
+            handle_process_exit(sub, proc_status);
         } else if (waitpid_result == -1 && errno != ECHILD) {
             // Error in waitpid
             sub->status = SUBAGENT_STATUS_FAILED;
@@ -742,41 +750,8 @@ int subagent_get_status(SubagentManager *manager, const char *subagent_id, int w
         pid_t waitpid_result = waitpid(sub->pid, &proc_status, WNOHANG);
 
         if (waitpid_result == sub->pid) {
-            // Process has exited
-            read_subagent_output(sub);
-
-            if (WIFEXITED(proc_status) && WEXITSTATUS(proc_status) == 0) {
-                sub->status = SUBAGENT_STATUS_COMPLETED;
-                sub->result = sub->output;
-                sub->output = NULL;
-                sub->output_len = 0;
-            } else {
-                sub->status = SUBAGENT_STATUS_FAILED;
-                // Include captured output in error message for debugging
-                char error_msg[256];
-                if (WIFEXITED(proc_status)) {
-                    snprintf(error_msg, sizeof(error_msg),
-                             "Subagent exited with code %d", WEXITSTATUS(proc_status));
-                } else if (WIFSIGNALED(proc_status)) {
-                    snprintf(error_msg, sizeof(error_msg),
-                             "Subagent killed by signal %d", WTERMSIG(proc_status));
-                } else {
-                    snprintf(error_msg, sizeof(error_msg), "Subagent process failed");
-                }
-                // Append captured output if available
-                if (sub->output != NULL && sub->output_len > 0) {
-                    size_t error_len = strlen(error_msg) + sub->output_len + 32;
-                    char *full_error = malloc(error_len);
-                    if (full_error != NULL) {
-                        snprintf(full_error, error_len, "%s. Output: %s", error_msg, sub->output);
-                        sub->error = full_error;
-                    } else {
-                        sub->error = strdup(error_msg);
-                    }
-                } else {
-                    sub->error = strdup(error_msg);
-                }
-            }
+            // Process has exited - delegate to helper
+            handle_process_exit(sub, proc_status);
             break;
         } else if (waitpid_result == -1 && errno != ECHILD) {
             // Error in waitpid
@@ -804,114 +779,54 @@ int subagent_get_status(SubagentManager *manager, const char *subagent_id, int w
 }
 
 /**
- * Extract a string value from JSON by key.
- * Returns a newly allocated string that must be freed by the caller.
+ * Extract a string value from JSON by key using cJSON.
+ * Returns a newly allocated string that must be freed by the caller,
+ * or NULL if the key is not found or is not a string.
  */
 static char* extract_json_string_value(const char *json, const char *key) {
     if (json == NULL || key == NULL) {
         return NULL;
     }
 
-    char search_pattern[256];
-    snprintf(search_pattern, sizeof(search_pattern), "\"%s\"", key);
-
-    const char *key_pos = strstr(json, search_pattern);
-    if (key_pos == NULL) {
+    cJSON *root = cJSON_Parse(json);
+    if (root == NULL) {
         return NULL;
     }
 
-    const char *colon_pos = strchr(key_pos, ':');
-    if (colon_pos == NULL) {
-        return NULL;
+    cJSON *item = cJSON_GetObjectItemCaseSensitive(root, key);
+    char *result = NULL;
+
+    if (cJSON_IsString(item) && item->valuestring != NULL) {
+        result = strdup(item->valuestring);
     }
 
-    colon_pos++;
-    while (*colon_pos == ' ' || *colon_pos == '\t' || *colon_pos == '\n' || *colon_pos == '\r') {
-        colon_pos++;
-    }
-
-    if (*colon_pos != '"') {
-        return NULL;
-    }
-
-    const char *start = colon_pos + 1;
-    const char *end = start;
-
-    // Find the closing quote, handling escaped characters
-    while (*end != '\0' && *end != '"') {
-        if (*end == '\\' && *(end + 1) != '\0') {
-            end += 2;
-        } else {
-            end++;
-        }
-    }
-
-    if (*end != '"') {
-        return NULL;
-    }
-
-    size_t len = (size_t)(end - start);
-    char *result = malloc(len + 1);
-    if (result == NULL) {
-        return NULL;
-    }
-
-    // Copy and unescape basic sequences
-    size_t j = 0;
-    for (size_t i = 0; i < len; i++) {
-        if (start[i] == '\\' && i + 1 < len) {
-            i++;
-            switch (start[i]) {
-                case 'n': result[j++] = '\n'; break;
-                case 't': result[j++] = '\t'; break;
-                case 'r': result[j++] = '\r'; break;
-                case '"': result[j++] = '"'; break;
-                case '\\': result[j++] = '\\'; break;
-                default: result[j++] = start[i]; break;
-            }
-        } else {
-            result[j++] = start[i];
-        }
-    }
-    result[j] = '\0';
-
+    cJSON_Delete(root);
     return result;
 }
 
 /**
- * Extract a boolean value from JSON by key.
- * Returns the default value if key is not found.
+ * Extract a boolean value from JSON by key using cJSON.
+ * Returns the default value if key is not found or is not a boolean.
  */
 static int extract_json_boolean_value(const char *json, const char *key, int default_value) {
     if (json == NULL || key == NULL) {
         return default_value;
     }
 
-    char search_pattern[256];
-    snprintf(search_pattern, sizeof(search_pattern), "\"%s\"", key);
-
-    const char *key_pos = strstr(json, search_pattern);
-    if (key_pos == NULL) {
+    cJSON *root = cJSON_Parse(json);
+    if (root == NULL) {
         return default_value;
     }
 
-    const char *colon_pos = strchr(key_pos, ':');
-    if (colon_pos == NULL) {
-        return default_value;
+    cJSON *item = cJSON_GetObjectItemCaseSensitive(root, key);
+    int result = default_value;
+
+    if (cJSON_IsBool(item)) {
+        result = cJSON_IsTrue(item) ? 1 : 0;
     }
 
-    colon_pos++;
-    while (*colon_pos == ' ' || *colon_pos == '\t' || *colon_pos == '\n' || *colon_pos == '\r') {
-        colon_pos++;
-    }
-
-    if (strncmp(colon_pos, "true", 4) == 0) {
-        return 1;
-    } else if (strncmp(colon_pos, "false", 5) == 0) {
-        return 0;
-    }
-
-    return default_value;
+    cJSON_Delete(root);
+    return result;
 }
 
 /**
