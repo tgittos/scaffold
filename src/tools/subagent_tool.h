@@ -14,6 +14,15 @@
 #define SUBAGENT_MAX_OUTPUT_LENGTH 131072  // 128KB max output per subagent
 
 /**
+ * Internal constants for subagent operations
+ */
+#define SUBAGENT_PATH_BUFFER_SIZE 4096     // Buffer size for executable paths
+#define SUBAGENT_POLL_INTERVAL_USEC 50000  // 50ms polling interval
+#define SUBAGENT_GRACE_PERIOD_USEC 100000  // 100ms grace period before SIGKILL
+#define SUBAGENT_HARD_CAP 20               // Absolute maximum concurrent subagents
+#define SUBAGENT_MAX_TIMEOUT_SEC 3600      // Maximum timeout: 1 hour
+
+/**
  * Subagent execution status enum
  */
 typedef enum {

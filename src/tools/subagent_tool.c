@@ -90,10 +90,14 @@ void cleanup_subagent(Subagent *sub) {
         return;
     }
 
-    // Close pipe if still open
+    // Close both pipe ends if still open
     if (sub->stdout_pipe[0] > 0) {
         close(sub->stdout_pipe[0]);
         sub->stdout_pipe[0] = -1;
+    }
+    if (sub->stdout_pipe[1] > 0) {
+        close(sub->stdout_pipe[1]);
+        sub->stdout_pipe[1] = -1;
     }
 
     // Free allocated strings
@@ -157,14 +161,14 @@ int subagent_manager_init_with_config(SubagentManager *manager, int max_subagent
     if (max_subagents < 1) {
         max_subagents = SUBAGENT_MAX_DEFAULT;
     }
-    if (max_subagents > 20) {
-        max_subagents = 20;  // Hard cap for safety
+    if (max_subagents > SUBAGENT_HARD_CAP) {
+        max_subagents = SUBAGENT_HARD_CAP;
     }
     if (timeout_seconds < 1) {
         timeout_seconds = SUBAGENT_TIMEOUT_DEFAULT;
     }
-    if (timeout_seconds > 3600) {
-        timeout_seconds = 3600;  // Max 1 hour
+    if (timeout_seconds > SUBAGENT_MAX_TIMEOUT_SEC) {
+        timeout_seconds = SUBAGENT_MAX_TIMEOUT_SEC;
     }
 
     manager->subagents = NULL;
@@ -199,7 +203,7 @@ void subagent_manager_cleanup(SubagentManager *manager) {
             pid_t result = waitpid(sub->pid, &status, WNOHANG);
             if (result == 0) {
                 // Still running, use SIGKILL
-                usleep(100000);  // 100ms grace period
+                usleep(SUBAGENT_GRACE_PERIOD_USEC);
                 kill(sub->pid, SIGKILL);
                 waitpid(sub->pid, &status, 0);
             }
@@ -401,6 +405,11 @@ static void handle_process_exit(Subagent *sub, int proc_status) {
         } else {
             sub->error = strdup(error_msg);
         }
+
+        // Free output after incorporating it into error message (prevents memory leak)
+        free(sub->output);
+        sub->output = NULL;
+        sub->output_len = 0;
     }
 }
 
@@ -468,13 +477,13 @@ int subagent_poll_all(SubagentManager *manager) {
  * We detect this and fall back to finding ralph in the current directory.
  */
 static char* get_executable_path(void) {
-    char *path = malloc(4096);
+    char *path = malloc(SUBAGENT_PATH_BUFFER_SIZE);
     if (path == NULL) {
         return NULL;
     }
 
     // Try /proc/self/exe first (Linux)
-    ssize_t len = readlink("/proc/self/exe", path, 4095);
+    ssize_t len = readlink("/proc/self/exe", path, SUBAGENT_PATH_BUFFER_SIZE - 1);
     if (len > 0) {
         path[len] = '\0';
         // Check if this is the APE loader (contains ".ape-" in path)
@@ -485,9 +494,9 @@ static char* get_executable_path(void) {
     }
 
     // Fallback: try current directory
-    if (getcwd(path, 4096) != NULL) {
+    if (getcwd(path, SUBAGENT_PATH_BUFFER_SIZE) != NULL) {
         size_t cwd_len = strlen(path);
-        if (cwd_len + 7 < 4096) {  // "/ralph" + null
+        if (cwd_len + 7 < SUBAGENT_PATH_BUFFER_SIZE) {  // "/ralph" + null
             strcat(path, "/ralph");
             if (access(path, X_OK) == 0) {
                 return path;
@@ -558,7 +567,9 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
         close(pipefd[1]);
 
         // Also redirect stderr to stdout so we capture errors
-        dup2(STDOUT_FILENO, STDERR_FILENO);
+        if (dup2(STDOUT_FILENO, STDERR_FILENO) == -1) {
+            _exit(127);
+        }
 
         // Build exec arguments
         // Maximum: ralph --subagent --task "..." --context "..." NULL = 7 args
@@ -761,7 +772,7 @@ int subagent_get_status(SubagentManager *manager, const char *subagent_id, int w
         }
 
         // Still running, sleep briefly before checking again
-        usleep(50000);  // 50ms polling interval
+        usleep(SUBAGENT_POLL_INTERVAL_USEC);
     }
 
     #undef RETURN_CURRENT_STATE
@@ -913,6 +924,12 @@ int register_subagent_tool(ToolRegistry *registry, SubagentManager *manager) {
         return -1;
     }
 
+    // Check for potential overwrite of existing manager (prevents subtle bugs)
+    if (g_subagent_manager != NULL && g_subagent_manager != manager) {
+        fprintf(stderr, "Warning: Overwriting existing subagent manager pointer. "
+                        "Only one SubagentManager should be active per process.\n");
+    }
+
     // Store manager pointer for execute function
     g_subagent_manager = manager;
 
@@ -976,6 +993,12 @@ int register_subagent_tool(ToolRegistry *registry, SubagentManager *manager) {
 int register_subagent_status_tool(ToolRegistry *registry, SubagentManager *manager) {
     if (registry == NULL || manager == NULL) {
         return -1;
+    }
+
+    // Check for potential overwrite of existing manager (prevents subtle bugs)
+    if (g_subagent_manager != NULL && g_subagent_manager != manager) {
+        fprintf(stderr, "Warning: Overwriting existing subagent manager pointer. "
+                        "Only one SubagentManager should be active per process.\n");
     }
 
     // Store manager pointer for execute function (may already be set)
