@@ -51,6 +51,16 @@ Your work is not considered complete unless it is accompanied by automated unit 
 
 `valgrind` will sometimes fail with a SIGPIPE error if you're running timeout tests. This is ok.
 
+### Subagent Tests and Valgrind
+
+The subagent tests use `fork()` and `execv()` to spawn child ralph processes. By default, valgrind traces all forked children, which causes a cascading process explosion:
+- Each test spawns a subagent → valgrind traces it
+- Each subagent initializes a full ralph session (tools, MCP, etc.)
+- MCP initialization may fork additional server processes
+- All processes make real API calls under valgrind's slow execution
+
+This can exhaust memory and crash the devcontainer. The Makefile uses `--trace-children=no` for subagent tests to prevent this. This means **memory issues in spawned subagent processes are not detected by valgrind**. To properly test subagent memory safety, run the subagent code paths directly without the fork/exec layer.
+
 ## Debugging
 
 You can use all normal C/C++ debug tooling on Cosmopolitan C projects. You must only remember that you need to check it against
