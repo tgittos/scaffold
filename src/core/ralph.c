@@ -9,6 +9,7 @@
 #include "todo_display.h"
 #include "debug_output.h"
 #include "api_common.h"
+#include "api_error.h"
 #include "../llm/embeddings_service.h"
 #include "token_manager.h"
 #include "conversation_compactor.h"
@@ -355,13 +356,29 @@ int ralph_init_session(RalphSession* session) {
         }
         // No warning if config file not found - MCP is optional
     }
-    
+
+    // Initialize subagent manager
+    if (subagent_manager_init(&session->subagent_manager) != 0) {
+        fprintf(stderr, "Warning: Failed to initialize subagent manager\n");
+    } else {
+        // Register subagent tools (they internally check is_subagent_process to prevent nesting)
+        if (register_subagent_tool(&session->tools, &session->subagent_manager) != 0) {
+            fprintf(stderr, "Warning: Failed to register subagent tool\n");
+        }
+        if (register_subagent_status_tool(&session->tools, &session->subagent_manager) != 0) {
+            fprintf(stderr, "Warning: Failed to register subagent_status tool\n");
+        }
+    }
+
     return 0;
 }
 
 void ralph_cleanup_session(RalphSession* session) {
     if (session == NULL) return;
-    
+
+    // Cleanup subagent manager (kills any running subagents)
+    subagent_manager_cleanup(&session->subagent_manager);
+
     // Cleanup MCP client
     mcp_client_cleanup(&session->mcp_client);
     
@@ -500,22 +517,46 @@ static char* construct_openai_assistant_message_with_tools(const char* content,
             free(message);
             return NULL;
         }
-        
-        char tool_call_json[512];
-        int tool_written = snprintf(tool_call_json, sizeof(tool_call_json),
-                                   "%s{\"id\": \"%s\", \"type\": \"function\", \"function\": {\"name\": \"%s\", \"arguments\": \"%s\"}}",
-                                   i > 0 ? ", " : "",
-                                   tool_calls[i].id ? tool_calls[i].id : "",
-                                   tool_calls[i].name ? tool_calls[i].name : "",
-                                   escaped_args);
-        free(escaped_args);
-        
-        if (tool_written < 0 || tool_written >= (int)sizeof(tool_call_json)) {
+
+        // Dynamically calculate buffer size needed for this tool call
+        const char* id = tool_calls[i].id ? tool_calls[i].id : "";
+        const char* name = tool_calls[i].name ? tool_calls[i].name : "";
+        // Buffer needs: prefix (2) + id + json structure (~80) + name + arguments
+        size_t tool_json_size = strlen(id) + strlen(name) + strlen(escaped_args) + 100;
+        char* tool_call_json = malloc(tool_json_size);
+        if (tool_call_json == NULL) {
+            free(escaped_args);
             free(message);
             return NULL;
         }
-        
+
+        int tool_written = snprintf(tool_call_json, tool_json_size,
+                                   "%s{\"id\": \"%s\", \"type\": \"function\", \"function\": {\"name\": \"%s\", \"arguments\": \"%s\"}}",
+                                   i > 0 ? ", " : "",
+                                   id, name, escaped_args);
+        free(escaped_args);
+
+        if (tool_written < 0 || tool_written >= (int)tool_json_size) {
+            free(tool_call_json);
+            free(message);
+            return NULL;
+        }
+
+        // Reallocate message buffer if needed
+        size_t current_len = strlen(message);
+        size_t needed_len = current_len + strlen(tool_call_json) + 3; // +3 for "]}" and null
+        if (needed_len > base_size + content_size + tools_size) {
+            char* new_message = realloc(message, needed_len + 100);
+            if (new_message == NULL) {
+                free(tool_call_json);
+                free(message);
+                return NULL;
+            }
+            message = new_message;
+        }
+
         strcat(message, tool_call_json);
+        free(tool_call_json);
     }
     
     strcat(message, "]}");
@@ -689,9 +730,20 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
         // Make API request
         struct HTTPResponse response = {0};
         debug_printf("Making API request for tool loop iteration %d\n", loop_count);
-        
+
         if (http_post_with_headers(session->session_data.config.api_url, post_data, headers, &response) != 0) {
-            fprintf(stderr, "API request failed for tool loop iteration %d\n", loop_count);
+            APIError err;
+            get_last_api_error(&err);
+
+            fprintf(stderr, "\n%s\n", api_error_user_message(&err));
+
+            if (err.attempts_made > 1) {
+                fprintf(stderr, "   (Retried %d times)\n", err.attempts_made);
+            }
+
+            debug_printf("HTTP status: %ld, Error: %s\n",
+                        err.http_status, err.error_message);
+
             free(post_data);
             cleanup_executed_tool_tracker(&tracker);
             return -1;
@@ -757,9 +809,10 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
         // Save assistant response to conversation
         if (tool_parse_result == 0 && call_count > 0) {
             // For responses with tool calls, use model-specific formatting
-            char* formatted_message = format_model_assistant_tool_message(model_registry, 
+            // Use parsed assistant_content, not raw response.data (which contains full API response JSON)
+            char* formatted_message = format_model_assistant_tool_message(model_registry,
                                                                          session->session_data.config.model,
-                                                                         response.data, tool_calls, call_count);
+                                                                         assistant_content, tool_calls, call_count);
             if (formatted_message) {
                 if (append_conversation_message(&session->session_data.conversation, "assistant", formatted_message) != 0) {
                     fprintf(stderr, "Warning: Failed to save assistant response with tool calls to conversation history\n");
@@ -992,7 +1045,7 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
     int result = -1;
     
     if (http_post_with_headers(session->session_data.config.api_url, post_data, headers, &response) == 0) {
-        debug_printf("Got API response: %s\n", response.data);
+        debug_printf_json("Got API response: ", response.data);
         // Parse the response based on API type
         ParsedResponse parsed_response;
         int parse_result;
@@ -1102,7 +1155,7 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
                         parsed_response.response_content, raw_tool_calls, raw_call_count);
                     content_to_save = constructed_message;
                 }
-                
+
                 if (content_to_save != NULL) {
                     if (append_conversation_message(&session->session_data.conversation, "assistant", content_to_save) != 0) {
                         fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");

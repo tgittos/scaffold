@@ -1,7 +1,12 @@
 #include "http_client.h"
+#include "api_error.h"
+#include "../utils/config.h"
+#include "../utils/debug_output.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <time.h>
 #include <curl/curl.h>
 
 // Default HTTP configuration
@@ -31,6 +36,57 @@ static size_t write_callback(void *contents, size_t size, size_t nmemb, void *us
     return realsize;
 }
 
+// Helper struct to capture response headers
+struct HeaderData {
+    int retry_after_seconds;
+};
+
+static size_t header_callback(char *buffer, size_t size, size_t nitems, void *userdata)
+{
+    struct HeaderData *header_data = (struct HeaderData *)userdata;
+    size_t realsize = size * nitems;
+
+    // Check for Retry-After header
+    if (realsize > 13 && strncasecmp(buffer, "Retry-After:", 12) == 0) {
+        const char *value = buffer + 12;
+        // Skip whitespace
+        while (*value == ' ' || *value == '\t') value++;
+
+        // Parse as integer (seconds)
+        int seconds = atoi(value);
+        if (seconds > 0 && seconds <= 300) {  // Cap at 5 minutes
+            header_data->retry_after_seconds = seconds;
+        }
+    }
+
+    return realsize;
+}
+
+// Calculate delay with exponential backoff and jitter
+static int calculate_retry_delay(int attempt, int base_delay_ms, float backoff_factor)
+{
+    // Exponential backoff: base_delay * (backoff_factor ^ attempt)
+    float multiplier = 1.0f;
+    for (int i = 0; i < attempt; i++) {
+        multiplier *= backoff_factor;
+    }
+
+    int delay = (int)(base_delay_ms * multiplier);
+
+    // Add jitter (0-25% of delay)
+    if (delay > 0) {
+        int jitter = rand() % (delay / 4 + 1);
+        delay += jitter;
+    }
+
+    // Cap at 60 seconds
+    if (delay > 60000) {
+        delay = 60000;
+    }
+
+    return delay;
+}
+
 int http_post(const char *url, const char *post_data, struct HTTPResponse *response)
 {
     return http_post_with_config(url, post_data, NULL, &DEFAULT_HTTP_CONFIG, response);
@@ -41,73 +97,151 @@ int http_post_with_headers(const char *url, const char *post_data, const char **
     return http_post_with_config(url, post_data, headers, &DEFAULT_HTTP_CONFIG, response);
 }
 
-int http_post_with_config(const char *url, const char *post_data, const char **headers, 
+int http_post_with_config(const char *url, const char *post_data, const char **headers,
                          const struct HTTPConfig *config, struct HTTPResponse *response)
 {
     CURL *curl = NULL;
     CURLcode res = CURLE_OK;
+    long http_status = 0;
     int return_code = 0;
     struct curl_slist *curl_headers = NULL;
-    
+    struct HeaderData header_data = {0};
+    APIError api_err;
+
     if (url == NULL || post_data == NULL || response == NULL || config == NULL) {
         fprintf(stderr, "Error: Invalid parameters\n");
         return -1;
     }
-    
-    curl = curl_easy_init();
-    if (curl == NULL) {
-        fprintf(stderr, "Error: Failed to initialize curl\n");
-        return -1;
+
+    // Get retry configuration
+    int max_retries = config_get_int("api_max_retries", 3);
+    int base_delay_ms = config_get_int("api_retry_delay_ms", 1000);
+    float backoff_factor = config_get_float("api_backoff_factor", 2.0f);
+
+    // Seed random for jitter (only once)
+    static int seeded = 0;
+    if (!seeded) {
+        srand((unsigned int)time(NULL));
+        seeded = 1;
     }
-    
-    response->data = malloc(1);
-    response->size = 0;
-    
-    if (response->data == NULL) {
-        fprintf(stderr, "Error: Failed to allocate memory\n");
-        curl_easy_cleanup(curl);
-        return -1;
-    }
-    
-    curl_headers = curl_slist_append(curl_headers, "Content-Type: application/json");
-    if (curl_headers == NULL) {
-        fprintf(stderr, "Error: Failed to set default headers\n");
-        free(response->data);
-        curl_easy_cleanup(curl);
-        return -1;
-    }
-    
-    if (headers != NULL) {
-        for (int i = 0; headers[i] != NULL; i++) {
-            curl_headers = curl_slist_append(curl_headers, headers[i]);
-            if (curl_headers == NULL) {
-                fprintf(stderr, "Error: Failed to set custom header: %s\n", headers[i]);
-                free(response->data);
-                curl_easy_cleanup(curl);
-                return -1;
+
+    // Clear previous error
+    clear_last_api_error();
+
+    // Retry loop
+    int attempt = 0;
+    while (attempt <= max_retries) {
+        // Reset response for each attempt
+        if (response->data != NULL) {
+            free(response->data);
+        }
+        response->data = malloc(1);
+        response->size = 0;
+        header_data.retry_after_seconds = 0;
+
+        if (response->data == NULL) {
+            fprintf(stderr, "Error: Failed to allocate memory\n");
+            return -1;
+        }
+
+        curl = curl_easy_init();
+        if (curl == NULL) {
+            fprintf(stderr, "Error: Failed to initialize curl\n");
+            free(response->data);
+            response->data = NULL;
+            return -1;
+        }
+
+        curl_headers = curl_slist_append(NULL, "Content-Type: application/json");
+        if (curl_headers == NULL) {
+            fprintf(stderr, "Error: Failed to set default headers\n");
+            free(response->data);
+            response->data = NULL;
+            curl_easy_cleanup(curl);
+            return -1;
+        }
+
+        if (headers != NULL) {
+            for (int i = 0; headers[i] != NULL; i++) {
+                curl_headers = curl_slist_append(curl_headers, headers[i]);
+                if (curl_headers == NULL) {
+                    fprintf(stderr, "Error: Failed to set custom header: %s\n", headers[i]);
+                    free(response->data);
+                    response->data = NULL;
+                    curl_easy_cleanup(curl);
+                    return -1;
+                }
             }
         }
+
+        curl_easy_setopt(curl, CURLOPT_URL, url);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_data);
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, curl_headers);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, response);
+        curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
+        curl_easy_setopt(curl, CURLOPT_HEADERDATA, &header_data);
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT, config->timeout_seconds);
+        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, config->connect_timeout_seconds);
+        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, config->follow_redirects ? 1L : 0L);
+        curl_easy_setopt(curl, CURLOPT_MAXREDIRS, config->max_redirects);
+
+        res = curl_easy_perform(curl);
+
+        // Get HTTP status code
+        http_status = 0;
+        if (res == CURLE_OK) {
+            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_status);
+        }
+
+        curl_slist_free_all(curl_headers);
+        curl_headers = NULL;
+        curl_easy_cleanup(curl);
+        curl = NULL;
+
+        // Check for success
+        if (res == CURLE_OK && http_status >= 200 && http_status < 400) {
+            return_code = 0;
+            break;  // Success!
+        }
+
+        // Determine if we should retry
+        int is_retryable = api_error_is_retryable(http_status, res);
+
+        if (!is_retryable || attempt == max_retries) {
+            // Non-retryable or exhausted retries
+            api_error_set(&api_err, http_status, res, attempt + 1);
+            set_last_api_error(&api_err);
+
+            if (res != CURLE_OK) {
+                debug_printf("API request failed: %s (attempt %d/%d)\n",
+                            curl_easy_strerror(res), attempt + 1, max_retries + 1);
+            } else {
+                debug_printf("API request failed with HTTP %ld (attempt %d/%d)\n",
+                            http_status, attempt + 1, max_retries + 1);
+            }
+            return_code = -1;
+            break;
+        }
+
+        // Calculate delay for retry
+        int delay_ms;
+        if (header_data.retry_after_seconds > 0) {
+            delay_ms = header_data.retry_after_seconds * 1000;
+            debug_printf("API returned Retry-After: %d seconds\n", header_data.retry_after_seconds);
+        } else {
+            delay_ms = calculate_retry_delay(attempt, base_delay_ms, backoff_factor);
+        }
+
+        debug_printf("API request failed (attempt %d/%d), retrying in %dms...\n",
+                    attempt + 1, max_retries + 1, delay_ms);
+
+        // Sleep before retry (convert ms to microseconds)
+        usleep(delay_ms * 1000);
+
+        attempt++;
     }
-    
-    curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_data);
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, curl_headers);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, response);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, config->timeout_seconds);
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, config->connect_timeout_seconds);
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, config->follow_redirects ? 1L : 0L);
-    curl_easy_setopt(curl, CURLOPT_MAXREDIRS, config->max_redirects);
-    
-    res = curl_easy_perform(curl);
-    
-    if (res != CURLE_OK) {
-        fprintf(stderr, "Error: curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
-        return_code = -1;
-    }
-    
-    curl_slist_free_all(curl_headers);
-    curl_easy_cleanup(curl);
+
     return return_code;
 }
 
@@ -121,75 +255,153 @@ int http_get_with_headers(const char *url, const char **headers, struct HTTPResp
     return http_get_with_config(url, headers, &DEFAULT_HTTP_CONFIG, response);
 }
 
-int http_get_with_config(const char *url, const char **headers, 
+int http_get_with_config(const char *url, const char **headers,
                         const struct HTTPConfig *config, struct HTTPResponse *response)
 {
     CURL *curl = NULL;
     CURLcode res = CURLE_OK;
+    long http_status = 0;
     int return_code = 0;
     struct curl_slist *curl_headers = NULL;
-    
+    struct HeaderData header_data = {0};
+    APIError api_err;
+
     // Initialize response struct to avoid valgrind errors
     if (response != NULL) {
         response->data = NULL;
         response->size = 0;
     }
-    
+
     if (url == NULL || response == NULL || config == NULL) {
         fprintf(stderr, "Error: Invalid parameters\n");
         return -1;
     }
-    
-    curl = curl_easy_init();
-    if (curl == NULL) {
-        fprintf(stderr, "Error: Failed to initialize curl\n");
-        return -1;
+
+    // Get retry configuration
+    int max_retries = config_get_int("api_max_retries", 3);
+    int base_delay_ms = config_get_int("api_retry_delay_ms", 1000);
+    float backoff_factor = config_get_float("api_backoff_factor", 2.0f);
+
+    // Seed random for jitter (only once)
+    static int seeded = 0;
+    if (!seeded) {
+        srand((unsigned int)time(NULL));
+        seeded = 1;
     }
-    
-    response->data = malloc(1);
-    response->size = 0;
-    
-    if (response->data == NULL) {
-        fprintf(stderr, "Error: Failed to allocate memory\n");
-        curl_easy_cleanup(curl);
-        return -1;
-    }
-    
-    if (headers != NULL) {
-        for (int i = 0; headers[i] != NULL; i++) {
-            curl_headers = curl_slist_append(curl_headers, headers[i]);
-            if (curl_headers == NULL) {
-                fprintf(stderr, "Error: Failed to set custom header: %s\n", headers[i]);
-                free(response->data);
-                curl_easy_cleanup(curl);
-                return -1;
+
+    // Clear previous error
+    clear_last_api_error();
+
+    // Retry loop
+    int attempt = 0;
+    while (attempt <= max_retries) {
+        // Reset response for each attempt
+        if (response->data != NULL) {
+            free(response->data);
+        }
+        response->data = malloc(1);
+        response->size = 0;
+        header_data.retry_after_seconds = 0;
+
+        if (response->data == NULL) {
+            fprintf(stderr, "Error: Failed to allocate memory\n");
+            return -1;
+        }
+
+        curl = curl_easy_init();
+        if (curl == NULL) {
+            fprintf(stderr, "Error: Failed to initialize curl\n");
+            free(response->data);
+            response->data = NULL;
+            return -1;
+        }
+
+        curl_headers = NULL;
+        if (headers != NULL) {
+            for (int i = 0; headers[i] != NULL; i++) {
+                curl_headers = curl_slist_append(curl_headers, headers[i]);
+                if (curl_headers == NULL) {
+                    fprintf(stderr, "Error: Failed to set custom header: %s\n", headers[i]);
+                    free(response->data);
+                    response->data = NULL;
+                    curl_easy_cleanup(curl);
+                    return -1;
+                }
             }
         }
+
+        curl_easy_setopt(curl, CURLOPT_URL, url);
+        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+        if (curl_headers) {
+            curl_easy_setopt(curl, CURLOPT_HTTPHEADER, curl_headers);
+        }
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, response);
+        curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
+        curl_easy_setopt(curl, CURLOPT_HEADERDATA, &header_data);
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT, config->timeout_seconds);
+        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, config->connect_timeout_seconds);
+        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, config->follow_redirects ? 1L : 0L);
+        curl_easy_setopt(curl, CURLOPT_MAXREDIRS, config->max_redirects);
+
+        res = curl_easy_perform(curl);
+
+        // Get HTTP status code
+        http_status = 0;
+        if (res == CURLE_OK) {
+            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_status);
+        }
+
+        if (curl_headers) {
+            curl_slist_free_all(curl_headers);
+            curl_headers = NULL;
+        }
+        curl_easy_cleanup(curl);
+        curl = NULL;
+
+        // Check for success
+        if (res == CURLE_OK && http_status >= 200 && http_status < 400) {
+            return_code = 0;
+            break;  // Success!
+        }
+
+        // Determine if we should retry
+        int is_retryable = api_error_is_retryable(http_status, res);
+
+        if (!is_retryable || attempt == max_retries) {
+            // Non-retryable or exhausted retries
+            api_error_set(&api_err, http_status, res, attempt + 1);
+            set_last_api_error(&api_err);
+
+            if (res != CURLE_OK) {
+                debug_printf("API request failed: %s (attempt %d/%d)\n",
+                            curl_easy_strerror(res), attempt + 1, max_retries + 1);
+            } else {
+                debug_printf("API request failed with HTTP %ld (attempt %d/%d)\n",
+                            http_status, attempt + 1, max_retries + 1);
+            }
+            return_code = -1;
+            break;
+        }
+
+        // Calculate delay for retry
+        int delay_ms;
+        if (header_data.retry_after_seconds > 0) {
+            delay_ms = header_data.retry_after_seconds * 1000;
+            debug_printf("API returned Retry-After: %d seconds\n", header_data.retry_after_seconds);
+        } else {
+            delay_ms = calculate_retry_delay(attempt, base_delay_ms, backoff_factor);
+        }
+
+        debug_printf("API request failed (attempt %d/%d), retrying in %dms...\n",
+                    attempt + 1, max_retries + 1, delay_ms);
+
+        // Sleep before retry (convert ms to microseconds)
+        usleep(delay_ms * 1000);
+
+        attempt++;
     }
-    
-    curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
-    if (curl_headers) {
-        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, curl_headers);
-    }
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, response);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, config->timeout_seconds);
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, config->connect_timeout_seconds);
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, config->follow_redirects ? 1L : 0L);
-    curl_easy_setopt(curl, CURLOPT_MAXREDIRS, config->max_redirects);
-    
-    res = curl_easy_perform(curl);
-    
-    if (res != CURLE_OK) {
-        fprintf(stderr, "Error: curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
-        return_code = -1;
-    }
-    
-    if (curl_headers) {
-        curl_slist_free_all(curl_headers);
-    }
-    curl_easy_cleanup(curl);
+
     return return_code;
 }
 

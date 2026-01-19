@@ -37,6 +37,7 @@ CORE_SOURCES := $(SRCDIR)/core/main.c \
                 $(SRCDIR)/core/ralph.c \
                 $(SRCDIR)/network/http_client.c \
                 $(SRCDIR)/network/api_common.c \
+                $(SRCDIR)/network/api_error.c \
                 $(SRCDIR)/utils/config.c \
                 $(SRCDIR)/utils/output_formatter.c \
                 $(SRCDIR)/utils/prompt_loader.c \
@@ -63,7 +64,8 @@ TOOL_SOURCES := $(SRCDIR)/tools/tools_system.c \
                 $(SRCDIR)/tools/vector_db_tool.c \
                 $(SRCDIR)/tools/memory_tool.c \
                 $(SRCDIR)/tools/pdf_tool.c \
-                $(SRCDIR)/tools/tool_result_builder.c
+                $(SRCDIR)/tools/tool_result_builder.c \
+                $(SRCDIR)/tools/subagent_tool.c
 
 # MCP system
 MCP_SOURCES := $(SRCDIR)/mcp/mcp_client.c
@@ -149,10 +151,10 @@ EMBEDDED_LINKS_HEADER := $(SRCDIR)/embedded_links.h
 
 # Common test dependencies - most tests need these core components
 COMMON_TEST_SOURCES := $(TESTDIR)/unity/unity.c
-TOOL_TEST_DEPS := $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/tools/vector_db_tool.c $(SRCDIR)/tools/memory_tool.c $(SRCDIR)/tools/pdf_tool.c $(SRCDIR)/tools/tool_result_builder.c
+TOOL_TEST_DEPS := $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/tools/vector_db_tool.c $(SRCDIR)/tools/memory_tool.c $(SRCDIR)/tools/pdf_tool.c $(SRCDIR)/tools/tool_result_builder.c $(SRCDIR)/tools/subagent_tool.c
 MODEL_TEST_DEPS := $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(SRCDIR)/llm/embeddings.c $(SRCDIR)/llm/embeddings_service.c $(SRCDIR)/llm/embedding_provider.c $(SRCDIR)/llm/providers/openai_embedding_provider.c $(SRCDIR)/llm/providers/local_embedding_provider.c
 UTIL_TEST_DEPS := $(SRCDIR)/utils/json_escape.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/utils/common_utils.c $(SRCDIR)/utils/document_chunker.c $(SRCDIR)/utils/pdf_processor.c $(SRCDIR)/utils/context_retriever.c $(SRCDIR)/utils/config.c
-COMPLEX_TEST_DEPS := $(TOOL_TEST_DEPS) $(MODEL_TEST_DEPS) $(UTIL_TEST_DEPS) $(DB_C_SOURCES) $(SRCDIR)/pdf/pdf_extractor.c $(SRCDIR)/network/http_client.c
+COMPLEX_TEST_DEPS := $(TOOL_TEST_DEPS) $(MODEL_TEST_DEPS) $(UTIL_TEST_DEPS) $(DB_C_SOURCES) $(SRCDIR)/pdf/pdf_extractor.c $(SRCDIR)/network/http_client.c $(SRCDIR)/network/api_error.c
 
 # =============================================================================
 # TEST DEFINITIONS - Simple and explicit for easy AI navigation
@@ -175,6 +177,10 @@ TEST_PROMPT_SOURCES = $(TESTDIR)/utils/test_prompt_loader.c $(SRCDIR)/utils/prom
 TEST_PROMPT_OBJECTS = $(TEST_PROMPT_SOURCES:.c=.o)
 TEST_PROMPT_TARGET = $(TESTDIR)/test_prompt_loader
 
+TEST_DEBUG_OUTPUT_SOURCES = $(TESTDIR)/utils/test_debug_output.c $(SRCDIR)/utils/debug_output.c $(COMMON_TEST_SOURCES)
+TEST_DEBUG_OUTPUT_OBJECTS = $(TEST_DEBUG_OUTPUT_SOURCES:.c=.o)
+TEST_DEBUG_OUTPUT_TARGET = $(TESTDIR)/test_debug_output
+
 TEST_CONVERSATION_SOURCES = $(TESTDIR)/session/test_conversation_tracker.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/utils/json_escape.c $(COMMON_TEST_SOURCES)
 TEST_CONVERSATION_OBJECTS = $(TEST_CONVERSATION_SOURCES:.c=.o)
 TEST_CONVERSATION_TARGET = $(TESTDIR)/test_conversation_tracker
@@ -183,6 +189,11 @@ TEST_CONVERSATION_VDB_C_SOURCES = $(TESTDIR)/session/test_conversation_vector_db
 TEST_CONVERSATION_VDB_CPP_SOURCES = $(DB_CPP_SOURCES)
 TEST_CONVERSATION_VDB_OBJECTS = $(TEST_CONVERSATION_VDB_C_SOURCES:.c=.o) $(TEST_CONVERSATION_VDB_CPP_SOURCES:.cpp=.o)
 TEST_CONVERSATION_VDB_TARGET = $(TESTDIR)/test_conversation_vector_db
+
+TEST_TOOL_CALLS_NOT_STORED_C_SOURCES = $(TESTDIR)/session/test_tool_calls_not_stored.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/db/document_store.c $(SRCDIR)/db/vector_db.c $(SRCDIR)/db/metadata_store.c $(SRCDIR)/llm/embeddings.c $(SRCDIR)/llm/embeddings_service.c $(SRCDIR)/llm/embedding_provider.c $(SRCDIR)/llm/providers/openai_embedding_provider.c $(SRCDIR)/llm/providers/local_embedding_provider.c $(SRCDIR)/network/http_client.c $(SRCDIR)/utils/json_escape.c $(SRCDIR)/utils/env_loader.c $(SRCDIR)/utils/config.c $(SRCDIR)/utils/debug_output.c $(COMMON_TEST_SOURCES)
+TEST_TOOL_CALLS_NOT_STORED_CPP_SOURCES = $(DB_CPP_SOURCES)
+TEST_TOOL_CALLS_NOT_STORED_OBJECTS = $(TEST_TOOL_CALLS_NOT_STORED_C_SOURCES:.c=.o) $(TEST_TOOL_CALLS_NOT_STORED_CPP_SOURCES:.cpp=.o)
+TEST_TOOL_CALLS_NOT_STORED_TARGET = $(TESTDIR)/test_tool_calls_not_stored
 
 TEST_TODO_MANAGER_SOURCES = $(TESTDIR)/tools/test_todo_manager.c $(SRCDIR)/tools/todo_manager.c $(COMMON_TEST_SOURCES)
 TEST_TODO_MANAGER_OBJECTS = $(TEST_TODO_MANAGER_SOURCES:.c=.o)
@@ -227,6 +238,11 @@ TEST_FILE_CPP_SOURCES = $(DB_CPP_SOURCES)
 TEST_FILE_OBJECTS = $(TEST_FILE_C_SOURCES:.c=.o) $(TEST_FILE_CPP_SOURCES:.cpp=.o)
 TEST_FILE_TARGET = $(TESTDIR)/test_file_tools
 
+TEST_FILE_FILTER_C_SOURCES = $(TESTDIR)/tools/test_file_search_filtering.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
+TEST_FILE_FILTER_CPP_SOURCES = $(DB_CPP_SOURCES)
+TEST_FILE_FILTER_OBJECTS = $(TEST_FILE_FILTER_C_SOURCES:.c=.o) $(TEST_FILE_FILTER_CPP_SOURCES:.cpp=.o)
+TEST_FILE_FILTER_TARGET = $(TESTDIR)/test_file_search_filtering
+
 TEST_SMART_FILE_C_SOURCES = $(TESTDIR)/tools/test_smart_file_tools.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
 TEST_SMART_FILE_CPP_SOURCES = $(DB_CPP_SOURCES)
 TEST_SMART_FILE_OBJECTS = $(TEST_SMART_FILE_C_SOURCES:.c=.o) $(TEST_SMART_FILE_CPP_SOURCES:.cpp=.o)
@@ -241,11 +257,6 @@ TEST_MEMORY_TOOL_C_SOURCES = $(TESTDIR)/tools/test_memory_tool.c $(COMPLEX_TEST_
 TEST_MEMORY_TOOL_CPP_SOURCES = $(DB_CPP_SOURCES)
 TEST_MEMORY_TOOL_OBJECTS = $(TEST_MEMORY_TOOL_C_SOURCES:.c=.o) $(TEST_MEMORY_TOOL_CPP_SOURCES:.cpp=.o)
 TEST_MEMORY_TOOL_TARGET = $(TESTDIR)/test_memory_tool
-
-TEST_MEMORY_HYBRID_C_SOURCES = $(TESTDIR)/test_memory_hybrid_search.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
-TEST_MEMORY_HYBRID_CPP_SOURCES = $(DB_CPP_SOURCES)
-TEST_MEMORY_HYBRID_OBJECTS = $(TEST_MEMORY_HYBRID_C_SOURCES:.c=.o) $(TEST_MEMORY_HYBRID_CPP_SOURCES:.cpp=.o)
-TEST_MEMORY_HYBRID_TARGET = $(TESTDIR)/test_memory_hybrid_search
 
 TEST_MEMORY_MGMT_C_SOURCES = $(TESTDIR)/test_memory_management.c $(SRCDIR)/cli/memory_commands.c $(DB_C_SOURCES) $(SRCDIR)/llm/embeddings_service.c $(SRCDIR)/llm/embeddings.c $(SRCDIR)/llm/embedding_provider.c $(SRCDIR)/llm/providers/openai_embedding_provider.c $(SRCDIR)/llm/providers/local_embedding_provider.c $(SRCDIR)/utils/config.c $(SRCDIR)/network/http_client.c $(SRCDIR)/utils/common_utils.c $(SRCDIR)/utils/debug_output.c $(COMMON_TEST_SOURCES)
 TEST_MEMORY_MGMT_CPP_SOURCES = $(DB_CPP_SOURCES)
@@ -282,6 +293,10 @@ TEST_MESSAGES_ARRAY_BUG_CPP_SOURCES = $(DB_CPP_SOURCES)
 TEST_MESSAGES_ARRAY_BUG_OBJECTS = $(TEST_MESSAGES_ARRAY_BUG_C_SOURCES:.c=.o) $(TEST_MESSAGES_ARRAY_BUG_CPP_SOURCES:.cpp=.o)
 TEST_MESSAGES_ARRAY_BUG_TARGET = $(TESTDIR)/test_messages_array_bug
 
+TEST_HTTP_RETRY_SOURCES = $(TESTDIR)/network/test_http_retry.c $(SRCDIR)/network/api_error.c $(SRCDIR)/utils/config.c $(COMMON_TEST_SOURCES)
+TEST_HTTP_RETRY_OBJECTS = $(TEST_HTTP_RETRY_SOURCES:.c=.o)
+TEST_HTTP_RETRY_TARGET = $(TESTDIR)/test_http_retry
+
 # MCP test
 TEST_MCP_CLIENT_C_SOURCES = $(TESTDIR)/mcp/test_mcp_client.c $(SRCDIR)/mcp/mcp_client.c $(SRCDIR)/core/ralph.c $(SRCDIR)/utils/env_loader.c $(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/network/api_common.c $(SRCDIR)/session/token_manager.c $(SRCDIR)/llm/llm_provider.c $(SRCDIR)/llm/providers/openai_provider.c $(SRCDIR)/llm/providers/anthropic_provider.c $(SRCDIR)/llm/providers/local_ai_provider.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
 TEST_MCP_CLIENT_CPP_SOURCES = $(DB_CPP_SOURCES)
@@ -303,8 +318,14 @@ TEST_DOCUMENT_STORE_CPP_OBJECTS = $(TEST_DOCUMENT_STORE_CPP_SOURCES:.cpp=.o)
 TEST_DOCUMENT_STORE_OBJECTS = $(TEST_DOCUMENT_STORE_C_OBJECTS) $(TEST_DOCUMENT_STORE_CPP_OBJECTS)
 TEST_DOCUMENT_STORE_TARGET = $(TESTDIR)/test_document_store
 
+# Subagent tool test (requires full ralph infrastructure for ralph_run_as_subagent)
+TEST_SUBAGENT_TOOL_C_SOURCES = $(TESTDIR)/tools/test_subagent_tool.c $(SRCDIR)/core/ralph.c $(SRCDIR)/utils/env_loader.c $(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/network/api_common.c $(SRCDIR)/session/token_manager.c $(SRCDIR)/llm/llm_provider.c $(SRCDIR)/llm/providers/openai_provider.c $(SRCDIR)/llm/providers/anthropic_provider.c $(SRCDIR)/llm/providers/local_ai_provider.c $(SRCDIR)/mcp/mcp_client.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
+TEST_SUBAGENT_TOOL_CPP_SOURCES = $(DB_CPP_SOURCES)
+TEST_SUBAGENT_TOOL_OBJECTS = $(TEST_SUBAGENT_TOOL_C_SOURCES:.c=.o) $(TEST_SUBAGENT_TOOL_CPP_SOURCES:.cpp=.o)
+TEST_SUBAGENT_TOOL_TARGET = $(TESTDIR)/test_subagent_tool
+
 # Collect all test targets
-ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_ENV_TARGET) $(TEST_CONFIG_TARGET) $(TEST_PROMPT_TARGET) $(TEST_CONVERSATION_TARGET) $(TEST_CONVERSATION_VDB_TARGET) $(TEST_TODO_MANAGER_TARGET) $(TEST_TODO_TOOL_TARGET) $(TEST_PDF_EXTRACTOR_TARGET) $(TEST_DOCUMENT_CHUNKER_TARGET) $(TEST_HTTP_TARGET) $(TEST_OUTPUT_TARGET) $(TEST_TOOLS_TARGET) $(TEST_SHELL_TARGET) $(TEST_FILE_TARGET) $(TEST_SMART_FILE_TARGET) $(TEST_VECTOR_DB_TOOL_TARGET) $(TEST_MEMORY_TOOL_TARGET) $(TEST_MEMORY_HYBRID_TARGET) $(TEST_MEMORY_MGMT_TARGET) $(TEST_TOKEN_MANAGER_TARGET) $(TEST_CONVERSATION_COMPACTOR_TARGET) $(TEST_RALPH_TARGET) $(TEST_INCOMPLETE_TASK_BUG_TARGET) $(TEST_MODEL_TOOLS_TARGET) $(TEST_MESSAGES_ARRAY_BUG_TARGET) $(TEST_VECTOR_DB_TARGET) $(TEST_DOCUMENT_STORE_TARGET) $(TEST_MCP_CLIENT_TARGET)
+ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_ENV_TARGET) $(TEST_CONFIG_TARGET) $(TEST_PROMPT_TARGET) $(TEST_DEBUG_OUTPUT_TARGET) $(TEST_CONVERSATION_TARGET) $(TEST_CONVERSATION_VDB_TARGET) $(TEST_TOOL_CALLS_NOT_STORED_TARGET) $(TEST_TODO_MANAGER_TARGET) $(TEST_TODO_TOOL_TARGET) $(TEST_PDF_EXTRACTOR_TARGET) $(TEST_DOCUMENT_CHUNKER_TARGET) $(TEST_HTTP_TARGET) $(TEST_HTTP_RETRY_TARGET) $(TEST_OUTPUT_TARGET) $(TEST_TOOLS_TARGET) $(TEST_SHELL_TARGET) $(TEST_FILE_TARGET) $(TEST_FILE_FILTER_TARGET) $(TEST_SMART_FILE_TARGET) $(TEST_VECTOR_DB_TOOL_TARGET) $(TEST_MEMORY_TOOL_TARGET) $(TEST_MEMORY_MGMT_TARGET) $(TEST_TOKEN_MANAGER_TARGET) $(TEST_CONVERSATION_COMPACTOR_TARGET) $(TEST_RALPH_TARGET) $(TEST_INCOMPLETE_TASK_BUG_TARGET) $(TEST_MODEL_TOOLS_TARGET) $(TEST_MESSAGES_ARRAY_BUG_TARGET) $(TEST_VECTOR_DB_TARGET) $(TEST_DOCUMENT_STORE_TARGET) $(TEST_MCP_CLIENT_TARGET) $(TEST_SUBAGENT_TOOL_TARGET)
 
 # =============================================================================
 # BUILD RULES
@@ -369,11 +390,17 @@ $(TEST_CONFIG_TARGET): $(TEST_CONFIG_OBJECTS) $(CJSON_LIB)
 $(TEST_PROMPT_TARGET): $(TEST_PROMPT_OBJECTS)
 	$(CC) -o $@ $(TEST_PROMPT_OBJECTS)
 
-$(TEST_CONVERSATION_TARGET): $(TEST_CONVERSATION_OBJECTS) $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/utils/env_loader.o src/utils/config.o src/utils/debug_output.o src/utils/common_utils.o $(ALL_LIBS)
-	$(CXX) -o $@ test/session/test_conversation_tracker.o src/session/conversation_tracker.o $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/utils/json_escape.o src/utils/env_loader.o src/utils/config.o src/utils/debug_output.o src/utils/common_utils.o test/unity/unity.o $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
+$(TEST_DEBUG_OUTPUT_TARGET): $(TEST_DEBUG_OUTPUT_OBJECTS) $(CJSON_LIB)
+	$(CC) -o $@ $(TEST_DEBUG_OUTPUT_OBJECTS) $(CJSON_LIB)
 
-$(TEST_CONVERSATION_VDB_TARGET): $(TEST_CONVERSATION_VDB_OBJECTS) $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/utils/env_loader.o src/utils/config.o src/utils/debug_output.o src/utils/common_utils.o $(ALL_LIBS)
-	$(CXX) -o $@ test/session/test_conversation_vector_db.o src/session/conversation_tracker.o $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/utils/json_escape.o src/utils/env_loader.o src/utils/config.o src/utils/debug_output.o src/utils/common_utils.o test/unity/unity.o $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
+$(TEST_CONVERSATION_TARGET): $(TEST_CONVERSATION_OBJECTS) $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/network/api_error.o src/utils/env_loader.o src/utils/config.o src/utils/debug_output.o src/utils/common_utils.o $(ALL_LIBS)
+	$(CXX) -o $@ test/session/test_conversation_tracker.o src/session/conversation_tracker.o $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/network/api_error.o src/utils/json_escape.o src/utils/env_loader.o src/utils/config.o src/utils/debug_output.o src/utils/common_utils.o test/unity/unity.o $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
+
+$(TEST_CONVERSATION_VDB_TARGET): $(TEST_CONVERSATION_VDB_OBJECTS) $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/network/api_error.o src/utils/env_loader.o src/utils/config.o src/utils/debug_output.o src/utils/common_utils.o $(ALL_LIBS)
+	$(CXX) -o $@ test/session/test_conversation_vector_db.o src/session/conversation_tracker.o $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/network/api_error.o src/utils/json_escape.o src/utils/env_loader.o src/utils/config.o src/utils/debug_output.o src/utils/common_utils.o test/unity/unity.o $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
+
+$(TEST_TOOL_CALLS_NOT_STORED_TARGET): $(TEST_TOOL_CALLS_NOT_STORED_OBJECTS) $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/network/api_error.o src/utils/env_loader.o src/utils/config.o src/utils/debug_output.o src/utils/common_utils.o $(ALL_LIBS)
+	$(CXX) -o $@ test/session/test_tool_calls_not_stored.o src/session/conversation_tracker.o $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/network/api_error.o src/utils/json_escape.o src/utils/env_loader.o src/utils/config.o src/utils/debug_output.o src/utils/common_utils.o test/unity/unity.o $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
 
 $(TEST_TODO_MANAGER_TARGET): $(TEST_TODO_MANAGER_OBJECTS)
 	$(CC) -o $@ $(TEST_TODO_MANAGER_OBJECTS)
@@ -403,6 +430,9 @@ $(TEST_SHELL_TARGET): $(TEST_SHELL_OBJECTS) $(ALL_LIBS)
 $(TEST_FILE_TARGET): $(TEST_FILE_OBJECTS) $(ALL_LIBS)
 	$(CXX) -o $@ $(TEST_FILE_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
 
+$(TEST_FILE_FILTER_TARGET): $(TEST_FILE_FILTER_OBJECTS) $(ALL_LIBS)
+	$(CXX) -o $@ $(TEST_FILE_FILTER_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
+
 $(TEST_SMART_FILE_TARGET): $(TEST_SMART_FILE_OBJECTS) $(ALL_LIBS)
 	$(CXX) -o $@ $(TEST_SMART_FILE_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
 
@@ -412,11 +442,8 @@ $(TEST_VECTOR_DB_TOOL_TARGET): $(TEST_VECTOR_DB_TOOL_OBJECTS) $(ALL_LIBS)
 $(TEST_MEMORY_TOOL_TARGET): $(TEST_MEMORY_TOOL_OBJECTS) $(ALL_LIBS)
 	$(CXX) -o $@ $(TEST_MEMORY_TOOL_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
 
-$(TEST_MEMORY_HYBRID_TARGET): $(TEST_MEMORY_HYBRID_OBJECTS) $(ALL_LIBS)
-	$(CXX) -o $@ $(TEST_MEMORY_HYBRID_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
-
-$(TEST_MEMORY_MGMT_TARGET): $(TEST_MEMORY_MGMT_OBJECTS) $(ALL_LIBS)
-	$(CXX) -o $@ $(TEST_MEMORY_MGMT_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
+$(TEST_MEMORY_MGMT_TARGET): $(TEST_MEMORY_MGMT_OBJECTS) src/network/api_error.o $(ALL_LIBS)
+	$(CXX) -o $@ $(TEST_MEMORY_MGMT_OBJECTS) src/network/api_error.o $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
 
 $(TEST_TOKEN_MANAGER_TARGET): $(TEST_TOKEN_MANAGER_OBJECTS) $(ALL_LIBS)
 	$(CC) -o $@ $(TEST_TOKEN_MANAGER_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm
@@ -436,14 +463,20 @@ $(TEST_MODEL_TOOLS_TARGET): $(TEST_MODEL_TOOLS_OBJECTS) $(EMBEDDED_LINKS_HEADER)
 $(TEST_MESSAGES_ARRAY_BUG_TARGET): $(TEST_MESSAGES_ARRAY_BUG_OBJECTS) $(EMBEDDED_LINKS_HEADER) $(ALL_LIBS)
 	$(CXX) -o $@ $(TEST_MESSAGES_ARRAY_BUG_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
 
+$(TEST_HTTP_RETRY_TARGET): $(TEST_HTTP_RETRY_OBJECTS) $(CJSON_LIB) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
+	$(CC) -o $@ $(TEST_HTTP_RETRY_OBJECTS) $(CJSON_LIB) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) -lm
+
 $(TEST_MCP_CLIENT_TARGET): $(TEST_MCP_CLIENT_OBJECTS) $(EMBEDDED_LINKS_HEADER) $(ALL_LIBS)
 	$(CXX) -o $@ $(TEST_MCP_CLIENT_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
+
+$(TEST_SUBAGENT_TOOL_TARGET): $(TEST_SUBAGENT_TOOL_OBJECTS) $(ALL_LIBS)
+	$(CXX) -o $@ $(TEST_SUBAGENT_TOOL_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
 
 $(TEST_VECTOR_DB_TARGET): $(TEST_VECTOR_DB_OBJECTS) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
 	$(CXX) -o $@ $(TEST_VECTOR_DB_OBJECTS) -lpthread -lm
 
-$(TEST_DOCUMENT_STORE_TARGET): $(TEST_DOCUMENT_STORE_OBJECTS) $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/utils/common_utils.o src/utils/config.o src/utils/debug_output.o src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o $(ALL_LIBS)
-	$(CXX) -o $@ test/db/test_document_store.o $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/utils/common_utils.o src/utils/config.o src/utils/debug_output.o src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o test/unity/unity.o $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
+$(TEST_DOCUMENT_STORE_TARGET): $(TEST_DOCUMENT_STORE_OBJECTS) $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/utils/common_utils.o src/utils/config.o src/utils/debug_output.o src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/network/api_error.o $(ALL_LIBS)
+	$(CXX) -o $@ test/db/test_document_store.o $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/utils/common_utils.o src/utils/config.o src/utils/debug_output.o src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/network/api_error.o test/unity/unity.o $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
 
 # =============================================================================
 # TEST EXECUTION
@@ -453,14 +486,17 @@ test: $(ALL_TEST_TARGETS)
 	@echo "Running all tests..."
 	./$(TEST_MAIN_TARGET)
 	./$(TEST_HTTP_TARGET)
+	./$(TEST_HTTP_RETRY_TARGET)
 	./$(TEST_ENV_TARGET)
 	./$(TEST_OUTPUT_TARGET)
 	./$(TEST_PROMPT_TARGET)
+	./$(TEST_DEBUG_OUTPUT_TARGET)
 	./$(TEST_CONVERSATION_TARGET)
 	./$(TEST_CONVERSATION_VDB_TARGET)
 	./$(TEST_TOOLS_TARGET)
 	./$(TEST_SHELL_TARGET)
 	./$(TEST_FILE_TARGET)
+	./$(TEST_FILE_FILTER_TARGET)
 	./$(TEST_SMART_FILE_TARGET)
 	./$(TEST_RALPH_TARGET)
 	./$(TEST_TODO_MANAGER_TARGET)
@@ -476,6 +512,7 @@ test: $(ALL_TEST_TARGETS)
 	./$(TEST_DOCUMENT_STORE_TARGET)
 	./$(TEST_PDF_EXTRACTOR_TARGET)
 	./$(TEST_DOCUMENT_CHUNKER_TARGET)
+	./$(TEST_SUBAGENT_TOOL_TARGET)
 	@echo "All tests completed"
 
 check: test
@@ -484,6 +521,7 @@ check: test
 check-valgrind: $(ALL_TEST_TARGETS)
 	@echo "Running valgrind tests (excluding HTTP tests)..."
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_MAIN_TARGET).aarch64.elf
+	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_HTTP_RETRY_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_ENV_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_OUTPUT_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_PROMPT_TARGET).aarch64.elf
@@ -502,7 +540,7 @@ check-valgrind: $(ALL_TEST_TARGETS)
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_VECTOR_DB_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_PDF_EXTRACTOR_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_DOCUMENT_CHUNKER_TARGET).aarch64.elf
-	@echo "Valgrind tests completed"
+	@echo "Valgrind tests completed (subagent tests excluded - see AGENT.md)"
 
 # Valgrind testing for all tests (may show false positives from external libraries)
 check-valgrind-all: $(ALL_TEST_TARGETS)

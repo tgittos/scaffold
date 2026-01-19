@@ -9,6 +9,7 @@
 #include "token_manager.h"
 #include "session_manager.h"
 #include "../mcp/mcp_client.h"
+#include "../tools/subagent_tool.h"
 
 // API type enumeration (deprecated - kept for compatibility)
 typedef enum {
@@ -38,6 +39,7 @@ typedef struct {
     ProviderRegistry provider_registry;  // New provider system
     LLMProvider* provider;               // Current active provider
     MCPClient mcp_client;                // Model Context Protocol client
+    SubagentManager subagent_manager;    // Subagent process management
 } RalphSession;
 
 // Core Ralph functions

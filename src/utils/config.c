@@ -13,13 +13,22 @@ static ralph_config_t *g_config = NULL;
 static void config_set_defaults(ralph_config_t *config)
 {
     if (!config) return;
-    
+
     // Set default values
     config->api_url = strdup("https://api.openai.com/v1/chat/completions");
-    config->model = strdup("gpt-4o-mini");
+    config->model = strdup("gpt-5-mini-2025-08-07");
     config->context_window = 8192;
     config->max_tokens = -1;
-    
+
+    // Set retry configuration defaults
+    config->api_max_retries = 3;
+    config->api_retry_delay_ms = 1000;
+    config->api_backoff_factor = 2.0f;
+
+    // Set subagent configuration defaults
+    config->max_subagents = 5;
+    config->subagent_timeout = 300;
+
     // Initialize other pointers to NULL
     config->api_key = NULL;
     config->anthropic_api_key = NULL;
@@ -236,7 +245,34 @@ int config_load_from_file(const char *filepath)
     if (cJSON_IsNumber(item)) {
         g_config->max_tokens = item->valueint;
     }
-    
+
+    // Load retry configuration
+    item = cJSON_GetObjectItem(json, "api_max_retries");
+    if (cJSON_IsNumber(item) && item->valueint >= 0) {
+        g_config->api_max_retries = item->valueint;
+    }
+
+    item = cJSON_GetObjectItem(json, "api_retry_delay_ms");
+    if (cJSON_IsNumber(item) && item->valueint > 0) {
+        g_config->api_retry_delay_ms = item->valueint;
+    }
+
+    item = cJSON_GetObjectItem(json, "api_backoff_factor");
+    if (cJSON_IsNumber(item) && item->valuedouble > 0) {
+        g_config->api_backoff_factor = (float)item->valuedouble;
+    }
+
+    // Load subagent configuration
+    item = cJSON_GetObjectItem(json, "max_subagents");
+    if (cJSON_IsNumber(item) && item->valueint > 0) {
+        g_config->max_subagents = item->valueint;
+    }
+
+    item = cJSON_GetObjectItem(json, "subagent_timeout");
+    if (cJSON_IsNumber(item) && item->valueint > 0) {
+        g_config->subagent_timeout = item->valueint;
+    }
+
     // Update main API key based on URL
     config_update_api_key_selection(g_config);
     
@@ -278,7 +314,16 @@ int config_save_to_file(const char *filepath)
     
     cJSON_AddNumberToObject(json, "context_window", g_config->context_window);
     cJSON_AddNumberToObject(json, "max_tokens", g_config->max_tokens);
-    
+
+    // Add retry configuration
+    cJSON_AddNumberToObject(json, "api_max_retries", g_config->api_max_retries);
+    cJSON_AddNumberToObject(json, "api_retry_delay_ms", g_config->api_retry_delay_ms);
+    cJSON_AddNumberToObject(json, "api_backoff_factor", (double)g_config->api_backoff_factor);
+
+    // Add subagent configuration
+    cJSON_AddNumberToObject(json, "max_subagents", g_config->max_subagents);
+    cJSON_AddNumberToObject(json, "subagent_timeout", g_config->subagent_timeout);
+
     // Convert to string
     char *json_string = cJSON_Print(json);
     cJSON_Delete(json);
@@ -479,12 +524,31 @@ const char* config_get_string(const char *key)
 int config_get_int(const char *key, int default_value)
 {
     if (!g_config || !key) return default_value;
-    
+
     if (strcmp(key, "context_window") == 0) {
         return g_config->context_window;
     } else if (strcmp(key, "max_tokens") == 0) {
         return g_config->max_tokens;
+    } else if (strcmp(key, "api_max_retries") == 0) {
+        return g_config->api_max_retries;
+    } else if (strcmp(key, "api_retry_delay_ms") == 0) {
+        return g_config->api_retry_delay_ms;
+    } else if (strcmp(key, "max_subagents") == 0) {
+        return g_config->max_subagents;
+    } else if (strcmp(key, "subagent_timeout") == 0) {
+        return g_config->subagent_timeout;
     }
-    
+
+    return default_value;
+}
+
+float config_get_float(const char *key, float default_value)
+{
+    if (!g_config || !key) return default_value;
+
+    if (strcmp(key, "api_backoff_factor") == 0) {
+        return g_config->api_backoff_factor;
+    }
+
     return default_value;
 }

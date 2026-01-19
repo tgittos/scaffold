@@ -28,6 +28,14 @@ static const char* CONTEXTUAL_SYSTEM_PROMPT =
     "- Do not create todos for simple requests or conversations\n"
     "- Do not create todos for requests that can be completed in a single action\n"
     "- Do not create todos for requests that are not actionable\n"
+    "\n## Code Exploration Guidelines:\n"
+    "When asked to find where something is defined or to understand code:\n"
+    "- Search for actual definitions (function signatures, variable declarations), not just mentions in comments\n"
+    "- When you find a promising file, READ it to confirm the definition and understand the implementation\n"
+    "- Follow code paths: if a function uses a variable, trace where that variable is defined\n"
+    "- Be thorough: don't stop at the first match - verify it's the actual definition, not a reference\n"
+    "- For functions: look for the implementation body, not just declarations or calls\n"
+    "- For variables: find where they are initialized or assigned, not just where they are used\n"
     "\n## Memory Management:\n"
     "You have access to a long-term memory system. Use it wisely:\n"
     "\n### When to Remember (use the 'remember' tool):\n"
@@ -65,7 +73,7 @@ int load_system_prompt(char **prompt_content) {
     *prompt_content = NULL;
     
     char *user_prompt = NULL;
-    FILE *file = fopen("PROMPT.md", "r");
+    FILE *file = fopen("AGENT.md", "r");
     
     if (file != NULL) {
         // Get file size

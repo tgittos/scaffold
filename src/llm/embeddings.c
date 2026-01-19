@@ -144,7 +144,7 @@ int embeddings_get_vector(const embeddings_config_t *config, const char *text,
         return -1;
     }
     
-    debug_printf("Embeddings response: %s\n", response.data);
+    debug_printf_json("Embeddings response: ", response.data);
     
     // Parse the response using provider
     result = provider->parse_response(provider, response.data, embedding);

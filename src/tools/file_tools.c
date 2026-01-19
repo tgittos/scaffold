@@ -20,6 +20,131 @@
 static FileErrorCode list_directory_recursive(const char *directory_path, const char *pattern,
                                              int include_hidden, DirectoryListing *listing, int *capacity);
 
+// Maximum file size for searching (1MB - same as FILE_MAX_CONTENT_SIZE)
+#define FILE_SEARCH_MAX_SIZE (1024 * 1024)
+
+// Directories to skip during recursive search
+static const char *SKIP_DIRECTORIES[] = {
+    ".git",
+    ".svn",
+    ".hg",
+    "node_modules",
+    "__pycache__",
+    ".cache",
+    "build",
+    "dist",
+    "deps",
+    "vendor",
+    ".venv",
+    "venv",
+    ".tox",
+    "target",       // Rust/Maven build output
+    "out",          // Common output directory
+    ".next",        // Next.js
+    ".nuxt",        // Nuxt.js
+    "coverage",     // Test coverage
+    ".terraform",   // Terraform
+    NULL
+};
+
+// Binary file extensions to skip
+static const char *BINARY_EXTENSIONS[] = {
+    // Executables and libraries
+    ".exe", ".dll", ".so", ".dylib", ".a", ".o", ".obj", ".lib",
+    ".com", ".bin", ".elf", ".dbg",
+    // Archives
+    ".zip", ".tar", ".gz", ".bz2", ".xz", ".7z", ".rar", ".tgz",
+    ".jar", ".war", ".ear",
+    // Images
+    ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".svg", ".webp",
+    ".tiff", ".tif", ".psd", ".raw", ".heic",
+    // Audio/Video
+    ".mp3", ".mp4", ".avi", ".mov", ".mkv", ".flv", ".wmv", ".wav",
+    ".ogg", ".m4a", ".aac", ".flac", ".wma",
+    // Documents (binary)
+    ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+    ".odt", ".ods", ".odp",
+    // Fonts
+    ".ttf", ".otf", ".woff", ".woff2", ".eot",
+    // Database
+    ".db", ".sqlite", ".sqlite3", ".mdb",
+    // Other binary formats
+    ".pyc", ".pyo", ".class", ".wasm",
+    ".ico", ".icns",
+    NULL
+};
+
+// Helper function to check if a directory should be skipped
+static int should_skip_directory(const char *dirname) {
+    if (dirname == NULL) return 0;
+
+    for (int i = 0; SKIP_DIRECTORIES[i] != NULL; i++) {
+        if (strcmp(dirname, SKIP_DIRECTORIES[i]) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// Helper function to check if a file has a binary extension
+static int has_binary_extension(const char *filename) {
+    if (filename == NULL) return 0;
+
+    const char *dot = strrchr(filename, '.');
+    if (dot == NULL) return 0;
+
+    for (int i = 0; BINARY_EXTENSIONS[i] != NULL; i++) {
+        if (strcasecmp(dot, BINARY_EXTENSIONS[i]) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// Helper function to check if file content appears to be binary
+// Checks the first portion of the file for null bytes
+static int is_binary_content(const char *file_path) {
+    if (file_path == NULL) return 0;
+
+    FILE *file = fopen(file_path, "rb");
+    if (file == NULL) return 0;
+
+    // Read first 8KB to check for binary content
+    unsigned char buffer[8192];
+    size_t bytes_read = fread(buffer, 1, sizeof(buffer), file);
+    fclose(file);
+
+    // Check for null bytes (strong indicator of binary)
+    for (size_t i = 0; i < bytes_read; i++) {
+        if (buffer[i] == 0) {
+            return 1;
+        }
+    }
+
+    // Check for high ratio of non-printable characters
+    int non_printable = 0;
+    for (size_t i = 0; i < bytes_read; i++) {
+        unsigned char c = buffer[i];
+        // Allow common text characters: printable ASCII, newline, tab, carriage return
+        if (c < 32 && c != '\n' && c != '\r' && c != '\t') {
+            non_printable++;
+        }
+        // High bytes (>127) in non-UTF8 context suggest binary
+        if (c > 127) {
+            // Could be UTF-8, allow some tolerance
+            // But if we see many, it's likely binary
+            non_printable++;
+        }
+    }
+
+    // If more than 30% non-printable, consider it binary
+    if (bytes_read > 0 && (non_printable * 100 / bytes_read) > 30) {
+        return 1;
+    }
+
+    return 0;
+}
+
 // Helper function to safely duplicate strings
 static char* safe_strdup(const char *str) {
     if (str == NULL) return NULL;
@@ -650,12 +775,51 @@ static FileErrorCode list_directory_recursive(const char *directory_path, const 
 }
 
 // Helper function to search content in a single file
+// Returns FILE_SUCCESS even when file is skipped (too large, binary, etc.)
+// Only returns errors for actual failures that should abort the search
 static FileErrorCode search_file_content(const char *file_path, const char *pattern,
                                         int case_sensitive, SearchResults *results, int *capacity) {
+    if (file_path == NULL || pattern == NULL || results == NULL || capacity == NULL) {
+        return FILE_ERROR_INVALID_PATH;
+    }
+
+    // Check file size first - skip files that are too large
+    struct stat file_stat;
+    if (stat(file_path, &file_stat) != 0) {
+        // Can't stat file, skip it silently
+        return FILE_SUCCESS;
+    }
+
+    if (file_stat.st_size > FILE_SEARCH_MAX_SIZE) {
+        // File too large, skip silently
+        return FILE_SUCCESS;
+    }
+
+    // Skip empty files
+    if (file_stat.st_size == 0) {
+        return FILE_SUCCESS;
+    }
+
+    // Check for binary extension first (fast check)
+    const char *basename = strrchr(file_path, '/');
+    basename = basename ? basename + 1 : file_path;
+    if (has_binary_extension(basename)) {
+        // Binary file by extension, skip silently
+        return FILE_SUCCESS;
+    }
+
+    // Check if file content appears to be binary
+    if (is_binary_content(file_path)) {
+        // Binary content detected, skip silently
+        return FILE_SUCCESS;
+    }
+
     char *content = NULL;
     FileErrorCode read_result = file_read_content(file_path, 0, 0, &content);
     if (read_result != FILE_SUCCESS) {
-        return read_result;
+        // Failed to read file (permission denied, too large, etc.)
+        // Skip silently and continue with other files
+        return FILE_SUCCESS;
     }
     
     // Simple line-by-line search
@@ -735,16 +899,23 @@ static FileErrorCode search_directory_content(const char *dir_path, const char *
                                             SearchResults *results, int *capacity) {
     DIR *dir = opendir(dir_path);
     if (dir == NULL) {
-        return (errno == EACCES) ? FILE_ERROR_PERMISSION : FILE_ERROR_NOT_FOUND;
+        // If we can't open the directory, skip it silently and continue
+        // Only fail for the root search path, not subdirectories
+        return FILE_SUCCESS;
     }
-    
+
     struct dirent *entry;
-    while ((entry = readdir(dir)) != NULL) {
+    while ((entry = readdir(dir)) != NULL && results->count < FILE_MAX_SEARCH_RESULTS) {
         // Skip . and ..
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
             continue;
         }
-        
+
+        // Skip hidden files and directories (starting with .)
+        if (entry->d_name[0] == '.') {
+            continue;
+        }
+
         // Build full path
         char full_path[PATH_MAX];
         int path_len = snprintf(full_path, sizeof(full_path), "%s/%s", dir_path, entry->d_name);
@@ -752,35 +923,43 @@ static FileErrorCode search_directory_content(const char *dir_path, const char *
             // Path too long, skip
             continue;
         }
-        
+
         struct stat entry_stat;
         if (stat(full_path, &entry_stat) != 0) {
             continue; // Skip if we can't stat the file
         }
-        
+
         if (S_ISREG(entry_stat.st_mode)) {
             // Check if file matches the file pattern
             if (!matches_file_pattern(entry->d_name, file_pattern)) {
                 continue; // Skip files that don't match the pattern
             }
-            
+
             // Regular file - search its content
+            // search_file_content now handles large/binary files gracefully
             FileErrorCode search_result = search_file_content(full_path, pattern, case_sensitive, results, capacity);
-            if (search_result != FILE_SUCCESS && search_result != FILE_ERROR_NOT_FOUND) {
+            if (search_result == FILE_ERROR_MEMORY) {
+                // Only abort on memory errors
                 closedir(dir);
                 return search_result;
             }
             results->files_searched++;
         } else if (S_ISDIR(entry_stat.st_mode) && recursive) {
+            // Check if this is a directory we should skip
+            if (should_skip_directory(entry->d_name)) {
+                continue;
+            }
+
             // Directory - recurse if requested
             FileErrorCode search_result = search_directory_content(full_path, pattern, file_pattern, recursive, case_sensitive, results, capacity);
-            if (search_result != FILE_SUCCESS) {
+            if (search_result == FILE_ERROR_MEMORY) {
+                // Only abort on memory errors
                 closedir(dir);
                 return search_result;
             }
         }
     }
-    
+
     closedir(dir);
     return FILE_SUCCESS;
 }
@@ -818,7 +997,7 @@ FileErrorCode file_search_content(const char *search_path, const char *pattern,
     // Search in single file - check if it matches the file pattern
     const char *filename = strrchr(search_path, '/');
     filename = filename ? filename + 1 : search_path; // Get basename
-    
+
     if (!matches_file_pattern(filename, file_pattern)) {
         // File doesn't match pattern, return empty results
         results->results = malloc(sizeof(SearchResult)); // Allocate minimal space
@@ -827,10 +1006,39 @@ FileErrorCode file_search_content(const char *search_path, const char *pattern,
         }
         return FILE_SUCCESS;
     }
-    
+
+    // Skip binary files by extension
+    if (has_binary_extension(filename)) {
+        results->results = malloc(sizeof(SearchResult));
+        if (results->results == NULL) {
+            return FILE_ERROR_MEMORY;
+        }
+        return FILE_SUCCESS;
+    }
+
+    // Check file size
+    if (path_stat.st_size > FILE_SEARCH_MAX_SIZE) {
+        // File too large, return empty results instead of error
+        results->results = malloc(sizeof(SearchResult));
+        if (results->results == NULL) {
+            return FILE_ERROR_MEMORY;
+        }
+        return FILE_SUCCESS;
+    }
+
+    // Skip binary content
+    if (is_binary_content(search_path)) {
+        results->results = malloc(sizeof(SearchResult));
+        if (results->results == NULL) {
+            return FILE_ERROR_MEMORY;
+        }
+        return FILE_SUCCESS;
+    }
+
     char *content = NULL;
     FileErrorCode read_result = file_read_content(search_path, 0, 0, &content);
     if (read_result != FILE_SUCCESS) {
+        // For single file search, return the actual error
         return read_result;
     }
     
@@ -1328,28 +1536,37 @@ int execute_file_search_tool_call(const ToolCall *tool_call, ToolResult *result)
     int case_sensitive = extract_bool_param(tool_call->arguments, "case_sensitive", 1);
     int max_tokens = extract_int_param(tool_call->arguments, "max_tokens", 0);
     int max_results = extract_int_param(tool_call->arguments, "max_results", 0);
-    
+    // Default to recursive search (1) for directories - this is the expected behavior
+    int recursive = extract_bool_param(tool_call->arguments, "recursive", 1);
+    char *file_pattern = extract_string_param(tool_call->arguments, "file_pattern");
+
     // Log user-visible information about the search operation
     printf("Searching for pattern: \"%s\"\n", pattern);
     printf("  Search path: %s\n", search_path);
     printf("  Case sensitive: %s\n", case_sensitive ? "yes" : "no");
+    printf("  Recursive: %s\n", recursive ? "yes" : "no");
+    if (file_pattern != NULL) {
+        printf("  File pattern: %s\n", file_pattern);
+    }
     if (max_results > 0) {
         printf("  Max results: %d\n", max_results);
     }
     if (max_tokens > 0) {
         printf("  Token limit: %d\n", max_tokens);
     }
-    
+
     SearchResults search_results;
     FileErrorCode error;
-    
+
     // Use smart search if limits are specified
     if (max_tokens > 0 || max_results > 0) {
-        error = file_search_content_smart(search_path, pattern, NULL, 0, case_sensitive, 
+        error = file_search_content_smart(search_path, pattern, file_pattern, recursive, case_sensitive,
                                         max_tokens, max_results, &search_results);
     } else {
-        error = file_search_content(search_path, pattern, NULL, 0, case_sensitive, &search_results);
+        error = file_search_content(search_path, pattern, file_pattern, recursive, case_sensitive, &search_results);
     }
+
+    free(file_pattern);
     
     if (error == FILE_SUCCESS) {
         // Show user-friendly summary
@@ -2149,8 +2366,8 @@ int register_file_tools(ToolRegistry *registry) {
     if (result != 0) return -1;
     
     // 5. Register file_search tool
-    ToolParameter search_parameters[5];
-    
+    ToolParameter search_parameters[7];
+
     // Parameter 1: search_path (required)
     search_parameters[0].name = strdup("search_path");
     search_parameters[0].type = strdup("string");
@@ -2158,7 +2375,7 @@ int register_file_tools(ToolRegistry *registry) {
     search_parameters[0].enum_values = NULL;
     search_parameters[0].enum_count = 0;
     search_parameters[0].required = 1;
-    
+
     // Parameter 2: pattern (required)
     search_parameters[1].name = strdup("pattern");
     search_parameters[1].type = strdup("string");
@@ -2166,7 +2383,7 @@ int register_file_tools(ToolRegistry *registry) {
     search_parameters[1].enum_values = NULL;
     search_parameters[1].enum_count = 0;
     search_parameters[1].required = 1;
-    
+
     // Parameter 3: case_sensitive (optional)
     search_parameters[2].name = strdup("case_sensitive");
     search_parameters[2].type = strdup("boolean");
@@ -2174,26 +2391,42 @@ int register_file_tools(ToolRegistry *registry) {
     search_parameters[2].enum_values = NULL;
     search_parameters[2].enum_count = 0;
     search_parameters[2].required = 0;
-    
-    // Parameter 4: max_tokens (optional)
-    search_parameters[3].name = strdup("max_tokens");
-    search_parameters[3].type = strdup("number");
-    search_parameters[3].description = strdup("Maximum tokens for search results (0 for no limit)");
+
+    // Parameter 4: recursive (optional)
+    search_parameters[3].name = strdup("recursive");
+    search_parameters[3].type = strdup("boolean");
+    search_parameters[3].description = strdup("Search directories recursively (default: true). Automatically skips .git, node_modules, build, and other common non-text directories.");
     search_parameters[3].enum_values = NULL;
     search_parameters[3].enum_count = 0;
     search_parameters[3].required = 0;
-    
-    // Parameter 5: max_results (optional)
-    search_parameters[4].name = strdup("max_results");
-    search_parameters[4].type = strdup("number");
-    search_parameters[4].description = strdup("Maximum number of search results (0 for no limit)");
+
+    // Parameter 5: file_pattern (optional)
+    search_parameters[4].name = strdup("file_pattern");
+    search_parameters[4].type = strdup("string");
+    search_parameters[4].description = strdup("File pattern filter with wildcards (e.g., '*.c', '*.js'). Only search files matching this pattern.");
     search_parameters[4].enum_values = NULL;
     search_parameters[4].enum_count = 0;
     search_parameters[4].required = 0;
-    
+
+    // Parameter 6: max_tokens (optional)
+    search_parameters[5].name = strdup("max_tokens");
+    search_parameters[5].type = strdup("number");
+    search_parameters[5].description = strdup("Maximum tokens for search results (0 for no limit)");
+    search_parameters[5].enum_values = NULL;
+    search_parameters[5].enum_count = 0;
+    search_parameters[5].required = 0;
+
+    // Parameter 7: max_results (optional)
+    search_parameters[6].name = strdup("max_results");
+    search_parameters[6].type = strdup("number");
+    search_parameters[6].description = strdup("Maximum number of search results (0 for no limit)");
+    search_parameters[6].enum_values = NULL;
+    search_parameters[6].enum_count = 0;
+    search_parameters[6].required = 0;
+
     // Check for allocation failures
-    for (int i = 0; i < 5; i++) {
-        if (search_parameters[i].name == NULL || 
+    for (int i = 0; i < 7; i++) {
+        if (search_parameters[i].name == NULL ||
             search_parameters[i].type == NULL ||
             search_parameters[i].description == NULL) {
             // Cleanup on failure
@@ -2205,14 +2438,14 @@ int register_file_tools(ToolRegistry *registry) {
             return -1;
         }
     }
-    
+
     // Register the tool using the new system
-    result = register_tool(registry, "file_search", 
-                          "Search for text patterns in files with intelligent result limiting",
-                          search_parameters, 5, execute_file_search_tool_call);
-    
+    result = register_tool(registry, "file_search",
+                          "Search for text patterns in files. Automatically skips binary files, large files (>1MB), and common non-text directories like .git, node_modules, build, deps.",
+                          search_parameters, 7, execute_file_search_tool_call);
+
     // Clean up temporary parameter storage
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 7; i++) {
         free(search_parameters[i].name);
         free(search_parameters[i].type);
         free(search_parameters[i].description);
