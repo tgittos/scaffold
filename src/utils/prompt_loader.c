@@ -73,7 +73,7 @@ int load_system_prompt(char **prompt_content) {
     *prompt_content = NULL;
     
     char *user_prompt = NULL;
-    FILE *file = fopen("PROMPT.md", "r");
+    FILE *file = fopen("AGENT.md", "r");
     
     if (file != NULL) {
         // Get file size

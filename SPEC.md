@@ -1,7 +1,7 @@
 # Ralph - Software Specification Document
 
-**Version:** 1.0
-**Status:** Reconstructed from Implementation
+**Version:** 1.1
+**Status:** Active Development
 **Platform:** Cross-platform (Linux, macOS, Windows, FreeBSD, OpenBSD, NetBSD)
 
 ---
@@ -16,6 +16,7 @@ Ralph is a portable command-line AI assistant designed for software engineers an
 - **Multi-Provider LLM Support**: Seamlessly switch between Anthropic, OpenAI, and local LLM servers
 - **Persistent Memory**: Long-term semantic memory that persists across sessions
 - **Extensible Tool System**: Plugin architecture for file operations, shell commands, and custom tools
+- **Subagent Delegation**: Spawn background subagents to handle parallel tasks with isolated contexts
 - **MCP Integration**: Model Context Protocol support for connecting to external tool servers
 - **Developer-Focused**: Built for software engineering workflows with file, shell, and code tools
 
@@ -130,38 +131,138 @@ The system automatically selects the appropriate provider based on the configure
 
 | Tool | Parameters | Description |
 |------|------------|-------------|
-| `remember` | `content` (required), `type`, `source`, `importance` | Store information in long-term semantic memory |
-| `recall_memories` | `query` (required), `k` | Search and retrieve relevant memories using hybrid search |
+| `remember` | `content` (required), `type`, `source`, `importance`, `ttl` | Store information in long-term semantic memory |
+| `recall_memories` | `query` (required) | Search and retrieve relevant memories using hybrid search |
 | `forget_memory` | `memory_id` (required) | Delete a specific memory by ID |
 
-**Memory Types:**
-- `correction` - User corrections to AI behavior
-- `preference` - User preferences and settings
-- `fact` - Important facts or context
-- `instruction` - Standing instructions for future sessions
-- `web_content` - Key information from web sources
-- `general` - Default type for unclassified memories
+**Memory Item Structure:**
+```json
+{
+  "memory_id": 12345,
+  "content": "The memory content",
+  "type": "fact",
+  "source": "conversation",
+  "importance": "normal",
+  "ttl": null,
+  "created_at": "2025-01-19T10:30:00Z",
+  "expires_at": null
+}
+```
 
-**Importance Levels:**
-- `low`
-- `normal` (default)
-- `high`
-- `critical`
+**Memory Types and Behavior:**
+
+| Type | Description | Recall Behavior |
+|------|-------------|-----------------|
+| `correction` | User corrections to AI behavior | **Always included** in context when relevant (bypass k limit) |
+| `instruction` | Standing instructions for future sessions | **Always included** in context when relevant (bypass k limit) |
+| `preference` | User preferences and settings | **Boosted** relevance score (+0.2) |
+| `fact` | Important facts or context | Standard recall |
+| `web_content` | Key information from web sources | Standard recall |
+| `general` | Default type for unclassified memories | Standard recall |
+
+**Importance Levels and Behavior:**
+
+| Importance | Description | Recall Score Multiplier | Default TTL |
+|------------|-------------|------------------------|-------------|
+| `critical` | Must never forget | 2.0x | None (permanent) |
+| `high` | Important, long-term | 1.5x | None (permanent) |
+| `normal` | Standard memory (default) | 1.0x | 90 days |
+| `low` | Ephemeral, short-term | 0.75x | 7 days |
+
+**TTL (Time-To-Live) Policies:**
+
+- Memories can have an explicit `ttl` parameter (in seconds) or use the default based on importance
+- Expired memories are automatically excluded from recall results
+- Expired memories are lazily purged during recall operations (not immediately deleted)
+- `critical` and `high` importance memories default to permanent (no expiration)
+- Setting `ttl: 0` explicitly creates a permanent memory regardless of importance
+
+**Automatic Memory Recall:**
+
+On each user message, the system automatically:
+1. Generates query embedding from user message
+2. Performs hybrid search (text matching + semantic similarity)
+3. Filters out expired memories (based on TTL)
+4. Applies importance score multipliers to rank results
+5. Applies type-based score boosts
+6. **Always includes** matching `correction` and `instruction` type memories (not counted against limit)
+7. Returns top **5** results (plus any forced-include types)
+8. Injects results into the system prompt under `# Relevant Memories`
 
 #### 2.3.4 Todo Tools (Task Management)
 
 | Tool | Parameters | Description |
 |------|------------|-------------|
-| `TodoWrite` | `todos` (array of todo items) | Create and manage task lists |
+| `todo_add` | `content` (required), `priority` (optional) | Add a new todo item |
+| `todo_update` | `id` (required), `status`, `priority`, `content` | Update a single todo item |
+| `todo_remove` | `id` (required) | Remove a todo item by ID |
+| `todo_list` | `status` (optional), `priority` (optional) | List todos with optional filtering |
+
+**Tool Details:**
+
+**`todo_add`** - Create a new task
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `content` | string | Yes | - | Task description (max 512 chars) |
+| `priority` | string | No | `medium` | Priority level: `low`, `medium`, `high` |
+
+Returns: `{ "id": "generated-id", "content": "...", "priority": "...", "status": "pending" }`
+
+**`todo_update`** - Update an existing task
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | string | Yes | The todo item ID to update |
+| `status` | string | No | New status: `pending`, `in_progress`, `completed` |
+| `priority` | string | No | New priority: `low`, `medium`, `high` |
+| `content` | string | No | New task description |
+
+Returns: `{ "id": "...", "updated_fields": [...] }`
+
+**`todo_remove`** - Delete a task
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | string | Yes | The todo item ID to remove |
+
+Returns: `{ "deleted_id": "..." }`
+
+**`todo_list`** - List and filter tasks
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `status` | string | No | Filter by status: `pending`, `in_progress`, `completed`, or `all` (default) |
+| `priority` | string | No | Minimum priority filter: `low`, `medium`, `high` |
+
+Returns: `{ "todos": [...], "count": N }`
 
 **Todo Item Structure:**
 ```json
 {
+  "id": "unique-identifier",
   "content": "Task description",
   "status": "pending|in_progress|completed",
-  "activeForm": "Present continuous form of the task"
+  "priority": "low|medium|high",
+  "created_at": "ISO-8601 timestamp",
+  "updated_at": "ISO-8601 timestamp"
 }
 ```
+
+**Status Definitions:**
+| Status | Description |
+|--------|-------------|
+| `pending` | Task has not been started |
+| `in_progress` | Task is currently being worked on |
+| `completed` | Task has been finished |
+
+**Priority Definitions:**
+| Priority | Description |
+|----------|-------------|
+| `low` | Non-urgent, can be deferred |
+| `medium` | Normal priority (default) |
+| `high` | Urgent, should be addressed soon |
+
+**Constraints:**
+- Maximum 100 todo items per session
+- Content limited to 512 characters
+- IDs are auto-generated and unique within session
 
 #### 2.3.5 Vector Database Tools (11+ tools)
 
@@ -201,11 +302,79 @@ The system automatically selects the appropriate provider based on the configure
 4. Vector database indexing
 5. Metadata storage
 
-#### 2.3.7 Links Tool (Web Fetch)
+#### 2.3.7 Subagent Tool
+
+| Tool | Parameters | Description |
+|------|------------|-------------|
+| `subagent` | `task` (required), `context` (optional) | Spawn a background subprocess to handle a delegated task |
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `task` | string | Yes | The task description/prompt for the subagent to execute |
+| `context` | string | No | Optional additional context to provide to the subagent |
+
+**Execution Model:**
+
+- **Background Execution**: Subagents run asynchronously in the background, allowing the parent to continue processing
+- **Isolated Context**: Subagents start with a fresh conversation context; they do not inherit the parent's conversation history
+- **No Nesting**: Subagents CANNOT spawn their own subagents (recursion depth is limited to 1)
+- **Tool Access**: Subagents have access to all standard tools except `subagent`
+
+**Return Value:**
+
+```json
+{
+  "subagent_id": "unique-identifier",
+  "status": "running|completed|failed",
+  "result": "output from subagent (when completed)"
+}
+```
+
+**Use Cases:**
+
+- Parallel research tasks (e.g., searching multiple codebases simultaneously)
+- Long-running operations that shouldn't block the main conversation
+- Decomposing complex tasks into independent subtasks
+- Background file processing or analysis
+
+**Lifecycle:**
+
+1. Parent invokes `subagent` with a task description
+2. Ralph spawns a new process with isolated context
+3. Subagent executes the task using available tools (except `subagent`)
+4. Parent can query subagent status using `subagent_status`
+5. Subagent result is returned when task completes or via status query
+
+**Status Query Tool:**
+
+| Tool | Parameters | Description |
+|------|------------|-------------|
+| `subagent_status` | `subagent_id` (required), `wait` (optional) | Query the status of a running subagent |
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `subagent_id` | string | Yes | - | The ID returned from the `subagent` tool |
+| `wait` | boolean | No | false | If true, block until subagent completes |
+
+**Status Response:**
+
+```json
+{
+  "subagent_id": "unique-identifier",
+  "status": "running|completed|failed",
+  "progress": "optional progress message",
+  "result": "final output (only when completed)",
+  "error": "error message (only when failed)"
+}
+```
+
+#### 2.3.9 Links Tool (Web Fetch)
 
 | Tool | Description |
 |------|-------------|
-| `fetch_url` | Fetch and process web content |
+| `web_fetch` | Fetch and process web content |
 
 ### 2.4 Memory System
 
@@ -248,11 +417,33 @@ The system automatically selects the appropriate provider based on the configure
 
 #### 2.4.4 Automatic Memory Recall
 
-The system automatically retrieves relevant memories based on user input:
-1. Query embedding is generated from user message
-2. Hybrid search combines text and semantic similarity
-3. Top-K results are injected into system prompt
-4. Context includes memory type, source, and importance
+The system automatically retrieves relevant memories on each user message:
+
+**Recall Pipeline:**
+1. Generate query embedding from user message
+2. Perform hybrid search (text matching + semantic similarity)
+3. Filter out expired memories (based on TTL)
+4. Apply importance score multipliers (critical: 2.0x, high: 1.5x, normal: 1.0x, low: 0.75x)
+5. Apply type-based score boosts (preference: +0.2)
+6. **Always include** relevant `correction` and `instruction` memories (bypass limit)
+7. Return top **5** results (plus any forced-include types)
+8. Inject into system prompt under `# Relevant Memories` section
+
+**Scoring Formula:**
+```
+final_score = base_score × importance_multiplier + type_boost
+```
+
+Where:
+- `base_score` = text match (1.0) or semantic similarity (1.0 - distance)
+- Memories appearing in both text and semantic results get: `(score1 + score2) / 2 + 0.1`
+
+**Memory Expiration Check:**
+```
+is_expired = (expires_at != NULL) && (current_time > expires_at)
+```
+
+Expired memories are excluded from results and lazily deleted during recall.
 
 ### 2.5 MCP (Model Context Protocol) Integration
 
@@ -338,6 +529,8 @@ MCP servers are configured in `ralph.config.json`:
   "system_prompt": "",
   "context_window": 8192,
   "max_tokens": -1,
+  "max_subagents": 5,
+  "subagent_timeout": 300,
   "mcpServers": {}
 }
 ```
@@ -356,6 +549,8 @@ MCP servers are configured in `ralph.config.json`:
 | `system_prompt` | string | "" | Custom system prompt |
 | `context_window` | integer | 8192 | Context window size (auto-detected from model) |
 | `max_tokens` | integer | -1 | Max response tokens (-1 for auto) |
+| `max_subagents` | integer | 5 | Maximum concurrent subagents per session |
+| `subagent_timeout` | integer | 300 | Subagent execution timeout in seconds |
 
 ### 3.3 Environment Variables
 
@@ -487,6 +682,22 @@ Custom user instructions can be placed in `PROMPT.md` in the current directory. 
 - Directory traversal (`..`) blocked
 - Null byte injection prevented
 
+### 5.5 Subagent Security
+
+**Resource Controls:**
+- Maximum concurrent subagents per session: configurable (default: 5)
+- Subagent execution timeout: configurable (default: 300 seconds)
+- No nesting: subagents cannot spawn subagents (prevents fork bombs)
+
+**Isolation:**
+- Fresh conversation context (no parent history leakage)
+- Independent process space
+- Shared configuration (API keys) but isolated execution
+
+**Tool Restrictions:**
+- `subagent` and `subagent_status` tools are disabled within subagent processes
+- All other tool safety measures apply (shell blocking, path validation, etc.)
+
 ---
 
 ## 6. Data Flow
@@ -539,8 +750,23 @@ Save Conversation
 ```
 Remember Request
     │
+    ├── content (required)
+    ├── type (default: general)
+    ├── source (default: conversation)
+    ├── importance (default: normal)
+    └── ttl (optional, in seconds)
+    │
     ▼
 Validate Content
+    │
+    ▼
+Calculate Expiration
+    │  • If ttl=0: expires_at = NULL (permanent)
+    │  • If ttl provided: expires_at = now + ttl
+    │  • Else use importance default:
+    │      critical/high: NULL (permanent)
+    │      normal: now + 90 days
+    │      low: now + 7 days
     │
     ▼
 Generate Embedding
@@ -550,6 +776,8 @@ Store Vector in HNSWLIB
     │
     ▼
 Store Metadata in JSON
+    │  • memory_id, content, type, source
+    │  • importance, created_at, expires_at
     │
     ▼
 Return Memory ID
@@ -568,10 +796,88 @@ Generate Query Embedding
     ├── Semantic Search ─────────────┐│
     │                                ││
     ▼                                ▼▼
-Merge and Score Results
+Merge Results (deduplicate, boost duplicates +0.1)
+    │
+    ▼
+Filter Expired Memories (expires_at < now)
+    │
+    ▼
+Apply Importance Multipliers
+    │  • critical: score × 2.0
+    │  • high: score × 1.5
+    │  • normal: score × 1.0
+    │  • low: score × 0.75
+    │
+    ▼
+Apply Type Boosts
+    │  • preference: score + 0.2
+    │
+    ▼
+Partition by Type
+    │
+    ├── correction/instruction ──▶ Always Include (if relevant)
+    │
+    └── other types ──▶ Sort by Score, Take Top 5
+    │
+    ▼
+Lazy Purge Expired Memories
     │
     ▼
 Inject into System Prompt
+```
+
+### 6.4 Subagent Execution Flow
+
+```
+Parent Ralph Session
+    │
+    ▼
+subagent Tool Called
+    │
+    ├── task: "Search for authentication code"
+    └── context: "Focus on OAuth implementations"
+    │
+    ▼
+Generate Unique Subagent ID
+    │
+    ▼
+Fork New Process
+    │
+    ├─────────────────────────────────────┐
+    │ Parent (continues)                  │ Subagent (background)
+    │    │                                │    │
+    │    ▼                                │    ▼
+    │ Return {subagent_id, status}        │ Initialize Fresh Session
+    │    │                                │    │
+    │    ▼                                │    ▼
+    │ Continue Processing                 │ Execute Task
+    │    │                                │    │
+    │    ▼                                │    ├── File Tools ✓
+    │ [Optional] subagent_status          │    ├── Shell Tools ✓
+    │    │                                │    ├── Memory Tools ✓
+    │    ▼                                │    ├── Vector DB Tools ✓
+    │ Query Status/Wait                   │    └── Subagent Tools ✗
+    │    │                                │    │
+    │    ◀────────────────────────────────│────┘
+    │                                     │
+    ▼                                     ▼
+Receive Subagent Result              Process Terminates
+```
+
+**Subagent Constraints:**
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Parent Session                        │
+│  ┌─────────────────────────────────────────────────┐    │
+│  │              Subagent Process                    │    │
+│  │  • Fresh context (no history inheritance)       │    │
+│  │  • All tools EXCEPT subagent/subagent_status    │    │
+│  │  • Cannot spawn nested subagents                │    │
+│  │  • Independent API connection                   │    │
+│  │  • Shares config (API keys, model, etc.)        │    │
+│  └─────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -721,6 +1027,7 @@ The Cosmopolitan build produces a single portable binary:
 
 ### A.1 Complete Tool List
 
+**File Tools (7):**
 1. `file_read` - Read file contents
 2. `file_write` - Write file contents
 3. `file_append` - Append to file
@@ -728,25 +1035,48 @@ The Cosmopolitan build produces a single portable binary:
 5. `file_search` - Search in files
 6. `file_info` - Get file metadata
 7. `file_delta` - Apply delta patches
+
+**Shell Tool (1):**
 8. `shell_execute` - Execute shell commands
-9. `remember` - Store memory
-10. `recall_memories` - Retrieve memories
+
+**Memory Tools (3):**
+9. `remember` - Store memory with importance and TTL
+10. `recall_memories` - Retrieve memories via hybrid search
 11. `forget_memory` - Delete memory
-12. `TodoWrite` - Manage tasks
-13. `process_pdf_document` - Process PDFs
-14. `vector_db_create_index` - Create vector index
-15. `vector_db_delete_index` - Delete vector index
-16. `vector_db_list_indices` - List indices
-17. `vector_db_add_vector` - Add vector
-18. `vector_db_update_vector` - Update vector
-19. `vector_db_delete_vector` - Delete vector
-20. `vector_db_get_vector` - Get vector
-21. `vector_db_search` - Search vectors
-22. `vector_db_add_text` - Add text as vector
-23. `vector_db_add_chunked_text` - Add chunked text
-24. `vector_db_add_pdf_document` - Add PDF to vector DB
-25. `fetch_url` - Fetch web content
-26. `mcp_*` - Dynamic MCP tools (namespaced)
+
+**Task Management (4):**
+12. `todo_add` - Add a new todo item
+13. `todo_update` - Update a single todo item
+14. `todo_remove` - Remove a todo item
+15. `todo_list` - List and filter todos
+
+**Subagent Tools (2):**
+16. `subagent` - Spawn background subagent for delegated tasks
+17. `subagent_status` - Query subagent execution status
+
+**PDF Tools (1):**
+18. `pdf_extract_text` - Extract text from PDFs
+
+**Vector Database Tools (13):**
+19. `vector_db_create_index` - Create vector index
+20. `vector_db_delete_index` - Delete vector index
+21. `vector_db_list_indices` - List indices
+22. `vector_db_add_vector` - Add vector
+23. `vector_db_update_vector` - Update vector
+24. `vector_db_delete_vector` - Delete vector
+25. `vector_db_get_vector` - Get vector
+26. `vector_db_search` - Search vectors
+27. `vector_db_add_text` - Add text as vector
+28. `vector_db_add_chunked_text` - Add chunked text
+29. `vector_db_add_pdf_document` - Add PDF to vector DB
+30. `vector_db_search_text` - Search by text query
+31. `vector_db_search_by_time` - Search by time range
+
+**Web Tools (1):**
+32. `web_fetch` - Fetch web content
+
+**External Tools:**
+33. `mcp_*` - Dynamic MCP tools (namespaced)
 
 ---
 
@@ -802,7 +1132,8 @@ The Cosmopolitan build produces a single portable binary:
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2024 | Initial specification (reconstructed from implementation) |
+| 1.1 | 2025 | Added subagent tools (`subagent`, `subagent_status`) for background task delegation; Refactored todo tools from bulk `TodoWrite` to granular `todo_add`, `todo_update`, `todo_remove`, `todo_list`; Enhanced memory system with importance-based scoring (2.0x/1.5x/1.0x/0.75x multipliers), type-based behavior (`correction`/`instruction` always included, `preference` boosted), TTL expiration policies (7d/90d/permanent by importance); Updated tool list to 33 tools |
 
 ---
 
-*This specification was reconstructed from the Ralph codebase implementation. It represents the effective behavior of the software as implemented.*
+*This specification defines the intended behavior of the Ralph software. Features marked as implemented reflect current functionality; features in development are noted accordingly.*
