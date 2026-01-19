@@ -51,6 +51,16 @@ Your work is not considered complete unless it is accompanied by automated unit 
 
 `valgrind` will sometimes fail with a SIGPIPE error if you're running timeout tests. This is ok.
 
+### Integration Tests Requiring API Keys
+
+Some tests require API credentials to pass. Before running these, source the environment file:
+
+```bash
+source .env && ./test/test_vector_db_tool
+```
+
+The `test_vector_db_tool` test specifically requires OpenAI Embeddings API access for the `test_vector_db_add_text` test case. Without sourcing `.env`, this test will fail with "Expected 1 Was 0" because the embeddings API call fails without authentication.
+
 ### Subagent Tests and Valgrind
 
 **Subagent tests are excluded from valgrind entirely.** Do not run valgrind on subagent tests.
