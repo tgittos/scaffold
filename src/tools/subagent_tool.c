@@ -407,24 +407,176 @@ int subagent_poll_all(SubagentManager *manager) {
     return changed;
 }
 
-/*
- * The following functions are stubs that will be implemented in later phases:
- * - subagent_spawn()
- * - subagent_get_status()
- * - register_subagent_tool()
- * - register_subagent_status_tool()
- * - execute_subagent_tool_call()
- * - execute_subagent_status_tool_call()
- * - ralph_run_as_subagent()
+/**
+ * Get the path to the current executable.
+ * Uses /proc/self/exe on Linux with fallback options.
+ * Returns a newly allocated string that must be freed by caller.
  */
+static char* get_executable_path(void) {
+    char *path = malloc(4096);
+    if (path == NULL) {
+        return NULL;
+    }
 
+    // Try /proc/self/exe first (Linux)
+    ssize_t len = readlink("/proc/self/exe", path, 4095);
+    if (len > 0) {
+        path[len] = '\0';
+        return path;
+    }
+
+    // Fallback: try current directory
+    if (getcwd(path, 4096) != NULL) {
+        size_t cwd_len = strlen(path);
+        if (cwd_len + 7 < 4096) {  // "/ralph" + null
+            strcat(path, "/ralph");
+            if (access(path, X_OK) == 0) {
+                return path;
+            }
+        }
+    }
+
+    // Last fallback: assume ./ralph
+    strcpy(path, "./ralph");
+    free(path);
+    return strdup("./ralph");
+}
+
+/**
+ * Spawn a new subagent to execute a task.
+ * Forks a new process running ralph in subagent mode.
+ */
 int subagent_spawn(SubagentManager *manager, const char *task, const char *context, char *subagent_id_out) {
-    (void)manager;
-    (void)task;
-    (void)context;
-    (void)subagent_id_out;
-    // TODO: Implement in Step 4
-    return -1;
+    if (manager == NULL || task == NULL || subagent_id_out == NULL) {
+        return -1;
+    }
+
+    // Prevent nesting: don't allow subagents to spawn subagents
+    if (manager->is_subagent_process) {
+        return -1;
+    }
+
+    // Check max limit
+    if (manager->count >= manager->max_subagents) {
+        return -1;
+    }
+
+    // Generate unique ID
+    char id[SUBAGENT_ID_LENGTH + 1];
+    generate_subagent_id(id);
+
+    // Create pipe for capturing child output
+    int pipefd[2];
+    if (pipe(pipefd) == -1) {
+        return -1;
+    }
+
+    // Get path to ralph executable
+    char *ralph_path = get_executable_path();
+    if (ralph_path == NULL) {
+        close(pipefd[0]);
+        close(pipefd[1]);
+        return -1;
+    }
+
+    // Fork the process
+    pid_t pid = fork();
+    if (pid == -1) {
+        // Fork failed
+        free(ralph_path);
+        close(pipefd[0]);
+        close(pipefd[1]);
+        return -1;
+    }
+
+    if (pid == 0) {
+        // Child process
+        close(pipefd[0]);  // Close read end
+
+        // Redirect stdout to pipe
+        if (dup2(pipefd[1], STDOUT_FILENO) == -1) {
+            _exit(127);
+        }
+        close(pipefd[1]);
+
+        // Also redirect stderr to stdout so we capture errors
+        dup2(STDOUT_FILENO, STDERR_FILENO);
+
+        // Build exec arguments
+        // Maximum: ralph --subagent --task "..." --context "..." NULL = 7 args
+        char *args[7];
+        int arg_idx = 0;
+
+        args[arg_idx++] = ralph_path;
+        args[arg_idx++] = "--subagent";
+        args[arg_idx++] = "--task";
+        args[arg_idx++] = (char*)task;
+
+        if (context != NULL && strlen(context) > 0) {
+            args[arg_idx++] = "--context";
+            args[arg_idx++] = (char*)context;
+        }
+
+        args[arg_idx] = NULL;
+
+        // Execute ralph in subagent mode
+        execv(ralph_path, args);
+
+        // If execv fails, exit with error
+        _exit(127);
+    }
+
+    // Parent process
+    free(ralph_path);
+    close(pipefd[1]);  // Close write end
+
+    // Expand the subagents array
+    Subagent *new_subagents = realloc(manager->subagents,
+                                       (size_t)(manager->count + 1) * sizeof(Subagent));
+    if (new_subagents == NULL) {
+        // Memory allocation failed - kill the child and clean up
+        kill(pid, SIGKILL);
+        waitpid(pid, NULL, 0);
+        close(pipefd[0]);
+        return -1;
+    }
+    manager->subagents = new_subagents;
+
+    // Initialize the new subagent entry
+    Subagent *sub = &manager->subagents[manager->count];
+    memset(sub, 0, sizeof(Subagent));
+
+    memcpy(sub->id, id, SUBAGENT_ID_LENGTH);
+    sub->id[SUBAGENT_ID_LENGTH] = '\0';
+    sub->pid = pid;
+    sub->status = SUBAGENT_STATUS_RUNNING;
+    sub->stdout_pipe[0] = pipefd[0];
+    sub->stdout_pipe[1] = -1;  // Write end closed in parent
+    sub->task = strdup(task);
+    sub->context = (context != NULL && strlen(context) > 0) ? strdup(context) : NULL;
+    sub->output = NULL;
+    sub->output_len = 0;
+    sub->result = NULL;
+    sub->error = NULL;
+    sub->start_time = time(NULL);
+
+    // Check if strdup failed
+    if (sub->task == NULL || (context != NULL && strlen(context) > 0 && sub->context == NULL)) {
+        // Cleanup on allocation failure
+        if (sub->task) free(sub->task);
+        if (sub->context) free(sub->context);
+        kill(pid, SIGKILL);
+        waitpid(pid, NULL, 0);
+        close(pipefd[0]);
+        return -1;
+    }
+
+    manager->count++;
+
+    // Copy ID to output
+    strcpy(subagent_id_out, id);
+
+    return 0;
 }
 
 int subagent_get_status(SubagentManager *manager, const char *subagent_id, int wait,

@@ -535,7 +535,7 @@ Test cases:
 1. ~~**Step 1**: Add config fields (`max_subagents`, `subagent_timeout`) to config.h/c~~ ✓ DONE
 2. ~~**Step 2**: Create subagent_tool.h with all declarations~~ ✓ DONE
 3. ~~**Step 3**: Implement SubagentManager (init, cleanup)~~ ✓ DONE
-4. **Step 4**: Implement `subagent_spawn()` with fork/exec
+4. ~~**Step 4**: Implement `subagent_spawn()` with fork/exec~~ ✓ DONE
 5. **Step 5**: Implement `subagent_get_status()` with waitpid
 6. **Step 6**: Add `--subagent` flag handling in main.c
 7. **Step 7**: Implement `ralph_run_as_subagent()`

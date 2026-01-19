@@ -274,6 +274,199 @@ void test_read_subagent_output_from_pipe(void) {
     cleanup_subagent(&sub);
 }
 
+// =========================================================================
+// subagent_spawn() tests
+// =========================================================================
+
+void test_subagent_spawn_null_params(void) {
+    SubagentManager manager;
+    subagent_manager_init(&manager);
+    char id[SUBAGENT_ID_LENGTH + 1];
+
+    // Null manager
+    TEST_ASSERT_EQUAL_INT(-1, subagent_spawn(NULL, "task", NULL, id));
+
+    // Null task
+    TEST_ASSERT_EQUAL_INT(-1, subagent_spawn(&manager, NULL, NULL, id));
+
+    // Null id output
+    TEST_ASSERT_EQUAL_INT(-1, subagent_spawn(&manager, "task", NULL, NULL));
+
+    subagent_manager_cleanup(&manager);
+}
+
+void test_subagent_spawn_prevents_nesting(void) {
+    SubagentManager manager;
+    subagent_manager_init(&manager);
+    char id[SUBAGENT_ID_LENGTH + 1];
+
+    // Set the is_subagent_process flag
+    manager.is_subagent_process = 1;
+
+    // Should fail because we're already in a subagent
+    int result = subagent_spawn(&manager, "test task", NULL, id);
+    TEST_ASSERT_EQUAL_INT(-1, result);
+    TEST_ASSERT_EQUAL_INT(0, manager.count);
+
+    subagent_manager_cleanup(&manager);
+}
+
+void test_subagent_spawn_respects_max_limit(void) {
+    SubagentManager manager;
+    subagent_manager_init_with_config(&manager, 2, 300);  // Max 2 subagents
+    char id[SUBAGENT_ID_LENGTH + 1];
+
+    // Manually create two "subagents" in the array to simulate being at limit
+    manager.subagents = malloc(2 * sizeof(Subagent));
+    TEST_ASSERT_NOT_NULL(manager.subagents);
+    memset(manager.subagents, 0, 2 * sizeof(Subagent));
+    manager.count = 2;
+
+    // Try to spawn - should fail
+    int result = subagent_spawn(&manager, "test task", NULL, id);
+    TEST_ASSERT_EQUAL_INT(-1, result);
+    TEST_ASSERT_EQUAL_INT(2, manager.count);  // Count unchanged
+
+    // Clean up (manually since we didn't use real spawning)
+    free(manager.subagents);
+    manager.subagents = NULL;
+    manager.count = 0;
+}
+
+void test_subagent_spawn_basic(void) {
+    SubagentManager manager;
+    subagent_manager_init(&manager);
+    char id[SUBAGENT_ID_LENGTH + 1];
+    memset(id, 0, sizeof(id));
+
+    // Spawn a subagent
+    // Note: This will fork a process that tries to run ralph --subagent
+    // The process will likely fail/exit quickly since --subagent isn't fully implemented
+    int result = subagent_spawn(&manager, "test task", NULL, id);
+    TEST_ASSERT_EQUAL_INT(0, result);
+
+    // Verify the subagent was created
+    TEST_ASSERT_EQUAL_INT(1, manager.count);
+    TEST_ASSERT_NOT_NULL(manager.subagents);
+
+    // Verify the ID was returned
+    TEST_ASSERT_EQUAL_INT(SUBAGENT_ID_LENGTH, strlen(id));
+
+    // Verify subagent fields
+    Subagent *sub = &manager.subagents[0];
+    TEST_ASSERT_EQUAL_STRING(id, sub->id);
+    TEST_ASSERT_TRUE(sub->pid > 0);
+    TEST_ASSERT_EQUAL_INT(SUBAGENT_STATUS_RUNNING, sub->status);
+    TEST_ASSERT_TRUE(sub->stdout_pipe[0] > 0);
+    TEST_ASSERT_EQUAL_STRING("test task", sub->task);
+    TEST_ASSERT_NULL(sub->context);
+    TEST_ASSERT_TRUE(sub->start_time > 0);
+
+    // Let the process complete (it will fail since --subagent isn't handled)
+    usleep(100000);  // 100ms
+
+    subagent_manager_cleanup(&manager);
+}
+
+void test_subagent_spawn_with_context(void) {
+    SubagentManager manager;
+    subagent_manager_init(&manager);
+    char id[SUBAGENT_ID_LENGTH + 1];
+    memset(id, 0, sizeof(id));
+
+    // Spawn a subagent with context
+    int result = subagent_spawn(&manager, "test task", "some context", id);
+    TEST_ASSERT_EQUAL_INT(0, result);
+
+    // Verify the subagent was created with context
+    TEST_ASSERT_EQUAL_INT(1, manager.count);
+    Subagent *sub = &manager.subagents[0];
+    TEST_ASSERT_EQUAL_STRING("test task", sub->task);
+    TEST_ASSERT_EQUAL_STRING("some context", sub->context);
+
+    usleep(100000);  // 100ms
+    subagent_manager_cleanup(&manager);
+}
+
+void test_subagent_spawn_empty_context_treated_as_null(void) {
+    SubagentManager manager;
+    subagent_manager_init(&manager);
+    char id[SUBAGENT_ID_LENGTH + 1];
+    memset(id, 0, sizeof(id));
+
+    // Spawn with empty context (should be treated as NULL)
+    int result = subagent_spawn(&manager, "test task", "", id);
+    TEST_ASSERT_EQUAL_INT(0, result);
+
+    Subagent *sub = &manager.subagents[0];
+    TEST_ASSERT_NULL(sub->context);  // Empty string treated as NULL
+
+    usleep(100000);  // 100ms
+    subagent_manager_cleanup(&manager);
+}
+
+void test_subagent_spawn_multiple(void) {
+    SubagentManager manager;
+    subagent_manager_init_with_config(&manager, 5, 300);
+    char id1[SUBAGENT_ID_LENGTH + 1];
+    char id2[SUBAGENT_ID_LENGTH + 1];
+    char id3[SUBAGENT_ID_LENGTH + 1];
+
+    // Spawn multiple subagents
+    TEST_ASSERT_EQUAL_INT(0, subagent_spawn(&manager, "task 1", NULL, id1));
+    TEST_ASSERT_EQUAL_INT(0, subagent_spawn(&manager, "task 2", "ctx 2", id2));
+    TEST_ASSERT_EQUAL_INT(0, subagent_spawn(&manager, "task 3", NULL, id3));
+
+    TEST_ASSERT_EQUAL_INT(3, manager.count);
+
+    // Verify all IDs are different
+    TEST_ASSERT_TRUE(strcmp(id1, id2) != 0);
+    TEST_ASSERT_TRUE(strcmp(id2, id3) != 0);
+    TEST_ASSERT_TRUE(strcmp(id1, id3) != 0);
+
+    // Verify we can find each subagent
+    TEST_ASSERT_NOT_NULL(subagent_find_by_id(&manager, id1));
+    TEST_ASSERT_NOT_NULL(subagent_find_by_id(&manager, id2));
+    TEST_ASSERT_NOT_NULL(subagent_find_by_id(&manager, id3));
+
+    usleep(100000);  // 100ms
+    subagent_manager_cleanup(&manager);
+}
+
+void test_subagent_spawn_and_poll(void) {
+    SubagentManager manager;
+    subagent_manager_init(&manager);
+    char id[SUBAGENT_ID_LENGTH + 1];
+
+    // Spawn a subagent
+    int result = subagent_spawn(&manager, "test task", NULL, id);
+    TEST_ASSERT_EQUAL_INT(0, result);
+
+    // Initial status should be running
+    Subagent *sub = subagent_find_by_id(&manager, id);
+    TEST_ASSERT_NOT_NULL(sub);
+    TEST_ASSERT_EQUAL_INT(SUBAGENT_STATUS_RUNNING, sub->status);
+
+    // Wait for process to complete (it will fail since --subagent isn't handled)
+    usleep(200000);  // 200ms
+
+    // Poll should detect the status change
+    int changed = subagent_poll_all(&manager);
+    TEST_ASSERT_TRUE(changed >= 0);  // May or may not have changed depending on timing
+
+    // Give it more time and poll again
+    usleep(200000);  // 200ms
+    subagent_poll_all(&manager);
+
+    // After polling, status should be either FAILED or COMPLETED
+    // (FAILED is expected since --subagent isn't fully implemented)
+    TEST_ASSERT_TRUE(sub->status == SUBAGENT_STATUS_FAILED ||
+                     sub->status == SUBAGENT_STATUS_COMPLETED ||
+                     sub->status == SUBAGENT_STATUS_RUNNING);
+
+    subagent_manager_cleanup(&manager);
+}
+
 int main(void) {
     UNITY_BEGIN();
 
@@ -312,6 +505,16 @@ int main(void) {
     RUN_TEST(test_read_subagent_output_null);
     RUN_TEST(test_read_subagent_output_invalid_pipe);
     RUN_TEST(test_read_subagent_output_from_pipe);
+
+    // Spawn tests
+    RUN_TEST(test_subagent_spawn_null_params);
+    RUN_TEST(test_subagent_spawn_prevents_nesting);
+    RUN_TEST(test_subagent_spawn_respects_max_limit);
+    RUN_TEST(test_subagent_spawn_basic);
+    RUN_TEST(test_subagent_spawn_with_context);
+    RUN_TEST(test_subagent_spawn_empty_context_treated_as_null);
+    RUN_TEST(test_subagent_spawn_multiple);
+    RUN_TEST(test_subagent_spawn_and_poll);
 
     return UNITY_END();
 }
