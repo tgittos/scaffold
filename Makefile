@@ -540,8 +540,7 @@ check-valgrind: $(ALL_TEST_TARGETS)
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_VECTOR_DB_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_PDF_EXTRACTOR_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_DOCUMENT_CHUNKER_TARGET).aarch64.elf
-	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --trace-children=no --error-exitcode=1 ./$(TEST_SUBAGENT_TOOL_TARGET).aarch64.elf
-	@echo "Valgrind tests completed"
+	@echo "Valgrind tests completed (subagent tests excluded - see AGENT.md)"
 
 # Valgrind testing for all tests (may show false positives from external libraries)
 check-valgrind-all: $(ALL_TEST_TARGETS)

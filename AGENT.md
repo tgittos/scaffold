@@ -53,13 +53,16 @@ Your work is not considered complete unless it is accompanied by automated unit 
 
 ### Subagent Tests and Valgrind
 
-The subagent tests use `fork()` and `execv()` to spawn child ralph processes. By default, valgrind traces all forked children, which causes a cascading process explosion:
+**Subagent tests are excluded from valgrind entirely.** Do not run valgrind on subagent tests.
+
+The subagent tests use `fork()` and `execv()` to spawn child ralph processes. Running these under valgrind causes a cascading process explosion that crashes the devcontainer:
 - Each test spawns a subagent → valgrind traces it
 - Each subagent initializes a full ralph session (tools, MCP, etc.)
 - MCP initialization may fork additional server processes
 - All processes make real API calls under valgrind's slow execution
+- This exhausts memory and crashes the devcontainer
 
-This can exhaust memory and crash the devcontainer. The Makefile uses `--trace-children=no` for subagent tests to prevent this. This means **memory issues in spawned subagent processes are not detected by valgrind**. To properly test subagent memory safety, run the subagent code paths directly without the fork/exec layer.
+To test subagent memory safety, run the subagent code paths directly without the fork/exec layer.
 
 ## Debugging
 

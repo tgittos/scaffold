@@ -648,6 +648,372 @@ void test_subagent_get_status_null_optional_params(void) {
 // The spawned processes execute ralph --subagent which calls ralph_run_as_subagent().
 // Direct unit testing would require linking against the full ralph infrastructure.
 
+// =========================================================================
+// Tool registration tests
+// =========================================================================
+
+void test_register_subagent_tool_null_params(void) {
+    SubagentManager manager;
+    subagent_manager_init(&manager);
+    ToolRegistry registry;
+    init_tool_registry(&registry);
+
+    // Null registry
+    TEST_ASSERT_EQUAL_INT(-1, register_subagent_tool(NULL, &manager));
+
+    // Null manager
+    TEST_ASSERT_EQUAL_INT(-1, register_subagent_tool(&registry, NULL));
+
+    cleanup_tool_registry(&registry);
+    subagent_manager_cleanup(&manager);
+}
+
+void test_register_subagent_status_tool_null_params(void) {
+    SubagentManager manager;
+    subagent_manager_init(&manager);
+    ToolRegistry registry;
+    init_tool_registry(&registry);
+
+    // Null registry
+    TEST_ASSERT_EQUAL_INT(-1, register_subagent_status_tool(NULL, &manager));
+
+    // Null manager
+    TEST_ASSERT_EQUAL_INT(-1, register_subagent_status_tool(&registry, NULL));
+
+    cleanup_tool_registry(&registry);
+    subagent_manager_cleanup(&manager);
+}
+
+void test_register_subagent_tools(void) {
+    SubagentManager manager;
+    subagent_manager_init(&manager);
+    ToolRegistry registry;
+    init_tool_registry(&registry);
+
+    // Register both tools
+    TEST_ASSERT_EQUAL_INT(0, register_subagent_tool(&registry, &manager));
+    TEST_ASSERT_EQUAL_INT(0, register_subagent_status_tool(&registry, &manager));
+
+    // Verify tools are registered
+    TEST_ASSERT_EQUAL_INT(2, registry.function_count);
+
+    cleanup_tool_registry(&registry);
+    subagent_manager_cleanup(&manager);
+}
+
+// =========================================================================
+// execute_subagent_tool_call() tests
+// =========================================================================
+
+void test_execute_subagent_tool_call_null_params(void) {
+    ToolCall tool_call = { .id = "tc1", .name = "subagent", .arguments = "{\"task\": \"test\"}" };
+    ToolResult result = { 0 };
+
+    // Null tool_call
+    TEST_ASSERT_EQUAL_INT(-1, execute_subagent_tool_call(NULL, &result));
+
+    // Null result
+    TEST_ASSERT_EQUAL_INT(-1, execute_subagent_tool_call(&tool_call, NULL));
+}
+
+void test_execute_subagent_tool_call_no_manager(void) {
+    // This test needs to ensure g_subagent_manager is NULL
+    // We'll register with a manager, then we can test the execution
+    SubagentManager manager;
+    subagent_manager_init(&manager);
+    ToolRegistry registry;
+    init_tool_registry(&registry);
+
+    // Register tools to set up the global manager
+    register_subagent_tool(&registry, &manager);
+
+    ToolCall tool_call = { .id = "tc1", .name = "subagent", .arguments = "{\"task\": \"test\"}" };
+    ToolResult result = { 0 };
+
+    // Execute should work now that manager is registered
+    int exec_result = execute_subagent_tool_call(&tool_call, &result);
+    TEST_ASSERT_EQUAL_INT(0, exec_result);
+    TEST_ASSERT_NOT_NULL(result.tool_call_id);
+    TEST_ASSERT_NOT_NULL(result.result);
+
+    // Clean up result
+    free(result.tool_call_id);
+    free(result.result);
+
+    usleep(200000);  // Let spawned process complete
+    cleanup_tool_registry(&registry);
+    subagent_manager_cleanup(&manager);
+}
+
+void test_execute_subagent_tool_call_missing_task(void) {
+    SubagentManager manager;
+    subagent_manager_init(&manager);
+    ToolRegistry registry;
+    init_tool_registry(&registry);
+    register_subagent_tool(&registry, &manager);
+
+    ToolCall tool_call = { .id = "tc1", .name = "subagent", .arguments = "{}" };
+    ToolResult result = { 0 };
+
+    // Should return error because task is missing
+    int exec_result = execute_subagent_tool_call(&tool_call, &result);
+    TEST_ASSERT_EQUAL_INT(0, exec_result);  // Function returns success but result is error
+    TEST_ASSERT_EQUAL_INT(0, result.success);
+    TEST_ASSERT_NOT_NULL(result.result);
+    TEST_ASSERT_TRUE(strstr(result.result, "required") != NULL);
+
+    free(result.tool_call_id);
+    free(result.result);
+
+    cleanup_tool_registry(&registry);
+    subagent_manager_cleanup(&manager);
+}
+
+void test_execute_subagent_tool_call_empty_task(void) {
+    SubagentManager manager;
+    subagent_manager_init(&manager);
+    ToolRegistry registry;
+    init_tool_registry(&registry);
+    register_subagent_tool(&registry, &manager);
+
+    ToolCall tool_call = { .id = "tc1", .name = "subagent", .arguments = "{\"task\": \"\"}" };
+    ToolResult result = { 0 };
+
+    // Should return error because task is empty
+    int exec_result = execute_subagent_tool_call(&tool_call, &result);
+    TEST_ASSERT_EQUAL_INT(0, exec_result);
+    TEST_ASSERT_EQUAL_INT(0, result.success);
+    TEST_ASSERT_NOT_NULL(result.result);
+    TEST_ASSERT_TRUE(strstr(result.result, "required") != NULL);
+
+    free(result.tool_call_id);
+    free(result.result);
+
+    cleanup_tool_registry(&registry);
+    subagent_manager_cleanup(&manager);
+}
+
+void test_execute_subagent_tool_call_success(void) {
+    SubagentManager manager;
+    subagent_manager_init(&manager);
+    ToolRegistry registry;
+    init_tool_registry(&registry);
+    register_subagent_tool(&registry, &manager);
+
+    ToolCall tool_call = {
+        .id = "tc1",
+        .name = "subagent",
+        .arguments = "{\"task\": \"test task\", \"context\": \"test context\"}"
+    };
+    ToolResult result = { 0 };
+
+    int exec_result = execute_subagent_tool_call(&tool_call, &result);
+    TEST_ASSERT_EQUAL_INT(0, exec_result);
+    TEST_ASSERT_EQUAL_INT(1, result.success);
+    TEST_ASSERT_NOT_NULL(result.result);
+    TEST_ASSERT_TRUE(strstr(result.result, "subagent_id") != NULL);
+    TEST_ASSERT_TRUE(strstr(result.result, "running") != NULL);
+
+    free(result.tool_call_id);
+    free(result.result);
+
+    usleep(200000);  // Let spawned process complete
+    cleanup_tool_registry(&registry);
+    subagent_manager_cleanup(&manager);
+}
+
+void test_execute_subagent_tool_call_prevents_nesting(void) {
+    SubagentManager manager;
+    subagent_manager_init(&manager);
+    manager.is_subagent_process = 1;  // Simulate running as a subagent
+    ToolRegistry registry;
+    init_tool_registry(&registry);
+    register_subagent_tool(&registry, &manager);
+
+    ToolCall tool_call = { .id = "tc1", .name = "subagent", .arguments = "{\"task\": \"test\"}" };
+    ToolResult result = { 0 };
+
+    int exec_result = execute_subagent_tool_call(&tool_call, &result);
+    TEST_ASSERT_EQUAL_INT(0, exec_result);
+    TEST_ASSERT_EQUAL_INT(0, result.success);
+    TEST_ASSERT_NOT_NULL(result.result);
+    TEST_ASSERT_TRUE(strstr(result.result, "cannot spawn") != NULL);
+
+    free(result.tool_call_id);
+    free(result.result);
+
+    cleanup_tool_registry(&registry);
+    subagent_manager_cleanup(&manager);
+}
+
+// =========================================================================
+// execute_subagent_status_tool_call() tests
+// =========================================================================
+
+void test_execute_subagent_status_tool_call_null_params(void) {
+    ToolCall tool_call = { .id = "tc1", .name = "subagent_status", .arguments = "{\"subagent_id\": \"abc\"}" };
+    ToolResult result = { 0 };
+
+    // Null tool_call
+    TEST_ASSERT_EQUAL_INT(-1, execute_subagent_status_tool_call(NULL, &result));
+
+    // Null result
+    TEST_ASSERT_EQUAL_INT(-1, execute_subagent_status_tool_call(&tool_call, NULL));
+}
+
+void test_execute_subagent_status_tool_call_missing_id(void) {
+    SubagentManager manager;
+    subagent_manager_init(&manager);
+    ToolRegistry registry;
+    init_tool_registry(&registry);
+    register_subagent_status_tool(&registry, &manager);
+
+    ToolCall tool_call = { .id = "tc1", .name = "subagent_status", .arguments = "{}" };
+    ToolResult result = { 0 };
+
+    int exec_result = execute_subagent_status_tool_call(&tool_call, &result);
+    TEST_ASSERT_EQUAL_INT(0, exec_result);
+    TEST_ASSERT_EQUAL_INT(0, result.success);
+    TEST_ASSERT_NOT_NULL(result.result);
+    TEST_ASSERT_TRUE(strstr(result.result, "required") != NULL);
+
+    free(result.tool_call_id);
+    free(result.result);
+
+    cleanup_tool_registry(&registry);
+    subagent_manager_cleanup(&manager);
+}
+
+void test_execute_subagent_status_tool_call_not_found(void) {
+    SubagentManager manager;
+    subagent_manager_init(&manager);
+    ToolRegistry registry;
+    init_tool_registry(&registry);
+    register_subagent_status_tool(&registry, &manager);
+
+    ToolCall tool_call = {
+        .id = "tc1",
+        .name = "subagent_status",
+        .arguments = "{\"subagent_id\": \"nonexistent123\"}"
+    };
+    ToolResult result = { 0 };
+
+    int exec_result = execute_subagent_status_tool_call(&tool_call, &result);
+    TEST_ASSERT_EQUAL_INT(0, exec_result);
+    TEST_ASSERT_EQUAL_INT(0, result.success);
+    TEST_ASSERT_NOT_NULL(result.result);
+    TEST_ASSERT_TRUE(strstr(result.result, "not found") != NULL || strstr(result.result, "error") != NULL);
+
+    free(result.tool_call_id);
+    free(result.result);
+
+    cleanup_tool_registry(&registry);
+    subagent_manager_cleanup(&manager);
+}
+
+void test_execute_subagent_status_tool_call_success(void) {
+    SubagentManager manager;
+    subagent_manager_init(&manager);
+    ToolRegistry registry;
+    init_tool_registry(&registry);
+    register_subagent_tool(&registry, &manager);
+    register_subagent_status_tool(&registry, &manager);
+
+    // First spawn a subagent
+    ToolCall spawn_call = {
+        .id = "tc1",
+        .name = "subagent",
+        .arguments = "{\"task\": \"test task\"}"
+    };
+    ToolResult spawn_result = { 0 };
+    execute_subagent_tool_call(&spawn_call, &spawn_result);
+    TEST_ASSERT_EQUAL_INT(1, spawn_result.success);
+
+    // Extract subagent_id from result
+    char *id_start = strstr(spawn_result.result, "\"subagent_id\": \"");
+    TEST_ASSERT_NOT_NULL(id_start);
+    id_start += strlen("\"subagent_id\": \"");
+    char subagent_id[SUBAGENT_ID_LENGTH + 1];
+    strncpy(subagent_id, id_start, SUBAGENT_ID_LENGTH);
+    subagent_id[SUBAGENT_ID_LENGTH] = '\0';
+
+    // Now query the status
+    char status_args[256];
+    snprintf(status_args, sizeof(status_args), "{\"subagent_id\": \"%s\"}", subagent_id);
+    ToolCall status_call = {
+        .id = "tc2",
+        .name = "subagent_status",
+        .arguments = status_args
+    };
+    ToolResult status_result = { 0 };
+
+    int exec_result = execute_subagent_status_tool_call(&status_call, &status_result);
+    TEST_ASSERT_EQUAL_INT(0, exec_result);
+    TEST_ASSERT_NOT_NULL(status_result.result);
+    TEST_ASSERT_TRUE(strstr(status_result.result, "status") != NULL);
+
+    free(spawn_result.tool_call_id);
+    free(spawn_result.result);
+    free(status_result.tool_call_id);
+    free(status_result.result);
+
+    usleep(200000);  // Let spawned process complete
+    cleanup_tool_registry(&registry);
+    subagent_manager_cleanup(&manager);
+}
+
+void test_execute_subagent_status_tool_call_with_wait(void) {
+    SubagentManager manager;
+    subagent_manager_init(&manager);
+    ToolRegistry registry;
+    init_tool_registry(&registry);
+    register_subagent_tool(&registry, &manager);
+    register_subagent_status_tool(&registry, &manager);
+
+    // First spawn a subagent
+    ToolCall spawn_call = {
+        .id = "tc1",
+        .name = "subagent",
+        .arguments = "{\"task\": \"test task\"}"
+    };
+    ToolResult spawn_result = { 0 };
+    execute_subagent_tool_call(&spawn_call, &spawn_result);
+
+    // Extract subagent_id
+    char *id_start = strstr(spawn_result.result, "\"subagent_id\": \"");
+    TEST_ASSERT_NOT_NULL(id_start);
+    id_start += strlen("\"subagent_id\": \"");
+    char subagent_id[SUBAGENT_ID_LENGTH + 1];
+    strncpy(subagent_id, id_start, SUBAGENT_ID_LENGTH);
+    subagent_id[SUBAGENT_ID_LENGTH] = '\0';
+
+    // Query status with wait=true
+    char status_args[256];
+    snprintf(status_args, sizeof(status_args), "{\"subagent_id\": \"%s\", \"wait\": true}", subagent_id);
+    ToolCall status_call = {
+        .id = "tc2",
+        .name = "subagent_status",
+        .arguments = status_args
+    };
+    ToolResult status_result = { 0 };
+
+    int exec_result = execute_subagent_status_tool_call(&status_call, &status_result);
+    TEST_ASSERT_EQUAL_INT(0, exec_result);
+    TEST_ASSERT_NOT_NULL(status_result.result);
+    // With wait=true, should not be "running" anymore
+    TEST_ASSERT_TRUE(strstr(status_result.result, "completed") != NULL ||
+                     strstr(status_result.result, "failed") != NULL ||
+                     strstr(status_result.result, "timeout") != NULL);
+
+    free(spawn_result.tool_call_id);
+    free(spawn_result.result);
+    free(status_result.tool_call_id);
+    free(status_result.result);
+
+    cleanup_tool_registry(&registry);
+    subagent_manager_cleanup(&manager);
+}
+
 int main(void) {
     UNITY_BEGIN();
 
@@ -705,6 +1071,26 @@ int main(void) {
     RUN_TEST(test_subagent_get_status_wait);
     RUN_TEST(test_subagent_get_status_cached_result);
     RUN_TEST(test_subagent_get_status_null_optional_params);
+
+    // Tool registration tests
+    RUN_TEST(test_register_subagent_tool_null_params);
+    RUN_TEST(test_register_subagent_status_tool_null_params);
+    RUN_TEST(test_register_subagent_tools);
+
+    // execute_subagent_tool_call tests
+    RUN_TEST(test_execute_subagent_tool_call_null_params);
+    RUN_TEST(test_execute_subagent_tool_call_no_manager);
+    RUN_TEST(test_execute_subagent_tool_call_missing_task);
+    RUN_TEST(test_execute_subagent_tool_call_empty_task);
+    RUN_TEST(test_execute_subagent_tool_call_success);
+    RUN_TEST(test_execute_subagent_tool_call_prevents_nesting);
+
+    // execute_subagent_status_tool_call tests
+    RUN_TEST(test_execute_subagent_status_tool_call_null_params);
+    RUN_TEST(test_execute_subagent_status_tool_call_missing_id);
+    RUN_TEST(test_execute_subagent_status_tool_call_not_found);
+    RUN_TEST(test_execute_subagent_status_tool_call_success);
+    RUN_TEST(test_execute_subagent_status_tool_call_with_wait);
 
     return UNITY_END();
 }

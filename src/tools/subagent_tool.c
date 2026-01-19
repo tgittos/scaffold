@@ -12,6 +12,14 @@
 #include <signal.h>
 
 /**
+ * Static pointer to the SubagentManager for use by execute functions.
+ * Set during tool registration, used by execute_subagent_tool_call and
+ * execute_subagent_status_tool_call since those functions can't receive
+ * the manager pointer through their signature.
+ */
+static SubagentManager *g_subagent_manager = NULL;
+
+/**
  * Generate a unique subagent ID using random hex characters.
  * Uses /dev/urandom for cryptographic randomness with a time/pid fallback.
  */
@@ -766,32 +774,514 @@ int subagent_get_status(SubagentManager *manager, const char *subagent_id, int w
     return 0;
 }
 
+/**
+ * Extract a string value from JSON by key.
+ * Returns a newly allocated string that must be freed by the caller.
+ */
+static char* extract_json_string_value(const char *json, const char *key) {
+    if (json == NULL || key == NULL) {
+        return NULL;
+    }
+
+    char search_pattern[256];
+    snprintf(search_pattern, sizeof(search_pattern), "\"%s\"", key);
+
+    const char *key_pos = strstr(json, search_pattern);
+    if (key_pos == NULL) {
+        return NULL;
+    }
+
+    const char *colon_pos = strchr(key_pos, ':');
+    if (colon_pos == NULL) {
+        return NULL;
+    }
+
+    colon_pos++;
+    while (*colon_pos == ' ' || *colon_pos == '\t' || *colon_pos == '\n' || *colon_pos == '\r') {
+        colon_pos++;
+    }
+
+    if (*colon_pos != '"') {
+        return NULL;
+    }
+
+    const char *start = colon_pos + 1;
+    const char *end = start;
+
+    // Find the closing quote, handling escaped characters
+    while (*end != '\0' && *end != '"') {
+        if (*end == '\\' && *(end + 1) != '\0') {
+            end += 2;
+        } else {
+            end++;
+        }
+    }
+
+    if (*end != '"') {
+        return NULL;
+    }
+
+    size_t len = (size_t)(end - start);
+    char *result = malloc(len + 1);
+    if (result == NULL) {
+        return NULL;
+    }
+
+    // Copy and unescape basic sequences
+    size_t j = 0;
+    for (size_t i = 0; i < len; i++) {
+        if (start[i] == '\\' && i + 1 < len) {
+            i++;
+            switch (start[i]) {
+                case 'n': result[j++] = '\n'; break;
+                case 't': result[j++] = '\t'; break;
+                case 'r': result[j++] = '\r'; break;
+                case '"': result[j++] = '"'; break;
+                case '\\': result[j++] = '\\'; break;
+                default: result[j++] = start[i]; break;
+            }
+        } else {
+            result[j++] = start[i];
+        }
+    }
+    result[j] = '\0';
+
+    return result;
+}
+
+/**
+ * Extract a boolean value from JSON by key.
+ * Returns the default value if key is not found.
+ */
+static int extract_json_boolean_value(const char *json, const char *key, int default_value) {
+    if (json == NULL || key == NULL) {
+        return default_value;
+    }
+
+    char search_pattern[256];
+    snprintf(search_pattern, sizeof(search_pattern), "\"%s\"", key);
+
+    const char *key_pos = strstr(json, search_pattern);
+    if (key_pos == NULL) {
+        return default_value;
+    }
+
+    const char *colon_pos = strchr(key_pos, ':');
+    if (colon_pos == NULL) {
+        return default_value;
+    }
+
+    colon_pos++;
+    while (*colon_pos == ' ' || *colon_pos == '\t' || *colon_pos == '\n' || *colon_pos == '\r') {
+        colon_pos++;
+    }
+
+    if (strncmp(colon_pos, "true", 4) == 0) {
+        return 1;
+    } else if (strncmp(colon_pos, "false", 5) == 0) {
+        return 0;
+    }
+
+    return default_value;
+}
+
+/**
+ * Escape a string for JSON output.
+ * Returns a newly allocated string that must be freed by the caller.
+ */
+static char* json_escape_string(const char *str) {
+    if (str == NULL) {
+        return strdup("");
+    }
+
+    // Calculate required size
+    size_t len = 0;
+    for (const char *p = str; *p != '\0'; p++) {
+        switch (*p) {
+            case '"':
+            case '\\':
+            case '\n':
+            case '\r':
+            case '\t':
+                len += 2;
+                break;
+            default:
+                if ((unsigned char)*p < 0x20) {
+                    len += 6;  // \uXXXX
+                } else {
+                    len += 1;
+                }
+                break;
+        }
+    }
+
+    char *result = malloc(len + 1);
+    if (result == NULL) {
+        return NULL;
+    }
+
+    char *out = result;
+    for (const char *p = str; *p != '\0'; p++) {
+        switch (*p) {
+            case '"':
+                *out++ = '\\';
+                *out++ = '"';
+                break;
+            case '\\':
+                *out++ = '\\';
+                *out++ = '\\';
+                break;
+            case '\n':
+                *out++ = '\\';
+                *out++ = 'n';
+                break;
+            case '\r':
+                *out++ = '\\';
+                *out++ = 'r';
+                break;
+            case '\t':
+                *out++ = '\\';
+                *out++ = 't';
+                break;
+            default:
+                if ((unsigned char)*p < 0x20) {
+                    snprintf(out, 7, "\\u%04x", (unsigned char)*p);
+                    out += 6;
+                } else {
+                    *out++ = *p;
+                }
+                break;
+        }
+    }
+    *out = '\0';
+
+    return result;
+}
+
+/**
+ * Register the subagent tool with the tool registry.
+ * Parameters:
+ *   - task (required, string): Task description for the subagent to execute
+ *   - context (optional, string): Additional context information
+ */
 int register_subagent_tool(ToolRegistry *registry, SubagentManager *manager) {
-    (void)registry;
-    (void)manager;
-    // TODO: Implement in Step 8
-    return -1;
+    if (registry == NULL || manager == NULL) {
+        return -1;
+    }
+
+    // Store manager pointer for execute function
+    g_subagent_manager = manager;
+
+    // Define parameters
+    ToolParameter parameters[2];
+
+    // Parameter 1: task (required)
+    parameters[0].name = strdup("task");
+    parameters[0].type = strdup("string");
+    parameters[0].description = strdup("Task description for the subagent to execute");
+    parameters[0].enum_values = NULL;
+    parameters[0].enum_count = 0;
+    parameters[0].required = 1;
+
+    // Parameter 2: context (optional)
+    parameters[1].name = strdup("context");
+    parameters[1].type = strdup("string");
+    parameters[1].description = strdup("Optional context information to provide to the subagent");
+    parameters[1].enum_values = NULL;
+    parameters[1].enum_count = 0;
+    parameters[1].required = 0;
+
+    // Check for allocation failures
+    for (int i = 0; i < 2; i++) {
+        if (parameters[i].name == NULL ||
+            parameters[i].type == NULL ||
+            parameters[i].description == NULL) {
+            // Cleanup on failure
+            for (int j = 0; j <= i; j++) {
+                free(parameters[j].name);
+                free(parameters[j].type);
+                free(parameters[j].description);
+            }
+            return -1;
+        }
+    }
+
+    // Register the tool
+    int result = register_tool(registry, "subagent",
+                              "Spawn a background subagent process to execute a delegated task. "
+                              "The subagent runs with fresh context and cannot spawn additional subagents. "
+                              "Returns a subagent_id that can be used with subagent_status to check progress.",
+                              parameters, 2, execute_subagent_tool_call);
+
+    // Clean up temporary parameter storage
+    for (int i = 0; i < 2; i++) {
+        free(parameters[i].name);
+        free(parameters[i].type);
+        free(parameters[i].description);
+    }
+
+    return result;
 }
 
+/**
+ * Register the subagent_status tool with the tool registry.
+ * Parameters:
+ *   - subagent_id (required, string): ID of the subagent to query
+ *   - wait (optional, boolean): Whether to block until completion (default: false)
+ */
 int register_subagent_status_tool(ToolRegistry *registry, SubagentManager *manager) {
-    (void)registry;
-    (void)manager;
-    // TODO: Implement in Step 8
-    return -1;
+    if (registry == NULL || manager == NULL) {
+        return -1;
+    }
+
+    // Store manager pointer for execute function (may already be set)
+    g_subagent_manager = manager;
+
+    // Define parameters
+    ToolParameter parameters[2];
+
+    // Parameter 1: subagent_id (required)
+    parameters[0].name = strdup("subagent_id");
+    parameters[0].type = strdup("string");
+    parameters[0].description = strdup("ID of the subagent to query status for");
+    parameters[0].enum_values = NULL;
+    parameters[0].enum_count = 0;
+    parameters[0].required = 1;
+
+    // Parameter 2: wait (optional)
+    parameters[1].name = strdup("wait");
+    parameters[1].type = strdup("boolean");
+    parameters[1].description = strdup("If true, block until the subagent completes (default: false)");
+    parameters[1].enum_values = NULL;
+    parameters[1].enum_count = 0;
+    parameters[1].required = 0;
+
+    // Check for allocation failures
+    for (int i = 0; i < 2; i++) {
+        if (parameters[i].name == NULL ||
+            parameters[i].type == NULL ||
+            parameters[i].description == NULL) {
+            // Cleanup on failure
+            for (int j = 0; j <= i; j++) {
+                free(parameters[j].name);
+                free(parameters[j].type);
+                free(parameters[j].description);
+            }
+            return -1;
+        }
+    }
+
+    // Register the tool
+    int result = register_tool(registry, "subagent_status",
+                              "Query the status of a running or completed subagent. "
+                              "Returns status (running/completed/failed/timeout), progress, result, and any errors.",
+                              parameters, 2, execute_subagent_status_tool_call);
+
+    // Clean up temporary parameter storage
+    for (int i = 0; i < 2; i++) {
+        free(parameters[i].name);
+        free(parameters[i].type);
+        free(parameters[i].description);
+    }
+
+    return result;
 }
 
+/**
+ * Execute the subagent tool call.
+ * Spawns a new subagent process to handle the given task.
+ */
 int execute_subagent_tool_call(const ToolCall *tool_call, ToolResult *result) {
-    (void)tool_call;
-    (void)result;
-    // TODO: Implement in Step 8
-    return -1;
+    if (tool_call == NULL || result == NULL) {
+        return -1;
+    }
+
+    // Initialize result
+    result->tool_call_id = strdup(tool_call->id);
+    if (result->tool_call_id == NULL) {
+        return -1;
+    }
+
+    // Check if manager is available
+    if (g_subagent_manager == NULL) {
+        result->result = strdup("{\"error\": \"Subagent manager not initialized\"}");
+        result->success = 0;
+        return 0;
+    }
+
+    // Check if we're already running as a subagent (prevent nesting)
+    if (g_subagent_manager->is_subagent_process) {
+        result->result = strdup("{\"error\": \"Subagents cannot spawn additional subagents\"}");
+        result->success = 0;
+        return 0;
+    }
+
+    // Parse arguments
+    char *task = extract_json_string_value(tool_call->arguments, "task");
+    if (task == NULL || strlen(task) == 0) {
+        free(task);
+        result->result = strdup("{\"error\": \"Task parameter is required\"}");
+        result->success = 0;
+        return 0;
+    }
+
+    char *context = extract_json_string_value(tool_call->arguments, "context");
+
+    // Spawn the subagent
+    char subagent_id[SUBAGENT_ID_LENGTH + 1];
+    int spawn_result = subagent_spawn(g_subagent_manager, task, context, subagent_id);
+
+    free(task);
+    free(context);
+
+    if (spawn_result != 0) {
+        // Check if we hit the max limit
+        if (g_subagent_manager->count >= g_subagent_manager->max_subagents) {
+            char error_msg[256];
+            snprintf(error_msg, sizeof(error_msg),
+                     "{\"error\": \"Maximum number of concurrent subagents (%d) reached\"}",
+                     g_subagent_manager->max_subagents);
+            result->result = strdup(error_msg);
+        } else {
+            result->result = strdup("{\"error\": \"Failed to spawn subagent\"}");
+        }
+        result->success = 0;
+        return 0;
+    }
+
+    // Build success response
+    char response[512];
+    snprintf(response, sizeof(response),
+             "{\"subagent_id\": \"%s\", \"status\": \"running\", \"message\": \"Subagent spawned successfully\"}",
+             subagent_id);
+
+    result->result = strdup(response);
+    result->success = 1;
+
+    return 0;
 }
 
+/**
+ * Execute the subagent_status tool call.
+ * Queries the status of an existing subagent.
+ */
 int execute_subagent_status_tool_call(const ToolCall *tool_call, ToolResult *result) {
-    (void)tool_call;
-    (void)result;
-    // TODO: Implement in Step 8
-    return -1;
+    if (tool_call == NULL || result == NULL) {
+        return -1;
+    }
+
+    // Initialize result
+    result->tool_call_id = strdup(tool_call->id);
+    if (result->tool_call_id == NULL) {
+        return -1;
+    }
+
+    // Check if manager is available
+    if (g_subagent_manager == NULL) {
+        result->result = strdup("{\"error\": \"Subagent manager not initialized\"}");
+        result->success = 0;
+        return 0;
+    }
+
+    // Parse arguments
+    char *subagent_id = extract_json_string_value(tool_call->arguments, "subagent_id");
+    if (subagent_id == NULL || strlen(subagent_id) == 0) {
+        free(subagent_id);
+        result->result = strdup("{\"error\": \"subagent_id parameter is required\"}");
+        result->success = 0;
+        return 0;
+    }
+
+    int wait = extract_json_boolean_value(tool_call->arguments, "wait", 0);
+
+    // Get status
+    SubagentStatus status;
+    char *subagent_result = NULL;
+    char *error = NULL;
+
+    int get_result = subagent_get_status(g_subagent_manager, subagent_id, wait,
+                                         &status, &subagent_result, &error);
+
+    free(subagent_id);
+
+    if (get_result != 0) {
+        // Subagent not found
+        char *escaped_error = json_escape_string(error ? error : "Subagent not found");
+        char response[512];
+        snprintf(response, sizeof(response),
+                 "{\"error\": \"%s\"}",
+                 escaped_error ? escaped_error : "Unknown error");
+        free(escaped_error);
+        free(error);
+        result->result = strdup(response);
+        result->success = 0;
+        return 0;
+    }
+
+    // Build response based on status
+    const char *status_str = subagent_status_to_string(status);
+
+    // Calculate response size
+    size_t response_size = 256;
+    char *escaped_result = NULL;
+    char *escaped_error = NULL;
+
+    if (subagent_result != NULL) {
+        escaped_result = json_escape_string(subagent_result);
+        if (escaped_result != NULL) {
+            response_size += strlen(escaped_result);
+        }
+    }
+    if (error != NULL) {
+        escaped_error = json_escape_string(error);
+        if (escaped_error != NULL) {
+            response_size += strlen(escaped_error);
+        }
+    }
+
+    char *response = malloc(response_size);
+    if (response == NULL) {
+        free(subagent_result);
+        free(error);
+        free(escaped_result);
+        free(escaped_error);
+        result->result = strdup("{\"error\": \"Memory allocation failed\"}");
+        result->success = 0;
+        return 0;
+    }
+
+    // Format response based on status
+    if (status == SUBAGENT_STATUS_COMPLETED && escaped_result != NULL) {
+        snprintf(response, response_size,
+                 "{\"status\": \"%s\", \"result\": \"%s\"}",
+                 status_str, escaped_result);
+        result->success = 1;
+    } else if ((status == SUBAGENT_STATUS_FAILED || status == SUBAGENT_STATUS_TIMEOUT) && escaped_error != NULL) {
+        snprintf(response, response_size,
+                 "{\"status\": \"%s\", \"error\": \"%s\"}",
+                 status_str, escaped_error);
+        result->success = 0;
+    } else if (status == SUBAGENT_STATUS_RUNNING) {
+        snprintf(response, response_size,
+                 "{\"status\": \"%s\", \"message\": \"Subagent is still running\"}",
+                 status_str);
+        result->success = 1;
+    } else {
+        snprintf(response, response_size,
+                 "{\"status\": \"%s\"}",
+                 status_str);
+        result->success = (status == SUBAGENT_STATUS_COMPLETED) ? 1 : 0;
+    }
+
+    result->result = response;
+
+    // Cleanup
+    free(subagent_result);
+    free(error);
+    free(escaped_result);
+    free(escaped_error);
+
+    return 0;
 }
 
 /**
