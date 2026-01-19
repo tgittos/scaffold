@@ -6,23 +6,44 @@
 #include "ralph.h"
 #include "debug_output.h"
 #include "../cli/memory_commands.h"
+#include "../tools/subagent_tool.h"
 
 #define MAX_INPUT_SIZE 8192
 
 int main(int argc, char *argv[])
 {
-    // Parse command line arguments for debug flag
+    // Parse command line arguments
     bool debug_mode = false;
     int message_arg_index = -1;
-    
+    int subagent_mode = 0;
+    char *subagent_task = NULL;
+    char *subagent_context = NULL;
+
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--debug") == 0) {
             debug_mode = true;
+        } else if (strcmp(argv[i], "--subagent") == 0) {
+            subagent_mode = 1;
+        } else if (strcmp(argv[i], "--task") == 0 && i + 1 < argc) {
+            subagent_task = argv[++i];
+        } else if (strcmp(argv[i], "--context") == 0 && i + 1 < argc) {
+            subagent_context = argv[++i];
         } else if (message_arg_index == -1 && argv[i][0] != '-') {
             message_arg_index = i;
         }
     }
-    
+
+    // Handle subagent mode
+    if (subagent_mode) {
+        if (subagent_task == NULL) {
+            fprintf(stderr, "Error: --subagent requires --task argument\n");
+            return EXIT_FAILURE;
+        }
+        // Initialize debug system for subagent mode
+        debug_init(debug_mode);
+        return ralph_run_as_subagent(subagent_task, subagent_context);
+    }
+
     // Initialize debug system
     debug_init(debug_mode);
     
@@ -158,7 +179,10 @@ int main(int argc, char *argv[])
         fprintf(stderr, "  %s                    Interactive chat mode\n", argv[0]);
         fprintf(stderr, "  %s \"question\"         Single question mode\n\n", argv[0]);
         fprintf(stderr, "\033[1mOptions:\033[0m\n");
-        fprintf(stderr, "  --debug               Show API debug output\n\n");
+        fprintf(stderr, "  --debug               Show API debug output\n");
+        fprintf(stderr, "  --subagent            Run as subagent (internal use)\n");
+        fprintf(stderr, "  --task \"task\"         Task for subagent to execute\n");
+        fprintf(stderr, "  --context \"ctx\"       Optional context for subagent\n\n");
         fprintf(stderr, "\033[1mSetup:\033[0m\n");
         fprintf(stderr, "  1. Export OPENAI_API_KEY=<your-key> or\n");
         fprintf(stderr, "  2. Edit ./ralph.config.json after first run\n");

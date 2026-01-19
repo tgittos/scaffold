@@ -537,7 +537,7 @@ Test cases:
 3. ~~**Step 3**: Implement SubagentManager (init, cleanup)~~ ✓ DONE
 4. ~~**Step 4**: Implement `subagent_spawn()` with fork/exec~~ ✓ DONE
 5. ~~**Step 5**: Implement `subagent_get_status()` with waitpid~~ ✓ DONE
-6. **Step 6**: Add `--subagent` flag handling in main.c
+6. ~~**Step 6**: Add `--subagent` flag handling in main.c~~ ✓ DONE
 7. **Step 7**: Implement `ralph_run_as_subagent()`
 8. **Step 8**: Implement tool execution functions
 9. **Step 9**: Register tools in tools_system.c (conditional on !is_subagent_process)
@@ -569,6 +569,6 @@ Test cases:
 - `src/utils/config.c` - Parse new config fields ✓
 - `src/core/ralph.h` - Add SubagentManager to RalphSession
 - `src/core/ralph.c` - Initialize/cleanup SubagentManager
-- `src/core/main.c` - Handle --subagent flag
+- `src/core/main.c` - Handle --subagent flag ✓
 - `src/tools/tools_system.c` - Register subagent tools (conditionally)
 - `Makefile` - Add new source file and test target
