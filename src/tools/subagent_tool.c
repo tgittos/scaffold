@@ -1,5 +1,7 @@
 #include "subagent_tool.h"
 #include "../utils/config.h"
+#include "../core/ralph.h"
+#include "../session/conversation_tracker.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -792,9 +794,76 @@ int execute_subagent_status_tool_call(const ToolCall *tool_call, ToolResult *res
     return -1;
 }
 
+/**
+ * Entry point for running ralph as a subagent process.
+ * Called from main() when --subagent flag is present.
+ *
+ * The subagent runs with:
+ * - Fresh conversation context (no parent history inheritance)
+ * - Output written to stdout (captured by parent via pipe)
+ * - Standard ralph capabilities except subagent tools (to prevent nesting)
+ *
+ * @param task Task description to execute (required)
+ * @param context Optional context information to prepend to task
+ * @return 0 on success, non-zero on failure
+ */
 int ralph_run_as_subagent(const char *task, const char *context) {
-    (void)task;
-    (void)context;
-    // TODO: Implement in Step 7
-    return -1;
+    if (task == NULL || strlen(task) == 0) {
+        fprintf(stderr, "Error: Subagent requires a task\n");
+        return -1;
+    }
+
+    RalphSession session;
+
+    // Initialize session
+    if (ralph_init_session(&session) != 0) {
+        fprintf(stderr, "Error: Failed to initialize subagent session\n");
+        return -1;
+    }
+
+    // Clear conversation history for fresh context (subagents don't inherit parent history)
+    // This ensures isolation between parent and child conversations
+    cleanup_conversation_history(&session.session_data.conversation);
+    init_conversation_history(&session.session_data.conversation);
+
+    // Load configuration
+    if (ralph_load_config(&session) != 0) {
+        fprintf(stderr, "Error: Failed to load subagent configuration\n");
+        ralph_cleanup_session(&session);
+        return -1;
+    }
+
+    // Build message with optional context
+    char *message = NULL;
+    if (context != NULL && strlen(context) > 0) {
+        // Combine context and task
+        const char *format = "Context: %s\n\nTask: %s";
+        size_t len = strlen(format) + strlen(context) + strlen(task) + 1;
+        message = malloc(len);
+        if (message == NULL) {
+            fprintf(stderr, "Error: Failed to allocate message buffer\n");
+            ralph_cleanup_session(&session);
+            return -1;
+        }
+        snprintf(message, len, format, context, task);
+    } else {
+        // Just the task
+        message = strdup(task);
+        if (message == NULL) {
+            fprintf(stderr, "Error: Failed to allocate message buffer\n");
+            ralph_cleanup_session(&session);
+            return -1;
+        }
+    }
+
+    // Process the message
+    // Output automatically goes to stdout (via print_formatted_response_improved)
+    // which the parent process captures through the pipe
+    int result = ralph_process_message(&session, message);
+
+    // Clean up
+    free(message);
+    ralph_cleanup_session(&session);
+
+    return result;
 }

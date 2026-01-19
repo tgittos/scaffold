@@ -318,9 +318,10 @@ TEST_DOCUMENT_STORE_CPP_OBJECTS = $(TEST_DOCUMENT_STORE_CPP_SOURCES:.cpp=.o)
 TEST_DOCUMENT_STORE_OBJECTS = $(TEST_DOCUMENT_STORE_C_OBJECTS) $(TEST_DOCUMENT_STORE_CPP_OBJECTS)
 TEST_DOCUMENT_STORE_TARGET = $(TESTDIR)/test_document_store
 
-# Subagent tool test
-TEST_SUBAGENT_TOOL_C_SOURCES = $(TESTDIR)/tools/test_subagent_tool.c $(SRCDIR)/tools/subagent_tool.c $(SRCDIR)/utils/config.c $(COMMON_TEST_SOURCES)
-TEST_SUBAGENT_TOOL_OBJECTS = $(TEST_SUBAGENT_TOOL_C_SOURCES:.c=.o)
+# Subagent tool test (requires full ralph infrastructure for ralph_run_as_subagent)
+TEST_SUBAGENT_TOOL_C_SOURCES = $(TESTDIR)/tools/test_subagent_tool.c $(SRCDIR)/tools/subagent_tool.c $(SRCDIR)/core/ralph.c $(SRCDIR)/utils/env_loader.c $(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/network/api_common.c $(SRCDIR)/session/token_manager.c $(SRCDIR)/llm/llm_provider.c $(SRCDIR)/llm/providers/openai_provider.c $(SRCDIR)/llm/providers/anthropic_provider.c $(SRCDIR)/llm/providers/local_ai_provider.c $(SRCDIR)/mcp/mcp_client.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
+TEST_SUBAGENT_TOOL_CPP_SOURCES = $(DB_CPP_SOURCES)
+TEST_SUBAGENT_TOOL_OBJECTS = $(TEST_SUBAGENT_TOOL_C_SOURCES:.c=.o) $(TEST_SUBAGENT_TOOL_CPP_SOURCES:.cpp=.o)
 TEST_SUBAGENT_TOOL_TARGET = $(TESTDIR)/test_subagent_tool
 
 # Collect all test targets
@@ -468,8 +469,8 @@ $(TEST_HTTP_RETRY_TARGET): $(TEST_HTTP_RETRY_OBJECTS) $(CJSON_LIB) $(CURL_LIB) $
 $(TEST_MCP_CLIENT_TARGET): $(TEST_MCP_CLIENT_OBJECTS) $(EMBEDDED_LINKS_HEADER) $(ALL_LIBS)
 	$(CXX) -o $@ $(TEST_MCP_CLIENT_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
 
-$(TEST_SUBAGENT_TOOL_TARGET): $(TEST_SUBAGENT_TOOL_OBJECTS) $(CJSON_LIB)
-	$(CC) -o $@ $(TEST_SUBAGENT_TOOL_OBJECTS) $(CJSON_LIB)
+$(TEST_SUBAGENT_TOOL_TARGET): $(TEST_SUBAGENT_TOOL_OBJECTS) $(ALL_LIBS)
+	$(CXX) -o $@ $(TEST_SUBAGENT_TOOL_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
 
 $(TEST_VECTOR_DB_TARGET): $(TEST_VECTOR_DB_OBJECTS) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
 	$(CXX) -o $@ $(TEST_VECTOR_DB_OBJECTS) -lpthread -lm

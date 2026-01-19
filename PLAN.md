@@ -538,7 +538,7 @@ Test cases:
 4. ~~**Step 4**: Implement `subagent_spawn()` with fork/exec~~ ✓ DONE
 5. ~~**Step 5**: Implement `subagent_get_status()` with waitpid~~ ✓ DONE
 6. ~~**Step 6**: Add `--subagent` flag handling in main.c~~ ✓ DONE
-7. **Step 7**: Implement `ralph_run_as_subagent()`
+7. ~~**Step 7**: Implement `ralph_run_as_subagent()`~~ ✓ DONE
 8. **Step 8**: Implement tool execution functions
 9. **Step 9**: Register tools in tools_system.c (conditional on !is_subagent_process)
 10. **Step 10**: Update Makefile

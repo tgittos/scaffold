@@ -644,6 +644,10 @@ void test_subagent_get_status_null_optional_params(void) {
     subagent_manager_cleanup(&manager);
 }
 
+// Note: ralph_run_as_subagent() is tested indirectly through the spawn tests.
+// The spawned processes execute ralph --subagent which calls ralph_run_as_subagent().
+// Direct unit testing would require linking against the full ralph infrastructure.
+
 int main(void) {
     UNITY_BEGIN();
 
