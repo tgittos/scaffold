@@ -138,60 +138,6 @@ void test_search_conversation_history(void) {
     document_store_clear_conversations();
 }
 
-void test_tool_messages_in_vector_db(void) {
-    ConversationHistory history;
-    init_conversation_history(&history);
-    
-    // Use a unique tool ID to avoid conflicts with other tests
-    char unique_tool_id[64];
-    snprintf(unique_tool_id, sizeof(unique_tool_id), "tool_test_%ld", (long)time(NULL));
-    
-    // Add an assistant message with a tool_use block first
-    char assistant_message_with_tool[256];
-    snprintf(assistant_message_with_tool, sizeof(assistant_message_with_tool), 
-             "I'll help you create a file. {\"id\": \"%s\", \"type\": \"function\", \"function\": {\"name\": \"file_write\"}}", 
-             unique_tool_id);
-    int assistant_result = append_conversation_message(&history, "assistant", assistant_message_with_tool);
-    TEST_ASSERT_EQUAL(0, assistant_result);
-    
-    // Add a tool message
-    int result = append_tool_message(&history, "File created successfully", unique_tool_id, "file_write");
-    
-    TEST_ASSERT_EQUAL(0, result);
-    TEST_ASSERT_EQUAL(2, history.count);
-    TEST_ASSERT_EQUAL_STRING("tool", history.messages[1].role);
-    TEST_ASSERT_EQUAL_STRING(unique_tool_id, history.messages[1].tool_call_id);
-    TEST_ASSERT_EQUAL_STRING("file_write", history.messages[1].tool_name);
-    
-    cleanup_conversation_history(&history);
-    
-    // Load and verify tool message from vector DB
-    ConversationHistory loaded_history;
-    init_conversation_history(&loaded_history);
-    
-    int load_result = load_conversation_history(&loaded_history);
-    TEST_ASSERT_EQUAL(0, load_result);
-    
-    // Find the tool message
-    int found_tool_msg = 0;
-    for (int i = 0; i < loaded_history.count; i++) {
-        if (strcmp(loaded_history.messages[i].role, "tool") == 0 &&
-            loaded_history.messages[i].tool_call_id != NULL &&
-            strcmp(loaded_history.messages[i].tool_call_id, unique_tool_id) == 0) {
-            found_tool_msg = 1;
-            TEST_ASSERT_EQUAL_STRING("file_write", loaded_history.messages[i].tool_name);
-            break;
-        }
-    }
-    
-    TEST_ASSERT_TRUE(found_tool_msg);
-    
-    cleanup_conversation_history(&loaded_history);
-    
-    // Clear conversation data to prevent test interference
-    document_store_clear_conversations();
-}
-
 void test_sliding_window_retrieval(void) {
     ConversationHistory history;
     init_conversation_history(&history);
@@ -223,9 +169,7 @@ void test_sliding_window_retrieval(void) {
 
 int main(void) {
     UNITY_BEGIN();
-    
-    // Run tool message test first to avoid interference from other tests
-    RUN_TEST(test_tool_messages_in_vector_db);
+
     RUN_TEST(test_conversation_stored_in_vector_db);
     RUN_TEST(test_extended_conversation_history);
     RUN_TEST(test_search_conversation_history);

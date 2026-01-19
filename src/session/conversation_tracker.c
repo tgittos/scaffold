@@ -261,24 +261,66 @@ static int add_message_to_history(ConversationHistory *history, const char *role
     // Store in vector database only for user and assistant messages
     // Tool messages are ephemeral context and not worth the embedding cost
     if (strcmp(role, "tool") != 0) {
-        document_store_t* store = document_store_get_instance();
-        if (store != NULL) {
-            // Ensure the conversation index exists
-            document_store_ensure_index(store, CONVERSATION_INDEX, CONVERSATION_EMBEDDING_DIM, 10000);
+        // For assistant messages, check if content contains tool_calls
+        // and extract only the actual content for storage in long-term memory.
+        // Tool calls are ephemeral implementation details that don't need to be remembered.
+        const char* content_to_store = content;
+        char* extracted_content = NULL;
+        int skip_storage = 0;
 
-            // Build metadata JSON
-            cJSON *metadata = cJSON_CreateObject();
-            cJSON_AddStringToObject(metadata, "role", role);
-
-            char *metadata_json = cJSON_PrintUnformatted(metadata);
-            cJSON_Delete(metadata);
-
-            if (metadata_json) {
-                // Add to document store with embeddings
-                document_store_add_text(store, CONVERSATION_INDEX, content, "conversation", role, metadata_json);
-                free(metadata_json);
+        if (strcmp(role, "assistant") == 0) {
+            cJSON* json = cJSON_Parse(content);
+            if (json) {
+                cJSON* tool_calls = cJSON_GetObjectItem(json, "tool_calls");
+                if (tool_calls && cJSON_IsArray(tool_calls)) {
+                    // This message contains tool_calls - extract only the content
+                    cJSON* content_item = cJSON_GetObjectItem(json, "content");
+                    if (content_item) {
+                        if (cJSON_IsString(content_item)) {
+                            const char* content_str = cJSON_GetStringValue(content_item);
+                            if (content_str && strlen(content_str) > 0) {
+                                // Has actual content - store only the content, not the tool_calls
+                                extracted_content = strdup(content_str);
+                                content_to_store = extracted_content;
+                            } else {
+                                // Empty string content with tool_calls - skip storage
+                                skip_storage = 1;
+                            }
+                        } else if (cJSON_IsNull(content_item)) {
+                            // Null content with tool_calls - skip storage
+                            skip_storage = 1;
+                        }
+                    } else {
+                        // No content field but has tool_calls - skip storage
+                        skip_storage = 1;
+                    }
+                }
+                cJSON_Delete(json);
             }
         }
+
+        if (!skip_storage) {
+            document_store_t* store = document_store_get_instance();
+            if (store != NULL) {
+                // Ensure the conversation index exists
+                document_store_ensure_index(store, CONVERSATION_INDEX, CONVERSATION_EMBEDDING_DIM, 10000);
+
+                // Build metadata JSON
+                cJSON *metadata = cJSON_CreateObject();
+                cJSON_AddStringToObject(metadata, "role", role);
+
+                char *metadata_json = cJSON_PrintUnformatted(metadata);
+                cJSON_Delete(metadata);
+
+                if (metadata_json) {
+                    // Add to document store with embeddings
+                    document_store_add_text(store, CONVERSATION_INDEX, content_to_store, "conversation", role, metadata_json);
+                    free(metadata_json);
+                }
+            }
+        }
+
+        free(extracted_content);
     }
 
     return 0;
