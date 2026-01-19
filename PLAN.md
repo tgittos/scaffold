@@ -533,7 +533,7 @@ Test cases:
 ## Implementation Order
 
 1. ~~**Step 1**: Add config fields (`max_subagents`, `subagent_timeout`) to config.h/c~~ ✓ DONE
-2. **Step 2**: Create subagent_tool.h with all declarations
+2. ~~**Step 2**: Create subagent_tool.h with all declarations~~ ✓ DONE
 3. **Step 3**: Implement SubagentManager (init, cleanup)
 4. **Step 4**: Implement `subagent_spawn()` with fork/exec
 5. **Step 5**: Implement `subagent_get_status()` with waitpid
@@ -560,7 +560,7 @@ Test cases:
 ## Files Summary
 
 ### New Files
-- `src/tools/subagent_tool.h` - Header file
+- `src/tools/subagent_tool.h` - Header file ✓
 - `src/tools/subagent_tool.c` - Implementation
 - `test/tools/test_subagent_tool.c` - Unit tests
 
