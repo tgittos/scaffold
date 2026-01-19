@@ -467,6 +467,183 @@ void test_subagent_spawn_and_poll(void) {
     subagent_manager_cleanup(&manager);
 }
 
+// =========================================================================
+// subagent_get_status() tests
+// =========================================================================
+
+void test_subagent_get_status_null_params(void) {
+    SubagentManager manager;
+    subagent_manager_init(&manager);
+    SubagentStatus status;
+    char *result_str = NULL;
+    char *error_str = NULL;
+
+    // Null manager
+    TEST_ASSERT_EQUAL_INT(-1, subagent_get_status(NULL, "abc123", 0, &status, &result_str, &error_str));
+
+    // Null subagent_id
+    TEST_ASSERT_EQUAL_INT(-1, subagent_get_status(&manager, NULL, 0, &status, &result_str, &error_str));
+
+    // Null status
+    TEST_ASSERT_EQUAL_INT(-1, subagent_get_status(&manager, "abc123", 0, NULL, &result_str, &error_str));
+
+    subagent_manager_cleanup(&manager);
+}
+
+void test_subagent_get_status_not_found(void) {
+    SubagentManager manager;
+    subagent_manager_init(&manager);
+    SubagentStatus status;
+    char *result_str = NULL;
+    char *error_str = NULL;
+
+    // Query non-existent subagent
+    int result = subagent_get_status(&manager, "nonexistent1234", 0, &status, &result_str, &error_str);
+    TEST_ASSERT_EQUAL_INT(-1, result);
+    TEST_ASSERT_EQUAL_INT(SUBAGENT_STATUS_FAILED, status);
+    TEST_ASSERT_NULL(result_str);
+    TEST_ASSERT_NOT_NULL(error_str);
+    TEST_ASSERT_TRUE(strstr(error_str, "not found") != NULL);
+
+    free(error_str);
+    subagent_manager_cleanup(&manager);
+}
+
+void test_subagent_get_status_running_nowait(void) {
+    SubagentManager manager;
+    subagent_manager_init(&manager);
+    char id[SUBAGENT_ID_LENGTH + 1];
+    SubagentStatus status;
+    char *result_str = NULL;
+    char *error_str = NULL;
+
+    // Spawn a subagent
+    int result = subagent_spawn(&manager, "test task", NULL, id);
+    TEST_ASSERT_EQUAL_INT(0, result);
+
+    // Query immediately - should be running
+    result = subagent_get_status(&manager, id, 0, &status, &result_str, &error_str);
+    TEST_ASSERT_EQUAL_INT(0, result);
+
+    // Status should be running (or possibly already failed if the process died very quickly)
+    TEST_ASSERT_TRUE(status == SUBAGENT_STATUS_RUNNING ||
+                     status == SUBAGENT_STATUS_FAILED);
+
+    if (result_str) free(result_str);
+    if (error_str) free(error_str);
+
+    usleep(200000);  // Let process complete
+    subagent_manager_cleanup(&manager);
+}
+
+void test_subagent_get_status_after_completion(void) {
+    SubagentManager manager;
+    subagent_manager_init(&manager);
+    char id[SUBAGENT_ID_LENGTH + 1];
+    SubagentStatus status;
+    char *result_str = NULL;
+    char *error_str = NULL;
+
+    // Spawn a subagent
+    int result = subagent_spawn(&manager, "test task", NULL, id);
+    TEST_ASSERT_EQUAL_INT(0, result);
+
+    // Wait for it to complete
+    usleep(500000);  // 500ms
+
+    // Query - should be completed or failed
+    result = subagent_get_status(&manager, id, 0, &status, &result_str, &error_str);
+    TEST_ASSERT_EQUAL_INT(0, result);
+    TEST_ASSERT_TRUE(status == SUBAGENT_STATUS_COMPLETED ||
+                     status == SUBAGENT_STATUS_FAILED);
+
+    if (result_str) free(result_str);
+    if (error_str) free(error_str);
+
+    subagent_manager_cleanup(&manager);
+}
+
+void test_subagent_get_status_wait(void) {
+    SubagentManager manager;
+    subagent_manager_init(&manager);
+    char id[SUBAGENT_ID_LENGTH + 1];
+    SubagentStatus status;
+    char *result_str = NULL;
+    char *error_str = NULL;
+
+    // Spawn a subagent
+    int result = subagent_spawn(&manager, "test task", NULL, id);
+    TEST_ASSERT_EQUAL_INT(0, result);
+
+    // Query with wait=1 - should block until completion
+    result = subagent_get_status(&manager, id, 1, &status, &result_str, &error_str);
+    TEST_ASSERT_EQUAL_INT(0, result);
+
+    // Should be completed or failed (not running)
+    TEST_ASSERT_TRUE(status == SUBAGENT_STATUS_COMPLETED ||
+                     status == SUBAGENT_STATUS_FAILED ||
+                     status == SUBAGENT_STATUS_TIMEOUT);
+
+    if (result_str) free(result_str);
+    if (error_str) free(error_str);
+
+    subagent_manager_cleanup(&manager);
+}
+
+void test_subagent_get_status_cached_result(void) {
+    SubagentManager manager;
+    subagent_manager_init(&manager);
+    char id[SUBAGENT_ID_LENGTH + 1];
+    SubagentStatus status1, status2;
+    char *result_str1 = NULL, *result_str2 = NULL;
+    char *error_str1 = NULL, *error_str2 = NULL;
+
+    // Spawn a subagent
+    int result = subagent_spawn(&manager, "test task", NULL, id);
+    TEST_ASSERT_EQUAL_INT(0, result);
+
+    // Wait for completion
+    usleep(500000);  // 500ms
+
+    // Query twice - second query should return cached result
+    result = subagent_get_status(&manager, id, 0, &status1, &result_str1, &error_str1);
+    TEST_ASSERT_EQUAL_INT(0, result);
+
+    result = subagent_get_status(&manager, id, 0, &status2, &result_str2, &error_str2);
+    TEST_ASSERT_EQUAL_INT(0, result);
+
+    // Both queries should return the same status
+    TEST_ASSERT_EQUAL_INT(status1, status2);
+
+    if (result_str1) free(result_str1);
+    if (result_str2) free(result_str2);
+    if (error_str1) free(error_str1);
+    if (error_str2) free(error_str2);
+
+    subagent_manager_cleanup(&manager);
+}
+
+void test_subagent_get_status_null_optional_params(void) {
+    SubagentManager manager;
+    subagent_manager_init(&manager);
+    char id[SUBAGENT_ID_LENGTH + 1];
+    SubagentStatus status;
+
+    // Spawn a subagent
+    int result = subagent_spawn(&manager, "test task", NULL, id);
+    TEST_ASSERT_EQUAL_INT(0, result);
+
+    usleep(500000);  // Wait for completion
+
+    // Query with NULL result and error pointers (should still work)
+    result = subagent_get_status(&manager, id, 0, &status, NULL, NULL);
+    TEST_ASSERT_EQUAL_INT(0, result);
+    TEST_ASSERT_TRUE(status == SUBAGENT_STATUS_COMPLETED ||
+                     status == SUBAGENT_STATUS_FAILED);
+
+    subagent_manager_cleanup(&manager);
+}
+
 int main(void) {
     UNITY_BEGIN();
 
@@ -515,6 +692,15 @@ int main(void) {
     RUN_TEST(test_subagent_spawn_empty_context_treated_as_null);
     RUN_TEST(test_subagent_spawn_multiple);
     RUN_TEST(test_subagent_spawn_and_poll);
+
+    // Get status tests
+    RUN_TEST(test_subagent_get_status_null_params);
+    RUN_TEST(test_subagent_get_status_not_found);
+    RUN_TEST(test_subagent_get_status_running_nowait);
+    RUN_TEST(test_subagent_get_status_after_completion);
+    RUN_TEST(test_subagent_get_status_wait);
+    RUN_TEST(test_subagent_get_status_cached_result);
+    RUN_TEST(test_subagent_get_status_null_optional_params);
 
     return UNITY_END();
 }

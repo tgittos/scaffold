@@ -579,16 +579,189 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
     return 0;
 }
 
+/**
+ * Get the current status of a subagent.
+ * Optionally waits for the subagent to complete.
+ *
+ * @param manager Pointer to SubagentManager
+ * @param subagent_id ID of the subagent to query
+ * @param wait If non-zero, block until subagent completes (with timeout)
+ * @param status Output: current status of the subagent
+ * @param result Output: result string if completed (caller must free), NULL otherwise
+ * @param error Output: error string if failed (caller must free), NULL otherwise
+ * @return 0 on success, -1 if subagent not found or error
+ */
 int subagent_get_status(SubagentManager *manager, const char *subagent_id, int wait,
                         SubagentStatus *status, char **result, char **error) {
-    (void)manager;
-    (void)subagent_id;
-    (void)wait;
-    (void)status;
-    (void)result;
-    (void)error;
-    // TODO: Implement in Step 5
-    return -1;
+    if (manager == NULL || subagent_id == NULL || status == NULL) {
+        return -1;
+    }
+
+    // Initialize outputs
+    if (result != NULL) {
+        *result = NULL;
+    }
+    if (error != NULL) {
+        *error = NULL;
+    }
+
+    // Find the subagent
+    Subagent *sub = subagent_find_by_id(manager, subagent_id);
+    if (sub == NULL) {
+        *status = SUBAGENT_STATUS_FAILED;
+        if (error != NULL) {
+            *error = strdup("Subagent not found");
+        }
+        return -1;
+    }
+
+    // Helper macro to return current state
+    #define RETURN_CURRENT_STATE() do { \
+        *status = sub->status; \
+        if (result != NULL && sub->result != NULL) { \
+            *result = strdup(sub->result); \
+        } \
+        if (error != NULL && sub->error != NULL) { \
+            *error = strdup(sub->error); \
+        } \
+        return 0; \
+    } while (0)
+
+    // If already in a terminal state, return cached values
+    if (sub->status == SUBAGENT_STATUS_COMPLETED ||
+        sub->status == SUBAGENT_STATUS_FAILED ||
+        sub->status == SUBAGENT_STATUS_TIMEOUT) {
+        RETURN_CURRENT_STATE();
+    }
+
+    // Subagent is still running - need to check/wait
+    time_t now = time(NULL);
+
+    if (!wait) {
+        // Non-blocking: check once and return
+
+        // Check timeout first
+        if (now - sub->start_time > manager->timeout_seconds) {
+            kill(sub->pid, SIGKILL);
+            waitpid(sub->pid, NULL, 0);
+            read_subagent_output(sub);
+            sub->status = SUBAGENT_STATUS_TIMEOUT;
+            sub->error = strdup("Subagent execution timed out");
+            RETURN_CURRENT_STATE();
+        }
+
+        // Read any available output
+        read_subagent_output_nonblocking(sub);
+
+        // Check process status non-blocking
+        int proc_status;
+        pid_t waitpid_result = waitpid(sub->pid, &proc_status, WNOHANG);
+
+        if (waitpid_result == sub->pid) {
+            // Process has exited
+            read_subagent_output(sub);
+
+            if (WIFEXITED(proc_status) && WEXITSTATUS(proc_status) == 0) {
+                sub->status = SUBAGENT_STATUS_COMPLETED;
+                sub->result = sub->output;
+                sub->output = NULL;
+                sub->output_len = 0;
+            } else {
+                sub->status = SUBAGENT_STATUS_FAILED;
+                if (WIFEXITED(proc_status)) {
+                    char error_msg[64];
+                    snprintf(error_msg, sizeof(error_msg),
+                             "Subagent exited with code %d", WEXITSTATUS(proc_status));
+                    sub->error = strdup(error_msg);
+                } else if (WIFSIGNALED(proc_status)) {
+                    char error_msg[64];
+                    snprintf(error_msg, sizeof(error_msg),
+                             "Subagent killed by signal %d", WTERMSIG(proc_status));
+                    sub->error = strdup(error_msg);
+                } else {
+                    sub->error = strdup("Subagent process failed");
+                }
+            }
+        } else if (waitpid_result == -1 && errno != ECHILD) {
+            // Error in waitpid
+            sub->status = SUBAGENT_STATUS_FAILED;
+            sub->error = strdup("Failed to check subagent status");
+        }
+        // waitpid_result == 0 means still running, status unchanged
+
+        RETURN_CURRENT_STATE();
+    }
+
+    // Blocking wait: loop until completion or timeout
+    while (sub->status == SUBAGENT_STATUS_RUNNING) {
+        now = time(NULL);
+
+        // Check timeout
+        if (now - sub->start_time > manager->timeout_seconds) {
+            kill(sub->pid, SIGKILL);
+            waitpid(sub->pid, NULL, 0);
+            read_subagent_output(sub);
+            sub->status = SUBAGENT_STATUS_TIMEOUT;
+            sub->error = strdup("Subagent execution timed out");
+            break;
+        }
+
+        // Read any available output while waiting
+        read_subagent_output_nonblocking(sub);
+
+        // Wait for process to exit (with brief timeout for periodic checks)
+        int proc_status;
+        pid_t waitpid_result = waitpid(sub->pid, &proc_status, WNOHANG);
+
+        if (waitpid_result == sub->pid) {
+            // Process has exited
+            read_subagent_output(sub);
+
+            if (WIFEXITED(proc_status) && WEXITSTATUS(proc_status) == 0) {
+                sub->status = SUBAGENT_STATUS_COMPLETED;
+                sub->result = sub->output;
+                sub->output = NULL;
+                sub->output_len = 0;
+            } else {
+                sub->status = SUBAGENT_STATUS_FAILED;
+                if (WIFEXITED(proc_status)) {
+                    char error_msg[64];
+                    snprintf(error_msg, sizeof(error_msg),
+                             "Subagent exited with code %d", WEXITSTATUS(proc_status));
+                    sub->error = strdup(error_msg);
+                } else if (WIFSIGNALED(proc_status)) {
+                    char error_msg[64];
+                    snprintf(error_msg, sizeof(error_msg),
+                             "Subagent killed by signal %d", WTERMSIG(proc_status));
+                    sub->error = strdup(error_msg);
+                } else {
+                    sub->error = strdup("Subagent process failed");
+                }
+            }
+            break;
+        } else if (waitpid_result == -1 && errno != ECHILD) {
+            // Error in waitpid
+            sub->status = SUBAGENT_STATUS_FAILED;
+            sub->error = strdup("Failed to check subagent status");
+            break;
+        }
+
+        // Still running, sleep briefly before checking again
+        usleep(50000);  // 50ms polling interval
+    }
+
+    #undef RETURN_CURRENT_STATE
+
+    // Return final state
+    *status = sub->status;
+    if (result != NULL && sub->result != NULL) {
+        *result = strdup(sub->result);
+    }
+    if (error != NULL && sub->error != NULL) {
+        *error = strdup(sub->error);
+    }
+
+    return 0;
 }
 
 int register_subagent_tool(ToolRegistry *registry, SubagentManager *manager) {
