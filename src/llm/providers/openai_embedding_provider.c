@@ -127,7 +127,6 @@ static int openai_embedding_parse_response(const EmbeddingProvider* provider,
         cJSON_Delete(root);
         return -1;
     }
-    embedding->dimension = count;
 
     size_t i = 0;
     cJSON* value;
@@ -135,6 +134,17 @@ static int openai_embedding_parse_response(const EmbeddingProvider* provider,
         if (cJSON_IsNumber(value)) {
             embedding->data[i++] = (float)value->valuedouble;
         }
+    }
+
+    // Set dimension to actual number of values parsed
+    embedding->dimension = i;
+
+    if (i == 0) {
+        fprintf(stderr, "Error: No valid numeric values in embedding array\n");
+        free(embedding->data);
+        embedding->data = NULL;
+        cJSON_Delete(root);
+        return -1;
     }
 
     cJSON_Delete(root);

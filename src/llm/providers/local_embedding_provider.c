@@ -105,7 +105,6 @@ static int parse_embedding_array(cJSON* embedding_array, embedding_vector_t* emb
         fprintf(stderr, "Error: Failed to allocate memory for embedding\n");
         return -1;
     }
-    embedding->dimension = count;
 
     size_t i = 0;
     cJSON* value;
@@ -113,6 +112,16 @@ static int parse_embedding_array(cJSON* embedding_array, embedding_vector_t* emb
         if (cJSON_IsNumber(value)) {
             embedding->data[i++] = (float)value->valuedouble;
         }
+    }
+
+    // Set dimension to actual number of values parsed
+    embedding->dimension = i;
+
+    if (i == 0) {
+        fprintf(stderr, "Error: No valid numeric values in embedding array\n");
+        free(embedding->data);
+        embedding->data = NULL;
+        return -1;
     }
 
     return 0;
