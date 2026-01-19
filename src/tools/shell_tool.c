@@ -285,17 +285,25 @@ int execute_shell_command(const ShellCommandParams *params, ShellExecutionResult
         if (params->capture_stderr) {
             close(stderr_pipe[0]);
         }
-        
-        dup2(stdout_pipe[1], STDOUT_FILENO);
+
+        if (dup2(stdout_pipe[1], STDOUT_FILENO) == -1) {
+            fprintf(stderr, "Failed to redirect stdout: %s\n", strerror(errno));
+            exit(1);
+        }
         close(stdout_pipe[1]);
-        
+
         if (params->capture_stderr) {
-            dup2(stderr_pipe[1], STDERR_FILENO);
+            if (dup2(stderr_pipe[1], STDERR_FILENO) == -1) {
+                fprintf(stderr, "Failed to redirect stderr: %s\n", strerror(errno));
+                exit(1);
+            }
             close(stderr_pipe[1]);
         } else {
-            dup2(stdout_pipe[1], STDERR_FILENO);
+            if (dup2(STDOUT_FILENO, STDERR_FILENO) == -1) {
+                exit(1);
+            }
         }
-        
+
         // Change working directory if specified
         if (params->working_directory != NULL) {
             if (chdir(params->working_directory) != 0) {
