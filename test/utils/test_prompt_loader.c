@@ -1,20 +1,46 @@
 #include "unity.h"
 #include "prompt_loader.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
 
+// Store original directory to restore after tests
+static char original_dir[4096];
+static const char *test_dir = "/tmp/test_prompt_loader_XXXXXX";
+static char test_dir_path[256];
+
 void setUp(void) {
-    // Clean up any existing test files
-    unlink("PROMPT.md");
-    unlink("test_prompt.md");
+    // Save current directory
+    if (getcwd(original_dir, sizeof(original_dir)) == NULL) {
+        TEST_FAIL_MESSAGE("Failed to get current directory");
+    }
+
+    // Create a unique temp directory for this test
+    strcpy(test_dir_path, test_dir);
+    if (mkdtemp(test_dir_path) == NULL) {
+        TEST_FAIL_MESSAGE("Failed to create temp directory");
+    }
+
+    // Change to temp directory
+    if (chdir(test_dir_path) != 0) {
+        TEST_FAIL_MESSAGE("Failed to change to temp directory");
+    }
 }
 
 void tearDown(void) {
-    // Clean up test files
-    unlink("PROMPT.md");
-    unlink("test_prompt.md");
+    // Clean up test files in temp directory
+    unlink("AGENT.md");
+
+    // Return to original directory
+    if (chdir(original_dir) != 0) {
+        // Can't use TEST_FAIL here as tearDown shouldn't fail tests
+        fprintf(stderr, "Warning: Failed to return to original directory\n");
+    }
+
+    // Remove temp directory
+    rmdir(test_dir_path);
 }
 
 void test_load_system_prompt_with_null_parameter(void) {
@@ -25,8 +51,8 @@ void test_load_system_prompt_with_null_parameter(void) {
 void test_load_system_prompt_file_not_exists(void) {
     char *prompt_content = NULL;
     
-    // Ensure PROMPT.md doesn't exist
-    unlink("PROMPT.md");
+    // Ensure AGENT.md doesn't exist
+    unlink("AGENT.md");
     
     int result = load_system_prompt(&prompt_content);
     
@@ -44,8 +70,8 @@ void test_load_system_prompt_file_not_exists(void) {
 void test_load_system_prompt_simple_content(void) {
     char *prompt_content = NULL;
     
-    // Create test PROMPT.md file
-    FILE *test_file = fopen("PROMPT.md", "w");
+    // Create test AGENT.md file
+    FILE *test_file = fopen("AGENT.md", "w");
     TEST_ASSERT_NOT_NULL(test_file);
     fprintf(test_file, "You are a helpful assistant.");
     fclose(test_file);
@@ -67,8 +93,8 @@ void test_load_system_prompt_simple_content(void) {
 void test_load_system_prompt_with_trailing_newlines(void) {
     char *prompt_content = NULL;
     
-    // Create test PROMPT.md file with trailing newlines
-    FILE *test_file = fopen("PROMPT.md", "w");
+    // Create test AGENT.md file with trailing newlines
+    FILE *test_file = fopen("AGENT.md", "w");
     TEST_ASSERT_NOT_NULL(test_file);
     fprintf(test_file, "You are a helpful assistant.\n\n\n");
     fclose(test_file);
@@ -90,8 +116,8 @@ void test_load_system_prompt_with_trailing_newlines(void) {
 void test_load_system_prompt_multiline_content(void) {
     char *prompt_content = NULL;
     
-    // Create test PROMPT.md file with multiline content
-    FILE *test_file = fopen("PROMPT.md", "w");
+    // Create test AGENT.md file with multiline content
+    FILE *test_file = fopen("AGENT.md", "w");
     TEST_ASSERT_NOT_NULL(test_file);
     fprintf(test_file, "You are a helpful assistant.\nAlways be polite and informative.\nRespond concisely.");
     fclose(test_file);
@@ -111,8 +137,8 @@ void test_load_system_prompt_multiline_content(void) {
 void test_load_system_prompt_empty_file(void) {
     char *prompt_content = NULL;
     
-    // Create empty PROMPT.md file
-    FILE *test_file = fopen("PROMPT.md", "w");
+    // Create empty AGENT.md file
+    FILE *test_file = fopen("AGENT.md", "w");
     TEST_ASSERT_NOT_NULL(test_file);
     fclose(test_file);
     
@@ -131,8 +157,8 @@ void test_load_system_prompt_empty_file(void) {
 void test_load_system_prompt_with_whitespace_only(void) {
     char *prompt_content = NULL;
     
-    // Create PROMPT.md file with only whitespace
-    FILE *test_file = fopen("PROMPT.md", "w");
+    // Create AGENT.md file with only whitespace
+    FILE *test_file = fopen("AGENT.md", "w");
     TEST_ASSERT_NOT_NULL(test_file);
     fprintf(test_file, "   \n\t\n  \r\n");
     fclose(test_file);
@@ -166,8 +192,8 @@ void test_cleanup_system_prompt_with_null_content(void) {
 void test_cleanup_system_prompt_with_allocated_content(void) {
     char *prompt_content = NULL;
     
-    // Create test PROMPT.md file
-    FILE *test_file = fopen("PROMPT.md", "w");
+    // Create test AGENT.md file
+    FILE *test_file = fopen("AGENT.md", "w");
     TEST_ASSERT_NOT_NULL(test_file);
     fprintf(test_file, "Test content");
     fclose(test_file);
@@ -183,8 +209,8 @@ void test_cleanup_system_prompt_with_allocated_content(void) {
 void test_load_system_prompt_large_content(void) {
     char *prompt_content = NULL;
     
-    // Create test PROMPT.md file with larger content
-    FILE *test_file = fopen("PROMPT.md", "w");
+    // Create test AGENT.md file with larger content
+    FILE *test_file = fopen("AGENT.md", "w");
     TEST_ASSERT_NOT_NULL(test_file);
     
     // Write a reasonably large prompt
@@ -211,7 +237,7 @@ void test_core_system_prompt_always_present(void) {
     char *prompt_content = NULL;
     
     // Test with no file
-    unlink("PROMPT.md");
+    unlink("AGENT.md");
     int result = load_system_prompt(&prompt_content);
     TEST_ASSERT_EQUAL(0, result);
     TEST_ASSERT_NOT_NULL(prompt_content);
