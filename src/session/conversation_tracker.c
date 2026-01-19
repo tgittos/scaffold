@@ -257,33 +257,30 @@ static int add_message_to_history(ConversationHistory *history, const char *role
     history->messages[history->count].tool_call_id = tool_call_id_copy;
     history->messages[history->count].tool_name = tool_name_copy;
     history->count++;
-    
-    // Also store in vector database
-    document_store_t* store = document_store_get_instance();
-    if (store != NULL) {
-        // Ensure the conversation index exists
-        document_store_ensure_index(store, CONVERSATION_INDEX, CONVERSATION_EMBEDDING_DIM, 10000);
-        
-        // Build metadata JSON
-        cJSON *metadata = cJSON_CreateObject();
-        cJSON_AddStringToObject(metadata, "role", role);
-        if (tool_call_id) {
-            cJSON_AddStringToObject(metadata, "tool_call_id", tool_call_id);
-        }
-        if (tool_name) {
-            cJSON_AddStringToObject(metadata, "tool_name", tool_name);
-        }
-        
-        char *metadata_json = cJSON_PrintUnformatted(metadata);
-        cJSON_Delete(metadata);
-        
-        if (metadata_json) {
-            // Add to document store with embeddings
-            document_store_add_text(store, CONVERSATION_INDEX, content, "conversation", role, metadata_json);
-            free(metadata_json);
+
+    // Store in vector database only for user and assistant messages
+    // Tool messages are ephemeral context and not worth the embedding cost
+    if (strcmp(role, "tool") != 0) {
+        document_store_t* store = document_store_get_instance();
+        if (store != NULL) {
+            // Ensure the conversation index exists
+            document_store_ensure_index(store, CONVERSATION_INDEX, CONVERSATION_EMBEDDING_DIM, 10000);
+
+            // Build metadata JSON
+            cJSON *metadata = cJSON_CreateObject();
+            cJSON_AddStringToObject(metadata, "role", role);
+
+            char *metadata_json = cJSON_PrintUnformatted(metadata);
+            cJSON_Delete(metadata);
+
+            if (metadata_json) {
+                // Add to document store with embeddings
+                document_store_add_text(store, CONVERSATION_INDEX, content, "conversation", role, metadata_json);
+                free(metadata_json);
+            }
         }
     }
-    
+
     return 0;
 }
 
