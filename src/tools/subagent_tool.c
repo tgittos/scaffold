@@ -1311,6 +1311,9 @@ int ralph_run_as_subagent(const char *task, const char *context) {
         return -1;
     }
 
+    // Mark this process as a subagent to prevent nesting (subagent tools will return error if called)
+    session.subagent_manager.is_subagent_process = 1;
+
     // Clear conversation history for fresh context (subagents don't inherit parent history)
     // This ensures isolation between parent and child conversations
     cleanup_conversation_history(&session.session_data.conversation);

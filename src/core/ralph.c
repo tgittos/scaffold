@@ -356,13 +356,29 @@ int ralph_init_session(RalphSession* session) {
         }
         // No warning if config file not found - MCP is optional
     }
-    
+
+    // Initialize subagent manager
+    if (subagent_manager_init(&session->subagent_manager) != 0) {
+        fprintf(stderr, "Warning: Failed to initialize subagent manager\n");
+    } else {
+        // Register subagent tools (they internally check is_subagent_process to prevent nesting)
+        if (register_subagent_tool(&session->tools, &session->subagent_manager) != 0) {
+            fprintf(stderr, "Warning: Failed to register subagent tool\n");
+        }
+        if (register_subagent_status_tool(&session->tools, &session->subagent_manager) != 0) {
+            fprintf(stderr, "Warning: Failed to register subagent_status tool\n");
+        }
+    }
+
     return 0;
 }
 
 void ralph_cleanup_session(RalphSession* session) {
     if (session == NULL) return;
-    
+
+    // Cleanup subagent manager (kills any running subagents)
+    subagent_manager_cleanup(&session->subagent_manager);
+
     // Cleanup MCP client
     mcp_client_cleanup(&session->mcp_client);
     
