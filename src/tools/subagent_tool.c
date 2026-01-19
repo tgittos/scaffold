@@ -421,6 +421,10 @@ int subagent_poll_all(SubagentManager *manager) {
  * Get the path to the current executable.
  * Uses /proc/self/exe on Linux with fallback options.
  * Returns a newly allocated string that must be freed by caller.
+ *
+ * Note: APE binaries run via an extracted loader (e.g., /root/.ape-1.10),
+ * so /proc/self/exe returns the loader path, not the actual binary.
+ * We detect this and fall back to finding ralph in the current directory.
  */
 static char* get_executable_path(void) {
     char *path = malloc(4096);
@@ -432,7 +436,11 @@ static char* get_executable_path(void) {
     ssize_t len = readlink("/proc/self/exe", path, 4095);
     if (len > 0) {
         path[len] = '\0';
-        return path;
+        // Check if this is the APE loader (contains ".ape-" in path)
+        // If so, skip and use fallback methods
+        if (strstr(path, ".ape-") == NULL) {
+            return path;
+        }
     }
 
     // Fallback: try current directory
@@ -447,7 +455,6 @@ static char* get_executable_path(void) {
     }
 
     // Last fallback: assume ./ralph
-    strcpy(path, "./ralph");
     free(path);
     return strdup("./ralph");
 }
@@ -678,18 +685,29 @@ int subagent_get_status(SubagentManager *manager, const char *subagent_id, int w
                 sub->output_len = 0;
             } else {
                 sub->status = SUBAGENT_STATUS_FAILED;
+                // Include captured output in error message for debugging
+                char error_msg[256];
                 if (WIFEXITED(proc_status)) {
-                    char error_msg[64];
                     snprintf(error_msg, sizeof(error_msg),
                              "Subagent exited with code %d", WEXITSTATUS(proc_status));
-                    sub->error = strdup(error_msg);
                 } else if (WIFSIGNALED(proc_status)) {
-                    char error_msg[64];
                     snprintf(error_msg, sizeof(error_msg),
                              "Subagent killed by signal %d", WTERMSIG(proc_status));
-                    sub->error = strdup(error_msg);
                 } else {
-                    sub->error = strdup("Subagent process failed");
+                    snprintf(error_msg, sizeof(error_msg), "Subagent process failed");
+                }
+                // Append captured output if available
+                if (sub->output != NULL && sub->output_len > 0) {
+                    size_t error_len = strlen(error_msg) + sub->output_len + 32;
+                    char *full_error = malloc(error_len);
+                    if (full_error != NULL) {
+                        snprintf(full_error, error_len, "%s. Output: %s", error_msg, sub->output);
+                        sub->error = full_error;
+                    } else {
+                        sub->error = strdup(error_msg);
+                    }
+                } else {
+                    sub->error = strdup(error_msg);
                 }
             }
         } else if (waitpid_result == -1 && errno != ECHILD) {
@@ -734,18 +752,29 @@ int subagent_get_status(SubagentManager *manager, const char *subagent_id, int w
                 sub->output_len = 0;
             } else {
                 sub->status = SUBAGENT_STATUS_FAILED;
+                // Include captured output in error message for debugging
+                char error_msg[256];
                 if (WIFEXITED(proc_status)) {
-                    char error_msg[64];
                     snprintf(error_msg, sizeof(error_msg),
                              "Subagent exited with code %d", WEXITSTATUS(proc_status));
-                    sub->error = strdup(error_msg);
                 } else if (WIFSIGNALED(proc_status)) {
-                    char error_msg[64];
                     snprintf(error_msg, sizeof(error_msg),
                              "Subagent killed by signal %d", WTERMSIG(proc_status));
-                    sub->error = strdup(error_msg);
                 } else {
-                    sub->error = strdup("Subagent process failed");
+                    snprintf(error_msg, sizeof(error_msg), "Subagent process failed");
+                }
+                // Append captured output if available
+                if (sub->output != NULL && sub->output_len > 0) {
+                    size_t error_len = strlen(error_msg) + sub->output_len + 32;
+                    char *full_error = malloc(error_len);
+                    if (full_error != NULL) {
+                        snprintf(full_error, error_len, "%s. Output: %s", error_msg, sub->output);
+                        sub->error = full_error;
+                    } else {
+                        sub->error = strdup(error_msg);
+                    }
+                } else {
+                    sub->error = strdup(error_msg);
                 }
             }
             break;
