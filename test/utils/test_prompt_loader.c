@@ -31,7 +31,7 @@ void setUp(void) {
 
 void tearDown(void) {
     // Clean up test files in temp directory
-    unlink("AGENT.md");
+    unlink("AGENTS.md");
 
     // Return to original directory
     if (chdir(original_dir) != 0) {
@@ -51,8 +51,8 @@ void test_load_system_prompt_with_null_parameter(void) {
 void test_load_system_prompt_file_not_exists(void) {
     char *prompt_content = NULL;
     
-    // Ensure AGENT.md doesn't exist
-    unlink("AGENT.md");
+    // Ensure AGENTS.md doesn't exist
+    unlink("AGENTS.md");
     
     int result = load_system_prompt(&prompt_content);
     
@@ -70,8 +70,8 @@ void test_load_system_prompt_file_not_exists(void) {
 void test_load_system_prompt_simple_content(void) {
     char *prompt_content = NULL;
     
-    // Create test AGENT.md file
-    FILE *test_file = fopen("AGENT.md", "w");
+    // Create test AGENTS.md file
+    FILE *test_file = fopen("AGENTS.md", "w");
     TEST_ASSERT_NOT_NULL(test_file);
     fprintf(test_file, "You are a helpful assistant.");
     fclose(test_file);
@@ -93,8 +93,8 @@ void test_load_system_prompt_simple_content(void) {
 void test_load_system_prompt_with_trailing_newlines(void) {
     char *prompt_content = NULL;
     
-    // Create test AGENT.md file with trailing newlines
-    FILE *test_file = fopen("AGENT.md", "w");
+    // Create test AGENTS.md file with trailing newlines
+    FILE *test_file = fopen("AGENTS.md", "w");
     TEST_ASSERT_NOT_NULL(test_file);
     fprintf(test_file, "You are a helpful assistant.\n\n\n");
     fclose(test_file);
@@ -116,8 +116,8 @@ void test_load_system_prompt_with_trailing_newlines(void) {
 void test_load_system_prompt_multiline_content(void) {
     char *prompt_content = NULL;
     
-    // Create test AGENT.md file with multiline content
-    FILE *test_file = fopen("AGENT.md", "w");
+    // Create test AGENTS.md file with multiline content
+    FILE *test_file = fopen("AGENTS.md", "w");
     TEST_ASSERT_NOT_NULL(test_file);
     fprintf(test_file, "You are a helpful assistant.\nAlways be polite and informative.\nRespond concisely.");
     fclose(test_file);
@@ -137,8 +137,8 @@ void test_load_system_prompt_multiline_content(void) {
 void test_load_system_prompt_empty_file(void) {
     char *prompt_content = NULL;
     
-    // Create empty AGENT.md file
-    FILE *test_file = fopen("AGENT.md", "w");
+    // Create empty AGENTS.md file
+    FILE *test_file = fopen("AGENTS.md", "w");
     TEST_ASSERT_NOT_NULL(test_file);
     fclose(test_file);
     
@@ -157,8 +157,8 @@ void test_load_system_prompt_empty_file(void) {
 void test_load_system_prompt_with_whitespace_only(void) {
     char *prompt_content = NULL;
     
-    // Create AGENT.md file with only whitespace
-    FILE *test_file = fopen("AGENT.md", "w");
+    // Create AGENTS.md file with only whitespace
+    FILE *test_file = fopen("AGENTS.md", "w");
     TEST_ASSERT_NOT_NULL(test_file);
     fprintf(test_file, "   \n\t\n  \r\n");
     fclose(test_file);
@@ -192,8 +192,8 @@ void test_cleanup_system_prompt_with_null_content(void) {
 void test_cleanup_system_prompt_with_allocated_content(void) {
     char *prompt_content = NULL;
     
-    // Create test AGENT.md file
-    FILE *test_file = fopen("AGENT.md", "w");
+    // Create test AGENTS.md file
+    FILE *test_file = fopen("AGENTS.md", "w");
     TEST_ASSERT_NOT_NULL(test_file);
     fprintf(test_file, "Test content");
     fclose(test_file);
@@ -209,8 +209,8 @@ void test_cleanup_system_prompt_with_allocated_content(void) {
 void test_load_system_prompt_large_content(void) {
     char *prompt_content = NULL;
     
-    // Create test AGENT.md file with larger content
-    FILE *test_file = fopen("AGENT.md", "w");
+    // Create test AGENTS.md file with larger content
+    FILE *test_file = fopen("AGENTS.md", "w");
     TEST_ASSERT_NOT_NULL(test_file);
     
     // Write a reasonably large prompt
@@ -237,7 +237,7 @@ void test_core_system_prompt_always_present(void) {
     char *prompt_content = NULL;
     
     // Test with no file
-    unlink("AGENT.md");
+    unlink("AGENTS.md");
     int result = load_system_prompt(&prompt_content);
     TEST_ASSERT_EQUAL(0, result);
     TEST_ASSERT_NOT_NULL(prompt_content);
