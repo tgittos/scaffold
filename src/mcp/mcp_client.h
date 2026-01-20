@@ -36,7 +36,7 @@ typedef struct {
  * MCP Server Runtime State
  */
 typedef struct {
-    MCPServerConfig config;      // Server configuration
+    MCPServerConfig* config;     // Pointer to server configuration (borrowed, not owned)
     int process_id;              // Process ID (for stdio servers)
     int stdin_fd;                // stdin file descriptor (for stdio)
     int stdout_fd;               // stdout file descriptor (for stdio)
