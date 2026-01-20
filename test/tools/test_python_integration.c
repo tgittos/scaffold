@@ -36,7 +36,7 @@ void test_python_tool_through_registry(void) {
     TEST_ASSERT_EQUAL_INT(0, execute_python_tool_call(&call, &result));
     TEST_ASSERT_EQUAL_INT(1, result.success);
     TEST_ASSERT_NOT_NULL(result.result);
-    TEST_ASSERT_NOT_NULL(strstr(result.result, "\"stdout\": \"4"));
+    TEST_ASSERT_NOT_NULL(strstr(result.result, "\"stdout\":\"4"));
 
     free(result.tool_call_id);
     free(result.result);

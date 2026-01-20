@@ -475,6 +475,8 @@ int execute_python_code(const PythonExecutionParams *params, PythonExecutionResu
     result->stderr_output = capture_python_output(stderr_capture);
 
     // Truncate output if too large, adding truncation indicator
+    // Note: When stdout_len >= PYTHON_MAX_OUTPUT_SIZE, the buffer (from strdup) is
+    // at least stdout_len+1 bytes, so writing up to PYTHON_MAX_OUTPUT_SIZE-1 is safe.
     if (result->stdout_output) {
         size_t stdout_len = strlen(result->stdout_output);
         if (stdout_len >= PYTHON_MAX_OUTPUT_SIZE) {
