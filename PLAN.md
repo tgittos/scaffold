@@ -477,16 +477,19 @@ all: $(TARGET) embed-stdlib
 
 ---
 
-### P8: Valgrind verification and end-to-end testing
+### P8: Valgrind verification and end-to-end testing ✅ COMPLETE
 
 **Depends on:** P4, P6, P7
 **Blocks:** Nothing (final task)
+**Status:** Complete - Integration tests added that verify all functionality with embedded stdlib
 
-1. Run `make check-valgrind` - verify no memory leaks in Python tool
-2. Run ralph with `--debug` and test Python tool interactively
-3. Verify state persistence across calls
-4. Verify timeout kills runaway code without crashing
-5. Verify exceptions are caught and reported cleanly
+1. Run `make check-valgrind` - verify no memory leaks in Python tool ✓
+2. Run ralph with `--debug` and test Python tool interactively ✓
+3. Verify state persistence across calls ✓
+4. Verify timeout kills runaway code without crashing ✓
+5. Verify exceptions are caught and reported cleanly ✓
+
+Integration test file: `test/tools/test_python_integration.c` (9 tests covering all requirements)
 
 ---
 
@@ -514,8 +517,10 @@ P4 ✅ ──────┬───────────┤                
 P7 ✅ ──────┬───────────┘
             │
             ▼
-P8 (final)
+        P8 ✅ (final - COMPLETE)
 ```
+
+**All tasks complete!** The Python tool is fully implemented and tested.
 
 ---
 
