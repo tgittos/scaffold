@@ -17,14 +17,36 @@ void tearDown(void) {
 // Test that the Python interpreter initializes correctly
 void test_python_interpreter_init_succeeds(void) {
     // Should already be initialized from the test main
-    TEST_ASSERT_EQUAL_INT(1, python_interpreter_is_initialized());
+    TEST_ASSERT_TRUE(python_interpreter_is_initialized());
+}
+
+// Test tool registration and execution through the tool registry
+void test_python_tool_through_registry(void) {
+    TEST_ASSERT_EQUAL_INT(0, register_python_tool(&registry));
+    TEST_ASSERT_EQUAL_INT(1, registry.function_count);
+    TEST_ASSERT_EQUAL_STRING("python", registry.functions[0].name);
+
+    ToolCall call = {
+        .id = "registry-test-1",
+        .name = "python",
+        .arguments = "{\"code\": \"print(2 + 2)\"}"
+    };
+    ToolResult result = {0};
+
+    TEST_ASSERT_EQUAL_INT(0, execute_python_tool_call(&call, &result));
+    TEST_ASSERT_EQUAL_INT(1, result.success);
+    TEST_ASSERT_NOT_NULL(result.result);
+    TEST_ASSERT_NOT_NULL(strstr(result.result, "\"stdout\": \"4"));
+
+    free(result.tool_call_id);
+    free(result.result);
 }
 
 // Test basic code execution
 void test_python_execute_basic_code(void) {
     PythonExecutionParams params = {0};
     params.code = strdup("print('Hello from Python!')");
-    params.timeout_seconds = 30;
+    params.timeout_seconds = PYTHON_DEFAULT_TIMEOUT;
 
     PythonExecutionResult result = {0};
     int ret = execute_python_code(&params, &result);
@@ -109,7 +131,7 @@ void test_python_function_persists(void) {
 void test_python_exception_handling(void) {
     PythonExecutionParams params = {0};
     params.code = strdup("raise ValueError('Test exception message')");
-    params.timeout_seconds = 30;
+    params.timeout_seconds = PYTHON_DEFAULT_TIMEOUT;
 
     PythonExecutionResult result = {0};
     int ret = execute_python_code(&params, &result);
@@ -184,7 +206,7 @@ void test_python_timeout(void) {
 void test_python_stdlib_json(void) {
     PythonExecutionParams params = {0};
     params.code = strdup("import json; print(json.dumps({'key': 'value'}))");
-    params.timeout_seconds = 30;
+    params.timeout_seconds = PYTHON_DEFAULT_TIMEOUT;
 
     PythonExecutionResult result = {0};
     int ret = execute_python_code(&params, &result);
@@ -202,7 +224,7 @@ void test_python_stdlib_json(void) {
 void test_python_stdlib_math(void) {
     PythonExecutionParams params = {0};
     params.code = strdup("import math; print(int(math.sqrt(144)))");
-    params.timeout_seconds = 30;
+    params.timeout_seconds = PYTHON_DEFAULT_TIMEOUT;
 
     PythonExecutionResult result = {0};
     int ret = execute_python_code(&params, &result);
@@ -226,6 +248,7 @@ int main(void) {
     UNITY_BEGIN();
 
     RUN_TEST(test_python_interpreter_init_succeeds);
+    RUN_TEST(test_python_tool_through_registry);
     RUN_TEST(test_python_execute_basic_code);
     RUN_TEST(test_python_state_persists);
     RUN_TEST(test_python_function_persists);

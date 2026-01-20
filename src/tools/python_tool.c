@@ -514,12 +514,12 @@ int execute_python_code(const PythonExecutionParams *params, PythonExecutionResu
     result->stdout_output = capture_python_output(stdout_capture);
     result->stderr_output = capture_python_output(stderr_capture);
 
-    // Truncate output if too large
-    if (result->stdout_output && strlen(result->stdout_output) > PYTHON_MAX_OUTPUT_SIZE) {
-        result->stdout_output[PYTHON_MAX_OUTPUT_SIZE] = '\0';
+    // Truncate output if too large (leave room for null terminator)
+    if (result->stdout_output && strlen(result->stdout_output) >= PYTHON_MAX_OUTPUT_SIZE) {
+        result->stdout_output[PYTHON_MAX_OUTPUT_SIZE - 1] = '\0';
     }
-    if (result->stderr_output && strlen(result->stderr_output) > PYTHON_MAX_OUTPUT_SIZE) {
-        result->stderr_output[PYTHON_MAX_OUTPUT_SIZE] = '\0';
+    if (result->stderr_output && strlen(result->stderr_output) >= PYTHON_MAX_OUTPUT_SIZE) {
+        result->stderr_output[PYTHON_MAX_OUTPUT_SIZE - 1] = '\0';
     }
 
     // Restore original stdout/stderr
