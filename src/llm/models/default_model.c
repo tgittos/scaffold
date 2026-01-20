@@ -1,29 +1,6 @@
 #include "model_capabilities.h"
 #include "output_formatter.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-// Default response processor for models without thinking support
-static int default_process_response(const char* content, ParsedResponse* result) {
-    if (!content || !result) {
-        return -1;
-    }
-    
-    // Initialize result
-    result->thinking_content = NULL;
-    result->response_content = NULL;
-    
-    // For default models, entire content is the response (no thinking support)
-    size_t content_len = strlen(content);
-    result->response_content = malloc(content_len + 1);
-    if (!result->response_content) {
-        return -1;
-    }
-    strcpy(result->response_content, content);
-    
-    return 0;
-}
+#include "response_processing.h"
 
 // Default model capabilities
 static ModelCapabilities default_model = {
@@ -31,7 +8,7 @@ static ModelCapabilities default_model = {
     .supports_thinking_tags = 0,
     .thinking_start_tag = NULL,
     .thinking_end_tag = NULL,
-    .process_response = default_process_response,
+    .process_response = process_simple_response,
     .supports_function_calling = 0,
     .generate_tools_json = NULL,
     .parse_tool_calls = NULL,
