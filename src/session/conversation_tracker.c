@@ -92,22 +92,50 @@ static int load_complete_conversation_turns(ConversationHistory* history, time_t
                 cJSON *role_item = cJSON_GetObjectItem(metadata, "role");
                 cJSON *tool_call_id_item = cJSON_GetObjectItem(metadata, "tool_call_id");
                 cJSON *tool_name_item = cJSON_GetObjectItem(metadata, "tool_name");
-                
-                if (cJSON_IsString(role_item)) role = strdup(cJSON_GetStringValue(role_item));
-                if (cJSON_IsString(tool_call_id_item)) tool_call_id = strdup(cJSON_GetStringValue(tool_call_id_item));
-                if (cJSON_IsString(tool_name_item)) tool_name = strdup(cJSON_GetStringValue(tool_name_item));
-                
+
+                if (cJSON_IsString(role_item)) {
+                    role = strdup(cJSON_GetStringValue(role_item));
+                    if (role == NULL) {
+                        cJSON_Delete(metadata);
+                        goto cleanup;
+                    }
+                }
+                if (cJSON_IsString(tool_call_id_item)) {
+                    tool_call_id = strdup(cJSON_GetStringValue(tool_call_id_item));
+                    if (tool_call_id == NULL) {
+                        free(role);
+                        cJSON_Delete(metadata);
+                        goto cleanup;
+                    }
+                }
+                if (cJSON_IsString(tool_name_item)) {
+                    tool_name = strdup(cJSON_GetStringValue(tool_name_item));
+                    if (tool_name == NULL) {
+                        free(role);
+                        free(tool_call_id);
+                        cJSON_Delete(metadata);
+                        goto cleanup;
+                    }
+                }
+
                 cJSON_Delete(metadata);
             }
         }
-        
-        if (!role && doc->source) role = strdup(doc->source);
+
+        if (!role && doc->source) {
+            role = strdup(doc->source);
+            if (role == NULL) {
+                free(tool_call_id);
+                free(tool_name);
+                goto cleanup;
+            }
+        }
         if (!role) {
             free(tool_call_id);
             free(tool_name);
             continue;
         }
-        
+
         // Start a new turn on user message or assistant message (if no current turn)
         if (strcmp(role, "user") == 0 || (strcmp(role, "assistant") == 0 && current_turn == NULL)) {
             // Finish current turn if it exists
@@ -145,14 +173,23 @@ static int load_complete_conversation_turns(ConversationHistory* history, time_t
                 current_turn->messages = new_messages;
             }
             
+            char *content_copy = strdup(doc->content);
+            if (content_copy == NULL) {
+                free(role);
+                free(tool_call_id);
+                free(tool_name);
+                goto cleanup;
+            }
             current_turn->messages[current_turn->count].role = role;
-            current_turn->messages[current_turn->count].content = strdup(doc->content);
+            current_turn->messages[current_turn->count].content = content_copy;
             current_turn->messages[current_turn->count].tool_call_id = tool_call_id;
             current_turn->messages[current_turn->count].tool_name = tool_name;
             current_turn->count++;
             current_turn->end_time = doc->timestamp;
         } else {
-            free(role); free(tool_call_id); free(tool_name);
+            free(role);
+            free(tool_call_id);
+            free(tool_name);
         }
     }
     
@@ -478,20 +515,58 @@ ConversationHistory* search_conversation_history(const char *query, size_t max_r
                 cJSON *role_item = cJSON_GetObjectItem(metadata, "role");
                 cJSON *tool_call_id_item = cJSON_GetObjectItem(metadata, "tool_call_id");
                 cJSON *tool_name_item = cJSON_GetObjectItem(metadata, "tool_name");
-                
-                if (cJSON_IsString(role_item)) role = strdup(cJSON_GetStringValue(role_item));
-                if (cJSON_IsString(tool_call_id_item)) tool_call_id = strdup(cJSON_GetStringValue(tool_call_id_item));
-                if (cJSON_IsString(tool_name_item)) tool_name = strdup(cJSON_GetStringValue(tool_name_item));
-                
+
+                if (cJSON_IsString(role_item)) {
+                    role = strdup(cJSON_GetStringValue(role_item));
+                    if (role == NULL) {
+                        cJSON_Delete(metadata);
+                        cleanup_conversation_history(history);
+                        free(history);
+                        document_store_free_results(results);
+                        return NULL;
+                    }
+                }
+                if (cJSON_IsString(tool_call_id_item)) {
+                    tool_call_id = strdup(cJSON_GetStringValue(tool_call_id_item));
+                    if (tool_call_id == NULL) {
+                        free(role);
+                        cJSON_Delete(metadata);
+                        cleanup_conversation_history(history);
+                        free(history);
+                        document_store_free_results(results);
+                        return NULL;
+                    }
+                }
+                if (cJSON_IsString(tool_name_item)) {
+                    tool_name = strdup(cJSON_GetStringValue(tool_name_item));
+                    if (tool_name == NULL) {
+                        free(role);
+                        free(tool_call_id);
+                        cJSON_Delete(metadata);
+                        cleanup_conversation_history(history);
+                        free(history);
+                        document_store_free_results(results);
+                        return NULL;
+                    }
+                }
+
                 cJSON_Delete(metadata);
             }
         }
-        
+
         // Use source as role if not in metadata
         if (role == NULL && doc->source != NULL) {
             role = strdup(doc->source);
+            if (role == NULL) {
+                free(tool_call_id);
+                free(tool_name);
+                cleanup_conversation_history(history);
+                free(history);
+                document_store_free_results(results);
+                return NULL;
+            }
         }
-        
+
         if (role != NULL && doc->content != NULL) {
             if (history->count >= history->capacity) {
                 if (resize_conversation_history(history) != 0) {
@@ -504,9 +579,20 @@ ConversationHistory* search_conversation_history(const char *query, size_t max_r
                     return NULL;
                 }
             }
-            
+
+            char *content_copy = strdup(doc->content);
+            if (content_copy == NULL) {
+                free(role);
+                free(tool_call_id);
+                free(tool_name);
+                cleanup_conversation_history(history);
+                free(history);
+                document_store_free_results(results);
+                return NULL;
+            }
+
             history->messages[history->count].role = role;
-            history->messages[history->count].content = strdup(doc->content);
+            history->messages[history->count].content = content_copy;
             history->messages[history->count].tool_call_id = tool_call_id;
             history->messages[history->count].tool_name = tool_name;
             history->count++;
