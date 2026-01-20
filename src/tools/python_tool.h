@@ -15,7 +15,7 @@
  */
 typedef struct {
     char *code;              // Python code to execute
-    int timeout_seconds;     // Timeout in seconds (0 for default)
+    int timeout_seconds;     // Timeout in seconds (0 for no timeout)
     int capture_stderr;      // 1 to capture stderr separately, 0 to merge
 } PythonExecutionParams;
 

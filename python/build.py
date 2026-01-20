@@ -85,25 +85,30 @@ def run_command(cmd, cwd=None, env=None, capture_output=False):
 def download_file(url, dest):
     """Download file from URL with progress."""
     if os.path.exists(dest):
-        # Check if it's a valid file
-        if dest.suffix == '.zip':
-            try:
-                with tarfile.open(dest, 'r') if dest.suffix in ['.tar', '.gz'] else open(dest, 'rb') as f:
-                    if dest.suffix == '.zip':
-                        # Try to read zip header
-                        header = f.read(4)
-                        if header[:2] != b'PK':
-                            print_status(f"Corrupted zip file, re-downloading...", COLOR_YELLOW)
-                            os.remove(dest)
-                        else:
-                            print_status(f"Using existing {dest}", COLOR_GREEN)
-                            return
-            except:
-                print_status(f"Corrupted file, re-downloading...", COLOR_YELLOW)
+        # Validate existing file based on type
+        try:
+            if str(dest).endswith('.tar.gz'):
+                # Validate tar.gz by attempting to open it
+                with tarfile.open(dest, 'r:gz') as _:
+                    pass
+                print_status(f"Using existing {dest}", COLOR_GREEN)
+                return
+            elif dest.suffix == '.zip':
+                # Validate zip by checking header
+                with open(dest, 'rb') as f:
+                    header = f.read(4)
+                    if header[:2] == b'PK':
+                        print_status(f"Using existing {dest}", COLOR_GREEN)
+                        return
+                print_status("Corrupted zip file, re-downloading...", COLOR_YELLOW)
                 os.remove(dest)
-        else:
-            print_status(f"Using existing {dest}", COLOR_GREEN)
-            return
+            else:
+                # For other files, assume valid if exists
+                print_status(f"Using existing {dest}", COLOR_GREEN)
+                return
+        except Exception:
+            print_status("Corrupted file, re-downloading...", COLOR_YELLOW)
+            os.remove(dest)
     
     print_status(f"Downloading {url}...", COLOR_YELLOW)
     try:
@@ -315,10 +320,13 @@ def create_fat_binary(fat_python_bin, x86_64_bin, aarch64_bin, install_dir):
     py_tmp.mkdir()
 
     # Copy Python standard library from install dir
-    lib_src = install_dir / "lib" / f"python{PYTHON_VERSION[:4]}"
-    lib_dst = py_tmp / "Lib"
+    # Use lib/python3.12/ structure to match Python's expected PYTHONHOME=/zip layout
+    py_version_short = PYTHON_VERSION[:4]
+    lib_src = install_dir / "lib" / f"python{py_version_short}"
+    lib_dst = py_tmp / "lib" / f"python{py_version_short}"
 
     if lib_src.exists():
+        lib_dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(lib_src, lib_dst)
 
         # Add sitecustomize.py
@@ -331,7 +339,7 @@ def create_fat_binary(fat_python_bin, x86_64_bin, aarch64_bin, install_dir):
 
         # Compile Python modules using the fat binary
         print_status("Compiling Python modules...", COLOR_YELLOW)
-        run_command(f"{fat_python_bin} -m compileall -fqb ./Lib", cwd=py_tmp)
+        run_command(f"{fat_python_bin} -m compileall -fqb ./lib", cwd=py_tmp)
 
     # Step 2: Create final binary
     # If we have arch-specific binaries, use apelink to create a clean fat binary
@@ -354,11 +362,12 @@ def create_fat_binary(fat_python_bin, x86_64_bin, aarch64_bin, install_dir):
         shutil.copy2(fat_python_bin, output_bin)
 
     # Step 3: Add Python library to the binary as ZIP
+    # Embedded at lib/python3.12/ to match PYTHONHOME=/zip expectations
     print_status("Adding libraries to fat binary...", COLOR_YELLOW)
 
-    if (py_tmp / "Lib").exists():
+    if (py_tmp / "lib").exists():
         run_command(
-            f"zip -qr {output_bin.absolute()} Lib/",
+            f"zip -qr {output_bin.absolute()} lib/",
             cwd=py_tmp
         )
 
