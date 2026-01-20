@@ -115,33 +115,46 @@ char* format_context_for_prompt(const context_result_t *context_result) {
     if (!context_result || context_result->item_count == 0) {
         return NULL;
     }
-    
-    // Calculate required buffer size
-    size_t total_size = 256; // Base overhead
+
+    // Header and footer text sizes
+    static const char *header = "\n\n## Relevant Context\n\nThe following information may be relevant to your response:\n\n";
+    static const char *footer = "\nPlease use this context to inform your response when relevant.\n";
+
+    // Calculate required buffer size accurately:
+    // - Header + footer overhead
+    // - Per item: "- " (2) + content + " (relevance: X.XX)\n" (20 max) + safety margin
+    size_t total_size = strlen(header) + strlen(footer) + 1;
     for (size_t i = 0; i < context_result->item_count; i++) {
         if (context_result->items[i].content) {
-            total_size += strlen(context_result->items[i].content) + 100;
+            // "- " (2) + content + " (relevance: X.XX)\n" (~22) + safety margin (~10)
+            total_size += strlen(context_result->items[i].content) + 32;
         }
     }
-    
+
     char *formatted = malloc(total_size);
     if (!formatted) return NULL;
-    
-    strcpy(formatted, "\n\n## Relevant Context\n\nThe following information may be relevant to your response:\n\n");
-    
+
+    strcpy(formatted, header);
+    size_t current_len = strlen(formatted);
+
     for (size_t i = 0; i < context_result->item_count; i++) {
         context_item_t *item = &context_result->items[i];
         if (item->content) {
-            char item_text[512];
-            snprintf(item_text, sizeof(item_text), 
-                    "- %s (relevance: %.2f)\n", 
-                    item->content, item->relevance_score);
-            strcat(formatted, item_text);
+            // Use snprintf directly into the buffer at the right offset
+            int written = snprintf(formatted + current_len, total_size - current_len,
+                                   "- %s (relevance: %.2f)\n",
+                                   item->content, item->relevance_score);
+            if (written > 0) {
+                current_len += (size_t)written;
+            }
         }
     }
-    
-    strcat(formatted, "\nPlease use this context to inform your response when relevant.\n");
-    
+
+    // Append footer - check we have space
+    if (current_len + strlen(footer) < total_size) {
+        strcpy(formatted + current_len, footer);
+    }
+
     return formatted;
 }
 

@@ -209,7 +209,7 @@ TEST_PDF_EXTRACTOR_SOURCES = $(TESTDIR)/pdf/test_pdf_extractor.c $(SRCDIR)/pdf/p
 TEST_PDF_EXTRACTOR_OBJECTS = $(TEST_PDF_EXTRACTOR_SOURCES:.c=.o)
 TEST_PDF_EXTRACTOR_TARGET = $(TESTDIR)/test_pdf_extractor
 
-TEST_DOCUMENT_CHUNKER_SOURCES = $(TESTDIR)/test_document_chunker.c $(SRCDIR)/utils/document_chunker.c $(COMMON_TEST_SOURCES)
+TEST_DOCUMENT_CHUNKER_SOURCES = $(TESTDIR)/test_document_chunker.c $(SRCDIR)/utils/document_chunker.c $(SRCDIR)/utils/common_utils.c $(COMMON_TEST_SOURCES)
 TEST_DOCUMENT_CHUNKER_OBJECTS = $(TEST_DOCUMENT_CHUNKER_SOURCES:.c=.o)
 TEST_DOCUMENT_CHUNKER_TARGET = $(TESTDIR)/test_document_chunker
 

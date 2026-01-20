@@ -4,17 +4,13 @@
 #include "../utils/document_chunker.h"
 #include "../llm/embeddings.h"
 #include "config.h"
+#include "common_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 #include <time.h>
 #include <unistd.h>
-
-static char* safe_strdup(const char *str) {
-    if (str == NULL) return NULL;
-    return strdup(str);
-}
 
 static pdf_processing_result_t* create_error_result(const char *error_msg) {
     pdf_processing_result_t *result = malloc(sizeof(pdf_processing_result_t));

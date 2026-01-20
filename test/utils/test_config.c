@@ -94,7 +94,7 @@ void test_config_init_with_defaults(void) {
     TEST_ASSERT_NOT_NULL(config->api_url);
     TEST_ASSERT_NOT_NULL(config->model);
     TEST_ASSERT_EQUAL_STRING("https://api.openai.com/v1/chat/completions", config->api_url);
-    TEST_ASSERT_EQUAL_STRING("gpt-4o-mini", config->model);
+    TEST_ASSERT_EQUAL_STRING("gpt-5-mini-2025-08-07", config->model);
     TEST_ASSERT_EQUAL(8192, config->context_window);
     TEST_ASSERT_EQUAL(-1, config->max_tokens);
 }

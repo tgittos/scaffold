@@ -1,13 +1,9 @@
 #include "document_chunker.h"
+#include "common_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-
-static char* safe_strdup(const char *str) {
-    if (str == NULL) return NULL;
-    return strdup(str);
-}
 
 static chunking_result_t* create_error_result(const char *error_msg) {
     chunking_result_t *result = malloc(sizeof(chunking_result_t));

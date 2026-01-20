@@ -107,11 +107,16 @@ void display_system_info_group_end(void);
 
 /**
  * Log system information with improved formatting and grouping
- * 
+ *
  * @param category Category of the system info
  * @param message The info message
  */
 void log_system_info(const char *category, const char *message);
 
+/**
+ * Cleanup output formatter resources including the global model registry.
+ * Should be called during application shutdown.
+ */
+void cleanup_output_formatter(void);
 
 #endif /* OUTPUT_FORMATTER_H */
