@@ -442,26 +442,38 @@ test: test-python ...
 
 ---
 
-### P7: Automate stdlib embedding
+### P7: Automate stdlib embedding ✅ COMPLETE
 
 **Depends on:** P3, P4, P6
 **Blocks:** P8
+**Status:** Complete - Makefile target `embed-stdlib` added that embeds Python stdlib into ralph binary using zipcopy
 
 Add Makefile target to embed Python stdlib into ralph binary:
 
 ```makefile
+# Python stdlib embedding directory
+PYTHON_STDLIB_DIR := python/build/results/py-tmp
+
+# Uses zipcopy (Cosmopolitan's zip tool) since standard zip doesn't work with APE binaries
 embed-stdlib: $(TARGET)
-	@if [ -d "python/build/results/py-tmp/lib" ]; then \
-		echo "Embedding Python stdlib..."; \
-		cd python/build/results/py-tmp && zip -qr ../../../../$(TARGET) lib/; \
-		echo "Stdlib embedded. Binary size: $$(ls -lh ../../../../$(TARGET) | awk '{print $$5}')"; \
+	@if [ -d "$(PYTHON_STDLIB_DIR)/lib" ]; then \
+		echo "Embedding Python stdlib into ralph binary..."; \
+		rm -f $(BUILDDIR)/stdlib.zip; \
+		cd $(PYTHON_STDLIB_DIR) && zip -qr $(CURDIR)/$(BUILDDIR)/stdlib.zip lib/; \
+		zipcopy $(CURDIR)/$(BUILDDIR)/stdlib.zip $(CURDIR)/$(TARGET); \
+		rm -f $(BUILDDIR)/stdlib.zip; \
+		echo "Stdlib embedded successfully."; \
+		ls -lh $(CURDIR)/$(TARGET) | awk '{print "Binary size: " $$5}'; \
 	else \
-		echo "Warning: Python stdlib not found. Run 'make python' first."; \
+		echo "Warning: Python stdlib not found at $(PYTHON_STDLIB_DIR)/lib"; \
+		echo "Run 'make python' first to build the Python stdlib."; \
 	fi
 
-# Update main build target
+# Default target now includes stdlib embedding
 all: $(TARGET) embed-stdlib
 ```
+
+**Note:** Standard `zip` command doesn't work for appending to APE binaries. Must use Cosmopolitan's `zipcopy` tool instead.
 
 ---
 
@@ -499,7 +511,7 @@ P4 ✅ ──────┬───────────┤                
             │       P6 ✅┐
             │           │
             ▼           ▼
-P7 ─────────┬───────────┘
+P7 ✅ ──────┬───────────┘
             │
             ▼
 P8 (final)

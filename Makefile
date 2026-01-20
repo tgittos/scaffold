@@ -338,13 +338,33 @@ ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_ENV_TARGET) $(TEST_CONFIG_TARGET) 
 # BUILD RULES
 # =============================================================================
 
-# Default target
-all: $(TARGET)
+# Python stdlib embedding directory
+PYTHON_STDLIB_DIR := python/build/results/py-tmp
+
+# Default target - build ralph and embed Python stdlib
+all: $(TARGET) embed-stdlib
 
 # Main executable
 $(TARGET): $(EMBEDDED_LINKS_HEADER) $(OBJECTS) $(ALL_LIBS) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
 	@echo "Linking with PDFio support"
 	$(CXX) $(LDFLAGS) -o $@ $(OBJECTS) $(LIBS) -lpthread
+
+# Embed Python stdlib into ralph binary using Cosmopolitan APE zip feature
+# The stdlib must be at /zip/lib/python3.12/ for Python to find it with PYTHONHOME=/zip
+# Uses zipcopy (Cosmopolitan's zip tool) since standard zip doesn't work with APE binaries
+embed-stdlib: $(TARGET)
+	@if [ -d "$(PYTHON_STDLIB_DIR)/lib" ]; then \
+		echo "Embedding Python stdlib into ralph binary..."; \
+		rm -f $(BUILDDIR)/stdlib.zip; \
+		cd $(PYTHON_STDLIB_DIR) && zip -qr $(CURDIR)/$(BUILDDIR)/stdlib.zip lib/; \
+		zipcopy $(CURDIR)/$(BUILDDIR)/stdlib.zip $(CURDIR)/$(TARGET); \
+		rm -f $(BUILDDIR)/stdlib.zip; \
+		echo "Stdlib embedded successfully."; \
+		ls -lh $(CURDIR)/$(TARGET) | awk '{print "Binary size: " $$5}'; \
+	else \
+		echo "Warning: Python stdlib not found at $(PYTHON_STDLIB_DIR)/lib"; \
+		echo "Run 'make python' first to build the Python stdlib."; \
+	fi
 
 # Embedded links
 $(BIN2C): build/bin2c.c
@@ -764,4 +784,4 @@ distclean: clean
 	rm -f $(LINKS_BUNDLED)
 	$(MAKE) -C python distclean
 
-.PHONY: all test check check-valgrind check-valgrind-all clean clean-python distclean python
+.PHONY: all test check check-valgrind check-valgrind-all clean clean-python distclean python embed-stdlib
