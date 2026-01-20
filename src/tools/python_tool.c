@@ -220,7 +220,7 @@ static int extract_json_number_value(const char *json, const char *key, int defa
     }
 
     colon_pos++;
-    while (*colon_pos == ' ' || *colon_pos == '\t') {
+    while (*colon_pos == ' ' || *colon_pos == '\t' || *colon_pos == '\n') {
         colon_pos++;
     }
 
@@ -251,8 +251,8 @@ int parse_python_arguments(const char *json_args, PythonExecutionParams *params)
     // Enforce reasonable timeout limits
     if (params->timeout_seconds <= 0) {
         params->timeout_seconds = PYTHON_DEFAULT_TIMEOUT;
-    } else if (params->timeout_seconds > 300) {
-        params->timeout_seconds = 300;  // Max 5 minutes
+    } else if (params->timeout_seconds > PYTHON_MAX_TIMEOUT_SECONDS) {
+        params->timeout_seconds = PYTHON_MAX_TIMEOUT_SECONDS;
     }
 
     params->capture_stderr = 1;  // Always capture stderr separately
@@ -310,13 +310,17 @@ static char* get_python_exception_string(void) {
             if (args != NULL) {
                 PyObject *formatted = PyObject_CallObject(format_exception, args);
                 if (formatted != NULL) {
-                    PyObject *joined = PyUnicode_Join(PyUnicode_FromString(""), formatted);
-                    if (joined != NULL) {
-                        const char *str = PyUnicode_AsUTF8(joined);
-                        if (str != NULL) {
-                            result = strdup(str);
+                    PyObject *empty_str = PyUnicode_FromString("");
+                    if (empty_str != NULL) {
+                        PyObject *joined = PyUnicode_Join(empty_str, formatted);
+                        Py_DECREF(empty_str);
+                        if (joined != NULL) {
+                            const char *str = PyUnicode_AsUTF8(joined);
+                            if (str != NULL) {
+                                result = strdup(str);
+                            }
+                            Py_DECREF(joined);
                         }
-                        Py_DECREF(joined);
                     }
                     Py_DECREF(formatted);
                 }
@@ -557,6 +561,9 @@ int execute_python_tool_call(const ToolCall *tool_call, ToolResult *result) {
     if (!interpreter_initialized) {
         if (python_interpreter_init() != 0) {
             result->result = strdup("{\"error\": \"Python interpreter not available\", \"success\": false}");
+            if (result->result == NULL) {
+                return -1;
+            }
             result->success = 0;
             return 0;
         }
@@ -565,6 +572,9 @@ int execute_python_tool_call(const ToolCall *tool_call, ToolResult *result) {
     PythonExecutionParams params;
     if (parse_python_arguments(tool_call->arguments, &params) != 0) {
         result->result = strdup("{\"error\": \"Failed to parse Python arguments\", \"success\": false}");
+        if (result->result == NULL) {
+            return -1;
+        }
         result->success = 0;
         return 0;
     }
@@ -573,6 +583,9 @@ int execute_python_tool_call(const ToolCall *tool_call, ToolResult *result) {
     if (execute_python_code(&params, &exec_result) != 0) {
         cleanup_python_params(&params);
         result->result = strdup("{\"error\": \"Failed to execute Python code\", \"success\": false}");
+        if (result->result == NULL) {
+            return -1;
+        }
         result->success = 0;
         return 0;
     }

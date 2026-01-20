@@ -8,6 +8,7 @@
  */
 #define PYTHON_MAX_CODE_SIZE (1024 * 1024)   // 1MB max code size
 #define PYTHON_DEFAULT_TIMEOUT 30             // Default timeout in seconds
+#define PYTHON_MAX_TIMEOUT_SECONDS 300        // Maximum timeout in seconds (5 minutes)
 #define PYTHON_MAX_OUTPUT_SIZE (512 * 1024)  // 512KB max output size
 
 /**
