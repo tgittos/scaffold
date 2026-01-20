@@ -1465,17 +1465,29 @@ int execute_file_list_tool_call(const ToolCall *tool_call, ToolResult *result) {
         // Build JSON response using cJSON for safety
         cJSON *response = cJSON_CreateObject();
         if (response != NULL) {
-            cJSON_AddBoolToObject(response, "success", 1);
+            if (!cJSON_AddBoolToObject(response, "success", 1)) {
+                cJSON_Delete(response);
+                result->result = safe_strdup("{\"success\":false,\"error\":\"Memory allocation failed\"}");
+                result->success = 0;
+                cleanup_directory_listing(&listing);
+                free(directory_path);
+                free(pattern);
+                return 0;
+            }
 
             cJSON *entries = cJSON_CreateArray();
             if (entries != NULL) {
                 for (int i = 0; i < listing.count; i++) {
                     cJSON *entry = cJSON_CreateObject();
                     if (entry != NULL) {
-                        cJSON_AddStringToObject(entry, "name", listing.entries[i].name);
-                        cJSON_AddStringToObject(entry, "full_path", listing.entries[i].full_path);
-                        cJSON_AddBoolToObject(entry, "is_directory", listing.entries[i].is_directory);
-                        cJSON_AddNumberToObject(entry, "size", (double)listing.entries[i].size);
+                        // Check return values - on failure, skip this entry
+                        if (!cJSON_AddStringToObject(entry, "name", listing.entries[i].name) ||
+                            !cJSON_AddStringToObject(entry, "full_path", listing.entries[i].full_path) ||
+                            !cJSON_AddBoolToObject(entry, "is_directory", listing.entries[i].is_directory) ||
+                            !cJSON_AddNumberToObject(entry, "size", (double)listing.entries[i].size)) {
+                            cJSON_Delete(entry);
+                            continue;
+                        }
                         cJSON_AddItemToArray(entries, entry);
                     }
                 }
@@ -1490,19 +1502,25 @@ int execute_file_list_tool_call(const ToolCall *tool_call, ToolResult *result) {
             result->success = 1;
             cJSON_Delete(response);
         } else {
-            result->result = safe_strdup("Error: Memory allocation failed");
+            result->result = safe_strdup("{\"success\":false,\"error\":\"Memory allocation failed\"}");
             result->success = 0;
         }
 
         cleanup_directory_listing(&listing);
     } else {
         printf("  Error: %s\n", file_error_message(error));
-        
-        char error_msg[256];
-        snprintf(error_msg, sizeof(error_msg),
-            "{\"success\": false, \"error\": \"%s\", \"directory_path\": \"%s\"}",
-            file_error_message(error), directory_path);
-        result->result = safe_strdup(error_msg);
+
+        // Use cJSON for error response to handle special character escaping
+        cJSON *err_response = cJSON_CreateObject();
+        if (err_response != NULL) {
+            cJSON_AddBoolToObject(err_response, "success", 0);
+            cJSON_AddStringToObject(err_response, "error", file_error_message(error));
+            cJSON_AddStringToObject(err_response, "directory_path", directory_path);
+            result->result = cJSON_PrintUnformatted(err_response);
+            cJSON_Delete(err_response);
+        } else {
+            result->result = safe_strdup("{\"success\":false,\"error\":\"Memory allocation failed\"}");
+        }
         result->success = 0;
     }
     
@@ -1571,16 +1589,28 @@ int execute_file_search_tool_call(const ToolCall *tool_call, ToolResult *result)
         // Build JSON response using cJSON for safety
         cJSON *response = cJSON_CreateObject();
         if (response != NULL) {
-            cJSON_AddBoolToObject(response, "success", 1);
+            if (!cJSON_AddBoolToObject(response, "success", 1)) {
+                cJSON_Delete(response);
+                result->result = safe_strdup("{\"success\":false,\"error\":\"Memory allocation failed\"}");
+                result->success = 0;
+                cleanup_search_results(&search_results);
+                free(search_path);
+                free(pattern);
+                return 0;
+            }
 
             cJSON *matches = cJSON_CreateArray();
             if (matches != NULL) {
                 for (int i = 0; i < search_results.count; i++) {
                     cJSON *match = cJSON_CreateObject();
                     if (match != NULL) {
-                        cJSON_AddStringToObject(match, "file", search_results.results[i].file_path);
-                        cJSON_AddNumberToObject(match, "line", search_results.results[i].line_number);
-                        cJSON_AddStringToObject(match, "content", search_results.results[i].line_content);
+                        // Check return values - on failure, skip this match
+                        if (!cJSON_AddStringToObject(match, "file", search_results.results[i].file_path) ||
+                            !cJSON_AddNumberToObject(match, "line", search_results.results[i].line_number) ||
+                            !cJSON_AddStringToObject(match, "content", search_results.results[i].line_content)) {
+                            cJSON_Delete(match);
+                            continue;
+                        }
                         cJSON_AddItemToArray(matches, match);
                     }
                 }
@@ -1594,19 +1624,25 @@ int execute_file_search_tool_call(const ToolCall *tool_call, ToolResult *result)
             result->success = 1;
             cJSON_Delete(response);
         } else {
-            result->result = safe_strdup("Error: Memory allocation failed");
+            result->result = safe_strdup("{\"success\":false,\"error\":\"Memory allocation failed\"}");
             result->success = 0;
         }
 
         cleanup_search_results(&search_results);
     } else {
         printf("  Error: %s\n", file_error_message(error));
-        
-        char error_msg[256];
-        snprintf(error_msg, sizeof(error_msg),
-            "{\"success\": false, \"error\": \"%s\", \"search_path\": \"%s\"}",
-            file_error_message(error), search_path);
-        result->result = safe_strdup(error_msg);
+
+        // Use cJSON for error response to handle special character escaping
+        cJSON *err_response = cJSON_CreateObject();
+        if (err_response != NULL) {
+            cJSON_AddBoolToObject(err_response, "success", 0);
+            cJSON_AddStringToObject(err_response, "error", file_error_message(error));
+            cJSON_AddStringToObject(err_response, "search_path", search_path);
+            result->result = cJSON_PrintUnformatted(err_response);
+            cJSON_Delete(err_response);
+        } else {
+            result->result = safe_strdup("{\"success\":false,\"error\":\"Memory allocation failed\"}");
+        }
         result->success = 0;
     }
     

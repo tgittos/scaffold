@@ -407,22 +407,33 @@ char* generate_anthropic_tools_json(const ToolRegistry *registry) {
             return NULL;
         }
 
-        // Add name and description
-        cJSON_AddStringToObject(tool, "name", func->name);
-        cJSON_AddStringToObject(tool, "description", func->description);
+        // Add name and description - check return values for memory allocation failures
+        if (!cJSON_AddStringToObject(tool, "name", func->name) ||
+            !cJSON_AddStringToObject(tool, "description", func->description)) {
+            cJSON_Delete(tool);
+            cJSON_Delete(tools_array);
+            return NULL;
+        }
 
         // Build input_schema
         cJSON *input_schema = cJSON_CreateObject();
         if (input_schema == NULL) {
+            cJSON_Delete(tool);
             cJSON_Delete(tools_array);
             return NULL;
         }
-        cJSON_AddStringToObject(input_schema, "type", "object");
+        if (!cJSON_AddStringToObject(input_schema, "type", "object")) {
+            cJSON_Delete(input_schema);
+            cJSON_Delete(tool);
+            cJSON_Delete(tools_array);
+            return NULL;
+        }
 
         if (func->parameter_count > 0) {
             cJSON *properties = cJSON_CreateObject();
             if (properties == NULL) {
                 cJSON_Delete(input_schema);
+                cJSON_Delete(tool);
                 cJSON_Delete(tools_array);
                 return NULL;
             }
@@ -434,12 +445,20 @@ char* generate_anthropic_tools_json(const ToolRegistry *registry) {
                 if (prop == NULL) {
                     cJSON_Delete(properties);
                     cJSON_Delete(input_schema);
+                    cJSON_Delete(tool);
                     cJSON_Delete(tools_array);
                     return NULL;
                 }
 
-                cJSON_AddStringToObject(prop, "type", param->type);
-                cJSON_AddStringToObject(prop, "description", param->description);
+                if (!cJSON_AddStringToObject(prop, "type", param->type) ||
+                    !cJSON_AddStringToObject(prop, "description", param->description)) {
+                    cJSON_Delete(prop);
+                    cJSON_Delete(properties);
+                    cJSON_Delete(input_schema);
+                    cJSON_Delete(tool);
+                    cJSON_Delete(tools_array);
+                    return NULL;
+                }
 
                 // Add items schema for array types
                 if (strcmp(param->type, "array") == 0) {
@@ -474,6 +493,7 @@ char* generate_anthropic_tools_json(const ToolRegistry *registry) {
                         required = cJSON_CreateArray();
                         if (required == NULL) {
                             cJSON_Delete(input_schema);
+                            cJSON_Delete(tool);
                             cJSON_Delete(tools_array);
                             return NULL;
                         }
