@@ -552,7 +552,7 @@ vector_db_error_t vector_db_load_index(vector_db_t* db, const char* index_name,
     if (meta) {
         size_t dimension, max_elements;
         if (fscanf(meta, "%zu %zu", &dimension, &max_elements) == 2) {
-            fscanf(meta, "%s", metric);
+            fscanf(meta, "%63s", metric);
             hnswlib_config.dimension = dimension;
             hnswlib_config.max_elements = max_elements;
         } else {

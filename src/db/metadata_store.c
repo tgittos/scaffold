@@ -73,13 +73,13 @@ metadata_store_t* metadata_store_create(const char* base_path) {
 
 void metadata_store_destroy(metadata_store_t* store) {
     if (store == NULL) return;
-    
-    free(store->base_path);
-    free(store);
-    
+
     if (store == singleton_instance) {
         singleton_instance = NULL;
     }
+
+    free(store->base_path);
+    free(store);
 }
 
 metadata_store_t* metadata_store_get_instance(void) {
@@ -211,36 +211,58 @@ ChunkMetadata* metadata_store_get(metadata_store_t* store, const char* index_nam
     // Extract fields
     cJSON* item = cJSON_GetObjectItem(json, "chunk_id");
     if (item) metadata->chunk_id = (size_t)item->valuedouble;
-    
+
     item = cJSON_GetObjectItem(json, "content");
-    if (item && item->valuestring) metadata->content = strdup(item->valuestring);
-    
+    if (item && item->valuestring) {
+        metadata->content = strdup(item->valuestring);
+        if (!metadata->content) goto alloc_error;
+    }
+
     item = cJSON_GetObjectItem(json, "index_name");
-    if (item && item->valuestring) metadata->index_name = strdup(item->valuestring);
-    
+    if (item && item->valuestring) {
+        metadata->index_name = strdup(item->valuestring);
+        if (!metadata->index_name) goto alloc_error;
+    }
+
     item = cJSON_GetObjectItem(json, "type");
-    if (item && item->valuestring) metadata->type = strdup(item->valuestring);
-    
+    if (item && item->valuestring) {
+        metadata->type = strdup(item->valuestring);
+        if (!metadata->type) goto alloc_error;
+    }
+
     item = cJSON_GetObjectItem(json, "source");
-    if (item && item->valuestring) metadata->source = strdup(item->valuestring);
-    
+    if (item && item->valuestring) {
+        metadata->source = strdup(item->valuestring);
+        if (!metadata->source) goto alloc_error;
+    }
+
     item = cJSON_GetObjectItem(json, "importance");
-    if (item && item->valuestring) metadata->importance = strdup(item->valuestring);
-    
+    if (item && item->valuestring) {
+        metadata->importance = strdup(item->valuestring);
+        if (!metadata->importance) goto alloc_error;
+    }
+
     item = cJSON_GetObjectItem(json, "timestamp");
     if (item) metadata->timestamp = (time_t)item->valuedouble;
-    
+
     item = cJSON_GetObjectItem(json, "custom_metadata");
     if (item) {
         char* custom = cJSON_Print(item);
         if (custom) metadata->custom_metadata = custom;
     }
-    
+
     cJSON_Delete(json);
     free(filename);
     free(index_path);
-    
+
     return metadata;
+
+alloc_error:
+    metadata_store_free_chunk(metadata);
+    cJSON_Delete(json);
+    free(filename);
+    free(index_path);
+    return NULL;
 }
 
 int metadata_store_delete(metadata_store_t* store, const char* index_name, size_t chunk_id) {

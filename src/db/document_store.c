@@ -108,13 +108,13 @@ document_store_t* document_store_create(const char* base_path) {
 
 void document_store_destroy(document_store_t* store) {
     if (store == NULL) return;
-    
-    free(store->base_path);
-    free(store);
-    
+
     if (store == singleton_instance) {
         singleton_instance = NULL;
     }
+
+    free(store->base_path);
+    free(store);
 }
 
 document_store_t* document_store_get_instance(void) {
@@ -279,19 +279,28 @@ static document_t* load_document(document_store_t* store, const char* index_name
     
     cJSON* item = cJSON_GetObjectItem(json, "id");
     if (item) doc->id = (size_t)item->valuedouble;
-    
+
     item = cJSON_GetObjectItem(json, "content");
-    if (item) doc->content = strdup(item->valuestring);
-    
+    if (item && item->valuestring) {
+        doc->content = strdup(item->valuestring);
+        if (!doc->content) goto alloc_error;
+    }
+
     item = cJSON_GetObjectItem(json, "type");
-    if (item) doc->type = strdup(item->valuestring);
-    
+    if (item && item->valuestring) {
+        doc->type = strdup(item->valuestring);
+        if (!doc->type) goto alloc_error;
+    }
+
     item = cJSON_GetObjectItem(json, "source");
-    if (item) doc->source = strdup(item->valuestring);
-    
+    if (item && item->valuestring) {
+        doc->source = strdup(item->valuestring);
+        if (!doc->source) goto alloc_error;
+    }
+
     item = cJSON_GetObjectItem(json, "timestamp");
     if (item) doc->timestamp = (time_t)item->valuedouble;
-    
+
     item = cJSON_GetObjectItem(json, "metadata");
     if (item) {
         char* metadata_str = cJSON_Print(item);
@@ -299,12 +308,19 @@ static document_t* load_document(document_store_t* store, const char* index_name
             doc->metadata_json = metadata_str;
         }
     }
-    
+
     cJSON_Delete(json);
     free(filename);
     free(index_path);
-    
+
     return doc;
+
+alloc_error:
+    document_store_free_document(doc);
+    cJSON_Delete(json);
+    free(filename);
+    free(index_path);
+    return NULL;
 }
 
 int document_store_add(document_store_t* store, const char* index_name,
