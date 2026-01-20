@@ -242,45 +242,137 @@ def build_python(src_dir):
 
 
 def copy_static_library(build_dir, install_dir):
-    """Copy libpython static library to main ralph build directory for linking."""
+    """Copy libpython static library to main ralph build directory for linking.
+
+    Creates a complete static library for embedding by:
+    1. Copying both x86_64 and aarch64 versions of libpython
+    2. Adding required module objects (HACL, expat, mpdec) that aren't in the base library
+    """
     print_status("Copying static library to main build directory...", COLOR_YELLOW)
 
     # Ensure ralph build directory exists
     RALPH_BUILD_DIR.mkdir(parents=True, exist_ok=True)
+    aarch64_dir = RALPH_BUILD_DIR / ".aarch64"
+    aarch64_dir.mkdir(parents=True, exist_ok=True)
 
-    # Find libpython*.a in the build or install directory
-    # Python build creates libpython3.X.a
     py_version_short = PYTHON_VERSION[:4]  # e.g., "3.12"
+    lib_name = f"libpython{py_version_short}.a"
 
-    # Check build directory first (where it's built)
-    libpython_src = build_dir / f"libpython{py_version_short}.a"
-    if not libpython_src.exists():
-        # Check install lib directory
-        libpython_src = install_dir / "lib" / f"libpython{py_version_short}.a"
+    # Find source libraries in install directory
+    lib_src_x86 = install_dir / "lib" / lib_name
+    lib_src_aarch64 = install_dir / "lib" / ".aarch64" / lib_name
 
-    if not libpython_src.exists():
-        # Try without minor version
-        libpython_src = build_dir / "libpython3.a"
-        if not libpython_src.exists():
-            libpython_src = install_dir / "lib" / "libpython3.a"
+    if not lib_src_x86.exists():
+        # Try build directory as fallback
+        lib_src_x86 = build_dir / lib_name
+        lib_src_aarch64 = build_dir / ".aarch64" / lib_name
 
-    if libpython_src.exists():
-        libpython_dst = RALPH_BUILD_DIR / f"libpython{py_version_short}.a"
-        shutil.copy2(libpython_src, libpython_dst)
-        print_status(f"Copied {libpython_src.name} to {RALPH_BUILD_DIR}", COLOR_GREEN)
-
-        # Also copy Python headers for ralph to include
-        include_src = install_dir / "include" / f"python{py_version_short}"
-        include_dst = RALPH_BUILD_DIR / "python-include"
-        if include_src.exists():
-            if include_dst.exists():
-                shutil.rmtree(include_dst)
-            shutil.copytree(include_src, include_dst)
-            print_status(f"Copied Python headers to {include_dst}", COLOR_GREEN)
-    else:
+    if not lib_src_x86.exists():
         print_status("Warning: libpython static library not found", COLOR_YELLOW)
-        # List what's available for debugging
-        print_status(f"Build dir contents: {list(build_dir.glob('*.a'))}", COLOR_YELLOW)
+        print_status(f"Searched: {install_dir / 'lib'}, {build_dir}", COLOR_YELLOW)
+        return
+
+    # Copy x86_64 library
+    lib_dst_x86 = RALPH_BUILD_DIR / lib_name
+    shutil.copy2(lib_src_x86, lib_dst_x86)
+    print_status(f"Copied {lib_name} to {RALPH_BUILD_DIR}", COLOR_GREEN)
+
+    # Copy aarch64 library
+    if lib_src_aarch64.exists():
+        lib_dst_aarch64 = aarch64_dir / lib_name
+        shutil.copy2(lib_src_aarch64, lib_dst_aarch64)
+        print_status(f"Copied {lib_name} to {aarch64_dir}", COLOR_GREEN)
+    else:
+        print_status("Warning: aarch64 libpython not found", COLOR_YELLOW)
+
+    # Add required module objects that aren't included in the base library
+    # These are needed for static linking/embedding
+    _add_module_objects_to_library(build_dir, lib_dst_x86, lib_dst_aarch64 if lib_src_aarch64.exists() else None)
+
+    # Copy Python headers for ralph to include
+    include_src = install_dir / "include" / f"python{py_version_short}"
+    include_dst = RALPH_BUILD_DIR / "python-include"
+    if include_src.exists():
+        if include_dst.exists():
+            shutil.rmtree(include_dst)
+        shutil.copytree(include_src, include_dst)
+        print_status(f"Copied Python headers to {include_dst}", COLOR_GREEN)
+
+
+def _add_module_objects_to_library(build_dir, lib_x86, lib_aarch64):
+    """Add additional module objects to the static library for complete embedding.
+
+    The base libpython doesn't include all objects needed for static linking.
+    We need to add: HACL (hash), expat (XML), and mpdec (decimal) objects.
+
+    Note: Some objects have conflicting names (e.g., context.o exists in both
+    Python/ and _decimal/libmpdec/). We rename conflicting objects with a prefix
+    before adding them to the archive.
+    """
+    print_status("Adding module objects for complete static linking...", COLOR_YELLOW)
+
+    modules_dir = build_dir / "Modules"
+
+    # Object groups to add: (subdir, files, prefix_for_renaming)
+    # The prefix is used to avoid name conflicts in the archive
+    object_groups = [
+        ("_hacl", ["Hacl_Hash_SHA2.o", "Hacl_Hash_SHA1.o", "Hacl_Hash_MD5.o", "Hacl_Hash_SHA3.o"], None),
+        ("expat", ["xmlparse.o", "xmlrole.o", "xmltok.o"], None),
+        # mpdec objects need prefix because context.o conflicts with Python/context.o
+        ("_decimal/libmpdec", ["basearith.o", "constants.o", "context.o", "convolute.o",
+                               "crt.o", "difradix2.o", "fnt.o", "fourstep.o", "io.o",
+                               "mpalloc.o", "mpdecimal.o", "numbertheory.o", "sixstep.o",
+                               "transpose.o"], "mpdec_"),
+    ]
+
+    # Create temp directory for renamed objects
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = Path(tmpdir)
+
+        for subdir, obj_files, prefix in object_groups:
+            obj_dir = modules_dir / subdir
+            if not obj_dir.exists():
+                print_status(f"Warning: {obj_dir} not found, skipping", COLOR_YELLOW)
+                continue
+
+            # Process x86_64 objects
+            x86_objs = []
+            for f in obj_files:
+                src = obj_dir / f
+                if src.exists():
+                    if prefix:
+                        # Rename to avoid conflicts
+                        dst = tmpdir / f"{prefix}{f}"
+                        shutil.copy2(src, dst)
+                        x86_objs.append(str(dst))
+                    else:
+                        x86_objs.append(str(src))
+
+            if x86_objs:
+                cmd = f"aarch64-linux-cosmo-ar r {lib_x86} " + " ".join(x86_objs)
+                run_command(cmd)
+
+            # Process aarch64 objects
+            if lib_aarch64:
+                aarch64_obj_dir = obj_dir / ".aarch64"
+                if aarch64_obj_dir.exists():
+                    aarch64_objs = []
+                    for f in obj_files:
+                        src = aarch64_obj_dir / f
+                        if src.exists():
+                            if prefix:
+                                dst = tmpdir / f"{prefix}aarch64_{f}"
+                                shutil.copy2(src, dst)
+                                aarch64_objs.append(str(dst))
+                            else:
+                                aarch64_objs.append(str(src))
+
+                    if aarch64_objs:
+                        cmd = f"aarch64-linux-cosmo-ar r {lib_aarch64} " + " ".join(aarch64_objs)
+                        run_command(cmd)
+
+    print_status("Module objects added to static library", COLOR_GREEN)
 
 def create_sitecustomize():
     """Create sitecustomize.py for /zip paths."""
