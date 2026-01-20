@@ -40,6 +40,8 @@ static void init_embedding_registry_internal(void) {
     g_registry_init_result = 0;
 }
 
+// Note: pthread_once guarantees init_embedding_registry_internal runs exactly once.
+// If initialization fails, subsequent calls return the failure result with no retry.
 static int init_embedding_registry_once(void) {
     pthread_once(&g_registry_init_once, init_embedding_registry_internal);
     return g_registry_init_result;
@@ -140,9 +142,10 @@ int embeddings_get_vector(const embeddings_config_t *config, const char *text,
 
     // Set up headers using provider (size 11 to always allow NULL terminator)
     const char *headers[11];
-    int header_count = provider->build_headers(provider, config->api_key, headers, 10);
-    if (header_count < 0) {
-        fprintf(stderr, "Error: Failed to build headers\n");
+    const int max_headers = 10;
+    int header_count = provider->build_headers(provider, config->api_key, headers, max_headers);
+    if (header_count < 0 || header_count > max_headers) {
+        fprintf(stderr, "Error: Invalid header count from provider\n");
         free(request_json);
         return -1;
     }
