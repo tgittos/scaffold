@@ -476,16 +476,31 @@ $(TEST_MEMORY_TOOL_TARGET): $(TEST_MEMORY_TOOL_OBJECTS) $(ALL_LIBS)
 
 $(TEST_PYTHON_TOOL_TARGET): $(TEST_PYTHON_TOOL_OBJECTS) $(ALL_LIBS)
 	$(CXX) -o $@ $(TEST_PYTHON_TOOL_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(PYTHON_LIB) -lm -lpthread
+	@set -e; \
+	if [ ! -d "$(PYTHON_STDLIB_DIR)/lib" ]; then \
+		echo "Error: Python stdlib directory '$(PYTHON_STDLIB_DIR)/lib' not found."; \
+		echo "Set PYTHON_STDLIB_DIR correctly before running Python tool tests."; \
+		exit 1; \
+	fi; \
+	echo "Embedding Python stdlib into Python tool test binary..."; \
+	rm -f $(BUILDDIR)/stdlib.zip; \
+	cd $(PYTHON_STDLIB_DIR) && zip -qr $(CURDIR)/$(BUILDDIR)/stdlib.zip lib/; \
+	zipcopy $(CURDIR)/$(BUILDDIR)/stdlib.zip $(CURDIR)/$@; \
+	rm -f $(BUILDDIR)/stdlib.zip
 
 $(TEST_PYTHON_INTEGRATION_TARGET): $(TEST_PYTHON_INTEGRATION_OBJECTS) $(ALL_LIBS)
 	$(CXX) -o $@ $(TEST_PYTHON_INTEGRATION_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(PYTHON_LIB) -lm -lpthread
-	@if [ -d "$(PYTHON_STDLIB_DIR)/lib" ]; then \
-		echo "Embedding Python stdlib into integration test binary..."; \
-		rm -f $(BUILDDIR)/stdlib.zip; \
-		cd $(PYTHON_STDLIB_DIR) && zip -qr $(CURDIR)/$(BUILDDIR)/stdlib.zip lib/; \
-		zipcopy $(CURDIR)/$(BUILDDIR)/stdlib.zip $(CURDIR)/$@; \
-		rm -f $(BUILDDIR)/stdlib.zip; \
-	fi
+	@set -e; \
+	if [ ! -d "$(PYTHON_STDLIB_DIR)/lib" ]; then \
+		echo "Error: Python stdlib directory '$(PYTHON_STDLIB_DIR)/lib' not found."; \
+		echo "Set PYTHON_STDLIB_DIR correctly before running integration tests."; \
+		exit 1; \
+	fi; \
+	echo "Embedding Python stdlib into integration test binary..."; \
+	rm -f $(BUILDDIR)/stdlib.zip; \
+	cd $(PYTHON_STDLIB_DIR) && zip -qr $(CURDIR)/$(BUILDDIR)/stdlib.zip lib/; \
+	zipcopy $(CURDIR)/$(BUILDDIR)/stdlib.zip $(CURDIR)/$@; \
+	rm -f $(BUILDDIR)/stdlib.zip
 
 $(TEST_MEMORY_MGMT_TARGET): $(TEST_MEMORY_MGMT_OBJECTS) src/network/api_error.o $(ALL_LIBS)
 	$(CXX) -o $@ $(TEST_MEMORY_MGMT_OBJECTS) src/network/api_error.o $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(PYTHON_LIB) -lm -lpthread
@@ -566,8 +581,9 @@ test: $(ALL_TEST_TARGETS)
 check: test
 
 # Valgrind testing (safe subset)
+# Note: Python tests excluded - stdlib is only embedded in APE binary, not platform-specific ELF
 check-valgrind: $(ALL_TEST_TARGETS)
-	@echo "Running valgrind tests (excluding HTTP tests)..."
+	@echo "Running valgrind tests (excluding HTTP and Python tests)..."
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_MAIN_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_HTTP_RETRY_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_ENV_TARGET).aarch64.elf
@@ -583,8 +599,6 @@ check-valgrind: $(ALL_TEST_TARGETS)
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_TODO_TOOL_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_VECTOR_DB_TOOL_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_MEMORY_TOOL_TARGET).aarch64.elf
-	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_PYTHON_TOOL_TARGET).aarch64.elf
-	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_PYTHON_INTEGRATION_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_TOKEN_MANAGER_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_CONVERSATION_COMPACTOR_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_MODEL_TOOLS_TARGET).aarch64.elf
@@ -797,6 +811,8 @@ clean:
 	find build -type f ! -name 'bin2c.c' ! -name 'links' ! -name 'libpython*.a' ! -path 'build/python-include/*' -delete 2>/dev/null || true
 
 clean-python:
+	rm -f $(PYTHON_LIB)
+	rm -rf $(PYTHON_INCLUDE)
 	$(MAKE) -C python clean
 
 distclean: clean

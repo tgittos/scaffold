@@ -117,9 +117,10 @@ void test_format_python_result_json_success(void) {
     TEST_ASSERT_NOT_NULL(json);
     TEST_ASSERT_TRUE(strstr(json, "\"stdout\"") != NULL);
     TEST_ASSERT_TRUE(strstr(json, "\"stderr\"") != NULL);
-    TEST_ASSERT_TRUE(strstr(json, "\"success\": true") != NULL);
-    TEST_ASSERT_TRUE(strstr(json, "\"timed_out\": false") != NULL);
-    TEST_ASSERT_TRUE(strstr(json, "\"exception\": null") != NULL);
+    // Check for boolean values (cJSON doesn't add space after colon)
+    TEST_ASSERT_TRUE(strstr(json, "\"success\":true") != NULL);
+    TEST_ASSERT_TRUE(strstr(json, "\"timed_out\":false") != NULL);
+    TEST_ASSERT_TRUE(strstr(json, "\"exception\":null") != NULL);
 
     free(json);
     cleanup_python_result(&result);
@@ -138,7 +139,7 @@ void test_format_python_result_json_exception(void) {
 
     char* json = format_python_result_json(&result);
     TEST_ASSERT_NOT_NULL(json);
-    TEST_ASSERT_TRUE(strstr(json, "\"success\": false") != NULL);
+    TEST_ASSERT_TRUE(strstr(json, "\"success\":false") != NULL);
     TEST_ASSERT_TRUE(strstr(json, "NameError") != NULL);
 
     free(json);
@@ -158,8 +159,8 @@ void test_format_python_result_json_timeout(void) {
 
     char* json = format_python_result_json(&result);
     TEST_ASSERT_NOT_NULL(json);
-    TEST_ASSERT_TRUE(strstr(json, "\"timed_out\": true") != NULL);
-    TEST_ASSERT_TRUE(strstr(json, "\"success\": false") != NULL);
+    TEST_ASSERT_TRUE(strstr(json, "\"timed_out\":true") != NULL);
+    TEST_ASSERT_TRUE(strstr(json, "\"success\":false") != NULL);
 
     free(json);
     cleanup_python_result(&result);
@@ -202,24 +203,47 @@ void test_cleanup_python_result(void) {
 
 // Test cleanup with NULL pointers (should not crash)
 void test_cleanup_null_safety(void) {
+    // Test NULL parameter handling (should not crash)
     cleanup_python_params(NULL);
     cleanup_python_result(NULL);
 
+    // Test cleanup of zero-initialized struct
     PythonExecutionParams params = {0};
     cleanup_python_params(&params);
+    // Verify struct is still zeroed after cleanup
+    TEST_ASSERT_NULL(params.code);
+    TEST_ASSERT_EQUAL_INT(0, params.timeout_seconds);
+    TEST_ASSERT_EQUAL_INT(0, params.capture_stderr);
 
+    // Test cleanup of zero-initialized result struct
     PythonExecutionResult result = {0};
     cleanup_python_result(&result);
-
-    TEST_PASS();
+    // Verify struct is still zeroed after cleanup
+    TEST_ASSERT_NULL(result.stdout_output);
+    TEST_ASSERT_NULL(result.stderr_output);
+    TEST_ASSERT_NULL(result.exception);
+    TEST_ASSERT_EQUAL_INT(0, result.success);
+    TEST_ASSERT_EQUAL_INT(0, result.timed_out);
 }
 
 // Test interpreter initialization status
 void test_python_interpreter_is_initialized(void) {
-    // Before any initialization, should return 0
-    // Note: If tests run after interpreter is initialized elsewhere, this may differ
-    int status = python_interpreter_is_initialized();
-    TEST_ASSERT_TRUE(status == 0 || status == 1);  // Either state is valid
+    // The interpreter should not be initialized at the start of this test
+    // (assuming tests run in isolation or interpreter was shut down)
+    int initial_status = python_interpreter_is_initialized();
+
+    // If not initialized, test the full init/shutdown cycle
+    if (initial_status == 0) {
+        TEST_ASSERT_EQUAL_INT(0, python_interpreter_init());
+        TEST_ASSERT_EQUAL_INT(1, python_interpreter_is_initialized());
+
+        // Shutdown and verify state returns to uninitialized
+        python_interpreter_shutdown();
+        TEST_ASSERT_EQUAL_INT(0, python_interpreter_is_initialized());
+    } else {
+        // Already initialized (from previous test), verify it reports correctly
+        TEST_ASSERT_EQUAL_INT(1, initial_status);
+    }
 }
 
 // Test tool integration with tools system

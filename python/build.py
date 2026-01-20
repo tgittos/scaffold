@@ -13,7 +13,6 @@ import sys
 import shutil
 import subprocess
 import tarfile
-import urllib.request
 from pathlib import Path
 
 # Configuration - matching superconfigure
@@ -350,7 +349,7 @@ def _add_module_objects_to_library(build_dir, lib_x86, lib_aarch64):
                         x86_objs.append(str(src))
 
             if x86_objs:
-                cmd = f"aarch64-linux-cosmo-ar r {lib_x86} " + " ".join(x86_objs)
+                cmd = f"cosmoar r {lib_x86} " + " ".join(x86_objs)
                 run_command(cmd)
 
             # Process aarch64 objects

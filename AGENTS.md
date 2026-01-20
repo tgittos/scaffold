@@ -79,6 +79,35 @@ To test subagent memory safety, run the subagent code paths directly without the
 You can use all normal C/C++ debug tooling on Cosmopolitan C projects. You must only remember that you need to check it against
 platform specific binaries, such as .aarch64.elf (aarch64) and .com.dbg (amd64)
 
+### Valgrind and Architecture
+
+**IMPORTANT: Before running valgrind, check the host architecture and use the correct binary:**
+
+```bash
+uname -m
+```
+
+- If `aarch64` (ARM64): Use `.aarch64.elf` files with valgrind
+- If `x86_64` (AMD64): Use `.com.dbg` files with valgrind
+
+Example on aarch64:
+```bash
+valgrind --leak-check=full ./test/test_foo.aarch64.elf
+```
+
+Example on x86_64:
+```bash
+valgrind --leak-check=full ./test/test_foo.com.dbg
+```
+
+### Python Tests and Valgrind
+
+**Python tests (`test_python_tool`, `test_python_integration`) are excluded from valgrind.**
+
+The Python stdlib is embedded into the APE binary using `zipcopy`, but valgrind requires running the platform-specific ELF binaries (`.aarch64.elf` or `.com.dbg`). These platform-specific binaries don't have the stdlib embedded, so Python initialization fails with "No module named 'encodings'".
+
+To test Python tool memory safety, rely on the unit tests for the C code paths (argument parsing, JSON formatting, cleanup functions) which don't require the Python interpreter to be fully initialized.
+
 ## Technology
 
 - Source code is C

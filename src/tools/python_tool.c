@@ -1,5 +1,5 @@
 #include "python_tool.h"
-#include "../utils/json_escape.h"
+#include <cJSON.h>
 #include <Python.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -138,126 +138,37 @@ int register_python_tool(ToolRegistry *registry) {
     return result;
 }
 
+// JSON helper functions using cJSON
 static char* extract_json_string_value(const char *json, const char *key) {
-    char search_pattern[256] = {0};
-    snprintf(search_pattern, sizeof(search_pattern), "\"%s\"", key);
-
-    const char *key_pos = strstr(json, search_pattern);
-    if (key_pos == NULL) {
+    cJSON *json_obj = cJSON_Parse(json);
+    if (json_obj == NULL) {
         return NULL;
     }
 
-    const char *colon_pos = strchr(key_pos, ':');
-    if (colon_pos == NULL) {
-        return NULL;
+    cJSON *item = cJSON_GetObjectItemCaseSensitive(json_obj, key);
+    char *result = NULL;
+    if (cJSON_IsString(item) && item->valuestring != NULL) {
+        result = strdup(item->valuestring);
     }
 
-    colon_pos++;
-    while (*colon_pos == ' ' || *colon_pos == '\t' || *colon_pos == '\n') {
-        colon_pos++;
-    }
-
-    if (*colon_pos != '"') {
-        return NULL;
-    }
-
-    const char *start = colon_pos + 1;
-    const char *end = start;
-
-    // Parse JSON string with escape handling
-    while (*end != '\0' && *end != '"') {
-        if (*end == '\\' && *(end + 1) != '\0') {
-            end += 2;
-        } else {
-            end++;
-        }
-    }
-
-    if (*end != '"') {
-        return NULL;
-    }
-
-    size_t len = end - start;
-    char *result = malloc(len + 1);
-    if (result == NULL) {
-        return NULL;
-    }
-
-    // Copy with escape sequence handling
-    size_t j = 0;
-    for (size_t i = 0; i < len; i++) {
-        if (start[i] == '\\' && i + 1 < len) {
-            char next = start[i + 1];
-            switch (next) {
-                case 'n': result[j++] = '\n'; i++; break;
-                case 't': result[j++] = '\t'; i++; break;
-                case 'r': result[j++] = '\r'; i++; break;
-                case 'b': result[j++] = '\b'; i++; break;
-                case 'f': result[j++] = '\f'; i++; break;
-                case '\\': result[j++] = '\\'; i++; break;
-                case '"': result[j++] = '"'; i++; break;
-                case '/': result[j++] = '/'; i++; break;
-                case 'u':
-                    // Handle unicode escape sequences (\uXXXX)
-                    if (i + 5 < len) {
-                        // Parse the 4-digit hex value
-                        char hex[5] = {start[i+2], start[i+3], start[i+4], start[i+5], '\0'};
-                        unsigned int codepoint = 0;
-                        if (sscanf(hex, "%4x", &codepoint) == 1) {
-                            // For ASCII range, just use the character directly
-                            if (codepoint < 0x80) {
-                                result[j++] = (char)codepoint;
-                            } else if (codepoint < 0x800) {
-                                // Two-byte UTF-8
-                                result[j++] = (char)(0xC0 | (codepoint >> 6));
-                                result[j++] = (char)(0x80 | (codepoint & 0x3F));
-                            } else {
-                                // Three-byte UTF-8
-                                result[j++] = (char)(0xE0 | (codepoint >> 12));
-                                result[j++] = (char)(0x80 | ((codepoint >> 6) & 0x3F));
-                                result[j++] = (char)(0x80 | (codepoint & 0x3F));
-                            }
-                            i += 5;  // Skip \uXXXX
-                        } else {
-                            // Invalid hex, keep as-is
-                            result[j++] = start[i];
-                        }
-                    } else {
-                        // Not enough characters for \uXXXX, keep as-is
-                        result[j++] = start[i];
-                    }
-                    break;
-                default: result[j++] = start[i]; break;
-            }
-        } else {
-            result[j++] = start[i];
-        }
-    }
-    result[j] = '\0';
-
+    cJSON_Delete(json_obj);
     return result;
 }
 
 static int extract_json_number_value(const char *json, const char *key, int default_value) {
-    char search_pattern[256] = {0};
-    snprintf(search_pattern, sizeof(search_pattern), "\"%s\"", key);
-
-    const char *key_pos = strstr(json, search_pattern);
-    if (key_pos == NULL) {
+    cJSON *json_obj = cJSON_Parse(json);
+    if (json_obj == NULL) {
         return default_value;
     }
 
-    const char *colon_pos = strchr(key_pos, ':');
-    if (colon_pos == NULL) {
-        return default_value;
+    cJSON *item = cJSON_GetObjectItemCaseSensitive(json_obj, key);
+    int result = default_value;
+    if (cJSON_IsNumber(item)) {
+        result = item->valueint;
     }
 
-    colon_pos++;
-    while (*colon_pos == ' ' || *colon_pos == '\t' || *colon_pos == '\n') {
-        colon_pos++;
-    }
-
-    return atoi(colon_pos);
+    cJSON_Delete(json_obj);
+    return result;
 }
 
 int parse_python_arguments(const char *json_args, PythonExecutionParams *params) {
@@ -364,16 +275,52 @@ static char* get_python_exception_string(void) {
         Py_DECREF(traceback_module);
     }
 
-    // Fallback to simple string representation
-    if (result == NULL && value != NULL) {
-        PyObject *str_value = PyObject_Str(value);
-        if (str_value != NULL) {
-            const char *str = PyUnicode_AsUTF8(str_value);
-            if (str != NULL) {
-                result = strdup(str);
+    // Fallback: try to include exception type name and value
+    if (result == NULL) {
+        char *type_name = NULL;
+        char *value_str = NULL;
+
+        // Try to get the exception type name
+        if (type != NULL) {
+            PyObject *type_name_obj = PyObject_GetAttrString(type, "__name__");
+            if (type_name_obj != NULL) {
+                const char *name = PyUnicode_AsUTF8(type_name_obj);
+                if (name != NULL) {
+                    type_name = strdup(name);
+                }
+                Py_DECREF(type_name_obj);
             }
-            Py_DECREF(str_value);
         }
+
+        // Try to get the value string
+        if (value != NULL) {
+            PyObject *str_value = PyObject_Str(value);
+            if (str_value != NULL) {
+                const char *str = PyUnicode_AsUTF8(str_value);
+                if (str != NULL) {
+                    value_str = strdup(str);
+                }
+                Py_DECREF(str_value);
+            }
+        }
+
+        // Combine type and value if available
+        if (type_name && value_str) {
+            size_t len = strlen(type_name) + strlen(value_str) + 3;  // ": " + null
+            result = malloc(len);
+            if (result) {
+                snprintf(result, len, "%s: %s", type_name, value_str);
+            }
+        } else if (type_name) {
+            result = type_name;
+            type_name = NULL;  // Prevent double-free
+        } else if (value_str) {
+            result = value_str;
+            value_str = NULL;  // Prevent double-free
+        }
+
+        free(type_name);
+        free(value_str);
     }
 
     Py_XDECREF(type);
@@ -474,6 +421,8 @@ int execute_python_code(const PythonExecutionParams *params, PythonExecutionResu
     sa.sa_flags = 0;
     if (sigaction(SIGALRM, &sa, &old_sigaction) == 0) {
         sigaction_saved = 1;
+    } else {
+        fprintf(stderr, "Warning: Failed to set up Python timeout handler\n");
     }
 
     if (params->timeout_seconds > 0) {
@@ -483,11 +432,22 @@ int execute_python_code(const PythonExecutionParams *params, PythonExecutionResu
     // Execute the Python code
     PyObject *exec_result = PyRun_String(params->code, Py_file_input, globals_dict, globals_dict);
 
-    // Cancel alarm
-    alarm(0);
-    if (sigaction_saved) {
-        sigaction(SIGALRM, &old_sigaction, NULL);
-        sigaction_saved = 0;
+    // Cancel alarm and restore signal handler
+    // Block SIGALRM while we cancel the alarm and restore the old handler
+    // to avoid a race where the timeout handler could run in this window.
+    {
+        sigset_t sigalrm_set, old_set;
+        sigemptyset(&sigalrm_set);
+        sigaddset(&sigalrm_set, SIGALRM);
+        sigprocmask(SIG_BLOCK, &sigalrm_set, &old_set);
+
+        alarm(0);
+        if (sigaction_saved) {
+            sigaction(SIGALRM, &old_sigaction, NULL);
+            sigaction_saved = 0;
+        }
+
+        sigprocmask(SIG_SETMASK, &old_set, NULL);
     }
 
     // Capture timing
@@ -514,12 +474,26 @@ int execute_python_code(const PythonExecutionParams *params, PythonExecutionResu
     result->stdout_output = capture_python_output(stdout_capture);
     result->stderr_output = capture_python_output(stderr_capture);
 
-    // Truncate output if too large (leave room for null terminator)
-    if (result->stdout_output && strlen(result->stdout_output) >= PYTHON_MAX_OUTPUT_SIZE) {
-        result->stdout_output[PYTHON_MAX_OUTPUT_SIZE - 1] = '\0';
+    // Truncate output if too large, adding truncation indicator
+    if (result->stdout_output) {
+        size_t stdout_len = strlen(result->stdout_output);
+        if (stdout_len >= PYTHON_MAX_OUTPUT_SIZE) {
+            const char *trunc_msg = "\n[Output truncated at 512KB]";
+            size_t trunc_msg_len = strlen(trunc_msg);
+            size_t start = PYTHON_MAX_OUTPUT_SIZE - trunc_msg_len - 1;
+            memcpy(result->stdout_output + start, trunc_msg, trunc_msg_len);
+            result->stdout_output[PYTHON_MAX_OUTPUT_SIZE - 1] = '\0';
+        }
     }
-    if (result->stderr_output && strlen(result->stderr_output) >= PYTHON_MAX_OUTPUT_SIZE) {
-        result->stderr_output[PYTHON_MAX_OUTPUT_SIZE - 1] = '\0';
+    if (result->stderr_output) {
+        size_t stderr_len = strlen(result->stderr_output);
+        if (stderr_len >= PYTHON_MAX_OUTPUT_SIZE) {
+            const char *trunc_msg = "\n[Output truncated at 512KB]";
+            size_t trunc_msg_len = strlen(trunc_msg);
+            size_t start = PYTHON_MAX_OUTPUT_SIZE - trunc_msg_len - 1;
+            memcpy(result->stderr_output + start, trunc_msg, trunc_msg_len);
+            result->stderr_output[PYTHON_MAX_OUTPUT_SIZE - 1] = '\0';
+        }
     }
 
     // Restore original stdout/stderr
@@ -543,55 +517,59 @@ char* format_python_result_json(const PythonExecutionResult *exec_result) {
         return NULL;
     }
 
-    // Escape strings for JSON
-    char *escaped_stdout = json_escape_string(exec_result->stdout_output ? exec_result->stdout_output : "");
-    char *escaped_stderr = json_escape_string(exec_result->stderr_output ? exec_result->stderr_output : "");
-    char *escaped_exception = exec_result->exception ? json_escape_string(exec_result->exception) : NULL;
-
-    if (escaped_stdout == NULL || escaped_stderr == NULL) {
-        free(escaped_stdout);
-        free(escaped_stderr);
-        free(escaped_exception);
+    // Build JSON using cJSON for proper escaping and formatting
+    cJSON *json_obj = cJSON_CreateObject();
+    if (json_obj == NULL) {
         return NULL;
     }
 
-    size_t estimated_size = 512 + strlen(escaped_stdout) + strlen(escaped_stderr);
-    if (escaped_exception) {
-        estimated_size += strlen(escaped_exception);
-    }
-
-    char *json = malloc(estimated_size);
-    if (json == NULL) {
-        free(escaped_stdout);
-        free(escaped_stderr);
-        free(escaped_exception);
+    // Add stdout and stderr (cJSON handles escaping automatically)
+    if (!cJSON_AddStringToObject(json_obj, "stdout",
+            exec_result->stdout_output ? exec_result->stdout_output : "")) {
+        cJSON_Delete(json_obj);
         return NULL;
     }
 
-    snprintf(json, estimated_size,
-        "{"
-        "\"stdout\": \"%s\", "
-        "\"stderr\": \"%s\", "
-        "\"exception\": %s%s%s, "
-        "\"success\": %s, "
-        "\"execution_time\": %.3f, "
-        "\"timed_out\": %s"
-        "}",
-        escaped_stdout,
-        escaped_stderr,
-        escaped_exception ? "\"" : "",
-        escaped_exception ? escaped_exception : "null",
-        escaped_exception ? "\"" : "",
-        exec_result->success ? "true" : "false",
-        exec_result->execution_time,
-        exec_result->timed_out ? "true" : "false"
-    );
+    if (!cJSON_AddStringToObject(json_obj, "stderr",
+            exec_result->stderr_output ? exec_result->stderr_output : "")) {
+        cJSON_Delete(json_obj);
+        return NULL;
+    }
 
-    free(escaped_stdout);
-    free(escaped_stderr);
-    free(escaped_exception);
+    // Add exception (null if not present)
+    if (exec_result->exception) {
+        if (!cJSON_AddStringToObject(json_obj, "exception", exec_result->exception)) {
+            cJSON_Delete(json_obj);
+            return NULL;
+        }
+    } else {
+        if (!cJSON_AddNullToObject(json_obj, "exception")) {
+            cJSON_Delete(json_obj);
+            return NULL;
+        }
+    }
 
-    return json;
+    // Add boolean and numeric fields
+    if (!cJSON_AddBoolToObject(json_obj, "success", exec_result->success)) {
+        cJSON_Delete(json_obj);
+        return NULL;
+    }
+
+    if (!cJSON_AddNumberToObject(json_obj, "execution_time", exec_result->execution_time)) {
+        cJSON_Delete(json_obj);
+        return NULL;
+    }
+
+    if (!cJSON_AddBoolToObject(json_obj, "timed_out", exec_result->timed_out)) {
+        cJSON_Delete(json_obj);
+        return NULL;
+    }
+
+    // Generate JSON string (unformatted for compactness)
+    char *json_str = cJSON_PrintUnformatted(json_obj);
+    cJSON_Delete(json_obj);
+
+    return json_str;
 }
 
 int execute_python_tool_call(const ToolCall *tool_call, ToolResult *result) {
