@@ -308,6 +308,10 @@ def _add_module_objects_to_library(build_dir, lib_x86, lib_aarch64):
     Note: Some objects have conflicting names (e.g., context.o exists in both
     Python/ and _decimal/libmpdec/). We rename conflicting objects with a prefix
     before adding them to the archive.
+
+    cosmoar requires that for each x86_64 object, the aarch64 counterpart exists
+    at .aarch64/<same_filename>. When renaming objects, we must maintain this
+    directory structure.
     """
     print_status("Adding module objects for complete static linking...", COLOR_YELLOW)
 
@@ -326,8 +330,11 @@ def _add_module_objects_to_library(build_dir, lib_x86, lib_aarch64):
     ]
 
     # Create temp directory for renamed objects
+    # cosmoar expects: tmpdir/<name>.o and tmpdir/.aarch64/<name>.o
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
+        tmpdir_aarch64 = tmpdir / ".aarch64"
+        tmpdir_aarch64.mkdir()
 
         for subdir, obj_files, prefix in object_groups:
             obj_dir = modules_dir / subdir
@@ -335,41 +342,46 @@ def _add_module_objects_to_library(build_dir, lib_x86, lib_aarch64):
                 print_status(f"Warning: {obj_dir} not found, skipping", COLOR_YELLOW)
                 continue
 
-            # Process x86_64 objects
-            x86_objs = []
-            for f in obj_files:
-                src = obj_dir / f
-                if src.exists():
-                    if prefix:
-                        # Rename to avoid conflicts
-                        dst = tmpdir / f"{prefix}{f}"
-                        shutil.copy2(src, dst)
-                        x86_objs.append(str(dst))
-                    else:
+            aarch64_obj_dir = obj_dir / ".aarch64"
+            has_aarch64 = aarch64_obj_dir.exists() and lib_aarch64
+
+            if prefix:
+                # For prefixed objects, copy both x86_64 and aarch64 to temp dir
+                # with matching names so cosmoar can find the pairs
+                x86_objs = []
+                for f in obj_files:
+                    x86_src = obj_dir / f
+                    prefixed_name = f"{prefix}{f}"
+
+                    if x86_src.exists():
+                        # Copy x86_64 object
+                        x86_dst = tmpdir / prefixed_name
+                        shutil.copy2(x86_src, x86_dst)
+
+                        # Copy aarch64 object with same name to .aarch64 subdir
+                        if has_aarch64:
+                            aarch64_src = aarch64_obj_dir / f
+                            if aarch64_src.exists():
+                                aarch64_dst = tmpdir_aarch64 / prefixed_name
+                                shutil.copy2(aarch64_src, aarch64_dst)
+
+                        x86_objs.append(str(x86_dst))
+
+                if x86_objs:
+                    # cosmoar will automatically find .aarch64/ counterparts
+                    cmd = f"cosmoar r {lib_x86} " + " ".join(x86_objs)
+                    run_command(cmd)
+            else:
+                # For non-prefixed objects, use original paths directly
+                x86_objs = []
+                for f in obj_files:
+                    src = obj_dir / f
+                    if src.exists():
                         x86_objs.append(str(src))
 
-            if x86_objs:
-                cmd = f"cosmoar r {lib_x86} " + " ".join(x86_objs)
-                run_command(cmd)
-
-            # Process aarch64 objects
-            if lib_aarch64:
-                aarch64_obj_dir = obj_dir / ".aarch64"
-                if aarch64_obj_dir.exists():
-                    aarch64_objs = []
-                    for f in obj_files:
-                        src = aarch64_obj_dir / f
-                        if src.exists():
-                            if prefix:
-                                dst = tmpdir / f"{prefix}aarch64_{f}"
-                                shutil.copy2(src, dst)
-                                aarch64_objs.append(str(dst))
-                            else:
-                                aarch64_objs.append(str(src))
-
-                    if aarch64_objs:
-                        cmd = f"aarch64-linux-cosmo-ar r {lib_aarch64} " + " ".join(aarch64_objs)
-                        run_command(cmd)
+                if x86_objs:
+                    cmd = f"cosmoar r {lib_x86} " + " ".join(x86_objs)
+                    run_command(cmd)
 
     print_status("Module objects added to static library", COLOR_GREEN)
 

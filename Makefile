@@ -121,7 +121,7 @@ NCURSES_DIR = $(DEPDIR)/ncurses-$(NCURSES_VERSION)
 # Library files
 CURL_LIB = $(CURL_DIR)/lib/.libs/libcurl.a
 MBEDTLS_LIB1 = $(MBEDTLS_DIR)/library/libmbedtls.a
-MBEDTLS_LIB2 = $(MBEDTLS_DIR)/library/libmbedx509.a  
+MBEDTLS_LIB2 = $(MBEDTLS_DIR)/library/libmbedx509.a
 MBEDTLS_LIB3 = $(MBEDTLS_DIR)/library/libmbedcrypto.a
 PDFIO_LIB = $(PDFIO_DIR)/libpdfio.a
 ZLIB_LIB = $(ZLIB_DIR)/libz.a
@@ -129,6 +129,11 @@ CJSON_LIB = $(CJSON_DIR)/libcjson.a
 READLINE_LIB = $(READLINE_DIR)/libreadline.a
 HISTORY_LIB = $(READLINE_DIR)/libhistory.a
 NCURSES_LIB = $(NCURSES_DIR)/lib/libncurses.a
+
+# Python library (built from python/ subdirectory)
+PYTHON_VERSION := 3.12
+PYTHON_LIB := $(BUILDDIR)/libpython$(PYTHON_VERSION).a
+PYTHON_INCLUDE := $(BUILDDIR)/python-include
 
 # All required libraries
 ALL_LIBS := $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(READLINE_LIB) $(HISTORY_LIB) $(NCURSES_LIB) $(PYTHON_LIB)
@@ -785,19 +790,15 @@ $(READLINE_LIB) $(HISTORY_LIB): $(NCURSES_LIB)
 # PYTHON BUILD
 # =============================================================================
 
-# Python configuration
-PYTHON_VERSION := 3.12
-PYTHON_LIB := $(BUILDDIR)/libpython$(PYTHON_VERSION).a
-PYTHON_INCLUDE := $(BUILDDIR)/python-include
-
-# Build Python (requires zlib to be built first)
-python: $(ZLIB_LIB)
+# Python library for linking with ralph (requires zlib to be built first)
+# This is the actual file target that triggers the Python build
+$(PYTHON_LIB): $(ZLIB_LIB)
 	@echo "Building Python..."
 	$(MAKE) -C python
-
-# Python library for linking with ralph
-$(PYTHON_LIB): python
 	@test -f $(PYTHON_LIB) || (echo "Error: Python build did not produce $(PYTHON_LIB)" && exit 1)
+
+# Convenience target to build Python manually
+python: $(PYTHON_LIB)
 
 # =============================================================================
 # CLEAN TARGETS
