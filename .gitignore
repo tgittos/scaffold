@@ -35,12 +35,8 @@ test/unity/.aarch64/
 .env
 
 # Runtime files
-CONVERSATION.md
 ralph.config.json
 ralph.config.json.backup
-
-# AI tooling
-.claude
 
 # Random files
 .DS_Store
