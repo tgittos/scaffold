@@ -367,8 +367,9 @@ embed-stdlib: $(TARGET)
 		echo "Stdlib embedded successfully."; \
 		ls -lh $(CURDIR)/$(TARGET) | awk '{print "Binary size: " $$5}'; \
 	else \
-		echo "Warning: Python stdlib not found at $(PYTHON_STDLIB_DIR)/lib"; \
-		echo "Run 'make python' first to build the Python stdlib."; \
+		echo "Error: Python stdlib not found at $(PYTHON_STDLIB_DIR)/lib" >&2; \
+		echo "Run 'make python' first to build the Python stdlib." >&2; \
+		exit 1; \
 	fi
 
 # Embedded links

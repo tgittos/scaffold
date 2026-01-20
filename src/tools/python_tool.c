@@ -8,15 +8,35 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-// Static globals for persistent interpreter state
+/*
+ * Static globals for persistent interpreter state.
+ *
+ * THREAD-SAFETY WARNING: This implementation is NOT thread-safe.
+ * The interpreter state (main_module, globals_dict) and timeout handling
+ * (python_timed_out, sigaction_saved) are stored in static global variables.
+ * If multiple threads attempt to execute Python code concurrently:
+ * - They will share the same globals dictionary, causing race conditions
+ * - The timeout flag could be set/cleared incorrectly between threads
+ * - Signal handlers may be restored incorrectly
+ *
+ * Python's GIL provides some protection for the Python interpreter itself,
+ * but the C-level access to these objects is not synchronized.
+ *
+ * For thread-safe usage, callers must ensure that only one thread calls
+ * execute_python_code() at a time, or add external synchronization.
+ */
 static PyObject *main_module = NULL;
 static PyObject *globals_dict = NULL;
 static int interpreter_initialized = 0;
 
-// Timeout handling
+/*
+ * Timeout handling state.
+ * The python_timed_out flag is shared across all invocations. In a multi-threaded
+ * context, one thread's timeout could incorrectly affect another thread's execution.
+ */
 static volatile sig_atomic_t python_timed_out = 0;
 static struct sigaction old_sigaction = {0};
-static int sigaction_saved = 0;  // Track whether old_sigaction was properly saved
+static int sigaction_saved = 0;  /* Track whether old_sigaction was properly saved */
 
 static void python_timeout_handler(int sig) {
     (void)sig;
@@ -70,12 +90,25 @@ void python_interpreter_shutdown(void) {
         return;
     }
 
+    /* Restore SIGALRM handler if it was modified for python timeouts.
+     * This handles the case where shutdown is called while a signal handler
+     * is still installed (e.g., after an error during Python execution). */
+    if (sigaction_saved) {
+        struct sigaction current_action;
+        if (sigaction(SIGALRM, NULL, &current_action) == 0 &&
+            current_action.sa_handler == python_timeout_handler) {
+            /* Ignore errors restoring the signal handler during shutdown. */
+            (void)sigaction(SIGALRM, &old_sigaction, NULL);
+        }
+        sigaction_saved = 0;
+    }
+
     if (globals_dict != NULL) {
         Py_DECREF(globals_dict);
         globals_dict = NULL;
     }
 
-    main_module = NULL;  // Borrowed reference, don't decref
+    main_module = NULL;  /* Borrowed reference, don't decref */
 
     Py_Finalize();
     interpreter_initialized = 0;
@@ -90,8 +123,11 @@ int register_python_tool(ToolRegistry *registry) {
         return -1;
     }
 
-    // Define parameters
+    /* Zero-initialize to ensure safe cleanup on allocation failure.
+     * Without this, partial allocation failures could attempt to free
+     * uninitialized (garbage) pointers in the cleanup loop. */
     ToolParameter parameters[2];
+    memset(parameters, 0, sizeof(parameters));
 
     // Parameter 1: code (required)
     parameters[0].name = strdup("code");
@@ -202,6 +238,25 @@ int parse_python_arguments(const char *json_args, PythonExecutionParams *params)
     params->capture_stderr = 1;  // Always capture stderr separately
 
     return 0;
+}
+
+/**
+ * Truncate output string if it exceeds max_size, appending a truncation indicator.
+ * Modifies the string in-place.
+ */
+static void truncate_output_if_needed(char *output, size_t max_size) {
+    if (output == NULL) {
+        return;
+    }
+
+    size_t len = strlen(output);
+    if (len >= max_size) {
+        const char *trunc_msg = "\n[Output truncated at 512KB]";
+        size_t trunc_msg_len = strlen(trunc_msg);
+        size_t start = max_size - trunc_msg_len - 1;
+        memcpy(output + start, trunc_msg, trunc_msg_len);
+        output[max_size - 1] = '\0';
+    }
 }
 
 static char* capture_python_output(PyObject *string_io) {
@@ -475,28 +530,10 @@ int execute_python_code(const PythonExecutionParams *params, PythonExecutionResu
     result->stderr_output = capture_python_output(stderr_capture);
 
     // Truncate output if too large, adding truncation indicator
-    // Note: When stdout_len >= PYTHON_MAX_OUTPUT_SIZE, the buffer (from strdup) is
-    // at least stdout_len+1 bytes, so writing up to PYTHON_MAX_OUTPUT_SIZE-1 is safe.
-    if (result->stdout_output) {
-        size_t stdout_len = strlen(result->stdout_output);
-        if (stdout_len >= PYTHON_MAX_OUTPUT_SIZE) {
-            const char *trunc_msg = "\n[Output truncated at 512KB]";
-            size_t trunc_msg_len = strlen(trunc_msg);
-            size_t start = PYTHON_MAX_OUTPUT_SIZE - trunc_msg_len - 1;
-            memcpy(result->stdout_output + start, trunc_msg, trunc_msg_len);
-            result->stdout_output[PYTHON_MAX_OUTPUT_SIZE - 1] = '\0';
-        }
-    }
-    if (result->stderr_output) {
-        size_t stderr_len = strlen(result->stderr_output);
-        if (stderr_len >= PYTHON_MAX_OUTPUT_SIZE) {
-            const char *trunc_msg = "\n[Output truncated at 512KB]";
-            size_t trunc_msg_len = strlen(trunc_msg);
-            size_t start = PYTHON_MAX_OUTPUT_SIZE - trunc_msg_len - 1;
-            memcpy(result->stderr_output + start, trunc_msg, trunc_msg_len);
-            result->stderr_output[PYTHON_MAX_OUTPUT_SIZE - 1] = '\0';
-        }
-    }
+    // Note: When output length >= PYTHON_MAX_OUTPUT_SIZE, the buffer (from strdup) is
+    // at least len+1 bytes, so writing up to PYTHON_MAX_OUTPUT_SIZE-1 is safe.
+    truncate_output_if_needed(result->stdout_output, PYTHON_MAX_OUTPUT_SIZE);
+    truncate_output_if_needed(result->stderr_output, PYTHON_MAX_OUTPUT_SIZE);
 
     // Restore original stdout/stderr
     PySys_SetObject("stdout", original_stdout);
@@ -514,12 +551,20 @@ int execute_python_code(const PythonExecutionParams *params, PythonExecutionResu
     return 0;
 }
 
+/*
+ * Format Python execution result as JSON string.
+ *
+ * Uses cJSON for proper JSON escaping. Note that cJSON handles Unicode escape
+ * sequences (\uXXXX) for the Basic Multilingual Plane (codepoints up to 0xFFFF),
+ * but does not handle surrogate pairs for codepoints above 0xFFFF. This is
+ * acceptable for typical Python tool output which is primarily ASCII/UTF-8.
+ */
 char* format_python_result_json(const PythonExecutionResult *exec_result) {
     if (exec_result == NULL) {
         return NULL;
     }
 
-    // Build JSON using cJSON for proper escaping and formatting
+    /* Build JSON using cJSON for proper escaping and formatting */
     cJSON *json_obj = cJSON_CreateObject();
     if (json_obj == NULL) {
         return NULL;

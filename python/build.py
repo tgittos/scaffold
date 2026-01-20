@@ -13,6 +13,7 @@ import sys
 import shutil
 import subprocess
 import tarfile
+import tempfile
 from pathlib import Path
 
 # Configuration - matching superconfigure
@@ -325,7 +326,6 @@ def _add_module_objects_to_library(build_dir, lib_x86, lib_aarch64):
     ]
 
     # Create temp directory for renamed objects
-    import tempfile
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
 
