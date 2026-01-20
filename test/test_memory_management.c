@@ -267,12 +267,36 @@ void test_memory_command_parsing(void) {
     // Test that memory commands are recognized
     int result = process_memory_command("/memory help");
     TEST_ASSERT_EQUAL(0, result);
-    
+
     // Test that non-memory commands are rejected
     result = process_memory_command("/other command");
     TEST_ASSERT_EQUAL(-1, result);
-    
+
     result = process_memory_command("not a slash command");
+    TEST_ASSERT_EQUAL(-1, result);
+}
+
+void test_memory_show_invalid_chunk_id(void) {
+    // Non-numeric input should fail
+    int result = process_memory_command("/memory show abc");
+    TEST_ASSERT_EQUAL(-1, result);
+
+    // Overflow value should fail (strtoull returns ERANGE)
+    result = process_memory_command("/memory show 99999999999999999999999999");
+    TEST_ASSERT_EQUAL(-1, result);
+
+    // Empty chunk ID should fail
+    result = process_memory_command("/memory show");
+    TEST_ASSERT_EQUAL(-1, result);
+}
+
+void test_memory_edit_invalid_chunk_id(void) {
+    // Non-numeric chunk ID should fail
+    int result = process_memory_command("/memory edit abc type test");
+    TEST_ASSERT_EQUAL(-1, result);
+
+    // Overflow chunk ID should fail
+    result = process_memory_command("/memory edit 99999999999999999999999999 type test");
     TEST_ASSERT_EQUAL(-1, result);
 }
 
@@ -289,6 +313,8 @@ int main(void) {
     
     // Memory command tests
     RUN_TEST(test_memory_command_parsing);
-    
+    RUN_TEST(test_memory_show_invalid_chunk_id);
+    RUN_TEST(test_memory_edit_invalid_chunk_id);
+
     return UNITY_END();
 }
