@@ -17,6 +17,7 @@
 #include "model_capabilities.h"
 #include "memory_tool.h"
 #include "../utils/context_retriever.h"
+#include "python_tool.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -343,6 +344,9 @@ int ralph_init_session(RalphSession* session) {
 
 void ralph_cleanup_session(RalphSession* session) {
     if (session == NULL) return;
+
+    // Shutdown Python interpreter if it was initialized
+    python_interpreter_shutdown();
 
     // Cleanup subagent manager (kills any running subagents)
     subagent_manager_cleanup(&session->subagent_manager);

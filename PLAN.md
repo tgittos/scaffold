@@ -231,10 +231,11 @@ $(TARGET): $(PYTHON_LIB)
 
 ---
 
-### P4: Integrate with ralph startup/shutdown
+### P4: Integrate with ralph startup/shutdown ✅ COMPLETE
 
 **Depends on:** P1, P2, P3
 **Blocks:** P5, P7, P8
+**Status:** Complete - Python tool registered in tools_system.c, lifecycle managed in ralph.c
 
 Modify `src/tools/tools_system.c`:
 
@@ -269,10 +270,11 @@ python_interpreter_shutdown();
 
 ---
 
-### P5: Create `test/tools/test_python_tool.c`
+### P5: Create `test/tools/test_python_tool.c` ✅ COMPLETE
 
 **Depends on:** P1, P2, P3, P4
 **Blocks:** P6, P7
+**Status:** Complete - 15 unit tests created covering registration, parsing, formatting, cleanup, and error handling
 
 Write unit tests:
 
@@ -414,10 +416,11 @@ int main(void) {
 
 ---
 
-### P6: Add test target to Makefile
+### P6: Add test target to Makefile ✅ COMPLETE
 
 **Depends on:** P3, P5
 **Blocks:** P7
+**Status:** Complete - TEST_PYTHON_TOOL target added to Makefile, Python library linked for all affected tests
 
 ```makefile
 TEST_PYTHON_SOURCES = $(TESTDIR)/tools/test_python_tool.c \
@@ -478,28 +481,28 @@ all: $(TARGET) embed-stdlib
 ## Task Dependency Graph
 
 ```
-P1 ─────────┬───────────────────────────────┐
+P1 ✅ ──────┬───────────────────────────────┐
             │                               │
             ▼                               │
-P2 ─────────┬───────────────────────────────┤
+P2 ✅ ──────┬───────────────────────────────┤
             │                               │
             ▼                               │
-P3 ─────────┬───────────┬───────────────────┤
+P3 ✅ ──────┬───────────┬───────────────────┤
             │           │                   │
             ▼           │                   │
-P4 ─────────┬───────────┤                   │
+P4 ✅ ──────┬───────────┤                   │
             │           │                   │
             │           ▼                   ▼
-            │       P5 ─┬───────────────────┘
+            │       P5 ✅┬───────────────────┘
             │           │
             │           ▼
-            │       P6 ─┐
+            │       P6 ✅┐
             │           │
             ▼           ▼
 P7 ─────────┬───────────┘
             │
             ▼
-P8 (done)
+P8 (final)
 ```
 
 ---

@@ -7,6 +7,7 @@
 #include "vector_db_tool.h"
 #include "memory_tool.h"
 #include "pdf_tool.h"
+#include "python_tool.h"
 #include "output_formatter.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -1068,10 +1069,12 @@ int register_builtin_tools(ToolRegistry *registry) {
     if (register_pdf_tool(registry) != 0) {
         return -1;
     }
-    
-    // Future built-in tools would be registered here:
-    // if (register_git_tool(registry) != 0) return -1;
-    
+
+    // Register Python interpreter tool
+    if (register_python_tool(registry) != 0) {
+        return -1;
+    }
+
     return 0;
 }
 

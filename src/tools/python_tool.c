@@ -15,7 +15,8 @@ static int interpreter_initialized = 0;
 
 // Timeout handling
 static volatile sig_atomic_t python_timed_out = 0;
-static struct sigaction old_sigaction;
+static struct sigaction old_sigaction = {0};
+static int sigaction_saved = 0;  // Track whether old_sigaction was properly saved
 
 static void python_timeout_handler(int sig) {
     (void)sig;
@@ -191,9 +192,41 @@ static char* extract_json_string_value(const char *json, const char *key) {
                 case 'n': result[j++] = '\n'; i++; break;
                 case 't': result[j++] = '\t'; i++; break;
                 case 'r': result[j++] = '\r'; i++; break;
+                case 'b': result[j++] = '\b'; i++; break;
+                case 'f': result[j++] = '\f'; i++; break;
                 case '\\': result[j++] = '\\'; i++; break;
                 case '"': result[j++] = '"'; i++; break;
                 case '/': result[j++] = '/'; i++; break;
+                case 'u':
+                    // Handle unicode escape sequences (\uXXXX)
+                    if (i + 5 < len) {
+                        // Parse the 4-digit hex value
+                        char hex[5] = {start[i+2], start[i+3], start[i+4], start[i+5], '\0'};
+                        unsigned int codepoint = 0;
+                        if (sscanf(hex, "%4x", &codepoint) == 1) {
+                            // For ASCII range, just use the character directly
+                            if (codepoint < 0x80) {
+                                result[j++] = (char)codepoint;
+                            } else if (codepoint < 0x800) {
+                                // Two-byte UTF-8
+                                result[j++] = (char)(0xC0 | (codepoint >> 6));
+                                result[j++] = (char)(0x80 | (codepoint & 0x3F));
+                            } else {
+                                // Three-byte UTF-8
+                                result[j++] = (char)(0xE0 | (codepoint >> 12));
+                                result[j++] = (char)(0x80 | ((codepoint >> 6) & 0x3F));
+                                result[j++] = (char)(0x80 | (codepoint & 0x3F));
+                            }
+                            i += 5;  // Skip \uXXXX
+                        } else {
+                            // Invalid hex, keep as-is
+                            result[j++] = start[i];
+                        }
+                    } else {
+                        // Not enough characters for \uXXXX, keep as-is
+                        result[j++] = start[i];
+                    }
+                    break;
                 default: result[j++] = start[i]; break;
             }
         } else {
@@ -353,17 +386,26 @@ static char* get_python_exception_string(void) {
 }
 
 int execute_python_code(const PythonExecutionParams *params, PythonExecutionResult *result) {
-    if (params == NULL || result == NULL || params->code == NULL) {
+    if (params == NULL || result == NULL) {
         return -1;
+    }
+
+    // Initialize result structure early to ensure it's valid on all paths
+    memset(result, 0, sizeof(PythonExecutionResult));
+
+    if (params->code == NULL) {
+        result->success = 0;
+        result->exception = strdup("No code provided");
+        return 0;  // Return 0 with error in result, not -1
     }
 
     if (!interpreter_initialized) {
         if (python_interpreter_init() != 0) {
-            return -1;
+            result->success = 0;
+            result->exception = strdup("Failed to initialize Python interpreter");
+            return 0;  // Return 0 with error in result, not -1
         }
     }
-
-    memset(result, 0, sizeof(PythonExecutionResult));
 
     struct timeval start_time, end_time;
     gettimeofday(&start_time, NULL);
@@ -430,7 +472,9 @@ int execute_python_code(const PythonExecutionParams *params, PythonExecutionResu
     sa.sa_handler = python_timeout_handler;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
-    sigaction(SIGALRM, &sa, &old_sigaction);
+    if (sigaction(SIGALRM, &sa, &old_sigaction) == 0) {
+        sigaction_saved = 1;
+    }
 
     if (params->timeout_seconds > 0) {
         alarm(params->timeout_seconds);
@@ -441,7 +485,10 @@ int execute_python_code(const PythonExecutionParams *params, PythonExecutionResu
 
     // Cancel alarm
     alarm(0);
-    sigaction(SIGALRM, &old_sigaction, NULL);
+    if (sigaction_saved) {
+        sigaction(SIGALRM, &old_sigaction, NULL);
+        sigaction_saved = 0;
+    }
 
     // Capture timing
     gettimeofday(&end_time, NULL);
