@@ -148,9 +148,9 @@ char* ralph_build_enhanced_system_prompt(const RalphSession* session) {
 // Constants for memory and context retrieval
 #define CONTEXT_RETRIEVAL_LIMIT 5
 
-// Memory section header for prompts
-static const char* MEMORY_SECTION_HEADER = "\n\n# Relevant Memories\n"
-                                          "The following memories may be relevant to the current conversation:\n";
+// Memory section header for prompts (const pointer to prevent accidental reassignment)
+static const char* const MEMORY_SECTION_HEADER = "\n\n# Relevant Memories\n"
+                                                "The following memories may be relevant to the current conversation:\n";
 
 // Helper function to build prompt with memory and context retrieval
 // Returns an allocated string that the caller must free, or NULL on failure
@@ -572,7 +572,8 @@ int ralph_execute_tool_workflow(RalphSession* session, ToolCall* tool_calls, int
             results[i].tool_call_id = tool_calls[i].id ? strdup(tool_calls[i].id) : NULL;
             results[i].result = strdup("Tool execution failed");
             results[i].success = 0;
-            // Note: If strdup fails, fields will be NULL which is handled downstream
+            // Note: If strdup fails, fields will be NULL. append_tool_message() returns -1
+            // for NULL params and logs a warning, cleanup_tool_results() handles NULL safely
         } else {
             debug_printf("Executed tool: %s (ID: %s)\n", tool_calls[i].name, tool_calls[i].id);
         }
@@ -893,9 +894,11 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
                 continue;
             }
 
-            // Track this tool call as executed
+            // Track this tool call as executed - skip execution if tracking fails
+            // to prevent potential duplicate execution in subsequent iterations
             if (add_executed_tool(&tracker, tool_calls[i].id) != 0) {
-                debug_printf("Warning: Failed to track tool call ID %s\n", tool_calls[i].id);
+                debug_printf("Warning: Failed to track tool call ID %s, skipping execution\n", tool_calls[i].id);
+                continue;
             }
 
             // Store mapping from result index to tool call index
@@ -918,7 +921,8 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
                 results[executed_count].tool_call_id = tool_calls[i].id ? strdup(tool_calls[i].id) : NULL;
                 results[executed_count].result = strdup("Tool execution failed");
                 results[executed_count].success = 0;
-                // Note: If strdup fails, fields will be NULL which is handled downstream
+                // Note: If strdup fails, fields will be NULL. append_tool_message() returns -1
+                // for NULL params and logs a warning, cleanup_tool_results() handles NULL safely
             } else {
                 debug_printf("Executed tool: %s (ID: %s) in iteration %d\n",
                            tool_calls[i].name, tool_calls[i].id, loop_count);
