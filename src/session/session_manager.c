@@ -32,22 +32,53 @@ void session_data_cleanup(SessionData* session) {
     memset(session, 0, sizeof(SessionData));
 }
 
-void session_data_copy_config(SessionData* dest, const SessionConfig* src) {
-    if (dest == NULL || src == NULL) return;
-    
-    // Free existing config
+int session_data_copy_config(SessionData* dest, const SessionConfig* src) {
+    if (dest == NULL || src == NULL) return -1;
+
+    // Stage allocations to avoid partial state on failure
+    char *new_api_url = NULL;
+    char *new_model = NULL;
+    char *new_api_key = NULL;
+    char *new_system_prompt = NULL;
+
+    if (src->api_url) {
+        new_api_url = strdup(src->api_url);
+        if (new_api_url == NULL) goto alloc_failed;
+    }
+    if (src->model) {
+        new_model = strdup(src->model);
+        if (new_model == NULL) goto alloc_failed;
+    }
+    if (src->api_key) {
+        new_api_key = strdup(src->api_key);
+        if (new_api_key == NULL) goto alloc_failed;
+    }
+    if (src->system_prompt) {
+        new_system_prompt = strdup(src->system_prompt);
+        if (new_system_prompt == NULL) goto alloc_failed;
+    }
+
+    // All allocations succeeded - commit the changes
     free(dest->config.api_url);
     free(dest->config.model);
     free(dest->config.api_key);
     free(dest->config.system_prompt);
-    
-    // Copy new config
-    dest->config.api_url = src->api_url ? strdup(src->api_url) : NULL;
-    dest->config.model = src->model ? strdup(src->model) : NULL;
-    dest->config.api_key = src->api_key ? strdup(src->api_key) : NULL;
-    dest->config.system_prompt = src->system_prompt ? strdup(src->system_prompt) : NULL;
+
+    dest->config.api_url = new_api_url;
+    dest->config.model = new_model;
+    dest->config.api_key = new_api_key;
+    dest->config.system_prompt = new_system_prompt;
     dest->config.context_window = src->context_window;
     dest->config.api_type = src->api_type;
+
+    return 0;
+
+alloc_failed:
+    free(new_api_url);
+    free(new_model);
+    free(new_api_key);
+    free(new_system_prompt);
+    return -1;
 }
 
 char* session_build_api_payload(const SessionData* session, const char* user_message, 

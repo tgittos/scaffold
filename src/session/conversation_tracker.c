@@ -6,6 +6,7 @@
 #include <time.h>
 #include "../db/document_store.h"
 #include "../llm/embeddings_service.h"
+#include "debug_output.h"
 
 #define INITIAL_CAPACITY 10
 #define GROWTH_FACTOR 2
@@ -340,7 +341,10 @@ static int add_message_to_history(ConversationHistory *history, const char *role
             document_store_t* store = document_store_get_instance();
             if (store != NULL) {
                 // Ensure the conversation index exists
-                document_store_ensure_index(store, CONVERSATION_INDEX, CONVERSATION_EMBEDDING_DIM, 10000);
+                int index_result = document_store_ensure_index(store, CONVERSATION_INDEX, CONVERSATION_EMBEDDING_DIM, 10000);
+                if (index_result != 0) {
+                    debug_printf("Warning: Failed to ensure conversation index\n");
+                }
 
                 // Build metadata JSON
                 cJSON *metadata = cJSON_CreateObject();
@@ -351,7 +355,10 @@ static int add_message_to_history(ConversationHistory *history, const char *role
 
                 if (metadata_json) {
                     // Add to document store with embeddings
-                    document_store_add_text(store, CONVERSATION_INDEX, content_to_store, "conversation", role, metadata_json);
+                    int add_result = document_store_add_text(store, CONVERSATION_INDEX, content_to_store, "conversation", role, metadata_json);
+                    if (add_result != 0) {
+                        debug_printf("Warning: Failed to add conversation message to document store\n");
+                    }
                     free(metadata_json);
                 }
             }

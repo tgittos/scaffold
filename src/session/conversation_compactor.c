@@ -13,11 +13,6 @@
 // Token estimation constants
 #define ESTIMATED_TOKENS_PER_MESSAGE 50    // Rough estimate for tokens saved per trimmed message
 
-// Compaction return values
-#define COMPACT_ERROR -1
-#define COMPACT_SUCCESS_NO_WORK 0
-#define COMPACT_SUCCESS_TRIMMED 1
-
 void compaction_config_init(CompactionConfig* config) {
     if (config == NULL) return;
     
