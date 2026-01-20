@@ -717,6 +717,24 @@ $(READLINE_LIB) $(HISTORY_LIB): $(NCURSES_LIB)
 	for f in ../*.h; do ln -sf "$$f" $$(basename "$$f"); done
 
 # =============================================================================
+# PYTHON BUILD
+# =============================================================================
+
+# Python configuration
+PYTHON_VERSION := 3.12
+PYTHON_LIB := $(BUILDDIR)/libpython$(PYTHON_VERSION).a
+PYTHON_INCLUDE := $(BUILDDIR)/python-include
+
+# Build Python (requires zlib to be built first)
+python: $(ZLIB_LIB)
+	@echo "Building Python..."
+	$(MAKE) -C python
+
+# Python library for linking with ralph
+$(PYTHON_LIB): python
+	@test -f $(PYTHON_LIB) || (echo "Error: Python build did not produce $(PYTHON_LIB)" && exit 1)
+
+# =============================================================================
 # CLEAN TARGETS
 # =============================================================================
 
@@ -728,9 +746,13 @@ clean:
 	rm -f $(EMBEDDED_LINKS_HEADER)
 	find build -type f ! -name 'bin2c.c' ! -name 'links' -delete 2>/dev/null || true
 
+clean-python:
+	$(MAKE) -C python clean
+
 distclean: clean
 	rm -rf $(DEPDIR)
 	rm -f *.tar.gz
 	rm -f $(LINKS_BUNDLED)
+	$(MAKE) -C python distclean
 
-.PHONY: all test check check-valgrind check-valgrind-all clean distclean
+.PHONY: all test check check-valgrind check-valgrind-all clean clean-python distclean python

@@ -13,6 +13,8 @@ RUN apt-get update && apt-get install -y \
     ripgrep \
     procps \
     libatomic1 \
+    vim \
+    zip \
     && rm -rf /var/lib/apt/lists/*
 
 RUN touch ~/.bashrc && chmod +x ~/.bashrc

@@ -3,6 +3,9 @@
 Build portable Python using Cosmopolitan Libc.
 Creates a fat binary that runs on Linux, macOS, Windows, and BSDs.
 Based on superconfigure's approach.
+
+This build shares dependencies with the main ralph project to avoid
+rebuilding libraries and ensure compatibility when linking.
 """
 
 import os
@@ -16,17 +19,28 @@ from pathlib import Path
 # Configuration - matching superconfigure
 PYTHON_VERSION = "3.12.3"
 PYTHON_URL = f"https://github.com/python/cpython/archive/refs/tags/v{PYTHON_VERSION}.tar.gz"
-ZLIB_VERSION = "1.3.1"
 
-# Build directories
-BUILD_DIR = Path("build").absolute()
-RESULTS_DIR = BUILD_DIR / "results"
+# Dependency versions - MUST match main Makefile
+ZLIB_VERSION = "1.3.1"
+READLINE_VERSION = "8.2"
+NCURSES_VERSION = "6.4"
+
+# Build directories - local to python/
+LOCAL_BUILD_DIR = Path("build").absolute()
+RESULTS_DIR = LOCAL_BUILD_DIR / "results"
 
 # Share deps with main ralph project to avoid rebuilding
 RALPH_ROOT = Path(__file__).parent.parent.absolute()
 DEPS_DIR = RALPH_ROOT / "deps"
+RALPH_BUILD_DIR = RALPH_ROOT / "build"  # Main project build dir for outputs
+
+# Shared dependency paths - same as main Makefile
 ZLIB_DIR = DEPS_DIR / f"zlib-{ZLIB_VERSION}"
 ZLIB_LIB = ZLIB_DIR / "libz.a"
+READLINE_DIR = DEPS_DIR / f"readline-{READLINE_VERSION}"
+READLINE_LIB = READLINE_DIR / "libreadline.a"
+NCURSES_DIR = DEPS_DIR / f"ncurses-{NCURSES_VERSION}"
+NCURSES_LIB = NCURSES_DIR / "lib" / "libncurses.a"
 
 # Colors for output
 COLOR_RED = "\033[91m"
@@ -103,19 +117,19 @@ def download_file(url, dest):
 
 def download_python_source():
     """Download and extract Python source."""
-    BUILD_DIR.mkdir(exist_ok=True)
-    
-    src_dir = BUILD_DIR / f"cpython-{PYTHON_VERSION}"
+    LOCAL_BUILD_DIR.mkdir(exist_ok=True)
+
+    src_dir = LOCAL_BUILD_DIR / f"cpython-{PYTHON_VERSION}"
     if src_dir.exists():
         print_status("Python source already exists, skipping download", COLOR_GREEN)
         return src_dir
     
-    tar_file = BUILD_DIR / f"python-{PYTHON_VERSION}.tar.gz"
+    tar_file = LOCAL_BUILD_DIR / f"python-{PYTHON_VERSION}.tar.gz"
     download_file(PYTHON_URL, tar_file)
-    
+
     print_status("Extracting Python source...", COLOR_YELLOW)
     with tarfile.open(tar_file, "r:gz") as tar:
-        tar.extractall(BUILD_DIR)
+        tar.extractall(LOCAL_BUILD_DIR)
     
     print_status("Python source ready", COLOR_GREEN)
     return src_dir
@@ -124,8 +138,8 @@ def build_python(src_dir):
     """Build Python using cosmocc fat compiler (produces both x86_64 and aarch64)."""
     print_status("\nBuilding Python with cosmocc (fat binary)...", COLOR_BLUE)
 
-    build_dir = BUILD_DIR / "build"
-    install_dir = BUILD_DIR / "install"
+    build_dir = LOCAL_BUILD_DIR / "build"
+    install_dir = LOCAL_BUILD_DIR / "install"
 
     # Clean and create directories
     if build_dir.exists():
@@ -144,6 +158,24 @@ def build_python(src_dir):
 
     print_status("Configuring Python...", COLOR_YELLOW)
 
+    # Build include and library paths from shared deps
+    include_paths = [f"-I{install_dir}/include", f"-I{ZLIB_DIR}"]
+    lib_paths = [f"-L{install_dir}/lib", f"-L{ZLIB_DIR}"]
+
+    # Add readline/ncurses if available (built by main Makefile)
+    if READLINE_LIB.exists():
+        include_paths.append(f"-I{READLINE_DIR}")
+        include_paths.append(f"-I{READLINE_DIR}/readline")
+        lib_paths.append(f"-L{READLINE_DIR}")
+        print_status(f"Using shared readline from {READLINE_DIR}", COLOR_GREEN)
+    if NCURSES_LIB.exists():
+        include_paths.append(f"-I{NCURSES_DIR}/include")
+        lib_paths.append(f"-L{NCURSES_DIR}/lib")
+        print_status(f"Using shared ncurses from {NCURSES_DIR}", COLOR_GREEN)
+
+    cflags = "-O2 " + " ".join(include_paths)
+    ldflags = " ".join(lib_paths)
+
     configure_cmd = f"""
     {src_dir}/configure \
         --disable-shared \
@@ -158,8 +190,8 @@ def build_python(src_dir):
         --prefix={install_dir} \
         ac_cv_file__dev_ptmx=yes \
         ac_cv_file__dev_ptc=no \
-        CFLAGS="-O2 -I{install_dir}/include -I{ZLIB_DIR}" \
-        LDFLAGS="-L{install_dir}/lib -L{ZLIB_DIR}"
+        CFLAGS="{cflags}" \
+        LDFLAGS="{ldflags}"
     """
 
     run_command(configure_cmd, cwd=build_dir, env=env)
@@ -177,6 +209,9 @@ def build_python(src_dir):
     # Install
     print_status("Installing Python...", COLOR_YELLOW)
     run_command("make install", cwd=build_dir, env=env)
+
+    # Copy static library to main ralph build directory for linking
+    copy_static_library(build_dir, install_dir)
 
     # Find the built python binary (fat APE) and its arch-specific variants
     python_bin = install_dir / "bin" / f"python{PYTHON_VERSION[:4]}"
@@ -199,6 +234,48 @@ def build_python(src_dir):
 
     print_status("Python built successfully", COLOR_GREEN)
     return python_bin, x86_64_bin, aarch64_bin, install_dir
+
+
+def copy_static_library(build_dir, install_dir):
+    """Copy libpython static library to main ralph build directory for linking."""
+    print_status("Copying static library to main build directory...", COLOR_YELLOW)
+
+    # Ensure ralph build directory exists
+    RALPH_BUILD_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Find libpython*.a in the build or install directory
+    # Python build creates libpython3.X.a
+    py_version_short = PYTHON_VERSION[:4]  # e.g., "3.12"
+
+    # Check build directory first (where it's built)
+    libpython_src = build_dir / f"libpython{py_version_short}.a"
+    if not libpython_src.exists():
+        # Check install lib directory
+        libpython_src = install_dir / "lib" / f"libpython{py_version_short}.a"
+
+    if not libpython_src.exists():
+        # Try without minor version
+        libpython_src = build_dir / "libpython3.a"
+        if not libpython_src.exists():
+            libpython_src = install_dir / "lib" / "libpython3.a"
+
+    if libpython_src.exists():
+        libpython_dst = RALPH_BUILD_DIR / f"libpython{py_version_short}.a"
+        shutil.copy2(libpython_src, libpython_dst)
+        print_status(f"Copied {libpython_src.name} to {RALPH_BUILD_DIR}", COLOR_GREEN)
+
+        # Also copy Python headers for ralph to include
+        include_src = install_dir / "include" / f"python{py_version_short}"
+        include_dst = RALPH_BUILD_DIR / "python-include"
+        if include_src.exists():
+            if include_dst.exists():
+                shutil.rmtree(include_dst)
+            shutil.copytree(include_src, include_dst)
+            print_status(f"Copied Python headers to {include_dst}", COLOR_GREEN)
+    else:
+        print_status("Warning: libpython static library not found", COLOR_YELLOW)
+        # List what's available for debugging
+        print_status(f"Build dir contents: {list(build_dir.glob('*.a'))}", COLOR_YELLOW)
 
 def create_sitecustomize():
     """Create sitecustomize.py for /zip paths."""
