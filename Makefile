@@ -532,6 +532,8 @@ test: $(ALL_TEST_TARGETS)
 	./$(TEST_TODO_MANAGER_TARGET)
 	./$(TEST_TODO_TOOL_TARGET)
 	./$(TEST_VECTOR_DB_TOOL_TARGET)
+	./$(TEST_MEMORY_TOOL_TARGET)
+	./$(TEST_PYTHON_TOOL_TARGET)
 	./$(TEST_TOKEN_MANAGER_TARGET)
 	./$(TEST_MODEL_TOOLS_TARGET)
 	./$(TEST_CONVERSATION_COMPACTOR_TARGET)
@@ -564,6 +566,8 @@ check-valgrind: $(ALL_TEST_TARGETS)
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_TODO_MANAGER_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_TODO_TOOL_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_VECTOR_DB_TOOL_TARGET).aarch64.elf
+	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_MEMORY_TOOL_TARGET).aarch64.elf
+	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_PYTHON_TOOL_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_TOKEN_MANAGER_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_CONVERSATION_COMPACTOR_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_MODEL_TOOLS_TARGET).aarch64.elf

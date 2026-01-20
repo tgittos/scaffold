@@ -239,7 +239,7 @@ static char* extract_json_string_value(const char *json, const char *key) {
 }
 
 static int extract_json_number_value(const char *json, const char *key, int default_value) {
-    char search_pattern[256];
+    char search_pattern[256] = {0};
     snprintf(search_pattern, sizeof(search_pattern), "\"%s\"", key);
 
     const char *key_pos = strstr(json, search_pattern);
