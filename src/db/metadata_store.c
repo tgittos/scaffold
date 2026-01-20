@@ -247,8 +247,8 @@ ChunkMetadata* metadata_store_get(metadata_store_t* store, const char* index_nam
 
     item = cJSON_GetObjectItem(json, "custom_metadata");
     if (item) {
-        char* custom = cJSON_Print(item);
-        if (custom) metadata->custom_metadata = custom;
+        metadata->custom_metadata = cJSON_Print(item);
+        if (!metadata->custom_metadata) goto alloc_error;
     }
 
     cJSON_Delete(json);

@@ -303,10 +303,8 @@ static document_t* load_document(document_store_t* store, const char* index_name
 
     item = cJSON_GetObjectItem(json, "metadata");
     if (item) {
-        char* metadata_str = cJSON_Print(item);
-        if (metadata_str) {
-            doc->metadata_json = metadata_str;
-        }
+        doc->metadata_json = cJSON_Print(item);
+        if (!doc->metadata_json) goto alloc_error;
     }
 
     cJSON_Delete(json);
