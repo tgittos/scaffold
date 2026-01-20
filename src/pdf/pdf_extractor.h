@@ -25,13 +25,19 @@ int pdf_extractor_init(void);
 // Cleanup the PDF extraction system
 void pdf_extractor_cleanup(void);
 
-// Extract text from a PDF file with default configuration
+// Extract text from a PDF file with default configuration.
+// Returns NULL on memory allocation failure, or a result struct with error
+// field set on other failures. Caller must free result with pdf_free_extraction_result().
 pdf_extraction_result_t* pdf_extract_text(const char* pdf_path);
 
-// Extract text from a PDF file with custom configuration
+// Extract text from a PDF file with custom configuration.
+// Returns NULL on memory allocation failure, or a result struct with error
+// field set on other failures. Caller must free result with pdf_free_extraction_result().
 pdf_extraction_result_t* pdf_extract_text_with_config(const char* pdf_path, const pdf_extraction_config_t* config);
 
-// Extract text from PDF data in memory
+// Extract text from PDF data in memory.
+// Returns NULL on memory allocation failure, or a result struct with error
+// field set on other failures. Caller must free result with pdf_free_extraction_result().
 pdf_extraction_result_t* pdf_extract_text_from_memory(const unsigned char* pdf_data, size_t data_size);
 
 // Free extraction result

@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <stdint.h>
 
 // PDFio headers
 #include <pdfio.h>
@@ -225,6 +226,15 @@ static pdf_extraction_result_t* pdf_extract_text_internal(const char* pdf_path,
         if (page_text) {
             size_t page_text_len = strlen(page_text);
             if (page_text_len > 0) {
+                // Check for size_t overflow before calculation
+                if (page_text_len > SIZE_MAX - total_length - 2) {
+                    free(page_text);
+                    free(full_text);
+                    pdfioFileClose(pdf);
+                    result->error = strdup("PDF too large: size overflow");
+                    return result;
+                }
+
                 // Reallocate full_text to accommodate new page text
                 // +2 for newline separator and null terminator
                 size_t new_size = total_length + page_text_len + 2;
