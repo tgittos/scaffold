@@ -615,7 +615,15 @@ void display_system_info_group_end(void) {
 
 void log_system_info(const char *category, const char *message) {
     if (!category || !message) return;
-    
+
     printf(ANSI_YELLOW "  %s:" ANSI_RESET " %s\n", category, message);
     fflush(stdout);
+}
+
+void cleanup_output_formatter(void) {
+    if (g_model_registry) {
+        cleanup_model_registry(g_model_registry);
+        free(g_model_registry);
+        g_model_registry = NULL;
+    }
 }

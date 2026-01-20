@@ -190,8 +190,14 @@ vector_db_error_t vector_db_create_index(vector_db_t* db, const char* index_name
         }
     } else {
         entry->config.metric = strdup("l2");
+        if (!entry->config.metric) {
+            free(entry->name);
+            free(entry);
+            pthread_mutex_unlock(&db->mutex);
+            return VECTOR_DB_ERROR_MEMORY;
+        }
     }
-    
+
     if (pthread_rwlock_init(&entry->lock, NULL) != 0) {
         free(entry->config.metric);
         free(entry->name);
@@ -552,7 +558,8 @@ vector_db_error_t vector_db_load_index(vector_db_t* db, const char* index_name,
     if (meta) {
         size_t dimension, max_elements;
         if (fscanf(meta, "%zu %zu", &dimension, &max_elements) == 2) {
-            fscanf(meta, "%s", metric);
+            // Metric is optional - if fscanf fails, we use the default "l2" value
+            (void)fscanf(meta, "%63s", metric);
             hnswlib_config.dimension = dimension;
             hnswlib_config.max_elements = max_elements;
         } else {
@@ -596,10 +603,17 @@ vector_db_error_t vector_db_load_index(vector_db_t* db, const char* index_name,
     entry->config.dimension = hnswlib_config.dimension;
     entry->config.max_elements = hnswlib_config.max_elements;
     entry->config.metric = strdup(metric);
+    if (!entry->config.metric) {
+        free(entry->name);
+        free(entry);
+        hnswlib_delete_index(index_name);
+        pthread_mutex_unlock(&db->mutex);
+        return VECTOR_DB_ERROR_MEMORY;
+    }
     entry->config.M = hnswlib_config.M;
     entry->config.ef_construction = hnswlib_config.ef_construction;
     entry->config.random_seed = hnswlib_config.random_seed;
-    
+
     if (pthread_rwlock_init(&entry->lock, NULL) != 0) {
         free(entry->config.metric);
         free(entry->name);
@@ -869,10 +883,14 @@ vector_db_error_t vector_db_flush_now(vector_db_t* db) {
     }
     
     char* directory = strdup(db->flush_directory);
+    if (!directory) {
+        pthread_mutex_unlock(&db->flush_mutex);
+        return VECTOR_DB_ERROR_MEMORY;
+    }
     vector_db_flush_callback_t callback = db->flush_callback;
     void* user_data = db->flush_user_data;
     pthread_mutex_unlock(&db->flush_mutex);
-    
+
     vector_db_error_t err = vector_db_save_all(db, directory);
     free(directory);
     

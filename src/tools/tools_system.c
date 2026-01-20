@@ -391,101 +391,128 @@ char* generate_anthropic_tools_json(const ToolRegistry *registry) {
     if (registry == NULL || registry->function_count == 0) {
         return NULL;
     }
-    
-    // Estimate size needed
-    size_t estimated_size = 1000 + (registry->function_count * 500);
-    char *json = malloc(estimated_size);
-    if (json == NULL) {
+
+    // Use cJSON for safe JSON construction to prevent buffer overflows
+    cJSON *tools_array = cJSON_CreateArray();
+    if (tools_array == NULL) {
         return NULL;
     }
-    
-    strcpy(json, "[");
-    
+
     for (int i = 0; i < registry->function_count; i++) {
         const ToolFunction *func = &registry->functions[i];
-        
-        if (i > 0) {
-            strcat(json, ", ");
+
+        cJSON *tool = cJSON_CreateObject();
+        if (tool == NULL) {
+            cJSON_Delete(tools_array);
+            return NULL;
         }
-        
-        // Anthropic uses a simpler format without the "type": "function" wrapper
-        strcat(json, "{\"name\": \"");
-        strcat(json, func->name);
-        strcat(json, "\", \"description\": \"");
-        strcat(json, func->description);
-        strcat(json, "\", \"input_schema\": {\"type\": \"object\"");
-        
+
+        // Add name and description - check return values for memory allocation failures
+        if (!cJSON_AddStringToObject(tool, "name", func->name) ||
+            !cJSON_AddStringToObject(tool, "description", func->description)) {
+            cJSON_Delete(tool);
+            cJSON_Delete(tools_array);
+            return NULL;
+        }
+
+        // Build input_schema
+        cJSON *input_schema = cJSON_CreateObject();
+        if (input_schema == NULL) {
+            cJSON_Delete(tool);
+            cJSON_Delete(tools_array);
+            return NULL;
+        }
+        if (!cJSON_AddStringToObject(input_schema, "type", "object")) {
+            cJSON_Delete(input_schema);
+            cJSON_Delete(tool);
+            cJSON_Delete(tools_array);
+            return NULL;
+        }
+
         if (func->parameter_count > 0) {
-            strcat(json, ", \"properties\": {");
-            
+            cJSON *properties = cJSON_CreateObject();
+            if (properties == NULL) {
+                cJSON_Delete(input_schema);
+                cJSON_Delete(tool);
+                cJSON_Delete(tools_array);
+                return NULL;
+            }
+
             for (int j = 0; j < func->parameter_count; j++) {
                 const ToolParameter *param = &func->parameters[j];
-                
-                if (j > 0) {
-                    strcat(json, ", ");
+
+                cJSON *prop = cJSON_CreateObject();
+                if (prop == NULL) {
+                    cJSON_Delete(properties);
+                    cJSON_Delete(input_schema);
+                    cJSON_Delete(tool);
+                    cJSON_Delete(tools_array);
+                    return NULL;
                 }
-                
-                strcat(json, "\"");
-                strcat(json, param->name);
-                strcat(json, "\": {\"type\": \"");
-                strcat(json, param->type);
-                strcat(json, "\", \"description\": \"");
-                strcat(json, param->description);
-                strcat(json, "\"");
-                
+
+                if (!cJSON_AddStringToObject(prop, "type", param->type) ||
+                    !cJSON_AddStringToObject(prop, "description", param->description)) {
+                    cJSON_Delete(prop);
+                    cJSON_Delete(properties);
+                    cJSON_Delete(input_schema);
+                    cJSON_Delete(tool);
+                    cJSON_Delete(tools_array);
+                    return NULL;
+                }
+
                 // Add items schema for array types
                 if (strcmp(param->type, "array") == 0) {
-                    strcat(json, ", \"items\": {\"type\": \"object\"}");
-                }
-                
-                if (param->enum_values != NULL && param->enum_count > 0) {
-                    strcat(json, ", \"enum\": [");
-                    for (int k = 0; k < param->enum_count; k++) {
-                        if (k > 0) strcat(json, ", ");
-                        strcat(json, "\"");
-                        strcat(json, param->enum_values[k]);
-                        strcat(json, "\"");
+                    cJSON *items = cJSON_CreateObject();
+                    if (items != NULL) {
+                        cJSON_AddStringToObject(items, "type", "object");
+                        cJSON_AddItemToObject(prop, "items", items);
                     }
-                    strcat(json, "]");
                 }
-                
-                strcat(json, "}");
+
+                // Add enum values if present
+                if (param->enum_values != NULL && param->enum_count > 0) {
+                    cJSON *enum_array = cJSON_CreateArray();
+                    if (enum_array != NULL) {
+                        for (int k = 0; k < param->enum_count; k++) {
+                            cJSON_AddItemToArray(enum_array, cJSON_CreateString(param->enum_values[k]));
+                        }
+                        cJSON_AddItemToObject(prop, "enum", enum_array);
+                    }
+                }
+
+                cJSON_AddItemToObject(properties, param->name, prop);
             }
-            
-            strcat(json, "}");
-            
+
+            cJSON_AddItemToObject(input_schema, "properties", properties);
+
             // Add required array if there are required parameters
-            int has_required = 0;
+            cJSON *required = NULL;
             for (int j = 0; j < func->parameter_count; j++) {
                 if (func->parameters[j].required) {
-                    has_required = 1;
-                    break;
+                    if (required == NULL) {
+                        required = cJSON_CreateArray();
+                        if (required == NULL) {
+                            cJSON_Delete(input_schema);
+                            cJSON_Delete(tool);
+                            cJSON_Delete(tools_array);
+                            return NULL;
+                        }
+                    }
+                    cJSON_AddItemToArray(required, cJSON_CreateString(func->parameters[j].name));
                 }
             }
-            
-            if (has_required) {
-                strcat(json, ", \"required\": [");
-                int first_required = 1;
-                for (int j = 0; j < func->parameter_count; j++) {
-                    if (func->parameters[j].required) {
-                        if (!first_required) {
-                            strcat(json, ", ");
-                        }
-                        strcat(json, "\"");
-                        strcat(json, func->parameters[j].name);
-                        strcat(json, "\"");
-                        first_required = 0;
-                    }
-                }
-                strcat(json, "]");
+            if (required != NULL) {
+                cJSON_AddItemToObject(input_schema, "required", required);
             }
         }
-        
-        strcat(json, "}}");
+
+        cJSON_AddItemToObject(tool, "input_schema", input_schema);
+        cJSON_AddItemToArray(tools_array, tool);
     }
-    
-    strcat(json, "]");
-    
+
+    char *json = cJSON_PrintUnformatted(tools_array);
+    cJSON_Delete(tools_array);
+
     return json;
 }
 

@@ -46,6 +46,7 @@ static int message_contains_tool_use_id(const ConversationMessage* msg, const ch
 
 // Anthropic provider implementation
 static int anthropic_detect_provider(const char* api_url) {
+    if (api_url == NULL) return 0;
     return strstr(api_url, "api.anthropic.com") != NULL;
 }
 
@@ -56,6 +57,9 @@ static char* anthropic_build_request_json(const LLMProvider* provider,
                                          const char* user_message,
                                          int max_tokens,
                                          const ToolRegistry* tools) {
+    if (provider == NULL || model == NULL || conversation == NULL) {
+        return NULL;
+    }
     // Anthropic-specific request building - system prompt at top level
     // Use the specialized Anthropic message builder to handle tool_result validation
     return build_json_payload_model_aware(model, system_prompt, conversation,
@@ -68,27 +72,32 @@ static int anthropic_build_headers(const LLMProvider* provider,
                                   const char** headers,
                                   int max_headers) {
     (void)provider; // Suppress unused parameter warning
+
+    if (max_headers < 2) {
+        return 0; // Cannot fit required headers
+    }
+
     int count = 0;
-    static char auth_header[512];
+    static _Thread_local char auth_header[512];
     static char content_type[] = "Content-Type: application/json";
     static char version_header[] = "anthropic-version: 2023-06-01";
-    
+
     // Add x-api-key header if API key provided
-    if (api_key && count < max_headers - 1) {
+    if (api_key && strlen(api_key) > 0 && count < max_headers - 1) {
         snprintf(auth_header, sizeof(auth_header), "x-api-key: %s", api_key);
         headers[count++] = auth_header;
     }
-    
+
     // Add version header (required by Anthropic)
     if (count < max_headers - 1) {
         headers[count++] = version_header;
     }
-    
+
     // Add content type header
     if (count < max_headers - 1) {
         headers[count++] = content_type;
     }
-    
+
     return count;
 }
 

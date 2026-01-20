@@ -29,7 +29,8 @@ void session_data_init(SessionData* session);
 void session_data_cleanup(SessionData* session);
 
 // Copy configuration from another session (for components that need config only)
-void session_data_copy_config(SessionData* dest, const SessionConfig* src);
+// Returns 0 on success, -1 on failure (memory allocation error)
+int session_data_copy_config(SessionData* dest, const SessionConfig* src);
 
 // Build API request payload (abstracted from ralph.c)
 char* session_build_api_payload(const SessionData* session, const char* user_message, 

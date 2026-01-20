@@ -7,6 +7,7 @@
 #include <string.h>
 #include <time.h>
 #include <ctype.h>
+#include <errno.h>
 
 static void print_help(void) {
     printf("\n📚 \033[1mMemory Management Commands\033[0m\n");
@@ -22,9 +23,11 @@ static void print_help(void) {
 
 static char* format_timestamp(time_t timestamp) {
     struct tm* tm_info = localtime(&timestamp);
+    if (tm_info == NULL) return NULL;
+
     char* buffer = malloc(64);
     if (buffer == NULL) return NULL;
-    
+
     strftime(buffer, 64, "%Y-%m-%d %H:%M:%S", tm_info);
     return buffer;
 }
@@ -170,9 +173,16 @@ static int cmd_show(const char* args) {
         printf("Usage: /memory show <chunk_id>\n");
         return -1;
     }
-    
-    size_t chunk_id = strtoull(args, NULL, 10);
-    
+
+    char* endptr = NULL;
+    errno = 0;
+    unsigned long long parsed = strtoull(args, &endptr, 10);
+    if (errno == ERANGE || endptr == args || (endptr != NULL && *endptr != '\0' && !isspace(*endptr))) {
+        printf("❌ Invalid chunk ID: %s\n", args);
+        return -1;
+    }
+    size_t chunk_id = (size_t)parsed;
+
     metadata_store_t* store = metadata_store_get_instance();
     if (store == NULL) {
         printf("❌ Failed to access metadata store\n");
@@ -225,9 +235,17 @@ static int cmd_edit(const char* args) {
     
     // Trim leading whitespace from value
     while (*value && isspace(*value)) value++;
-    
-    size_t chunk_id = strtoull(chunk_id_str, NULL, 10);
-    
+
+    char* endptr = NULL;
+    errno = 0;
+    unsigned long long parsed = strtoull(chunk_id_str, &endptr, 10);
+    if (errno == ERANGE || endptr == chunk_id_str || (endptr != NULL && *endptr != '\0')) {
+        printf("❌ Invalid chunk ID: %s\n", chunk_id_str);
+        free(args_copy);
+        return -1;
+    }
+    size_t chunk_id = (size_t)parsed;
+
     metadata_store_t* store = metadata_store_get_instance();
     if (store == NULL) {
         printf("❌ Failed to access metadata store\n");
@@ -253,26 +271,57 @@ static int cmd_edit(const char* args) {
     
     // Update field
     bool valid_field = true;
+    char* new_value = NULL;
     if (strcmp(field, "type") == 0) {
+        new_value = strdup(value);
+        if (new_value == NULL) {
+            printf("❌ Memory allocation failed\n");
+            metadata_store_free_chunk(chunk);
+            free(args_copy);
+            return -1;
+        }
         free(chunk->type);
-        chunk->type = strdup(value);
+        chunk->type = new_value;
     } else if (strcmp(field, "source") == 0) {
+        new_value = strdup(value);
+        if (new_value == NULL) {
+            printf("❌ Memory allocation failed\n");
+            metadata_store_free_chunk(chunk);
+            free(args_copy);
+            return -1;
+        }
         free(chunk->source);
-        chunk->source = strdup(value);
+        chunk->source = new_value;
     } else if (strcmp(field, "importance") == 0) {
+        new_value = strdup(value);
+        if (new_value == NULL) {
+            printf("❌ Memory allocation failed\n");
+            metadata_store_free_chunk(chunk);
+            free(args_copy);
+            return -1;
+        }
         free(chunk->importance);
-        chunk->importance = strdup(value);
+        chunk->importance = new_value;
     } else if (strcmp(field, "content") == 0) {
+        new_value = strdup(value);
+        if (new_value == NULL) {
+            printf("❌ Memory allocation failed\n");
+            metadata_store_free_chunk(chunk);
+            free(args_copy);
+            return -1;
+        }
         free(chunk->content);
-        chunk->content = strdup(value);
-        
+        chunk->content = new_value;
+
         // Update embedding if embeddings service is available
         if (embeddings_service_is_configured()) {
             vector_t* new_vector = embeddings_service_text_to_vector(value);
-            if (new_vector != NULL) {
+            if (new_vector == NULL) {
+                printf("⚠️  Warning: Failed to create embedding for updated content\n");
+            } else {
                 vector_db_t* db = vector_db_service_get_database();
-                if (db != NULL) {
-                    vector_db_update_vector(db, index_name, new_vector, chunk_id);
+                if (db == NULL || vector_db_update_vector(db, index_name, new_vector, chunk_id) != 0) {
+                    printf("⚠️  Warning: Failed to update vector embedding\n");
                 }
                 embeddings_service_free_vector(new_vector);
             }

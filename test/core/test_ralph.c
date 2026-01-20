@@ -774,15 +774,16 @@ void test_ralph_build_anthropic_json_payload_with_tools(void) {
                                                      test_message, max_tokens, &tools);
     
     TEST_ASSERT_NOT_NULL(result);
-    
+
     // Check for tools array
     TEST_ASSERT_NOT_NULL(strstr(result, "\"tools\": ["));
-    
-    // Check for shell_execute tool with Anthropic format
-    TEST_ASSERT_NOT_NULL(strstr(result, "\"name\": \"shell_execute\""));
+
+    // Check for shell_execute tool with Anthropic format (cJSON produces no spaces after colons)
+    TEST_ASSERT_NOT_NULL(strstr(result, "\"name\":\"shell_execute\""));
     TEST_ASSERT_NOT_NULL(strstr(result, "\"input_schema\""));
-    
+
     // Should not have OpenAI's function wrapper
+    TEST_ASSERT_NULL(strstr(result, "\"type\":\"function\""));
     TEST_ASSERT_NULL(strstr(result, "\"type\": \"function\""));
     
     free(result);

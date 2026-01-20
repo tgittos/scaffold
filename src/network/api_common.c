@@ -9,30 +9,59 @@
 // Model registry is now used for all tool handling
 extern ModelRegistry* get_model_registry(void);
 
-#include "json_escape.h"
-
 size_t calculate_json_payload_size(const char* model, const char* system_prompt,
                                   const ConversationHistory* conversation,
                                   const char* user_message, const ToolRegistry* tools) {
+    // Validate required parameters
+    if (model == NULL || conversation == NULL) {
+        return 0; // Signal invalid input
+    }
+
     size_t base_size = 200; // Base JSON structure
     size_t model_len = strlen(model);
     size_t user_msg_len = user_message ? strlen(user_message) * 2 + 50 : 0;
     size_t system_len = system_prompt ? strlen(system_prompt) * 2 + 50 : 0;
     size_t history_len = 0;
-    
+
     // Calculate space needed for conversation history
     for (int i = 0; i < conversation->count; i++) {
-        history_len += strlen(conversation->messages[i].role) + 
-                      strlen(conversation->messages[i].content) * 2 + 100; // Extra space for tool metadata
+        // Validate message fields before dereferencing
+        if (conversation->messages[i].role == NULL ||
+            conversation->messages[i].content == NULL) {
+            continue; // Skip invalid messages
+        }
+        size_t msg_size = strlen(conversation->messages[i].role) +
+                         strlen(conversation->messages[i].content) * 2 + 100; // Extra space for tool metadata
+
+        // Overflow protection: check before adding
+        if (history_len > SIZE_MAX - msg_size) {
+            return SIZE_MAX; // Signal overflow
+        }
+        history_len += msg_size;
     }
-    
+
     // Account for tools JSON size
     size_t tools_len = 0;
     if (tools != NULL && tools->function_count > 0) {
         tools_len = tools->function_count * 500; // Rough estimate per tool
     }
-    
-    return base_size + model_len + user_msg_len + system_len + history_len + tools_len + 200;
+
+    // Final overflow protection
+    size_t total = base_size;
+    if (total > SIZE_MAX - model_len) return SIZE_MAX;
+    total += model_len;
+    if (total > SIZE_MAX - user_msg_len) return SIZE_MAX;
+    total += user_msg_len;
+    if (total > SIZE_MAX - system_len) return SIZE_MAX;
+    total += system_len;
+    if (total > SIZE_MAX - history_len) return SIZE_MAX;
+    total += history_len;
+    if (total > SIZE_MAX - tools_len) return SIZE_MAX;
+    total += tools_len;
+    if (total > SIZE_MAX - 200) return SIZE_MAX;
+    total += 200;
+
+    return total;
 }
 
 int format_openai_message(char* buffer, size_t buffer_size,
@@ -341,8 +370,16 @@ char* build_json_payload_common(const char* model, const char* system_prompt,
                                int max_tokens, const ToolRegistry* tools,
                                MessageFormatter formatter,
                                int system_at_top_level) {
+    // Validate required parameters
+    if (model == NULL || conversation == NULL) {
+        return NULL;
+    }
+
     // Calculate required buffer size
     size_t total_size = calculate_json_payload_size(model, system_prompt, conversation, user_message, tools);
+    if (total_size == 0 || total_size == SIZE_MAX) {
+        return NULL; // Invalid input or overflow
+    }
     char* json = malloc(total_size);
     if (json == NULL) return NULL;
     
@@ -389,18 +426,20 @@ char* build_json_payload_common(const char* model, const char* system_prompt,
     // Add system prompt at top level if requested (Anthropic style)
     if (system_at_top_level && system_prompt != NULL) {
         char* escaped_system = json_escape_string(system_prompt);
-        if (escaped_system != NULL) {
-            written = snprintf(current, remaining, ", \"system\": \"%s\"", escaped_system);
-            free(escaped_system);
-            if (written < 0 || written >= (int)remaining) {
-                free(json);
-                return NULL;
-            }
-            current += written;
-            remaining -= written;
+        if (escaped_system == NULL) {
+            free(json);
+            return NULL; // Memory allocation failure
         }
+        written = snprintf(current, remaining, ", \"system\": \"%s\"", escaped_system);
+        free(escaped_system);
+        if (written < 0 || written >= (int)remaining) {
+            free(json);
+            return NULL;
+        }
+        current += written;
+        remaining -= written;
     }
-    
+
     // Add max_tokens if specified
     if (max_tokens > 0 && max_tokens_param != NULL) {
         written = snprintf(current, remaining, ", \"%s\": %d", max_tokens_param, max_tokens);
@@ -411,7 +450,7 @@ char* build_json_payload_common(const char* model, const char* system_prompt,
         current += written;
         remaining -= written;
     }
-    
+
     // Add tools if available - always use model capabilities
     if (tools != NULL && tools->function_count > 0 && model) {
         ModelRegistry* registry = get_model_registry();
@@ -446,8 +485,16 @@ char* build_json_payload_model_aware(const char* model, const char* system_promp
                                     int max_tokens, const ToolRegistry* tools,
                                     MessageFormatter formatter,
                                     int system_at_top_level) {
+    // Validate required parameters
+    if (model == NULL || conversation == NULL) {
+        return NULL;
+    }
+
     // Calculate required buffer size
     size_t total_size = calculate_json_payload_size(model, system_prompt, conversation, user_message, tools);
+    if (total_size == 0 || total_size == SIZE_MAX) {
+        return NULL; // Invalid input or overflow
+    }
     char* json = malloc(total_size);
     if (json == NULL) return NULL;
     
@@ -494,18 +541,20 @@ char* build_json_payload_model_aware(const char* model, const char* system_promp
     // Add system prompt at top level if requested (Anthropic style)
     if (system_at_top_level && system_prompt != NULL) {
         char* escaped_system = json_escape_string(system_prompt);
-        if (escaped_system != NULL) {
-            written = snprintf(current, remaining, ", \"system\": \"%s\"", escaped_system);
-            free(escaped_system);
-            if (written < 0 || written >= (int)remaining) {
-                free(json);
-                return NULL;
-            }
-            current += written;
-            remaining -= written;
+        if (escaped_system == NULL) {
+            free(json);
+            return NULL; // Memory allocation failure
         }
+        written = snprintf(current, remaining, ", \"system\": \"%s\"", escaped_system);
+        free(escaped_system);
+        if (written < 0 || written >= (int)remaining) {
+            free(json);
+            return NULL;
+        }
+        current += written;
+        remaining -= written;
     }
-    
+
     // Add max_tokens if specified
     if (max_tokens > 0 && max_tokens_param != NULL) {
         written = snprintf(current, remaining, ", \"%s\": %d", max_tokens_param, max_tokens);
@@ -516,7 +565,7 @@ char* build_json_payload_model_aware(const char* model, const char* system_promp
         current += written;
         remaining -= written;
     }
-    
+
     // Add tools if available - use model-specific formatting
     if (tools != NULL && tools->function_count > 0) {
         char* tools_json = NULL;

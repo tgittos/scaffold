@@ -3,10 +3,18 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <stdint.h>
 
 // PDFio headers
 #include <pdfio.h>
 
+// Buffer size constants
+#define PDF_INITIAL_BUFFER_SIZE 1024
+#define PDF_TOKEN_BUFFER_SIZE 1024
+
+// Note: This module is NOT thread-safe. The initialization state is tracked
+// with a global variable without synchronization. Callers must ensure that
+// pdf_extractor_init() and pdf_extractor_cleanup() are not called concurrently.
 static int pdf_extractor_initialized = 0;
 
 int pdf_extractor_init(void) {
@@ -70,7 +78,7 @@ static char* extract_text_from_page(pdfio_file_t *pdf, size_t page_num) {
         }
         
         // Extract text tokens from the stream, based on pdfiototext.c
-        char buffer[1024];
+        char buffer[PDF_TOKEN_BUFFER_SIZE];
         bool first = true;
         while (pdfioStreamGetToken(st, buffer, sizeof(buffer))) {
             if (buffer[0] == '(') {
@@ -80,7 +88,7 @@ static char* extract_text_from_page(pdfio_file_t *pdf, size_t page_num) {
                     // Add space before token if not first
                     if (!first) {
                         if (full_text_len >= full_text_cap) {
-                            full_text_cap = full_text_cap ? full_text_cap * 2 : 1024;
+                            full_text_cap = full_text_cap ? full_text_cap * 2 : PDF_INITIAL_BUFFER_SIZE;
                             char *new_text = realloc(full_text, full_text_cap + 1);
                             if (!new_text) {
                                 free(full_text);
@@ -93,10 +101,10 @@ static char* extract_text_from_page(pdfio_file_t *pdf, size_t page_num) {
                     } else {
                         first = false;
                     }
-                    
+
                     // Ensure we have enough space
                     while (full_text_len + token_len >= full_text_cap) {
-                        full_text_cap = full_text_cap ? full_text_cap * 2 : 1024;
+                        full_text_cap = full_text_cap ? full_text_cap * 2 : PDF_INITIAL_BUFFER_SIZE;
                         char *new_text = realloc(full_text, full_text_cap + 1);
                         if (!new_text) {
                             free(full_text);
@@ -105,17 +113,17 @@ static char* extract_text_from_page(pdfio_file_t *pdf, size_t page_num) {
                         }
                         full_text = new_text;
                     }
-                    
+
                     // Copy the token
                     memcpy(full_text + full_text_len, buffer + 1, token_len);
                     full_text_len += token_len;
                 }
-            } else if (!strcmp(buffer, "Td") || !strcmp(buffer, "TD") || !strcmp(buffer, "T*") || 
+            } else if (!strcmp(buffer, "Td") || !strcmp(buffer, "TD") || !strcmp(buffer, "T*") ||
                        !strcmp(buffer, "'") || !strcmp(buffer, "\"")) {
                 // Text positioning commands - add newline
                 if (!first) {
                     if (full_text_len >= full_text_cap) {
-                        full_text_cap = full_text_cap ? full_text_cap * 2 : 1024;
+                        full_text_cap = full_text_cap ? full_text_cap * 2 : PDF_INITIAL_BUFFER_SIZE;
                         char *new_text = realloc(full_text, full_text_cap + 1);
                         if (!new_text) {
                             free(full_text);
@@ -129,10 +137,10 @@ static char* extract_text_from_page(pdfio_file_t *pdf, size_t page_num) {
                 }
             }
         }
-        
+
         if (!first && full_text_len > 0 && full_text[full_text_len - 1] != '\n') {
             if (full_text_len >= full_text_cap) {
-                full_text_cap = full_text_cap ? full_text_cap * 2 : 1024;
+                full_text_cap = full_text_cap ? full_text_cap * 2 : PDF_INITIAL_BUFFER_SIZE;
                 char *new_text = realloc(full_text, full_text_cap + 1);
                 if (!new_text) {
                     free(full_text);
@@ -154,35 +162,38 @@ static char* extract_text_from_page(pdfio_file_t *pdf, size_t page_num) {
     return full_text;
 }
 
-static pdf_extraction_result_t* pdf_extract_text_internal(const char* pdf_path, 
-                                                         const unsigned char* pdf_data, 
+static pdf_extraction_result_t* pdf_extract_text_internal(const char* pdf_path,
+                                                         const unsigned char* pdf_data,
                                                          size_t data_size,
                                                          const pdf_extraction_config_t* config) {
     if (!pdf_extractor_initialized) {
         return create_error_result("PDF extractor not initialized");
     }
-    
+
+    // Declare default_config at function scope to avoid dangling pointer
+    // when config is NULL and we assign config = &default_config
+    pdf_extraction_config_t default_config;
     if (!config) {
-        pdf_extraction_config_t default_config = pdf_get_default_config();
+        default_config = pdf_get_default_config();
         config = &default_config;
     }
-    
+
     pdfio_file_t *pdf = NULL;
     pdf_extraction_result_t *result = NULL;
     char *full_text = NULL;
     size_t total_length = 0;
     int page_count = 0;
-    
+
     result = malloc(sizeof(pdf_extraction_result_t));
     if (!result) {
-        return create_error_result("Memory allocation failed");
+        return NULL;  // Cannot allocate even for error result
     }
-    
+
     result->text = NULL;
     result->length = 0;
     result->page_count = 0;
     result->error = NULL;
-    
+
     // Open document
     if (pdf_path) {
         pdf = pdfioFileOpen(pdf_path, NULL, NULL, NULL, NULL);
@@ -194,54 +205,74 @@ static pdf_extraction_result_t* pdf_extract_text_internal(const char* pdf_path,
         result->error = strdup("No PDF source provided");
         return result;
     }
-    
+
     if (!pdf) {
         result->error = strdup("Failed to open PDF document");
         return result;
     }
-    
+
     size_t total_pages = pdfioFileGetNumPages(pdf);
     size_t start_page = (config->start_page >= 0) ? (size_t)config->start_page : 0;
     size_t end_page = (config->end_page >= 0) ? (size_t)config->end_page : total_pages - 1;
-    
+
     // Validate page range
     if (start_page >= total_pages) start_page = total_pages - 1;
     if (end_page >= total_pages) end_page = total_pages - 1;
     if (start_page > end_page) start_page = end_page;
-    
+
     // Extract text from each page
     for (size_t page_num = start_page; page_num <= end_page; page_num++) {
         char *page_text = extract_text_from_page(pdf, page_num);
         if (page_text) {
             size_t page_text_len = strlen(page_text);
             if (page_text_len > 0) {
-                // Reallocate full_text to accommodate new page text
-                size_t new_size = total_length + page_text_len + 2; // +2 for newline and null terminator
-                char *new_full_text = realloc(full_text, new_size);
-                if (new_full_text) {
-                    full_text = new_full_text;
-                    if (total_length > 0) {
-                        strcat(full_text + total_length, "\n");
-                        total_length++;
-                    } else {
-                        full_text[0] = '\0';
-                    }
-                    strcat(full_text + total_length, page_text);
-                    total_length += page_text_len;
-                    page_count++;
+                // Check for size_t overflow before calculation
+                if (page_text_len > SIZE_MAX - total_length - 2) {
+                    free(page_text);
+                    free(full_text);
+                    pdfioFileClose(pdf);
+                    result->error = strdup("PDF too large: size overflow");
+                    return result;
                 }
+
+                // Reallocate full_text to accommodate new page text
+                // +2 for newline separator and null terminator
+                size_t new_size = total_length + page_text_len + 2;
+                char *new_full_text = realloc(full_text, new_size);
+                if (!new_full_text) {
+                    // Allocation failed - clean up and return error
+                    free(page_text);
+                    free(full_text);
+                    pdfioFileClose(pdf);
+                    result->error = strdup("Memory allocation failed during text extraction");
+                    return result;
+                }
+                full_text = new_full_text;
+
+                // Append newline separator if not the first page
+                if (total_length > 0) {
+                    full_text[total_length] = '\n';
+                    total_length++;
+                }
+
+                // Copy page text using memcpy for explicit control
+                memcpy(full_text + total_length, page_text, page_text_len);
+                total_length += page_text_len;
+                full_text[total_length] = '\0';  // Null-terminate
+
+                page_count++;
             }
             free(page_text);
         }
     }
-    
+
     pdfioFileClose(pdf);
-    
+
     // Set results
     result->text = full_text;
     result->length = total_length;
     result->page_count = page_count;
-    
+
     return result;
 }
 

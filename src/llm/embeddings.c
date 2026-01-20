@@ -6,30 +6,45 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
 
 // Provider registration functions
 int register_openai_embedding_provider(EmbeddingProviderRegistry* registry);
 int register_local_embedding_provider(EmbeddingProviderRegistry* registry);
 
-// Global embedding provider registry
+// Global embedding provider registry with thread-safe initialization
 static EmbeddingProviderRegistry g_embedding_registry = {0};
-static int g_embedding_registry_initialized = 0;
+static pthread_once_t g_registry_init_once = PTHREAD_ONCE_INIT;
+static int g_registry_init_result = -1;
 
-static int init_embedding_registry_once(void) {
-    if (g_embedding_registry_initialized) {
-        return 0;
-    }
-    
+static void init_embedding_registry_internal(void) {
     if (init_embedding_provider_registry(&g_embedding_registry) != 0) {
-        return -1;
+        g_registry_init_result = -1;
+        return;
     }
-    
+
     // Register built-in providers (order matters - specific providers first, fallback last)
-    register_openai_embedding_provider(&g_embedding_registry);
-    register_local_embedding_provider(&g_embedding_registry);
-    
-    g_embedding_registry_initialized = 1;
-    return 0;
+    // Check return values to detect registration failures
+    if (register_openai_embedding_provider(&g_embedding_registry) != 0) {
+        cleanup_embedding_provider_registry(&g_embedding_registry);
+        g_registry_init_result = -1;
+        return;
+    }
+
+    if (register_local_embedding_provider(&g_embedding_registry) != 0) {
+        cleanup_embedding_provider_registry(&g_embedding_registry);
+        g_registry_init_result = -1;
+        return;
+    }
+
+    g_registry_init_result = 0;
+}
+
+// Note: pthread_once guarantees init_embedding_registry_internal runs exactly once.
+// If initialization fails, subsequent calls return the failure result with no retry.
+static int init_embedding_registry_once(void) {
+    pthread_once(&g_registry_init_once, init_embedding_registry_internal);
+    return g_registry_init_result;
 }
 
 static char* safe_strdup(const char *str) {
@@ -101,55 +116,68 @@ int embeddings_get_vector(const embeddings_config_t *config, const char *text,
     }
     
     EmbeddingProvider *provider = config->provider;
-    
+
+    // Verify required function pointers are set
+    if (provider->build_request_json == NULL) {
+        fprintf(stderr, "Error: Provider missing build_request_json implementation\n");
+        return -1;
+    }
+    if (provider->build_headers == NULL) {
+        fprintf(stderr, "Error: Provider missing build_headers implementation\n");
+        return -1;
+    }
+    if (provider->parse_response == NULL) {
+        fprintf(stderr, "Error: Provider missing parse_response implementation\n");
+        return -1;
+    }
+
     // Build request JSON using provider
     char *request_json = provider->build_request_json(provider, config->model, text);
     if (request_json == NULL) {
         fprintf(stderr, "Error: Failed to build embeddings request\n");
         return -1;
     }
-    
+
     debug_printf("Embeddings request JSON: %s\n", request_json);
-    
-    // Set up headers using provider
-    const char *headers[10];
-    int header_count = provider->build_headers(provider, config->api_key, headers, 10);
-    if (header_count < 0) {
-        fprintf(stderr, "Error: Failed to build headers\n");
+
+    // Set up headers using provider (size 11 to always allow NULL terminator)
+    const char *headers[11];
+    const int max_headers = 10;
+    int header_count = provider->build_headers(provider, config->api_key, headers, max_headers);
+    if (header_count < 0 || header_count > max_headers) {
+        fprintf(stderr, "Error: Invalid header count from provider\n");
         free(request_json);
         return -1;
     }
-    
-    // Null-terminate the headers array
-    if (header_count < 10) {
-        headers[header_count] = NULL;
-    }
-    
+
+    // Always null-terminate the headers array
+    headers[header_count] = NULL;
+
     // Make API request
     struct HTTPResponse response = {0};
     int result = http_post_with_headers(config->api_url, request_json, headers, &response);
-    
+
     free(request_json);
-    
+
     if (result != 0 || response.data == NULL) {
         fprintf(stderr, "Error: Failed to get embeddings from API\n");
         cleanup_response(&response);
         return -1;
     }
-    
+
     // Check for API errors
     if (strstr(response.data, "\"error\"") != NULL) {
         debug_fprintf(stderr, "API Error: %s\n", response.data);
         cleanup_response(&response);
         return -1;
     }
-    
+
     debug_printf_json("Embeddings response: ", response.data);
-    
+
     // Parse the response using provider
     result = provider->parse_response(provider, response.data, embedding);
     cleanup_response(&response);
-    
+
     return result;
 }
 

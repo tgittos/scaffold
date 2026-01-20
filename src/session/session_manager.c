@@ -6,8 +6,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include "json_escape.h"
+#include <stdint.h>
 
-#include "json_escape.h"
+// Buffer size calculation constants
+#define PAYLOAD_BASE_SIZE 2048
+#define JSON_ESCAPE_MULTIPLIER 6  // Worst case: all chars need \uXXXX escaping
+#define MAX_PAYLOAD_SIZE (SIZE_MAX / 2)  // Prevent overflow in calculations
 
 void session_data_init(SessionData* session) {
     if (session == NULL) return;
@@ -28,22 +32,53 @@ void session_data_cleanup(SessionData* session) {
     memset(session, 0, sizeof(SessionData));
 }
 
-void session_data_copy_config(SessionData* dest, const SessionConfig* src) {
-    if (dest == NULL || src == NULL) return;
-    
-    // Free existing config
+int session_data_copy_config(SessionData* dest, const SessionConfig* src) {
+    if (dest == NULL || src == NULL) return -1;
+
+    // Stage allocations to avoid partial state on failure
+    char *new_api_url = NULL;
+    char *new_model = NULL;
+    char *new_api_key = NULL;
+    char *new_system_prompt = NULL;
+
+    if (src->api_url) {
+        new_api_url = strdup(src->api_url);
+        if (new_api_url == NULL) goto alloc_failed;
+    }
+    if (src->model) {
+        new_model = strdup(src->model);
+        if (new_model == NULL) goto alloc_failed;
+    }
+    if (src->api_key) {
+        new_api_key = strdup(src->api_key);
+        if (new_api_key == NULL) goto alloc_failed;
+    }
+    if (src->system_prompt) {
+        new_system_prompt = strdup(src->system_prompt);
+        if (new_system_prompt == NULL) goto alloc_failed;
+    }
+
+    // All allocations succeeded - commit the changes
     free(dest->config.api_url);
     free(dest->config.model);
     free(dest->config.api_key);
     free(dest->config.system_prompt);
-    
-    // Copy new config
-    dest->config.api_url = src->api_url ? strdup(src->api_url) : NULL;
-    dest->config.model = src->model ? strdup(src->model) : NULL;
-    dest->config.api_key = src->api_key ? strdup(src->api_key) : NULL;
-    dest->config.system_prompt = src->system_prompt ? strdup(src->system_prompt) : NULL;
+
+    dest->config.api_url = new_api_url;
+    dest->config.model = new_model;
+    dest->config.api_key = new_api_key;
+    dest->config.system_prompt = new_system_prompt;
     dest->config.context_window = src->context_window;
     dest->config.api_type = src->api_type;
+
+    return 0;
+
+alloc_failed:
+    free(new_api_url);
+    free(new_model);
+    free(new_api_key);
+    free(new_system_prompt);
+    return -1;
 }
 
 char* session_build_api_payload(const SessionData* session, const char* user_message, 
@@ -54,13 +89,26 @@ char* session_build_api_payload(const SessionData* session, const char* user_mes
     // This is used primarily by the conversation compactor
     (void)include_tools; // Suppress unused parameter warning
     
-    // Calculate buffer size needed
-    size_t buffer_size = 2048; // Base size
-    if (session->config.system_prompt) {
-        buffer_size += strlen(session->config.system_prompt) * 2; // Account for escaping
+    // Calculate buffer size needed with overflow protection
+    size_t system_len = session->config.system_prompt ? strlen(session->config.system_prompt) : 0;
+    size_t user_len = strlen(user_message);
+
+    // Check for potential overflow before multiplication
+    if (system_len > MAX_PAYLOAD_SIZE / JSON_ESCAPE_MULTIPLIER ||
+        user_len > MAX_PAYLOAD_SIZE / JSON_ESCAPE_MULTIPLIER) {
+        return NULL;  // Input too large, would overflow
     }
-    buffer_size += strlen(user_message) * 2; // Account for escaping
-    
+
+    size_t system_escaped_size = system_len * JSON_ESCAPE_MULTIPLIER;
+    size_t user_escaped_size = user_len * JSON_ESCAPE_MULTIPLIER;
+
+    // Check for overflow in addition
+    if (PAYLOAD_BASE_SIZE > MAX_PAYLOAD_SIZE - system_escaped_size - user_escaped_size) {
+        return NULL;  // Total size would overflow
+    }
+
+    size_t buffer_size = PAYLOAD_BASE_SIZE + system_escaped_size + user_escaped_size;
+
     char* payload = malloc(buffer_size);
     if (payload == NULL) return NULL;
     
@@ -150,44 +198,48 @@ int session_make_api_request(const SessionData* session, const char* payload,
         return -1;
     }
     
-    // Extract content based on API type
+    // Extract content based on API type using proper JSON parsing
     char* extracted_content = NULL;
-    
-    if (session->config.api_type == 1) {  // Anthropic
-        // Look for {"content":[{"text":"response here"}]}
-        const char* content_start = strstr(response.data, "\"content\"");
-        if (content_start != NULL) {
-            const char* text_start = strstr(content_start, "\"text\":\"");
-            if (text_start != NULL) {
-                text_start += 8; // Skip "text":"
-                const char* text_end = strstr(text_start, "\"}");
-                if (text_end != NULL) {
-                    size_t content_len = text_end - text_start;
-                    extracted_content = malloc(content_len + 1);
-                    if (extracted_content != NULL) {
-                        strncpy(extracted_content, text_start, content_len);
-                        extracted_content[content_len] = '\0';
+    cJSON* root = cJSON_Parse(response.data);
+
+    if (root != NULL) {
+        if (session->config.api_type == 1) {  // Anthropic
+            // Format: {"content":[{"type":"text","text":"response here"}]}
+            cJSON* content_array = cJSON_GetObjectItem(root, "content");
+            if (content_array != NULL && cJSON_IsArray(content_array)) {
+                cJSON* first_content = cJSON_GetArrayItem(content_array, 0);
+                if (first_content != NULL) {
+                    cJSON* text_item = cJSON_GetObjectItem(first_content, "text");
+                    if (text_item != NULL && cJSON_IsString(text_item)) {
+                        const char* text_value = cJSON_GetStringValue(text_item);
+                        if (text_value != NULL) {
+                            extracted_content = strdup(text_value);
+                        }
+                    }
+                }
+            }
+        } else {  // OpenAI/Local
+            // Format: {"choices":[{"message":{"content":"response here"}}]}
+            cJSON* choices = cJSON_GetObjectItem(root, "choices");
+            if (choices != NULL && cJSON_IsArray(choices)) {
+                cJSON* first_choice = cJSON_GetArrayItem(choices, 0);
+                if (first_choice != NULL) {
+                    cJSON* message = cJSON_GetObjectItem(first_choice, "message");
+                    if (message != NULL) {
+                        cJSON* content_item = cJSON_GetObjectItem(message, "content");
+                        if (content_item != NULL && cJSON_IsString(content_item)) {
+                            const char* content_value = cJSON_GetStringValue(content_item);
+                            if (content_value != NULL) {
+                                extracted_content = strdup(content_value);
+                            }
+                        }
                     }
                 }
             }
         }
-    } else {  // OpenAI/Local
-        // Look for {"choices":[{"message":{"content":"response here"}}]}
-        const char* content_start = strstr(response.data, "\"content\":\"");
-        if (content_start != NULL) {
-            content_start += 11; // Skip "content":"
-            const char* content_end = strstr(content_start, "\"");
-            if (content_end != NULL) {
-                size_t content_len = content_end - content_start;
-                extracted_content = malloc(content_len + 1);
-                if (extracted_content != NULL) {
-                    strncpy(extracted_content, content_start, content_len);
-                    extracted_content[content_len] = '\0';
-                }
-            }
-        }
+        cJSON_Delete(root);
     }
-    
+
     cleanup_response(&response);
     
     if (extracted_content == NULL) {

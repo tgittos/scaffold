@@ -337,9 +337,19 @@ int mcp_client_load_config(MCPClient* client, const char* config_path) {
                             config->env_values[config->env_count] = mcp_expand_env_vars(env_value);
                             if (config->env_keys[config->env_count] && config->env_values[config->env_count]) {
                                 config->env_count++;
+                            } else {
+                                // Clean up partial allocation
+                                free(config->env_keys[config->env_count]);
+                                free(config->env_values[config->env_count]);
                             }
                         }
                     }
+                } else {
+                    // Clean up partial allocation if only one succeeded
+                    free(config->env_keys);
+                    free(config->env_values);
+                    config->env_keys = NULL;
+                    config->env_values = NULL;
                 }
             }
         }
@@ -361,9 +371,19 @@ int mcp_client_load_config(MCPClient* client, const char* config_path) {
                             config->header_values[config->header_count] = mcp_expand_env_vars(header_value);
                             if (config->header_keys[config->header_count] && config->header_values[config->header_count]) {
                                 config->header_count++;
+                            } else {
+                                // Clean up partial allocation
+                                free(config->header_keys[config->header_count]);
+                                free(config->header_values[config->header_count]);
                             }
                         }
                     }
+                } else {
+                    // Clean up partial allocation if only one succeeded
+                    free(config->header_keys);
+                    free(config->header_values);
+                    config->header_keys = NULL;
+                    config->header_values = NULL;
                 }
             }
         }
@@ -375,35 +395,45 @@ int mcp_client_load_config(MCPClient* client, const char* config_path) {
     }
     
     cJSON_Delete(root);
-    
+
     // Store config path
     client->config.config_path = strdup(config_path);
-    
+    if (!client->config.config_path) {
+        debug_printf("Warning: Failed to allocate memory for config path\n");
+    }
+
     debug_printf("Loaded %d MCP servers from config\n", client->config.server_count);
     return 0;
 }
 
 int mcp_connect_server(MCPServerState* server) {
-    if (!server || !server->config.enabled) {
+    if (!server || !server->config->enabled) {
         debug_printf("Invalid server or server disabled\n");
         return -1;
     }
     
-    debug_printf("Connecting to MCP server: %s\n", server->config.name);
+    debug_printf("Connecting to MCP server: %s\n", server->config->name);
     
-    if (server->config.type == MCP_SERVER_STDIO) {
+    if (server->config->type == MCP_SERVER_STDIO) {
         // Create pipes for communication
         int stdin_pipe[2], stdout_pipe[2];
-        
-        if (pipe(stdin_pipe) == -1 || pipe(stdout_pipe) == -1) {
-            debug_printf("Failed to create pipes for MCP server %s\n", server->config.name);
+
+        if (pipe(stdin_pipe) == -1) {
+            debug_printf("Failed to create stdin pipe for MCP server %s\n", server->config->name);
+            return -1;
+        }
+
+        if (pipe(stdout_pipe) == -1) {
+            debug_printf("Failed to create stdout pipe for MCP server %s\n", server->config->name);
+            close(stdin_pipe[0]);
+            close(stdin_pipe[1]);
             return -1;
         }
         
         // Fork process
         pid_t pid = fork();
         if (pid == -1) {
-            debug_printf("Failed to fork process for MCP server %s\n", server->config.name);
+            debug_printf("Failed to fork process for MCP server %s\n", server->config->name);
             close(stdin_pipe[0]);
             close(stdin_pipe[1]);
             close(stdout_pipe[0]);
@@ -425,27 +455,27 @@ int mcp_connect_server(MCPServerState* server) {
             close(stdout_pipe[1]);
             
             // Set environment variables
-            for (int i = 0; i < server->config.env_count; i++) {
-                setenv(server->config.env_keys[i], server->config.env_values[i], 1);
+            for (int i = 0; i < server->config->env_count; i++) {
+                setenv(server->config->env_keys[i], server->config->env_values[i], 1);
             }
             
             // Prepare arguments
-            char** argv = malloc((server->config.arg_count + 2) * sizeof(char*));
+            char** argv = malloc((server->config->arg_count + 2) * sizeof(char*));
             if (!argv) {
                 exit(1);
             }
             
-            argv[0] = server->config.command;
-            for (int i = 0; i < server->config.arg_count; i++) {
-                argv[i + 1] = server->config.args[i];
+            argv[0] = server->config->command;
+            for (int i = 0; i < server->config->arg_count; i++) {
+                argv[i + 1] = server->config->args[i];
             }
-            argv[server->config.arg_count + 1] = NULL;
+            argv[server->config->arg_count + 1] = NULL;
             
             // Execute server command
-            execv(server->config.command, argv);
+            execv(server->config->command, argv);
             
             // If we get here, execv failed
-            debug_printf("Failed to execute MCP server command: %s\n", server->config.command);
+            debug_printf("Failed to execute MCP server command: %s\n", server->config->command);
             exit(1);
         } else {
             // Parent process - store process info
@@ -463,12 +493,12 @@ int mcp_connect_server(MCPServerState* server) {
             
             server->initialized = 1;
             
-            debug_printf("Started MCP server process %d for %s\n", pid, server->config.name);
+            debug_printf("Started MCP server process %d for %s\n", pid, server->config->name);
         }
     } else {
         // For HTTP/SSE servers, just mark as initialized
         server->initialized = 1;
-        debug_printf("Marked HTTP/SSE server %s as initialized\n", server->config.name);
+        debug_printf("Marked HTTP/SSE server %s as initialized\n", server->config->name);
     }
     
     return 0;
@@ -479,9 +509,9 @@ int mcp_disconnect_server(MCPServerState* server) {
         return 0;
     }
     
-    debug_printf("Disconnecting MCP server: %s\n", server->config.name);
+    debug_printf("Disconnecting MCP server: %s\n", server->config->name);
     
-    if (server->config.type == MCP_SERVER_STDIO && server->process_id > 0) {
+    if (server->config->type == MCP_SERVER_STDIO && server->process_id > 0) {
         // Close pipes
         if (server->stdin_fd > 0) {
             close(server->stdin_fd);
@@ -504,7 +534,7 @@ int mcp_disconnect_server(MCPServerState* server) {
     
     server->initialized = 0;
     
-    debug_printf("Disconnected MCP server: %s\n", server->config.name);
+    debug_printf("Disconnected MCP server: %s\n", server->config->name);
     return 0;
 }
 
@@ -539,11 +569,11 @@ int mcp_send_request(MCPServerState* server, const char* method, const char* par
         return -1;
     }
     
-    debug_printf("Sending MCP request to %s: %s\n", server->config.name, method);
+    debug_printf("Sending MCP request to %s: %s\n", server->config->name, method);
     
     int result = -1;
     
-    if (server->config.type == MCP_SERVER_STDIO) {
+    if (server->config->type == MCP_SERVER_STDIO) {
         // Send request via stdin
         size_t request_len = strlen(request_str);
         if (write(server->stdin_fd, request_str, request_len) == (ssize_t)request_len) {
@@ -556,38 +586,38 @@ int mcp_send_request(MCPServerState* server, const char* method, const char* par
                     *response = strdup(buffer);
                     result = 0;
                 } else {
-                    debug_printf("Failed to read response from MCP server %s\n", server->config.name);
+                    debug_printf("Failed to read response from MCP server %s\n", server->config->name);
                 }
             }
         } else {
-            debug_printf("Failed to send request to MCP server %s\n", server->config.name);
+            debug_printf("Failed to send request to MCP server %s\n", server->config->name);
         }
-    } else if (server->config.type == MCP_SERVER_HTTP || server->config.type == MCP_SERVER_SSE) {
+    } else if (server->config->type == MCP_SERVER_HTTP || server->config->type == MCP_SERVER_SSE) {
         // Send HTTP request
         char** headers = NULL;
-        int header_count = server->config.header_count;
+        int header_count = server->config->header_count;
         
         if (header_count > 0) {
             headers = malloc(header_count * sizeof(char*));
             if (headers) {
                 for (int i = 0; i < header_count; i++) {
-                    size_t header_len = strlen(server->config.header_keys[i]) + strlen(server->config.header_values[i]) + 3;
+                    size_t header_len = strlen(server->config->header_keys[i]) + strlen(server->config->header_values[i]) + 3;
                     headers[i] = malloc(header_len);
                     if (headers[i]) {
-                        snprintf(headers[i], header_len, "%s: %s", server->config.header_keys[i], server->config.header_values[i]);
+                        snprintf(headers[i], header_len, "%s: %s", server->config->header_keys[i], server->config->header_values[i]);
                     }
                 }
             }
         }
         
         struct HTTPResponse http_response = {0};
-        if (http_post_with_headers(server->config.url, request_str, (const char**)headers, &http_response) == 0) {
+        if (http_post_with_headers(server->config->url, request_str, (const char**)headers, &http_response) == 0) {
             if (http_response.data && http_response.size > 0) {
                 *response = strdup(http_response.data);
                 result = 0;
             }
         } else {
-            debug_printf("Failed to send HTTP request to MCP server %s\n", server->config.name);
+            debug_printf("Failed to send HTTP request to MCP server %s\n", server->config->name);
         }
         
         // Clean up HTTP response
@@ -607,7 +637,7 @@ int mcp_send_request(MCPServerState* server, const char* method, const char* par
     free(request_str);
     
     if (result == 0) {
-        debug_printf("Received MCP response from %s\n", server->config.name);
+        debug_printf("Received MCP response from %s\n", server->config->name);
     }
     
     return result;
@@ -638,15 +668,15 @@ int mcp_client_connect_servers(MCPClient* client) {
         MCPServerState* server = &client->servers[client->active_server_count];
         memset(server, 0, sizeof(MCPServerState));
         
-        // Copy configuration
-        server->config = client->config.servers[i];
+        // Point to original configuration (not copied - config is owned by client->config.servers)
+        server->config = &client->config.servers[i];
         
         // Connect to server
         if (mcp_connect_server(server) == 0) {
             client->active_server_count++;
-            debug_printf("Successfully connected to MCP server: %s\n", server->config.name);
+            debug_printf("Successfully connected to MCP server: %s\n", server->config->name);
         } else {
-            debug_printf("Failed to connect to MCP server: %s\n", server->config.name);
+            debug_printf("Failed to connect to MCP server: %s\n", server->config->name);
         }
     }
     
@@ -658,17 +688,17 @@ int mcp_client_disconnect_servers(MCPClient* client) {
     if (!client || !client->servers) {
         return 0;
     }
-    
+
     debug_printf("Disconnecting from %d MCP servers\n", client->active_server_count);
-    
+
     for (int i = 0; i < client->active_server_count; i++) {
-        mcp_disconnect_server(&client->servers[i]);
+        mcp_cleanup_server_state(&client->servers[i]);
     }
-    
+
     free(client->servers);
     client->servers = NULL;
     client->active_server_count = 0;
-    
+
     debug_printf("Disconnected from all MCP servers\n");
     return 0;
 }
@@ -724,19 +754,22 @@ int mcp_parse_tools(const char* response, ToolFunction** tools, int* tool_count)
         
         ToolFunction* func = &tool_functions[parsed_count];
         memset(func, 0, sizeof(ToolFunction));
-        
-        // Tool name
+
+        // Tool name (required)
         cJSON* name_item = cJSON_GetObjectItem(tool_item, "name");
-        if (name_item && cJSON_IsString(name_item)) {
-            func->name = strdup(cJSON_GetStringValue(name_item));
-        } else {
+        if (!name_item || !cJSON_IsString(name_item)) {
             continue;
         }
-        
-        // Tool description
+        func->name = strdup(cJSON_GetStringValue(name_item));
+        if (!func->name) {
+            continue;  // Skip tool if name allocation fails
+        }
+
+        // Tool description (optional, allocation failure is non-fatal)
         cJSON* desc_item = cJSON_GetObjectItem(tool_item, "description");
         if (desc_item && cJSON_IsString(desc_item)) {
             func->description = strdup(cJSON_GetStringValue(desc_item));
+            // NULL is acceptable for optional description
         }
         
         // Tool parameters
@@ -760,31 +793,36 @@ int mcp_parse_tools(const char* response, ToolFunction** tools, int* tool_count)
                             
                             ToolParameter* param = &func->parameters[func->parameter_count];
                             memset(param, 0, sizeof(ToolParameter));
-                            
+
                             param->name = strdup(prop_item->string);
-                            
+                            if (!param->name) {
+                                continue;  // Skip parameter if name allocation fails
+                            }
+
                             cJSON* type_item = cJSON_GetObjectItem(prop_item, "type");
                             if (type_item && cJSON_IsString(type_item)) {
                                 param->type = strdup(cJSON_GetStringValue(type_item));
+                                // NULL is acceptable for optional type
                             }
-                            
+
                             cJSON* desc_param = cJSON_GetObjectItem(prop_item, "description");
                             if (desc_param && cJSON_IsString(desc_param)) {
                                 param->description = strdup(cJSON_GetStringValue(desc_param));
+                                // NULL is acceptable for optional description
                             }
-                            
+
                             // Check if parameter is required
-                            if (required && cJSON_IsArray(required)) {
+                            if (required && cJSON_IsArray(required) && param->name) {
                                 cJSON* req_item = NULL;
                                 cJSON_ArrayForEach(req_item, required) {
-                                    if (cJSON_IsString(req_item) && 
+                                    if (cJSON_IsString(req_item) &&
                                         strcmp(cJSON_GetStringValue(req_item), param->name) == 0) {
                                         param->required = 1;
                                         break;
                                     }
                                 }
                             }
-                            
+
                             func->parameter_count++;
                         }
                     }
@@ -829,7 +867,7 @@ int mcp_client_register_tools(MCPClient* client, ToolRegistry* registry) {
                 server->tools = tools;
                 server->tool_count = tool_count;
                 
-                debug_printf("Server %s provides %d tools\n", server->config.name, tool_count);
+                debug_printf("Server %s provides %d tools\n", server->config->name, tool_count);
                 
                 // Register tools with registry
                 for (int j = 0; j < tool_count; j++) {
@@ -837,7 +875,7 @@ int mcp_client_register_tools(MCPClient* client, ToolRegistry* registry) {
                     
                     // Create prefixed name to avoid conflicts
                     char prefixed_name[256];
-                    snprintf(prefixed_name, sizeof(prefixed_name), "mcp_%s_%s", server->config.name, tool->name);
+                    snprintf(prefixed_name, sizeof(prefixed_name), "mcp_%s_%s", server->config->name, tool->name);
                     
                     // Find space in registry
                     int registry_idx = registry->function_count;
@@ -849,10 +887,15 @@ int mcp_client_register_tools(MCPClient* client, ToolRegistry* registry) {
                     // Copy tool to registry
                     ToolFunction* reg_tool = &registry->functions[registry_idx];
                     reg_tool->name = strdup(prefixed_name);
+                    if (!reg_tool->name) {
+                        debug_printf("Failed to allocate memory for tool name: %s\n", prefixed_name);
+                        continue;  // Skip this tool if name allocation fails
+                    }
                     reg_tool->description = tool->description ? strdup(tool->description) : NULL;
+                    // NULL description is acceptable
                     reg_tool->parameters = tool->parameters;  // Share parameters
                     reg_tool->parameter_count = tool->parameter_count;
-                    
+
                     registry->function_count++;
                     
                     debug_printf("Registered MCP tool: %s\n", prefixed_name);
@@ -861,7 +904,7 @@ int mcp_client_register_tools(MCPClient* client, ToolRegistry* registry) {
             
             free(response);
         } else {
-            debug_printf("Failed to get tools from MCP server: %s\n", server->config.name);
+            debug_printf("Failed to get tools from MCP server: %s\n", server->config->name);
         }
     }
     
@@ -902,7 +945,7 @@ int mcp_client_execute_tool(MCPClient* client, const ToolCall* tool_call, ToolRe
     // Find the server
     MCPServerState* server = NULL;
     for (int i = 0; i < client->active_server_count; i++) {
-        if (strcmp(client->servers[i].config.name, server_name) == 0) {
+        if (strcmp(client->servers[i].config->name, server_name) == 0) {
             server = &client->servers[i];
             break;
         }

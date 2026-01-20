@@ -331,7 +331,6 @@ int execute_recall_memories_tool_call(const ToolCall *tool_call, ToolResult *res
             *result = *temp_result;
             free(temp_result);
         }
-        free(query);
         return 0;
     }
     

@@ -14,6 +14,11 @@
 #define DEFAULT_SAFETY_BUFFER_RATIO 0.02f  // 2% of context window - reduced due to better estimation
 #define DEFAULT_CHARS_PER_TOKEN 5.5f       // Modern tokenizers: ~1 token per word (4-6 chars)
 
+// Token overhead estimates
+#define TOKEN_OVERHEAD_PER_MESSAGE 10      // Overhead per message for role, structure, etc.
+#define TOKEN_OVERHEAD_PER_TOOL 50         // Rough estimate per tool definition
+#define TOKEN_OVERHEAD_JSON_STRUCTURE 50   // JSON structure overhead for request
+
 void token_config_init(TokenConfig* config, int context_window) {
     if (config == NULL) return;
     
@@ -111,7 +116,7 @@ int trim_conversation_for_tokens(ConversationHistory* conversation,
     // Calculate current token usage
     for (int i = 0; i < conversation->count; i++) {
         current_tokens += estimate_token_count(conversation->messages[i].content, config);
-        current_tokens += 10; // Overhead per message for role, structure, etc.
+        current_tokens += TOKEN_OVERHEAD_PER_MESSAGE;
     }
     
     debug_printf("Current conversation tokens: %d, max allowed: %d\n", current_tokens, max_prompt_tokens);
@@ -123,7 +128,8 @@ int trim_conversation_for_tokens(ConversationHistory* conversation,
         
         // Look for old user/assistant pairs, but preserve recent tool interactions
         for (int i = 0; i < conversation->count - 2; i++) { // Keep last 2 messages
-            if (strcmp(conversation->messages[i].role, "tool") != 0) {
+            if (conversation->messages[i].role != NULL &&
+                strcmp(conversation->messages[i].role, "tool") != 0) {
                 remove_index = i;
                 break;
             }
@@ -137,7 +143,7 @@ int trim_conversation_for_tokens(ConversationHistory* conversation,
         if (remove_index == -1) break; // Can't trim anymore
         
         // Remove the message
-        int removed_tokens = estimate_token_count(conversation->messages[remove_index].content, config) + 10;
+        int removed_tokens = estimate_token_count(conversation->messages[remove_index].content, config) + TOKEN_OVERHEAD_PER_MESSAGE;
         current_tokens -= removed_tokens;
         
         // Free memory
@@ -194,16 +200,16 @@ int calculate_token_allocation(const SessionData* session, const char* user_mess
     int history_tokens = 0;
     for (int i = 0; i < session->conversation.count; i++) {
         history_tokens += estimate_token_count(session->conversation.messages[i].content, config);
-        history_tokens += 10; // Overhead per message
+        history_tokens += TOKEN_OVERHEAD_PER_MESSAGE;
     }
     
     // Estimate tokens for tool definitions
     int tool_tokens = 0;
     if (session->tool_count > 0) {
-        tool_tokens = session->tool_count * 50; // Rough estimate per tool
+        tool_tokens = session->tool_count * TOKEN_OVERHEAD_PER_TOOL;
     }
     
-    int total_prompt_tokens = system_tokens + user_tokens + history_tokens + tool_tokens + 50; // JSON overhead
+    int total_prompt_tokens = system_tokens + user_tokens + history_tokens + tool_tokens + TOKEN_OVERHEAD_JSON_STRUCTURE;
     usage->total_prompt_tokens = total_prompt_tokens;
     
     // Calculate dynamic safety buffer

@@ -81,6 +81,7 @@ PROVIDER_SOURCES := $(SRCDIR)/llm/providers/openai_provider.c \
                     $(SRCDIR)/llm/providers/local_embedding_provider.c
 
 MODEL_SOURCES := $(SRCDIR)/llm/model_capabilities.c \
+                 $(SRCDIR)/llm/models/response_processing.c \
                  $(SRCDIR)/llm/models/qwen_model.c \
                  $(SRCDIR)/llm/models/deepseek_model.c \
                  $(SRCDIR)/llm/models/gpt_model.c \
@@ -152,7 +153,7 @@ EMBEDDED_LINKS_HEADER := $(SRCDIR)/embedded_links.h
 # Common test dependencies - most tests need these core components
 COMMON_TEST_SOURCES := $(TESTDIR)/unity/unity.c
 TOOL_TEST_DEPS := $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/shell_tool.c $(SRCDIR)/tools/file_tools.c $(SRCDIR)/tools/links_tool.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/tools/vector_db_tool.c $(SRCDIR)/tools/memory_tool.c $(SRCDIR)/tools/pdf_tool.c $(SRCDIR)/tools/tool_result_builder.c $(SRCDIR)/tools/subagent_tool.c
-MODEL_TEST_DEPS := $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(SRCDIR)/llm/embeddings.c $(SRCDIR)/llm/embeddings_service.c $(SRCDIR)/llm/embedding_provider.c $(SRCDIR)/llm/providers/openai_embedding_provider.c $(SRCDIR)/llm/providers/local_embedding_provider.c
+MODEL_TEST_DEPS := $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/llm/models/response_processing.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(SRCDIR)/llm/embeddings.c $(SRCDIR)/llm/embeddings_service.c $(SRCDIR)/llm/embedding_provider.c $(SRCDIR)/llm/providers/openai_embedding_provider.c $(SRCDIR)/llm/providers/local_embedding_provider.c
 UTIL_TEST_DEPS := $(SRCDIR)/utils/json_escape.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/utils/common_utils.c $(SRCDIR)/utils/document_chunker.c $(SRCDIR)/utils/pdf_processor.c $(SRCDIR)/utils/context_retriever.c $(SRCDIR)/utils/config.c
 COMPLEX_TEST_DEPS := $(TOOL_TEST_DEPS) $(MODEL_TEST_DEPS) $(UTIL_TEST_DEPS) $(DB_C_SOURCES) $(SRCDIR)/pdf/pdf_extractor.c $(SRCDIR)/network/http_client.c $(SRCDIR)/network/api_error.c
 
@@ -208,7 +209,7 @@ TEST_PDF_EXTRACTOR_SOURCES = $(TESTDIR)/pdf/test_pdf_extractor.c $(SRCDIR)/pdf/p
 TEST_PDF_EXTRACTOR_OBJECTS = $(TEST_PDF_EXTRACTOR_SOURCES:.c=.o)
 TEST_PDF_EXTRACTOR_TARGET = $(TESTDIR)/test_pdf_extractor
 
-TEST_DOCUMENT_CHUNKER_SOURCES = $(TESTDIR)/test_document_chunker.c $(SRCDIR)/utils/document_chunker.c $(COMMON_TEST_SOURCES)
+TEST_DOCUMENT_CHUNKER_SOURCES = $(TESTDIR)/test_document_chunker.c $(SRCDIR)/utils/document_chunker.c $(SRCDIR)/utils/common_utils.c $(COMMON_TEST_SOURCES)
 TEST_DOCUMENT_CHUNKER_OBJECTS = $(TEST_DOCUMENT_CHUNKER_SOURCES:.c=.o)
 TEST_DOCUMENT_CHUNKER_TARGET = $(TESTDIR)/test_document_chunker
 
@@ -540,7 +541,7 @@ check-valgrind: $(ALL_TEST_TARGETS)
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_VECTOR_DB_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_PDF_EXTRACTOR_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_DOCUMENT_CHUNKER_TARGET).aarch64.elf
-	@echo "Valgrind tests completed (subagent tests excluded - see AGENT.md)"
+	@echo "Valgrind tests completed (subagent tests excluded - see AGENTS.md)"
 
 # Valgrind testing for all tests (may show false positives from external libraries)
 check-valgrind-all: $(ALL_TEST_TARGETS)

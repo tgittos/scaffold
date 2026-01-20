@@ -23,10 +23,6 @@
 #include <curl/curl.h>
 #include "json_escape.h"
 
-// Tool-specific functions are now handled through ModelCapabilities
-
-#include "json_escape.h"
-
 // Compatibility wrapper for tests - use json_escape_string instead in new code
 char* ralph_escape_json_string(const char* str) {
     return json_escape_string(str);
@@ -52,29 +48,33 @@ char* ralph_build_anthropic_json_payload(const char* model, const char* system_p
                                     format_anthropic_message, 1);
 }
 
+// Constants for memory recall
+#define MEMORY_RECALL_DEFAULT_K 3
+#define MEMORY_ARGS_JSON_OVERHEAD 64  // Overhead for JSON structure: {"query": "", "k": N}
+
 // Helper function to retrieve relevant memories based on user message
 static char* retrieve_relevant_memories(const char* query) {
     if (query == NULL || strlen(query) == 0) return NULL;
-    
+
     // Create a tool call to recall memories
     ToolCall memory_call = {
         .id = "internal_memory_recall",
         .name = "recall_memories",
         .arguments = NULL
     };
-    
+
     // Build arguments JSON
     char* escaped_query = json_escape_string(query);
     if (escaped_query == NULL) return NULL;
-    
-    size_t args_len = strlen(escaped_query) + 64;
+
+    size_t args_len = strlen(escaped_query) + MEMORY_ARGS_JSON_OVERHEAD;
     memory_call.arguments = malloc(args_len);
     if (memory_call.arguments == NULL) {
         free(escaped_query);
         return NULL;
     }
-    
-    snprintf(memory_call.arguments, args_len, "{\"query\": \"%s\", \"k\": 3}", escaped_query);
+
+    snprintf(memory_call.arguments, args_len, "{\"query\": \"%s\", \"k\": %d}", escaped_query, MEMORY_RECALL_DEFAULT_K);
     free(escaped_query);
     
     // Execute the recall
@@ -145,73 +145,96 @@ char* ralph_build_enhanced_system_prompt(const RalphSession* session) {
     return enhanced_prompt;
 }
 
-char* ralph_build_json_payload_with_todos(const RalphSession* session,
-                                         const char* user_message, int max_tokens) {
+// Constants for memory and context retrieval
+#define CONTEXT_RETRIEVAL_LIMIT 5
+
+// Memory section header for prompts (const pointer to prevent accidental reassignment)
+static const char* const MEMORY_SECTION_HEADER = "\n\n# Relevant Memories\n"
+                                                "The following memories may be relevant to the current conversation:\n";
+
+// Helper function to build prompt with memory and context retrieval
+// Returns an allocated string that the caller must free, or NULL on failure
+static char* build_enhanced_prompt_with_context(const RalphSession* session,
+                                                const char* user_message) {
     if (session == NULL) return NULL;
-    
+
     char* enhanced_prompt = ralph_build_enhanced_system_prompt(session);
     if (enhanced_prompt == NULL) return NULL;
-    
-    // Retrieve relevant memories if there's a user message
-    char* memories = NULL;
-    char* final_prompt = enhanced_prompt;
-    
-    if (user_message != NULL && strlen(user_message) > 0) {
-        memories = retrieve_relevant_memories(user_message);
-        
-        // Also retrieve relevant context from vector database
-        context_result_t* context = retrieve_relevant_context(user_message, 5);
-        char* formatted_context = NULL;
-        if (context && !context->error && context->item_count > 0) {
-            formatted_context = format_context_for_prompt(context);
-        }
-        
-        if (memories != NULL || formatted_context != NULL) {
-            size_t new_len = strlen(enhanced_prompt) + 1;
-            
-            // Calculate size for memories section
-            if (memories != NULL) {
-                const char* memory_section = "\n\n# Relevant Memories\n"
-                                           "The following memories may be relevant to the current conversation:\n";
-                new_len += strlen(memory_section) + strlen(memories) + 2;
-            }
-            
-            // Calculate size for context section  
-            if (formatted_context != NULL) {
-                new_len += strlen(formatted_context) + 2;
-            }
-            
-            char* enhanced_final_prompt = malloc(new_len);
-            if (enhanced_final_prompt != NULL) {
-                strcpy(enhanced_final_prompt, enhanced_prompt);
-                
-                if (memories != NULL) {
-                    const char* memory_section = "\n\n# Relevant Memories\n"
-                                               "The following memories may be relevant to the current conversation:\n";
-                    strcat(enhanced_final_prompt, memory_section);
-                    strcat(enhanced_final_prompt, memories);
-                    strcat(enhanced_final_prompt, "\n");
-                }
-                
-                if (formatted_context != NULL) {
-                    strcat(enhanced_final_prompt, formatted_context);
-                }
-                
-                final_prompt = enhanced_final_prompt;
-                free(enhanced_prompt);
-            }
-        }
-        
+
+    // If no user message, just return the enhanced prompt
+    if (user_message == NULL || strlen(user_message) == 0) {
+        return enhanced_prompt;
+    }
+
+    // Retrieve relevant memories
+    char* memories = retrieve_relevant_memories(user_message);
+
+    // Retrieve relevant context from vector database
+    context_result_t* context = retrieve_relevant_context(user_message, CONTEXT_RETRIEVAL_LIMIT);
+    char* formatted_context = NULL;
+    if (context && !context->error && context->item_count > 0) {
+        formatted_context = format_context_for_prompt(context);
+    }
+
+    // If no memories or context, return enhanced prompt as-is
+    if (memories == NULL && formatted_context == NULL) {
+        free_context_result(context);
+        return enhanced_prompt;
+    }
+
+    // Calculate size for combined prompt
+    size_t new_len = strlen(enhanced_prompt) + 1;
+
+    if (memories != NULL) {
+        new_len += strlen(MEMORY_SECTION_HEADER) + strlen(memories) + 2;
+    }
+
+    if (formatted_context != NULL) {
+        new_len += strlen(formatted_context) + 2;
+    }
+
+    // Allocate and build the final prompt
+    char* final_prompt = malloc(new_len);
+    if (final_prompt == NULL) {
+        // On allocation failure, fall back to enhanced_prompt
         free(memories);
         free(formatted_context);
         free_context_result(context);
+        return enhanced_prompt;
     }
-    
+
+    strcpy(final_prompt, enhanced_prompt);
+
+    if (memories != NULL) {
+        strcat(final_prompt, MEMORY_SECTION_HEADER);
+        strcat(final_prompt, memories);
+        strcat(final_prompt, "\n");
+    }
+
+    if (formatted_context != NULL) {
+        strcat(final_prompt, formatted_context);
+    }
+
+    free(enhanced_prompt);
+    free(memories);
+    free(formatted_context);
+    free_context_result(context);
+
+    return final_prompt;
+}
+
+char* ralph_build_json_payload_with_todos(const RalphSession* session,
+                                         const char* user_message, int max_tokens) {
+    if (session == NULL) return NULL;
+
+    char* final_prompt = build_enhanced_prompt_with_context(session, user_message);
+    if (final_prompt == NULL) return NULL;
+
     char* result = ralph_build_json_payload(session->session_data.config.model, final_prompt,
                                           &session->session_data.conversation, user_message,
                                           session->session_data.config.max_tokens_param, max_tokens,
                                           &session->tools);
-    
+
     free(final_prompt);
     return result;
 }
@@ -219,69 +242,14 @@ char* ralph_build_json_payload_with_todos(const RalphSession* session,
 char* ralph_build_anthropic_json_payload_with_todos(const RalphSession* session,
                                                    const char* user_message, int max_tokens) {
     if (session == NULL) return NULL;
-    
-    char* enhanced_prompt = ralph_build_enhanced_system_prompt(session);
-    if (enhanced_prompt == NULL) return NULL;
-    
-    // Retrieve relevant memories if there's a user message
-    char* memories = NULL;
-    char* final_prompt = enhanced_prompt;
-    
-    if (user_message != NULL && strlen(user_message) > 0) {
-        memories = retrieve_relevant_memories(user_message);
-        
-        // Also retrieve relevant context from vector database
-        context_result_t* context = retrieve_relevant_context(user_message, 5);
-        char* formatted_context = NULL;
-        if (context && !context->error && context->item_count > 0) {
-            formatted_context = format_context_for_prompt(context);
-        }
-        
-        if (memories != NULL || formatted_context != NULL) {
-            size_t new_len = strlen(enhanced_prompt) + 1;
-            
-            // Calculate size for memories section
-            if (memories != NULL) {
-                const char* memory_section = "\n\n# Relevant Memories\n"
-                                           "The following memories may be relevant to the current conversation:\n";
-                new_len += strlen(memory_section) + strlen(memories) + 2;
-            }
-            
-            // Calculate size for context section  
-            if (formatted_context != NULL) {
-                new_len += strlen(formatted_context) + 2;
-            }
-            
-            char* enhanced_final_prompt = malloc(new_len);
-            if (enhanced_final_prompt != NULL) {
-                strcpy(enhanced_final_prompt, enhanced_prompt);
-                
-                if (memories != NULL) {
-                    const char* memory_section = "\n\n# Relevant Memories\n"
-                                               "The following memories may be relevant to the current conversation:\n";
-                    strcat(enhanced_final_prompt, memory_section);
-                    strcat(enhanced_final_prompt, memories);
-                    strcat(enhanced_final_prompt, "\n");
-                }
-                
-                if (formatted_context != NULL) {
-                    strcat(enhanced_final_prompt, formatted_context);
-                }
-                
-                final_prompt = enhanced_final_prompt;
-                free(enhanced_prompt);
-            }
-        }
-        
-        free(memories);
-        free(formatted_context);
-        free_context_result(context);
-    }
-    
+
+    char* final_prompt = build_enhanced_prompt_with_context(session, user_message);
+    if (final_prompt == NULL) return NULL;
+
     char* result = ralph_build_anthropic_json_payload(session->session_data.config.model, final_prompt,
                                                     &session->session_data.conversation, user_message,
                                                     max_tokens, &session->tools);
-    
+
     free(final_prompt);
     return result;
 }
@@ -581,36 +549,31 @@ int ralph_execute_tool_workflow(RalphSession* session, ToolCall* tool_calls, int
     // Note: User message is already saved by caller
     (void)user_message; // Acknowledge parameter usage
     
-    // Execute tool calls
-    ToolResult *results = malloc(call_count * sizeof(ToolResult));
+    // Execute tool calls - use calloc to zero-initialize
+    ToolResult *results = calloc(call_count, sizeof(ToolResult));
     if (results == NULL) {
         return -1;
     }
-    
+
     for (int i = 0; i < call_count; i++) {
         int tool_executed = 0;
-        
+
         // Check if this is an MCP tool call
         if (strncmp(tool_calls[i].name, "mcp_", 4) == 0) {
             if (mcp_client_execute_tool(&session->mcp_client, &tool_calls[i], &results[i]) == 0) {
                 tool_executed = 1;
             }
         }
-        
+
         // If not an MCP tool or MCP execution failed, try standard tool execution
         if (!tool_executed && execute_tool_call(&session->tools, &tool_calls[i], &results[i]) != 0) {
             fprintf(stderr, "Warning: Failed to execute tool call %s\n", tool_calls[i].name);
-            results[i].tool_call_id = strdup(tool_calls[i].id);
+            // Attempt to set error information - strdup may fail in low memory
+            results[i].tool_call_id = tool_calls[i].id ? strdup(tool_calls[i].id) : NULL;
             results[i].result = strdup("Tool execution failed");
             results[i].success = 0;
-            
-            // Handle strdup failures
-            if (results[i].tool_call_id == NULL) {
-                results[i].tool_call_id = strdup("unknown");
-            }
-            if (results[i].result == NULL) {
-                results[i].result = strdup("Memory allocation failed");
-            }
+            // Note: If strdup fails, fields will be NULL. append_tool_message() returns -1
+            // for NULL params and logs a warning, cleanup_tool_results() handles NULL safely
         } else {
             debug_printf("Executed tool: %s (ID: %s)\n", tool_calls[i].name, tool_calls[i].id);
         }
@@ -659,15 +622,29 @@ static int is_tool_already_executed(ExecutedToolTracker* tracker, const char* to
 }
 
 // Add a tool call ID to the executed tracker
-static void add_executed_tool(ExecutedToolTracker* tracker, const char* tool_call_id) {
+// Returns 0 on success, -1 on failure
+static int add_executed_tool(ExecutedToolTracker* tracker, const char* tool_call_id) {
+    if (tracker == NULL || tool_call_id == NULL) {
+        return -1;
+    }
+
     if (tracker->count >= tracker->capacity) {
-        tracker->capacity = tracker->capacity == 0 ? 10 : tracker->capacity * 2;
-        tracker->tool_call_ids = realloc(tracker->tool_call_ids, tracker->capacity * sizeof(char*));
+        int new_capacity = tracker->capacity == 0 ? 10 : tracker->capacity * 2;
+        char** new_array = realloc(tracker->tool_call_ids, new_capacity * sizeof(char*));
+        if (new_array == NULL) {
+            return -1;
+        }
+        tracker->tool_call_ids = new_array;
+        tracker->capacity = new_capacity;
     }
-    if (tracker->tool_call_ids != NULL) {
-        tracker->tool_call_ids[tracker->count] = strdup(tool_call_id);
-        tracker->count++;
+
+    char* dup = strdup(tool_call_id);
+    if (dup == NULL) {
+        return -1;
     }
+
+    tracker->tool_call_ids[tracker->count++] = dup;
+    return 0;
 }
 
 // Cleanup executed tool tracker
@@ -748,7 +725,16 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
             cleanup_executed_tool_tracker(&tracker);
             return -1;
         }
-        
+
+        // Check for NULL response data
+        if (response.data == NULL) {
+            fprintf(stderr, "Error: Empty response from API in tool loop iteration %d\n", loop_count);
+            cleanup_response(&response);
+            free(post_data);
+            cleanup_executed_tool_tracker(&tracker);
+            return -1;
+        }
+
         // Parse response
         ParsedResponse parsed_response;
         int parse_result;
@@ -882,14 +868,14 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
         // Start tool execution group for improved visual formatting
         display_tool_execution_group_start();
         
-        // Execute only the new tool calls
-        ToolResult *results = malloc(call_count * sizeof(ToolResult));
+        // Execute only the new tool calls - use calloc to zero-initialize
+        ToolResult *results = calloc(call_count, sizeof(ToolResult));
         if (results == NULL) {
             cleanup_tool_calls(tool_calls, call_count);
             cleanup_executed_tool_tracker(&tracker);
             return -1;
         }
-        
+
         // Track mapping from result index to tool call index for proper tool names
         int *tool_call_indices = malloc(call_count * sizeof(int));
         if (tool_call_indices == NULL) {
@@ -898,48 +884,47 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
             cleanup_executed_tool_tracker(&tracker);
             return -1;
         }
-        
+
         int executed_count = 0;
         for (int i = 0; i < call_count; i++) {
             // Skip already executed tool calls
             if (is_tool_already_executed(&tracker, tool_calls[i].id)) {
-                debug_printf("Skipping already executed tool: %s (ID: %s)\n", 
+                debug_printf("Skipping already executed tool: %s (ID: %s)\n",
                            tool_calls[i].name, tool_calls[i].id);
                 continue;
             }
-            
-            // Track this tool call as executed
-            add_executed_tool(&tracker, tool_calls[i].id);
-            
+
+            // Track this tool call as executed - skip execution if tracking fails
+            // to prevent potential duplicate execution in subsequent iterations
+            if (add_executed_tool(&tracker, tool_calls[i].id) != 0) {
+                debug_printf("Warning: Failed to track tool call ID %s, skipping execution\n", tool_calls[i].id);
+                continue;
+            }
+
             // Store mapping from result index to tool call index
             tool_call_indices[executed_count] = i;
-            
+
             int tool_executed = 0;
-            
+
             // Check if this is an MCP tool call
             if (strncmp(tool_calls[i].name, "mcp_", 4) == 0) {
                 if (mcp_client_execute_tool(&session->mcp_client, &tool_calls[i], &results[executed_count]) == 0) {
                     tool_executed = 1;
                 }
             }
-            
+
             // If not an MCP tool or MCP execution failed, try standard tool execution
             if (!tool_executed && execute_tool_call(&session->tools, &tool_calls[i], &results[executed_count]) != 0) {
-                fprintf(stderr, "Warning: Failed to execute tool call %s in iteration %d\n", 
+                fprintf(stderr, "Warning: Failed to execute tool call %s in iteration %d\n",
                        tool_calls[i].name, loop_count);
-                results[executed_count].tool_call_id = strdup(tool_calls[i].id);
+                // Attempt to set error information - strdup may fail in low memory
+                results[executed_count].tool_call_id = tool_calls[i].id ? strdup(tool_calls[i].id) : NULL;
                 results[executed_count].result = strdup("Tool execution failed");
                 results[executed_count].success = 0;
-                
-                // Handle strdup failures
-                if (results[executed_count].tool_call_id == NULL) {
-                    results[executed_count].tool_call_id = strdup("unknown");
-                }
-                if (results[executed_count].result == NULL) {
-                    results[executed_count].result = strdup("Memory allocation failed");
-                }
+                // Note: If strdup fails, fields will be NULL. append_tool_message() returns -1
+                // for NULL params and logs a warning, cleanup_tool_results() handles NULL safely
             } else {
-                debug_printf("Executed tool: %s (ID: %s) in iteration %d\n", 
+                debug_printf("Executed tool: %s (ID: %s) in iteration %d\n",
                            tool_calls[i].name, tool_calls[i].id, loop_count);
             }
             executed_count++;
@@ -1045,6 +1030,15 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
     int result = -1;
     
     if (http_post_with_headers(session->session_data.config.api_url, post_data, headers, &response) == 0) {
+        // Check for NULL response data
+        if (response.data == NULL) {
+            fprintf(stderr, "Error: Empty response from API\n");
+            cleanup_response(&response);
+            free(post_data);
+            curl_global_cleanup();
+            return -1;
+        }
+
         debug_printf_json("Got API response: ", response.data);
         // Parse the response based on API type
         ParsedResponse parsed_response;

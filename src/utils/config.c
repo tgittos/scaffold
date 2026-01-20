@@ -10,13 +10,30 @@
 
 static ralph_config_t *g_config = NULL;
 
-static void config_set_defaults(ralph_config_t *config)
+static int config_set_defaults(ralph_config_t *config)
 {
-    if (!config) return;
+    if (!config) return -1;
 
-    // Set default values
+    // Initialize all pointers to NULL first for safe cleanup on failure
+    config->api_url = NULL;
+    config->model = NULL;
+    config->api_key = NULL;
+    config->anthropic_api_key = NULL;
+    config->openai_api_key = NULL;
+    config->openai_api_url = NULL;
+    config->embedding_api_url = NULL;
+    config->embedding_model = NULL;
+    config->system_prompt = NULL;
+    config->config_file_path = NULL;
+    config->config_loaded = false;
+
+    // Set default values with allocation checks
     config->api_url = strdup("https://api.openai.com/v1/chat/completions");
+    if (!config->api_url) return -1;
+
     config->model = strdup("gpt-5-mini-2025-08-07");
+    if (!config->model) return -1;
+
     config->context_window = 8192;
     config->max_tokens = -1;
 
@@ -29,35 +46,29 @@ static void config_set_defaults(ralph_config_t *config)
     config->max_subagents = 5;
     config->subagent_timeout = 300;
 
-    // Initialize other pointers to NULL
-    config->api_key = NULL;
-    config->anthropic_api_key = NULL;
-    config->openai_api_key = NULL;
-    config->openai_api_url = NULL;
-    config->embedding_api_url = NULL;
-    config->embedding_model = NULL;
-    config->system_prompt = NULL;
-    config->config_file_path = NULL;
-    config->config_loaded = false;
+    return 0;
 }
 
 
-static void config_update_api_key_selection(ralph_config_t *config)
+static int config_update_api_key_selection(ralph_config_t *config)
 {
-    if (!config) return;
-    
+    if (!config) return -1;
+
     // Set main API key based on URL
     if (config->api_url && strstr(config->api_url, "api.anthropic.com") != NULL) {
         if (config->anthropic_api_key) {
             free(config->api_key);
             config->api_key = strdup(config->anthropic_api_key);
+            if (!config->api_key) return -1;
         }
     } else {
         if (config->openai_api_key) {
             free(config->api_key);
             config->api_key = strdup(config->openai_api_key);
+            if (!config->api_key) return -1;
         }
     }
+    return 0;
 }
 
 static char* get_user_config_dir(void)
@@ -101,21 +112,23 @@ static int ensure_directory_exists(const char *path)
 static void config_generate_default_file(void)
 {
     if (!g_config) return;
-    
+
     // Pre-fill API keys from environment
     const char *env_openai_key = getenv("OPENAI_API_KEY");
     const char *env_anthropic_key = getenv("ANTHROPIC_API_KEY");
-    
+
     // Always set OpenAI key (empty string if not in env)
     free(g_config->openai_api_key);
     g_config->openai_api_key = strdup(env_openai_key ? env_openai_key : "");
-    
+    if (!g_config->openai_api_key) return;
+
     // Always set Anthropic key (empty string if not in env)
     free(g_config->anthropic_api_key);
     g_config->anthropic_api_key = strdup(env_anthropic_key ? env_anthropic_key : "");
-    
+    if (!g_config->anthropic_api_key) return;
+
     // Update API selection based on which keys are available
-    config_update_api_key_selection(g_config);
+    (void)config_update_api_key_selection(g_config);
     
     // Try to generate in current directory first
     const char *local_path = "./ralph.config.json";
@@ -186,54 +199,80 @@ int config_load_from_file(const char *filepath)
     }
     
     // Update configuration from JSON
+    // Note: strdup failures are non-fatal - we keep previous value or NULL
     cJSON *item;
-    
+    char *new_val;
+
     item = cJSON_GetObjectItem(json, "api_url");
     if (cJSON_IsString(item)) {
-        free(g_config->api_url);
-        g_config->api_url = strdup(item->valuestring);
+        new_val = strdup(item->valuestring);
+        if (new_val) {
+            free(g_config->api_url);
+            g_config->api_url = new_val;
+        }
     }
-    
+
     item = cJSON_GetObjectItem(json, "model");
     if (cJSON_IsString(item)) {
-        free(g_config->model);
-        g_config->model = strdup(item->valuestring);
+        new_val = strdup(item->valuestring);
+        if (new_val) {
+            free(g_config->model);
+            g_config->model = new_val;
+        }
     }
-    
+
     item = cJSON_GetObjectItem(json, "anthropic_api_key");
     if (cJSON_IsString(item)) {
-        free(g_config->anthropic_api_key);
-        g_config->anthropic_api_key = strdup(item->valuestring);
+        new_val = strdup(item->valuestring);
+        if (new_val) {
+            free(g_config->anthropic_api_key);
+            g_config->anthropic_api_key = new_val;
+        }
     }
-    
+
     item = cJSON_GetObjectItem(json, "openai_api_key");
     if (cJSON_IsString(item)) {
-        free(g_config->openai_api_key);
-        g_config->openai_api_key = strdup(item->valuestring);
+        new_val = strdup(item->valuestring);
+        if (new_val) {
+            free(g_config->openai_api_key);
+            g_config->openai_api_key = new_val;
+        }
     }
-    
+
     item = cJSON_GetObjectItem(json, "openai_api_url");
     if (cJSON_IsString(item)) {
-        free(g_config->openai_api_url);
-        g_config->openai_api_url = strdup(item->valuestring);
+        new_val = strdup(item->valuestring);
+        if (new_val) {
+            free(g_config->openai_api_url);
+            g_config->openai_api_url = new_val;
+        }
     }
-    
+
     item = cJSON_GetObjectItem(json, "embedding_api_url");
     if (cJSON_IsString(item)) {
-        free(g_config->embedding_api_url);
-        g_config->embedding_api_url = strdup(item->valuestring);
+        new_val = strdup(item->valuestring);
+        if (new_val) {
+            free(g_config->embedding_api_url);
+            g_config->embedding_api_url = new_val;
+        }
     }
-    
+
     item = cJSON_GetObjectItem(json, "embedding_model");
     if (cJSON_IsString(item)) {
-        free(g_config->embedding_model);
-        g_config->embedding_model = strdup(item->valuestring);
+        new_val = strdup(item->valuestring);
+        if (new_val) {
+            free(g_config->embedding_model);
+            g_config->embedding_model = new_val;
+        }
     }
-    
+
     item = cJSON_GetObjectItem(json, "system_prompt");
     if (cJSON_IsString(item)) {
-        free(g_config->system_prompt);
-        g_config->system_prompt = strdup(item->valuestring);
+        new_val = strdup(item->valuestring);
+        if (new_val) {
+            free(g_config->system_prompt);
+            g_config->system_prompt = new_val;
+        }
     }
     
     item = cJSON_GetObjectItem(json, "context_window");
@@ -274,15 +313,18 @@ int config_load_from_file(const char *filepath)
     }
 
     // Update main API key based on URL
-    config_update_api_key_selection(g_config);
-    
+    (void)config_update_api_key_selection(g_config);
+
     cJSON_Delete(json);
     g_config->config_loaded = true;
-    
+
     // Store the config file path
-    free(g_config->config_file_path);
-    g_config->config_file_path = strdup(filepath);
-    
+    new_val = strdup(filepath);
+    if (new_val) {
+        free(g_config->config_file_path);
+        g_config->config_file_path = new_val;
+    }
+
     return 0;
 }
 
@@ -350,28 +392,31 @@ int config_init(void)
         // Already initialized
         return 0;
     }
-    
+
     g_config = malloc(sizeof(ralph_config_t));
     if (!g_config) return -1;
-    
+
     memset(g_config, 0, sizeof(ralph_config_t));
-    
+
     // Set defaults
-    config_set_defaults(g_config);
-    
+    if (config_set_defaults(g_config) != 0) {
+        config_cleanup();
+        return -1;
+    }
+
     // Try to load configuration in priority order:
     // 1. ./ralph.config.json (local override)
     // 2. ~/.local/ralph/config.json (user config)
-    
+
     bool config_loaded = false;
-    
+
     // Try local config file first
     if (access("./ralph.config.json", R_OK) == 0) {
         if (config_load_from_file("./ralph.config.json") == 0) {
             config_loaded = true;
         }
     }
-    
+
     // Try user config directory if local config not found
     if (!config_loaded) {
         char *user_config_dir = get_user_config_dir();
@@ -389,29 +434,35 @@ int config_init(void)
             free(user_config_dir);
         }
     }
-    
+
     // If no config was loaded, generate a default config file
     if (!config_loaded) {
         config_generate_default_file();
     }
-    
+
     // Always override with environment variables if they exist
     const char *env_openai_key = getenv("OPENAI_API_KEY");
     const char *env_anthropic_key = getenv("ANTHROPIC_API_KEY");
-    
+
     if (env_openai_key) {
-        free(g_config->openai_api_key);
-        g_config->openai_api_key = strdup(env_openai_key);
+        char *new_key = strdup(env_openai_key);
+        if (new_key) {
+            free(g_config->openai_api_key);
+            g_config->openai_api_key = new_key;
+        }
     }
-    
+
     if (env_anthropic_key) {
-        free(g_config->anthropic_api_key);
-        g_config->anthropic_api_key = strdup(env_anthropic_key);
+        char *new_key = strdup(env_anthropic_key);
+        if (new_key) {
+            free(g_config->anthropic_api_key);
+            g_config->anthropic_api_key = new_key;
+        }
     }
-    
+
     // Update API selection based on available keys
-    config_update_api_key_selection(g_config);
-    
+    (void)config_update_api_key_selection(g_config);
+
     return 0;
 }
 
@@ -442,55 +493,65 @@ void config_cleanup(void)
 int config_set(const char *key, const char *value)
 {
     if (!g_config || !key) return -1;
-    
+
     bool need_api_key_update = false;
-    
+    char *new_val = NULL;
+
+    // Helper: duplicate value if non-NULL, check allocation
+    if (value) {
+        new_val = strdup(value);
+        if (!new_val) return -1;
+    }
+
     if (strcmp(key, "api_url") == 0) {
         free(g_config->api_url);
-        g_config->api_url = value ? strdup(value) : NULL;
+        g_config->api_url = new_val;
         need_api_key_update = true;
     } else if (strcmp(key, "model") == 0) {
         free(g_config->model);
-        g_config->model = value ? strdup(value) : NULL;
+        g_config->model = new_val;
     } else if (strcmp(key, "anthropic_api_key") == 0) {
         free(g_config->anthropic_api_key);
-        g_config->anthropic_api_key = value ? strdup(value) : NULL;
+        g_config->anthropic_api_key = new_val;
         need_api_key_update = true;
     } else if (strcmp(key, "openai_api_key") == 0) {
         free(g_config->openai_api_key);
-        g_config->openai_api_key = value ? strdup(value) : NULL;
+        g_config->openai_api_key = new_val;
         need_api_key_update = true;
     } else if (strcmp(key, "openai_api_url") == 0) {
         free(g_config->openai_api_url);
-        g_config->openai_api_url = value ? strdup(value) : NULL;
+        g_config->openai_api_url = new_val;
     } else if (strcmp(key, "embedding_api_url") == 0) {
         free(g_config->embedding_api_url);
-        g_config->embedding_api_url = value ? strdup(value) : NULL;
+        g_config->embedding_api_url = new_val;
     } else if (strcmp(key, "embedding_model") == 0) {
         free(g_config->embedding_model);
-        g_config->embedding_model = value ? strdup(value) : NULL;
+        g_config->embedding_model = new_val;
     } else if (strcmp(key, "system_prompt") == 0) {
         free(g_config->system_prompt);
-        g_config->system_prompt = value ? strdup(value) : NULL;
+        g_config->system_prompt = new_val;
     } else if (strcmp(key, "context_window") == 0) {
+        free(new_val); // Not used for this key
         if (value) {
             int parsed = atoi(value);
             if (parsed > 0) g_config->context_window = parsed;
         }
     } else if (strcmp(key, "max_tokens") == 0) {
+        free(new_val); // Not used for this key
         if (value) {
             int parsed = atoi(value);
             g_config->max_tokens = parsed;
         }
     } else {
-        return -1; // Unknown key
+        free(new_val); // Unknown key - free the allocation
+        return -1;
     }
-    
+
     // Update API key selection if needed
     if (need_api_key_update) {
-        config_update_api_key_selection(g_config);
+        (void)config_update_api_key_selection(g_config);
     }
-    
+
     return 0;
 }
 

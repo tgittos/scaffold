@@ -145,7 +145,7 @@ One-shot mode means Ralph becomes part of your development infrastructure:
 - **MCP protocol integration** that brings external AI tools into Ralph's workflow
 - **Memory systems** that learn from every interaction and never forget solutions
 - **Shell automation** that handles complex multi-command workflows safely
-- **AGENT.md support** - Define custom AI behavior with the [agent.md](https://agent.md/) specification
+- **AGENTS.md support** - Define custom AI behavior with the [agents.md](https://agents.md/) specification
 
 ## Universal Compatibility
 
@@ -495,7 +495,7 @@ pytest --tb=short 2>&1 | ./ralph "Debug these test failures and provide fixes"
 ```
 
 ### 🎛️ **Custom AI Behavior**
-Create an `AGENT.md` file following the [agent.md specification](https://agent.md/):
+Create an `AGENTS.md` file following the [agents.md specification](https://agents.md/):
 
 ```markdown
 # Development Assistant Agent

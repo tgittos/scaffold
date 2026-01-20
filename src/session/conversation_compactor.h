@@ -4,6 +4,11 @@
 #include "conversation_tracker.h"
 #include "session_manager.h"
 
+// Compaction return values
+#define COMPACT_ERROR -1           // Error occurred during compaction
+#define COMPACT_SUCCESS_NO_WORK 0  // Success, no trimming was needed
+#define COMPACT_SUCCESS_TRIMMED 1  // Success, messages were trimmed
+
 // Simplified configuration for conversation trimming
 typedef struct {
     int preserve_recent_messages;     // Always keep this many recent messages

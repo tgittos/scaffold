@@ -304,16 +304,18 @@ void test_generate_anthropic_tools_json_with_tools(void) {
     
     char *json = generate_anthropic_tools_json(&registry);
     TEST_ASSERT_NOT_NULL(json);
-    
+
     // Check for Anthropic format - no "type": "function" wrapper
+    // Note: cJSON produces no spaces after colons, check both formats
+    TEST_ASSERT_NULL(strstr(json, "\"type\":\"function\""));
     TEST_ASSERT_NULL(strstr(json, "\"type\": \"function\""));
-    
+
     // Check for input_schema instead of parameters
     TEST_ASSERT_NOT_NULL(strstr(json, "\"input_schema\""));
-    
-    // Check for shell_execute tool
-    TEST_ASSERT_NOT_NULL(strstr(json, "\"name\": \"shell_execute\""));
-    
+
+    // Check for shell_execute tool (cJSON produces no spaces after colons)
+    TEST_ASSERT_NOT_NULL(strstr(json, "\"name\":\"shell_execute\""));
+
     free(json);
     cleanup_tool_registry(&registry);
 }
