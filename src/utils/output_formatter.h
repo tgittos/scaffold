@@ -86,6 +86,15 @@ void display_tool_execution_group_start(void);
 void display_tool_execution_group_end(void);
 
 /**
+ * Print a line of content inside the tool execution box with proper borders
+ * The line will be padded to fit within the 80-character box width
+ *
+ * @param format Printf-style format string
+ * @param ... Format arguments
+ */
+void print_tool_box_line(const char* format, ...);
+
+/**
  * Log tool execution with improved formatting and grouping
  * 
  * @param tool_name Name of the tool
