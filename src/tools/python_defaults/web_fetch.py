@@ -1,4 +1,11 @@
-"""Fetch web page content."""
+"""Fetch web page content.
+
+Security Note: This tool intentionally allows fetching from localhost and
+internal network resources. This is a development tool where the agent may
+need to test local services, access development servers, or fetch from
+internal resources. SSRF protections are deliberately not implemented.
+The security boundary is the user's decision to run ralph with network access.
+"""
 
 import html.parser
 import re

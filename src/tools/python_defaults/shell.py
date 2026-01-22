@@ -1,4 +1,11 @@
-"""Execute shell commands."""
+"""Execute shell commands.
+
+Security Note: This tool intentionally executes arbitrary shell commands.
+The security boundary is the user's decision to run ralph and grant it
+shell access - not this tool's input validation. The dangerous_patterns
+list provides defense-in-depth against obvious accidents, not a security
+boundary. This is by design for an agent development tool.
+"""
 
 def shell(command: str, working_dir: str = None, timeout: int = 30,
           capture_stderr: bool = True) -> dict:
