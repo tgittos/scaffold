@@ -1,6 +1,7 @@
 #ifndef SESSION_MANAGER_H
 #define SESSION_MANAGER_H
 
+#include <stdbool.h>
 #include "conversation_tracker.h"
 #include "tools_system.h"
 
@@ -14,6 +15,7 @@ typedef struct {
     int max_tokens;
     const char* max_tokens_param;
     int api_type;  // 0=OpenAI, 1=Anthropic, 2=Local
+    bool enable_streaming;  // Default: true
 } SessionConfig;
 
 typedef struct {

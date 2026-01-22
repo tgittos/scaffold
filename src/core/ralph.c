@@ -424,6 +424,7 @@ int ralph_load_config(RalphSession* session) {
     
     session->session_data.config.context_window = config->context_window;
     session->session_data.config.max_tokens = config->max_tokens;
+    session->session_data.config.enable_streaming = config->enable_streaming;
     
     // Determine API type and correct parameter name for max tokens
     if (strstr(session->session_data.config.api_url, "api.openai.com") != NULL) {
@@ -1256,12 +1257,15 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
         provider = detect_provider_for_url(provider_registry, session->session_data.config.api_url);
     }
 
-    // Use streaming if provider supports it
-    if (provider != NULL && provider->supports_streaming != NULL &&
-        provider->supports_streaming(provider) &&
-        provider->build_streaming_request_json != NULL &&
-        provider->parse_stream_event != NULL) {
+    // Use streaming if enabled in config and provider supports it
+    bool streaming_enabled = session->session_data.config.enable_streaming;
+    bool provider_supports_streaming = provider != NULL &&
+                                       provider->supports_streaming != NULL &&
+                                       provider->supports_streaming(provider) &&
+                                       provider->build_streaming_request_json != NULL &&
+                                       provider->parse_stream_event != NULL;
 
+    if (streaming_enabled && provider_supports_streaming) {
         debug_printf("Using streaming mode for provider: %s\n", provider->capabilities.name);
         free(post_data);  // Free the non-streaming payload, streaming function builds its own
 
@@ -1271,7 +1275,11 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
         return result;
     }
 
-    debug_printf("Using buffered mode (provider does not support streaming or streaming not available)\n");
+    if (!streaming_enabled) {
+        debug_printf("Using buffered mode (streaming disabled via configuration)\n");
+    } else {
+        debug_printf("Using buffered mode (provider does not support streaming)\n");
+    }
 
     curl_global_init(CURL_GLOBAL_DEFAULT);
 

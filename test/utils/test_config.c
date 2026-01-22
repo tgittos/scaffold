@@ -88,7 +88,7 @@ void tearDown(void) {
 
 void test_config_init_with_defaults(void) {
     TEST_ASSERT_EQUAL(0, config_init());
-    
+
     ralph_config_t *config = config_get();
     TEST_ASSERT_NOT_NULL(config);
     TEST_ASSERT_NOT_NULL(config->api_url);
@@ -97,6 +97,7 @@ void test_config_init_with_defaults(void) {
     TEST_ASSERT_EQUAL_STRING("gpt-5-mini-2025-08-07", config->model);
     TEST_ASSERT_EQUAL(8192, config->context_window);
     TEST_ASSERT_EQUAL(-1, config->max_tokens);
+    TEST_ASSERT_TRUE(config->enable_streaming);  // Default should be true
 }
 
 void test_config_init_with_anthropic_config(void) {
@@ -282,9 +283,73 @@ void test_config_load_nonexistent_file(void) {
 
 void test_config_save_invalid_path(void) {
     TEST_ASSERT_EQUAL(0, config_init());
-    
+
     // Should return -1 for invalid path
     TEST_ASSERT_EQUAL(-1, config_save_to_file("/invalid/path/config.json"));
+}
+
+void test_config_enable_streaming_default(void) {
+    TEST_ASSERT_EQUAL(0, config_init());
+
+    // Default should be true
+    TEST_ASSERT_TRUE(config_get_bool("enable_streaming", false));
+
+    ralph_config_t *config = config_get();
+    TEST_ASSERT_NOT_NULL(config);
+    TEST_ASSERT_TRUE(config->enable_streaming);
+}
+
+void test_config_enable_streaming_load_from_file(void) {
+    // Create a test JSON config file with streaming disabled
+    FILE *test_file = fopen("test_config.json", "w");
+    TEST_ASSERT_NOT_NULL(test_file);
+
+    const char *json_content =
+        "{\n"
+        "  \"api_url\": \"https://api.example.com/v1/chat\",\n"
+        "  \"model\": \"test-model\",\n"
+        "  \"enable_streaming\": false\n"
+        "}\n";
+
+    fwrite(json_content, 1, strlen(json_content), test_file);
+    fclose(test_file);
+
+    TEST_ASSERT_EQUAL(0, config_init());
+    TEST_ASSERT_EQUAL(0, config_load_from_file("test_config.json"));
+
+    ralph_config_t *config = config_get();
+    TEST_ASSERT_NOT_NULL(config);
+    TEST_ASSERT_FALSE(config->enable_streaming);
+    TEST_ASSERT_FALSE(config_get_bool("enable_streaming", true));
+}
+
+void test_config_enable_streaming_save_to_file(void) {
+    TEST_ASSERT_EQUAL(0, config_init());
+
+    // Modify streaming setting
+    ralph_config_t *config = config_get();
+    TEST_ASSERT_NOT_NULL(config);
+    config->enable_streaming = false;
+
+    // Save to file
+    TEST_ASSERT_EQUAL(0, config_save_to_file("test_config.json"));
+
+    // Reload and verify
+    config_cleanup();
+    TEST_ASSERT_EQUAL(0, config_init());
+    TEST_ASSERT_EQUAL(0, config_load_from_file("test_config.json"));
+
+    config = config_get();
+    TEST_ASSERT_NOT_NULL(config);
+    TEST_ASSERT_FALSE(config->enable_streaming);
+}
+
+void test_config_get_bool_nonexistent_key(void) {
+    TEST_ASSERT_EQUAL(0, config_init());
+
+    // Should return default for nonexistent key
+    TEST_ASSERT_TRUE(config_get_bool("nonexistent_key", true));
+    TEST_ASSERT_FALSE(config_get_bool("nonexistent_key", false));
 }
 
 int main(void) {
@@ -302,6 +367,10 @@ int main(void) {
     RUN_TEST(test_config_openai_api_key_selection);
     RUN_TEST(test_config_load_nonexistent_file);
     RUN_TEST(test_config_save_invalid_path);
-    
+    RUN_TEST(test_config_enable_streaming_default);
+    RUN_TEST(test_config_enable_streaming_load_from_file);
+    RUN_TEST(test_config_enable_streaming_save_to_file);
+    RUN_TEST(test_config_get_bool_nonexistent_key);
+
     return UNITY_END();
 }
