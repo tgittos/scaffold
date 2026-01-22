@@ -575,6 +575,11 @@ void display_tool_execution_group_end(void) {
 void print_tool_box_line(const char* format, ...) {
     if (format == NULL) return;
 
+    // In JSON mode, terminal display is suppressed
+    if (g_json_output_mode) {
+        return;
+    }
+
     // Format the content
     char content[512];
     va_list args;
@@ -694,6 +699,11 @@ void log_tool_execution_improved(const char *tool_name, const char *arguments, b
 }
 
 void display_system_info_group_start(void) {
+    // In JSON mode, terminal display is suppressed
+    if (g_json_output_mode) {
+        return;
+    }
+
     if (!system_info_group_active) {
         printf("\n" ANSI_YELLOW ANSI_BOLD "▼ System Information" ANSI_RESET "\n");
         printf(ANSI_YELLOW SEPARATOR_LIGHT ANSI_RESET "\n");
@@ -702,6 +712,11 @@ void display_system_info_group_start(void) {
 }
 
 void display_system_info_group_end(void) {
+    // In JSON mode, terminal display is suppressed
+    if (g_json_output_mode) {
+        return;
+    }
+
     if (system_info_group_active) {
         system_info_group_active = false;
     }
@@ -709,6 +724,11 @@ void display_system_info_group_end(void) {
 
 void log_system_info(const char *category, const char *message) {
     if (!category || !message) return;
+
+    // In JSON mode, terminal display is suppressed
+    if (g_json_output_mode) {
+        return;
+    }
 
     printf(ANSI_YELLOW "  %s:" ANSI_RESET " %s\n", category, message);
     fflush(stdout);

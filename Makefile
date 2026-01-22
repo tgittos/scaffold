@@ -190,8 +190,9 @@ TEST_DEBUG_OUTPUT_SOURCES = $(TESTDIR)/utils/test_debug_output.c $(SRCDIR)/utils
 TEST_DEBUG_OUTPUT_OBJECTS = $(TEST_DEBUG_OUTPUT_SOURCES:.c=.o)
 TEST_DEBUG_OUTPUT_TARGET = $(TESTDIR)/test_debug_output
 
-TEST_JSON_OUTPUT_SOURCES = $(TESTDIR)/utils/test_json_output.c $(SRCDIR)/utils/json_output.c $(SRCDIR)/network/streaming.c $(COMMON_TEST_SOURCES)
-TEST_JSON_OUTPUT_OBJECTS = $(TEST_JSON_OUTPUT_SOURCES:.c=.o)
+TEST_JSON_OUTPUT_C_SOURCES = $(TESTDIR)/utils/test_json_output.c $(SRCDIR)/network/streaming.c $(UTIL_TEST_DEPS) $(MODEL_TEST_DEPS) $(TOOL_TEST_DEPS) $(DB_C_SOURCES) $(SRCDIR)/network/http_client.c $(SRCDIR)/network/api_error.c $(SRCDIR)/pdf/pdf_extractor.c $(COMMON_TEST_SOURCES)
+TEST_JSON_OUTPUT_CPP_SOURCES = $(DB_CPP_SOURCES)
+TEST_JSON_OUTPUT_OBJECTS = $(TEST_JSON_OUTPUT_C_SOURCES:.c=.o) $(TEST_JSON_OUTPUT_CPP_SOURCES:.cpp=.o)
 TEST_JSON_OUTPUT_TARGET = $(TESTDIR)/test_json_output
 
 TEST_CONVERSATION_SOURCES = $(TESTDIR)/session/test_conversation_tracker.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/utils/json_escape.c $(COMMON_TEST_SOURCES)
@@ -455,7 +456,7 @@ $(TEST_DEBUG_OUTPUT_TARGET): $(TEST_DEBUG_OUTPUT_OBJECTS) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_DEBUG_OUTPUT_OBJECTS) $(CJSON_LIB)
 
 $(TEST_JSON_OUTPUT_TARGET): $(TEST_JSON_OUTPUT_OBJECTS) $(ALL_LIBS)
-	$(CC) -o $@ $(TEST_JSON_OUTPUT_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(CJSON_LIB) $(PYTHON_LIB) $(ZLIB_LIB) -lm -lpthread
+	$(CXX) -o $@ $(TEST_JSON_OUTPUT_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(CJSON_LIB) $(PYTHON_LIB) $(ZLIB_LIB) -lm -lpthread
 
 $(TEST_CONVERSATION_TARGET): $(TEST_CONVERSATION_OBJECTS) $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/network/api_error.o src/utils/env_loader.o src/utils/config.o src/utils/debug_output.o src/utils/common_utils.o $(ALL_LIBS)
 	$(CXX) -o $@ test/session/test_conversation_tracker.o src/session/conversation_tracker.o $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/network/api_error.o src/utils/json_escape.o src/utils/env_loader.o src/utils/config.o src/utils/debug_output.o src/utils/common_utils.o test/unity/unity.o $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
