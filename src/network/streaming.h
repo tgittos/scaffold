@@ -78,6 +78,9 @@ typedef struct {
     void (*on_tool_use_delta)(const char* id, const char* json_delta, void* user_data);
     void (*on_stream_end)(const char* stop_reason, void* user_data);
     void (*on_error)(const char* error, void* user_data);
+
+    // Callback for raw SSE data events (for provider-specific JSON parsing)
+    void (*on_sse_data)(const char* data, size_t len, void* user_data);
     void* user_data;
 } StreamingContext;
 

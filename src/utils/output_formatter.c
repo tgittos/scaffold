@@ -6,6 +6,9 @@
 #include <string.h>
 #include <stdarg.h>
 
+// State for streaming display
+static int streaming_first_chunk = 1;
+
 
 static char *extract_json_string(const char *json, const char *key) {
     if (!json || !key) {
@@ -633,13 +636,20 @@ void cleanup_output_formatter(void) {
 // =============================================================================
 
 void display_streaming_init(void) {
-    // Clear any "thinking" indicator and position cursor for streaming output
+    // Display thinking indicator while waiting for first chunk
+    streaming_first_chunk = 1;
+    fprintf(stdout, "\033[36m•\033[0m ");
     fflush(stdout);
 }
 
 void display_streaming_text(const char* text, size_t len) {
     if (text == NULL || len == 0) {
         return;
+    }
+    // Clear thinking indicator on first chunk
+    if (streaming_first_chunk) {
+        fprintf(stdout, "\r\033[K");
+        streaming_first_chunk = 0;
     }
     fwrite(text, 1, len, stdout);
     fflush(stdout);
@@ -648,6 +658,11 @@ void display_streaming_text(const char* text, size_t len) {
 void display_streaming_thinking(const char* text, size_t len) {
     if (text == NULL || len == 0) {
         return;
+    }
+    // Clear thinking indicator on first chunk
+    if (streaming_first_chunk) {
+        fprintf(stdout, "\r\033[K");
+        streaming_first_chunk = 0;
     }
     // Display in dimmed gray style
     printf(ANSI_DIM ANSI_GRAY);
@@ -659,6 +674,11 @@ void display_streaming_thinking(const char* text, size_t len) {
 void display_streaming_tool_start(const char* tool_name) {
     if (tool_name == NULL) {
         return;
+    }
+    // Clear thinking indicator on first chunk
+    if (streaming_first_chunk) {
+        fprintf(stdout, "\r\033[K");
+        streaming_first_chunk = 0;
     }
     printf("\n" ANSI_CYAN "[Calling %s...]" ANSI_RESET "\n", tool_name);
     fflush(stdout);
@@ -684,6 +704,11 @@ void display_streaming_complete(int input_tokens, int output_tokens) {
 void display_streaming_error(const char* error) {
     if (error == NULL) {
         return;
+    }
+    // Clear thinking indicator if still showing
+    if (streaming_first_chunk) {
+        fprintf(stdout, "\r\033[K");
+        streaming_first_chunk = 0;
     }
     fprintf(stderr, "\n" ANSI_RED "Error: %s" ANSI_RESET "\n", error);
     fflush(stderr);

@@ -159,6 +159,7 @@ StreamingContext* streaming_context_create(void) {
     ctx->on_tool_use_delta = NULL;
     ctx->on_stream_end = NULL;
     ctx->on_error = NULL;
+    ctx->on_sse_data = NULL;
     ctx->user_data = NULL;
 
     return ctx;
@@ -307,8 +308,11 @@ int streaming_process_sse_line(StreamingContext* ctx, const char* line, size_t l
         // Update state to indicate we're reading data
         ctx->state = STREAM_STATE_READING_DATA;
 
-        // The JSON payload is available via streaming_get_last_data()
-        // Provider-specific parsers will handle the actual JSON parsing
+        // Invoke SSE data callback for provider-specific parsing
+        if (ctx->on_sse_data != NULL && payload_len > 0) {
+            ctx->on_sse_data(payload, payload_len, ctx->user_data);
+        }
+
         return 0;
     }
 
