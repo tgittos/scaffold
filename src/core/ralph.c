@@ -730,11 +730,23 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
         struct HTTPResponse response = {0};
         debug_printf("Making API request for tool loop iteration %d\n", loop_count);
 
+        // Display subtle thinking indicator to user (skip in JSON mode)
+        if (!session->session_data.config.json_output_mode) {
+            fprintf(stdout, "\033[36m•\033[0m ");
+            fflush(stdout);
+        }
+
         if (http_post_with_headers(session->session_data.config.api_url, post_data, headers, &response) != 0) {
+            // Clear the thinking indicator before showing error
+            if (!session->session_data.config.json_output_mode) {
+                fprintf(stdout, "\r\033[K");
+                fflush(stdout);
+            }
+
             APIError err;
             get_last_api_error(&err);
 
-            fprintf(stderr, "\n%s\n", api_error_user_message(&err));
+            fprintf(stderr, "%s\n", api_error_user_message(&err));
 
             if (err.attempts_made > 1) {
                 fprintf(stderr, "   (Retried %d times)\n", err.attempts_made);
@@ -750,6 +762,11 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
 
         // Check for NULL response data
         if (response.data == NULL) {
+            // Clear the thinking indicator before showing error
+            if (!session->session_data.config.json_output_mode) {
+                fprintf(stdout, "\r\033[K");
+                fflush(stdout);
+            }
             fprintf(stderr, "Error: Empty response from API in tool loop iteration %d\n", loop_count);
             cleanup_response(&response);
             free(post_data);
@@ -767,14 +784,20 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
         }
         
         if (parse_result != 0) {
+            // Clear the thinking indicator before showing error
+            if (!session->session_data.config.json_output_mode) {
+                fprintf(stdout, "\r\033[K");
+                fflush(stdout);
+            }
+
             // Check for common API key errors and provide user-friendly messages
-            if (strstr(response.data, "didn't provide an API key") != NULL || 
+            if (strstr(response.data, "didn't provide an API key") != NULL ||
                 strstr(response.data, "Incorrect API key") != NULL ||
                 strstr(response.data, "invalid_api_key") != NULL) {
-                fprintf(stderr, "\n❌ API key missing or invalid.\n");
+                fprintf(stderr, "❌ API key missing or invalid.\n");
                 fprintf(stderr, "   Please add your API key to ralph.config.json\n");
             } else if (strstr(response.data, "\"error\"") != NULL) {
-                fprintf(stderr, "\n❌ API request failed during tool execution.\n");
+                fprintf(stderr, "❌ API request failed during tool execution.\n");
                 if (debug_enabled) {
                     fprintf(stderr, "Debug: %s\n", response.data);
                 }
@@ -787,10 +810,16 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
             cleanup_executed_tool_tracker(&tracker);
             return -1;
         }
-        
+
+        // Clear the thinking indicator on success (skip in JSON mode)
+        if (!session->session_data.config.json_output_mode) {
+            fprintf(stdout, "\r\033[K");
+            fflush(stdout);
+        }
+
         // Display the response
         print_formatted_response_improved(&parsed_response);
-        
+
         // Check for tool calls in the response FIRST
         ToolCall *tool_calls = NULL;
         int call_count = 0;
