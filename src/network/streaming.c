@@ -348,6 +348,7 @@ void streaming_emit_text(StreamingContext* ctx, const char* text, size_t len) {
     // Ensure capacity for new text
     if (ensure_capacity(&ctx->text_content, &ctx->text_capacity,
                        ctx->text_len, len) != 0) {
+        ctx->state = STREAM_STATE_ERROR;
         return;  // Allocation failed
     }
 
@@ -370,6 +371,7 @@ void streaming_emit_thinking(StreamingContext* ctx, const char* text, size_t len
     // Ensure capacity for new thinking text
     if (ensure_capacity(&ctx->thinking_content, &ctx->thinking_capacity,
                        ctx->thinking_len, len) != 0) {
+        ctx->state = STREAM_STATE_ERROR;
         return;  // Allocation failed
     }
 
@@ -479,10 +481,15 @@ void streaming_emit_tool_delta(StreamingContext* ctx, const char* id, const char
     if (needed > tool->arguments_capacity) {
         size_t new_capacity = tool->arguments_capacity;
         while (new_capacity < needed) {
+            if (new_capacity > SIZE_MAX / BUFFER_GROWTH_FACTOR) {
+                ctx->state = STREAM_STATE_ERROR;
+                return;  // Would overflow
+            }
             new_capacity *= BUFFER_GROWTH_FACTOR;
         }
         char* new_buffer = realloc(tool->arguments_json, new_capacity);
         if (new_buffer == NULL) {
+            ctx->state = STREAM_STATE_ERROR;
             return;  // Allocation failed
         }
         tool->arguments_json = new_buffer;

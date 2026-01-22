@@ -265,12 +265,12 @@ static char* openai_build_streaming_request_json(const LLMProvider* provider,
     }
 
     // Add stream: true
-    cJSON_AddBoolToObject(root, "stream", cJSON_True);
+    cJSON_AddBoolToObject(root, "stream", 1);
 
     // Add stream_options with include_usage: true
     cJSON* stream_options = cJSON_CreateObject();
     if (stream_options != NULL) {
-        cJSON_AddBoolToObject(stream_options, "include_usage", cJSON_True);
+        cJSON_AddBoolToObject(stream_options, "include_usage", 1);
         cJSON_AddItemToObject(root, "stream_options", stream_options);
     }
 

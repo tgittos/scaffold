@@ -152,6 +152,12 @@ static int anthropic_validate_conversation(const LLMProvider* provider,
     return 0; // Always succeed - orphaned results are handled by message builder
 }
 
+// Streaming support - not yet implemented for Anthropic
+static int anthropic_supports_streaming(const LLMProvider* provider) {
+    (void)provider;
+    return 0;  // Anthropic streaming not yet implemented
+}
+
 // Anthropic provider instance
 static LLMProvider anthropic_provider = {
     .capabilities = {
@@ -169,8 +175,8 @@ static LLMProvider anthropic_provider = {
     .parse_response = anthropic_parse_response,
     // Tool functions removed - now handled by ModelCapabilities
     .validate_conversation = anthropic_validate_conversation,
-    // Streaming not yet implemented for Anthropic (Plan D)
-    .supports_streaming = NULL,
+    // Streaming not yet implemented for Anthropic
+    .supports_streaming = anthropic_supports_streaming,
     .parse_stream_event = NULL,
     .build_streaming_request_json = NULL
 };
