@@ -1002,6 +1002,28 @@ typedef struct {
     LLMProvider* provider;
 } StreamingUserData;
 
+// User data for SSE callbacks (holds context and provider for parsing)
+typedef struct {
+    StreamingContext* ctx;
+    LLMProvider* provider;
+} StreamingSSEUserData;
+
+// Callback: SSE data event - parse with provider-specific parser
+static void streaming_sse_data_callback(const char* data, size_t len, void* user_data) {
+    if (data == NULL || len == 0 || user_data == NULL) {
+        return;
+    }
+
+    StreamingSSEUserData* sse_data = (StreamingSSEUserData*)user_data;
+    if (sse_data->ctx == NULL || sse_data->provider == NULL) {
+        return;
+    }
+
+    if (sse_data->provider->parse_stream_event != NULL) {
+        sse_data->provider->parse_stream_event(sse_data->provider, sse_data->ctx, data, len);
+    }
+}
+
 // Callback: display text chunks as they arrive
 static void streaming_text_callback(const char* text, size_t len, void* user_data) {
     (void)user_data; // Suppress unused parameter warning
@@ -1040,27 +1062,12 @@ static size_t ralph_stream_callback(const char* data, size_t size, void* user_da
         return 0;
     }
 
-    // user_data is a two-element array: [StreamingContext*, LLMProvider*]
-    void** context_array = (void**)user_data;
-    StreamingContext* ctx = (StreamingContext*)context_array[0];
-    LLMProvider* provider = (LLMProvider*)context_array[1];
-
-    if (ctx == NULL) {
-        return 0;
-    }
+    StreamingContext* ctx = (StreamingContext*)user_data;
 
     // Process the chunk through SSE parser
+    // Provider-specific parsing happens via the on_sse_data callback
     if (streaming_process_chunk(ctx, data, size) != 0) {
         return 0;
-    }
-
-    // If we have a complete data line, parse it with provider-specific parser
-    const char* json_data = streaming_get_last_data(ctx);
-    if (json_data != NULL && provider != NULL && provider->parse_stream_event != NULL) {
-        size_t json_len = strlen(json_data);
-        if (json_len > 0) {
-            provider->parse_stream_event(provider, ctx, json_data, json_len);
-        }
     }
 
     return size;
@@ -1107,24 +1114,29 @@ static int ralph_process_message_streaming(RalphSession* session, const char* us
         return -1;
     }
 
-    // Set up callbacks for real-time display
+    // Set up user data for SSE callbacks (provider parsing)
+    StreamingSSEUserData sse_user_data = {
+        .ctx = ctx,
+        .provider = provider
+    };
+    ctx->user_data = &sse_user_data;
+
+    // Set up callbacks for real-time display and SSE data parsing
     ctx->on_text_chunk = streaming_text_callback;
     ctx->on_thinking_chunk = streaming_thinking_callback;
     ctx->on_tool_use_start = streaming_tool_start_callback;
     ctx->on_stream_end = streaming_end_callback;
     ctx->on_error = streaming_error_callback;
+    ctx->on_sse_data = streaming_sse_data_callback;
 
     // Initialize streaming display
     display_streaming_init();
-
-    // Set up callback data array: [StreamingContext*, LLMProvider*]
-    void* callback_data[2] = {ctx, provider};
 
     // Configure streaming HTTP request
     struct StreamingHTTPConfig streaming_config = {
         .base = DEFAULT_HTTP_CONFIG,
         .stream_callback = ralph_stream_callback,
-        .callback_data = callback_data,
+        .callback_data = ctx,
         .low_speed_limit = 1,
         .low_speed_time = 30
     };
@@ -1153,13 +1165,6 @@ static int ralph_process_message_streaming(RalphSession* session, const char* us
         fprintf(stderr, "Warning: Failed to save user message to conversation history\n");
     }
 
-    // Save assistant response to conversation
-    if (ctx->text_content != NULL && ctx->text_len > 0) {
-        if (append_conversation_message(&session->session_data.conversation, "assistant", ctx->text_content) != 0) {
-            fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
-        }
-    }
-
     // Handle tool calls if any
     if (ctx->tool_use_count > 0) {
         // Convert streaming tool uses to ToolCall array
@@ -1171,6 +1176,17 @@ static int ralph_process_message_streaming(RalphSession* session, const char* us
                 tool_calls[i].arguments = ctx->tool_uses[i].arguments_json ? strdup(ctx->tool_uses[i].arguments_json) : NULL;
             }
 
+            // For OpenAI, construct assistant message with tool_calls array
+            // This is required for the conversation format to be valid
+            char* constructed_message = construct_openai_assistant_message_with_tools(
+                ctx->text_content, tool_calls, ctx->tool_use_count);
+            if (constructed_message != NULL) {
+                if (append_conversation_message(&session->session_data.conversation, "assistant", constructed_message) != 0) {
+                    fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
+                }
+                free(constructed_message);
+            }
+
             // Execute tool workflow
             result = ralph_execute_tool_workflow(session, tool_calls, ctx->tool_use_count,
                                                  user_message, max_tokens, headers);
@@ -1178,6 +1194,13 @@ static int ralph_process_message_streaming(RalphSession* session, const char* us
             cleanup_tool_calls(tool_calls, ctx->tool_use_count);
         } else {
             result = -1;
+        }
+    } else {
+        // No tool calls - save assistant response directly
+        if (ctx->text_content != NULL && ctx->text_len > 0) {
+            if (append_conversation_message(&session->session_data.conversation, "assistant", ctx->text_content) != 0) {
+                fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
+            }
         }
     }
 
