@@ -539,6 +539,38 @@ void display_tool_execution_group_end(void) {
     }
 }
 
+// Box width is 80 characters total: │ (1) + space (1) + content+padding (77) + │ (1)
+#define TOOL_BOX_WIDTH 80
+#define TOOL_BOX_CONTENT_WIDTH (TOOL_BOX_WIDTH - 3)  // 77 chars for content+padding
+
+void print_tool_box_line(const char* format, ...) {
+    if (format == NULL) return;
+
+    // Format the content
+    char content[512];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(content, sizeof(content), format, args);
+    va_end(args);
+
+    // Calculate content length (visible characters only)
+    size_t content_len = strlen(content);
+
+    // Print left border with space
+    printf(ANSI_CYAN "│" ANSI_RESET " ");
+
+    // Print content
+    printf("%s", content);
+
+    // Calculate padding needed (account for content width)
+    int padding = TOOL_BOX_CONTENT_WIDTH - (int)content_len;
+    if (padding < 0) padding = 0;
+
+    // Print padding and right border
+    printf("%*s" ANSI_CYAN "│" ANSI_RESET "\n", padding, "");
+    fflush(stdout);
+}
+
 static bool is_informational_check(const char *tool_name, const char *arguments) {
     if (!tool_name || !arguments) return false;
     
@@ -556,49 +588,74 @@ static bool is_informational_check(const char *tool_name, const char *arguments)
 
 void log_tool_execution_improved(const char *tool_name, const char *arguments, bool success, const char *result) {
     if (!tool_name) return;
-    
+
     // Skip internal todo tool logging
     if (strcmp(tool_name, "TodoWrite") == 0) {
         return;
     }
-    
+
     // Check if this is an informational check rather than a real failure
     bool is_info_check = !success && is_informational_check(tool_name, arguments);
-    
-    // Print tool execution within the bordered section with proper indentation
-    printf(ANSI_CYAN "│" ANSI_RESET " ");
-    
-    if (success) {
-        printf(ANSI_GREEN "✓" ANSI_RESET " %s", tool_name);
-    } else if (is_info_check) {
-        printf(ANSI_YELLOW "◦" ANSI_RESET " %s", tool_name);
-    } else {
-        printf(ANSI_RED "✗" ANSI_RESET " %s", tool_name);
-    }
-    
-    // Show brief tool arguments for context
+
+    // Build content string
+    char content[256];
+    char context[64] = "";
+
+    // Determine context suffix
     if (arguments && strlen(arguments) > 0) {
         if (strstr(arguments, "\"directory_path\"")) {
-            printf(ANSI_DIM " (listing directory)" ANSI_RESET);
+            snprintf(context, sizeof(context), " (listing directory)");
         } else if (strstr(arguments, "\"file_path\"")) {
-            printf(ANSI_DIM " (reading file)" ANSI_RESET);
+            snprintf(context, sizeof(context), " (reading file)");
         } else if (strstr(arguments, "\"command\"")) {
-            printf(ANSI_DIM " (running command)" ANSI_RESET);
+            snprintf(context, sizeof(context), " (running command)");
         }
     }
-    
-    printf("\n");
-    
+
+    // Format: "✓ tool_name (context)" - status icon takes ~2 chars visible
+    if (success) {
+        snprintf(content, sizeof(content), "✓ %s%s", tool_name, context);
+    } else if (is_info_check) {
+        snprintf(content, sizeof(content), "◦ %s%s", tool_name, context);
+    } else {
+        snprintf(content, sizeof(content), "✗ %s%s", tool_name, context);
+    }
+
+    // Calculate visible length (unicode symbols count as 1 visible char but take 3 bytes)
+    size_t visible_len = strlen(tool_name) + strlen(context) + 2;  // +2 for "X "
+
+    // Print left border
+    printf(ANSI_CYAN "│" ANSI_RESET " ");
+
+    // Print content with color
+    if (success) {
+        printf(ANSI_GREEN "✓" ANSI_RESET " %s" ANSI_DIM "%s" ANSI_RESET, tool_name, context);
+    } else if (is_info_check) {
+        printf(ANSI_YELLOW "◦" ANSI_RESET " %s" ANSI_DIM "%s" ANSI_RESET, tool_name, context);
+    } else {
+        printf(ANSI_RED "✗" ANSI_RESET " %s" ANSI_DIM "%s" ANSI_RESET, tool_name, context);
+    }
+
+    // Padding and right border
+    int padding = TOOL_BOX_CONTENT_WIDTH - (int)visible_len;
+    if (padding < 0) padding = 0;
+    printf("%*s" ANSI_CYAN "│" ANSI_RESET "\n", padding, "");
+
     // Show errors for actual failures with proper indentation
     if (!success && !is_info_check && result && strlen(result) > 0) {
-        printf(ANSI_CYAN "│" ANSI_RESET "   " ANSI_RED "└─ Error: ");
-        if (strlen(result) > 80) {
-            printf("%.77s..." ANSI_RESET "\n", result);
+        char error_line[128];
+        if (strlen(result) > 60) {
+            snprintf(error_line, sizeof(error_line), "  └─ Error: %.57s...", result);
         } else {
-            printf("%s" ANSI_RESET "\n", result);
+            snprintf(error_line, sizeof(error_line), "  └─ Error: %s", result);
         }
+        size_t err_visible_len = strlen(error_line);
+        int err_padding = TOOL_BOX_CONTENT_WIDTH - (int)err_visible_len;
+        if (err_padding < 0) err_padding = 0;
+        printf(ANSI_CYAN "│" ANSI_RESET " " ANSI_RED "%s" ANSI_RESET "%*s" ANSI_CYAN "│" ANSI_RESET "\n",
+               error_line, err_padding, "");
     }
-    
+
     fflush(stdout);
 }
 
@@ -680,7 +737,8 @@ void display_streaming_tool_start(const char* tool_name) {
         fprintf(stdout, "\r\033[K");
         streaming_first_chunk = 0;
     }
-    printf("\n" ANSI_CYAN "[Calling %s...]" ANSI_RESET "\n", tool_name);
+    // No header displayed - tool execution box will show tool info
+    (void)tool_name;
     fflush(stdout);
 }
 

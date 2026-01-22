@@ -1157,8 +1157,9 @@ static int ralph_process_message_streaming(RalphSession* session, const char* us
         return -1;
     }
 
-    // Display completion with token counts
-    display_streaming_complete(ctx->input_tokens, ctx->output_tokens);
+    // Save token counts to display after tool execution (if any)
+    int input_tokens = ctx->input_tokens;
+    int output_tokens = ctx->output_tokens;
 
     // Save user message to conversation
     if (append_conversation_message(&session->session_data.conversation, "user", user_message) != 0) {
@@ -1202,6 +1203,8 @@ static int ralph_process_message_streaming(RalphSession* session, const char* us
                 fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
             }
         }
+        // Display token counts for non-tool responses
+        display_streaming_complete(input_tokens, output_tokens);
     }
 
     streaming_context_free(ctx);
