@@ -46,6 +46,9 @@ static int config_set_defaults(ralph_config_t *config)
     config->max_subagents = 5;
     config->subagent_timeout = 300;
 
+    // Set streaming configuration default
+    config->enable_streaming = true;
+
     return 0;
 }
 
@@ -312,6 +315,12 @@ int config_load_from_file(const char *filepath)
         g_config->subagent_timeout = item->valueint;
     }
 
+    // Load streaming configuration
+    item = cJSON_GetObjectItem(json, "enable_streaming");
+    if (cJSON_IsBool(item)) {
+        g_config->enable_streaming = cJSON_IsTrue(item);
+    }
+
     // Update main API key based on URL
     (void)config_update_api_key_selection(g_config);
 
@@ -365,6 +374,9 @@ int config_save_to_file(const char *filepath)
     // Add subagent configuration
     cJSON_AddNumberToObject(json, "max_subagents", g_config->max_subagents);
     cJSON_AddNumberToObject(json, "subagent_timeout", g_config->subagent_timeout);
+
+    // Add streaming configuration
+    cJSON_AddBoolToObject(json, "enable_streaming", g_config->enable_streaming);
 
     // Convert to string
     char *json_string = cJSON_Print(json);
@@ -609,6 +621,17 @@ float config_get_float(const char *key, float default_value)
 
     if (strcmp(key, "api_backoff_factor") == 0) {
         return g_config->api_backoff_factor;
+    }
+
+    return default_value;
+}
+
+bool config_get_bool(const char *key, bool default_value)
+{
+    if (!g_config || !key) return default_value;
+
+    if (strcmp(key, "enable_streaming") == 0) {
+        return g_config->enable_streaming;
     }
 
     return default_value;

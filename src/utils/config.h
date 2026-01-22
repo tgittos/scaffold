@@ -25,6 +25,9 @@ typedef struct {
     int max_subagents;          // Default: 5
     int subagent_timeout;       // Default: 300 seconds
 
+    // Streaming configuration
+    bool enable_streaming;      // Default: true
+
     // Configuration file paths
     char *config_file_path;
     bool config_loaded;
@@ -105,5 +108,14 @@ int config_get_int(const char *key, int default_value);
  * @return Configuration value or default_value
  */
 float config_get_float(const char *key, float default_value);
+
+/**
+ * Get a boolean configuration value by key
+ *
+ * @param key Configuration key
+ * @param default_value Default value if key not found
+ * @return Configuration value or default_value
+ */
+bool config_get_bool(const char *key, bool default_value);
 
 #endif /* CONFIG_H */
