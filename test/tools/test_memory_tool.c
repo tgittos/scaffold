@@ -3,17 +3,32 @@
 #include "../../src/tools/tools_system.h"
 #include "../../src/db/vector_db.h"
 #include "../../src/llm/embeddings.h"
+#include "../../src/llm/embeddings_service.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
+// Global storage for API key preservation across setUp/tearDown
+static char *g_saved_api_key = NULL;
+
 void setUp(void) {
-    // Clean setup for each test
+    // Save the API key at the start of each test
+    const char *key = getenv("OPENAI_API_KEY");
+    if (key) {
+        g_saved_api_key = strdup(key);
+    } else {
+        g_saved_api_key = NULL;
+    }
 }
 
 void tearDown(void) {
-    // Clean up after each test
+    // Restore the API key after each test (handles test failures that exit early)
+    if (g_saved_api_key) {
+        setenv("OPENAI_API_KEY", g_saved_api_key, 1);
+        free(g_saved_api_key);
+        g_saved_api_key = NULL;
+    }
 }
 
 void test_register_memory_tools(void) {
@@ -84,29 +99,42 @@ void test_remember_tool_no_api_key(void) {
     char *old_key = getenv("OPENAI_API_KEY");
     char *saved_key = old_key ? strdup(old_key) : NULL;
     unsetenv("OPENAI_API_KEY");
-    
+
+    // Reinitialize embeddings service to pick up the unset key
+    embeddings_service_reinitialize();
+
     ToolCall tool_call = {
         .id = "test_id",
         .name = "remember",
         .arguments = "{\"content\": \"Test memory content\"}"
     };
-    
+
     ToolResult result = {0};
     int exec_result = execute_remember_tool_call(&tool_call, &result);
-    
-    TEST_ASSERT_EQUAL_INT(0, exec_result);
-    TEST_ASSERT_NOT_NULL(result.result);
-    TEST_ASSERT_EQUAL_INT(0, result.success);
-    TEST_ASSERT_TRUE(strstr(result.result, "Embeddings service not configured") != NULL);
-    
+
+    // Capture test values BEFORE restoring env, so assertions don't exit early
+    int got_exec_result = exec_result;
+    int got_result_not_null = (result.result != NULL);
+    int got_success = result.success;
+    int got_error_message = (result.result && strstr(result.result, "Embeddings service not configured") != NULL);
+
+    // Free resources before restoring
     free(result.tool_call_id);
     free(result.result);
-    
-    // Restore API key
+
+    // Restore API key and reinitialize embeddings service BEFORE assertions
+    // This ensures the env is restored even if assertions fail
     if (saved_key) {
         setenv("OPENAI_API_KEY", saved_key, 1);
         free(saved_key);
+        embeddings_service_reinitialize();
     }
+
+    // Now run assertions
+    TEST_ASSERT_EQUAL_INT(0, got_exec_result);
+    TEST_ASSERT_TRUE(got_result_not_null);
+    TEST_ASSERT_EQUAL_INT(0, got_success);
+    TEST_ASSERT_TRUE(got_error_message);
 }
 
 void test_remember_tool_with_valid_content(void) {
@@ -115,23 +143,23 @@ void test_remember_tool_with_valid_content(void) {
         TEST_IGNORE_MESSAGE("OPENAI_API_KEY not set, skipping integration test");
         return;
     }
-    
+
     ToolCall tool_call = {
         .id = "test_memory_id",
         .name = "remember",
         .arguments = "{\"content\": \"Ralph is a C program that uses Cosmopolitan for portability\", "
                     "\"type\": \"fact\", \"source\": \"test\", \"importance\": \"high\"}"
     };
-    
+
     ToolResult result = {0};
     int exec_result = execute_remember_tool_call(&tool_call, &result);
-    
+
     TEST_ASSERT_EQUAL_INT(0, exec_result);
     TEST_ASSERT_NOT_NULL(result.result);
     TEST_ASSERT_EQUAL_INT(1, result.success);
     TEST_ASSERT_TRUE(strstr(result.result, "\"success\": true") != NULL);
     TEST_ASSERT_TRUE(strstr(result.result, "Memory stored successfully") != NULL);
-    
+
     free(result.tool_call_id);
     free(result.result);
 }
@@ -160,29 +188,42 @@ void test_recall_memories_no_api_key(void) {
     char *old_key = getenv("OPENAI_API_KEY");
     char *saved_key = old_key ? strdup(old_key) : NULL;
     unsetenv("OPENAI_API_KEY");
-    
+
+    // Reinitialize embeddings service to pick up the unset key
+    embeddings_service_reinitialize();
+
     ToolCall tool_call = {
         .id = "test_id",
         .name = "recall_memories",
         .arguments = "{\"query\": \"test query\"}"
     };
-    
+
     ToolResult result = {0};
     int exec_result = execute_recall_memories_tool_call(&tool_call, &result);
-    
-    TEST_ASSERT_EQUAL_INT(0, exec_result);
-    TEST_ASSERT_NOT_NULL(result.result);
-    TEST_ASSERT_EQUAL_INT(0, result.success);
-    TEST_ASSERT_TRUE(strstr(result.result, "Embeddings service not configured") != NULL);
-    
+
+    // Capture test values BEFORE restoring env, so assertions don't exit early
+    int got_exec_result = exec_result;
+    int got_result_not_null = (result.result != NULL);
+    int got_success = result.success;
+    int got_error_message = (result.result && strstr(result.result, "Embeddings service not configured") != NULL);
+
+    // Free resources before restoring
     free(result.tool_call_id);
     free(result.result);
-    
-    // Restore API key
+
+    // Restore API key and reinitialize embeddings service BEFORE assertions
+    // This ensures the env is restored even if assertions fail
     if (saved_key) {
         setenv("OPENAI_API_KEY", saved_key, 1);
         free(saved_key);
+        embeddings_service_reinitialize();
     }
+
+    // Now run assertions
+    TEST_ASSERT_EQUAL_INT(0, got_exec_result);
+    TEST_ASSERT_TRUE(got_result_not_null);
+    TEST_ASSERT_EQUAL_INT(0, got_success);
+    TEST_ASSERT_TRUE(got_error_message);
 }
 
 void test_recall_memories_with_valid_query(void) {

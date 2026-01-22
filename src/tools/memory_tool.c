@@ -333,7 +333,19 @@ int execute_recall_memories_tool_call(const ToolCall *tool_call, ToolResult *res
         }
         return 0;
     }
-    
+
+    // Check embeddings service - required for semantic memory search
+    if (!embeddings_service_is_configured()) {
+        tool_result_builder_set_error(builder, "Embeddings service not configured. OPENAI_API_KEY environment variable required");
+        ToolResult* temp_result = tool_result_builder_finalize(builder);
+        if (temp_result) {
+            *result = *temp_result;
+            free(temp_result);
+        }
+        free(query);
+        return 0;
+    }
+
     // Get metadata store for text search
     metadata_store_t* meta_store = metadata_store_get_instance();
     if (meta_store == NULL) {
