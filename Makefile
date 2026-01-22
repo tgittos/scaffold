@@ -190,6 +190,10 @@ TEST_DEBUG_OUTPUT_SOURCES = $(TESTDIR)/utils/test_debug_output.c $(SRCDIR)/utils
 TEST_DEBUG_OUTPUT_OBJECTS = $(TEST_DEBUG_OUTPUT_SOURCES:.c=.o)
 TEST_DEBUG_OUTPUT_TARGET = $(TESTDIR)/test_debug_output
 
+TEST_JSON_OUTPUT_SOURCES = $(TESTDIR)/utils/test_json_output.c $(SRCDIR)/utils/json_output.c $(SRCDIR)/network/streaming.c $(COMMON_TEST_SOURCES)
+TEST_JSON_OUTPUT_OBJECTS = $(TEST_JSON_OUTPUT_SOURCES:.c=.o)
+TEST_JSON_OUTPUT_TARGET = $(TESTDIR)/test_json_output
+
 TEST_CONVERSATION_SOURCES = $(TESTDIR)/session/test_conversation_tracker.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/utils/json_escape.c $(COMMON_TEST_SOURCES)
 TEST_CONVERSATION_OBJECTS = $(TEST_CONVERSATION_SOURCES:.c=.o)
 TEST_CONVERSATION_TARGET = $(TESTDIR)/test_conversation_tracker
@@ -361,7 +365,7 @@ TEST_SUBAGENT_TOOL_OBJECTS = $(TEST_SUBAGENT_TOOL_C_SOURCES:.c=.o) $(TEST_SUBAGE
 TEST_SUBAGENT_TOOL_TARGET = $(TESTDIR)/test_subagent_tool
 
 # Collect all test targets
-ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_ENV_TARGET) $(TEST_CONFIG_TARGET) $(TEST_PROMPT_TARGET) $(TEST_DEBUG_OUTPUT_TARGET) $(TEST_CONVERSATION_TARGET) $(TEST_CONVERSATION_VDB_TARGET) $(TEST_TOOL_CALLS_NOT_STORED_TARGET) $(TEST_TODO_MANAGER_TARGET) $(TEST_TODO_TOOL_TARGET) $(TEST_PDF_EXTRACTOR_TARGET) $(TEST_DOCUMENT_CHUNKER_TARGET) $(TEST_HTTP_TARGET) $(TEST_HTTP_RETRY_TARGET) $(TEST_STREAMING_TARGET) $(TEST_OPENAI_STREAMING_TARGET) $(TEST_ANTHROPIC_STREAMING_TARGET) $(TEST_OUTPUT_TARGET) $(TEST_TOOLS_TARGET) $(TEST_SHELL_TARGET) $(TEST_FILE_TARGET) $(TEST_FILE_FILTER_TARGET) $(TEST_SMART_FILE_TARGET) $(TEST_VECTOR_DB_TOOL_TARGET) $(TEST_MEMORY_TOOL_TARGET) $(TEST_PYTHON_TOOL_TARGET) $(TEST_PYTHON_INTEGRATION_TARGET) $(TEST_MEMORY_MGMT_TARGET) $(TEST_TOKEN_MANAGER_TARGET) $(TEST_CONVERSATION_COMPACTOR_TARGET) $(TEST_RALPH_TARGET) $(TEST_INCOMPLETE_TASK_BUG_TARGET) $(TEST_MODEL_TOOLS_TARGET) $(TEST_MESSAGES_ARRAY_BUG_TARGET) $(TEST_VECTOR_DB_TARGET) $(TEST_DOCUMENT_STORE_TARGET) $(TEST_MCP_CLIENT_TARGET) $(TEST_SUBAGENT_TOOL_TARGET)
+ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_ENV_TARGET) $(TEST_CONFIG_TARGET) $(TEST_PROMPT_TARGET) $(TEST_DEBUG_OUTPUT_TARGET) $(TEST_JSON_OUTPUT_TARGET) $(TEST_CONVERSATION_TARGET) $(TEST_CONVERSATION_VDB_TARGET) $(TEST_TOOL_CALLS_NOT_STORED_TARGET) $(TEST_TODO_MANAGER_TARGET) $(TEST_TODO_TOOL_TARGET) $(TEST_PDF_EXTRACTOR_TARGET) $(TEST_DOCUMENT_CHUNKER_TARGET) $(TEST_HTTP_TARGET) $(TEST_HTTP_RETRY_TARGET) $(TEST_STREAMING_TARGET) $(TEST_OPENAI_STREAMING_TARGET) $(TEST_ANTHROPIC_STREAMING_TARGET) $(TEST_OUTPUT_TARGET) $(TEST_TOOLS_TARGET) $(TEST_SHELL_TARGET) $(TEST_FILE_TARGET) $(TEST_FILE_FILTER_TARGET) $(TEST_SMART_FILE_TARGET) $(TEST_VECTOR_DB_TOOL_TARGET) $(TEST_MEMORY_TOOL_TARGET) $(TEST_PYTHON_TOOL_TARGET) $(TEST_PYTHON_INTEGRATION_TARGET) $(TEST_MEMORY_MGMT_TARGET) $(TEST_TOKEN_MANAGER_TARGET) $(TEST_CONVERSATION_COMPACTOR_TARGET) $(TEST_RALPH_TARGET) $(TEST_INCOMPLETE_TASK_BUG_TARGET) $(TEST_MODEL_TOOLS_TARGET) $(TEST_MESSAGES_ARRAY_BUG_TARGET) $(TEST_VECTOR_DB_TARGET) $(TEST_DOCUMENT_STORE_TARGET) $(TEST_MCP_CLIENT_TARGET) $(TEST_SUBAGENT_TOOL_TARGET)
 
 # =============================================================================
 # BUILD RULES
@@ -449,6 +453,9 @@ $(TEST_PROMPT_TARGET): $(TEST_PROMPT_OBJECTS)
 
 $(TEST_DEBUG_OUTPUT_TARGET): $(TEST_DEBUG_OUTPUT_OBJECTS) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_DEBUG_OUTPUT_OBJECTS) $(CJSON_LIB)
+
+$(TEST_JSON_OUTPUT_TARGET): $(TEST_JSON_OUTPUT_OBJECTS) $(ALL_LIBS)
+	$(CC) -o $@ $(TEST_JSON_OUTPUT_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(CJSON_LIB) $(PYTHON_LIB) $(ZLIB_LIB) -lm -lpthread
 
 $(TEST_CONVERSATION_TARGET): $(TEST_CONVERSATION_OBJECTS) $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/network/api_error.o src/utils/env_loader.o src/utils/config.o src/utils/debug_output.o src/utils/common_utils.o $(ALL_LIBS)
 	$(CXX) -o $@ test/session/test_conversation_tracker.o src/session/conversation_tracker.o $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/network/api_error.o src/utils/json_escape.o src/utils/env_loader.o src/utils/config.o src/utils/debug_output.o src/utils/common_utils.o test/unity/unity.o $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
@@ -613,6 +620,7 @@ test: $(ALL_TEST_TARGETS)
 	./$(TEST_PDF_EXTRACTOR_TARGET)
 	./$(TEST_DOCUMENT_CHUNKER_TARGET)
 	./$(TEST_SUBAGENT_TOOL_TARGET)
+	./$(TEST_JSON_OUTPUT_TARGET)
 	@echo "All tests completed"
 
 check: test
@@ -645,6 +653,7 @@ check-valgrind: $(ALL_TEST_TARGETS)
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_VECTOR_DB_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_PDF_EXTRACTOR_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_DOCUMENT_CHUNKER_TARGET).aarch64.elf
+	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_JSON_OUTPUT_TARGET).aarch64.elf
 	@echo "Valgrind tests completed (subagent tests excluded - see AGENTS.md)"
 
 # Valgrind testing for all tests (may show false positives from external libraries)
