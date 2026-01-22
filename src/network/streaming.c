@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdint.h>
 
 // Initial buffer capacities
 #define INITIAL_LINE_BUFFER_CAPACITY 1024
@@ -19,21 +20,29 @@
 
 /**
  * Ensure buffer has capacity for at least additional_len more bytes
- * Returns 0 on success, -1 on allocation failure
+ * Returns 0 on success, -1 on allocation failure or overflow
  */
 static int ensure_capacity(char** buffer, size_t* capacity, size_t current_len, size_t additional_len) {
     if (buffer == NULL || capacity == NULL) {
         return -1;
     }
 
+    // Check for overflow in needed calculation
+    if (additional_len > SIZE_MAX - current_len - 1) {
+        return -1;  // Would overflow
+    }
     size_t needed = current_len + additional_len + 1;  // +1 for null terminator
+
     if (needed <= *capacity) {
         return 0;  // Already have enough capacity
     }
 
-    // Calculate new capacity with growth factor
+    // Calculate new capacity with growth factor, checking for overflow
     size_t new_capacity = *capacity;
     while (new_capacity < needed) {
+        if (new_capacity > SIZE_MAX / BUFFER_GROWTH_FACTOR) {
+            return -1;  // Would overflow
+        }
         new_capacity *= BUFFER_GROWTH_FACTOR;
     }
 
@@ -382,15 +391,23 @@ void streaming_emit_tool_start(StreamingContext* ctx, const char* id, const char
 
     // Ensure capacity for new tool
     if (ctx->tool_use_count >= ctx->tool_use_capacity) {
+        // Check for overflow before multiplication
+        if (ctx->tool_use_capacity > INT_MAX / BUFFER_GROWTH_FACTOR) {
+            return;  // Would overflow
+        }
         int new_capacity = ctx->tool_use_capacity * BUFFER_GROWTH_FACTOR;
+        // Check for overflow in size calculation
+        if ((size_t)new_capacity > SIZE_MAX / sizeof(StreamingToolUse)) {
+            return;  // Would overflow
+        }
         StreamingToolUse* new_tools = realloc(ctx->tool_uses,
-                                               new_capacity * sizeof(StreamingToolUse));
+                                               (size_t)new_capacity * sizeof(StreamingToolUse));
         if (new_tools == NULL) {
             return;  // Allocation failed
         }
         // Zero out new entries
         memset(new_tools + ctx->tool_use_capacity, 0,
-               (new_capacity - ctx->tool_use_capacity) * sizeof(StreamingToolUse));
+               (size_t)(new_capacity - ctx->tool_use_capacity) * sizeof(StreamingToolUse));
         ctx->tool_uses = new_tools;
         ctx->tool_use_capacity = new_capacity;
     }
