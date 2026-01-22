@@ -413,3 +413,133 @@ void cleanup_response(struct HTTPResponse *response)
         response->size = 0;
     }
 }
+
+// =============================================================================
+// Streaming HTTP Support
+// =============================================================================
+
+// Default streaming configuration
+const struct StreamingHTTPConfig DEFAULT_STREAMING_HTTP_CONFIG = {
+    .base = {
+        .timeout_seconds = 0,           // No overall timeout for streams
+        .connect_timeout_seconds = 30,
+        .follow_redirects = 1,
+        .max_redirects = 5
+    },
+    .stream_callback = NULL,
+    .callback_data = NULL,
+    .low_speed_limit = 1,               // 1 byte/sec minimum
+    .low_speed_time = 30                // For 30 seconds before timeout
+};
+
+// Internal callback wrapper for streaming
+static size_t streaming_write_callback(void *contents, size_t size, size_t nmemb, void *userp)
+{
+    struct StreamingHTTPConfig *config = (struct StreamingHTTPConfig *)userp;
+    size_t total = size * nmemb;
+
+    if (config->stream_callback != NULL) {
+        return config->stream_callback((const char *)contents, total, config->callback_data);
+    }
+
+    // If no callback is set, just consume the data
+    return total;
+}
+
+int http_post_streaming(const char *url, const char *post_data,
+                       const char **headers,
+                       const struct StreamingHTTPConfig *config)
+{
+    CURL *curl = NULL;
+    CURLcode res = CURLE_OK;
+    long http_status = 0;
+    struct curl_slist *curl_headers = NULL;
+    APIError api_err;
+
+    if (url == NULL || post_data == NULL || config == NULL) {
+        fprintf(stderr, "Error: Invalid parameters for streaming POST\n");
+        return -1;
+    }
+
+    // Clear previous error
+    clear_last_api_error();
+
+    curl = curl_easy_init();
+    if (curl == NULL) {
+        fprintf(stderr, "Error: Failed to initialize curl for streaming\n");
+        return -1;
+    }
+
+    // Set up headers
+    curl_headers = curl_slist_append(NULL, "Content-Type: application/json");
+    if (curl_headers == NULL) {
+        fprintf(stderr, "Error: Failed to set default headers for streaming\n");
+        curl_easy_cleanup(curl);
+        return -1;
+    }
+
+    if (headers != NULL) {
+        for (int i = 0; headers[i] != NULL; i++) {
+            curl_headers = curl_slist_append(curl_headers, headers[i]);
+            if (curl_headers == NULL) {
+                fprintf(stderr, "Error: Failed to set custom header: %s\n", headers[i]);
+                curl_easy_cleanup(curl);
+                return -1;
+            }
+        }
+    }
+
+    // Basic request setup
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_data);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, curl_headers);
+
+    // Streaming callback
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, streaming_write_callback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)config);
+
+    // Timeouts - for streaming, we use low speed limits instead of overall timeout
+    if (config->base.timeout_seconds > 0) {
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT, config->base.timeout_seconds);
+    }
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, config->base.connect_timeout_seconds);
+
+    // Low speed timeout for stalled streams
+    if (config->low_speed_limit > 0) {
+        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, config->low_speed_limit);
+        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, config->low_speed_time);
+    }
+
+    // Redirect handling
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, config->base.follow_redirects ? 1L : 0L);
+    curl_easy_setopt(curl, CURLOPT_MAXREDIRS, config->base.max_redirects);
+
+    // Perform the request
+    res = curl_easy_perform(curl);
+
+    // Get HTTP status
+    if (res == CURLE_OK) {
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_status);
+    }
+
+    // Cleanup
+    curl_slist_free_all(curl_headers);
+    curl_easy_cleanup(curl);
+
+    // Check result
+    if (res != CURLE_OK) {
+        api_error_set(&api_err, http_status, res, 1);
+        set_last_api_error(&api_err);
+        debug_printf("Streaming request failed: %s\n", curl_easy_strerror(res));
+        return -1;
+    }
+
+    if (http_status < 200 || http_status >= 400) {
+        api_error_set(&api_err, http_status, res, 1);
+        set_last_api_error(&api_err);
+        debug_printf("Streaming request failed with HTTP %ld\n", http_status);
+        return -1;
+    }
+
+    return 0;
+}
