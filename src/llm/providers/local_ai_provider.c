@@ -191,8 +191,11 @@ static int local_ai_parse_stream_event(const LLMProvider* provider,
 
             cJSON* finish_reason = cJSON_GetObjectItem(choice, "finish_reason");
             if (finish_reason != NULL && cJSON_IsString(finish_reason)) {
-                free(ctx->stop_reason);
-                ctx->stop_reason = strdup(finish_reason->valuestring);
+                char* new_reason = strdup(finish_reason->valuestring);
+                if (new_reason != NULL) {
+                    free(ctx->stop_reason);
+                    ctx->stop_reason = new_reason;
+                }
             }
         }
     }

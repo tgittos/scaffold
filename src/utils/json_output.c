@@ -277,7 +277,6 @@ void json_output_assistant_tool_calls_buffered(ToolCall* tool_calls, int count, 
 
 void json_output_tool_result(const char* tool_use_id, const char* content, bool is_error) {
     if (tool_use_id == NULL) {
-        fprintf(stderr, "json_output: tool_use_id is NULL, skipping tool result\n");
         return;
     }
 
