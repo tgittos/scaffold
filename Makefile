@@ -36,6 +36,7 @@ NCURSES_VERSION := 6.4
 CORE_SOURCES := $(SRCDIR)/core/main.c \
                 $(SRCDIR)/core/ralph.c \
                 $(SRCDIR)/network/http_client.c \
+                $(SRCDIR)/network/streaming.c \
                 $(SRCDIR)/network/api_common.c \
                 $(SRCDIR)/network/api_error.c \
                 $(SRCDIR)/utils/config.c \
@@ -314,6 +315,11 @@ TEST_HTTP_RETRY_SOURCES = $(TESTDIR)/network/test_http_retry.c $(SRCDIR)/network
 TEST_HTTP_RETRY_OBJECTS = $(TEST_HTTP_RETRY_SOURCES:.c=.o)
 TEST_HTTP_RETRY_TARGET = $(TESTDIR)/test_http_retry
 
+# Streaming test
+TEST_STREAMING_SOURCES = $(TESTDIR)/network/test_streaming.c $(SRCDIR)/network/streaming.c $(COMMON_TEST_SOURCES)
+TEST_STREAMING_OBJECTS = $(TEST_STREAMING_SOURCES:.c=.o)
+TEST_STREAMING_TARGET = $(TESTDIR)/test_streaming
+
 # MCP test
 TEST_MCP_CLIENT_C_SOURCES = $(TESTDIR)/mcp/test_mcp_client.c $(SRCDIR)/mcp/mcp_client.c $(SRCDIR)/core/ralph.c $(SRCDIR)/utils/env_loader.c $(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/network/api_common.c $(SRCDIR)/session/token_manager.c $(SRCDIR)/llm/llm_provider.c $(SRCDIR)/llm/providers/openai_provider.c $(SRCDIR)/llm/providers/anthropic_provider.c $(SRCDIR)/llm/providers/local_ai_provider.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
 TEST_MCP_CLIENT_CPP_SOURCES = $(DB_CPP_SOURCES)
@@ -342,7 +348,7 @@ TEST_SUBAGENT_TOOL_OBJECTS = $(TEST_SUBAGENT_TOOL_C_SOURCES:.c=.o) $(TEST_SUBAGE
 TEST_SUBAGENT_TOOL_TARGET = $(TESTDIR)/test_subagent_tool
 
 # Collect all test targets
-ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_ENV_TARGET) $(TEST_CONFIG_TARGET) $(TEST_PROMPT_TARGET) $(TEST_DEBUG_OUTPUT_TARGET) $(TEST_CONVERSATION_TARGET) $(TEST_CONVERSATION_VDB_TARGET) $(TEST_TOOL_CALLS_NOT_STORED_TARGET) $(TEST_TODO_MANAGER_TARGET) $(TEST_TODO_TOOL_TARGET) $(TEST_PDF_EXTRACTOR_TARGET) $(TEST_DOCUMENT_CHUNKER_TARGET) $(TEST_HTTP_TARGET) $(TEST_HTTP_RETRY_TARGET) $(TEST_OUTPUT_TARGET) $(TEST_TOOLS_TARGET) $(TEST_SHELL_TARGET) $(TEST_FILE_TARGET) $(TEST_FILE_FILTER_TARGET) $(TEST_SMART_FILE_TARGET) $(TEST_VECTOR_DB_TOOL_TARGET) $(TEST_MEMORY_TOOL_TARGET) $(TEST_PYTHON_TOOL_TARGET) $(TEST_PYTHON_INTEGRATION_TARGET) $(TEST_MEMORY_MGMT_TARGET) $(TEST_TOKEN_MANAGER_TARGET) $(TEST_CONVERSATION_COMPACTOR_TARGET) $(TEST_RALPH_TARGET) $(TEST_INCOMPLETE_TASK_BUG_TARGET) $(TEST_MODEL_TOOLS_TARGET) $(TEST_MESSAGES_ARRAY_BUG_TARGET) $(TEST_VECTOR_DB_TARGET) $(TEST_DOCUMENT_STORE_TARGET) $(TEST_MCP_CLIENT_TARGET) $(TEST_SUBAGENT_TOOL_TARGET)
+ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_ENV_TARGET) $(TEST_CONFIG_TARGET) $(TEST_PROMPT_TARGET) $(TEST_DEBUG_OUTPUT_TARGET) $(TEST_CONVERSATION_TARGET) $(TEST_CONVERSATION_VDB_TARGET) $(TEST_TOOL_CALLS_NOT_STORED_TARGET) $(TEST_TODO_MANAGER_TARGET) $(TEST_TODO_TOOL_TARGET) $(TEST_PDF_EXTRACTOR_TARGET) $(TEST_DOCUMENT_CHUNKER_TARGET) $(TEST_HTTP_TARGET) $(TEST_HTTP_RETRY_TARGET) $(TEST_STREAMING_TARGET) $(TEST_OUTPUT_TARGET) $(TEST_TOOLS_TARGET) $(TEST_SHELL_TARGET) $(TEST_FILE_TARGET) $(TEST_FILE_FILTER_TARGET) $(TEST_SMART_FILE_TARGET) $(TEST_VECTOR_DB_TOOL_TARGET) $(TEST_MEMORY_TOOL_TARGET) $(TEST_PYTHON_TOOL_TARGET) $(TEST_PYTHON_INTEGRATION_TARGET) $(TEST_MEMORY_MGMT_TARGET) $(TEST_TOKEN_MANAGER_TARGET) $(TEST_CONVERSATION_COMPACTOR_TARGET) $(TEST_RALPH_TARGET) $(TEST_INCOMPLETE_TASK_BUG_TARGET) $(TEST_MODEL_TOOLS_TARGET) $(TEST_MESSAGES_ARRAY_BUG_TARGET) $(TEST_VECTOR_DB_TARGET) $(TEST_DOCUMENT_STORE_TARGET) $(TEST_MCP_CLIENT_TARGET) $(TEST_SUBAGENT_TOOL_TARGET)
 
 # =============================================================================
 # BUILD RULES
@@ -532,6 +538,9 @@ $(TEST_MESSAGES_ARRAY_BUG_TARGET): $(TEST_MESSAGES_ARRAY_BUG_OBJECTS) $(EMBEDDED
 $(TEST_HTTP_RETRY_TARGET): $(TEST_HTTP_RETRY_OBJECTS) $(CJSON_LIB) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
 	$(CC) -o $@ $(TEST_HTTP_RETRY_OBJECTS) $(CJSON_LIB) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) -lm
 
+$(TEST_STREAMING_TARGET): $(TEST_STREAMING_OBJECTS)
+	$(CC) -o $@ $(TEST_STREAMING_OBJECTS)
+
 $(TEST_MCP_CLIENT_TARGET): $(TEST_MCP_CLIENT_OBJECTS) $(EMBEDDED_LINKS_HEADER) $(ALL_LIBS)
 	$(CXX) -o $@ $(TEST_MCP_CLIENT_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(PYTHON_LIB) -lm -lpthread
 
@@ -553,6 +562,7 @@ test: $(ALL_TEST_TARGETS)
 	./$(TEST_MAIN_TARGET)
 	./$(TEST_HTTP_TARGET)
 	./$(TEST_HTTP_RETRY_TARGET)
+	./$(TEST_STREAMING_TARGET)
 	./$(TEST_ENV_TARGET)
 	./$(TEST_OUTPUT_TARGET)
 	./$(TEST_PROMPT_TARGET)
@@ -592,6 +602,7 @@ check-valgrind: $(ALL_TEST_TARGETS)
 	@echo "Running valgrind tests (excluding HTTP and Python tests)..."
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_MAIN_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_HTTP_RETRY_TARGET).aarch64.elf
+	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_STREAMING_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_ENV_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_OUTPUT_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_PROMPT_TARGET).aarch64.elf
