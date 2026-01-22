@@ -627,3 +627,64 @@ void cleanup_output_formatter(void) {
         g_model_registry = NULL;
     }
 }
+
+// =============================================================================
+// Streaming Display Functions
+// =============================================================================
+
+void display_streaming_init(void) {
+    // Clear any "thinking" indicator and position cursor for streaming output
+    fflush(stdout);
+}
+
+void display_streaming_text(const char* text, size_t len) {
+    if (text == NULL || len == 0) {
+        return;
+    }
+    fwrite(text, 1, len, stdout);
+    fflush(stdout);
+}
+
+void display_streaming_thinking(const char* text, size_t len) {
+    if (text == NULL || len == 0) {
+        return;
+    }
+    // Display in dimmed gray style
+    printf(ANSI_DIM ANSI_GRAY);
+    fwrite(text, 1, len, stdout);
+    printf(ANSI_RESET);
+    fflush(stdout);
+}
+
+void display_streaming_tool_start(const char* tool_name) {
+    if (tool_name == NULL) {
+        return;
+    }
+    printf("\n" ANSI_CYAN "[Calling %s...]" ANSI_RESET "\n", tool_name);
+    fflush(stdout);
+}
+
+void display_streaming_complete(int input_tokens, int output_tokens) {
+    // Final newline
+    printf("\n");
+
+    // Display token usage if available
+    if (input_tokens > 0 || output_tokens > 0) {
+        int total_tokens = input_tokens + output_tokens;
+        printf(ANSI_DIM "    └─ %d tokens", total_tokens);
+        if (input_tokens > 0 && output_tokens > 0) {
+            printf(" (%d prompt + %d completion)", input_tokens, output_tokens);
+        }
+        printf(ANSI_RESET "\n");
+    }
+
+    fflush(stdout);
+}
+
+void display_streaming_error(const char* error) {
+    if (error == NULL) {
+        return;
+    }
+    fprintf(stderr, "\n" ANSI_RED "Error: %s" ANSI_RESET "\n", error);
+    fflush(stderr);
+}
