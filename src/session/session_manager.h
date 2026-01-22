@@ -16,6 +16,7 @@ typedef struct {
     const char* max_tokens_param;
     int api_type;  // 0=OpenAI, 1=Anthropic, 2=Local
     bool enable_streaming;  // Default: true
+    bool json_output_mode;  // Default: false
 } SessionConfig;
 
 typedef struct {

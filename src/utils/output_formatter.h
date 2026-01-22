@@ -5,6 +5,26 @@
 #include <stdbool.h>
 
 
+// =============================================================================
+// JSON Output Mode Control
+// =============================================================================
+
+/**
+ * Set JSON output mode enabled/disabled.
+ * When enabled, terminal display functions become no-ops and JSON output
+ * should be used instead.
+ *
+ * @param enabled true to enable JSON mode, false for terminal mode
+ */
+void set_json_output_mode(bool enabled);
+
+/**
+ * Get current JSON output mode state.
+ *
+ * @return true if JSON mode is enabled, false otherwise
+ */
+bool get_json_output_mode(void);
+
 // ANSI color codes
 #define ANSI_RESET   "\033[0m"
 #define ANSI_GRAY    "\033[90m"

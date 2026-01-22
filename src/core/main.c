@@ -5,6 +5,8 @@
 #include <readline/history.h>
 #include "ralph.h"
 #include "debug_output.h"
+#include "output_formatter.h"
+#include "json_output.h"
 #include "../cli/memory_commands.h"
 #include "../tools/subagent_tool.h"
 
@@ -15,6 +17,7 @@ int main(int argc, char *argv[])
     // Parse command line arguments
     bool debug_mode = false;
     bool no_stream = false;
+    bool json_mode = false;
     int message_arg_index = -1;
     int subagent_mode = 0;
     char *subagent_task = NULL;
@@ -25,6 +28,8 @@ int main(int argc, char *argv[])
             debug_mode = true;
         } else if (strcmp(argv[i], "--no-stream") == 0) {
             no_stream = true;
+        } else if (strcmp(argv[i], "--json") == 0) {
+            json_mode = true;
         } else if (strcmp(argv[i], "--subagent") == 0) {
             subagent_mode = 1;
         } else if (strcmp(argv[i], "--task") == 0 && i + 1 < argc) {
@@ -74,6 +79,13 @@ int main(int argc, char *argv[])
             session.session_data.config.enable_streaming = false;
         }
 
+        // Enable JSON output mode if --json flag was passed
+        if (json_mode) {
+            session.session_data.config.json_output_mode = true;
+            set_json_output_mode(true);
+            json_output_init();
+        }
+
         // Process the user message
         int result = ralph_process_message(&session, user_message);
         
@@ -82,16 +94,18 @@ int main(int argc, char *argv[])
         return (result == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
     } else if (message_arg_index == -1) {
         // Interactive mode (no message argument provided)
-        printf("\033[1mRalph\033[0m - AI Assistant\n");
-        printf("Commands: quit, exit | Ctrl+D to end\n\n");
-        
+        if (!json_mode) {
+            printf("\033[1mRalph\033[0m - AI Assistant\n");
+            printf("Commands: quit, exit | Ctrl+D to end\n\n");
+        }
+
         // Initialize Ralph session
         RalphSession session;
         if (ralph_init_session(&session) != 0) {
             fprintf(stderr, "Error: Failed to initialize Ralph session\n");
             return EXIT_FAILURE;
         }
-        
+
         // Load configuration
         if (ralph_load_config(&session) != 0) {
             fprintf(stderr, "Error: Failed to load Ralph configuration\n");
@@ -104,17 +118,25 @@ int main(int argc, char *argv[])
             session.session_data.config.enable_streaming = false;
         }
 
+        // Enable JSON output mode if --json flag was passed
+        if (json_mode) {
+            session.session_data.config.json_output_mode = true;
+            set_json_output_mode(true);
+            json_output_init();
+        }
+
         // Check if this is a first-time user (no conversation history)
-        if (session.session_data.conversation.count == 0) {
+        // Skip welcome message in JSON mode
+        if (session.session_data.conversation.count == 0 && !json_mode) {
             debug_printf("Generating welcome message...\n");
-            
+
             // Send a system message to get an AI-generated greeting
             const char* greeting_prompt = "This is your first interaction with this user in interactive mode. "
                                         "Please introduce yourself as Ralph, briefly explain your capabilities "
                                         "(answering questions, running shell commands, file operations, problem-solving), "
                                         "and ask what you can help with today. Keep it warm, concise, and engaging. "
                                         "Make it feel personal and conversational, not like a static template.";
-            
+
             // Send initial greeting (indicator will be cleared immediately)
             int result = ralph_process_message(&session, greeting_prompt);
             if (result != 0) {
@@ -194,6 +216,7 @@ int main(int argc, char *argv[])
         fprintf(stderr, "\033[1mOptions:\033[0m\n");
         fprintf(stderr, "  --debug               Show API debug output\n");
         fprintf(stderr, "  --no-stream           Disable streaming (use buffered responses)\n");
+        fprintf(stderr, "  --json                Output JSON (machine-readable format)\n");
         fprintf(stderr, "  --subagent            Run as subagent (internal use)\n");
         fprintf(stderr, "  --task \"task\"         Task for subagent to execute\n");
         fprintf(stderr, "  --context \"ctx\"       Optional context for subagent\n\n");

@@ -3,6 +3,7 @@
 #include "env_loader.h"
 #include "utils/config.h"
 #include "output_formatter.h"
+#include "json_output.h"
 #include "prompt_loader.h"
 #include "shell_tool.h"
 #include "todo_tool.h"
@@ -594,6 +595,11 @@ int ralph_execute_tool_workflow(RalphSession* session, ToolCall* tool_calls, int
         } else {
             debug_printf("Executed tool: %s (ID: %s)\n", tool_calls[i].name, tool_calls[i].id);
         }
+
+        // Output tool result in JSON mode
+        if (session->session_data.config.json_output_mode) {
+            json_output_tool_result(tool_calls[i].id, results[i].result, !results[i].success);
+        }
     }
     
     // End tool execution group for improved visual formatting
@@ -811,6 +817,13 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
         
         // Save assistant response to conversation
         if (tool_parse_result == 0 && call_count > 0) {
+            // Output tool calls in JSON mode
+            if (session->session_data.config.json_output_mode) {
+                json_output_assistant_tool_calls_buffered(tool_calls, call_count,
+                                                          parsed_response.prompt_tokens,
+                                                          parsed_response.completion_tokens);
+            }
+
             // For responses with tool calls, use model-specific formatting
             // Use parsed assistant_content, not raw response.data (which contains full API response JSON)
             char* formatted_message = format_model_assistant_tool_message(model_registry,
@@ -850,9 +863,16 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
                 if (append_conversation_message(&session->session_data.conversation, "assistant", assistant_content) != 0) {
                     fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
                 }
+
+                // Output text response in JSON mode
+                if (session->session_data.config.json_output_mode) {
+                    json_output_assistant_text(assistant_content,
+                                               parsed_response.prompt_tokens,
+                                               parsed_response.completion_tokens);
+                }
             }
         }
-        
+
         cleanup_parsed_response(&parsed_response);
         cleanup_response(&response);
         free(post_data);
@@ -944,6 +964,12 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
                 debug_printf("Executed tool: %s (ID: %s) in iteration %d\n",
                            tool_calls[i].name, tool_calls[i].id, loop_count);
             }
+
+            // Output tool result in JSON mode
+            if (session->session_data.config.json_output_mode) {
+                json_output_tool_result(tool_calls[i].id, results[executed_count].result, !results[executed_count].success);
+            }
+
             executed_count++;
         }
         
@@ -1188,6 +1214,11 @@ static int ralph_process_message_streaming(RalphSession* session, const char* us
                 free(constructed_message);
             }
 
+            // Output tool calls in JSON mode
+            if (session->session_data.config.json_output_mode) {
+                json_output_assistant_tool_calls(ctx->tool_uses, ctx->tool_use_count, input_tokens, output_tokens);
+            }
+
             // Execute tool workflow
             result = ralph_execute_tool_workflow(session, tool_calls, ctx->tool_use_count,
                                                  user_message, max_tokens, headers);
@@ -1201,6 +1232,11 @@ static int ralph_process_message_streaming(RalphSession* session, const char* us
         if (ctx->text_content != NULL && ctx->text_len > 0) {
             if (append_conversation_message(&session->session_data.conversation, "assistant", ctx->text_content) != 0) {
                 fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
+            }
+
+            // Output text response in JSON mode
+            if (session->session_data.config.json_output_mode) {
+                json_output_assistant_text(ctx->text_content, input_tokens, output_tokens);
             }
         }
         // Display token counts for non-tool responses
@@ -1312,9 +1348,11 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
     debug_printf("Making API request to %s\n", session->session_data.config.api_url);
     debug_printf("POST data: %s\n\n", post_data);
 
-    // Display subtle thinking indicator to user
-    fprintf(stdout, "\033[36m•\033[0m ");
-    fflush(stdout);
+    // Display subtle thinking indicator to user (skip in JSON mode)
+    if (!session->session_data.config.json_output_mode) {
+        fprintf(stdout, "\033[36m•\033[0m ");
+        fflush(stdout);
+    }
 
     struct HTTPResponse response = {0};
     int result = -1;
@@ -1365,9 +1403,11 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
             return -1;
         }
         
-        // Clear the thinking indicator on success
-        fprintf(stdout, "\r\033[K");
-        fflush(stdout);
+        // Clear the thinking indicator on success (skip in JSON mode)
+        if (!session->session_data.config.json_output_mode) {
+            fprintf(stdout, "\r\033[K");
+            fflush(stdout);
+        }
         
         const char* message_content = parsed_response.response_content ? 
                                      parsed_response.response_content : 
@@ -1480,12 +1520,19 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
                 }
                 
                 // Use response_content for the assistant's message (this is the main content without thinking)
-                const char* assistant_content = parsed_response.response_content ? 
-                                               parsed_response.response_content : 
+                const char* assistant_content = parsed_response.response_content ?
+                                               parsed_response.response_content :
                                                parsed_response.thinking_content;
                 if (assistant_content != NULL) {
                     if (append_conversation_message(&session->session_data.conversation, "assistant", assistant_content) != 0) {
                         fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
+                    }
+
+                    // Output text response in JSON mode
+                    if (session->session_data.config.json_output_mode) {
+                        json_output_assistant_text(assistant_content,
+                                                   parsed_response.prompt_tokens,
+                                                   parsed_response.completion_tokens);
                     }
                 }
                 result = 0;

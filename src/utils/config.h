@@ -28,6 +28,9 @@ typedef struct {
     // Streaming configuration
     bool enable_streaming;      // Default: true
 
+    // JSON output configuration
+    bool json_output_mode;      // Default: false
+
     // Configuration file paths
     char *config_file_path;
     bool config_loaded;

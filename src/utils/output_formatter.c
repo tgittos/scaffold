@@ -6,6 +6,20 @@
 #include <string.h>
 #include <stdarg.h>
 
+// =============================================================================
+// JSON Output Mode State
+// =============================================================================
+
+static bool g_json_output_mode = false;
+
+void set_json_output_mode(bool enabled) {
+    g_json_output_mode = enabled;
+}
+
+bool get_json_output_mode(void) {
+    return g_json_output_mode;
+}
+
 // State for streaming display
 static int streaming_first_chunk = 1;
 
@@ -500,31 +514,41 @@ void print_formatted_response_improved(const ParsedResponse *response) {
     if (!response) {
         return;
     }
-    
+
+    // In JSON mode, terminal display is suppressed
+    if (g_json_output_mode) {
+        return;
+    }
+
     // Print thinking content in dim gray if present (unchanged behavior)
     if (response->thinking_content) {
         printf(ANSI_DIM ANSI_GRAY "%s" ANSI_RESET "\n\n", response->thinking_content);
     }
-    
+
     // Print the main response content prominently
     if (response->response_content) {
         printf("%s\n", response->response_content);
-        
+
         // Print token usage on separate line, grouped with response
         if (response->total_tokens > 0) {
             if (response->prompt_tokens > 0 && response->completion_tokens > 0) {
-                printf(ANSI_DIM "    └─ %d tokens (%d prompt + %d completion)\n" ANSI_RESET, 
+                printf(ANSI_DIM "    └─ %d tokens (%d prompt + %d completion)\n" ANSI_RESET,
                        response->total_tokens, response->prompt_tokens, response->completion_tokens);
             } else {
                 printf(ANSI_DIM "    └─ %d tokens\n" ANSI_RESET, response->total_tokens);
             }
         }
-        
+
         printf("\n");
     }
 }
 
 void display_tool_execution_group_start(void) {
+    // In JSON mode, terminal display is suppressed
+    if (g_json_output_mode) {
+        return;
+    }
+
     if (!tool_execution_group_active) {
         // Professional header for tool execution section with proper width (80 chars total)
         printf(ANSI_CYAN "┌─ " ANSI_BOLD "Tool Execution" ANSI_RESET ANSI_CYAN " ─────────────────────────────────────────────────────────────┐" ANSI_RESET "\n");
@@ -533,6 +557,11 @@ void display_tool_execution_group_start(void) {
 }
 
 void display_tool_execution_group_end(void) {
+    // In JSON mode, terminal display is suppressed
+    if (g_json_output_mode) {
+        return;
+    }
+
     if (tool_execution_group_active) {
         printf(ANSI_CYAN "└──────────────────────────────────────────────────────────────────────────────┘" ANSI_RESET "\n\n");
         tool_execution_group_active = false;
@@ -588,6 +617,11 @@ static bool is_informational_check(const char *tool_name, const char *arguments)
 
 void log_tool_execution_improved(const char *tool_name, const char *arguments, bool success, const char *result) {
     if (!tool_name) return;
+
+    // In JSON mode, terminal display is suppressed (tool results handled via json_output_tool_result)
+    if (g_json_output_mode) {
+        return;
+    }
 
     // Skip internal todo tool logging
     if (strcmp(tool_name, "TodoWrite") == 0) {
@@ -693,6 +727,11 @@ void cleanup_output_formatter(void) {
 // =============================================================================
 
 void display_streaming_init(void) {
+    // In JSON mode, terminal display is suppressed
+    if (g_json_output_mode) {
+        return;
+    }
+
     // Display thinking indicator while waiting for first chunk
     streaming_first_chunk = 1;
     fprintf(stdout, "\033[36m•\033[0m ");
@@ -703,6 +742,12 @@ void display_streaming_text(const char* text, size_t len) {
     if (text == NULL || len == 0) {
         return;
     }
+
+    // In JSON mode, terminal display is suppressed
+    if (g_json_output_mode) {
+        return;
+    }
+
     // Clear thinking indicator on first chunk
     if (streaming_first_chunk) {
         fprintf(stdout, "\r\033[K");
@@ -716,6 +761,12 @@ void display_streaming_thinking(const char* text, size_t len) {
     if (text == NULL || len == 0) {
         return;
     }
+
+    // In JSON mode, terminal display is suppressed
+    if (g_json_output_mode) {
+        return;
+    }
+
     // Clear thinking indicator on first chunk
     if (streaming_first_chunk) {
         fprintf(stdout, "\r\033[K");
@@ -732,6 +783,12 @@ void display_streaming_tool_start(const char* tool_name) {
     if (tool_name == NULL) {
         return;
     }
+
+    // In JSON mode, terminal display is suppressed
+    if (g_json_output_mode) {
+        return;
+    }
+
     // Clear thinking indicator on first chunk
     if (streaming_first_chunk) {
         fprintf(stdout, "\r\033[K");
@@ -743,6 +800,11 @@ void display_streaming_tool_start(const char* tool_name) {
 }
 
 void display_streaming_complete(int input_tokens, int output_tokens) {
+    // In JSON mode, terminal display is suppressed
+    if (g_json_output_mode) {
+        return;
+    }
+
     // Final newline
     printf("\n");
 

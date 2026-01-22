@@ -49,6 +49,9 @@ static int config_set_defaults(ralph_config_t *config)
     // Set streaming configuration default
     config->enable_streaming = true;
 
+    // Set JSON output configuration default
+    config->json_output_mode = false;
+
     return 0;
 }
 
