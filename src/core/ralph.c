@@ -5,7 +5,6 @@
 #include "output_formatter.h"
 #include "json_output.h"
 #include "prompt_loader.h"
-#include "shell_tool.h"
 #include "todo_tool.h"
 #include "todo_display.h"
 #include "debug_output.h"

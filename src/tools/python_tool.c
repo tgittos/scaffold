@@ -1,4 +1,5 @@
 #include "python_tool.h"
+#include "python_tool_files.h"
 #include <cJSON.h>
 #include <Python.h>
 #include <stdio.h>
@@ -82,6 +83,19 @@ int python_interpreter_init(void) {
     Py_INCREF(globals_dict);
 
     interpreter_initialized = 1;
+
+    // Initialize Python tool files system (creates ~/.local/ralph/tools/ if needed)
+    if (python_init_tool_files() != 0) {
+        fprintf(stderr, "Warning: Failed to initialize Python tool files\n");
+        // Continue anyway - the base Python tool still works
+    }
+
+    // Load Python tool files into the interpreter's global scope
+    if (python_load_tool_files() != 0) {
+        fprintf(stderr, "Warning: Failed to load Python tool files\n");
+        // Continue anyway - the base Python tool still works
+    }
+
     return 0;
 }
 
@@ -102,6 +116,9 @@ void python_interpreter_shutdown(void) {
         }
         sigaction_saved = 0;
     }
+
+    // Cleanup Python tool files before finalizing interpreter
+    python_cleanup_tool_files();
 
     if (globals_dict != NULL) {
         Py_DECREF(globals_dict);

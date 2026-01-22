@@ -57,9 +57,6 @@ CORE_SOURCES := $(SRCDIR)/core/main.c \
 
 # Tool system
 TOOL_SOURCES := $(SRCDIR)/tools/tools_system.c \
-                $(SRCDIR)/tools/shell_tool.c \
-                $(SRCDIR)/tools/file_tools.c \
-                $(SRCDIR)/tools/links_tool.c \
                 $(SRCDIR)/tools/todo_manager.c \
                 $(SRCDIR)/tools/todo_tool.c \
                 $(SRCDIR)/tools/todo_display.c \
@@ -68,7 +65,8 @@ TOOL_SOURCES := $(SRCDIR)/tools/tools_system.c \
                 $(SRCDIR)/tools/pdf_tool.c \
                 $(SRCDIR)/tools/tool_result_builder.c \
                 $(SRCDIR)/tools/subagent_tool.c \
-                $(SRCDIR)/tools/python_tool.c
+                $(SRCDIR)/tools/python_tool.c \
+                $(SRCDIR)/tools/python_tool_files.c
 
 # MCP system
 MCP_SOURCES := $(SRCDIR)/mcp/mcp_client.c
@@ -242,26 +240,6 @@ TEST_TOOLS_CPP_SOURCES = $(DB_CPP_SOURCES)
 TEST_TOOLS_OBJECTS = $(TEST_TOOLS_C_SOURCES:.c=.o) $(TEST_TOOLS_CPP_SOURCES:.cpp=.o)
 TEST_TOOLS_TARGET = $(TESTDIR)/test_tools_system
 
-TEST_SHELL_C_SOURCES = $(TESTDIR)/tools/test_shell_tool.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
-TEST_SHELL_CPP_SOURCES = $(DB_CPP_SOURCES)
-TEST_SHELL_OBJECTS = $(TEST_SHELL_C_SOURCES:.c=.o) $(TEST_SHELL_CPP_SOURCES:.cpp=.o)
-TEST_SHELL_TARGET = $(TESTDIR)/test_shell_tool
-
-TEST_FILE_C_SOURCES = $(TESTDIR)/tools/test_file_tools.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
-TEST_FILE_CPP_SOURCES = $(DB_CPP_SOURCES)
-TEST_FILE_OBJECTS = $(TEST_FILE_C_SOURCES:.c=.o) $(TEST_FILE_CPP_SOURCES:.cpp=.o)
-TEST_FILE_TARGET = $(TESTDIR)/test_file_tools
-
-TEST_FILE_FILTER_C_SOURCES = $(TESTDIR)/tools/test_file_search_filtering.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
-TEST_FILE_FILTER_CPP_SOURCES = $(DB_CPP_SOURCES)
-TEST_FILE_FILTER_OBJECTS = $(TEST_FILE_FILTER_C_SOURCES:.c=.o) $(TEST_FILE_FILTER_CPP_SOURCES:.cpp=.o)
-TEST_FILE_FILTER_TARGET = $(TESTDIR)/test_file_search_filtering
-
-TEST_SMART_FILE_C_SOURCES = $(TESTDIR)/tools/test_smart_file_tools.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
-TEST_SMART_FILE_CPP_SOURCES = $(DB_CPP_SOURCES)
-TEST_SMART_FILE_OBJECTS = $(TEST_SMART_FILE_C_SOURCES:.c=.o) $(TEST_SMART_FILE_CPP_SOURCES:.cpp=.o)
-TEST_SMART_FILE_TARGET = $(TESTDIR)/test_smart_file_tools
-
 TEST_VECTOR_DB_TOOL_C_SOURCES = $(TESTDIR)/tools/test_vector_db_tool.c $(SRCDIR)/utils/env_loader.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
 TEST_VECTOR_DB_TOOL_CPP_SOURCES = $(DB_CPP_SOURCES)
 TEST_VECTOR_DB_TOOL_OBJECTS = $(TEST_VECTOR_DB_TOOL_C_SOURCES:.c=.o) $(TEST_VECTOR_DB_TOOL_CPP_SOURCES:.cpp=.o)
@@ -366,7 +344,7 @@ TEST_SUBAGENT_TOOL_OBJECTS = $(TEST_SUBAGENT_TOOL_C_SOURCES:.c=.o) $(TEST_SUBAGE
 TEST_SUBAGENT_TOOL_TARGET = $(TESTDIR)/test_subagent_tool
 
 # Collect all test targets
-ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_ENV_TARGET) $(TEST_CONFIG_TARGET) $(TEST_PROMPT_TARGET) $(TEST_DEBUG_OUTPUT_TARGET) $(TEST_JSON_OUTPUT_TARGET) $(TEST_CONVERSATION_TARGET) $(TEST_CONVERSATION_VDB_TARGET) $(TEST_TOOL_CALLS_NOT_STORED_TARGET) $(TEST_TODO_MANAGER_TARGET) $(TEST_TODO_TOOL_TARGET) $(TEST_PDF_EXTRACTOR_TARGET) $(TEST_DOCUMENT_CHUNKER_TARGET) $(TEST_HTTP_TARGET) $(TEST_HTTP_RETRY_TARGET) $(TEST_STREAMING_TARGET) $(TEST_OPENAI_STREAMING_TARGET) $(TEST_ANTHROPIC_STREAMING_TARGET) $(TEST_OUTPUT_TARGET) $(TEST_TOOLS_TARGET) $(TEST_SHELL_TARGET) $(TEST_FILE_TARGET) $(TEST_FILE_FILTER_TARGET) $(TEST_SMART_FILE_TARGET) $(TEST_VECTOR_DB_TOOL_TARGET) $(TEST_MEMORY_TOOL_TARGET) $(TEST_PYTHON_TOOL_TARGET) $(TEST_PYTHON_INTEGRATION_TARGET) $(TEST_MEMORY_MGMT_TARGET) $(TEST_TOKEN_MANAGER_TARGET) $(TEST_CONVERSATION_COMPACTOR_TARGET) $(TEST_RALPH_TARGET) $(TEST_INCOMPLETE_TASK_BUG_TARGET) $(TEST_MODEL_TOOLS_TARGET) $(TEST_MESSAGES_ARRAY_BUG_TARGET) $(TEST_VECTOR_DB_TARGET) $(TEST_DOCUMENT_STORE_TARGET) $(TEST_MCP_CLIENT_TARGET) $(TEST_SUBAGENT_TOOL_TARGET)
+ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_ENV_TARGET) $(TEST_CONFIG_TARGET) $(TEST_PROMPT_TARGET) $(TEST_DEBUG_OUTPUT_TARGET) $(TEST_JSON_OUTPUT_TARGET) $(TEST_CONVERSATION_TARGET) $(TEST_CONVERSATION_VDB_TARGET) $(TEST_TOOL_CALLS_NOT_STORED_TARGET) $(TEST_TODO_MANAGER_TARGET) $(TEST_TODO_TOOL_TARGET) $(TEST_PDF_EXTRACTOR_TARGET) $(TEST_DOCUMENT_CHUNKER_TARGET) $(TEST_HTTP_TARGET) $(TEST_HTTP_RETRY_TARGET) $(TEST_STREAMING_TARGET) $(TEST_OPENAI_STREAMING_TARGET) $(TEST_ANTHROPIC_STREAMING_TARGET) $(TEST_OUTPUT_TARGET) $(TEST_TOOLS_TARGET) $(TEST_VECTOR_DB_TOOL_TARGET) $(TEST_MEMORY_TOOL_TARGET) $(TEST_PYTHON_TOOL_TARGET) $(TEST_PYTHON_INTEGRATION_TARGET) $(TEST_MEMORY_MGMT_TARGET) $(TEST_TOKEN_MANAGER_TARGET) $(TEST_CONVERSATION_COMPACTOR_TARGET) $(TEST_RALPH_TARGET) $(TEST_INCOMPLETE_TASK_BUG_TARGET) $(TEST_MODEL_TOOLS_TARGET) $(TEST_MESSAGES_ARRAY_BUG_TARGET) $(TEST_VECTOR_DB_TARGET) $(TEST_DOCUMENT_STORE_TARGET) $(TEST_MCP_CLIENT_TARGET) $(TEST_SUBAGENT_TOOL_TARGET)
 
 # =============================================================================
 # BUILD RULES
@@ -375,31 +353,38 @@ ALL_TEST_TARGETS = $(TEST_MAIN_TARGET) $(TEST_ENV_TARGET) $(TEST_CONFIG_TARGET) 
 # Python stdlib embedding directory
 PYTHON_STDLIB_DIR := python/build/results/py-tmp
 
-# Default target - build ralph and embed Python stdlib
-all: $(TARGET) embed-stdlib
+# Python default tools directory (embedded for self-healing)
+PYTHON_DEFAULTS_DIR := src/tools/python_defaults
+
+# Default target - build ralph and embed Python stdlib and defaults
+all: $(TARGET) embed-python
 
 # Main executable
-$(TARGET): $(EMBEDDED_LINKS_HEADER) $(OBJECTS) $(ALL_LIBS) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
+$(TARGET): $(OBJECTS) $(ALL_LIBS) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
 	@echo "Linking with PDFio support"
 	$(CXX) $(LDFLAGS) -o $@ $(OBJECTS) $(LIBS) -lpthread
 
-# Embed Python stdlib into ralph binary using Cosmopolitan APE zip feature
+# Embed Python stdlib AND default tools into ralph binary in a single zipcopy call
+# zipcopy overwrites existing zip content, so we must combine everything into one zip
 # The stdlib must be at /zip/lib/python3.12/ for Python to find it with PYTHONHOME=/zip
-# Uses zipcopy (Cosmopolitan's zip tool) since standard zip doesn't work with APE binaries
-embed-stdlib: $(TARGET)
-	@if [ -d "$(PYTHON_STDLIB_DIR)/lib" ]; then \
-		echo "Embedding Python stdlib into ralph binary..."; \
-		rm -f $(BUILDDIR)/stdlib.zip; \
-		cd $(PYTHON_STDLIB_DIR) && zip -qr $(CURDIR)/$(BUILDDIR)/stdlib.zip lib/; \
-		zipcopy $(CURDIR)/$(BUILDDIR)/stdlib.zip $(CURDIR)/$(TARGET); \
-		rm -f $(BUILDDIR)/stdlib.zip; \
-		echo "Stdlib embedded successfully."; \
-		ls -lh $(CURDIR)/$(TARGET) | awk '{print "Binary size: " $$5}'; \
-	else \
+embed-python: $(TARGET)
+	@if [ ! -d "$(PYTHON_STDLIB_DIR)/lib" ]; then \
 		echo "Error: Python stdlib not found at $(PYTHON_STDLIB_DIR)/lib" >&2; \
 		echo "Run 'make python' first to build the Python stdlib." >&2; \
 		exit 1; \
 	fi
+	@if [ ! -d "$(PYTHON_DEFAULTS_DIR)" ]; then \
+		echo "Error: Python defaults not found at $(PYTHON_DEFAULTS_DIR)" >&2; \
+		exit 1; \
+	fi
+	@echo "Embedding Python stdlib and default tools into ralph binary..."
+	@rm -f $(BUILDDIR)/python-embed.zip
+	@cd $(PYTHON_STDLIB_DIR) && zip -qr $(CURDIR)/$(BUILDDIR)/python-embed.zip lib/
+	@cd $(SRCDIR)/tools && zip -qr $(CURDIR)/$(BUILDDIR)/python-embed.zip python_defaults/
+	@zipcopy $(CURDIR)/$(BUILDDIR)/python-embed.zip $(CURDIR)/$(TARGET)
+	@rm -f $(BUILDDIR)/python-embed.zip
+	@echo "Python embedding complete."
+	@ls -lh $(CURDIR)/$(TARGET) | awk '{print "Binary size: " $$5}'
 
 # Embedded links
 $(BIN2C): build/bin2c.c
@@ -420,8 +405,6 @@ $(LINKS_BUNDLED):
 	fi
 
 # Compilation rules
-$(SRCDIR)/tools/links_tool.o: $(SRCDIR)/tools/links_tool.c $(EMBEDDED_LINKS_HEADER) $(HEADERS) $(ALL_LIBS) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
-	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 $(SRCDIR)/%.o: $(SRCDIR)/%.c $(HEADERS) $(ALL_LIBS) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
@@ -489,18 +472,6 @@ $(TEST_OUTPUT_TARGET): $(TEST_OUTPUT_OBJECTS) $(ALL_LIBS)
 $(TEST_TOOLS_TARGET): $(TEST_TOOLS_OBJECTS) $(ALL_LIBS)
 	$(CXX) -o $@ $(TEST_TOOLS_OBJECTS) src/session/conversation_tracker.o $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(PYTHON_LIB) -lm -lpthread
 
-$(TEST_SHELL_TARGET): $(TEST_SHELL_OBJECTS) $(ALL_LIBS)
-	$(CXX) -o $@ $(TEST_SHELL_OBJECTS) src/session/conversation_tracker.o $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(PYTHON_LIB) -lm -lpthread
-
-$(TEST_FILE_TARGET): $(TEST_FILE_OBJECTS) $(ALL_LIBS)
-	$(CXX) -o $@ $(TEST_FILE_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(PYTHON_LIB) -lm -lpthread
-
-$(TEST_FILE_FILTER_TARGET): $(TEST_FILE_FILTER_OBJECTS) $(ALL_LIBS)
-	$(CXX) -o $@ $(TEST_FILE_FILTER_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(PYTHON_LIB) -lm -lpthread
-
-$(TEST_SMART_FILE_TARGET): $(TEST_SMART_FILE_OBJECTS) $(ALL_LIBS)
-	$(CXX) -o $@ $(TEST_SMART_FILE_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(PYTHON_LIB) -lm -lpthread
-
 $(TEST_VECTOR_DB_TOOL_TARGET): $(TEST_VECTOR_DB_TOOL_OBJECTS) $(ALL_LIBS)
 	$(CXX) -o $@ $(TEST_VECTOR_DB_TOOL_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(PYTHON_LIB) -lm -lpthread
 
@@ -547,19 +518,19 @@ $(TEST_CONVERSATION_COMPACTOR_TARGET): $(TEST_CONVERSATION_COMPACTOR_OBJECTS) $(
 $(TEST_RALPH_TARGET): $(TEST_RALPH_OBJECTS) $(ALL_LIBS)
 	$(CXX) $(LDFLAGS) -o $@ $(TEST_RALPH_OBJECTS) $(LIBS) -lpthread
 
-$(TEST_INCOMPLETE_TASK_BUG_TARGET): $(TEST_INCOMPLETE_TASK_BUG_OBJECTS) $(EMBEDDED_LINKS_HEADER) $(ALL_LIBS)
+$(TEST_INCOMPLETE_TASK_BUG_TARGET): $(TEST_INCOMPLETE_TASK_BUG_OBJECTS) $(ALL_LIBS)
 	$(CXX) -o $@ $(TEST_INCOMPLETE_TASK_BUG_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(PYTHON_LIB) -lm -lpthread
 
-$(TEST_MODEL_TOOLS_TARGET): $(TEST_MODEL_TOOLS_OBJECTS) $(EMBEDDED_LINKS_HEADER) $(ALL_LIBS)
+$(TEST_MODEL_TOOLS_TARGET): $(TEST_MODEL_TOOLS_OBJECTS) $(ALL_LIBS)
 	$(CXX) -o $@ $(TEST_MODEL_TOOLS_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(PYTHON_LIB) -lm -lpthread
 
-$(TEST_OPENAI_STREAMING_TARGET): $(TEST_OPENAI_STREAMING_OBJECTS) $(EMBEDDED_LINKS_HEADER) $(ALL_LIBS)
+$(TEST_OPENAI_STREAMING_TARGET): $(TEST_OPENAI_STREAMING_OBJECTS) $(ALL_LIBS)
 	$(CXX) -o $@ $(TEST_OPENAI_STREAMING_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(PYTHON_LIB) -lm -lpthread
 
-$(TEST_ANTHROPIC_STREAMING_TARGET): $(TEST_ANTHROPIC_STREAMING_OBJECTS) $(EMBEDDED_LINKS_HEADER) $(ALL_LIBS)
+$(TEST_ANTHROPIC_STREAMING_TARGET): $(TEST_ANTHROPIC_STREAMING_OBJECTS) $(ALL_LIBS)
 	$(CXX) -o $@ $(TEST_ANTHROPIC_STREAMING_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(PYTHON_LIB) -lm -lpthread
 
-$(TEST_MESSAGES_ARRAY_BUG_TARGET): $(TEST_MESSAGES_ARRAY_BUG_OBJECTS) $(EMBEDDED_LINKS_HEADER) $(ALL_LIBS)
+$(TEST_MESSAGES_ARRAY_BUG_TARGET): $(TEST_MESSAGES_ARRAY_BUG_OBJECTS) $(ALL_LIBS)
 	$(CXX) -o $@ $(TEST_MESSAGES_ARRAY_BUG_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(PYTHON_LIB) -lm -lpthread
 
 $(TEST_HTTP_RETRY_TARGET): $(TEST_HTTP_RETRY_OBJECTS) $(CJSON_LIB) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
@@ -568,7 +539,7 @@ $(TEST_HTTP_RETRY_TARGET): $(TEST_HTTP_RETRY_OBJECTS) $(CJSON_LIB) $(CURL_LIB) $
 $(TEST_STREAMING_TARGET): $(TEST_STREAMING_OBJECTS)
 	$(CC) -o $@ $(TEST_STREAMING_OBJECTS)
 
-$(TEST_MCP_CLIENT_TARGET): $(TEST_MCP_CLIENT_OBJECTS) $(EMBEDDED_LINKS_HEADER) $(ALL_LIBS)
+$(TEST_MCP_CLIENT_TARGET): $(TEST_MCP_CLIENT_OBJECTS) $(ALL_LIBS)
 	$(CXX) -o $@ $(TEST_MCP_CLIENT_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(PYTHON_LIB) -lm -lpthread
 
 $(TEST_SUBAGENT_TOOL_TARGET): $(TEST_SUBAGENT_TOOL_OBJECTS) $(ALL_LIBS)
@@ -599,10 +570,6 @@ test: $(ALL_TEST_TARGETS)
 	./$(TEST_CONVERSATION_TARGET)
 	./$(TEST_CONVERSATION_VDB_TARGET)
 	./$(TEST_TOOLS_TARGET)
-	./$(TEST_SHELL_TARGET)
-	./$(TEST_FILE_TARGET)
-	./$(TEST_FILE_FILTER_TARGET)
-	./$(TEST_SMART_FILE_TARGET)
 	./$(TEST_RALPH_TARGET)
 	./$(TEST_TODO_MANAGER_TARGET)
 	./$(TEST_TODO_TOOL_TARGET)
@@ -641,8 +608,6 @@ check-valgrind: $(ALL_TEST_TARGETS)
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_CONVERSATION_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_CONVERSATION_VDB_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_TOOLS_TARGET).aarch64.elf
-	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_SHELL_TARGET).aarch64.elf
-	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_FILE_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_RALPH_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_TODO_MANAGER_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_TODO_TOOL_TARGET).aarch64.elf
@@ -668,8 +633,6 @@ check-valgrind-all: $(ALL_TEST_TARGETS)
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_CONVERSATION_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_CONVERSATION_VDB_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_TOOLS_TARGET).aarch64.elf
-	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_SHELL_TARGET).aarch64.elf
-	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_FILE_TARGET).aarch64.elf
 	valgrind --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./$(TEST_RALPH_TARGET).aarch64.elf
 	@echo "All valgrind tests completed"
 
@@ -867,4 +830,4 @@ distclean: clean
 	rm -f $(LINKS_BUNDLED)
 	$(MAKE) -C python distclean
 
-.PHONY: all test check check-valgrind check-valgrind-all clean clean-python distclean python embed-stdlib
+.PHONY: all test check check-valgrind check-valgrind-all clean clean-python distclean python embed-python

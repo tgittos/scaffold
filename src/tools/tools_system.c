@@ -1,13 +1,11 @@
 #include "tools_system.h"
 #include <cJSON.h>
-#include "shell_tool.h"
-#include "file_tools.h"
-#include "links_tool.h"
 #include "todo_tool.h"
 #include "vector_db_tool.h"
 #include "memory_tool.h"
 #include "pdf_tool.h"
 #include "python_tool.h"
+#include "python_tool_files.h"
 #include "output_formatter.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -1039,40 +1037,40 @@ int register_builtin_tools(ToolRegistry *registry) {
     if (registry == NULL) {
         return -1;
     }
-    
-    // Register all built-in tools that are compiled into the binary
-    if (register_shell_tool(registry) != 0) {
-        return -1;
-    }
-    
-    // Register file manipulation tools
-    if (register_file_tools(registry) != 0) {
-        return -1;
-    }
-    
-    // Register Links web browser tool
-    if (register_links_tool(registry) != 0) {
-        return -1;
-    }
-    
+
     // Register vector DB CRUD tool
     if (register_vector_db_tool(registry) != 0) {
         return -1;
     }
-    
+
     // Register memory tools
     if (register_memory_tools(registry) != 0) {
         return -1;
     }
-    
+
     // Register PDF text extraction tool
     if (register_pdf_tool(registry) != 0) {
         return -1;
     }
 
-    // Register Python interpreter tool
+    // Register Python interpreter tool (the host for Python file tools)
     if (register_python_tool(registry) != 0) {
         return -1;
+    }
+
+    // Initialize Python interpreter eagerly so tool files can be loaded and registered
+    // This extracts default tools from /zip/python_defaults/ to ~/.local/ralph/tools/
+    // and loads them into the Python global scope
+    if (python_interpreter_init() != 0) {
+        fprintf(stderr, "Warning: Failed to initialize Python interpreter\n");
+        // Continue anyway - core tools are still available
+    }
+
+    // Register Python file-based tools (read_file, write_file, shell, web_fetch, etc.)
+    // These are loaded from ~/.local/ralph/tools/ and provide external system access
+    if (python_register_tool_schemas(registry) != 0) {
+        fprintf(stderr, "Warning: Failed to register Python file tools\n");
+        // Continue anyway - core tools are still available
     }
 
     return 0;
