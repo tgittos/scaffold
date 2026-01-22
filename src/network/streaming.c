@@ -149,6 +149,9 @@ StreamingContext* streaming_context_create(void) {
     ctx->stop_reason = NULL;
     ctx->error_message = NULL;
 
+    // Initialize SSE event type tracking
+    ctx->current_event_type = NULL;
+
     // Callbacks start as NULL
     ctx->on_text_chunk = NULL;
     ctx->on_thinking_chunk = NULL;
@@ -192,6 +195,10 @@ void streaming_context_free(StreamingContext* ctx) {
     ctx->stop_reason = NULL;
     free(ctx->error_message);
     ctx->error_message = NULL;
+
+    // Free SSE event type
+    free(ctx->current_event_type);
+    ctx->current_event_type = NULL;
 
     free(ctx);
 }
@@ -240,6 +247,10 @@ void streaming_context_reset(StreamingContext* ctx) {
 
     free(ctx->error_message);
     ctx->error_message = NULL;
+
+    // Clear SSE event type
+    free(ctx->current_event_type);
+    ctx->current_event_type = NULL;
 
     // Note: callbacks and user_data are preserved
 }
@@ -304,7 +315,15 @@ int streaming_process_sse_line(StreamingContext* ctx, const char* line, size_t l
     // Check for "event: " prefix
     if (len >= 7 && strncmp(line, "event: ", 7) == 0) {
         ctx->state = STREAM_STATE_READING_EVENT;
-        // Event type is available for provider-specific handling
+        // Store event type for provider-specific handling (e.g., Anthropic)
+        free(ctx->current_event_type);
+        const char* event_start = line + 7;
+        size_t event_len = len - 7;
+        // Trim trailing whitespace
+        while (event_len > 0 && (event_start[event_len - 1] == ' ' || event_start[event_len - 1] == '\t')) {
+            event_len--;
+        }
+        ctx->current_event_type = strndup(event_start, event_len);
         return 0;
     }
 

@@ -44,6 +44,9 @@ typedef struct {
     size_t line_buffer_len;
     size_t line_buffer_capacity;
 
+    // SSE event type (from "event: xxx" line, for providers like Anthropic)
+    char* current_event_type;
+
     // Accumulated text content
     char* text_content;
     size_t text_len;
