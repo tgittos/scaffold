@@ -564,6 +564,7 @@ void display_tool_execution_group_end(void) {
 
     if (tool_execution_group_active) {
         printf(ANSI_CYAN "└──────────────────────────────────────────────────────────────────────────────┘" ANSI_RESET "\n\n");
+        fflush(stdout);
         tool_execution_group_active = false;
     }
 }
