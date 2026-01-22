@@ -18,11 +18,16 @@
 #include "memory_tool.h"
 #include "../utils/context_retriever.h"
 #include "python_tool.h"
+#include "streaming.h"
+#include "llm_provider.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <curl/curl.h>
 #include "json_escape.h"
+
+// Global provider registry for streaming support
+static ProviderRegistry* g_provider_registry = NULL;
 
 // Compatibility wrapper for tests - use json_escape_string instead in new code
 char* ralph_escape_json_string(const char* str) {
@@ -344,6 +349,13 @@ int ralph_init_session(RalphSession* session) {
 
 void ralph_cleanup_session(RalphSession* session) {
     if (session == NULL) return;
+
+    // Cleanup provider registry
+    if (g_provider_registry != NULL) {
+        cleanup_provider_registry(g_provider_registry);
+        free(g_provider_registry);
+        g_provider_registry = NULL;
+    }
 
     // Shutdown Python interpreter if it was initialized
     python_interpreter_shutdown();
@@ -956,6 +968,216 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
     }
 }
 
+// =============================================================================
+// Streaming Support
+// =============================================================================
+
+// Forward declaration for provider registry
+static ProviderRegistry* get_provider_registry(void);
+
+static ProviderRegistry* get_provider_registry(void) {
+    if (g_provider_registry == NULL) {
+        g_provider_registry = malloc(sizeof(ProviderRegistry));
+        if (g_provider_registry != NULL) {
+            if (init_provider_registry(g_provider_registry) == 0) {
+                register_openai_provider(g_provider_registry);
+                register_anthropic_provider(g_provider_registry);
+                register_local_ai_provider(g_provider_registry);
+            }
+        }
+    }
+    return g_provider_registry;
+}
+
+// Streaming context for callbacks
+typedef struct {
+    RalphSession* session;
+    LLMProvider* provider;
+} StreamingUserData;
+
+// Callback: display text chunks as they arrive
+static void streaming_text_callback(const char* text, size_t len, void* user_data) {
+    (void)user_data; // Suppress unused parameter warning
+    display_streaming_text(text, len);
+}
+
+// Callback: display thinking chunks
+static void streaming_thinking_callback(const char* text, size_t len, void* user_data) {
+    (void)user_data; // Suppress unused parameter warning
+    display_streaming_thinking(text, len);
+}
+
+// Callback: display tool use start
+static void streaming_tool_start_callback(const char* id, const char* name, void* user_data) {
+    (void)id; // Suppress unused parameter warning
+    (void)user_data; // Suppress unused parameter warning
+    display_streaming_tool_start(name);
+}
+
+// Callback: stream end
+static void streaming_end_callback(const char* stop_reason, void* user_data) {
+    (void)stop_reason; // Suppress unused parameter warning
+    (void)user_data; // Suppress unused parameter warning
+    // Completion display is handled after we have token counts
+}
+
+// Callback: stream error
+static void streaming_error_callback(const char* error, void* user_data) {
+    (void)user_data; // Suppress unused parameter warning
+    display_streaming_error(error);
+}
+
+// HTTP streaming callback that processes SSE chunks
+static size_t ralph_stream_callback(const char* data, size_t size, void* user_data) {
+    if (data == NULL || size == 0 || user_data == NULL) {
+        return 0;
+    }
+
+    // user_data is a two-element array: [StreamingContext*, LLMProvider*]
+    void** context_array = (void**)user_data;
+    StreamingContext* ctx = (StreamingContext*)context_array[0];
+    LLMProvider* provider = (LLMProvider*)context_array[1];
+
+    if (ctx == NULL) {
+        return 0;
+    }
+
+    // Process the chunk through SSE parser
+    if (streaming_process_chunk(ctx, data, size) != 0) {
+        return 0;
+    }
+
+    // If we have a complete data line, parse it with provider-specific parser
+    const char* json_data = streaming_get_last_data(ctx);
+    if (json_data != NULL && provider != NULL && provider->parse_stream_event != NULL) {
+        size_t json_len = strlen(json_data);
+        if (json_len > 0) {
+            provider->parse_stream_event(provider, ctx, json_data, json_len);
+        }
+    }
+
+    return size;
+}
+
+// Process message using streaming API
+static int ralph_process_message_streaming(RalphSession* session, const char* user_message,
+                                           LLMProvider* provider, int max_tokens, const char** headers) {
+    if (session == NULL || user_message == NULL || provider == NULL) {
+        return -1;
+    }
+
+    // Build enhanced prompt with context
+    char* final_prompt = build_enhanced_prompt_with_context(session, user_message);
+    if (final_prompt == NULL) {
+        return -1;
+    }
+
+    // Build streaming request JSON
+    char* post_data = provider->build_streaming_request_json(
+        provider,
+        session->session_data.config.model,
+        final_prompt,
+        &session->session_data.conversation,
+        user_message,
+        max_tokens,
+        &session->tools
+    );
+
+    free(final_prompt);
+
+    if (post_data == NULL) {
+        fprintf(stderr, "Error: Failed to build streaming JSON payload\n");
+        return -1;
+    }
+
+    debug_printf("Streaming POST data: %s\n\n", post_data);
+
+    // Create streaming context with display callbacks
+    StreamingContext* ctx = streaming_context_create();
+    if (ctx == NULL) {
+        free(post_data);
+        fprintf(stderr, "Error: Failed to create streaming context\n");
+        return -1;
+    }
+
+    // Set up callbacks for real-time display
+    ctx->on_text_chunk = streaming_text_callback;
+    ctx->on_thinking_chunk = streaming_thinking_callback;
+    ctx->on_tool_use_start = streaming_tool_start_callback;
+    ctx->on_stream_end = streaming_end_callback;
+    ctx->on_error = streaming_error_callback;
+
+    // Initialize streaming display
+    display_streaming_init();
+
+    // Set up callback data array: [StreamingContext*, LLMProvider*]
+    void* callback_data[2] = {ctx, provider};
+
+    // Configure streaming HTTP request
+    struct StreamingHTTPConfig streaming_config = {
+        .base = DEFAULT_HTTP_CONFIG,
+        .stream_callback = ralph_stream_callback,
+        .callback_data = callback_data,
+        .low_speed_limit = 1,
+        .low_speed_time = 30
+    };
+
+    // Execute streaming request
+    int result = http_post_streaming(
+        session->session_data.config.api_url,
+        post_data,
+        headers,
+        &streaming_config
+    );
+
+    free(post_data);
+
+    if (result != 0) {
+        streaming_context_free(ctx);
+        fprintf(stderr, "Error: Streaming HTTP request failed\n");
+        return -1;
+    }
+
+    // Display completion with token counts
+    display_streaming_complete(ctx->input_tokens, ctx->output_tokens);
+
+    // Save user message to conversation
+    if (append_conversation_message(&session->session_data.conversation, "user", user_message) != 0) {
+        fprintf(stderr, "Warning: Failed to save user message to conversation history\n");
+    }
+
+    // Save assistant response to conversation
+    if (ctx->text_content != NULL && ctx->text_len > 0) {
+        if (append_conversation_message(&session->session_data.conversation, "assistant", ctx->text_content) != 0) {
+            fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
+        }
+    }
+
+    // Handle tool calls if any
+    if (ctx->tool_use_count > 0) {
+        // Convert streaming tool uses to ToolCall array
+        ToolCall* tool_calls = malloc(ctx->tool_use_count * sizeof(ToolCall));
+        if (tool_calls != NULL) {
+            for (int i = 0; i < ctx->tool_use_count; i++) {
+                tool_calls[i].id = ctx->tool_uses[i].id ? strdup(ctx->tool_uses[i].id) : NULL;
+                tool_calls[i].name = ctx->tool_uses[i].name ? strdup(ctx->tool_uses[i].name) : NULL;
+                tool_calls[i].arguments = ctx->tool_uses[i].arguments_json ? strdup(ctx->tool_uses[i].arguments_json) : NULL;
+            }
+
+            // Execute tool workflow
+            result = ralph_execute_tool_workflow(session, tool_calls, ctx->tool_use_count,
+                                                 user_message, max_tokens, headers);
+
+            cleanup_tool_calls(tool_calls, ctx->tool_use_count);
+        } else {
+            result = -1;
+        }
+    }
+
+    streaming_context_free(ctx);
+    return result;
+}
+
 int ralph_process_message(RalphSession* session, const char* user_message) {
     if (session == NULL || user_message == NULL) return -1;
     
@@ -1020,19 +1242,43 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
             headers[header_count++] = auth_header;
         }
     }
-    
+
+    // Check if streaming is supported for this provider and use it if available
+    ProviderRegistry* provider_registry = get_provider_registry();
+    LLMProvider* provider = NULL;
+    if (provider_registry != NULL) {
+        provider = detect_provider_for_url(provider_registry, session->session_data.config.api_url);
+    }
+
+    // Use streaming if provider supports it
+    if (provider != NULL && provider->supports_streaming != NULL &&
+        provider->supports_streaming(provider) &&
+        provider->build_streaming_request_json != NULL &&
+        provider->parse_stream_event != NULL) {
+
+        debug_printf("Using streaming mode for provider: %s\n", provider->capabilities.name);
+        free(post_data);  // Free the non-streaming payload, streaming function builds its own
+
+        curl_global_init(CURL_GLOBAL_DEFAULT);
+        int result = ralph_process_message_streaming(session, user_message, provider, max_tokens, headers);
+        curl_global_cleanup();
+        return result;
+    }
+
+    debug_printf("Using buffered mode (provider does not support streaming or streaming not available)\n");
+
     curl_global_init(CURL_GLOBAL_DEFAULT);
-    
+
     debug_printf("Making API request to %s\n", session->session_data.config.api_url);
     debug_printf("POST data: %s\n\n", post_data);
-    
+
     // Display subtle thinking indicator to user
     fprintf(stdout, "\033[36m•\033[0m ");
     fflush(stdout);
-    
+
     struct HTTPResponse response = {0};
     int result = -1;
-    
+
     if (http_post_with_headers(session->session_data.config.api_url, post_data, headers, &response) == 0) {
         // Check for NULL response data
         if (response.data == NULL) {

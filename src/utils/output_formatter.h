@@ -119,4 +119,52 @@ void log_system_info(const char *category, const char *message);
  */
 void cleanup_output_formatter(void);
 
+// =============================================================================
+// Streaming Display Functions
+// =============================================================================
+
+/**
+ * Initialize streaming display mode
+ * Clears any "thinking" indicator and prepares for streaming output
+ */
+void display_streaming_init(void);
+
+/**
+ * Display streaming text content as it arrives
+ *
+ * @param text The text chunk to display
+ * @param len Length of the text chunk
+ */
+void display_streaming_text(const char* text, size_t len);
+
+/**
+ * Display streaming thinking content (dimmed/gray)
+ *
+ * @param text The thinking text chunk to display
+ * @param len Length of the text chunk
+ */
+void display_streaming_thinking(const char* text, size_t len);
+
+/**
+ * Display notification that a tool is being called
+ *
+ * @param tool_name Name of the tool being called
+ */
+void display_streaming_tool_start(const char* tool_name);
+
+/**
+ * Display completion of streaming response with token counts
+ *
+ * @param input_tokens Number of input/prompt tokens used
+ * @param output_tokens Number of output/completion tokens generated
+ */
+void display_streaming_complete(int input_tokens, int output_tokens);
+
+/**
+ * Display an error during streaming
+ *
+ * @param error Error message to display
+ */
+void display_streaming_error(const char* error);
+
 #endif /* OUTPUT_FORMATTER_H */

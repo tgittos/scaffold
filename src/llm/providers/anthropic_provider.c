@@ -168,7 +168,11 @@ static LLMProvider anthropic_provider = {
     .build_headers = anthropic_build_headers,
     .parse_response = anthropic_parse_response,
     // Tool functions removed - now handled by ModelCapabilities
-    .validate_conversation = anthropic_validate_conversation
+    .validate_conversation = anthropic_validate_conversation,
+    // Streaming not yet implemented for Anthropic (Plan D)
+    .supports_streaming = NULL,
+    .parse_stream_event = NULL,
+    .build_streaming_request_json = NULL
 };
 
 int register_anthropic_provider(ProviderRegistry* registry) {

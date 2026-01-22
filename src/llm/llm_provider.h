@@ -5,6 +5,7 @@
 #include "tools_system.h"
 #include "http_client.h"
 #include "output_formatter.h"
+#include "streaming.h"
 
 // Forward declarations
 struct LLMProvider;
@@ -23,37 +24,55 @@ typedef struct {
 // Provider interface - all providers must implement these functions
 typedef struct LLMProvider {
     ProviderCapabilities capabilities;
-    
+
     // Provider detection
     int (*detect_provider)(const char* api_url);
-    
+
     // Request building
     char* (*build_request_json)(const struct LLMProvider* provider,
-                               const char* model, 
+                               const char* model,
                                const char* system_prompt,
                                const ConversationHistory* conversation,
                                const char* user_message,
                                int max_tokens,
                                const ToolRegistry* tools);
-    
+
     // HTTP headers
     int (*build_headers)(const struct LLMProvider* provider,
                         const char* api_key,
                         const char** headers,
                         int max_headers);
-    
+
     // Response parsing
     int (*parse_response)(const struct LLMProvider* provider,
                          const char* json_response,
                          ParsedResponse* result);
-    
+
     // Message formatting for conversation history
     // Note: Tool calling is now handled through ModelCapabilities
-    
+
     // Conversation validation (for providers with specific requirements)
     int (*validate_conversation)(const struct LLMProvider* provider,
                                 const ConversationHistory* conversation);
-    
+
+    // Streaming support
+    int (*supports_streaming)(const struct LLMProvider* provider);
+
+    // Parse a single SSE data line from streaming response
+    int (*parse_stream_event)(const struct LLMProvider* provider,
+                             StreamingContext* ctx,
+                             const char* json_data,
+                             size_t len);
+
+    // Build streaming request JSON (adds stream: true and stream_options)
+    char* (*build_streaming_request_json)(const struct LLMProvider* provider,
+                                          const char* model,
+                                          const char* system_prompt,
+                                          const ConversationHistory* conversation,
+                                          const char* user_message,
+                                          int max_tokens,
+                                          const ToolRegistry* tools);
+
 } LLMProvider;
 
 // Provider registry and factory
