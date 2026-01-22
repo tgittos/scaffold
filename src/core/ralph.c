@@ -975,6 +975,12 @@ static int ralph_execute_tool_loop(RalphSession* session, const char* user_messa
 // Forward declaration for provider registry
 static ProviderRegistry* get_provider_registry(void);
 
+/**
+ * Get or create the global provider registry.
+ * NOTE: This function is NOT thread-safe. It assumes single-threaded usage
+ * which is the case for ralph's CLI architecture. If multi-threading is
+ * added, this should be protected with a mutex or use _Thread_local storage.
+ */
 static ProviderRegistry* get_provider_registry(void) {
     if (g_provider_registry == NULL) {
         g_provider_registry = malloc(sizeof(ProviderRegistry));
