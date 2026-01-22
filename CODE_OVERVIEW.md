@@ -7,7 +7,7 @@ This document provides a comprehensive overview of Ralph's codebase structure an
 ### `src/` - Main Source Code
 
 #### `src/core/` - Core Application Logic
-- **`main.c`** - Application entry point with CLI interface (single message and interactive modes)
+- **`main.c`** - Application entry point with CLI interface (single message, interactive, --json, --subagent modes)
 - **`ralph.c/ralph.h`** - Core Ralph orchestration: session management, API communication, tool execution workflow
 
 #### `src/cli/` - Command Line Interface
@@ -26,6 +26,7 @@ This document provides a comprehensive overview of Ralph's codebase structure an
 - **`deepseek_model.c`** - DeepSeek model integration with thinking tags
 - **`qwen_model.c`** - Qwen model integration with thinking tags
 - **`default_model.c`** - Default/fallback model implementation (4k context)
+- **`response_processing.c/h`** - Thinking tag processing for model responses
 
 ##### `src/llm/providers/` - API Provider Implementations
 - **`anthropic_provider.c`** - Anthropic API client (Messages format)
@@ -35,8 +36,10 @@ This document provides a comprehensive overview of Ralph's codebase structure an
 - **`local_embedding_provider.c`** - Local embedding service provider (LMStudio, Ollama)
 
 #### `src/network/` - Network Communication
-- **`http_client.c/h`** - HTTP client implementation using libcurl
+- **`http_client.c/h`** - HTTP client implementation using libcurl (buffered and streaming)
 - **`api_common.c/h`** - Common API utilities, JSON payload building for OpenAI/Anthropic formats
+- **`streaming.c/h`** - SSE streaming infrastructure for real-time response handling
+- **`api_error.c/h`** - Enhanced API error handling with retry logic
 
 #### `src/session/` - User Session Management
 - **`session_manager.c/h`** - Session data structures and API payload building
@@ -49,18 +52,30 @@ This document provides a comprehensive overview of Ralph's codebase structure an
 
 #### `src/tools/` - AI Tool System
 - **`tools_system.c/h`** - Core tool registry and execution framework
+- **`tools_system_safe.c`** - Safe tool execution helpers
 - **`tool_result_builder.c/h`** - Standardized tool result construction (builder pattern)
 
 ##### Individual Tools
-- **`file_tools.c/h`** - File system operations (read, write, search, list, info, delta)
-- **`shell_tool.c/h`** - Shell command execution with timeout support
-- **`memory_tool.c/h`** - Persistent semantic memory (remember, recall_memories, forget)
+- **`memory_tool.c/h`** - Persistent semantic memory (remember, recall_memories, forget_memory)
+- **`pdf_tool.c/h`** - PDF processing and vector indexing
+- **`vector_db_tool.c/h`** - Vector database operations (11 tools)
+- **`python_tool.c/h`** - Embedded Python interpreter execution
+- **`python_tool_files.c/h`** - Python file-based tool loading system
+- **`subagent_tool.c/h`** - Subagent process spawning and management
 - **`todo_manager.c/h`** - Todo data structures and operations
 - **`todo_tool.c/h`** - Todo tool call handler
 - **`todo_display.c/h`** - Todo console visualization
-- **`pdf_tool.c/h`** - PDF processing and vector indexing
-- **`vector_db_tool.c/h`** - Vector database operations (11 tools)
-- **`links_tool.c/h`** - Web content fetching with embedded Links browser
+
+##### Python Default Tools (in `python_defaults/`)
+- **`read_file.py`** - Read file contents
+- **`write_file.py`** - Write content to file
+- **`append_file.py`** - Append content to file
+- **`file_info.py`** - Get file metadata
+- **`list_dir.py`** - List directory contents with filtering
+- **`search_files.py`** - Search files by content or pattern
+- **`apply_delta.py`** - Apply unified diff patches
+- **`shell.py`** - Shell command execution with timeout
+- **`web_fetch.py`** - Fetch and process web content
 
 #### `src/db/` - Database Layer
 - **`vector_db.c/h`** - Core vector database with HNSWLIB backend
@@ -77,6 +92,7 @@ This document provides a comprehensive overview of Ralph's codebase structure an
 - **`common_utils.c/h`** - General utility functions (string ops, JSON extraction)
 - **`env_loader.c/h`** - Environment variable and .env file loading
 - **`json_escape.c/h`** - JSON string escaping utilities
+- **`json_output.c/h`** - JSON output mode for programmatic integration (--json flag)
 - **`output_formatter.c/h`** - Response formatting and display
 - **`debug_output.c/h`** - Conditional debug logging with ANSI colors
 - **`prompt_loader.c/h`** - System prompt loading (core + PROMPT.md)
@@ -102,6 +118,9 @@ The test directory mirrors the source structure:
 - **`test_http_client.c`** - HTTP client functionality tests
 - **`test_messages_array_bug.c`** - Message handling regression tests
 - **`test_null_message_fields.c`** - Null field handling tests
+- **`test_streaming.c`** - Streaming infrastructure tests
+- **`test_anthropic_streaming.c`** & **`test_openai_streaming.c`** - Provider streaming tests
+- **`test_http_retry.c`** - HTTP retry logic tests
 
 #### `test/session/` - Session Management Tests
 - **`test_conversation_tracker.c`** - Conversation persistence tests
@@ -111,11 +130,11 @@ The test directory mirrors the source structure:
 
 #### `test/tools/` - Tool System Tests
 - **`test_tools_system.c`** - Core tool system tests
-- **`test_file_tools.c`** - File operation tests
-- **`test_shell_tool.c`** - Shell execution tests
 - **`test_memory_tool.c`** - Memory system tests
 - **`test_todo_manager.c`** & **`test_todo_tool.c`** - Task management tests
 - **`test_vector_db_tool.c`** - Vector database tests
+- **`test_python_tool.c`** & **`test_python_integration.c`** - Python interpreter tests
+- **`test_subagent_tool.c`** - Subagent system tests
 
 #### `test/pdf/` - PDF Processing Tests
 - **`test_pdf_extractor.c`** - PDF extraction functionality tests
@@ -131,6 +150,8 @@ The test directory mirrors the source structure:
 - **`test_env_loader.c`** - Configuration loading tests
 - **`test_output_formatter.c`** - Output formatting tests
 - **`test_prompt_loader.c`** - Prompt loading tests
+- **`test_config.c`** - Configuration system tests
+- **`test_json_output.c`** - JSON output mode tests
 
 #### Test Infrastructure
 - **`test/unity/`** - Unity testing framework (vendored)
@@ -150,7 +171,9 @@ The `src/llm/` directory implements a flexible provider system using the registr
 The `src/tools/` directory implements a safe, extensible tool execution framework:
 - **Tool Registry**: Dynamic tool registration and JSON-based execution
 - **Result Builder**: Standardized response formatting
-- **Categories**: File ops, shell, memory, todos, PDFs, vector DB, web fetch
+- **Python Tools**: File ops, shell, web fetch loaded from Python files
+- **Native Tools**: Memory, todos, PDFs, vector DB, subagents implemented in C
+- **Extensibility**: Custom Python tools can be added to `~/.local/ralph/tools/`
 
 ### 3. Vector Database Integration
 The `src/db/` directory provides a layered persistence architecture:
@@ -191,10 +214,9 @@ Centralized configuration in `src/utils/config.c`:
 
 ## Unused Directories
 
-The following directories exist but contain no source code (placeholders/build artifacts only):
-- `src/http/` - HTTP code is in `src/network/` instead
-- `src/daemon/` - Placeholder, not implemented
-- `src/server/` - Placeholder, not implemented
+The following directories exist but contain no production source code:
+- `src/http/` - Contains only test subdirectory; HTTP code is in `src/network/`
+- `src/daemon/` - Contains only build artifacts; not implemented
 
 ---
 

@@ -39,14 +39,15 @@ graph TB
     Core --> ToolsSystem[Tools System<br/>tools_system.c/h]
     ToolsSystem --> ToolRegistry[Tool Registry]
 
-    ToolRegistry --> FileTools[File Tools<br/>file_tools.c/h]
-    ToolRegistry --> ShellTool[Shell Tool<br/>shell_tool.c/h]
+    ToolRegistry --> PythonTool[Python Tool<br/>python_tool.c/h]
+    ToolRegistry --> PythonFileTools[Python File Tools<br/>python_tool_files.c/h]
     ToolRegistry --> TodoTool[Todo Tool<br/>todo_tool.c/h]
-    ToolRegistry --> LinksTool[Links Tool<br/>links_tool.c/h]
     ToolRegistry --> MemoryTool[Memory Tool<br/>memory_tool.c/h]
     ToolRegistry --> PDFTool[PDF Tool<br/>pdf_tool.c/h]
     ToolRegistry --> VectorDBTool[Vector DB Tool<br/>vector_db_tool.c/h]
+    ToolRegistry --> SubagentTool[Subagent Tool<br/>subagent_tool.c/h]
 
+    PythonFileTools --> PythonDefaults[Python Defaults<br/>python_defaults/]
     TodoTool --> TodoManager[Todo Manager<br/>todo_manager.c/h]
     TodoTool --> TodoDisplay[Todo Display<br/>todo_display.c/h]
 
@@ -76,7 +77,7 @@ graph TB
     %% Document Processing
     PDFTool --> PDFExtractor[PDF Extractor<br/>pdf_extractor.c/h]
     PDFTool --> DocumentChunker[Document Chunker<br/>document_chunker.c/h]
-    LinksTool --> PDFProcessor[PDF Processor<br/>pdf_processor.c/h]
+    PDFTool --> PDFProcessor[PDF Processor<br/>pdf_processor.c/h]
 
     PDFExtractor --> PDFio[PDFio Library]
 
@@ -146,7 +147,7 @@ graph TB
 
     class CLI,Core,Session,ConfigSystem,MemoryCommands coreLayer
     class LLMProvider,ProviderRegistry,Anthropic,OpenAI,LocalAI,ModelCaps,ClaudeModel,GPTModel,QwenModel,DeepSeekModel,DefaultModel llmLayer
-    class ToolsSystem,ToolRegistry,FileTools,ShellTool,TodoTool,LinksTool,MemoryTool,PDFTool,VectorDBTool,TodoManager,TodoDisplay toolsLayer
+    class ToolsSystem,ToolRegistry,PythonTool,PythonFileTools,PythonDefaults,TodoTool,MemoryTool,PDFTool,VectorDBTool,SubagentTool,TodoManager,TodoDisplay toolsLayer
     class ConversationTracker,TokenManager,ConversationCompactor sessionLayer
     class HTTPClient,APICommon networkLayer
     class OutputFormatter,PromptLoader,EnvLoader,JSONEscape,DebugOutput,ToolResultBuilder,CommonUtils,ContextRetriever utilsLayer
@@ -317,45 +318,55 @@ graph TB
 graph TB
     ToolCall[Tool Call Request<br/>JSON] --> ToolSystem[Tools System<br/>tools_system.c]
     ToolSystem --> ToolRegistry[Tool Registry<br/>Dynamic Lookup]
-    
-    ToolRegistry --> FileTools[File Tools<br/>read/write/search/list]
-    ToolRegistry --> ShellTool[Shell Tool<br/>Command execution]
-    ToolRegistry --> TodoTools[Todo Tools<br/>Task management]
-    ToolRegistry --> LinksTools[Links Tool<br/>URL management]
-    ToolRegistry --> MemoryTools[Memory Tools<br/>remember/recall_memories]
-    ToolRegistry --> PDFTools[PDF Tools<br/>process_pdf_document]
-    ToolRegistry --> VectorDBTools[Vector DB Tools<br/>11 vector operations]
-    
-    FileTools --> FileSys[File System Operations]
-    ShellTool --> Shell[Shell Execution<br/>Security validated]
+
+    ToolRegistry --> PythonTool[Python Tool<br/>python_tool.c]
+    ToolRegistry --> MemoryTools[Memory Tools<br/>memory_tool.c]
+    ToolRegistry --> PDFTools[PDF Tool<br/>pdf_tool.c]
+    ToolRegistry --> VectorDBTools[Vector DB Tools<br/>vector_db_tool.c]
+    ToolRegistry --> SubagentTool[Subagent Tool<br/>subagent_tool.c]
+    ToolRegistry --> PythonFileTools[Python File Tools<br/>python_tool_files.c]
+    ToolRegistry --> TodoTools[Todo Tools<br/>todo_tool.c]
+
+    PythonTool --> PythonInterpreter[Embedded Python<br/>Interpreter]
+
+    PythonFileTools --> DefaultTools[Default Tools<br/>python_defaults/]
+    DefaultTools --> FileOps[File Operations<br/>read/write/append/delta]
+    DefaultTools --> ShellOp[Shell Execution<br/>shell.py]
+    DefaultTools --> WebFetch[Web Fetch<br/>web_fetch.py]
+    DefaultTools --> DirOps[Directory Operations<br/>list_dir.py]
+    DefaultTools --> SearchOp[Search Files<br/>search_files.py]
+
+    SubagentTool --> ChildProcess[Child Ralph Process<br/>fork/exec]
+
     TodoTools --> TodoMgr[Todo Manager<br/>In-memory state]
-    LinksTools --> EmbeddedLinks[Embedded Links<br/>Binary data]
-    
+
     MemoryTools --> VectorDBSvc[Vector DB Service<br/>Long-term memory index]
     MemoryTools --> EmbeddingsSvc[Embeddings Service<br/>Text to vectors]
-    
+
     PDFTools --> PDFExtractor[PDF Extractor<br/>PDFio library]
     PDFTools --> DocumentChunker[Document Chunker<br/>Intelligent segmentation]
     PDFTools --> VectorDBSvc
     PDFTools --> EmbeddingsSvc
-    
+
     VectorDBTools --> VectorDBSvc
     VectorDBTools --> EmbeddingsSvc
     VectorDBTools --> IndexMgmt[Index Management<br/>Create/delete/list]
     VectorDBTools --> VectorOps[Vector Operations<br/>CRUD + search]
-    
+
     ToolSystem --> ToolResultBuilder[Tool Result Builder<br/>Standardized responses]
     ToolResultBuilder --> ToolResult[Tool Result<br/>JSON Response]
-    
+
     classDef toolCore fill:#e8f5e8
     classDef toolImpl fill:#c8e6c9
     classDef vectorTools fill:#e3f2fd
+    classDef pythonTools fill:#fff3e0
     classDef external fill:#ffcdd2
-    
+
     class ToolCall,ToolSystem,ToolRegistry,ToolResult,ToolResultBuilder toolCore
-    class FileTools,ShellTool,TodoTools,LinksTools,TodoMgr toolImpl
+    class TodoTools,TodoMgr toolImpl
     class MemoryTools,PDFTools,VectorDBTools,VectorDBSvc,EmbeddingsSvc,PDFExtractor,DocumentChunker,IndexMgmt,VectorOps vectorTools
-    class FileSys,Shell,EmbeddedLinks external
+    class PythonTool,PythonFileTools,DefaultTools,FileOps,ShellOp,WebFetch,DirOps,SearchOp,PythonInterpreter pythonTools
+    class SubagentTool,ChildProcess external
 ```
 
 ## Provider Abstraction
@@ -444,6 +455,83 @@ MCP servers are configured in `ralph.config.json`:
   }
 }
 ```
+
+## Streaming Response Architecture
+
+Ralph supports Server-Sent Events (SSE) streaming for real-time response display.
+
+```mermaid
+graph TB
+    Provider[LLM Provider] --> StreamReq[Streaming Request<br/>build_streaming_request_json]
+    StreamReq --> HTTPStream[HTTP Streaming<br/>http_post_streaming]
+    HTTPStream --> StreamCallback[Stream Callback]
+    StreamCallback --> StreamCtx[Streaming Context<br/>streaming.c/h]
+
+    StreamCtx --> SSEParser[SSE Line Parser]
+    SSEParser --> ProviderParser[Provider Parser<br/>parse_stream_event]
+
+    ProviderParser --> EmitText[Emit Text Chunk]
+    ProviderParser --> EmitThinking[Emit Thinking Chunk]
+    ProviderParser --> EmitToolStart[Emit Tool Start]
+    ProviderParser --> EmitToolDelta[Emit Tool Delta]
+
+    EmitText --> Display[Real-time Display]
+    EmitThinking --> Display
+
+    classDef streaming fill:#e8f5e8
+    classDef parser fill:#e3f2fd
+    classDef emit fill:#fff3e0
+
+    class Provider,StreamReq,HTTPStream,StreamCallback streaming
+    class StreamCtx,SSEParser,ProviderParser parser
+    class EmitText,EmitThinking,EmitToolStart,EmitToolDelta,Display emit
+```
+
+### Streaming Features
+- Real-time text streaming to console
+- Extended thinking content accumulation
+- Tool call argument accumulation from deltas
+- Provider-specific SSE parsing (Anthropic events vs OpenAI data lines)
+- Configurable via `--no-stream` flag to disable
+
+## Subagent System
+
+Ralph can spawn child processes to execute tasks in parallel.
+
+```mermaid
+graph TB
+    ParentRalph[Parent Ralph] --> SubagentTool[Subagent Tool<br/>subagent_tool.c]
+    SubagentTool --> SubagentMgr[Subagent Manager]
+
+    SubagentMgr --> Spawn[subagent_spawn]
+    Spawn --> Fork[fork + exec]
+    Fork --> ChildRalph[Child Ralph<br/>--subagent mode]
+
+    ChildRalph --> TaskExec[Execute Task]
+    TaskExec --> Output[Capture Output]
+    Output --> Pipe[stdout pipe]
+    Pipe --> Poll[subagent_poll_all]
+    Poll --> Status[Status Update]
+
+    SubagentMgr --> StatusTool[Subagent Status Tool]
+    StatusTool --> GetStatus[subagent_get_status]
+
+    classDef parent fill:#e1f5fe
+    classDef subagent fill:#e8f5e8
+    classDef child fill:#fff3e0
+
+    class ParentRalph,SubagentTool,SubagentMgr parent
+    class Spawn,Fork,Poll,StatusTool,GetStatus subagent
+    class ChildRalph,TaskExec,Output,Pipe,Status child
+```
+
+### Subagent Configuration
+- `max_subagents`: Maximum concurrent subagents (default: 5)
+- `subagent_timeout`: Timeout in seconds (default: 300)
+
+### Subagent Tool Commands
+- `subagent`: Spawn a new subagent with a task
+- `subagent_status`: Query subagent status with optional blocking wait
 
 ## CLI Commands
 
@@ -605,14 +693,36 @@ graph TB
 - **Memory Safe**: Defensive programming with comprehensive error handling
 - **Testable**: Extensive test suite covering all major components including vector operations
 
-## New Tool Categories
+## Tool Categories
 
-### Memory Tools
+### Memory Tools (3 tools)
 - **`remember`**: Store information in long-term semantic memory
 - **`recall_memories`**: Search and retrieve relevant memories using semantic similarity
+- **`forget_memory`**: Delete a memory by ID
 
-### PDF Processing Tools  
+### PDF Processing Tools
 - **`process_pdf_document`**: Extract text from PDFs and automatically index in vector database
+
+### Python Tools (1 tool + file-based tools)
+- **`python`**: Execute arbitrary Python code with embedded interpreter
+
+### Python File Tools (9 tools loaded from `~/.local/ralph/tools/`)
+- **`read_file`**: Read file contents
+- **`write_file`**: Write content to file
+- **`append_file`**: Append content to file
+- **`file_info`**: Get file metadata
+- **`list_dir`**: List directory contents
+- **`search_files`**: Search for files matching patterns
+- **`apply_delta`**: Apply unified diff to file
+- **`shell`**: Execute shell commands
+- **`web_fetch`**: Fetch web content
+
+### Subagent Tools (2 tools)
+- **`subagent`**: Spawn a child ralph process for parallel task execution
+- **`subagent_status`**: Query the status of a running subagent
+
+### Todo Tools (1 tool)
+- **`todo`**: Manage task list (create, update, complete, delete todos)
 
 ### Vector Database Tools (11 tools)
 - **Index Management**: `vector_db_create_index`, `vector_db_delete_index`, `vector_db_list_indices`
@@ -635,14 +745,14 @@ src/
 ├── cli/                    # CLI command handlers
 │   └── memory_commands.c/h # Interactive /memory slash commands
 ├── core/                   # Core application
-│   ├── main.c              # Entry point (CLI interface)
+│   ├── main.c              # Entry point (CLI interface, --json, --subagent modes)
 │   └── ralph.c/h           # Core orchestration logic
 ├── db/                     # Database layer
 │   ├── vector_db.c/h       # Low-level HNSWLIB wrapper
 │   ├── vector_db_service.c/h # Thread-safe singleton service
 │   ├── document_store.c/h  # High-level document storage
 │   ├── metadata_store.c/h  # Chunk metadata storage
-│   └── hnswlib_wrapper.h   # C++ bridge header
+│   └── hnswlib_wrapper.cpp/h # C++ bridge
 ├── llm/                    # LLM integration
 │   ├── llm_provider.c/h    # Provider abstraction
 │   ├── model_capabilities.c/h # Model-specific capabilities
@@ -654,7 +764,8 @@ src/
 │   │   ├── gpt_model.c
 │   │   ├── qwen_model.c
 │   │   ├── deepseek_model.c
-│   │   └── default_model.c
+│   │   ├── default_model.c
+│   │   └── response_processing.c/h  # Thinking tag processing
 │   └── providers/          # Provider implementations
 │       ├── anthropic_provider.c
 │       ├── openai_provider.c
@@ -665,7 +776,9 @@ src/
 │   └── mcp_client.c/h      # MCP client implementation
 ├── network/                # Network layer
 │   ├── http_client.c/h     # HTTP client (cURL wrapper)
-│   └── api_common.c/h      # API payload building
+│   ├── api_common.c/h      # API payload building
+│   ├── streaming.c/h       # SSE streaming infrastructure
+│   └── api_error.c/h       # Enhanced error handling with retries
 ├── pdf/                    # PDF processing
 │   └── pdf_extractor.c/h   # PDFio-based text extraction
 ├── session/                # Session management
@@ -675,31 +788,43 @@ src/
 │   └── conversation_compactor.c/h # Context trimming
 ├── tools/                  # Tool implementations
 │   ├── tools_system.c/h    # Tool registry and execution
-│   ├── file_tools.c/h      # File operations (7 tools)
-│   ├── shell_tool.c/h      # Shell execution
-│   ├── todo_tool.c/h       # Todo management
-│   ├── todo_manager.c/h    # Todo data structures
-│   ├── todo_display.c/h    # Todo visualization
-│   ├── links_tool.c/h      # Web content fetching
-│   ├── memory_tool.c/h     # Semantic memory (3 tools)
+│   ├── tools_system_safe.c # Safe tool execution helpers
+│   ├── tool_result_builder.c/h # Result formatting
+│   ├── memory_tool.c/h     # Semantic memory (remember, recall_memories, forget_memory)
 │   ├── pdf_tool.c/h        # PDF processing tool
 │   ├── vector_db_tool.c/h  # Vector DB operations (11 tools)
-│   └── tool_result_builder.c/h # Result formatting
-└── utils/                  # Utilities
-    ├── config.c/h          # Configuration management
-    ├── env_loader.c/h      # .env file loading
-    ├── prompt_loader.c/h   # System prompt loading
-    ├── output_formatter.c/h # Response formatting
-    ├── debug_output.c/h    # Debug logging
-    ├── document_chunker.c/h # Text chunking
-    ├── pdf_processor.c/h   # PDF download/processing
-    ├── context_retriever.c/h # Vector context retrieval
-    ├── json_escape.c/h     # JSON escaping
-    └── common_utils.c/h    # General utilities
+│   ├── python_tool.c/h     # Embedded Python interpreter
+│   ├── python_tool_files.c/h # Python file-based tools
+│   ├── subagent_tool.c/h   # Subagent process spawning
+│   ├── todo_manager.c/h    # Todo data structures
+│   ├── todo_tool.c/h       # Todo tool call handler
+│   ├── todo_display.c/h    # Todo visualization
+│   └── python_defaults/    # Default Python tool files
+│       ├── read_file.py
+│       ├── write_file.py
+│       ├── append_file.py
+│       ├── file_info.py
+│       ├── list_dir.py
+│       ├── search_files.py
+│       ├── apply_delta.py
+│       ├── shell.py
+│       └── web_fetch.py
+├── utils/                  # Utilities
+│   ├── config.c/h          # Configuration management
+│   ├── env_loader.c/h      # .env file loading
+│   ├── prompt_loader.c/h   # System prompt loading
+│   ├── output_formatter.c/h # Response formatting
+│   ├── debug_output.c/h    # Debug logging
+│   ├── document_chunker.c/h # Text chunking
+│   ├── pdf_processor.c/h   # PDF download/processing
+│   ├── context_retriever.c/h # Vector context retrieval
+│   ├── json_escape.c/h     # JSON escaping
+│   ├── json_output.c/h     # JSON output mode
+│   └── common_utils.c/h    # General utilities
+└── embedded_links.h        # Embedded Links browser binary
 ```
 
 ### Unused Directories
-The following directories exist but contain no source code (only build artifacts):
-- `src/http/` - HTTP code is in `src/network/` instead
-- `src/daemon/` - Placeholder, not implemented
-- `src/server/` - Placeholder, not implemented
+The following directories exist but contain no production source code:
+- `src/http/` - Contains only test subdirectory; HTTP code is in `src/network/`
+- `src/daemon/` - Contains only build artifacts; not implemented
