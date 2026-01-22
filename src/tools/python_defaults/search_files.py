@@ -2,7 +2,7 @@
 
 def search_files(path: str, pattern: str, file_pattern: str = None,
                  recursive: bool = True, case_sensitive: bool = True,
-                 max_results: int = 100) -> list:
+                 max_results: int = 100) -> dict:
     """Search for pattern in files.
 
     Args:

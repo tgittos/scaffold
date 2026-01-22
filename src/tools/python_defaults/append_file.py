@@ -1,5 +1,7 @@
 """Append content to a file."""
 
+MAX_APPEND_SIZE = 10 * 1024 * 1024  # 10MB
+
 def append_file(path: str, content: str) -> dict:
     """Append content to file.
 
@@ -12,11 +14,16 @@ def append_file(path: str, content: str) -> dict:
     """
     from pathlib import Path
 
-    p = Path(path).resolve()
-
-    # Security check - prevent directory traversal
-    if '..' in str(path):
+    # Security check - prevent directory traversal (check BEFORE resolving)
+    if '..' in path:
         raise ValueError("Invalid path: directory traversal not allowed")
+
+    # Check content size limit
+    content_bytes = content.encode('utf-8')
+    if len(content_bytes) > MAX_APPEND_SIZE:
+        raise ValueError(f"Content too large: {len(content_bytes)} bytes (max {MAX_APPEND_SIZE})")
+
+    p = Path(path).resolve()
 
     # Create parent directories if needed
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -28,5 +35,5 @@ def append_file(path: str, content: str) -> dict:
     return {
         "success": True,
         "path": str(p),
-        "bytes_appended": len(content.encode('utf-8'))
+        "bytes_appended": len(content_bytes)
     }

@@ -1,5 +1,7 @@
 """Write content to a file."""
 
+MAX_WRITE_SIZE = 50 * 1024 * 1024  # 50MB
+
 def write_file(path: str, content: str, backup: bool = False) -> dict:
     """Write content to file.
 
@@ -14,11 +16,16 @@ def write_file(path: str, content: str, backup: bool = False) -> dict:
     from pathlib import Path
     import shutil
 
-    p = Path(path).resolve()
-
-    # Security check - prevent directory traversal
-    if '..' in str(path):
+    # Security check - prevent directory traversal (check BEFORE resolving)
+    if '..' in path:
         raise ValueError("Invalid path: directory traversal not allowed")
+
+    # Check content size limit
+    content_bytes = content.encode('utf-8')
+    if len(content_bytes) > MAX_WRITE_SIZE:
+        raise ValueError(f"Content too large: {len(content_bytes)} bytes (max {MAX_WRITE_SIZE})")
+
+    p = Path(path).resolve()
 
     # Create backup if requested and file exists
     if backup and p.exists():
@@ -34,5 +41,5 @@ def write_file(path: str, content: str, backup: bool = False) -> dict:
     return {
         "success": True,
         "path": str(p),
-        "bytes_written": len(content.encode('utf-8'))
+        "bytes_written": len(content_bytes)
     }

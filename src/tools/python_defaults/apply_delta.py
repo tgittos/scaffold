@@ -1,5 +1,41 @@
 """Apply delta patch operations to a file."""
 
+VALID_OP_TYPES = {'insert', 'delete', 'replace'}
+
+def _validate_operations(operations: list) -> None:
+    """Validate operation structure before processing."""
+    if not isinstance(operations, list):
+        raise ValueError("Operations must be a list")
+
+    for i, op in enumerate(operations):
+        if not isinstance(op, dict):
+            raise ValueError(f"Operation {i} must be a dictionary")
+
+        if 'type' not in op:
+            raise ValueError(f"Operation {i} missing required key: type")
+
+        op_type = op.get('type', '').lower()
+        if op_type not in VALID_OP_TYPES:
+            raise ValueError(f"Operation {i} has invalid type: {op.get('type')} (must be one of {VALID_OP_TYPES})")
+
+        if 'start_line' not in op:
+            raise ValueError(f"Operation {i} missing required key: start_line")
+
+        start_line = op.get('start_line')
+        if not isinstance(start_line, int) or start_line < 1:
+            raise ValueError(f"Operation {i} has invalid start_line: {start_line} (must be positive integer)")
+
+        if op_type in ('delete', 'replace'):
+            line_count = op.get('line_count', 0)
+            if not isinstance(line_count, int) or line_count < 0:
+                raise ValueError(f"Operation {i} has invalid line_count: {line_count}")
+
+        if op_type in ('insert', 'replace'):
+            lines = op.get('lines')
+            if lines is not None and not isinstance(lines, list):
+                raise ValueError(f"Operation {i} has invalid lines: must be a list")
+
+
 def apply_delta(path: str, operations: list, create_backup: bool = True) -> dict:
     """Apply delta patch operations to a file.
 
@@ -16,7 +52,15 @@ def apply_delta(path: str, operations: list, create_backup: bool = True) -> dict
         Dictionary with success status and details
     """
     from pathlib import Path
+    from datetime import datetime
     import shutil
+
+    # Security check - prevent directory traversal (check BEFORE resolving)
+    if '..' in path:
+        raise ValueError("Invalid path: directory traversal not allowed")
+
+    # Validate operations structure before any file operations
+    _validate_operations(operations)
 
     p = Path(path).resolve()
 
@@ -26,10 +70,6 @@ def apply_delta(path: str, operations: list, create_backup: bool = True) -> dict
     if not p.is_file():
         raise ValueError(f"Not a file: {path}")
 
-    # Security check
-    if '..' in str(path):
-        raise ValueError("Invalid path: directory traversal not allowed")
-
     # Read current content
     content = p.read_text(encoding='utf-8')
     lines = content.splitlines(keepends=True)
@@ -38,10 +78,11 @@ def apply_delta(path: str, operations: list, create_backup: bool = True) -> dict
     if lines and not lines[-1].endswith('\n'):
         lines[-1] += '\n'
 
-    # Create backup if requested
+    # Create backup if requested (use unique timestamp-based name)
     backup_path = None
     if create_backup:
-        backup_path = str(p) + '.bak'
+        timestamp = datetime.now().strftime('%Y%m%d%H%M%S%f')
+        backup_path = f"{p}.{timestamp}.bak"
         shutil.copy2(p, backup_path)
 
     # Sort operations by start_line in reverse order
