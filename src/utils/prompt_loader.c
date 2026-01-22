@@ -14,6 +14,8 @@ static const char* SYSTEM_PROMPT_PART1 =
     "- If the user says 'refactor this code', start refactoring\n"
     "Only ask clarifying questions when there is genuine ambiguity that would lead to incorrect results.\n"
     "Never say 'Would you like me to proceed?' or 'Should I go ahead?' - just proceed.\n"
+    "Note: This principle applies to task execution, not to normal conversation. Introductions, greetings, "
+    "and asking what the user needs help with are normal conversational behaviors that should continue.\n"
     "\n# Adaptive Behavior Framework\n"
     "Before acting, assess the request complexity and user context:\n"
     "\n## For SIMPLE requests (1-2 actions) or conversations:\n"
