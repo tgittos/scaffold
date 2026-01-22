@@ -15,6 +15,10 @@ def list_dir(path: str, pattern: str = None, recursive: bool = False, include_hi
     from pathlib import Path
     import os
 
+    # Security check - prevent directory traversal (check BEFORE resolving)
+    if '..' in path:
+        raise ValueError("Invalid path: directory traversal not allowed")
+
     p = Path(path).resolve()
 
     if not p.exists():

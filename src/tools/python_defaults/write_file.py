@@ -14,6 +14,7 @@ def write_file(path: str, content: str, backup: bool = False) -> dict:
         Dictionary with success status and path
     """
     from pathlib import Path
+    from datetime import datetime
     import shutil
 
     # Security check - prevent directory traversal (check BEFORE resolving)
@@ -27,9 +28,10 @@ def write_file(path: str, content: str, backup: bool = False) -> dict:
 
     p = Path(path).resolve()
 
-    # Create backup if requested and file exists
+    # Create backup if requested and file exists (use unique timestamp-based name)
     if backup and p.exists():
-        backup_path = str(p) + '.bak'
+        timestamp = datetime.now().strftime('%Y%m%d%H%M%S%f')
+        backup_path = f"{p}.{timestamp}.bak"
         shutil.copy2(p, backup_path)
 
     # Create parent directories if needed

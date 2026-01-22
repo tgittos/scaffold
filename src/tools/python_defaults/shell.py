@@ -96,11 +96,11 @@ def shell(command: str, working_dir: str = None, timeout: int = 30,
     execution_time = time.time() - start
 
     # Truncate very long output
-    max_output = 100 * 1024  # 100KB
+    max_output = 1024 * 1024  # 1MB
     if len(stdout) > max_output:
-        stdout = stdout[:max_output] + '\n[Output truncated at 100KB]'
+        stdout = stdout[:max_output] + '\n[Output truncated at 1MB]'
     if len(stderr) > max_output:
-        stderr = stderr[:max_output] + '\n[Output truncated at 100KB]'
+        stderr = stderr[:max_output] + '\n[Output truncated at 1MB]'
 
     return {
         "stdout": stdout,

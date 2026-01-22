@@ -14,6 +14,10 @@ def file_info(path: str) -> dict:
     import stat as stat_module
     from datetime import datetime
 
+    # Security check - prevent directory traversal (check BEFORE resolving)
+    if '..' in path:
+        raise ValueError("Invalid path: directory traversal not allowed")
+
     p = Path(path).resolve()
 
     if not p.exists():

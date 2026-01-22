@@ -4,7 +4,9 @@ import html.parser
 import re
 
 
-def web_fetch(url: str, timeout: int = 30) -> str:
+MAX_CONTENT_SIZE = 1024 * 1024  # 1MB
+
+def web_fetch(url: str, timeout: int = 30) -> dict:
     """Fetch web page content.
 
     Args:
@@ -12,7 +14,7 @@ def web_fetch(url: str, timeout: int = 30) -> str:
         timeout: Request timeout in seconds (default: 30)
 
     Returns:
-        Web page content as text (HTML converted to plain text for readability)
+        Dictionary with url, content, content_type, size, and truncated flag
     """
     import urllib.request
     import urllib.error
@@ -54,11 +56,18 @@ def web_fetch(url: str, timeout: int = 30) -> str:
                 content = html_to_text(content)
 
             # Truncate very long content
-            max_size = 100 * 1024  # 100KB
-            if len(content) > max_size:
-                content = content[:max_size] + '\n[Content truncated at 100KB]'
+            truncated = False
+            if len(content) > MAX_CONTENT_SIZE:
+                content = content[:MAX_CONTENT_SIZE] + '\n[Content truncated at 1MB]'
+                truncated = True
 
-            return content
+            return {
+                "url": url,
+                "content": content,
+                "content_type": content_type,
+                "size": len(content),
+                "truncated": truncated
+            }
 
     except urllib.error.HTTPError as e:
         raise Exception(f"HTTP Error {e.code}: {e.reason}")
@@ -118,7 +127,7 @@ def html_to_text(html_content: str) -> str:
     try:
         parser.feed(html_content)
         return parser.get_text()
-    except:
+    except Exception:
         # Fallback: strip tags with regex
         text = re.sub(r'<script[^>]*>.*?</script>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
         text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)

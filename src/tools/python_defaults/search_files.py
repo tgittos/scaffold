@@ -1,5 +1,9 @@
 """Search for patterns in files."""
 
+MAX_FILE_SIZE = 1024 * 1024  # 1MB
+CONTEXT_CHARS = 30  # Characters of context around match
+MAX_LINE_DISPLAY = 200  # Max characters to display per line
+
 def search_files(path: str, pattern: str, file_pattern: str = None,
                  recursive: bool = True, case_sensitive: bool = True,
                  max_results: int = 100) -> dict:
@@ -14,11 +18,15 @@ def search_files(path: str, pattern: str, file_pattern: str = None,
         max_results: Maximum number of results to return
 
     Returns:
-        List of dictionaries with match information
+        Dictionary with results list, total_matches, files_searched, and truncated flag
     """
     from pathlib import Path
     import re
     import os
+
+    # Security check - prevent directory traversal (check BEFORE resolving)
+    if '..' in path:
+        raise ValueError("Invalid path: directory traversal not allowed")
 
     p = Path(path).resolve()
 
@@ -34,7 +42,6 @@ def search_files(path: str, pattern: str, file_pattern: str = None,
 
     results = []
     files_searched = 0
-    max_file_size = 1024 * 1024  # 1MB
 
     # Directories to skip
     skip_dirs = {'.git', '.svn', '.hg', 'node_modules', '__pycache__',
@@ -59,7 +66,7 @@ def search_files(path: str, pattern: str, file_pattern: str = None,
 
         try:
             stat = file_path.stat()
-            if stat.st_size > max_file_size:
+            if stat.st_size > MAX_FILE_SIZE:
                 return
 
             content = file_path.read_text(encoding='utf-8', errors='replace')
@@ -72,8 +79,8 @@ def search_files(path: str, pattern: str, file_pattern: str = None,
                 match = regex.search(line)
                 if match:
                     # Get context (surrounding characters)
-                    start = max(0, match.start() - 30)
-                    end = min(len(line), match.end() + 30)
+                    start = max(0, match.start() - CONTEXT_CHARS)
+                    end = min(len(line), match.end() + CONTEXT_CHARS)
                     context = line[start:end]
                     if start > 0:
                         context = '...' + context
@@ -83,7 +90,7 @@ def search_files(path: str, pattern: str, file_pattern: str = None,
                     results.append({
                         "file_path": str(file_path),
                         "line_number": line_num,
-                        "line_content": line.strip()[:200],
+                        "line_content": line.strip()[:MAX_LINE_DISPLAY],
                         "match_context": context
                     })
         except (PermissionError, OSError, UnicodeDecodeError):

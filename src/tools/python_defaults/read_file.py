@@ -13,6 +13,10 @@ def read_file(path: str, start_line: int = 0, end_line: int = 0) -> str:
     """
     from pathlib import Path
 
+    # Security check - prevent directory traversal (check BEFORE resolving)
+    if '..' in path:
+        raise ValueError("Invalid path: directory traversal not allowed")
+
     p = Path(path).resolve()
 
     if not p.exists():
