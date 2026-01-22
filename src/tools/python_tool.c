@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <unistd.h>
 
@@ -48,6 +49,16 @@ static void python_timeout_handler(int sig) {
 int python_interpreter_init(void) {
     if (interpreter_initialized) {
         return 0;
+    }
+
+    // Check if Python stdlib is available before attempting initialization.
+    // Py_Initialize() will fatally crash if stdlib is missing, so we must
+    // check first and fail gracefully. This allows the system to run with
+    // 0 Python tools (e.g., in test binaries without embedded stdlib).
+    struct stat st;
+    if (stat("/zip/lib/python3.12", &st) != 0 || !S_ISDIR(st.st_mode)) {
+        // Python stdlib not available - fail gracefully
+        return -1;
     }
 
     // Set PYTHONHOME for embedded stdlib

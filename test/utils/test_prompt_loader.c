@@ -6,6 +6,11 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
+// Stub for python_get_loaded_tools_description (avoids linking python_tool_files.c)
+char *python_get_loaded_tools_description(void) {
+    return NULL;
+}
+
 // Store original directory to restore after tests
 static char original_dir[4096];
 static const char *test_dir = "/tmp/test_prompt_loader_XXXXXX";

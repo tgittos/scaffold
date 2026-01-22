@@ -92,7 +92,7 @@ int main(int argc, char *argv[])
         // Cleanup and return result
         ralph_cleanup_session(&session);
         return (result == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
-    } else if (message_arg_index == -1) {
+    } else {
         // Interactive mode (no message argument provided)
         if (!json_mode) {
             printf("\033[1mRalph\033[0m - AI Assistant\n");
@@ -207,24 +207,5 @@ int main(int argc, char *argv[])
         memory_commands_cleanup();
         ralph_cleanup_session(&session);
         return EXIT_SUCCESS;
-    } else {
-        // Invalid arguments
-        fprintf(stderr, "\033[1mUsage:\033[0m %s [options] [message]\n\n", argv[0]);
-        fprintf(stderr, "\033[1mModes:\033[0m\n");
-        fprintf(stderr, "  %s                    Interactive chat mode\n", argv[0]);
-        fprintf(stderr, "  %s \"question\"         Single question mode\n\n", argv[0]);
-        fprintf(stderr, "\033[1mOptions:\033[0m\n");
-        fprintf(stderr, "  --debug               Show API debug output\n");
-        fprintf(stderr, "  --no-stream           Disable streaming (use buffered responses)\n");
-        fprintf(stderr, "  --json                Output JSON (machine-readable format)\n");
-        fprintf(stderr, "  --subagent            Run as subagent (internal use)\n");
-        fprintf(stderr, "  --task \"task\"         Task for subagent to execute\n");
-        fprintf(stderr, "  --context \"ctx\"       Optional context for subagent\n\n");
-        fprintf(stderr, "\033[1mSetup:\033[0m\n");
-        fprintf(stderr, "  1. Export OPENAI_API_KEY=<your-key> or\n");
-        fprintf(stderr, "  2. Edit ./ralph.config.json after first run\n");
-        fprintf(stderr, "Example: %s \"Hello, how are you?\"\n", argv[0]);
-        fprintf(stderr, "Example: %s --debug \"Hello, how are you?\"\n", argv[0]);
-        return EXIT_FAILURE;
     }
 }

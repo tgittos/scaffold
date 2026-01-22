@@ -308,7 +308,17 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
     }
 
     tool_def->name = strdup(name_item->valuestring);
+    if (tool_def->name == NULL) {
+        cJSON_Delete(schema);
+        return -1;
+    }
     tool_def->description = strdup(desc_item->valuestring);
+    if (tool_def->description == NULL) {
+        free(tool_def->name);
+        tool_def->name = NULL;
+        cJSON_Delete(schema);
+        return -1;
+    }
 
     // Extract parameters
     if (cJSON_IsArray(params_item)) {
@@ -360,6 +370,27 @@ int python_load_tool_files(void) {
     if (!python_interpreter_is_initialized()) {
         fprintf(stderr, "Error: Python interpreter not initialized\n");
         return -1;
+    }
+
+    // Free existing tools if reloading (prevents memory leak on double-init)
+    if (python_tool_registry.tools != NULL) {
+        for (int i = 0; i < python_tool_registry.count; i++) {
+            PythonToolDef *tool = &python_tool_registry.tools[i];
+            free(tool->name);
+            free(tool->description);
+            free(tool->file_path);
+            if (tool->parameters != NULL) {
+                for (int j = 0; j < tool->parameter_count; j++) {
+                    free(tool->parameters[j].name);
+                    free(tool->parameters[j].type);
+                    free(tool->parameters[j].description);
+                }
+                free(tool->parameters);
+            }
+        }
+        free(python_tool_registry.tools);
+        python_tool_registry.tools = NULL;
+        python_tool_registry.count = 0;
     }
 
     DIR *dir = opendir(python_tool_registry.tools_dir);
@@ -570,9 +601,18 @@ int execute_python_file_tool_call(const ToolCall *tool_call, ToolResult *result)
         if (cJSON_IsString(item)) {
             // Escape single quotes and backslashes in string values
             const char *str_val = item->valuestring;
-            char escaped[2048];
+            size_t str_len = strlen(str_val);
+            // Worst case: every char escapes to 2 chars, plus null terminator
+            size_t escaped_size = str_len * 2 + 1;
+            char *escaped = malloc(escaped_size);
+            if (escaped == NULL) {
+                free(call_code);
+                result->result = strdup("{\"error\": \"Memory allocation failed\", \"success\": false}");
+                result->success = 0;
+                return 0;
+            }
             size_t e = 0;
-            for (size_t j = 0; str_val[j] && e < sizeof(escaped) - 3; j++) {
+            for (size_t j = 0; str_val[j]; j++) {
                 if (str_val[j] == '\\') {
                     escaped[e++] = '\\';
                     escaped[e++] = '\\';
@@ -595,6 +635,7 @@ int execute_python_file_tool_call(const ToolCall *tool_call, ToolResult *result)
             escaped[e] = '\0';
             kwargs_pos += snprintf(kwargs + kwargs_pos, sizeof(kwargs) - kwargs_pos,
                                    "%s='%s'", item->string, escaped);
+            free(escaped);
         } else if (cJSON_IsNumber(item)) {
             if (item->valuedouble == (double)item->valueint) {
                 kwargs_pos += snprintf(kwargs + kwargs_pos, sizeof(kwargs) - kwargs_pos,

@@ -313,8 +313,9 @@ void test_generate_anthropic_tools_json_with_tools(void) {
     // Check for input_schema instead of parameters
     TEST_ASSERT_NOT_NULL(strstr(json, "\"input_schema\""));
 
-    // Check for shell_execute tool (cJSON produces no spaces after colons)
-    TEST_ASSERT_NOT_NULL(strstr(json, "\"name\":\"shell_execute\""));
+    // Check for vector_db_search tool (cJSON produces no spaces after colons)
+    // Note: We use vector_db_search because it's a C-based tool that doesn't require Python
+    TEST_ASSERT_NOT_NULL(strstr(json, "\"name\":\"vector_db_search\""));
 
     free(json);
     cleanup_tool_registry(&registry);

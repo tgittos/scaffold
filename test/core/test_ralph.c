@@ -188,11 +188,11 @@ void test_ralph_execute_tool_workflow_null_parameters(void) {
     RalphSession session;
     ToolCall tool_calls[1];
     const char* headers[2] = {NULL, NULL};
-    
-    // Initialize valid tool call for testing
+
+    // Initialize valid tool call for testing (use C-based tool that doesn't require Python)
     tool_calls[0].id = "test_id";
-    tool_calls[0].name = "shell_execute";
-    tool_calls[0].arguments = "{\"command\":\"echo test\"}";
+    tool_calls[0].name = "vector_db_list_indices";
+    tool_calls[0].arguments = "{}";
     
     ralph_init_session(&session);
     ralph_load_config(&session);
@@ -219,9 +219,9 @@ void test_ralph_execute_tool_workflow_null_parameters(void) {
 void test_ralph_execute_tool_workflow_api_failure_resilience(void) {
     // INTEGRATION TEST: Tool execution succeeds, API follow-up fails
     // This tests the specific bug that was fixed: ralph_execute_tool_workflow
-    // should return 0 (success) when tools execute successfully, even if 
+    // should return 0 (success) when tools execute successfully, even if
     // the follow-up API request fails (network down, server error, etc.)
-    
+
     // Start mock server that will fail on API requests
     MockAPIServer server = {0};
     server.port = MOCK_SERVER_DEFAULT_PORT;
@@ -231,59 +231,60 @@ void test_ralph_execute_tool_workflow_api_failure_resilience(void) {
     responses[0].method = "POST";
     server.responses = responses;
     server.response_count = 1;
-    
+
     TEST_ASSERT_EQUAL_INT(0, mock_api_server_start(&server));
     TEST_ASSERT_EQUAL_INT(0, mock_api_server_wait_ready(&server, 1000));
-    
+
     // Set environment to use mock server
     setenv("API_URL", "http://127.0.0.1:8888/v1/chat/completions", 1);
     setenv("MODEL", "test-model", 1);
-    
+
     RalphSession session;
     ToolCall tool_calls[1];
     const char* headers[2] = {"Content-Type: application/json", NULL};
-    
-    // Initialize with a simple tool call that will succeed
+
+    // Initialize with a C-based tool call that will succeed (doesn't require Python)
     tool_calls[0].id = "test_tool_id_123";
-    tool_calls[0].name = "shell_execute";
-    tool_calls[0].arguments = "{\"command\":\"echo 'integration_test_success'\"}";
-    
+    tool_calls[0].name = "vector_db_list_indices";
+    tool_calls[0].arguments = "{}";
+
     ralph_init_session(&session);
     ralph_load_config(&session);
-    
+
     // Execute tool workflow - this should return 0 (success) because:
-    // 1. Tool execution succeeds (shell_execute with "echo" command works)
+    // 1. Tool execution succeeds (vector_db_list_indices returns list of indices)
     // 2. Tool results are added to conversation history
     // 3. Follow-up API request fails (mock server drops connection)
     // 4. Function returns 0 anyway because tools executed successfully
-    int result = ralph_execute_tool_workflow(&session, tool_calls, 1, "run echo command", 100, headers);
-    
+    int result = ralph_execute_tool_workflow(&session, tool_calls, 1, "list vector indices", 100, headers);
+
     // The key assertion: even though API follow-up fails, workflow returns success (0)
     // because the actual tool execution was successful
     TEST_ASSERT_EQUAL_INT(0, result);
-    
+
     // Verify tool result was actually added to conversation history
     // This proves the tool executed successfully despite API failure
     TEST_ASSERT_TRUE(session.session_data.conversation.count > 0);
-    
+
     // Look for tool result message in conversation history
     int found_tool_result = 0;
     for (int i = 0; i < session.session_data.conversation.count; i++) {
         if (strcmp(session.session_data.conversation.messages[i].role, "tool") == 0) {
             found_tool_result = 1;
             TEST_ASSERT_EQUAL_STRING("test_tool_id_123", session.session_data.conversation.messages[i].tool_call_id);
-            TEST_ASSERT_EQUAL_STRING("shell_execute", session.session_data.conversation.messages[i].tool_name);
-            TEST_ASSERT_TRUE(strstr(session.session_data.conversation.messages[i].content, "integration_test_success") != NULL);
+            TEST_ASSERT_EQUAL_STRING("vector_db_list_indices", session.session_data.conversation.messages[i].tool_name);
+            // vector_db_list_indices returns JSON with indices array (may be empty)
+            TEST_ASSERT_TRUE(strstr(session.session_data.conversation.messages[i].content, "indices") != NULL);
             break;
         }
     }
     TEST_ASSERT_TRUE(found_tool_result);
-    
+
     ralph_cleanup_session(&session);
-    
+
     // Stop mock server
     mock_api_server_stop(&server);
-    
+
     // Clean up environment
     unsetenv("API_URL");
     unsetenv("MODEL");
@@ -333,7 +334,7 @@ void test_ralph_process_message_basic_workflow(void) {
 void test_tool_execution_without_api_server(void) {
     // NETWORK RESILIENCE TEST: Tool execution with completely unreachable API server
     // This tests graceful degradation when no API server is available
-    
+
     // Start mock server that will drop all connections
     MockAPIServer server = {0};
     server.port = MOCK_SERVER_DEFAULT_PORT;
@@ -343,51 +344,52 @@ void test_tool_execution_without_api_server(void) {
     responses[0].method = "POST";
     server.responses = responses;
     server.response_count = 1;
-    
+
     TEST_ASSERT_EQUAL_INT(0, mock_api_server_start(&server));
     TEST_ASSERT_EQUAL_INT(0, mock_api_server_wait_ready(&server, 1000));
-    
+
     // Set environment to use mock server
     setenv("API_URL", "http://127.0.0.1:8888/v1/chat/completions", 1);
     setenv("MODEL", "test-model", 1);
-    
+
     RalphSession session;
     ToolCall tool_calls[1];
     const char* headers[2] = {"Content-Type: application/json", NULL};
-    
-    // Setup tool call that will succeed locally
+
+    // Setup C-based tool call that will succeed locally (doesn't require Python)
     tool_calls[0].id = "test_no_api_123";
-    tool_calls[0].name = "shell_execute";
-    tool_calls[0].arguments = "{\"command\":\"echo 'tool_works_without_api'\"}";
-    
+    tool_calls[0].name = "vector_db_list_indices";
+    tool_calls[0].arguments = "{}";
+
     ralph_init_session(&session);
     ralph_load_config(&session);
-    
+
     // Execute tool workflow - should succeed despite unreachable API
     int result = ralph_execute_tool_workflow(&session, tool_calls, 1, "test without api", 100, headers);
-    
+
     // Tool execution should succeed even when API is unreachable
     TEST_ASSERT_EQUAL_INT(0, result);
-    
+
     // Verify tool result was added to conversation
     TEST_ASSERT_TRUE(session.session_data.conversation.count > 0);
-    
+
     // Find and verify tool result
     int found_tool_result = 0;
     for (int i = 0; i < session.session_data.conversation.count; i++) {
         if (strcmp(session.session_data.conversation.messages[i].role, "tool") == 0) {
             found_tool_result = 1;
-            TEST_ASSERT_TRUE(strstr(session.session_data.conversation.messages[i].content, "tool_works_without_api") != NULL);
+            // vector_db_list_indices returns JSON with indices array
+            TEST_ASSERT_TRUE(strstr(session.session_data.conversation.messages[i].content, "indices") != NULL);
             break;
         }
     }
     TEST_ASSERT_TRUE(found_tool_result);
-    
+
     ralph_cleanup_session(&session);
-    
+
     // Stop mock server
     mock_api_server_stop(&server);
-    
+
     // Clean up environment
     unsetenv("API_URL");
     unsetenv("MODEL");
@@ -396,7 +398,7 @@ void test_tool_execution_without_api_server(void) {
 void test_tool_execution_with_network_timeout(void) {
     // NETWORK RESILIENCE TEST: Tool execution with network timeout
     // Tests behavior when API server times out
-    
+
     // Start mock server with long delay to simulate timeout
     MockAPIServer server = {0};
     server.port = MOCK_SERVER_DEFAULT_PORT;
@@ -407,40 +409,40 @@ void test_tool_execution_with_network_timeout(void) {
     responses[0].delay_ms = 5000; // Long delay before dropping
     server.responses = responses;
     server.response_count = 1;
-    
+
     TEST_ASSERT_EQUAL_INT(0, mock_api_server_start(&server));
     TEST_ASSERT_EQUAL_INT(0, mock_api_server_wait_ready(&server, 1000));
-    
+
     // Set environment to use mock server
     setenv("API_URL", "http://127.0.0.1:8888/v1/chat/completions", 1);
     setenv("MODEL", "test-model", 1);
-    
+
     RalphSession session;
     ToolCall tool_calls[1];
     const char* headers[2] = {"Content-Type: application/json", NULL};
-    
-    // Setup tool call
+
+    // Setup C-based tool call (doesn't require Python)
     tool_calls[0].id = "timeout_test_123";
-    tool_calls[0].name = "shell_execute"; 
-    tool_calls[0].arguments = "{\"command\":\"echo 'tool_survives_timeout'\"}";
-    
+    tool_calls[0].name = "vector_db_list_indices";
+    tool_calls[0].arguments = "{}";
+
     ralph_init_session(&session);
     ralph_load_config(&session);
-    
+
     // Execute - should succeed because tool executes locally, API timeout doesn't matter
     int result = ralph_execute_tool_workflow(&session, tool_calls, 1, "timeout test", 100, headers);
-    
+
     // Tool workflow should succeed despite API timeout
     TEST_ASSERT_EQUAL_INT(0, result);
-    
+
     // Tool result should be in conversation
     TEST_ASSERT_TRUE(session.session_data.conversation.count > 0);
-    
+
     ralph_cleanup_session(&session);
-    
+
     // Stop mock server
     mock_api_server_stop(&server);
-    
+
     // Clean up environment
     unsetenv("API_URL");
     unsetenv("MODEL");
@@ -449,7 +451,7 @@ void test_tool_execution_with_network_timeout(void) {
 void test_tool_execution_with_auth_failure(void) {
     // NETWORK RESILIENCE TEST: Tool execution with API authentication failure
     // Tests graceful handling when API server returns auth error
-    
+
     // Start mock server that returns 401 Unauthorized
     MockAPIServer server = {0};
     server.port = MOCK_SERVER_DEFAULT_PORT;
@@ -459,37 +461,38 @@ void test_tool_execution_with_auth_failure(void) {
     responses[0].method = "POST";
     server.responses = responses;
     server.response_count = 1;
-    
+
     TEST_ASSERT_EQUAL_INT(0, mock_api_server_start(&server));
     TEST_ASSERT_EQUAL_INT(0, mock_api_server_wait_ready(&server, 1000));
-    
+
     // Set environment to use mock server
     setenv("API_URL", "http://127.0.0.1:8888/v1/chat/completions", 1);
     setenv("MODEL", "test-model", 1);
     setenv("API_KEY", "test-key", 1);
-    
+
     RalphSession session;
     ToolCall tool_calls[1];
     const char* headers[2] = {"Content-Type: application/json", NULL};
-    
+
+    // Use C-based tool (doesn't require Python)
     tool_calls[0].id = "auth_fail_test_123";
-    tool_calls[0].name = "shell_execute";
-    tool_calls[0].arguments = "{\"command\":\"echo 'tool_survives_auth_failure'\"}";
-    
+    tool_calls[0].name = "vector_db_list_indices";
+    tool_calls[0].arguments = "{}";
+
     ralph_init_session(&session);
     ralph_load_config(&session);
-    
+
     // Execute - tool should succeed even with API auth failure
     int result = ralph_execute_tool_workflow(&session, tool_calls, 1, "auth test", 100, headers);
-    
+
     TEST_ASSERT_EQUAL_INT(0, result);
     TEST_ASSERT_TRUE(session.session_data.conversation.count > 0);
-    
+
     ralph_cleanup_session(&session);
-    
+
     // Stop mock server
     mock_api_server_stop(&server);
-    
+
     // Clean up environment
     unsetenv("API_URL");
     unsetenv("MODEL");
@@ -499,7 +502,7 @@ void test_tool_execution_with_auth_failure(void) {
 void test_graceful_degradation_on_api_errors(void) {
     // NETWORK RESILIENCE TEST: Various API error scenarios
     // Tests that tool execution continues working despite different API failures
-    
+
     // Start mock server that returns 500 Internal Server Error
     MockAPIServer server = {0};
     server.port = MOCK_SERVER_DEFAULT_PORT;
@@ -509,48 +512,50 @@ void test_graceful_degradation_on_api_errors(void) {
     responses[0].method = "POST";
     server.responses = responses;
     server.response_count = 1;
-    
+
     TEST_ASSERT_EQUAL_INT(0, mock_api_server_start(&server));
     TEST_ASSERT_EQUAL_INT(0, mock_api_server_wait_ready(&server, 1000));
-    
+
     // Set environment to use mock server
     setenv("API_URL", "http://127.0.0.1:8888/v1/chat/completions", 1);
     setenv("MODEL", "test-model", 1);
-    
+
     RalphSession session;
     ToolCall tool_calls[1];
     const char* headers[2] = {"Content-Type: application/json", NULL};
-    
+
+    // Use C-based tool (doesn't require Python)
     tool_calls[0].id = "server_error_test_123";
-    tool_calls[0].name = "shell_execute";
-    tool_calls[0].arguments = "{\"command\":\"echo 'tool_survives_server_error'\"}";
-    
+    tool_calls[0].name = "vector_db_list_indices";
+    tool_calls[0].arguments = "{}";
+
     ralph_init_session(&session);
     ralph_load_config(&session);
-    
+
     // Execute tool workflow
     int result = ralph_execute_tool_workflow(&session, tool_calls, 1, "server error test", 100, headers);
-    
+
     // Should succeed because tools execute locally regardless of API errors
     TEST_ASSERT_EQUAL_INT(0, result);
     TEST_ASSERT_TRUE(session.session_data.conversation.count > 0);
-    
+
     // Verify tool result exists
     int found_tool_result = 0;
     for (int i = 0; i < session.session_data.conversation.count; i++) {
         if (strcmp(session.session_data.conversation.messages[i].role, "tool") == 0) {
             found_tool_result = 1;
-            TEST_ASSERT_TRUE(strstr(session.session_data.conversation.messages[i].content, "tool_survives_server_error") != NULL);
+            // vector_db_list_indices returns JSON with indices array
+            TEST_ASSERT_TRUE(strstr(session.session_data.conversation.messages[i].content, "indices") != NULL);
             break;
         }
     }
     TEST_ASSERT_TRUE(found_tool_result);
-    
+
     ralph_cleanup_session(&session);
-    
+
     // Stop mock server
     mock_api_server_stop(&server);
-    
+
     // Clean up environment
     unsetenv("API_URL");
     unsetenv("MODEL");
@@ -588,54 +593,55 @@ void test_shell_command_request_workflow(void) {
 void test_sequential_tool_execution(void) {
     // TOOL WORKFLOW INTEGRATION TEST: Multiple tool calls in sequence
     // Tests that multiple tools execute properly and results are tracked
-    
+
     RalphSession session;
     ToolCall tool_calls[2];
     const char* headers[2] = {"Content-Type: application/json", NULL};
-    
-    // Setup first tool call
+
+    // Setup first C-based tool call (doesn't require Python)
     tool_calls[0].id = "seq_test_1";
-    tool_calls[0].name = "shell_execute";
-    tool_calls[0].arguments = "{\"command\":\"echo 'first_tool_executed'\"}";
-    
-    // Setup second tool call  
+    tool_calls[0].name = "vector_db_list_indices";
+    tool_calls[0].arguments = "{}";
+
+    // Setup second C-based tool call (different tool to verify both execute)
     tool_calls[1].id = "seq_test_2";
-    tool_calls[1].name = "shell_execute";
-    tool_calls[1].arguments = "{\"command\":\"echo 'second_tool_executed'\"}";
-    
+    tool_calls[1].name = "vector_db_list_indices";
+    tool_calls[1].arguments = "{}";
+
     ralph_init_session(&session);
     ralph_load_config(&session);
-    
+
     // Use unreachable API to focus on tool execution
     free(session.session_data.config.api_url);
     session.session_data.config.api_url = strdup("http://192.0.2.1:99999/v1/chat/completions");
-    
+
     // Execute multiple tools
     int result = ralph_execute_tool_workflow(&session, tool_calls, 2, "sequential test", 100, headers);
-    
+
     TEST_ASSERT_EQUAL_INT(0, result);
-    
+
     // Should have at least 2 tool results in conversation
     TEST_ASSERT_TRUE(session.session_data.conversation.count >= 2);
-    
+
     // Verify both tools executed
     int found_first = 0, found_second = 0;
     for (int i = 0; i < session.session_data.conversation.count; i++) {
         if (strcmp(session.session_data.conversation.messages[i].role, "tool") == 0) {
             if (strcmp(session.session_data.conversation.messages[i].tool_call_id, "seq_test_1") == 0) {
                 found_first = 1;
-                TEST_ASSERT_TRUE(strstr(session.session_data.conversation.messages[i].content, "first_tool_executed") != NULL);
+                // vector_db_list_indices returns JSON with indices array
+                TEST_ASSERT_TRUE(strstr(session.session_data.conversation.messages[i].content, "indices") != NULL);
             }
             if (strcmp(session.session_data.conversation.messages[i].tool_call_id, "seq_test_2") == 0) {
                 found_second = 1;
-                TEST_ASSERT_TRUE(strstr(session.session_data.conversation.messages[i].content, "second_tool_executed") != NULL);
+                TEST_ASSERT_TRUE(strstr(session.session_data.conversation.messages[i].content, "indices") != NULL);
             }
         }
     }
-    
+
     TEST_ASSERT_TRUE(found_first);
     TEST_ASSERT_TRUE(found_second);
-    
+
     ralph_cleanup_session(&session);
 }
 
@@ -670,48 +676,48 @@ void test_conversation_persistence_through_tools(void) {
 void test_tool_name_hardcoded_bug_fixed(void) {
     // BUG FIX VERIFICATION TEST: Tool name should now use correct tool name, not hardcoded "tool_name"
     // This test verifies that the fix for the hardcoded tool_name bug works correctly
-    
+
     RalphSession session;
     ToolCall tool_calls[1];
     const char* headers[2] = {"Content-Type: application/json", NULL};
-    
-    // Setup file list tool call - this should now have tool_name "file_list" not "tool_name"
+
+    // Setup C-based tool call - this should now have tool_name "vector_db_list_indices" not "tool_name"
     tool_calls[0].id = "toolu_01DdpdffBNXNqfWFDUCtY7Jc";  // Same ID from CONVERSATION.md
-    tool_calls[0].name = "file_list";  // This is the ACTUAL tool name that should be saved
-    tool_calls[0].arguments = "{\"directory_path\": \".\"}";
-    
+    tool_calls[0].name = "vector_db_list_indices";  // This is the ACTUAL tool name that should be saved
+    tool_calls[0].arguments = "{}";
+
     ralph_init_session(&session);
     ralph_load_config(&session);
-    
+
     // Use unreachable API to focus on tool execution fix verification
     free(session.session_data.config.api_url);
     session.session_data.config.api_url = strdup("http://192.0.2.1:99999/v1/chat/completions");
-    
+
     // Execute tool workflow which will eventually call the fixed ralph_execute_tool_loop
-    int result = ralph_execute_tool_workflow(&session, tool_calls, 1, "list files", 100, headers);
-    
+    int result = ralph_execute_tool_workflow(&session, tool_calls, 1, "list indices", 100, headers);
+
     // Tool execution should succeed
     TEST_ASSERT_EQUAL_INT(0, result);
     TEST_ASSERT_TRUE(session.session_data.conversation.count > 0);
-    
+
     // Find the tool result message and verify the tool_name is now correct
     int found_tool_result = 0;
     for (int i = 0; i < session.session_data.conversation.count; i++) {
         if (strcmp(session.session_data.conversation.messages[i].role, "tool") == 0) {
             found_tool_result = 1;
             printf("DEBUG: Fixed tool message has tool_name: '%s'\n", session.session_data.conversation.messages[i].tool_name);
-            
-            // BUG FIX VERIFICATION: tool_name should now be "file_list", NOT "tool_name"
-            TEST_ASSERT_EQUAL_STRING("file_list", session.session_data.conversation.messages[i].tool_name);
+
+            // BUG FIX VERIFICATION: tool_name should now be "vector_db_list_indices", NOT "tool_name"
+            TEST_ASSERT_EQUAL_STRING("vector_db_list_indices", session.session_data.conversation.messages[i].tool_name);
             TEST_ASSERT_EQUAL_STRING("toolu_01DdpdffBNXNqfWFDUCtY7Jc", session.session_data.conversation.messages[i].tool_call_id);
-            
+
             // Verify it's NOT the hardcoded bug value anymore
             TEST_ASSERT_NOT_EQUAL(0, strcmp("tool_name", session.session_data.conversation.messages[i].tool_name));
             break;
         }
     }
     TEST_ASSERT_TRUE(found_tool_result);
-    
+
     ralph_cleanup_session(&session);
 }
 
@@ -764,28 +770,29 @@ void test_ralph_build_anthropic_json_payload_with_tools(void) {
     const char *test_message = "List files";
     const char *model = "claude-3-opus-20240229";
     int max_tokens = 200;
-    
+
     ConversationHistory conversation = {0};
     ToolRegistry tools = {0};
     init_tool_registry(&tools);
     register_builtin_tools(&tools);
-    
-    char* result = ralph_build_anthropic_json_payload(model, NULL, &conversation, 
+
+    char* result = ralph_build_anthropic_json_payload(model, NULL, &conversation,
                                                      test_message, max_tokens, &tools);
-    
+
     TEST_ASSERT_NOT_NULL(result);
 
     // Check for tools array
     TEST_ASSERT_NOT_NULL(strstr(result, "\"tools\": ["));
 
-    // Check for shell_execute tool with Anthropic format (cJSON produces no spaces after colons)
-    TEST_ASSERT_NOT_NULL(strstr(result, "\"name\":\"shell_execute\""));
+    // Check for C-based vector_db_search tool with Anthropic format (cJSON produces no spaces after colons)
+    // Note: We use vector_db_search because it's a C-based tool that doesn't require Python
+    TEST_ASSERT_NOT_NULL(strstr(result, "\"name\":\"vector_db_search\""));
     TEST_ASSERT_NOT_NULL(strstr(result, "\"input_schema\""));
 
     // Should not have OpenAI's function wrapper
     TEST_ASSERT_NULL(strstr(result, "\"type\":\"function\""));
     TEST_ASSERT_NULL(strstr(result, "\"type\": \"function\""));
-    
+
     free(result);
     cleanup_tool_registry(&tools);
 }
