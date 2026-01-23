@@ -77,4 +77,9 @@ char* ralph_build_anthropic_json_payload_with_todos(const RalphSession* session,
 int manage_conversation_tokens(RalphSession* session, const char* user_message,
                               TokenConfig* config, TokenUsage* usage);
 
+// Generate a recap of recent conversation without persisting to history
+// Returns 0 on success, -1 on failure
+// max_messages: maximum number of recent messages to include in recap context (0 for default)
+int ralph_generate_recap(RalphSession* session, int max_messages);
+
 #endif // RALPH_H

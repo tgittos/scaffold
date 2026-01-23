@@ -126,24 +126,37 @@ int main(int argc, char *argv[])
         }
 
         // Check if this is a first-time user (no conversation history)
-        // Skip welcome message in JSON mode
-        if (session.session_data.conversation.count == 0 && !json_mode) {
-            debug_printf("Generating welcome message...\n");
+        // Skip welcome/recap message in JSON mode
+        if (!json_mode) {
+            if (session.session_data.conversation.count == 0) {
+                debug_printf("Generating welcome message...\n");
 
-            // Send a system message to get an AI-generated greeting
-            const char* greeting_prompt = "This is your first interaction with this user in interactive mode. "
-                                        "Please introduce yourself as Ralph, briefly explain your capabilities "
-                                        "(answering questions, running shell commands, file operations, problem-solving), "
-                                        "and ask what you can help with today. Keep it warm, concise, and engaging. "
-                                        "Make it feel personal and conversational, not like a static template.";
+                // Send a system message to get an AI-generated greeting
+                const char* greeting_prompt = "This is your first interaction with this user in interactive mode. "
+                                            "Please introduce yourself as Ralph, briefly explain your capabilities "
+                                            "(answering questions, running shell commands, file operations, problem-solving), "
+                                            "and ask what you can help with today. Keep it warm, concise, and engaging. "
+                                            "Make it feel personal and conversational, not like a static template.";
 
-            // Send initial greeting (indicator will be cleared immediately)
-            int result = ralph_process_message(&session, greeting_prompt);
-            if (result != 0) {
-                // Fallback to basic message if AI greeting fails
-                printf("Hello! I'm Ralph, your AI assistant. What can I help you with today?\n");
+                // Send initial greeting (indicator will be cleared immediately)
+                int result = ralph_process_message(&session, greeting_prompt);
+                if (result != 0) {
+                    // Fallback to basic message if AI greeting fails
+                    printf("Hello! I'm Ralph, your AI assistant. What can I help you with today?\n");
+                }
+                printf("\n");
+            } else {
+                // Existing conversation - generate a brief recap
+                debug_printf("Generating recap of recent conversation (%d messages)...\n",
+                           session.session_data.conversation.count);
+
+                int result = ralph_generate_recap(&session, 5);
+                if (result != 0) {
+                    // Fallback to simple message if recap fails
+                    printf("Welcome back! Ready to continue where we left off.\n");
+                }
+                printf("\n");
             }
-            printf("\n");
         }
         
         // Initialize readline
