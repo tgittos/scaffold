@@ -2,6 +2,7 @@
 #define APPROVAL_GATE_H
 
 #include <regex.h>
+#include <stdint.h>
 #include <sys/types.h>
 #include <time.h>
 
@@ -20,6 +21,13 @@
  * - Denial rate limiting to prevent approval fatigue
  * - Subagent approval proxying via IPC
  * - TOCTOU-safe path verification
+ *
+ * Related headers (for detailed implementations):
+ * - shell_parser.h: Shell command parsing and dangerous pattern detection
+ * - protected_files.h: Protected file detection and inode caching
+ * - path_normalize.h: Cross-platform path normalization
+ * - atomic_file.h: TOCTOU-safe atomic file operations
+ * - subagent_approval.h: Subagent approval proxy IPC
  */
 
 /* Forward declarations */
@@ -70,6 +78,22 @@ typedef enum {
     SHELL_TYPE_POWERSHELL,  /* PowerShell (Windows or Core) */
     SHELL_TYPE_UNKNOWN
 } ShellType;
+
+/**
+ * Result codes from path verification operations.
+ */
+typedef enum {
+    VERIFY_OK,                  /* Path verified successfully */
+    VERIFY_ERR_SYMLINK,         /* Path is a symlink (O_NOFOLLOW) */
+    VERIFY_ERR_DELETED,         /* File was deleted after approval */
+    VERIFY_ERR_OPEN,            /* Failed to open file */
+    VERIFY_ERR_STAT,            /* Failed to stat file */
+    VERIFY_ERR_INODE_MISMATCH,  /* Inode/device changed since approval */
+    VERIFY_ERR_PARENT,          /* Cannot open parent directory */
+    VERIFY_ERR_PARENT_CHANGED,  /* Parent directory inode changed */
+    VERIFY_ERR_ALREADY_EXISTS,  /* File exists when creating new file */
+    VERIFY_ERR_CREATE           /* Failed to create new file */
+} VerifyResult;
 
 /**
  * Shell-specific allowlist entry.
@@ -372,9 +396,22 @@ int get_rate_limit_remaining(const ApprovalGateConfig *config,
  * Verify that an approved path hasn't changed since approval.
  *
  * @param approved The approved path data
- * @return 1 if verified, 0 if path changed
+ * @return VERIFY_OK on success, or specific error code
  */
-int verify_approved_path(const ApprovedPath *approved);
+VerifyResult verify_approved_path(const ApprovedPath *approved);
+
+/**
+ * Verify and open an approved path atomically.
+ * Opens file with O_NOFOLLOW and verifies inode matches approval.
+ *
+ * @param approved The approved path data
+ * @param flags Open flags (O_RDONLY, O_WRONLY, etc.)
+ * @param out_fd Output: file descriptor on success
+ * @return VERIFY_OK on success, or specific error code
+ */
+VerifyResult verify_and_open_approved_path(const ApprovedPath *approved,
+                                           int flags,
+                                           int *out_fd);
 
 /**
  * Free resources held by an ApprovedPath.
@@ -416,6 +453,58 @@ void handle_subagent_approval_request(ApprovalGateConfig *config,
 void free_approval_channel(ApprovalChannel *channel);
 
 /* ============================================================================
+ * Shell Detection
+ * ========================================================================== */
+
+/**
+ * Detect the shell type from environment.
+ * On Windows: checks COMSPEC and PSModulePath.
+ * On POSIX: checks SHELL for pwsh/powershell, defaults to POSIX.
+ *
+ * @return Detected shell type
+ */
+ShellType detect_shell_type(void);
+
+/* ============================================================================
+ * Error Formatting
+ * ========================================================================== */
+
+/**
+ * Format a rate limit error message as JSON.
+ *
+ * @param config Gate configuration
+ * @param tool_call The rate-limited tool call
+ * @return Allocated JSON error string. Caller must free.
+ */
+char *format_rate_limit_error(const ApprovalGateConfig *config,
+                              const struct ToolCall *tool_call);
+
+/**
+ * Format a denial error message as JSON.
+ *
+ * @param tool_call The denied tool call
+ * @return Allocated JSON error string. Caller must free.
+ */
+char *format_denial_error(const struct ToolCall *tool_call);
+
+/**
+ * Format a protected file error message as JSON.
+ *
+ * @param path The protected file path
+ * @return Allocated JSON error string. Caller must free.
+ */
+char *format_protected_file_error(const char *path);
+
+/**
+ * Format a path verification error message as JSON.
+ *
+ * @param result The verification result
+ * @param path The path that failed verification
+ * @return Allocated JSON error string. Caller must free.
+ */
+char *format_verify_error(VerifyResult result, const char *path);
+
+/* ============================================================================
  * Utility Functions
  * ========================================================================== */
 
@@ -442,5 +531,13 @@ const char *gate_action_name(GateAction action);
  * @return Static string name
  */
 const char *approval_result_name(ApprovalResult result);
+
+/**
+ * Get verify result error message.
+ *
+ * @param result The verification result
+ * @return Static string message
+ */
+const char *verify_result_message(VerifyResult result);
 
 #endif /* APPROVAL_GATE_H */
