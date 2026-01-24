@@ -1,4 +1,8 @@
-"""Append content to a file."""
+"""Append content to a file.
+
+Gate: file_write
+Match: path
+"""
 
 MAX_APPEND_SIZE = 10 * 1024 * 1024  # 10MB
 

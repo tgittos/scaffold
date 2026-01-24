@@ -1,4 +1,8 @@
-"""Get file information and metadata."""
+"""Get file information and metadata.
+
+Gate: file_read
+Match: path
+"""
 
 def file_info(path: str) -> dict:
     """Get file information and metadata.

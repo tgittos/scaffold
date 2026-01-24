@@ -1,4 +1,8 @@
-"""Search for patterns in files."""
+"""Search for patterns in files.
+
+Gate: file_read
+Match: pattern
+"""
 
 MAX_FILE_SIZE = 1024 * 1024  # 1MB
 CONTEXT_CHARS = 30  # Characters of context around match

@@ -191,6 +191,7 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
     }
 
     // Python code to extract function schema
+    // Also parses Gate: and Match: directives from module docstring
     const char *schema_code =
         "def _ralph_parse_docstring_args(doc):\n"
         "    \"\"\"Parse Args section from Google-style docstring.\"\"\"\n"
@@ -236,15 +237,39 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
         "        args_desc[current_param] = ' '.join(current_desc)\n"
         "    return args_desc\n"
         "\n"
+        "def _ralph_parse_gate_directives(doc):\n"
+        "    \"\"\"Parse Gate: and Match: directives from docstring.\"\"\"\n"
+        "    result = {'gate_category': None, 'match_arg': None}\n"
+        "    if not doc:\n"
+        "        return result\n"
+        "    for line in doc.split('\\n'):\n"
+        "        stripped = line.strip()\n"
+        "        if stripped.startswith('Gate:'):\n"
+        "            result['gate_category'] = stripped[5:].strip()\n"
+        "        elif stripped.startswith('Match:'):\n"
+        "            result['match_arg'] = stripped[6:].strip()\n"
+        "    return result\n"
+        "\n"
         "def _ralph_extract_schema(func_name):\n"
         "    import inspect\n"
         "    import json\n"
+        "    import sys\n"
         "    func = globals().get(func_name)\n"
         "    if func is None or not callable(func):\n"
         "        return None\n"
         "    try:\n"
         "        sig = inspect.signature(func)\n"
         "        doc = func.__doc__ or ''\n"
+        "        # Get module docstring for Gate:/Match: directives\n"
+        "        module_doc = sys.modules.get('__main__').__doc__ or ''\n"
+        "        gate_info = _ralph_parse_gate_directives(module_doc)\n"
+        "        # Also check function docstring for directives\n"
+        "        if gate_info['gate_category'] is None or gate_info['match_arg'] is None:\n"
+        "            func_gate_info = _ralph_parse_gate_directives(doc)\n"
+        "            if gate_info['gate_category'] is None:\n"
+        "                gate_info['gate_category'] = func_gate_info['gate_category']\n"
+        "            if gate_info['match_arg'] is None:\n"
+        "                gate_info['match_arg'] = func_gate_info['match_arg']\n"
         "        # Get first line of docstring as description\n"
         "        desc = doc.split('\\n')[0].strip() if doc else func_name\n"
         "        # Parse Args section for parameter descriptions\n"
@@ -265,7 +290,13 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
         "            # Use parsed docstring description or fall back to param name\n"
         "            p['description'] = arg_descriptions.get(name, name)\n"
         "            params.append(p)\n"
-        "        return json.dumps({'name': func_name, 'description': desc, 'parameters': params})\n"
+        "        return json.dumps({\n"
+        "            'name': func_name,\n"
+        "            'description': desc,\n"
+        "            'parameters': params,\n"
+        "            'gate_category': gate_info['gate_category'],\n"
+        "            'match_arg': gate_info['match_arg']\n"
+        "        })\n"
         "    except Exception as e:\n"
         "        return None\n";
 
@@ -319,6 +350,8 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
     cJSON *name_item = cJSON_GetObjectItem(schema, "name");
     cJSON *desc_item = cJSON_GetObjectItem(schema, "description");
     cJSON *params_item = cJSON_GetObjectItem(schema, "parameters");
+    cJSON *gate_item = cJSON_GetObjectItem(schema, "gate_category");
+    cJSON *match_item = cJSON_GetObjectItem(schema, "match_arg");
 
     if (!cJSON_IsString(name_item) || !cJSON_IsString(desc_item)) {
         cJSON_Delete(schema);
@@ -336,6 +369,16 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
         tool_def->name = NULL;
         cJSON_Delete(schema);
         return -1;
+    }
+
+    // Extract gate category and match argument if specified
+    tool_def->gate_category = NULL;
+    tool_def->match_arg = NULL;
+    if (cJSON_IsString(gate_item) && gate_item->valuestring != NULL) {
+        tool_def->gate_category = strdup(gate_item->valuestring);
+    }
+    if (cJSON_IsString(match_item) && match_item->valuestring != NULL) {
+        tool_def->match_arg = strdup(match_item->valuestring);
     }
 
     // Extract parameters
@@ -397,6 +440,8 @@ int python_load_tool_files(void) {
             free(tool->name);
             free(tool->description);
             free(tool->file_path);
+            free(tool->gate_category);
+            free(tool->match_arg);
             if (tool->parameters != NULL) {
                 for (int j = 0; j < tool->parameter_count; j++) {
                     free(tool->parameters[j].name);
@@ -792,6 +837,30 @@ char* python_get_loaded_tools_description(void) {
     return desc;
 }
 
+const char* python_tool_get_gate_category(const char *name) {
+    if (name == NULL) return NULL;
+
+    for (int i = 0; i < python_tool_registry.count; i++) {
+        if (python_tool_registry.tools[i].name != NULL &&
+            strcmp(python_tool_registry.tools[i].name, name) == 0) {
+            return python_tool_registry.tools[i].gate_category;
+        }
+    }
+    return NULL;
+}
+
+const char* python_tool_get_match_arg(const char *name) {
+    if (name == NULL) return NULL;
+
+    for (int i = 0; i < python_tool_registry.count; i++) {
+        if (python_tool_registry.tools[i].name != NULL &&
+            strcmp(python_tool_registry.tools[i].name, name) == 0) {
+            return python_tool_registry.tools[i].match_arg;
+        }
+    }
+    return NULL;
+}
+
 void python_cleanup_tool_files(void) {
     if (python_tool_registry.tools != NULL) {
         for (int i = 0; i < python_tool_registry.count; i++) {
@@ -799,6 +868,8 @@ void python_cleanup_tool_files(void) {
             free(tool->name);
             free(tool->description);
             free(tool->file_path);
+            free(tool->gate_category);
+            free(tool->match_arg);
             if (tool->parameters != NULL) {
                 for (int j = 0; j < tool->parameter_count; j++) {
                     free(tool->parameters[j].name);

@@ -19,6 +19,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "../tools/python_tool_files.h"
 #include "../utils/debug_output.h"
 
 /* =============================================================================
@@ -671,6 +672,18 @@ GateCategory get_tool_category(const char *tool_name) {
         return GATE_CATEGORY_PYTHON; /* Default for unknown tools */
     }
 
+    /* Check Python tool metadata first for dynamic tools with Gate: directive */
+    if (is_python_file_tool(tool_name)) {
+        const char *gate_category = python_tool_get_gate_category(tool_name);
+        if (gate_category != NULL) {
+            GateCategory category;
+            if (parse_gate_category(gate_category, &category) == 0) {
+                return category;
+            }
+        }
+        /* Fall through to check hardcoded mappings for known tools */
+    }
+
     /* Memory tools */
     if (strcmp(tool_name, "remember") == 0 ||
         strcmp(tool_name, "recall_memories") == 0 ||
@@ -1011,6 +1024,38 @@ int approval_gate_add_shell_allowlist(ApprovalGateConfig *config,
     return 0;
 }
 
+/**
+ * Extract the match target value from tool call arguments.
+ * For Python file tools, this uses the Match: directive to identify which argument
+ * to extract. Returns an allocated string that must be freed by the caller.
+ */
+static char *extract_match_target(const char *tool_name, const char *arguments_json) {
+    if (tool_name == NULL || arguments_json == NULL) {
+        return NULL;
+    }
+
+    /* Check if it's a Python file tool with a Match: directive */
+    if (is_python_file_tool(tool_name)) {
+        const char *match_arg = python_tool_get_match_arg(tool_name);
+        if (match_arg != NULL) {
+            /* Parse arguments JSON and extract the specified argument */
+            cJSON *args = cJSON_Parse(arguments_json);
+            if (args != NULL) {
+                cJSON *target_item = cJSON_GetObjectItem(args, match_arg);
+                char *result = NULL;
+                if (cJSON_IsString(target_item) && target_item->valuestring != NULL) {
+                    result = strdup(target_item->valuestring);
+                }
+                cJSON_Delete(args);
+                return result;
+            }
+        }
+    }
+
+    /* Fall back to using full arguments JSON as match target */
+    return strdup(arguments_json);
+}
+
 static int match_regex_allowlist(const ApprovalGateConfig *config,
                                  const char *tool_name,
                                  const char *match_target) {
@@ -1052,9 +1097,14 @@ int approval_gate_matches_allowlist(const ApprovalGateConfig *config,
         return 0;
     }
 
-    /* For other tools, use regex matching against the arguments */
+    /* For other tools, extract the match target based on Match: directive */
     if (tool_call->arguments != NULL) {
-        return match_regex_allowlist(config, tool_call->name, tool_call->arguments);
+        char *match_target = extract_match_target(tool_call->name, tool_call->arguments);
+        if (match_target != NULL) {
+            int result = match_regex_allowlist(config, tool_call->name, match_target);
+            free(match_target);
+            return result;
+        }
     }
 
     return 0;

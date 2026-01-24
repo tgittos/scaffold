@@ -1,5 +1,8 @@
 """Execute shell commands.
 
+Gate: shell
+Match: command
+
 Security Note: This tool intentionally executes arbitrary shell commands.
 The security boundary is the user's decision to run ralph and grant it
 shell access - not this tool's input validation. The dangerous_patterns

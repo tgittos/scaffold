@@ -28,7 +28,7 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 - [x] **Implement `get_tool_category()` function** - Map tool names to `GateCategory` enum. Handle C native tools by exact name match (`remember`, `recall_memories`, `forget_memory`, `process_pdf_document`, `python`, `subagent`, `subagent_status`, `todo`, `vector_db_*` prefix, `mcp_*` prefix). Default unknown tools to `GATE_CATEGORY_PYTHON`. See spec section "Implementation > Tool Category Mapping".
 
-- [ ] **Handle Python file tool categorization** - Parse `Gate:` directive from Python tool docstrings to override default category. Parse `Match:` directive to identify which argument to use for pattern matching. See spec section "Dynamic Tools > Gate Metadata" for directive format.
+- [x] **Handle Python file tool categorization** - Parse `Gate:` directive from Python tool docstrings to override default category. Parse `Match:` directive to identify which argument to use for pattern matching. See spec section "Dynamic Tools > Gate Metadata" for directive format.
 
 ---
 

@@ -10,6 +10,26 @@
 #include <time.h>
 #include <unistd.h>
 
+/*
+ * Stub implementations for Python tool functions.
+ * These are used when Python tools aren't loaded (test environment).
+ * In real usage, python_tool_files.c provides the actual implementations.
+ */
+int is_python_file_tool(const char *name) {
+    (void)name;
+    return 0; /* No Python tools loaded in test environment */
+}
+
+const char* python_tool_get_gate_category(const char *name) {
+    (void)name;
+    return NULL; /* No metadata available in test environment */
+}
+
+const char* python_tool_get_match_arg(const char *name) {
+    (void)name;
+    return NULL; /* No metadata available in test environment */
+}
+
 /* Backup for existing config file */
 static char *saved_config_backup = NULL;
 
@@ -173,6 +193,28 @@ void test_get_tool_category_python(void) {
 void test_get_tool_category_unknown_defaults_to_python(void) {
     TEST_ASSERT_EQUAL(GATE_CATEGORY_PYTHON, get_tool_category("unknown_tool"));
     TEST_ASSERT_EQUAL(GATE_CATEGORY_PYTHON, get_tool_category("custom_dynamic_tool"));
+}
+
+/**
+ * Test that Python tool Gate: directive overrides are used when available.
+ *
+ * Note: This tests the fallback behavior when Python tools are not loaded.
+ * When the Python interpreter is not initialized, is_python_file_tool() returns 0
+ * and get_tool_category() falls back to hardcoded mappings.
+ *
+ * Full Python tool integration tests would require:
+ * 1. Initializing the Python interpreter
+ * 2. Loading Python tool files with Gate: directives
+ * 3. Verifying categories are derived from directives
+ *
+ * These tests are covered in test_python_tool_integration.c.
+ */
+void test_get_tool_category_fallback_when_python_not_loaded(void) {
+    /* Even when Python isn't loaded, known tools should map correctly via hardcoded fallback */
+    TEST_ASSERT_EQUAL(GATE_CATEGORY_FILE_READ, get_tool_category("read_file"));
+    TEST_ASSERT_EQUAL(GATE_CATEGORY_FILE_WRITE, get_tool_category("write_file"));
+    TEST_ASSERT_EQUAL(GATE_CATEGORY_SHELL, get_tool_category("shell"));
+    TEST_ASSERT_EQUAL(GATE_CATEGORY_NETWORK, get_tool_category("web_fetch"));
 }
 
 void test_get_tool_category_null_defaults_to_python(void) {
@@ -1085,6 +1127,7 @@ int main(void) {
     RUN_TEST(test_get_tool_category_python);
     RUN_TEST(test_get_tool_category_unknown_defaults_to_python);
     RUN_TEST(test_get_tool_category_null_defaults_to_python);
+    RUN_TEST(test_get_tool_category_fallback_when_python_not_loaded);
 
     /* Rate limiting tests */
     RUN_TEST(test_rate_limiting_initial_state);

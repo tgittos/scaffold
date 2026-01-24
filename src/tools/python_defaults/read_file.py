@@ -1,4 +1,8 @@
-"""Read file contents with optional line range."""
+"""Read file contents with optional line range.
+
+Gate: file_read
+Match: path
+"""
 
 def read_file(path: str, start_line: int = 0, end_line: int = 0) -> str:
     """Read file contents, optionally with line range.

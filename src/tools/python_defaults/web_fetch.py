@@ -1,5 +1,8 @@
 """Fetch web page content.
 
+Gate: network
+Match: url
+
 Security Note: This tool intentionally allows fetching from localhost and
 internal network resources. This is a development tool where the agent may
 need to test local services, access development servers, or fetch from

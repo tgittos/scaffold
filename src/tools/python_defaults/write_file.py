@@ -1,4 +1,8 @@
-"""Write content to a file."""
+"""Write content to a file.
+
+Gate: file_write
+Match: path
+"""
 
 MAX_WRITE_SIZE = 50 * 1024 * 1024  # 50MB
 

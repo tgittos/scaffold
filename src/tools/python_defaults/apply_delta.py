@@ -1,4 +1,8 @@
-"""Apply delta patch operations to a file."""
+"""Apply delta patch operations to a file.
+
+Gate: file_write
+Match: path
+"""
 
 VALID_OP_TYPES = {'insert', 'delete', 'replace'}
 

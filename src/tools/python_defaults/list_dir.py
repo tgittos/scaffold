@@ -1,4 +1,8 @@
-"""List directory contents."""
+"""List directory contents.
+
+Gate: file_read
+Match: path
+"""
 
 def list_dir(path: str, pattern: str = None, recursive: bool = False, include_hidden: bool = False) -> list:
     """List directory contents with optional filtering.
