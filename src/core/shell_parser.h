@@ -19,7 +19,10 @@
  * - Commands with pipes (|) never match allowlist
  * - Commands with subshells ($(), ``) never match allowlist
  * - Dangerous patterns (rm -rf, fork bombs, etc.) are always flagged
- * - ANSI-C quoting, non-ASCII chars, unbalanced quotes are rejected
+ * - ANSI-C quoting ($'...') is detected and prevents allowlist matching
+ * - Non-ASCII characters are flagged (potential Unicode lookalike attacks)
+ * - Backslash escapes are flagged (complex parsing, potential bypasses)
+ * - Unbalanced quotes are flagged as unsafe for matching
  *
  * Related headers:
  * - approval_gate.h: Uses parsed commands for allowlist matching

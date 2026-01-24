@@ -364,6 +364,43 @@ int parse_posix_shell(const char *command, ParsedShellCommand *result) {
     while (*p) {
         char c = *p;
 
+        /*
+         * Security: Check for non-ASCII characters.
+         * Unicode lookalikes for operators (e.g., U+037E Greek Question Mark
+         * looks like semicolon) could bypass detection. Flag as potentially
+         * dangerous by setting has_chain.
+         */
+        if ((unsigned char)c > 127) {
+            result->has_chain = 1;
+        }
+
+        /*
+         * Security: Detect ANSI-C quoting ($'...')
+         * This allows encoding metacharacters like $'\x3b' for semicolon.
+         * Must check before entering single quote mode.
+         */
+        if (c == '$' && *(p + 1) == '\'') {
+            result->has_chain = 1;  /* ANSI-C quoting can hide metacharacters */
+            p++;  /* Skip the $ */
+            continue;
+        }
+
+        /*
+         * Security: Handle backslash escapes outside quotes.
+         * In POSIX shells, backslash can escape any character including
+         * metacharacters. A backslash at end of line is line continuation.
+         * Mark as unsafe for matching rather than trying to parse all cases.
+         */
+        if (c == '\\' && !in_single_quote) {
+            result->has_chain = 1;  /* Backslash escapes are complex; mark unsafe */
+            if (*(p + 1)) {
+                p += 2;  /* Skip backslash and escaped character */
+            } else {
+                p++;  /* Just skip backslash at end */
+            }
+            continue;
+        }
+
         /* Handle quotes */
         if (c == '\'' && !in_double_quote) {
             in_single_quote = !in_single_quote;
@@ -486,44 +523,99 @@ int parse_posix_shell(const char *command, ParsedShellCommand *result) {
 }
 
 /* ============================================================================
- * Placeholder implementations for cmd.exe and PowerShell
- * These will be implemented in shell_parser_cmd.c and shell_parser_ps.c
+ * Windows cmd.exe Parsing (Placeholder)
+ *
+ * NOTE: This is a conservative placeholder that falls back to POSIX-like
+ * parsing with cmd-specific checks. Full cmd.exe parsing would require:
+ * - Only double quotes as delimiters (single quotes are literal)
+ * - Caret (^) as escape character
+ * - Different metacharacter set (&, |, <, >, ^, %)
+ * - Environment variable expansion (%VAR%)
+ *
+ * For now, we err on the side of caution by flagging anything that looks
+ * potentially dangerous. This means some safe commands may require approval.
  * ========================================================================== */
 
 int parse_cmd_shell(const char *command, ParsedShellCommand *result) {
-    /* For now, fall back to POSIX-like parsing with cmd-specific dangerous check */
+    /* Fall back to POSIX-like parsing with cmd-specific checks */
     if (parse_posix_shell(command, result) != 0) {
         return -1;
     }
     result->shell_type = SHELL_TYPE_CMD;
 
-    /* cmd.exe uses & as unconditional separator */
+    if (!command) {
+        return 0;
+    }
+
+    /* cmd.exe uses & as unconditional command separator */
     /* Re-scan for cmd-specific metacharacters */
-    if (command && strstr(command, "&")) {
+    if (strstr(command, "&")) {
         result->has_chain = 1;
     }
-    if (command && strstr(command, "%")) {
-        /* Variable expansion - mark as subshell equivalent */
+
+    /* % indicates variable expansion */
+    if (strchr(command, '%')) {
         result->has_subshell = 1;
+    }
+
+    /* ^ is the escape character in cmd.exe */
+    if (strchr(command, '^')) {
+        result->has_chain = 1;  /* Could escape metacharacters */
     }
 
     return 0;
 }
 
+/* ============================================================================
+ * PowerShell Parsing (Placeholder)
+ *
+ * NOTE: This is a conservative placeholder that falls back to POSIX-like
+ * parsing with PowerShell-specific checks. Full PowerShell parsing would require:
+ * - Different quoting rules (both ' and " but with different semantics)
+ * - Script block syntax { }
+ * - Pipeline chaining (;, |, &&, ||)
+ * - Call operators (& and . at start of expression)
+ * - Subexpression syntax $( )
+ * - Here-strings (@' '@ and @" "@)
+ *
+ * For now, we err on the side of caution by flagging anything that looks
+ * potentially dangerous.
+ * ========================================================================== */
+
 int parse_powershell(const char *command, ParsedShellCommand *result) {
-    /* For now, fall back to POSIX-like parsing with PS-specific dangerous check */
+    /* Fall back to POSIX-like parsing with PS-specific checks */
     if (parse_posix_shell(command, result) != 0) {
         return -1;
     }
     result->shell_type = SHELL_TYPE_POWERSHELL;
+
+    if (!command) {
+        return 0;
+    }
 
     /* Add PowerShell-specific dangerous pattern check */
     if (powershell_command_is_dangerous(command)) {
         result->is_dangerous = 1;
     }
 
-    /* Check for script blocks */
-    if (command && strchr(command, '{') && strchr(command, '}')) {
+    /* Check for script blocks { } */
+    if (strchr(command, '{') && strchr(command, '}')) {
+        result->has_subshell = 1;
+    }
+
+    /* Check for call operators at start of command */
+    /* Skip leading whitespace */
+    const char *p = command;
+    while (*p && isspace((unsigned char)*p)) {
+        p++;
+    }
+    if (*p == '&' || *p == '.') {
+        /* & or . at start indicates call operator */
+        result->has_subshell = 1;
+    }
+
+    /* Check for subexpression syntax $( ) */
+    if (strstr(command, "$(")) {
         result->has_subshell = 1;
     }
 

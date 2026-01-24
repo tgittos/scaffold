@@ -506,6 +506,133 @@ void test_parse_auto_detects_shell(void) {
 }
 
 /* ============================================================================
+ * Security Edge Cases - ANSI-C Quoting
+ * ========================================================================== */
+
+void test_ansic_quoting_detected(void) {
+    /* ANSI-C quoting $'...' can encode metacharacters */
+    ParsedShellCommand *cmd = parse_shell_command_for_type("echo $'hello'", SHELL_TYPE_POSIX);
+    TEST_ASSERT_NOT_NULL(cmd);
+    TEST_ASSERT_EQUAL_INT(1, cmd->has_chain);  /* Flagged as unsafe */
+    TEST_ASSERT_EQUAL_INT(0, shell_command_is_safe_for_matching(cmd));
+    free_parsed_shell_command(cmd);
+}
+
+void test_ansic_quoting_with_encoded_semicolon(void) {
+    /* $'\x3b' is a semicolon */
+    ParsedShellCommand *cmd = parse_shell_command_for_type("git$'\\x3b'rm", SHELL_TYPE_POSIX);
+    TEST_ASSERT_NOT_NULL(cmd);
+    TEST_ASSERT_EQUAL_INT(1, cmd->has_chain);
+    free_parsed_shell_command(cmd);
+}
+
+/* ============================================================================
+ * Security Edge Cases - Non-ASCII Characters
+ * ========================================================================== */
+
+void test_non_ascii_characters_flagged(void) {
+    /* Non-ASCII chars could be Unicode lookalikes for operators */
+    /* Using the Greek Question Mark (U+037E) which looks like semicolon */
+    unsigned char cmd_with_greek[] = {'e', 'c', 'h', 'o', ' ', 0xCD, 0xBE, 0x00};
+    ParsedShellCommand *cmd = parse_shell_command_for_type((char *)cmd_with_greek, SHELL_TYPE_POSIX);
+    TEST_ASSERT_NOT_NULL(cmd);
+    TEST_ASSERT_EQUAL_INT(1, cmd->has_chain);  /* Non-ASCII flagged */
+    free_parsed_shell_command(cmd);
+}
+
+void test_utf8_in_quoted_string_still_flagged(void) {
+    /* Even quoted non-ASCII should be flagged for safety */
+    unsigned char cmd_with_utf8[] = {'"', 0xC2, 0xA9, '"', 0x00};  /* Quoted copyright symbol */
+    ParsedShellCommand *cmd = parse_shell_command_for_type((char *)cmd_with_utf8, SHELL_TYPE_POSIX);
+    TEST_ASSERT_NOT_NULL(cmd);
+    TEST_ASSERT_EQUAL_INT(1, cmd->has_chain);
+    free_parsed_shell_command(cmd);
+}
+
+/* ============================================================================
+ * Security Edge Cases - Backslash Escapes
+ * ========================================================================== */
+
+void test_backslash_escape_flagged(void) {
+    /* Backslash can escape metacharacters */
+    ParsedShellCommand *cmd = parse_shell_command_for_type("echo hello\\;world", SHELL_TYPE_POSIX);
+    TEST_ASSERT_NOT_NULL(cmd);
+    TEST_ASSERT_EQUAL_INT(1, cmd->has_chain);  /* Backslash makes it unsafe */
+    free_parsed_shell_command(cmd);
+}
+
+void test_backslash_space_flagged(void) {
+    /* git\ status - backslash escapes space */
+    ParsedShellCommand *cmd = parse_shell_command_for_type("git\\ status", SHELL_TYPE_POSIX);
+    TEST_ASSERT_NOT_NULL(cmd);
+    TEST_ASSERT_EQUAL_INT(1, cmd->has_chain);  /* Flagged */
+    free_parsed_shell_command(cmd);
+}
+
+void test_backslash_at_end_flagged(void) {
+    /* Trailing backslash (line continuation) */
+    ParsedShellCommand *cmd = parse_shell_command_for_type("echo hello\\", SHELL_TYPE_POSIX);
+    TEST_ASSERT_NOT_NULL(cmd);
+    TEST_ASSERT_EQUAL_INT(1, cmd->has_chain);
+    free_parsed_shell_command(cmd);
+}
+
+/* ============================================================================
+ * PowerShell Specific Tests
+ * ========================================================================== */
+
+void test_powershell_call_operator_ampersand(void) {
+    /* & at start is call operator in PowerShell */
+    ParsedShellCommand *cmd = parse_shell_command_for_type("& notepad.exe", SHELL_TYPE_POWERSHELL);
+    TEST_ASSERT_NOT_NULL(cmd);
+    TEST_ASSERT_EQUAL_INT(1, cmd->has_subshell);
+    free_parsed_shell_command(cmd);
+}
+
+void test_powershell_call_operator_dot(void) {
+    /* . at start is dot-sourcing operator in PowerShell */
+    ParsedShellCommand *cmd = parse_shell_command_for_type(". script.ps1", SHELL_TYPE_POWERSHELL);
+    TEST_ASSERT_NOT_NULL(cmd);
+    TEST_ASSERT_EQUAL_INT(1, cmd->has_subshell);
+    free_parsed_shell_command(cmd);
+}
+
+void test_powershell_subexpression(void) {
+    /* $() is subexpression syntax */
+    ParsedShellCommand *cmd = parse_shell_command_for_type("echo $(Get-Date)", SHELL_TYPE_POWERSHELL);
+    TEST_ASSERT_NOT_NULL(cmd);
+    TEST_ASSERT_EQUAL_INT(1, cmd->has_subshell);
+    free_parsed_shell_command(cmd);
+}
+
+void test_powershell_dangerous_cmdlet(void) {
+    ParsedShellCommand *cmd = parse_shell_command_for_type("Invoke-Expression $code", SHELL_TYPE_POWERSHELL);
+    TEST_ASSERT_NOT_NULL(cmd);
+    TEST_ASSERT_EQUAL_INT(1, cmd->is_dangerous);
+    free_parsed_shell_command(cmd);
+}
+
+/* ============================================================================
+ * cmd.exe Specific Tests
+ * ========================================================================== */
+
+void test_cmd_caret_escape_flagged(void) {
+    /* ^ is escape character in cmd.exe */
+    ParsedShellCommand *cmd = parse_shell_command_for_type("echo ^&", SHELL_TYPE_CMD);
+    TEST_ASSERT_NOT_NULL(cmd);
+    TEST_ASSERT_EQUAL_INT(1, cmd->has_chain);
+    free_parsed_shell_command(cmd);
+}
+
+void test_cmd_variable_expansion_flagged(void) {
+    /* % indicates variable expansion */
+    ParsedShellCommand *cmd = parse_shell_command_for_type("echo %PATH%", SHELL_TYPE_CMD);
+    TEST_ASSERT_NOT_NULL(cmd);
+    TEST_ASSERT_EQUAL_INT(1, cmd->has_subshell);
+    free_parsed_shell_command(cmd);
+}
+
+/* ============================================================================
  * Test Runner
  * ========================================================================== */
 
@@ -591,6 +718,29 @@ int main(void) {
     /* Edge Cases */
     RUN_TEST(test_unbalanced_quotes_flagged);
     RUN_TEST(test_parse_auto_detects_shell);
+
+    /* Security Edge Cases - ANSI-C Quoting */
+    RUN_TEST(test_ansic_quoting_detected);
+    RUN_TEST(test_ansic_quoting_with_encoded_semicolon);
+
+    /* Security Edge Cases - Non-ASCII Characters */
+    RUN_TEST(test_non_ascii_characters_flagged);
+    RUN_TEST(test_utf8_in_quoted_string_still_flagged);
+
+    /* Security Edge Cases - Backslash Escapes */
+    RUN_TEST(test_backslash_escape_flagged);
+    RUN_TEST(test_backslash_space_flagged);
+    RUN_TEST(test_backslash_at_end_flagged);
+
+    /* PowerShell Specific Tests */
+    RUN_TEST(test_powershell_call_operator_ampersand);
+    RUN_TEST(test_powershell_call_operator_dot);
+    RUN_TEST(test_powershell_subexpression);
+    RUN_TEST(test_powershell_dangerous_cmdlet);
+
+    /* cmd.exe Specific Tests */
+    RUN_TEST(test_cmd_caret_escape_flagged);
+    RUN_TEST(test_cmd_variable_expansion_flagged);
 
     return UNITY_END();
 }
