@@ -19,6 +19,129 @@
 #include <unistd.h>
 
 /* =============================================================================
+ * Internal Helper Functions
+ * ========================================================================== */
+
+/**
+ * Escape a string for safe inclusion in JSON.
+ * Returns an allocated string that must be freed by the caller.
+ * Returns NULL on allocation failure.
+ */
+static char *json_escape_string_simple(const char *str) {
+    if (str == NULL) {
+        return strdup("");
+    }
+
+    /* Calculate the escaped length */
+    size_t escaped_len = 0;
+    for (const char *p = str; *p != '\0'; p++) {
+        unsigned char c = (unsigned char)*p;
+        if (c == '"' || c == '\\' || c == '/') {
+            escaped_len += 2;  /* \x */
+        } else if (c == '\b' || c == '\f' || c == '\n' || c == '\r' || c == '\t') {
+            escaped_len += 2;  /* \x */
+        } else if (c < 0x20) {
+            escaped_len += 6;  /* \uXXXX */
+        } else {
+            escaped_len += 1;
+        }
+    }
+
+    char *result = malloc(escaped_len + 1);
+    if (result == NULL) {
+        return NULL;
+    }
+
+    /* Build the escaped string */
+    char *out = result;
+    for (const char *p = str; *p != '\0'; p++) {
+        unsigned char c = (unsigned char)*p;
+        if (c == '"') {
+            *out++ = '\\';
+            *out++ = '"';
+        } else if (c == '\\') {
+            *out++ = '\\';
+            *out++ = '\\';
+        } else if (c == '/') {
+            *out++ = '\\';
+            *out++ = '/';
+        } else if (c == '\b') {
+            *out++ = '\\';
+            *out++ = 'b';
+        } else if (c == '\f') {
+            *out++ = '\\';
+            *out++ = 'f';
+        } else if (c == '\n') {
+            *out++ = '\\';
+            *out++ = 'n';
+        } else if (c == '\r') {
+            *out++ = '\\';
+            *out++ = 'r';
+        } else if (c == '\t') {
+            *out++ = '\\';
+            *out++ = 't';
+        } else if (c < 0x20) {
+            /* Control character - use \uXXXX format */
+            out += sprintf(out, "\\u%04x", c);
+        } else {
+            *out++ = c;
+        }
+    }
+    *out = '\0';
+
+    return result;
+}
+
+#ifdef _WIN32
+/**
+ * Case-insensitive substring search.
+ * Returns pointer to first occurrence of needle in haystack, or NULL if not found.
+ */
+static const char *strcasestr_local(const char *haystack, const char *needle) {
+    if (!haystack || !needle) {
+        return NULL;
+    }
+    if (*needle == '\0') {
+        return haystack;
+    }
+
+    size_t needle_len = strlen(needle);
+    for (const char *p = haystack; *p != '\0'; p++) {
+        if (strncasecmp(p, needle, needle_len) == 0) {
+            return p;
+        }
+    }
+    return NULL;
+}
+#endif /* _WIN32 */
+
+#ifdef __linux__
+/**
+ * Get the last path component (basename), handling both / and \ separators.
+ */
+static const char *get_path_basename(const char *path) {
+    if (!path) {
+        return NULL;
+    }
+
+    const char *last_slash = strrchr(path, '/');
+    const char *last_backslash = strrchr(path, '\\');
+
+    /* Use whichever separator appears last */
+    const char *sep = NULL;
+    if (last_slash && last_backslash) {
+        sep = (last_slash > last_backslash) ? last_slash : last_backslash;
+    } else if (last_slash) {
+        sep = last_slash;
+    } else if (last_backslash) {
+        sep = last_backslash;
+    }
+
+    return sep ? sep + 1 : path;
+}
+#endif /* __linux__ */
+
+/* =============================================================================
  * Constants and Static Data
  * ========================================================================== */
 
@@ -383,12 +506,8 @@ ShellType detect_shell_type(void) {
 
     const char *comspec = getenv("COMSPEC");
     if (comspec != NULL) {
-        /* Check if cmd.exe (case-insensitive) */
-        const char *cmd_exe = strstr(comspec, "cmd.exe");
-        if (cmd_exe == NULL) {
-            cmd_exe = strstr(comspec, "CMD.EXE");
-        }
-        if (cmd_exe != NULL) {
+        /* Check if cmd.exe (case-insensitive for all variations) */
+        if (strcasestr_local(comspec, "cmd.exe") != NULL) {
             return SHELL_TYPE_CMD;
         }
     }
@@ -754,9 +873,8 @@ ApprovalResult approval_gate_prompt(ApprovalGateConfig *config,
         if (arg_len <= 50) {
             snprintf(arg_display, sizeof(arg_display), "%s", tool_call->arguments);
         } else {
-            strncpy(arg_display, tool_call->arguments, 47);
-            arg_display[47] = '\0';
-            strcat(arg_display, "...");
+            /* Use snprintf for safe truncation with ellipsis */
+            snprintf(arg_display, sizeof(arg_display), "%.47s...", tool_call->arguments);
         }
         fprintf(stderr, "│  Args: %-53s │\n", arg_display);
     }
@@ -970,10 +1088,6 @@ VerifyResult verify_and_open_approved_path(const ApprovedPath *approved,
             return VERIFY_ERR_PARENT_CHANGED;
         }
 
-        /* Extract basename */
-        const char *basename = strrchr(approved->user_path, '/');
-        basename = basename ? basename + 1 : approved->user_path;
-
         /* Create file with O_EXCL */
 #ifdef O_NOFOLLOW
         int create_flags = flags | O_CREAT | O_EXCL | O_NOFOLLOW;
@@ -981,17 +1095,18 @@ VerifyResult verify_and_open_approved_path(const ApprovedPath *approved,
         int create_flags = flags | O_CREAT | O_EXCL;
 #endif
 
+        int fd;
 #ifdef __linux__
-        int fd = openat(parent_fd, basename, create_flags, 0644);
+        /* Extract basename (handles both / and \ path separators) */
+        const char *basename = get_path_basename(approved->user_path);
+        fd = openat(parent_fd, basename, create_flags, 0644);
 #else
         /* Fallback for systems without openat */
-        close(parent_fd);
-        int fd = open(approved->resolved_path, create_flags, 0644);
+        fd = open(approved->resolved_path, create_flags, 0644);
 #endif
 
-#ifdef __linux__
+        /* Always close parent_fd after file creation attempt */
         close(parent_fd);
-#endif
 
         if (fd < 0) {
             if (errno == EEXIST) {
@@ -1069,6 +1184,12 @@ char *format_rate_limit_error(const ApprovalGateConfig *config,
     int remaining = get_rate_limit_remaining(config, tool_call->name);
     const char *tool_name = tool_call->name ? tool_call->name : "unknown";
 
+    /* Escape tool name for JSON */
+    char *escaped_tool = json_escape_string_simple(tool_name);
+    if (escaped_tool == NULL) {
+        return NULL;
+    }
+
     char *error = NULL;
     int ret = asprintf(&error,
                        "{\"error\": \"rate_limited\", "
@@ -1076,7 +1197,9 @@ char *format_rate_limit_error(const ApprovalGateConfig *config,
                        "Wait %d seconds before retrying.\", "
                        "\"retry_after\": %d, "
                        "\"tool\": \"%s\"}",
-                       tool_name, remaining, remaining, tool_name);
+                       escaped_tool, remaining, remaining, escaped_tool);
+
+    free(escaped_tool);
 
     if (ret < 0) {
         return NULL;
@@ -1091,6 +1214,12 @@ char *format_denial_error(const ToolCall *tool_call) {
 
     const char *tool_name = tool_call->name ? tool_call->name : "unknown";
 
+    /* Escape tool name for JSON */
+    char *escaped_tool = json_escape_string_simple(tool_name);
+    if (escaped_tool == NULL) {
+        return NULL;
+    }
+
     char *error = NULL;
     int ret = asprintf(&error,
                        "{\"error\": \"operation_denied\", "
@@ -1098,7 +1227,9 @@ char *format_denial_error(const ToolCall *tool_call) {
                        "\"tool\": \"%s\", "
                        "\"suggestion\": \"Ask the user to perform this operation "
                        "manually, or request permission with explanation\"}",
-                       tool_name, tool_name);
+                       escaped_tool, escaped_tool);
+
+    free(escaped_tool);
 
     if (ret < 0) {
         return NULL;
@@ -1111,12 +1242,20 @@ char *format_protected_file_error(const char *path) {
         path = "unknown";
     }
 
+    /* Escape path for JSON */
+    char *escaped_path = json_escape_string_simple(path);
+    if (escaped_path == NULL) {
+        return NULL;
+    }
+
     char *error = NULL;
     int ret = asprintf(&error,
                        "{\"error\": \"protected_file\", "
                        "\"message\": \"Cannot modify protected configuration file\", "
                        "\"path\": \"%s\"}",
-                       path);
+                       escaped_path);
+
+    free(escaped_path);
 
     if (ret < 0) {
         return NULL;
@@ -1131,12 +1270,20 @@ char *format_verify_error(VerifyResult result, const char *path) {
 
     const char *message = verify_result_message(result);
 
+    /* Escape path for JSON (message is from static strings, no escaping needed) */
+    char *escaped_path = json_escape_string_simple(path);
+    if (escaped_path == NULL) {
+        return NULL;
+    }
+
     char *error = NULL;
     int ret = asprintf(&error,
                        "{\"error\": \"path_changed\", "
                        "\"message\": \"%s\", "
                        "\"path\": \"%s\"}",
-                       message, path);
+                       message, escaped_path);
+
+    free(escaped_path);
 
     if (ret < 0) {
         return NULL;
