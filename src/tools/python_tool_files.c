@@ -716,21 +716,16 @@ int execute_python_file_tool_call(const ToolCall *tool_call, ToolResult *result)
 
     result->result = strdup(result_str);
 
-    // Check if success is true in the result
+    // Determine success: JSON parsed without an "error" field means success
     cJSON *result_json = cJSON_Parse(result_str);
     if (result_json != NULL) {
-        cJSON *success_item = cJSON_GetObjectItem(result_json, "success");
-        result->success = cJSON_IsTrue(success_item) ? 1 : 0;
-
-        // If there's an error field, mark as unsuccessful
         cJSON *error_item = cJSON_GetObjectItem(result_json, "error");
-        if (error_item != NULL && cJSON_IsString(error_item)) {
-            result->success = 0;
-        }
-
+        // Success if no error field present
+        result->success = (error_item == NULL || !cJSON_IsString(error_item)) ? 1 : 0;
         cJSON_Delete(result_json);
     } else {
-        result->success = 1;  // Assume success if we can't parse
+        // JSON didn't parse - treat as failure
+        result->success = 0;
     }
 
     return 0;

@@ -11,25 +11,12 @@
 #include "../mcp/mcp_client.h"
 #include "../tools/subagent_tool.h"
 
-// API type enumeration (deprecated - kept for compatibility)
+// API type enumeration - used for provider-specific behavior
 typedef enum {
     API_TYPE_OPENAI,
     API_TYPE_ANTHROPIC,
     API_TYPE_LOCAL
 } APIType;
-
-// Ralph configuration structure
-typedef struct {
-    char* api_url;
-    char* model;
-    char* api_key;
-    char* system_prompt;
-    int context_window;
-    int max_context_window;      // Maximum context window allowed
-    int max_tokens;
-    const char* max_tokens_param;
-    APIType api_type;            // Deprecated - kept for compatibility
-} RalphConfig;
 
 // Ralph session structure - uses SessionData for core session functionality
 typedef struct {
