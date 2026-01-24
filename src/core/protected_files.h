@@ -28,13 +28,31 @@
  * The inode cache is refreshed periodically to detect late-created files.
  * On Windows, file identity uses volume serial + file index.
  *
+ * This header is self-contained and does not require including other
+ * approval gate headers. For error formatting, use format_protected_file_error()
+ * from approval_gate.h.
+ *
  * Related headers:
  * - path_normalize.h: Cross-platform path normalization for matching
  * - approval_gate.h: Integration with the approval gates system
  */
 
+/* ============================================================================
+ * Configuration Constants
+ * ========================================================================== */
+
 /* Refresh interval for inode cache (seconds) */
 #define PROTECTED_INODE_REFRESH_INTERVAL 30
+
+/* Maximum parent directory depth to scan for protected files */
+#define PROTECTED_INODE_SCAN_DEPTH 3
+
+/* Initial capacity for the inode cache array */
+#define PROTECTED_INODE_INITIAL_CAPACITY 16
+
+/* ============================================================================
+ * Data Structures
+ * ========================================================================== */
 
 /**
  * Tracked inode for a protected file.
@@ -48,7 +66,9 @@ typedef struct {
     DWORD index_high;       /* Windows file index (high DWORD) */
     DWORD index_low;        /* Windows file index (low DWORD) */
 #endif
-    char *original_path;    /* Path when first discovered (for debugging) */
+    char *original_path;    /* Allocated copy of path when first discovered.
+                             * Owned by the cache, freed on cleanup.
+                             * Used for debugging and diagnostics. */
     time_t discovered_at;   /* When this inode was recorded */
 } ProtectedInode;
 
@@ -95,7 +115,9 @@ int is_protected_basename(const char *basename);
 
 /**
  * Check if a path matches a protected glob pattern.
- * Uses fnmatch with FNM_CASEFOLD on Windows.
+ * Uses fnmatch for pattern matching. On Windows, case-insensitivity is
+ * achieved by lowercasing the path before matching (since FNM_CASEFOLD
+ * is a GNU extension not available on all platforms).
  *
  * @param path Normalized path to check
  * @return 1 if matches protected pattern, 0 if not
@@ -125,7 +147,7 @@ int is_protected_inode(const char *path);
  * - ralph.config.json in current directory
  * - .ralph/config.json
  * - .env, .env.local, .env.development, .env.production, .env.test
- * - Parent directories up to 3 levels
+ * - Parent directories up to PROTECTED_INODE_SCAN_DEPTH levels
  */
 void refresh_protected_inodes(void);
 
@@ -158,35 +180,32 @@ void clear_protected_inode_cache(void);
 void cleanup_protected_inode_cache(void);
 
 /* ============================================================================
- * Protected Patterns Configuration
+ * Protected Patterns Access
  * ========================================================================== */
 
 /**
- * Get the array of protected basename patterns.
+ * Get the NULL-terminated array of protected basename patterns.
  * These are exact filenames that are always protected.
  *
- * @param count Output: number of patterns in array
- * @return Pointer to static array of pattern strings (NULL-terminated)
+ * @return Pointer to static NULL-terminated array of pattern strings
  */
-const char **get_protected_basename_patterns(int *count);
+const char **get_protected_basename_patterns(void);
 
 /**
- * Get the array of protected prefix patterns.
+ * Get the NULL-terminated array of protected prefix patterns.
  * Basenames starting with these prefixes are protected (e.g., ".env.").
  *
- * @param count Output: number of patterns in array
- * @return Pointer to static array of pattern strings (NULL-terminated)
+ * @return Pointer to static NULL-terminated array of pattern strings
  */
-const char **get_protected_prefix_patterns(int *count);
+const char **get_protected_prefix_patterns(void);
 
 /**
- * Get the array of protected glob patterns.
+ * Get the NULL-terminated array of protected glob patterns.
  * Full paths matching these globs are protected.
  *
- * @param count Output: number of patterns in array
- * @return Pointer to static array of pattern strings (NULL-terminated)
+ * @return Pointer to static NULL-terminated array of pattern strings
  */
-const char **get_protected_glob_patterns(int *count);
+const char **get_protected_glob_patterns(void);
 
 /* ============================================================================
  * Initialization and Cleanup
@@ -205,24 +224,5 @@ int protected_files_init(void);
  * Frees all cached data and resets state.
  */
 void protected_files_cleanup(void);
-
-/* ============================================================================
- * Error Formatting
- * ========================================================================== */
-
-/**
- * Format a protected file error message as JSON.
- *
- * @param path The protected file path
- * @return Allocated JSON error string. Caller must free.
- *
- * Example output:
- * {
- *   "error": "protected_file",
- *   "message": "Cannot modify protected configuration file",
- *   "path": "ralph.config.json"
- * }
- */
-char *format_protected_file_error(const char *path);
 
 #endif /* PROTECTED_FILES_H */
