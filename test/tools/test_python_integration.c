@@ -1,5 +1,6 @@
 #include "unity.h"
 #include "../../src/tools/python_tool.h"
+#include "../../src/tools/python_tool_files.h"
 #include "../../src/tools/tools_system.h"
 #include <string.h>
 #include <stdlib.h>
@@ -238,6 +239,54 @@ void test_python_stdlib_math(void) {
     cleanup_python_result(&result);
 }
 
+// Test that docstring Args section is parsed correctly for tool descriptions
+void test_python_tool_docstring_parsing(void) {
+    // Initialize tool files
+    TEST_ASSERT_EQUAL_INT(0, python_init_tool_files());
+
+    // Load Python tool files
+    TEST_ASSERT_EQUAL_INT(0, python_load_tool_files());
+
+    // Create a registry and register tools
+    ToolRegistry file_registry;
+    init_tool_registry(&file_registry);
+    TEST_ASSERT_EQUAL_INT(0, python_register_tool_schemas(&file_registry));
+
+    // Find the apply_delta tool
+    int found_apply_delta = 0;
+    for (int i = 0; i < file_registry.function_count; i++) {
+        if (strcmp(file_registry.functions[i].name, "apply_delta") == 0) {
+            found_apply_delta = 1;
+
+            // Check that 'operations' parameter has a real description
+            // (not just "operations" which was the old broken behavior)
+            for (int j = 0; j < file_registry.functions[i].parameter_count; j++) {
+                if (strcmp(file_registry.functions[i].parameters[j].name, "operations") == 0) {
+                    const char *desc = file_registry.functions[i].parameters[j].description;
+                    TEST_ASSERT_NOT_NULL(desc);
+                    // Description should contain details about the operations format
+                    TEST_ASSERT_NOT_NULL_MESSAGE(
+                        strstr(desc, "delta"),
+                        "operations description should mention 'delta'"
+                    );
+                    // Should mention the operation structure details
+                    TEST_ASSERT_NOT_NULL_MESSAGE(
+                        strstr(desc, "type"),
+                        "operations description should mention 'type' field"
+                    );
+                    break;
+                }
+            }
+            break;
+        }
+    }
+
+    TEST_ASSERT_TRUE_MESSAGE(found_apply_delta, "apply_delta tool should be registered");
+
+    cleanup_tool_registry(&file_registry);
+    python_cleanup_tool_files();
+}
+
 int main(void) {
     // Initialize interpreter once for all tests
     if (python_interpreter_init() != 0) {
@@ -257,6 +306,7 @@ int main(void) {
     RUN_TEST(test_python_timeout);
     RUN_TEST(test_python_stdlib_json);
     RUN_TEST(test_python_stdlib_math);
+    RUN_TEST(test_python_tool_docstring_parsing);
 
     int result = UNITY_END();
 

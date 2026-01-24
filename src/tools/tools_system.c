@@ -7,6 +7,7 @@
 #include "python_tool.h"
 #include "python_tool_files.h"
 #include "output_formatter.h"
+#include "json_escape.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -244,9 +245,16 @@ char* generate_tools_json(const ToolRegistry *registry) {
             pos += ret;
         }
         
-        ret = snprintf(json + pos, required_size - pos, 
+        // Escape description for JSON
+        char *escaped_desc = json_escape_string(func->description);
+        if (escaped_desc == NULL) {
+            free(json);
+            return NULL;
+        }
+        ret = snprintf(json + pos, required_size - pos,
             "{\"type\": \"function\", \"function\": {\"name\": \"%s\", \"description\": \"%s\"",
-            func->name, func->description);
+            func->name, escaped_desc);
+        free(escaped_desc);
         if (ret < 0 || (size_t)ret >= required_size - pos) {
             free(json);
             return NULL;
@@ -273,9 +281,16 @@ char* generate_tools_json(const ToolRegistry *registry) {
                     pos += ret;
                 }
                 
-                ret = snprintf(json + pos, required_size - pos, 
+                // Escape parameter description for JSON
+                char *escaped_param_desc = json_escape_string(param->description);
+                if (escaped_param_desc == NULL) {
+                    free(json);
+                    return NULL;
+                }
+                ret = snprintf(json + pos, required_size - pos,
                     "\"%s\": {\"type\": \"%s\", \"description\": \"%s\"",
-                    param->name, param->type, param->description);
+                    param->name, param->type, escaped_param_desc);
+                free(escaped_param_desc);
                 if (ret < 0 || (size_t)ret >= required_size - pos) {
                     free(json);
                     return NULL;
