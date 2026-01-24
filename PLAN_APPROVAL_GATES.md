@@ -42,7 +42,7 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 ## Protected File Detection
 
-- [ ] **Create `src/core/protected_files.h`** - Define `ProtectedInode` struct and `ProtectedInodeCache` struct. Declare `is_protected_file()`, `refresh_protected_inodes()`, and related functions.
+- [x] **Create `src/core/protected_files.h`** - Define `ProtectedInode` struct and `ProtectedInodeCache` struct. Declare `is_protected_file()`, `refresh_protected_inodes()`, and related functions.
 
 - [ ] **Create `src/core/protected_files.c`** - Implement protected file detection with multiple strategies: (1) basename exact match (`ralph.config.json`, `.env`), (2) basename prefix match (`.env.*`), (3) glob pattern match (`**/ralph.config.json`, `**/.ralph/config.json`, `**/.env`, `**/.env.*`), (4) inode-based detection for hardlinks/renames. See spec section "Protected Files" and "Implementation > Protected Files".
 
