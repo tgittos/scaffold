@@ -5,6 +5,56 @@
 #include <string.h>
 #include <stdbool.h>
 #include <ctype.h>
+#include <sys/utsname.h>
+#include <unistd.h>
+#include <limits.h>
+
+// Get platform information string (caller must free)
+static char *get_platform_info(void) {
+    struct utsname uname_info;
+    char cwd[PATH_MAX];
+
+    // Zero-initialize to satisfy valgrind
+    memset(&uname_info, 0, sizeof(uname_info));
+    memset(cwd, 0, sizeof(cwd));
+
+    // Initialize with defaults
+    const char *arch = "unknown";
+    const char *os_name = "unknown";
+    const char *cwd_str = ".";
+
+    // Get system information
+    if (uname(&uname_info) == 0) {
+        arch = uname_info.machine;
+        os_name = uname_info.sysname;
+    }
+
+    // Get current working directory
+    if (getcwd(cwd, sizeof(cwd)) != NULL) {
+        cwd_str = cwd;
+    }
+
+    // Format the platform info section
+    const char *format =
+        "\n## Platform Information:\n"
+        "- Architecture: %s\n"
+        "- Operating System: %s\n"
+        "- Working Directory: %s\n";
+
+    // Calculate required size
+    int size = snprintf(NULL, 0, format, arch, os_name, cwd_str);
+    if (size < 0) {
+        return NULL;
+    }
+
+    char *result = malloc((size_t)size + 1);
+    if (result == NULL) {
+        return NULL;
+    }
+
+    snprintf(result, (size_t)size + 1, format, arch, os_name, cwd_str);
+    return result;
+}
 
 // Core system prompt PART 1 - up to where dynamic tools list goes
 static const char* SYSTEM_PROMPT_PART1 =
@@ -330,22 +380,32 @@ int load_system_prompt(char **prompt_content) {
     char *tools_desc = python_get_loaded_tools_description();
     size_t tools_len = tools_desc ? strlen(tools_desc) : 0;
 
+    // Get platform information
+    char *platform_info = get_platform_info();
+    size_t platform_len = platform_info ? strlen(platform_info) : 0;
+
     // Calculate total size needed for combined prompt
     size_t part1_len = strlen(SYSTEM_PROMPT_PART1);
     size_t part2_len = strlen(SYSTEM_PROMPT_PART2);
     size_t user_len = user_prompt ? strlen(user_prompt) : 0;
-    size_t total_len = part1_len + tools_len + part2_len + user_len + 1;
+    size_t total_len = part1_len + platform_len + tools_len + part2_len + user_len + 1;
 
     // Allocate buffer for combined prompt
     char *combined_prompt = malloc(total_len);
     if (combined_prompt == NULL) {
         free(user_prompt);
         free(tools_desc);
+        free(platform_info);
         return -1;
     }
 
-    // Build the combined prompt: PART1 + tools + PART2 + user
+    // Build the combined prompt: PART1 + platform + tools + PART2 + user
     strcpy(combined_prompt, SYSTEM_PROMPT_PART1);
+
+    if (platform_info != NULL) {
+        strcat(combined_prompt, platform_info);
+        free(platform_info);
+    }
 
     if (tools_desc != NULL) {
         strcat(combined_prompt, tools_desc);

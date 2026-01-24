@@ -462,6 +462,26 @@ void test_file_reference_at_sign_not_filename(void) {
     cleanup_system_prompt(&prompt_content);
 }
 
+void test_platform_info_present(void) {
+    char *prompt_content = NULL;
+
+    // Ensure no AGENTS.md file
+    unlink("AGENTS.md");
+
+    int result = load_system_prompt(&prompt_content);
+
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_NOT_NULL(prompt_content);
+
+    // Platform information section should be present
+    TEST_ASSERT_TRUE(strstr(prompt_content, "## Platform Information:") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, "- Architecture:") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, "- Operating System:") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, "- Working Directory:") != NULL);
+
+    cleanup_system_prompt(&prompt_content);
+}
+
 int main(void) {
     UNITY_BEGIN();
 
@@ -486,6 +506,9 @@ int main(void) {
     RUN_TEST(test_file_reference_no_recursive_expansion);
     RUN_TEST(test_file_reference_mixed_existing_and_missing);
     RUN_TEST(test_file_reference_at_sign_not_filename);
+
+    // Platform information tests
+    RUN_TEST(test_platform_info_present);
 
     return UNITY_END();
 }
