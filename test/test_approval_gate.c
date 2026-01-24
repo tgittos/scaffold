@@ -26,9 +26,11 @@ static void backup_config_file(void) {
         if (saved_config_backup) {
             size_t read_size = fread(saved_config_backup, 1, size, f);
             saved_config_backup[read_size] = '\0';
+            fclose(f);
+            unlink("ralph.config.json");  /* Only unlink if backup succeeded */
+        } else {
+            fclose(f);  /* Don't unlink if we couldn't backup */
         }
-        fclose(f);
-        unlink("ralph.config.json");
     }
 }
 
@@ -811,6 +813,81 @@ void test_approval_gate_load_from_json_file_powershell_shell(void) {
     restore_config_file();
 }
 
+void test_approval_gate_load_from_json_file_malformed_json(void) {
+    backup_config_file();
+
+    /* Create config file with malformed JSON */
+    FILE *f = fopen("ralph.config.json", "w");
+    TEST_ASSERT_NOT_NULL(f);
+
+    const char *json = "{ invalid json here }";
+
+    fprintf(f, "%s", json);
+    fclose(f);
+
+    /* Re-init - should succeed with defaults despite malformed JSON */
+    approval_gate_cleanup(&config);
+    int result = approval_gate_init(&config);
+    TEST_ASSERT_EQUAL(0, result);
+
+    /* Should have defaults */
+    TEST_ASSERT_EQUAL(1, config.enabled);
+    TEST_ASSERT_EQUAL(GATE_ACTION_GATE, config.categories[GATE_CATEGORY_FILE_WRITE]);
+    TEST_ASSERT_EQUAL(GATE_ACTION_ALLOW, config.categories[GATE_CATEGORY_FILE_READ]);
+    TEST_ASSERT_EQUAL(0, config.allowlist_count);
+    TEST_ASSERT_EQUAL(0, config.shell_allowlist_count);
+
+    unlink("ralph.config.json");
+    restore_config_file();
+}
+
+void test_approval_gate_load_from_json_file_invalid_entries_skipped(void) {
+    backup_config_file();
+
+    /* Create config file with some invalid entries mixed with valid ones */
+    FILE *f = fopen("ralph.config.json", "w");
+    TEST_ASSERT_NOT_NULL(f);
+
+    const char *json =
+        "{\n"
+        "  \"approval_gates\": {\n"
+        "    \"categories\": {\n"
+        "      \"invalid_category\": \"allow\",\n"
+        "      \"file_write\": \"invalid_action\",\n"
+        "      \"shell\": \"deny\"\n"
+        "    },\n"
+        "    \"allowlist\": [\n"
+        "      {\"tool\": \"shell\", \"command\": []},\n"
+        "      {\"tool\": \"shell\", \"command\": [123]},\n"
+        "      {\"tool\": \"write_file\"},\n"
+        "      {\"pattern\": \"no_tool_field\"},\n"
+        "      {\"tool\": \"shell\", \"command\": [\"ls\"]}\n"
+        "    ]\n"
+        "  }\n"
+        "}\n";
+
+    fprintf(f, "%s", json);
+    fclose(f);
+
+    /* Re-init - should succeed, skipping invalid entries */
+    approval_gate_cleanup(&config);
+    int result = approval_gate_init(&config);
+    TEST_ASSERT_EQUAL(0, result);
+
+    /* Valid category override should work */
+    TEST_ASSERT_EQUAL(GATE_ACTION_DENY, config.categories[GATE_CATEGORY_SHELL]);
+    /* Invalid category/action should keep default */
+    TEST_ASSERT_EQUAL(GATE_ACTION_GATE, config.categories[GATE_CATEGORY_FILE_WRITE]);
+
+    /* Only valid allowlist entry should be added */
+    TEST_ASSERT_EQUAL(1, config.shell_allowlist_count);
+    TEST_ASSERT_EQUAL_STRING("ls", config.shell_allowlist[0].command_prefix[0]);
+    TEST_ASSERT_EQUAL(0, config.allowlist_count);
+
+    unlink("ralph.config.json");
+    restore_config_file();
+}
+
 /* =============================================================================
  * Main
  * ========================================================================== */
@@ -886,6 +963,8 @@ int main(void) {
     RUN_TEST(test_approval_gate_load_from_json_file_mixed_allowlist);
     RUN_TEST(test_approval_gate_load_from_json_file_no_approval_gates_section);
     RUN_TEST(test_approval_gate_load_from_json_file_powershell_shell);
+    RUN_TEST(test_approval_gate_load_from_json_file_malformed_json);
+    RUN_TEST(test_approval_gate_load_from_json_file_invalid_entries_skipped);
 
     return UNITY_END();
 }

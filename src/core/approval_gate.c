@@ -19,6 +19,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "../utils/debug_output.h"
+
 /* =============================================================================
  * Internal Helper Functions
  * ========================================================================== */
@@ -539,8 +541,12 @@ int approval_gate_init(ApprovalGateConfig *config) {
     /* Try to load configuration from config file */
     for (int i = 0; CONFIG_FILE_PATHS[i] != NULL; i++) {
         if (access(CONFIG_FILE_PATHS[i], R_OK) == 0) {
-            approval_gate_load_from_file(config, CONFIG_FILE_PATHS[i]);
-            break;  /* Stop after first successful load */
+            int load_result = approval_gate_load_from_file(config, CONFIG_FILE_PATHS[i]);
+            if (load_result != 0) {
+                debug_printf("Warning: Failed to parse approval_gates from %s, "
+                             "using defaults\n", CONFIG_FILE_PATHS[i]);
+            }
+            break;  /* Stop after first config file found */
         }
     }
 
@@ -564,10 +570,12 @@ int approval_gate_init_from_parent(ApprovalGateConfig *child,
         child->categories[i] = parent->categories[i];
     }
 
-    /* Copy parent's static allowlist entries (from config file) */
-    /* Note: We do NOT copy session allowlist (runtime "allow always" entries) */
-    /* For now, we copy all allowlist entries since we don't distinguish static vs session */
-    /* TODO: Add a flag to distinguish static vs session allowlist entries */
+    /* Note: Static allowlist (from config file) is inherited.
+     * Session allowlist (runtime "allow always" entries) is NOT inherited.
+     * Currently both types share the same array, but session entries are only
+     * added by the root process via approval_gate_prompt(). Since subagents
+     * start fresh with approval_gate_init_from_parent(), they won't have any
+     * session entries from the parent. */
 
     return 0;
 }
