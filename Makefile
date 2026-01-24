@@ -35,6 +35,7 @@ NCURSES_VERSION := 6.4
 # Core application sources
 CORE_SOURCES := $(SRCDIR)/core/main.c \
                 $(SRCDIR)/core/ralph.c \
+                $(SRCDIR)/core/context_enhancement.c \
                 $(SRCDIR)/network/http_client.c \
                 $(SRCDIR)/network/streaming.c \
                 $(SRCDIR)/network/api_common.c \
@@ -275,18 +276,18 @@ TEST_CONVERSATION_COMPACTOR_CPP_SOURCES = $(DB_CPP_SOURCES)
 TEST_CONVERSATION_COMPACTOR_OBJECTS = $(TEST_CONVERSATION_COMPACTOR_C_SOURCES:.c=.o) $(TEST_CONVERSATION_COMPACTOR_CPP_SOURCES:.cpp=.o)
 TEST_CONVERSATION_COMPACTOR_TARGET = $(TESTDIR)/test_conversation_compactor
 
-TEST_RALPH_C_SOURCES = $(TESTDIR)/core/test_ralph.c $(TESTDIR)/mock_api_server.c $(SRCDIR)/core/ralph.c $(SRCDIR)/utils/env_loader.c $(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/network/api_common.c $(SRCDIR)/network/streaming.c $(SRCDIR)/session/token_manager.c $(SRCDIR)/llm/llm_provider.c $(SRCDIR)/llm/providers/openai_provider.c $(SRCDIR)/llm/providers/anthropic_provider.c $(SRCDIR)/llm/providers/local_ai_provider.c $(SRCDIR)/mcp/mcp_client.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
+TEST_RALPH_C_SOURCES = $(TESTDIR)/core/test_ralph.c $(TESTDIR)/mock_api_server.c $(SRCDIR)/core/ralph.c $(SRCDIR)/core/context_enhancement.c $(SRCDIR)/utils/env_loader.c $(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/network/api_common.c $(SRCDIR)/network/streaming.c $(SRCDIR)/session/token_manager.c $(SRCDIR)/llm/llm_provider.c $(SRCDIR)/llm/providers/openai_provider.c $(SRCDIR)/llm/providers/anthropic_provider.c $(SRCDIR)/llm/providers/local_ai_provider.c $(SRCDIR)/mcp/mcp_client.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
 TEST_RALPH_CPP_SOURCES = $(DB_CPP_SOURCES)
 TEST_RALPH_OBJECTS = $(TEST_RALPH_C_SOURCES:.c=.o) $(TEST_RALPH_CPP_SOURCES:.cpp=.o)
 TEST_RALPH_TARGET = $(TESTDIR)/test_ralph
 
 # Recap test (tests conversation recap functionality)
-TEST_RECAP_C_SOURCES = $(TESTDIR)/core/test_recap.c $(SRCDIR)/core/ralph.c $(SRCDIR)/utils/env_loader.c $(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/network/api_common.c $(SRCDIR)/network/streaming.c $(SRCDIR)/session/token_manager.c $(SRCDIR)/llm/llm_provider.c $(SRCDIR)/llm/providers/openai_provider.c $(SRCDIR)/llm/providers/anthropic_provider.c $(SRCDIR)/llm/providers/local_ai_provider.c $(SRCDIR)/mcp/mcp_client.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
+TEST_RECAP_C_SOURCES = $(TESTDIR)/core/test_recap.c $(SRCDIR)/core/ralph.c $(SRCDIR)/core/context_enhancement.c $(SRCDIR)/utils/env_loader.c $(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/network/api_common.c $(SRCDIR)/network/streaming.c $(SRCDIR)/session/token_manager.c $(SRCDIR)/llm/llm_provider.c $(SRCDIR)/llm/providers/openai_provider.c $(SRCDIR)/llm/providers/anthropic_provider.c $(SRCDIR)/llm/providers/local_ai_provider.c $(SRCDIR)/mcp/mcp_client.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
 TEST_RECAP_CPP_SOURCES = $(DB_CPP_SOURCES)
 TEST_RECAP_OBJECTS = $(TEST_RECAP_C_SOURCES:.c=.o) $(TEST_RECAP_CPP_SOURCES:.cpp=.o)
 TEST_RECAP_TARGET = $(TESTDIR)/test_recap
 
-TEST_INCOMPLETE_TASK_BUG_C_SOURCES = $(TESTDIR)/core/test_incomplete_task_bug.c $(SRCDIR)/core/ralph.c $(SRCDIR)/utils/env_loader.c $(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/network/api_common.c $(SRCDIR)/network/streaming.c $(SRCDIR)/session/token_manager.c $(SRCDIR)/llm/llm_provider.c $(SRCDIR)/llm/providers/openai_provider.c $(SRCDIR)/llm/providers/anthropic_provider.c $(SRCDIR)/llm/providers/local_ai_provider.c $(SRCDIR)/mcp/mcp_client.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
+TEST_INCOMPLETE_TASK_BUG_C_SOURCES = $(TESTDIR)/core/test_incomplete_task_bug.c $(SRCDIR)/core/ralph.c $(SRCDIR)/core/context_enhancement.c $(SRCDIR)/utils/env_loader.c $(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/network/api_common.c $(SRCDIR)/network/streaming.c $(SRCDIR)/session/token_manager.c $(SRCDIR)/llm/llm_provider.c $(SRCDIR)/llm/providers/openai_provider.c $(SRCDIR)/llm/providers/anthropic_provider.c $(SRCDIR)/llm/providers/local_ai_provider.c $(SRCDIR)/mcp/mcp_client.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
 TEST_INCOMPLETE_TASK_BUG_CPP_SOURCES = $(DB_CPP_SOURCES)
 TEST_INCOMPLETE_TASK_BUG_OBJECTS = $(TEST_INCOMPLETE_TASK_BUG_C_SOURCES:.c=.o) $(TEST_INCOMPLETE_TASK_BUG_CPP_SOURCES:.cpp=.o)
 TEST_INCOMPLETE_TASK_BUG_TARGET = $(TESTDIR)/test_incomplete_task_bug
@@ -323,7 +324,7 @@ TEST_STREAMING_OBJECTS = $(TEST_STREAMING_SOURCES:.c=.o)
 TEST_STREAMING_TARGET = $(TESTDIR)/test_streaming
 
 # MCP test
-TEST_MCP_CLIENT_C_SOURCES = $(TESTDIR)/mcp/test_mcp_client.c $(SRCDIR)/mcp/mcp_client.c $(SRCDIR)/core/ralph.c $(SRCDIR)/utils/env_loader.c $(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/network/api_common.c $(SRCDIR)/network/streaming.c $(SRCDIR)/session/token_manager.c $(SRCDIR)/llm/llm_provider.c $(SRCDIR)/llm/providers/openai_provider.c $(SRCDIR)/llm/providers/anthropic_provider.c $(SRCDIR)/llm/providers/local_ai_provider.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
+TEST_MCP_CLIENT_C_SOURCES = $(TESTDIR)/mcp/test_mcp_client.c $(SRCDIR)/mcp/mcp_client.c $(SRCDIR)/core/ralph.c $(SRCDIR)/core/context_enhancement.c $(SRCDIR)/utils/env_loader.c $(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/network/api_common.c $(SRCDIR)/network/streaming.c $(SRCDIR)/session/token_manager.c $(SRCDIR)/llm/llm_provider.c $(SRCDIR)/llm/providers/openai_provider.c $(SRCDIR)/llm/providers/anthropic_provider.c $(SRCDIR)/llm/providers/local_ai_provider.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
 TEST_MCP_CLIENT_CPP_SOURCES = $(DB_CPP_SOURCES)
 TEST_MCP_CLIENT_OBJECTS = $(TEST_MCP_CLIENT_C_SOURCES:.c=.o) $(TEST_MCP_CLIENT_CPP_SOURCES:.cpp=.o)
 TEST_MCP_CLIENT_TARGET = $(TESTDIR)/test_mcp_client
@@ -344,7 +345,7 @@ TEST_DOCUMENT_STORE_OBJECTS = $(TEST_DOCUMENT_STORE_C_OBJECTS) $(TEST_DOCUMENT_S
 TEST_DOCUMENT_STORE_TARGET = $(TESTDIR)/test_document_store
 
 # Subagent tool test (requires full ralph infrastructure for ralph_run_as_subagent)
-TEST_SUBAGENT_TOOL_C_SOURCES = $(TESTDIR)/tools/test_subagent_tool.c $(SRCDIR)/core/ralph.c $(SRCDIR)/utils/env_loader.c $(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/network/api_common.c $(SRCDIR)/network/streaming.c $(SRCDIR)/session/token_manager.c $(SRCDIR)/llm/llm_provider.c $(SRCDIR)/llm/providers/openai_provider.c $(SRCDIR)/llm/providers/anthropic_provider.c $(SRCDIR)/llm/providers/local_ai_provider.c $(SRCDIR)/mcp/mcp_client.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
+TEST_SUBAGENT_TOOL_C_SOURCES = $(TESTDIR)/tools/test_subagent_tool.c $(SRCDIR)/core/ralph.c $(SRCDIR)/core/context_enhancement.c $(SRCDIR)/utils/env_loader.c $(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/network/api_common.c $(SRCDIR)/network/streaming.c $(SRCDIR)/session/token_manager.c $(SRCDIR)/llm/llm_provider.c $(SRCDIR)/llm/providers/openai_provider.c $(SRCDIR)/llm/providers/anthropic_provider.c $(SRCDIR)/llm/providers/local_ai_provider.c $(SRCDIR)/mcp/mcp_client.c $(COMPLEX_TEST_DEPS) $(COMMON_TEST_SOURCES)
 TEST_SUBAGENT_TOOL_CPP_SOURCES = $(DB_CPP_SOURCES)
 TEST_SUBAGENT_TOOL_OBJECTS = $(TEST_SUBAGENT_TOOL_C_SOURCES:.c=.o) $(TEST_SUBAGENT_TOOL_CPP_SOURCES:.cpp=.o)
 TEST_SUBAGENT_TOOL_TARGET = $(TESTDIR)/test_subagent_tool
