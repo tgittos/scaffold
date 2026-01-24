@@ -8,7 +8,11 @@ This document provides a comprehensive overview of Ralph's codebase structure an
 
 #### `src/core/` - Core Application Logic
 - **`main.c`** - Application entry point with CLI interface (single message, interactive, --json, --subagent modes)
-- **`ralph.c/ralph.h`** - Core Ralph orchestration: session management, API communication, tool execution workflow
+- **`ralph.c/ralph.h`** - Core Ralph orchestration: session management, API communication
+- **`context_enhancement.c/h`** - Prompt enhancement with todo state, memory recall, and context retrieval
+- **`recap.c/h`** - Conversation recap generation (one-shot LLM calls without history persistence)
+- **`streaming_handler.c/h`** - Application-layer streaming orchestration and provider registry management
+- **`tool_executor.c/h`** - Iterative tool-calling state machine for executing tool workflows
 
 #### `src/cli/` - Command Line Interface
 - **`memory_commands.c/h`** - Interactive `/memory` slash commands for direct memory management
@@ -58,7 +62,7 @@ This document provides a comprehensive overview of Ralph's codebase structure an
 ##### Individual Tools
 - **`memory_tool.c/h`** - Persistent semantic memory (remember, recall_memories, forget_memory)
 - **`pdf_tool.c/h`** - PDF processing and vector indexing
-- **`vector_db_tool.c/h`** - Vector database operations (11 tools)
+- **`vector_db_tool.c/h`** - Vector database operations (13 tools including search_text and search_by_time)
 - **`python_tool.c/h`** - Embedded Python interpreter execution
 - **`python_tool_files.c/h`** - Python file-based tool loading system
 - **`subagent_tool.c/h`** - Subagent process spawning and management
@@ -110,9 +114,12 @@ The test directory mirrors the source structure:
 - **`test_main.c`** - Main application tests
 - **`test_ralph.c`** - Core Ralph functionality tests
 - **`test_ralph_integration.c`** - Integration tests
+- **`test_recap.c`** - Recap generation tests
+- **`test_incomplete_task_bug.c`** - Regression test for task handling
 
 #### `test/llm/` - LLM System Tests
 - **`test_model_tools.c`** - Model and tool integration tests
+- **`test_embedding_providers.c`** - Embedding provider tests
 
 #### `test/network/` - Network Layer Tests
 - **`test_http_client.c`** - HTTP client functionality tests
@@ -127,6 +134,9 @@ The test directory mirrors the source structure:
 - **`test_conversation_compactor.c`** - History compression tests
 - **`test_token_manager.c`** - Token management tests
 - **`test_conversation_loading.c`** - Conversation loading tests
+- **`test_conversation_vector_db.c`** - Vector DB integration tests
+- **`test_conversation_tool_sequence_bug.c`** - Tool sequence regression tests
+- **`test_tool_calls_not_stored.c`** - Tool call storage tests
 
 #### `test/tools/` - Tool System Tests
 - **`test_tools_system.c`** - Core tool system tests
@@ -135,12 +145,15 @@ The test directory mirrors the source structure:
 - **`test_vector_db_tool.c`** - Vector database tests
 - **`test_python_tool.c`** & **`test_python_integration.c`** - Python interpreter tests
 - **`test_subagent_tool.c`** - Subagent system tests
+- **`test_enhanced_tool_feedback.c`** - Enhanced feedback tests
+- **`test_tool_call_filtering.c`** - Tool filtering tests
 
 #### `test/pdf/` - PDF Processing Tests
 - **`test_pdf_extractor.c`** - PDF extraction functionality tests
 
 #### `test/db/` - Database Tests
 - **`test_vector_db.c`** - Vector database core tests
+- **`test_document_store.c`** - Document store tests
 
 #### `test/mcp/` - MCP Integration Tests
 - **`test_mcp_client.c`** - MCP client functionality tests
@@ -152,6 +165,8 @@ The test directory mirrors the source structure:
 - **`test_prompt_loader.c`** - Prompt loading tests
 - **`test_config.c`** - Configuration system tests
 - **`test_json_output.c`** - JSON output mode tests
+- **`test_debug_output.c`** - Debug output tests
+- **`test_output_improvement.c`** - Output improvement tests
 
 #### Test Infrastructure
 - **`test/unity/`** - Unity testing framework (vendored)

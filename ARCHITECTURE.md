@@ -14,6 +14,10 @@ graph TB
     Core --> Session[Session Manager<br/>session_manager.c/h]
     Core --> ConfigSystem[Config System<br/>config.c/h]
     Core --> MCPClient[MCP Client<br/>mcp_client.c/h]
+    Core --> ContextEnhancement[Context Enhancement<br/>context_enhancement.c/h]
+    Core --> RecapModule[Recap Generator<br/>recap.c/h]
+    Core --> StreamingHandler[Streaming Handler<br/>streaming_handler.c/h]
+    Core --> ToolExecutor[Tool Executor<br/>tool_executor.c/h]
 
     %% MCP Integration
     MCPClient --> MCPServers[MCP Server Connections<br/>STDIO/HTTP/SSE]
@@ -145,7 +149,7 @@ graph TB
     classDef externalLayer fill:#efebe9
     classDef mcpLayer fill:#fff9c4
 
-    class CLI,Core,Session,ConfigSystem,MemoryCommands coreLayer
+    class CLI,Core,Session,ConfigSystem,MemoryCommands,ContextEnhancement,RecapModule,StreamingHandler,ToolExecutor coreLayer
     class LLMProvider,ProviderRegistry,Anthropic,OpenAI,LocalAI,ModelCaps,ClaudeModel,GPTModel,QwenModel,DeepSeekModel,DefaultModel llmLayer
     class ToolsSystem,ToolRegistry,PythonTool,PythonFileTools,PythonDefaults,TodoTool,MemoryTool,PDFTool,VectorDBTool,SubagentTool,TodoManager,TodoDisplay toolsLayer
     class ConversationTracker,TokenManager,ConversationCompactor sessionLayer
@@ -724,10 +728,10 @@ graph TB
 ### Todo Tools (1 tool)
 - **`todo`**: Manage task list (create, update, complete, delete todos)
 
-### Vector Database Tools (11 tools)
+### Vector Database Tools (13 tools)
 - **Index Management**: `vector_db_create_index`, `vector_db_delete_index`, `vector_db_list_indices`
 - **Vector Operations**: `vector_db_add_vector`, `vector_db_update_vector`, `vector_db_delete_vector`, `vector_db_get_vector`
-- **Search Operations**: `vector_db_search`
+- **Search Operations**: `vector_db_search`, `vector_db_search_text`, `vector_db_search_by_time`
 - **Text Operations**: `vector_db_add_text`, `vector_db_add_chunked_text`, `vector_db_add_pdf_document`
 
 ## Storage and Persistence
@@ -746,7 +750,11 @@ src/
 │   └── memory_commands.c/h # Interactive /memory slash commands
 ├── core/                   # Core application
 │   ├── main.c              # Entry point (CLI interface, --json, --subagent modes)
-│   └── ralph.c/h           # Core orchestration logic
+│   ├── ralph.c/h           # Core orchestration logic
+│   ├── context_enhancement.c/h  # Prompt enhancement with memory/context
+│   ├── recap.c/h           # Conversation recap generation
+│   ├── streaming_handler.c/h   # Streaming orchestration layer
+│   └── tool_executor.c/h   # Tool-calling state machine
 ├── db/                     # Database layer
 │   ├── vector_db.c/h       # Low-level HNSWLIB wrapper
 │   ├── vector_db_service.c/h # Thread-safe singleton service
@@ -792,7 +800,7 @@ src/
 │   ├── tool_result_builder.c/h # Result formatting
 │   ├── memory_tool.c/h     # Semantic memory (remember, recall_memories, forget_memory)
 │   ├── pdf_tool.c/h        # PDF processing tool
-│   ├── vector_db_tool.c/h  # Vector DB operations (11 tools)
+│   ├── vector_db_tool.c/h  # Vector DB operations (13 tools)
 │   ├── python_tool.c/h     # Embedded Python interpreter
 │   ├── python_tool_files.c/h # Python file-based tools
 │   ├── subagent_tool.c/h   # Subagent process spawning
