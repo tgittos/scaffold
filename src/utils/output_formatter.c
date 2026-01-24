@@ -315,10 +315,11 @@ int parse_anthropic_response(const char *json_response, ParsedResponse *result) 
                     size_t new_len = strlen(thinking->valuestring);
                     char *new_thinking = realloc(accumulated_thinking, old_len + new_len + 2);
                     if (new_thinking) {
-                        strcat(new_thinking, "\n");
-                        strcat(new_thinking, thinking->valuestring);
                         accumulated_thinking = new_thinking;
+                        strcat(accumulated_thinking, "\n");
+                        strcat(accumulated_thinking, thinking->valuestring);
                     }
+                    // If realloc fails, continue with existing content
                 }
             }
         } else if (strcmp(type_str, "text") == 0) {
@@ -333,10 +334,11 @@ int parse_anthropic_response(const char *json_response, ParsedResponse *result) 
                     size_t new_len = strlen(text->valuestring);
                     char *new_text = realloc(accumulated_text, old_len + new_len + 2);
                     if (new_text) {
-                        strcat(new_text, "\n");
-                        strcat(new_text, text->valuestring);
                         accumulated_text = new_text;
+                        strcat(accumulated_text, "\n");
+                        strcat(accumulated_text, text->valuestring);
                     }
+                    // If realloc fails, continue with existing content
                 }
             }
         }
@@ -364,10 +366,11 @@ int parse_anthropic_response(const char *json_response, ParsedResponse *result) 
                     size_t new_len = strlen(inner_thinking);
                     char *merged = realloc(result->thinking_content, old_len + new_len + 2);
                     if (merged) {
-                        strcat(merged, "\n");
-                        strcat(merged, inner_thinking);
                         result->thinking_content = merged;
+                        strcat(result->thinking_content, "\n");
+                        strcat(result->thinking_content, inner_thinking);
                     }
+                    // If realloc fails, keep original thinking_content
                     free(inner_thinking);
                 }
             }

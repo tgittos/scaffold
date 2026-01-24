@@ -382,6 +382,36 @@ void test_parse_anthropic_response_thinking_contains_text_field(void) {
     cleanup_parsed_response(&result);
 }
 
+// Test Anthropic response with multiple thinking and text blocks
+void test_parse_anthropic_response_multiple_blocks(void) {
+    // Rare but possible: multiple thinking and text blocks in sequence
+    const char *multi_block_response =
+        "{"
+        "\"content\": ["
+            "{\"type\": \"thinking\", \"thinking\": \"First thought.\"},"
+            "{\"type\": \"thinking\", \"thinking\": \"Second thought.\"},"
+            "{\"type\": \"text\", \"text\": \"First part of response.\"},"
+            "{\"type\": \"text\", \"text\": \"Second part of response.\"}"
+        "],"
+        "\"usage\": {\"input_tokens\": 50, \"output_tokens\": 40}"
+        "}";
+
+    ParsedResponse result;
+    int ret = parse_anthropic_response(multi_block_response, &result);
+
+    TEST_ASSERT_EQUAL(0, ret);
+    TEST_ASSERT_NOT_NULL(result.thinking_content);
+    TEST_ASSERT_NOT_NULL(result.response_content);
+    // Blocks should be concatenated with newlines
+    TEST_ASSERT_EQUAL_STRING("First thought.\nSecond thought.", result.thinking_content);
+    TEST_ASSERT_EQUAL_STRING("First part of response.\nSecond part of response.", result.response_content);
+    TEST_ASSERT_EQUAL(50, result.prompt_tokens);
+    TEST_ASSERT_EQUAL(40, result.completion_tokens);
+    TEST_ASSERT_EQUAL(90, result.total_tokens);
+
+    cleanup_parsed_response(&result);
+}
+
 void test_filter_tool_call_markup_from_response(void) {
     // Test response from local model with tool call markup
     const char *local_model_response =
@@ -518,7 +548,8 @@ int main(void) {
     RUN_TEST(test_parse_anthropic_response_malformed);
     RUN_TEST(test_parse_anthropic_response_extended_thinking);
     RUN_TEST(test_parse_anthropic_response_thinking_contains_text_field);
-    
+    RUN_TEST(test_parse_anthropic_response_multiple_blocks);
+
     // Tool call markup filtering test
     RUN_TEST(test_filter_tool_call_markup_from_response);
 
