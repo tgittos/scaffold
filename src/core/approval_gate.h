@@ -540,4 +540,53 @@ const char *approval_result_name(ApprovalResult result);
  */
 const char *verify_result_message(VerifyResult result);
 
+/* ============================================================================
+ * CLI Override Functions
+ * ========================================================================== */
+
+/**
+ * Enable yolo mode (disable all gates).
+ * This is typically called after approval_gate_init() to apply the --yolo flag.
+ *
+ * @param config Gate configuration
+ */
+void approval_gate_enable_yolo(ApprovalGateConfig *config);
+
+/**
+ * Override a category's action from CLI.
+ * CLI flags take precedence over config file settings.
+ *
+ * @param config Gate configuration
+ * @param category_name Category name string (e.g., "file_write", "shell")
+ * @param action The action to set
+ * @return 0 on success, -1 if category name is invalid
+ */
+int approval_gate_set_category_action(ApprovalGateConfig *config,
+                                      const char *category_name,
+                                      GateAction action);
+
+/**
+ * Parse and add a CLI --allow entry.
+ * Format: "tool:arg1,arg2,..." for shell commands
+ * Format: "tool:pattern" for regex patterns
+ *
+ * For shell commands (tool="shell"), the arguments are parsed as command prefix.
+ * For other tools, the argument is treated as a regex pattern.
+ *
+ * @param config Gate configuration
+ * @param allow_spec The allow specification string (e.g., "shell:git,status")
+ * @return 0 on success, -1 on failure
+ */
+int approval_gate_add_cli_allow(ApprovalGateConfig *config,
+                                const char *allow_spec);
+
+/**
+ * Parse category name from string.
+ *
+ * @param name Category name string
+ * @param out_category Output: the parsed category
+ * @return 0 on success, -1 if name is not recognized
+ */
+int approval_gate_parse_category(const char *name, GateCategory *out_category);
+
 #endif /* APPROVAL_GATE_H */

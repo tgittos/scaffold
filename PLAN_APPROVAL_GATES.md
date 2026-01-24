@@ -18,15 +18,15 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 - [x] **Extend `src/utils/config.c`** - Add parsing for the `approval_gates` section of `ralph.config.json`. Parse `enabled` boolean, `categories` object (map category names to actions), and `allowlist` array. Store in a new config structure accessible to approval gate module. See spec section "Configuration > Config File" for JSON schema.
 
-- [ ] **Add CLI flag parsing in `src/core/main.c`** - Implement `--yolo` flag to disable all gates for session. Implement `--allow "tool:arg1,arg2"` to add entries to session allowlist. Implement `--allow-category=<category>` to override category defaults. CLI flags must override config file settings. See spec section "Configuration > Command-Line Flags".
+- [x] **Add CLI flag parsing in `src/core/main.c`** - Implement `--yolo` flag to disable all gates for session. Implement `--allow "tool:arg1,arg2"` to add entries to session allowlist. Implement `--allow-category=<category>` to override category defaults. CLI flags must override config file settings. See spec section "Configuration > Command-Line Flags".
 
-- [ ] **Implement category default initialization** - Set up default actions for each category: `file_write=gate`, `file_read=allow`, `shell=gate`, `network=gate`, `memory=allow`, `subagent=gate`, `mcp=gate`, `python=allow`. See spec section "Tool Categories" table.
+- [x] **Implement category default initialization** - Set up default actions for each category: `file_write=gate`, `file_read=allow`, `shell=gate`, `network=gate`, `memory=allow`, `subagent=gate`, `mcp=gate`, `python=allow`. See spec section "Tool Categories" table.
 
 ---
 
 ## Tool Category Mapping
 
-- [ ] **Implement `get_tool_category()` function** - Map tool names to `GateCategory` enum. Handle C native tools by exact name match (`remember`, `recall_memories`, `forget_memory`, `process_pdf_document`, `python`, `subagent`, `subagent_status`, `todo`, `vector_db_*` prefix, `mcp_*` prefix). Default unknown tools to `GATE_CATEGORY_PYTHON`. See spec section "Implementation > Tool Category Mapping".
+- [x] **Implement `get_tool_category()` function** - Map tool names to `GateCategory` enum. Handle C native tools by exact name match (`remember`, `recall_memories`, `forget_memory`, `process_pdf_document`, `python`, `subagent`, `subagent_status`, `todo`, `vector_db_*` prefix, `mcp_*` prefix). Default unknown tools to `GATE_CATEGORY_PYTHON`. See spec section "Implementation > Tool Category Mapping".
 
 - [ ] **Handle Python file tool categorization** - Parse `Gate:` directive from Python tool docstrings to override default category. Parse `Match:` directive to identify which argument to use for pattern matching. See spec section "Dynamic Tools > Gate Metadata" for directive format.
 
@@ -122,15 +122,15 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 ## Denial Rate Limiting
 
-- [ ] **Implement `DenialTracker` management** - Track per-tool denial count, last denial time, backoff expiry. Store in `ApprovalGateConfig.denial_trackers` array.
+- [x] **Implement `DenialTracker` management** - Track per-tool denial count, last denial time, backoff expiry. Store in `ApprovalGateConfig.denial_trackers` array.
 
-- [ ] **Implement exponential backoff** - 1-2 denials: no backoff. 3: 5s. 4: 15s. 5: 60s. 6+: 5 minutes. See spec section "Denial Rate Limiting > Backoff Schedule".
+- [x] **Implement exponential backoff** - 1-2 denials: no backoff. 3: 5s. 4: 15s. 5: 60s. 6+: 5 minutes. See spec section "Denial Rate Limiting > Backoff Schedule".
 
-- [ ] **Implement `is_rate_limited()` check** - Return true if tool is in backoff period. Called before prompting user.
+- [x] **Implement `is_rate_limited()` check** - Return true if tool is in backoff period. Called before prompting user.
 
-- [ ] **Implement rate limit error response** - Return structured JSON error with `retry_after` field. See spec section "Denial Rate Limiting > Behavior During Backoff".
+- [x] **Implement rate limit error response** - Return structured JSON error with `retry_after` field. See spec section "Denial Rate Limiting > Behavior During Backoff".
 
-- [ ] **Implement backoff reset** - Reset denial counter on: user approval, session restart, or backoff expiry without new denial. See spec section "Denial Rate Limiting".
+- [x] **Implement backoff reset** - Reset denial counter on: user approval, session restart, or backoff expiry without new denial. See spec section "Denial Rate Limiting".
 
 ---
 
@@ -190,7 +190,7 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 ## Unit Tests
 
-- [ ] **Create `test/test_approval_gate.c`** - Test gate config initialization, category lookup, allowlist matching (regex), rate limiting calculations, denial tracking.
+- [x] **Create `test/test_approval_gate.c`** - Test gate config initialization, category lookup, allowlist matching (regex), rate limiting calculations, denial tracking.
 
 - [ ] **Create `test/test_shell_parser.c`** - Test POSIX shell tokenization, quote handling, metacharacter detection, chain/pipe detection, dangerous pattern matching. Test edge cases: empty commands, only whitespace, unbalanced quotes.
 

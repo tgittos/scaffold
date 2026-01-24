@@ -889,6 +889,161 @@ void test_approval_gate_load_from_json_file_invalid_entries_skipped(void) {
 }
 
 /* =============================================================================
+ * CLI Override Tests
+ * ========================================================================== */
+
+void test_approval_gate_enable_yolo(void) {
+    TEST_ASSERT_EQUAL(1, config.enabled);
+    approval_gate_enable_yolo(&config);
+    TEST_ASSERT_EQUAL(0, config.enabled);
+}
+
+void test_approval_gate_enable_yolo_null_safe(void) {
+    /* Should not crash */
+    approval_gate_enable_yolo(NULL);
+}
+
+void test_approval_gate_set_category_action(void) {
+    /* Default should be gate */
+    TEST_ASSERT_EQUAL(GATE_ACTION_GATE, config.categories[GATE_CATEGORY_FILE_WRITE]);
+
+    /* Set to allow */
+    int result = approval_gate_set_category_action(&config, "file_write", GATE_ACTION_ALLOW);
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_EQUAL(GATE_ACTION_ALLOW, config.categories[GATE_CATEGORY_FILE_WRITE]);
+
+    /* Set to deny */
+    result = approval_gate_set_category_action(&config, "shell", GATE_ACTION_DENY);
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_EQUAL(GATE_ACTION_DENY, config.categories[GATE_CATEGORY_SHELL]);
+}
+
+void test_approval_gate_set_category_action_invalid_category(void) {
+    int result = approval_gate_set_category_action(&config, "invalid_category", GATE_ACTION_ALLOW);
+    TEST_ASSERT_EQUAL(-1, result);
+}
+
+void test_approval_gate_set_category_action_null_params(void) {
+    TEST_ASSERT_EQUAL(-1, approval_gate_set_category_action(NULL, "file_write", GATE_ACTION_ALLOW));
+    TEST_ASSERT_EQUAL(-1, approval_gate_set_category_action(&config, NULL, GATE_ACTION_ALLOW));
+}
+
+void test_approval_gate_parse_category(void) {
+    GateCategory category;
+
+    TEST_ASSERT_EQUAL(0, approval_gate_parse_category("file_write", &category));
+    TEST_ASSERT_EQUAL(GATE_CATEGORY_FILE_WRITE, category);
+
+    TEST_ASSERT_EQUAL(0, approval_gate_parse_category("file_read", &category));
+    TEST_ASSERT_EQUAL(GATE_CATEGORY_FILE_READ, category);
+
+    TEST_ASSERT_EQUAL(0, approval_gate_parse_category("shell", &category));
+    TEST_ASSERT_EQUAL(GATE_CATEGORY_SHELL, category);
+
+    TEST_ASSERT_EQUAL(0, approval_gate_parse_category("network", &category));
+    TEST_ASSERT_EQUAL(GATE_CATEGORY_NETWORK, category);
+
+    TEST_ASSERT_EQUAL(0, approval_gate_parse_category("memory", &category));
+    TEST_ASSERT_EQUAL(GATE_CATEGORY_MEMORY, category);
+
+    TEST_ASSERT_EQUAL(0, approval_gate_parse_category("subagent", &category));
+    TEST_ASSERT_EQUAL(GATE_CATEGORY_SUBAGENT, category);
+
+    TEST_ASSERT_EQUAL(0, approval_gate_parse_category("mcp", &category));
+    TEST_ASSERT_EQUAL(GATE_CATEGORY_MCP, category);
+
+    TEST_ASSERT_EQUAL(0, approval_gate_parse_category("python", &category));
+    TEST_ASSERT_EQUAL(GATE_CATEGORY_PYTHON, category);
+}
+
+void test_approval_gate_parse_category_invalid(void) {
+    GateCategory category;
+    TEST_ASSERT_EQUAL(-1, approval_gate_parse_category("invalid", &category));
+    TEST_ASSERT_EQUAL(-1, approval_gate_parse_category(NULL, &category));
+    TEST_ASSERT_EQUAL(-1, approval_gate_parse_category("file_write", NULL));
+}
+
+void test_approval_gate_add_cli_allow_shell_command(void) {
+    int initial_count = config.shell_allowlist_count;
+
+    /* Add shell command via CLI format */
+    int result = approval_gate_add_cli_allow(&config, "shell:git,status");
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_EQUAL(initial_count + 1, config.shell_allowlist_count);
+
+    /* Verify the entry */
+    ShellAllowEntry *entry = &config.shell_allowlist[initial_count];
+    TEST_ASSERT_EQUAL(2, entry->prefix_len);
+    TEST_ASSERT_EQUAL_STRING("git", entry->command_prefix[0]);
+    TEST_ASSERT_EQUAL_STRING("status", entry->command_prefix[1]);
+    TEST_ASSERT_EQUAL(SHELL_TYPE_UNKNOWN, entry->shell_type);
+}
+
+void test_approval_gate_add_cli_allow_shell_single_command(void) {
+    int initial_count = config.shell_allowlist_count;
+
+    /* Add single-word shell command */
+    int result = approval_gate_add_cli_allow(&config, "shell:ls");
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_EQUAL(initial_count + 1, config.shell_allowlist_count);
+
+    ShellAllowEntry *entry = &config.shell_allowlist[initial_count];
+    TEST_ASSERT_EQUAL(1, entry->prefix_len);
+    TEST_ASSERT_EQUAL_STRING("ls", entry->command_prefix[0]);
+}
+
+void test_approval_gate_add_cli_allow_shell_multi_arg(void) {
+    int initial_count = config.shell_allowlist_count;
+
+    /* Add multi-argument shell command */
+    int result = approval_gate_add_cli_allow(&config, "shell:npm,install,lodash");
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_EQUAL(initial_count + 1, config.shell_allowlist_count);
+
+    ShellAllowEntry *entry = &config.shell_allowlist[initial_count];
+    TEST_ASSERT_EQUAL(3, entry->prefix_len);
+    TEST_ASSERT_EQUAL_STRING("npm", entry->command_prefix[0]);
+    TEST_ASSERT_EQUAL_STRING("install", entry->command_prefix[1]);
+    TEST_ASSERT_EQUAL_STRING("lodash", entry->command_prefix[2]);
+}
+
+void test_approval_gate_add_cli_allow_regex_pattern(void) {
+    int initial_count = config.allowlist_count;
+
+    /* Add regex pattern for non-shell tool */
+    int result = approval_gate_add_cli_allow(&config, "write_file:^\\./src/.*\\.c$");
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_EQUAL(initial_count + 1, config.allowlist_count);
+
+    AllowlistEntry *entry = &config.allowlist[initial_count];
+    TEST_ASSERT_EQUAL_STRING("write_file", entry->tool);
+    TEST_ASSERT_EQUAL_STRING("^\\./src/.*\\.c$", entry->pattern);
+    TEST_ASSERT_EQUAL(1, entry->valid);
+}
+
+void test_approval_gate_add_cli_allow_invalid_format(void) {
+    int initial_shell = config.shell_allowlist_count;
+    int initial_regex = config.allowlist_count;
+
+    /* No colon separator */
+    TEST_ASSERT_EQUAL(-1, approval_gate_add_cli_allow(&config, "shell"));
+
+    /* Empty tool name */
+    TEST_ASSERT_EQUAL(-1, approval_gate_add_cli_allow(&config, ":ls"));
+
+    /* No arguments after colon */
+    TEST_ASSERT_EQUAL(-1, approval_gate_add_cli_allow(&config, "shell:"));
+
+    /* NULL input */
+    TEST_ASSERT_EQUAL(-1, approval_gate_add_cli_allow(&config, NULL));
+    TEST_ASSERT_EQUAL(-1, approval_gate_add_cli_allow(NULL, "shell:ls"));
+
+    /* Counts should be unchanged */
+    TEST_ASSERT_EQUAL(initial_shell, config.shell_allowlist_count);
+    TEST_ASSERT_EQUAL(initial_regex, config.allowlist_count);
+}
+
+/* =============================================================================
  * Main
  * ========================================================================== */
 
@@ -965,6 +1120,20 @@ int main(void) {
     RUN_TEST(test_approval_gate_load_from_json_file_powershell_shell);
     RUN_TEST(test_approval_gate_load_from_json_file_malformed_json);
     RUN_TEST(test_approval_gate_load_from_json_file_invalid_entries_skipped);
+
+    /* CLI override tests */
+    RUN_TEST(test_approval_gate_enable_yolo);
+    RUN_TEST(test_approval_gate_enable_yolo_null_safe);
+    RUN_TEST(test_approval_gate_set_category_action);
+    RUN_TEST(test_approval_gate_set_category_action_invalid_category);
+    RUN_TEST(test_approval_gate_set_category_action_null_params);
+    RUN_TEST(test_approval_gate_parse_category);
+    RUN_TEST(test_approval_gate_parse_category_invalid);
+    RUN_TEST(test_approval_gate_add_cli_allow_shell_command);
+    RUN_TEST(test_approval_gate_add_cli_allow_shell_single_command);
+    RUN_TEST(test_approval_gate_add_cli_allow_shell_multi_arg);
+    RUN_TEST(test_approval_gate_add_cli_allow_regex_pattern);
+    RUN_TEST(test_approval_gate_add_cli_allow_invalid_format);
 
     return UNITY_END();
 }

@@ -1540,3 +1540,140 @@ char *format_verify_error(VerifyResult result, const char *path) {
     }
     return error;
 }
+
+/* =============================================================================
+ * CLI Override Functions
+ * ========================================================================== */
+
+void approval_gate_enable_yolo(ApprovalGateConfig *config) {
+    if (config == NULL) {
+        return;
+    }
+    config->enabled = 0;
+}
+
+int approval_gate_set_category_action(ApprovalGateConfig *config,
+                                      const char *category_name,
+                                      GateAction action) {
+    if (config == NULL || category_name == NULL) {
+        return -1;
+    }
+
+    GateCategory category;
+    if (parse_gate_category(category_name, &category) != 0) {
+        return -1;
+    }
+
+    config->categories[category] = action;
+    return 0;
+}
+
+int approval_gate_parse_category(const char *name, GateCategory *out_category) {
+    return parse_gate_category(name, out_category);
+}
+
+int approval_gate_add_cli_allow(ApprovalGateConfig *config,
+                                const char *allow_spec) {
+    if (config == NULL || allow_spec == NULL) {
+        return -1;
+    }
+
+    /* Find the colon separator between tool and arguments */
+    const char *colon = strchr(allow_spec, ':');
+    if (colon == NULL) {
+        /* No colon - invalid format */
+        return -1;
+    }
+
+    /* Extract tool name */
+    size_t tool_len = colon - allow_spec;
+    if (tool_len == 0) {
+        return -1;
+    }
+
+    char *tool_name = malloc(tool_len + 1);
+    if (tool_name == NULL) {
+        return -1;
+    }
+    memcpy(tool_name, allow_spec, tool_len);
+    tool_name[tool_len] = '\0';
+
+    /* Get the arguments part (after the colon) */
+    const char *args = colon + 1;
+    if (*args == '\0') {
+        /* No arguments after colon */
+        free(tool_name);
+        return -1;
+    }
+
+    int result;
+
+    if (strcmp(tool_name, "shell") == 0) {
+        /* For shell, parse comma-separated command tokens */
+        /* Count the number of tokens */
+        int token_count = 1;
+        for (const char *p = args; *p != '\0'; p++) {
+            if (*p == ',') {
+                token_count++;
+            }
+        }
+
+        /* Allocate token array */
+        const char **tokens = calloc(token_count, sizeof(char *));
+        char **allocated_tokens = calloc(token_count, sizeof(char *));
+        if (tokens == NULL || allocated_tokens == NULL) {
+            free(tool_name);
+            free(tokens);
+            free(allocated_tokens);
+            return -1;
+        }
+
+        /* Parse tokens */
+        char *args_copy = strdup(args);
+        if (args_copy == NULL) {
+            free(tool_name);
+            free(tokens);
+            free(allocated_tokens);
+            return -1;
+        }
+
+        int idx = 0;
+        char *saveptr = NULL;
+        char *token = strtok_r(args_copy, ",", &saveptr);
+        while (token != NULL && idx < token_count) {
+            allocated_tokens[idx] = strdup(token);
+            if (allocated_tokens[idx] == NULL) {
+                /* Cleanup on failure */
+                for (int i = 0; i < idx; i++) {
+                    free(allocated_tokens[i]);
+                }
+                free(args_copy);
+                free(tool_name);
+                free(tokens);
+                free(allocated_tokens);
+                return -1;
+            }
+            tokens[idx] = allocated_tokens[idx];
+            idx++;
+            token = strtok_r(NULL, ",", &saveptr);
+        }
+
+        /* Add to shell allowlist */
+        result = approval_gate_add_shell_allowlist(config, tokens, idx,
+                                                   SHELL_TYPE_UNKNOWN);
+
+        /* Cleanup */
+        for (int i = 0; i < idx; i++) {
+            free(allocated_tokens[i]);
+        }
+        free(args_copy);
+        free(tokens);
+        free(allocated_tokens);
+    } else {
+        /* For other tools, treat args as a regex pattern */
+        result = approval_gate_add_allowlist(config, tool_name, args);
+    }
+
+    free(tool_name);
+    return result;
+}
