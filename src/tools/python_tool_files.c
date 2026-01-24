@@ -261,7 +261,8 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
         "        sig = inspect.signature(func)\n"
         "        doc = func.__doc__ or ''\n"
         "        # Get module docstring for Gate:/Match: directives\n"
-        "        module_doc = sys.modules.get('__main__').__doc__ or ''\n"
+        "        main_module = sys.modules.get('__main__')\n"
+        "        module_doc = getattr(main_module, '__doc__', '') or ''\n"
         "        gate_info = _ralph_parse_gate_directives(module_doc)\n"
         "        # Also check function docstring for directives\n"
         "        if gate_info['gate_category'] is None or gate_info['match_arg'] is None:\n"
@@ -371,7 +372,9 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
         return -1;
     }
 
-    // Extract gate category and match argument if specified
+    // Extract gate category and match argument if specified.
+    // These are optional metadata - NULL is acceptable (indicates not specified).
+    // strdup failure for optional fields is handled gracefully by leaving NULL.
     tool_def->gate_category = NULL;
     tool_def->match_arg = NULL;
     if (cJSON_IsString(gate_item) && gate_item->valuestring != NULL) {
