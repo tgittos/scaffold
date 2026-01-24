@@ -9,6 +9,7 @@
 
 #include "approval_gate.h"
 
+#include <cJSON.h>
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -215,6 +216,239 @@ static const int BACKOFF_SCHEDULE[] = {
 #define INITIAL_SHELL_ALLOWLIST_CAPACITY 16
 #define INITIAL_DENIAL_TRACKER_CAPACITY 8
 
+/* Config file paths to search */
+static const char *CONFIG_FILE_PATHS[] = {
+    "./ralph.config.json",
+    NULL
+};
+
+/* =============================================================================
+ * Config Parsing Helpers
+ * ========================================================================== */
+
+/**
+ * Parse an action string to GateAction enum.
+ * Returns -1 if the string is not recognized.
+ */
+static int parse_gate_action(const char *str, GateAction *out) {
+    if (str == NULL || out == NULL) {
+        return -1;
+    }
+
+    if (strcmp(str, "allow") == 0) {
+        *out = GATE_ACTION_ALLOW;
+        return 0;
+    } else if (strcmp(str, "gate") == 0) {
+        *out = GATE_ACTION_GATE;
+        return 0;
+    } else if (strcmp(str, "deny") == 0) {
+        *out = GATE_ACTION_DENY;
+        return 0;
+    }
+
+    return -1;
+}
+
+/**
+ * Parse a category name string to GateCategory enum.
+ * Returns -1 if the string is not recognized.
+ */
+static int parse_gate_category(const char *str, GateCategory *out) {
+    if (str == NULL || out == NULL) {
+        return -1;
+    }
+
+    for (int i = 0; i < GATE_CATEGORY_COUNT; i++) {
+        if (strcmp(str, CATEGORY_NAMES[i]) == 0) {
+            *out = (GateCategory)i;
+            return 0;
+        }
+    }
+
+    return -1;
+}
+
+/**
+ * Parse a shell type string to ShellType enum.
+ * Returns SHELL_TYPE_UNKNOWN if the string is not recognized.
+ */
+static ShellType parse_shell_type(const char *str) {
+    if (str == NULL) {
+        return SHELL_TYPE_UNKNOWN;
+    }
+
+    if (strcmp(str, "posix") == 0) {
+        return SHELL_TYPE_POSIX;
+    } else if (strcmp(str, "cmd") == 0) {
+        return SHELL_TYPE_CMD;
+    } else if (strcmp(str, "powershell") == 0) {
+        return SHELL_TYPE_POWERSHELL;
+    }
+
+    return SHELL_TYPE_UNKNOWN;
+}
+
+/**
+ * Load approval gate config from a cJSON object.
+ * This parses the "approval_gates" section of the config file.
+ */
+static int approval_gate_load_from_json(ApprovalGateConfig *config, cJSON *json) {
+    if (config == NULL || json == NULL) {
+        return -1;
+    }
+
+    cJSON *approval_gates = cJSON_GetObjectItem(json, "approval_gates");
+    if (approval_gates == NULL || !cJSON_IsObject(approval_gates)) {
+        /* No approval_gates section - use defaults */
+        return 0;
+    }
+
+    /* Parse "enabled" field */
+    cJSON *enabled = cJSON_GetObjectItem(approval_gates, "enabled");
+    if (cJSON_IsBool(enabled)) {
+        config->enabled = cJSON_IsTrue(enabled) ? 1 : 0;
+    }
+
+    /* Parse "categories" object */
+    cJSON *categories = cJSON_GetObjectItem(approval_gates, "categories");
+    if (cJSON_IsObject(categories)) {
+        cJSON *cat_item = NULL;
+        cJSON_ArrayForEach(cat_item, categories) {
+            if (!cJSON_IsString(cat_item)) {
+                continue;
+            }
+
+            GateCategory category;
+            GateAction action;
+
+            if (parse_gate_category(cat_item->string, &category) != 0) {
+                continue;
+            }
+
+            if (parse_gate_action(cat_item->valuestring, &action) != 0) {
+                continue;
+            }
+
+            config->categories[category] = action;
+        }
+    }
+
+    /* Parse "allowlist" array */
+    cJSON *allowlist = cJSON_GetObjectItem(approval_gates, "allowlist");
+    if (cJSON_IsArray(allowlist)) {
+        cJSON *entry = NULL;
+        cJSON_ArrayForEach(entry, allowlist) {
+            if (!cJSON_IsObject(entry)) {
+                continue;
+            }
+
+            cJSON *tool = cJSON_GetObjectItem(entry, "tool");
+            if (!cJSON_IsString(tool)) {
+                continue;
+            }
+
+            const char *tool_name = tool->valuestring;
+
+            /* Check if this is a shell command entry (has "command" array) */
+            cJSON *command = cJSON_GetObjectItem(entry, "command");
+            if (cJSON_IsArray(command)) {
+                /* Shell command allowlist entry */
+                int command_len = cJSON_GetArraySize(command);
+                if (command_len <= 0) {
+                    continue;
+                }
+
+                /* Allocate command prefix array */
+                const char **command_prefix = calloc(command_len, sizeof(char *));
+                if (command_prefix == NULL) {
+                    continue;
+                }
+
+                int valid = 1;
+                for (int i = 0; i < command_len; i++) {
+                    cJSON *cmd_item = cJSON_GetArrayItem(command, i);
+                    if (!cJSON_IsString(cmd_item)) {
+                        valid = 0;
+                        break;
+                    }
+                    command_prefix[i] = cmd_item->valuestring;
+                }
+
+                if (valid) {
+                    /* Parse optional shell type */
+                    cJSON *shell_type_json = cJSON_GetObjectItem(entry, "shell");
+                    ShellType shell_type = SHELL_TYPE_UNKNOWN;
+                    if (cJSON_IsString(shell_type_json)) {
+                        shell_type = parse_shell_type(shell_type_json->valuestring);
+                    }
+
+                    approval_gate_add_shell_allowlist(config, command_prefix,
+                                                      command_len, shell_type);
+                }
+
+                free(command_prefix);
+            } else {
+                /* Regex pattern allowlist entry */
+                cJSON *pattern = cJSON_GetObjectItem(entry, "pattern");
+                if (cJSON_IsString(pattern)) {
+                    approval_gate_add_allowlist(config, tool_name, pattern->valuestring);
+                }
+            }
+        }
+    }
+
+    return 0;
+}
+
+/**
+ * Load approval gate configuration from a JSON file.
+ */
+static int approval_gate_load_from_file(ApprovalGateConfig *config,
+                                        const char *filepath) {
+    if (config == NULL || filepath == NULL) {
+        return -1;
+    }
+
+    FILE *file = fopen(filepath, "r");
+    if (file == NULL) {
+        return -1;
+    }
+
+    /* Read file content */
+    fseek(file, 0, SEEK_END);
+    long file_size = ftell(file);
+    fseek(file, 0, SEEK_SET);
+
+    if (file_size <= 0) {
+        fclose(file);
+        return -1;
+    }
+
+    char *json_content = malloc(file_size + 1);
+    if (json_content == NULL) {
+        fclose(file);
+        return -1;
+    }
+
+    size_t bytes_read = fread(json_content, 1, file_size, file);
+    json_content[bytes_read] = '\0';
+    fclose(file);
+
+    /* Parse JSON */
+    cJSON *json = cJSON_Parse(json_content);
+    free(json_content);
+
+    if (json == NULL) {
+        return -1;
+    }
+
+    /* Load config from JSON */
+    int result = approval_gate_load_from_json(config, json);
+    cJSON_Delete(json);
+
+    return result;
+}
+
 /* =============================================================================
  * Utility Functions
  * ========================================================================== */
@@ -301,6 +535,14 @@ int approval_gate_init(ApprovalGateConfig *config) {
 
     /* No approval channel for root process */
     config->approval_channel = NULL;
+
+    /* Try to load configuration from config file */
+    for (int i = 0; CONFIG_FILE_PATHS[i] != NULL; i++) {
+        if (access(CONFIG_FILE_PATHS[i], R_OK) == 0) {
+            approval_gate_load_from_file(config, CONFIG_FILE_PATHS[i]);
+            break;  /* Stop after first successful load */
+        }
+    }
 
     return 0;
 }

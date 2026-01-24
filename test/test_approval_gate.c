@@ -8,9 +8,41 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
+
+/* Backup for existing config file */
+static char *saved_config_backup = NULL;
 
 /* Test fixture */
 static ApprovalGateConfig config;
+
+static void backup_config_file(void) {
+    FILE *f = fopen("ralph.config.json", "r");
+    if (f) {
+        fseek(f, 0, SEEK_END);
+        long size = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        saved_config_backup = malloc(size + 1);
+        if (saved_config_backup) {
+            size_t read_size = fread(saved_config_backup, 1, size, f);
+            saved_config_backup[read_size] = '\0';
+        }
+        fclose(f);
+        unlink("ralph.config.json");
+    }
+}
+
+static void restore_config_file(void) {
+    if (saved_config_backup) {
+        FILE *f = fopen("ralph.config.json", "w");
+        if (f) {
+            fwrite(saved_config_backup, 1, strlen(saved_config_backup), f);
+            fclose(f);
+        }
+        free(saved_config_backup);
+        saved_config_backup = NULL;
+    }
+}
 
 void setUp(void) {
     int result = approval_gate_init(&config);
@@ -520,6 +552,266 @@ void test_verify_approved_path_null_path(void) {
 }
 
 /* =============================================================================
+ * Config Loading Tests
+ * ========================================================================== */
+
+void test_approval_gate_load_from_json_file_enabled(void) {
+    backup_config_file();
+
+    /* Create config file with approval_gates section */
+    FILE *f = fopen("ralph.config.json", "w");
+    TEST_ASSERT_NOT_NULL(f);
+
+    const char *json =
+        "{\n"
+        "  \"approval_gates\": {\n"
+        "    \"enabled\": false\n"
+        "  }\n"
+        "}\n";
+
+    fprintf(f, "%s", json);
+    fclose(f);
+
+    /* Re-init to load from file */
+    approval_gate_cleanup(&config);
+    int result = approval_gate_init(&config);
+    TEST_ASSERT_EQUAL(0, result);
+
+    /* Enabled should be false from config */
+    TEST_ASSERT_EQUAL(0, config.enabled);
+
+    unlink("ralph.config.json");
+    restore_config_file();
+}
+
+void test_approval_gate_load_from_json_file_categories(void) {
+    backup_config_file();
+
+    /* Create config file with category overrides */
+    FILE *f = fopen("ralph.config.json", "w");
+    TEST_ASSERT_NOT_NULL(f);
+
+    const char *json =
+        "{\n"
+        "  \"approval_gates\": {\n"
+        "    \"enabled\": true,\n"
+        "    \"categories\": {\n"
+        "      \"file_write\": \"allow\",\n"
+        "      \"shell\": \"deny\",\n"
+        "      \"memory\": \"gate\"\n"
+        "    }\n"
+        "  }\n"
+        "}\n";
+
+    fprintf(f, "%s", json);
+    fclose(f);
+
+    /* Re-init to load from file */
+    approval_gate_cleanup(&config);
+    int result = approval_gate_init(&config);
+    TEST_ASSERT_EQUAL(0, result);
+
+    /* Check category overrides */
+    TEST_ASSERT_EQUAL(GATE_ACTION_ALLOW, config.categories[GATE_CATEGORY_FILE_WRITE]);
+    TEST_ASSERT_EQUAL(GATE_ACTION_DENY, config.categories[GATE_CATEGORY_SHELL]);
+    TEST_ASSERT_EQUAL(GATE_ACTION_GATE, config.categories[GATE_CATEGORY_MEMORY]);
+    /* Unchanged categories should have defaults */
+    TEST_ASSERT_EQUAL(GATE_ACTION_ALLOW, config.categories[GATE_CATEGORY_FILE_READ]);
+
+    unlink("ralph.config.json");
+    restore_config_file();
+}
+
+void test_approval_gate_load_from_json_file_regex_allowlist(void) {
+    backup_config_file();
+
+    /* Create config file with regex allowlist entries */
+    FILE *f = fopen("ralph.config.json", "w");
+    TEST_ASSERT_NOT_NULL(f);
+
+    const char *json =
+        "{\n"
+        "  \"approval_gates\": {\n"
+        "    \"allowlist\": [\n"
+        "      {\"tool\": \"write_file\", \"pattern\": \"^\\\\.test\\\\.c$\"},\n"
+        "      {\"tool\": \"web_fetch\", \"pattern\": \"^https://api\\\\.example\\\\.com\"}\n"
+        "    ]\n"
+        "  }\n"
+        "}\n";
+
+    fprintf(f, "%s", json);
+    fclose(f);
+
+    /* Re-init to load from file */
+    approval_gate_cleanup(&config);
+    int result = approval_gate_init(&config);
+    TEST_ASSERT_EQUAL(0, result);
+
+    /* Check allowlist entries were added */
+    TEST_ASSERT_EQUAL(2, config.allowlist_count);
+    TEST_ASSERT_EQUAL_STRING("write_file", config.allowlist[0].tool);
+    TEST_ASSERT_EQUAL_STRING("^\\.test\\.c$", config.allowlist[0].pattern);
+    TEST_ASSERT_EQUAL(1, config.allowlist[0].valid);
+    TEST_ASSERT_EQUAL_STRING("web_fetch", config.allowlist[1].tool);
+
+    unlink("ralph.config.json");
+    restore_config_file();
+}
+
+void test_approval_gate_load_from_json_file_shell_allowlist(void) {
+    backup_config_file();
+
+    /* Create config file with shell command allowlist entries */
+    FILE *f = fopen("ralph.config.json", "w");
+    TEST_ASSERT_NOT_NULL(f);
+
+    const char *json =
+        "{\n"
+        "  \"approval_gates\": {\n"
+        "    \"allowlist\": [\n"
+        "      {\"tool\": \"shell\", \"command\": [\"ls\"]},\n"
+        "      {\"tool\": \"shell\", \"command\": [\"git\", \"status\"]},\n"
+        "      {\"tool\": \"shell\", \"command\": [\"dir\"], \"shell\": \"cmd\"}\n"
+        "    ]\n"
+        "  }\n"
+        "}\n";
+
+    fprintf(f, "%s", json);
+    fclose(f);
+
+    /* Re-init to load from file */
+    approval_gate_cleanup(&config);
+    int result = approval_gate_init(&config);
+    TEST_ASSERT_EQUAL(0, result);
+
+    /* Check shell allowlist entries were added */
+    TEST_ASSERT_EQUAL(3, config.shell_allowlist_count);
+
+    /* First entry: ls */
+    TEST_ASSERT_EQUAL(1, config.shell_allowlist[0].prefix_len);
+    TEST_ASSERT_EQUAL_STRING("ls", config.shell_allowlist[0].command_prefix[0]);
+    TEST_ASSERT_EQUAL(SHELL_TYPE_UNKNOWN, config.shell_allowlist[0].shell_type);
+
+    /* Second entry: git status */
+    TEST_ASSERT_EQUAL(2, config.shell_allowlist[1].prefix_len);
+    TEST_ASSERT_EQUAL_STRING("git", config.shell_allowlist[1].command_prefix[0]);
+    TEST_ASSERT_EQUAL_STRING("status", config.shell_allowlist[1].command_prefix[1]);
+
+    /* Third entry: dir (cmd only) */
+    TEST_ASSERT_EQUAL(1, config.shell_allowlist[2].prefix_len);
+    TEST_ASSERT_EQUAL_STRING("dir", config.shell_allowlist[2].command_prefix[0]);
+    TEST_ASSERT_EQUAL(SHELL_TYPE_CMD, config.shell_allowlist[2].shell_type);
+
+    unlink("ralph.config.json");
+    restore_config_file();
+}
+
+void test_approval_gate_load_from_json_file_mixed_allowlist(void) {
+    backup_config_file();
+
+    /* Create config file with mixed shell and regex allowlist entries */
+    FILE *f = fopen("ralph.config.json", "w");
+    TEST_ASSERT_NOT_NULL(f);
+
+    const char *json =
+        "{\n"
+        "  \"approval_gates\": {\n"
+        "    \"enabled\": true,\n"
+        "    \"categories\": {\n"
+        "      \"network\": \"allow\"\n"
+        "    },\n"
+        "    \"allowlist\": [\n"
+        "      {\"tool\": \"shell\", \"command\": [\"cat\"]},\n"
+        "      {\"tool\": \"write_file\", \"pattern\": \"/tmp/.*\"}\n"
+        "    ]\n"
+        "  }\n"
+        "}\n";
+
+    fprintf(f, "%s", json);
+    fclose(f);
+
+    /* Re-init to load from file */
+    approval_gate_cleanup(&config);
+    int result = approval_gate_init(&config);
+    TEST_ASSERT_EQUAL(0, result);
+
+    /* Check both types of allowlist entries */
+    TEST_ASSERT_EQUAL(1, config.shell_allowlist_count);
+    TEST_ASSERT_EQUAL(1, config.allowlist_count);
+
+    TEST_ASSERT_EQUAL_STRING("cat", config.shell_allowlist[0].command_prefix[0]);
+    TEST_ASSERT_EQUAL_STRING("write_file", config.allowlist[0].tool);
+    TEST_ASSERT_EQUAL_STRING("/tmp/.*", config.allowlist[0].pattern);
+
+    /* Also check category override */
+    TEST_ASSERT_EQUAL(GATE_ACTION_ALLOW, config.categories[GATE_CATEGORY_NETWORK]);
+
+    unlink("ralph.config.json");
+    restore_config_file();
+}
+
+void test_approval_gate_load_from_json_file_no_approval_gates_section(void) {
+    backup_config_file();
+
+    /* Create config file without approval_gates section */
+    FILE *f = fopen("ralph.config.json", "w");
+    TEST_ASSERT_NOT_NULL(f);
+
+    const char *json =
+        "{\n"
+        "  \"api_url\": \"https://api.example.com\"\n"
+        "}\n";
+
+    fprintf(f, "%s", json);
+    fclose(f);
+
+    /* Re-init to load from file - should use defaults */
+    approval_gate_cleanup(&config);
+    int result = approval_gate_init(&config);
+    TEST_ASSERT_EQUAL(0, result);
+
+    /* Should have defaults */
+    TEST_ASSERT_EQUAL(1, config.enabled);
+    TEST_ASSERT_EQUAL(GATE_ACTION_GATE, config.categories[GATE_CATEGORY_FILE_WRITE]);
+    TEST_ASSERT_EQUAL(GATE_ACTION_ALLOW, config.categories[GATE_CATEGORY_FILE_READ]);
+
+    unlink("ralph.config.json");
+    restore_config_file();
+}
+
+void test_approval_gate_load_from_json_file_powershell_shell(void) {
+    backup_config_file();
+
+    /* Create config file with PowerShell shell type */
+    FILE *f = fopen("ralph.config.json", "w");
+    TEST_ASSERT_NOT_NULL(f);
+
+    const char *json =
+        "{\n"
+        "  \"approval_gates\": {\n"
+        "    \"allowlist\": [\n"
+        "      {\"tool\": \"shell\", \"command\": [\"Get-ChildItem\"], \"shell\": \"powershell\"}\n"
+        "    ]\n"
+        "  }\n"
+        "}\n";
+
+    fprintf(f, "%s", json);
+    fclose(f);
+
+    /* Re-init to load from file */
+    approval_gate_cleanup(&config);
+    int result = approval_gate_init(&config);
+    TEST_ASSERT_EQUAL(0, result);
+
+    TEST_ASSERT_EQUAL(1, config.shell_allowlist_count);
+    TEST_ASSERT_EQUAL_STRING("Get-ChildItem", config.shell_allowlist[0].command_prefix[0]);
+    TEST_ASSERT_EQUAL(SHELL_TYPE_POWERSHELL, config.shell_allowlist[0].shell_type);
+
+    unlink("ralph.config.json");
+    restore_config_file();
+}
+
+/* =============================================================================
  * Main
  * ========================================================================== */
 
@@ -585,6 +877,15 @@ int main(void) {
     /* Path verification tests */
     RUN_TEST(test_free_approved_path_handles_null);
     RUN_TEST(test_verify_approved_path_null_path);
+
+    /* Config loading tests */
+    RUN_TEST(test_approval_gate_load_from_json_file_enabled);
+    RUN_TEST(test_approval_gate_load_from_json_file_categories);
+    RUN_TEST(test_approval_gate_load_from_json_file_regex_allowlist);
+    RUN_TEST(test_approval_gate_load_from_json_file_shell_allowlist);
+    RUN_TEST(test_approval_gate_load_from_json_file_mixed_allowlist);
+    RUN_TEST(test_approval_gate_load_from_json_file_no_approval_gates_section);
+    RUN_TEST(test_approval_gate_load_from_json_file_powershell_shell);
 
     return UNITY_END();
 }

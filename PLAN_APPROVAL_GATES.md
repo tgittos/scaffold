@@ -16,7 +16,7 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 ## Configuration System
 
-- [ ] **Extend `src/utils/config.c`** - Add parsing for the `approval_gates` section of `ralph.config.json`. Parse `enabled` boolean, `categories` object (map category names to actions), and `allowlist` array. Store in a new config structure accessible to approval gate module. See spec section "Configuration > Config File" for JSON schema.
+- [x] **Extend `src/utils/config.c`** - Add parsing for the `approval_gates` section of `ralph.config.json`. Parse `enabled` boolean, `categories` object (map category names to actions), and `allowlist` array. Store in a new config structure accessible to approval gate module. See spec section "Configuration > Config File" for JSON schema.
 
 - [ ] **Add CLI flag parsing in `src/core/main.c`** - Implement `--yolo` flag to disable all gates for session. Implement `--allow "tool:arg1,arg2"` to add entries to session allowlist. Implement `--allow-category=<category>` to override category defaults. CLI flags must override config file settings. See spec section "Configuration > Command-Line Flags".
 
