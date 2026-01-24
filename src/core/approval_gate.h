@@ -12,7 +12,7 @@
 
 /* Include tools_system.h for ToolCall definition */
 #include "../tools/tools_system.h"
-/* Include shell_parser.h for ShellType and shell parsing */
+/* Include shell_parser.h for ShellType, detect_shell_type(), and shell parsing */
 #include "shell_parser.h"
 
 /**
@@ -445,8 +445,6 @@ void handle_subagent_approval_request(ApprovalGateConfig *config,
  * @param channel Channel to clean up
  */
 void free_approval_channel(ApprovalChannel *channel);
-
-/* detect_shell_type() is declared in shell_parser.h */
 
 /* ============================================================================
  * Error Formatting

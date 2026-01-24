@@ -191,12 +191,12 @@ int powershell_command_is_dangerous(const char *command);
  * "git status; rm -rf /" (has chain).
  *
  * @param parsed The parsed command
- * @param prefix Array of prefix tokens to match
+ * @param prefix Array of prefix tokens to match (const, not modified)
  * @param prefix_len Number of tokens in prefix
  * @return 1 if matches, 0 if not
  */
 int shell_command_matches_prefix(const ParsedShellCommand *parsed,
-                                 const char **prefix,
+                                 const char * const *prefix,
                                  int prefix_len);
 
 /**
@@ -207,14 +207,22 @@ int shell_command_matches_prefix(const ParsedShellCommand *parsed,
  * - cat <-> type <-> Get-Content <-> gc
  * - rm <-> del <-> Remove-Item <-> ri
  *
- * @param cmd1 First command name
- * @param cmd2 Second command name
+ * Shell types are used to ensure equivalence is appropriate for the context.
+ * For example, 'ls' on POSIX is equivalent to 'dir' on cmd.exe.
+ *
+ * @param allowed_cmd Command name from allowlist entry
+ * @param actual_cmd Command name from parsed command
+ * @param allowed_shell Shell type of the allowlist entry (or UNKNOWN for any)
+ * @param actual_shell Shell type of the actual command
  * @return 1 if equivalent, 0 if not
  */
-int commands_are_equivalent(const char *cmd1, const char *cmd2);
+int commands_are_equivalent(const char *allowed_cmd,
+                            const char *actual_cmd,
+                            ShellType allowed_shell,
+                            ShellType actual_shell);
 
 /* ============================================================================
- * POSIX Shell Parsing (shell_parser.c)
+ * POSIX Shell Parsing (to be implemented in shell_parser.c)
  * ========================================================================== */
 
 /**
@@ -233,7 +241,7 @@ int commands_are_equivalent(const char *cmd1, const char *cmd2);
 int parse_posix_shell(const char *command, ParsedShellCommand *result);
 
 /* ============================================================================
- * cmd.exe Parsing (shell_parser_cmd.c)
+ * cmd.exe Parsing (to be implemented in shell_parser.c)
  * ========================================================================== */
 
 /**
@@ -253,7 +261,7 @@ int parse_posix_shell(const char *command, ParsedShellCommand *result);
 int parse_cmd_shell(const char *command, ParsedShellCommand *result);
 
 /* ============================================================================
- * PowerShell Parsing (shell_parser_ps.c)
+ * PowerShell Parsing (to be implemented in shell_parser.c)
  * ========================================================================== */
 
 /**

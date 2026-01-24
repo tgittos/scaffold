@@ -274,7 +274,9 @@ static int parse_gate_category(const char *str, GateCategory *out) {
 /**
  * Parse a shell type string to ShellType enum.
  * Returns SHELL_TYPE_UNKNOWN if the string is not recognized.
- * Note: Internal function until shell_parser.c is fully implemented.
+ *
+ * TODO: Remove this function when shell_parser.c is implemented and use
+ * parse_shell_type() from shell_parser.h instead.
  */
 static ShellType parse_shell_type_internal(const char *str) {
     if (str == NULL) {
