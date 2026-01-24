@@ -1,556 +1,275 @@
 # Ralph
 
-**The Programming Force Multiplier That Fits in Your Pocket**
+**A Portable AI Development Assistant**
 
-Ralph is the AI-powered development companion that transforms ordinary programmers into coding superhumans. Built as a single portable binary that runs anywhere, Ralph doesn't just chat about code - it writes it, fixes it, explains it, and ships it. This is the tool that turns 1x programmers into 10x programmers, and 10x programmers into unstoppable 100x forces of nature.
+Ralph is an AI-powered command-line tool that helps developers write code, debug issues, and automate workflows. Built as a single portable binary using [Cosmopolitan Libc](https://github.com/jart/cosmopolitan), Ralph runs on Linux, macOS, Windows, FreeBSD, NetBSD, and OpenBSD without installation or dependencies.
 
-## The Developer's Secret Weapon
+## What Ralph Does
 
-Imagine having a senior developer, systems architect, and research assistant all rolled into one - available 24/7, never gets tired, never judges your code, and costs pennies to run. That's Ralph.
+Ralph connects to LLM providers (OpenAI, Anthropic, or local models) and gives the AI access to tools for:
 
-### 🚀 **Code Creation That Actually Works**
-Ralph doesn't just generate boilerplate - it crafts production-ready solutions tailored to your exact needs. From complex algorithms to entire application architectures, Ralph understands context, follows your coding style, and delivers code that actually compiles and runs.
+- **File operations**: Read, write, and modify files in your project
+- **Shell commands**: Execute build commands, run tests, manage git
+- **Semantic memory**: Store and recall information across sessions using vector embeddings
+- **PDF processing**: Extract text from PDF documentation for context
+- **Task tracking**: Maintain a todo list that persists between sessions
+- **Python execution**: Run Python scripts with output capture
+- **MCP integration**: Connect to external MCP servers you configure
 
-### 🔍 **Internet-Powered Research Engine**
-Stuck on an obscure API? Need to understand a new framework? Ralph can research the latest documentation, browse GitHub repos, analyze StackOverflow discussions, and synthesize the information into actionable insights - all while you grab coffee.
+## Interactive Mode
 
-### 📄 **Document Processing Superpowers**
-Ralph doesn't just read code - it devours PDF documentation, technical specs, and research papers. Drop a 500-page API manual on Ralph, and it instantly indexes every function, stores semantic relationships, and answers questions about edge cases buried on page 347. Your entire technical library becomes instantly searchable and conversational.
-
-### 🧠 **MCP Protocol Integration**
-Ralph automatically connects to MCP-enabled tools and services when it needs them to complete your tasks. Ask Ralph to deploy to AWS, and it seamlessly uses AWS MCP tools behind the scenes. Need database optimization? Ralph automatically connects to your database through MCP. Your entire development ecosystem becomes Ralph's invisible superpower.
-
-### 🤝 **Your AI Pair Programming Partner**
-Ralph reviews your code with the precision of a senior architect, catches bugs before they hit production, suggests optimizations you never considered, and explains complex codebases like a patient mentor. It's the pair programmer who makes you better, not just faster.
-
-### ⚡ **Automation-First Architecture**
-One-shot mode means Ralph integrates seamlessly into CI/CD pipelines, git hooks, and automated workflows. Build scripts that fix themselves. Tests that write documentation. Code reviews that happen in milliseconds, not hours.
-
-## The Interactive Development Experience
-
-The real power of Ralph isn't in one-shot commands - it's in the **conversational development workflow** where you and Ralph build, iterate, and perfect code together in real-time.
+Ralph's interactive mode provides a conversational interface for working through problems iteratively:
 
 ```bash
 $ ./ralph
 Ralph Interactive Mode
 Type 'quit' or 'exit' to end the conversation.
 
-> I want to build a REST API for a todo app in Python, but I'm not sure where to start
+> I'm getting a segfault in my linked list implementation
 
-[Ralph provides architecture overview and asks clarifying questions]
+[Ralph examines your code, identifies the issue, explains it, and offers a fix]
 
-> Let's use FastAPI. Create the basic project structure
+> Can you also add a test case that would have caught this?
 
-[Ralph creates files, explains choices, shows next steps]
-
-> Now add a User model with authentication
-
-[Ralph implements user model, database setup, auth middleware]
-
-> The password hashing isn't working. Here's the error...
-
-[Ralph debugs, fixes the issue, explains the problem]
-
-> Add rate limiting to prevent abuse
-
-[Ralph implements rate limiting, adds configuration, updates docs]
-
-> Write comprehensive tests for everything we've built
-
-[Ralph creates test suite, explains testing strategy]
-
-> How do I deploy this to production?
-
-[Ralph provides deployment guide, Docker setup, environment config]
+[Ralph creates a test file with the failing case]
 ```
 
-**This is how development should feel**: Natural conversation that turns ideas into production-ready code through collaborative iteration. No context switching, no losing your train of thought, no starting over when you get stuck.
+The conversation context persists throughout the session, so Ralph remembers what you've discussed and can build on previous work.
 
-### 🎯 **The Document Processing Revolution**
+## One-Shot Mode
+
+For automation and scripting, Ralph accepts a message as an argument:
 
 ```bash
-$ ./ralph "Process this AWS API documentation PDF and help me integrate S3 with my Node.js app"
+# Generate a commit message
+git diff --staged | ./ralph "Write a commit message for these changes"
 
-[Ralph ingests 847-page PDF, creates semantic index, extracts code examples]
+# Analyze test failures
+pytest 2>&1 | ./ralph "What's causing these test failures?"
 
-Ralph: I've processed the entire AWS S3 API documentation. I found 23 relevant endpoints 
-for your Node.js integration. The SDK examples on pages 156-203 show the exact patterns 
-you need. Let me create a complete integration...
-
-[Ralph generates full S3 service module with error handling, retry logic, and tests]
-
-> How do I handle large file uploads efficiently?
-
-[Ralph recalls page 445 about multipart uploads, implements streaming solution]
-
-> What about security best practices?
-
-[Ralph references section 12.3 on IAM policies, generates secure configuration]
+# Quick code review
+./ralph "Review this function for bugs" < myfile.c
 ```
 
-### 🔧 **Complex Multi-Step Execution**
+## Installation
+
+### Download
 
 ```bash
-$ ./ralph
-> I need to refactor our authentication system, add rate limiting, and update the docs
-
-Ralph: I'll handle this comprehensive refactor systematically. Let me start by auditing 
-your current authentication implementation...
-
-[Ralph analyzes entire codebase, identifies security issues]
-
-Ralph: Found 3 critical issues in password handling. Now designing new JWT architecture 
-with refresh tokens...
-
-[Implements secure auth system with proper token rotation]
-
-Ralph: Auth system complete. Adding Redis-backed rate limiting middleware...
-
-[Creates rate limiting with configurable thresholds and Redis persistence]
-
-Ralph: Rate limiting deployed. Updating API documentation with new endpoints...
-
-[Generates comprehensive API docs with examples and security notes]
-
-Ralph: Full refactor complete! Added tests covering all new functionality.
-
-# Result: Complex multi-component system delivered seamlessly
-```
-
-## The Force Multiplier Effect
-
-### 🎯 **From Concept to Code in Minutes**
-Stop wrestling with APIs, fighting documentation, or translating pseudocode. Ralph takes your high-level ideas and transforms them into working implementations faster than you can say "Stack Overflow."
-
-### 🧬 **Code Evolution on Demand**
-Ralph doesn't just write code - it evolves it. Refactor monoliths into microservices, migrate between frameworks, optimize algorithms, or completely rewrite systems in different languages while preserving business logic.
-
-### 🎓 **Learn While You Build**
-Every interaction with Ralph is a masterclass. It explains its reasoning, teaches best practices, and helps you understand not just what to code, but why. You'll absorb years of experience in weeks.
-
-### 🔄 **Conversational Context That Never Breaks**
-Ralph remembers everything from your session. Built that authentication system two hours ago? Ralph knows exactly how it works when you want to add features. Ran into an error? Ralph remembers the solution when similar issues come up. It's like pair programming with someone who has perfect memory and infinite patience.
-
-### 🧠 **Vector-Powered Semantic Memory That Never Forgets**
-Ralph doesn't just remember - it understands. Using advanced vector embeddings, Ralph builds semantic maps of everything: every bug you've solved, every architecture decision, every clever workaround. When you mention "authentication issues," Ralph instantly recalls not just what you said about auth, but similar security patterns, related debugging sessions, and that brilliant JWT solution from three months ago. It's like having a search engine for your entire programming experience that actually gets what you mean, not just what you typed.
-
-### ⚡ **Scriptable Superpowers**
-One-shot mode means Ralph becomes part of your development infrastructure:
-- **Pre-commit hooks** that refactor code automatically
-- **CI/CD pipelines** that fix failing tests and update documentation
-- **Automated code reviews** that catch security issues before humans even look
-- **Documentation generators** that process PDF specs and generate living docs
-- **PDF processing pipelines** that turn technical manuals into searchable knowledge
-- **Vector database operations** that build semantic code indexes
-- **MCP protocol integration** that brings external AI tools into Ralph's workflow
-- **Memory systems** that learn from every interaction and never forget solutions
-- **Shell automation** that handles complex multi-command workflows safely
-- **AGENTS.md support** - Define custom AI behavior with the [agents.md](https://agents.md/) specification
-
-## Universal Compatibility
-
-**One Binary. Every Platform. Zero Compromises.**
-- Linux, Windows, macOS, FreeBSD, NetBSD, OpenBSD
-- No installation, no dependencies, no containers
-- Built with [Cosmopolitan Libc](https://cosmos.zip) for true portability
-
-## Get Started in 30 Seconds
-
-### Option 1: Download and Go
-```bash
-# Download the latest release
 wget https://github.com/bluetongueai/ralph/releases/latest/download/ralph
 chmod +x ralph
-
-# Configure Ralph with your API key
-echo '{
-  "api_url": "https://api.openai.com/v1/chat/completions",
-  "model": "gpt-4o",
-  "openai_api_key": "sk-your-key-here",
-  "context_window": 128000,
-  "max_tokens": -1
-}' > ralph.config.json
-
-# Start building the future
-./ralph "Let's build something amazing"
-
-# Ralph automatically creates vector databases for long-term memory and PDF processing
 ```
 
-### Option 1.5: Auto-Configuration with Environment Variables
-```bash
-# Download the latest release
-wget https://github.com/bluetongueai/ralph/releases/latest/download/ralph
-chmod +x ralph
+### Build from Source
 
-# Set your API keys as environment variables
-export OPENAI_API_KEY="sk-your-openai-key-here"
-export ANTHROPIC_API_KEY="sk-ant-your-anthropic-key-here"  # optional
-
-# Ralph automatically creates a config file using your environment variables
-./ralph "Let's build something amazing"
-
-# Ralph detects your API keys and auto-configures itself on first run
-```
-
-### Option 2: Build from Source
 ```bash
 git clone https://github.com/bluetongueai/ralph
 cd ralph
 make
-# Coffee break while it builds...
-./ralph "Hello, world"
 ```
 
 ## Configuration
 
-Ralph uses a JSON configuration file (`ralph.config.json`) for setup:
+Ralph uses a JSON configuration file (`ralph.config.json`):
 
-```json
-{
-    "api_url": "https://api.anthropic.com/v1/messages",
-    "model": "claude-sonnet-4-20250514",
-    "anthropic_api_key": "sk-ant-your-key-here",
-    "openai_api_key": "sk-your-openai-key-here",
-    "context_window": 8192,
-    "max_tokens": -1
-}
-```
-
-### Configuration Examples
-
-**OpenAI Configuration:**
 ```json
 {
     "api_url": "https://api.openai.com/v1/chat/completions",
     "model": "gpt-4o",
-    "openai_api_key": "sk-your-openai-key",
+    "openai_api_key": "sk-your-key-here",
     "context_window": 128000,
     "max_tokens": -1
 }
 ```
 
-**Anthropic Configuration:**
-```json
-{
-    "api_url": "https://api.anthropic.com/v1/messages",
-    "model": "claude-3-5-sonnet-20241022",
-    "anthropic_api_key": "sk-ant-your-key",
-    "openai_api_key": "sk-your-openai-key",
-    "context_window": 200000,
-    "max_tokens": -1
-}
-```
-
-**Local LM Studio:**
-```json
-{
-    "api_url": "http://localhost:1234/v1/chat/completions",
-    "model": "qwen/qwen-2.5-coder-32b",
-    "openai_api_key": "sk-your-openai-key",
-    "context_window": 32768,
-    "max_tokens": -1
-}
-```
-
-**Anthropic + Local Embeddings:**
-```json
-{
-    "api_url": "https://api.anthropic.com/v1/messages",
-    "model": "claude-3-5-sonnet-20241022",
-    "anthropic_api_key": "sk-ant-your-key",
-    "embedding_api_url": "http://localhost:1234/v1/embeddings",
-    "embedding_model": "nomic-ai/nomic-embed-text-v1.5",
-    "context_window": 200000,
-    "max_tokens": -1
-}
-```
-
-
 ### Configuration Options
 
 | Field | Description | Default |
 |-------|-------------|---------|
-| `api_url` | API endpoint URL for chat completions | `https://api.openai.com/v1/chat/completions` |
+| `api_url` | LLM API endpoint | `https://api.openai.com/v1/chat/completions` |
 | `model` | Model identifier | `gpt-4o-mini` |
 | `context_window` | Model context window size | `8192` |
 | `max_tokens` | Max response tokens (-1 for auto) | `-1` |
 | `openai_api_key` | OpenAI API key | None |
 | `anthropic_api_key` | Anthropic API key | None |
-| `embedding_api_url` | API endpoint URL for embeddings (optional) | Uses `api_url` or OpenAI default |
-| `embedding_model` | Embedding model identifier | `text-embedding-3-small` |
+| `embedding_api_url` | Embeddings endpoint | Uses OpenAI |
+| `embedding_model` | Embedding model | `text-embedding-3-small` |
 
-**Important:** For embeddings functionality, you can either:
-- Use OpenAI embeddings (requires `openai_api_key`) 
-- Use a local embedding provider by setting `embedding_api_url` to your local service
-- When using Anthropic for chat with local embeddings, set both `anthropic_api_key` and `embedding_api_url`
+### Provider Examples
 
-### Environment Variable Auto-Configuration
-
-Ralph automatically detects and uses the following environment variables to configure itself:
-
-| Environment Variable | Description | Usage |
-|---------------------|-------------|--------|
-| `OPENAI_API_KEY` | OpenAI API key | Used for both chat and embeddings (always required) |
-| `ANTHROPIC_API_KEY` | Anthropic API key | Used when connecting to Anthropic models |
-| `EMBEDDING_MODEL` | Embedding model override | Defaults to `text-embedding-3-small` |
-| `OPENAI_API_URL` | OpenAI API URL override | For custom OpenAI-compatible endpoints |
-
-When you first run Ralph, it automatically creates a `ralph.config.json` file using any API keys found in your environment variables. This means you can skip manual configuration entirely by simply setting your API keys as environment variables before running Ralph.
-
-## Real-World Usage Examples
-
-### 🎯 **The "I Have No Idea What I'm Doing" Scenario**
-```bash
-# You need to build something you've never built before
-./ralph "I need to create a real-time chat app with WebSockets, but I've never used WebSockets. Walk me through building it from scratch in Node.js"
-
-# Result: Complete tutorial + working code + deployment instructions
+**OpenAI:**
+```json
+{
+    "api_url": "https://api.openai.com/v1/chat/completions",
+    "model": "gpt-4o",
+    "openai_api_key": "sk-your-key",
+    "context_window": 128000
+}
 ```
 
-### 🔍 **The "Legacy Code Nightmare" Scenario**
-```bash
-# That 1000-line function nobody wants to touch
-./ralph "This function is a monster. Break it down, explain what each part does, and refactor it into clean, testable modules" < legacy_monster.py
-
-# Result: Detailed analysis + refactored code + migration strategy
+**Anthropic:**
+```json
+{
+    "api_url": "https://api.anthropic.com/v1/messages",
+    "model": "claude-sonnet-4-20250514",
+    "anthropic_api_key": "sk-ant-your-key",
+    "openai_api_key": "sk-your-key",
+    "context_window": 200000
+}
 ```
 
-### 🚀 **The "Ship It Yesterday" Scenario**
-```bash
-# When deadlines are breathing down your neck
-./ralph "I need a complete REST API for a blog platform with authentication, CRUD operations, and pagination. Make it production-ready with proper error handling and validation."
-
-# Result: Full implementation + tests + documentation
+**Local (LM Studio/Ollama):**
+```json
+{
+    "api_url": "http://localhost:1234/v1/chat/completions",
+    "model": "qwen/qwen-2.5-coder-32b",
+    "context_window": 32768
+}
 ```
 
-### 🎓 **The "Learn While Building" Scenario**
-```bash
-$ ./ralph
-> I want to learn Rust by building a command-line tool that parses CSV files
+### Environment Variables
 
-[Ralph: "Great choice! Let me walk you through setting up a new Rust project..." 
-Creates Cargo.toml, explains project structure, builds basic CSV parser]
+Ralph auto-detects these environment variables:
 
-> This is working! Now add multi-threading for large files
+| Variable | Description |
+|----------|-------------|
+| `OPENAI_API_KEY` | OpenAI API key (required for embeddings) |
+| `ANTHROPIC_API_KEY` | Anthropic API key |
+| `EMBEDDING_MODEL` | Override embedding model |
+| `OPENAI_API_URL` | Override OpenAI endpoint |
 
-[Ralph: "Perfect timing to learn about Rust's concurrency model..."
-Implements thread pool, explains ownership rules, shows performance comparison]
+On first run, Ralph creates a config file using any API keys found in your environment.
 
-> Add proper error handling with the ? operator
+## Features
 
-[Ralph: "The ? operator is one of Rust's best features for error handling..."
-Refactors code with Result types, explains error propagation, adds custom errors]
+### Memory System
 
-> Show me how to write comprehensive unit tests
-
-[Ralph: "Testing in Rust is fantastic - let me show you the conventions..."
-Creates test module, explains #[cfg(test)], implements property-based testing]
-
-> How do I package this for distribution?
-
-[Ralph: "Let's get this ready for crates.io..."
-Sets up GitHub Actions, configures publishing, explains semantic versioning]
-
-# Result: Not just working code, but deep understanding of Rust ecosystem
-```
-
-**The Learning Accelerator**: Ralph doesn't just give you fish - it teaches you to fish while helping you build an entire fishing industry.
-
-### 🧠 **The "Perfect Programming Partner" Scenario**
-```bash
-$ ./ralph
-> I'm getting a weird CORS error when calling our payment API
-
-[Ralph: "I remember you had a similar CORS issue 3 months ago with the user service. 
-You fixed it by adding specific headers in the preflight response..."
-Recalls exact solution from memory]
-
-> remember that our team decided to use JWT with 15-minute expiry for security
-
-[Ralph: "Stored that security decision. I'll remember this for future authentication work."
-Permanently stores team conventions]
-
-> Why did we choose Redis over Memcached again?
-
-[Ralph: "You chose Redis because you needed pub/sub for real-time notifications and 
-data persistence for session storage. This was decided on March 15th when..."
-Recalls exact reasoning from months ago]
-
-> I'm refactoring the payment service. What patterns should I follow?
-
-[Ralph: "Based on your previous work, you prefer the Repository pattern with dependency 
-injection. You also always validate inputs with Joi schemas and use async/await with 
-proper error boundaries. Here's how you structured the user service..."
-Applies learned patterns from your past work]
-
-> This legacy PHP code is driving me insane. How did we handle this before?
-
-[Ralph: "I remember you dealt with similar legacy PHP code in the invoice system. 
-You created a wrapper service that gradually migrated functionality while maintaining 
-the existing API. Here's the exact approach..."
-Recalls solutions to similar problems]
-
-# Result: An AI partner that learns YOUR way of coding and remembers EVERYTHING
-```
-
-**The Perfect Memory**: Ralph becomes an extension of your own brain - remembering every solution, learning every pattern, and growing smarter with every interaction. It's not just AI assistance; it's AI that becomes YOU.
-
-### 📚 **The Technical Library Transformation**
+Ralph includes a semantic memory system backed by a vector database. The AI can store and recall information across sessions:
 
 ```bash
-$ ./ralph "Process these React documentation PDFs and help me optimize our component architecture"
+> remember that our API uses snake_case for all field names
 
-[Ralph ingests 1,200 pages of React docs, Next.js guides, and performance whitepapers]
+[Stored in memory]
 
-Ralph: I've indexed your entire React library. I found 47 optimization patterns across 
-the documentation. Your current components violate 3 key performance principles I 
-discovered on pages 234, 567, and 891. Let me show you the fixes...
+# Later session...
+> What naming convention do we use for API fields?
 
-[Creates optimized component architecture with lazy loading and memoization]
-
-> remember this optimization approach for future React projects
-
-Ralph: ✅ Stored semantic memory: "React optimization architecture with lazy loading 
-pattern - 40% performance improvement on large component trees"
-
-> Three months later...
-> I'm having performance issues with this Vue.js app
-
-Ralph: I remember you solved similar performance issues with React using lazy loading 
-and component memoization. The same principles apply to Vue - let me adapt that 
-optimization pattern...
-
-[Applies learned patterns from React to Vue, cross-framework knowledge transfer]
+[Recalls the stored preference]
 ```
 
-## Automation and Integration
+Memory persists in `~/.local/ralph/` and uses OpenAI embeddings for semantic search.
 
-### 🔄 **Git Workflow Automation**
-```bash
-# .git/hooks/pre-commit
-#!/bin/bash
-./ralph "Review this commit for potential issues and suggest improvements" < <(git diff --cached)
+### PDF Processing
 
-# .git/hooks/prepare-commit-msg  
-#!/bin/bash
-commit_msg=$(./ralph "Generate a commit message for: $(git diff --staged --name-only | tr '\n' ' ')")
-echo "$commit_msg" > $1
-```
-
-### 🏗️ **CI/CD Integration**
-```yaml
-# GitHub Actions
-- name: AI Code Review
-  run: |
-    git diff origin/main..HEAD | ./ralph "Provide a thorough code review with specific suggestions"
-
-# GitLab CI
-script:
-  - ./ralph "Analyze test failures and suggest fixes" < test_results.log
-```
-
-### 🤖 **Development Workflow Automation**
-```bash
-# Build error assistant
-make 2>&1 | ./ralph "Fix these build errors and explain what went wrong"
-
-# Automated documentation with PDF processing
-./ralph "Process the API spec PDF and generate comprehensive documentation with examples" 
-
-# Test failure debugging
-pytest --tb=short 2>&1 | ./ralph "Debug these test failures and provide fixes"
-
-# Ralph automatically uses MCP tools as needed
-./ralph "Optimize our AWS infrastructure costs"
-# Ralph automatically connects to AWS MCP tools to analyze and optimize
-
-# Advanced memory operations
-./ralph "remember this regex solution for parsing email addresses - it handles edge cases the others missed"
-
-# Vector-powered knowledge recall
-./ralph "What was that database optimization technique we used for the payment service?"
-
-# PDF-powered research
-./ralph "Search the PostgreSQL documentation for best practices on connection pooling"
-```
-
-### 🔌 **MCP Protocol Integration**
-```bash
-# Ask Ralph to do something - it automatically uses the right MCP tools
-./ralph "Deploy this app to production and set up monitoring"
-# Ralph automatically uses AWS/Docker/monitoring MCP tools as needed
-
-./ralph "Optimize these slow database queries"
-# Ralph connects to your database through MCP and analyzes performance
-
-./ralph "Review our recent commits for security issues" 
-# Ralph uses GitHub MCP integration to analyze repository history
-
-./ralph "Set up automated backups for our user data"
-# Ralph uses cloud provider MCP tools to configure backup systems
-
-./ralph "Migrate this SQLite data to PostgreSQL"
-# Ralph uses database MCP tools to handle the migration seamlessly
-```
-
-### 🎛️ **Custom AI Behavior**
-Create an `AGENTS.md` file following the [agents.md specification](https://agents.md/):
-
-```markdown
-# Development Assistant Agent
-
-You are a senior software architect specializing in distributed systems.
-Focus on scalability, reliability, and maintainability.
-
-## Priorities
-- Performance optimization
-- Security best practices  
-- Clean architecture principles
-```
-
-## Why Ralph Changes Everything
-
-### For Individual Developers
-Ralph transforms you from someone who googles "how to" into someone who just *does*. No more context switching between Stack Overflow tabs, no more deciphering cryptic error messages alone, no more getting stuck on APIs you've never used. Ralph is your 24/7 senior developer with perfect memory who never gets impatient with your questions and learns from every mistake you make together.
-
-### For Teams
-Ralph democratizes expertise across your entire team while building institutional memory that never leaves. Junior developers can tackle senior-level problems with Ralph's guidance. Senior developers can focus on architecture while Ralph handles the implementation details. When team members leave, their knowledge stays in Ralph's memory. Code reviews become collaborative learning sessions that improve the entire team's collective intelligence.
-
-### For Companies
-Ralph is the ultimate force multiplier for development velocity with permanent institutional memory. It reduces onboarding time from months to weeks, turns every developer into a polyglot programmer, and ensures critical knowledge never walks out the door when employees leave. Ralph learns from every bug fix, every architecture decision, every successful pattern - building a permanent knowledge base that makes your entire organization smarter over time.
-
-## Universal Deployment
-
-**Runs everywhere. Breaks nowhere.**
-- Linux, Windows, macOS, FreeBSD, NetBSD, OpenBSD
-- Servers, desktops, containers, CI/CD pipelines
-- No runtime dependencies, no installation headaches
-- One binary to rule them all
-
-## Get Ralph Now
+Ralph can extract text from PDF files and use the content as context:
 
 ```bash
-# The future of programming is one download away
-wget https://github.com/bluetongueai/ralph/releases/latest/download/ralph
-chmod +x ralph
-
-# Option 1: Use environment variables (recommended)
-export OPENAI_API_KEY="your-key-here"
-./ralph "Transform me into a 10x developer"
-
-# Option 2: Create config file manually
-echo '{
-  "openai_api_key": "your-key-here",
-  "model": "gpt-4o",
-  "context_window": 128000
-}' > ralph.config.json
-
-./ralph "Transform me into a 10x developer"
+./ralph "What authentication methods does this API support?" --pdf api-docs.pdf
 ```
+
+### MCP Integration
+
+Ralph supports the [Model Context Protocol](https://modelcontextprotocol.io/) for connecting to external tool servers. Configure servers in `ralph.config.json`:
+
+```json
+{
+    "mcpServers": {
+        "my-server": {
+            "type": "stdio",
+            "command": "/path/to/server",
+            "args": ["--flag"]
+        }
+    }
+}
+```
+
+Ralph discovers and registers tools from configured servers at startup.
+
+### Subagents
+
+Ralph can spawn parallel subagents for complex tasks. This is useful when the AI needs to work on multiple independent subtasks simultaneously.
+
+Configuration:
+- `max_subagents`: Maximum concurrent subagents (default: 5)
+- `subagent_timeout`: Timeout in seconds (default: 300)
+
+### Extensible Python Tools
+
+Ralph's file and shell operations are implemented as Python tools stored in `~/.local/ralph/tools/`. The AI can write new tools or modify existing ones:
+
+```bash
+> I need a tool that converts CSV files to JSON
+
+[Ralph writes a new csv_to_json.py file to ~/.local/ralph/tools/]
+
+# After restarting Ralph, the new tool is available
+> Convert data.csv to JSON format
+
+[Ralph uses the csv_to_json tool it created]
+```
+
+On startup, Ralph scans `~/.local/ralph/tools/` for `.py` files. Each Python function becomes a registered tool using its function name and docstring. Default tools include `read_file`, `write_file`, `shell`, `search_files`, `web_fetch`, and others.
+
+### AGENTS.md Support
+
+Ralph reads `AGENTS.md` files following the [agents.md specification](https://agents.md/) to customize AI behavior for specific projects.
+
+## Usage Examples
+
+### Code Review
+```bash
+git diff HEAD~1 | ./ralph "Review these changes for potential issues"
+```
+
+### Debug Assistance
+```bash
+./ralph "I'm getting 'undefined reference' errors when linking. Here's my Makefile..."
+```
+
+### Learning
+```bash
+./ralph "Explain how this regex works: ^(?=.*[A-Z])(?=.*[0-9]).{8,}$"
+```
+
+### Refactoring
+```bash
+./ralph "This function is too long. Suggest how to break it into smaller functions" < big_function.c
+```
+
+## Data Storage
+
+Ralph stores data in `~/.local/ralph/`:
+- `CONVERSATION.md` - Conversation history
+- Vector database files (HNSWLIB format)
+- Memory metadata (JSON)
+- Python tools
+
+## Platform Support
+
+Ralph runs on:
+- Linux (x86_64, aarch64)
+- macOS (x86_64, Apple Silicon)
+- Windows
+- FreeBSD, NetBSD, OpenBSD
+
+No runtime dependencies required.
+
+## Building
+
+Requirements:
+- Cosmopolitan toolchain (included in devcontainer)
+- Make
+
+```bash
+make        # Build ralph
+make test   # Run tests
+make clean  # Clean build artifacts
+```
+
+## License
+
+See LICENSE file.
 
 ---
 
-**Ralph: Because every programmer deserves a senior developer in their corner.**
-
-Built with [Cosmopolitan Libc](https://github.com/jart/cosmopolitan) for true universal portability.
+Built with [Cosmopolitan Libc](https://github.com/jart/cosmopolitan).
