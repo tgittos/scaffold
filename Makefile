@@ -40,6 +40,7 @@ CORE_SOURCES := $(SRCDIR)/core/main.c \
                 $(SRCDIR)/core/context_enhancement.c \
                 $(SRCDIR)/core/recap.c \
                 $(SRCDIR)/network/http_client.c \
+                $(SRCDIR)/network/embedded_cacert.c \
                 $(SRCDIR)/network/streaming.c \
                 $(SRCDIR)/network/api_common.c \
                 $(SRCDIR)/network/api_error.c \
@@ -156,6 +157,10 @@ BIN2C := $(BUILDDIR)/bin2c
 LINKS_BUNDLED := $(BUILDDIR)/links
 EMBEDDED_LINKS_HEADER := $(SRCDIR)/embedded_links.h
 
+# CA Certificate bundle (embedded for portable SSL/TLS)
+CACERT_PEM := $(BUILDDIR)/cacert.pem
+CACERT_SOURCE := $(SRCDIR)/network/embedded_cacert.c
+
 # =============================================================================
 # COMMON TEST COMPONENTS
 # =============================================================================
@@ -165,7 +170,8 @@ COMMON_TEST_SOURCES := $(TESTDIR)/unity/unity.c
 TOOL_TEST_DEPS := $(SRCDIR)/tools/tools_system.c $(SRCDIR)/tools/todo_tool.c $(SRCDIR)/tools/todo_manager.c $(SRCDIR)/tools/todo_display.c $(SRCDIR)/tools/vector_db_tool.c $(SRCDIR)/tools/memory_tool.c $(SRCDIR)/tools/pdf_tool.c $(SRCDIR)/tools/tool_result_builder.c $(SRCDIR)/tools/subagent_tool.c $(SRCDIR)/tools/python_tool.c $(SRCDIR)/tools/python_tool_files.c
 MODEL_TEST_DEPS := $(SRCDIR)/llm/model_capabilities.c $(SRCDIR)/llm/models/response_processing.c $(SRCDIR)/llm/models/qwen_model.c $(SRCDIR)/llm/models/deepseek_model.c $(SRCDIR)/llm/models/gpt_model.c $(SRCDIR)/llm/models/claude_model.c $(SRCDIR)/llm/models/default_model.c $(SRCDIR)/llm/embeddings.c $(SRCDIR)/llm/embeddings_service.c $(SRCDIR)/llm/embedding_provider.c $(SRCDIR)/llm/providers/openai_embedding_provider.c $(SRCDIR)/llm/providers/local_embedding_provider.c
 UTIL_TEST_DEPS := $(SRCDIR)/utils/json_escape.c $(SRCDIR)/utils/output_formatter.c $(SRCDIR)/utils/json_output.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/utils/common_utils.c $(SRCDIR)/utils/document_chunker.c $(SRCDIR)/utils/pdf_processor.c $(SRCDIR)/utils/context_retriever.c $(SRCDIR)/utils/config.c
-COMPLEX_TEST_DEPS := $(TOOL_TEST_DEPS) $(MODEL_TEST_DEPS) $(UTIL_TEST_DEPS) $(DB_C_SOURCES) $(SRCDIR)/pdf/pdf_extractor.c $(SRCDIR)/network/http_client.c $(SRCDIR)/network/api_error.c
+NETWORK_TEST_DEPS := $(SRCDIR)/network/http_client.c $(SRCDIR)/network/embedded_cacert.c $(SRCDIR)/network/api_error.c
+COMPLEX_TEST_DEPS := $(TOOL_TEST_DEPS) $(MODEL_TEST_DEPS) $(UTIL_TEST_DEPS) $(DB_C_SOURCES) $(SRCDIR)/pdf/pdf_extractor.c $(NETWORK_TEST_DEPS)
 
 # =============================================================================
 # TEST DEFINITIONS - Simple and explicit for easy AI navigation
@@ -192,7 +198,7 @@ TEST_DEBUG_OUTPUT_SOURCES = $(TESTDIR)/utils/test_debug_output.c $(SRCDIR)/utils
 TEST_DEBUG_OUTPUT_OBJECTS = $(TEST_DEBUG_OUTPUT_SOURCES:.c=.o)
 TEST_DEBUG_OUTPUT_TARGET = $(TESTDIR)/test_debug_output
 
-TEST_JSON_OUTPUT_C_SOURCES = $(TESTDIR)/utils/test_json_output.c $(SRCDIR)/network/streaming.c $(UTIL_TEST_DEPS) $(MODEL_TEST_DEPS) $(TOOL_TEST_DEPS) $(DB_C_SOURCES) $(SRCDIR)/network/http_client.c $(SRCDIR)/network/api_error.c $(SRCDIR)/pdf/pdf_extractor.c $(COMMON_TEST_SOURCES)
+TEST_JSON_OUTPUT_C_SOURCES = $(TESTDIR)/utils/test_json_output.c $(SRCDIR)/network/streaming.c $(UTIL_TEST_DEPS) $(MODEL_TEST_DEPS) $(TOOL_TEST_DEPS) $(DB_C_SOURCES) $(NETWORK_TEST_DEPS) $(SRCDIR)/pdf/pdf_extractor.c $(COMMON_TEST_SOURCES)
 TEST_JSON_OUTPUT_CPP_SOURCES = $(DB_CPP_SOURCES)
 TEST_JSON_OUTPUT_OBJECTS = $(TEST_JSON_OUTPUT_C_SOURCES:.c=.o) $(TEST_JSON_OUTPUT_CPP_SOURCES:.cpp=.o)
 TEST_JSON_OUTPUT_TARGET = $(TESTDIR)/test_json_output
@@ -264,7 +270,7 @@ TEST_PYTHON_INTEGRATION_CPP_SOURCES = $(DB_CPP_SOURCES)
 TEST_PYTHON_INTEGRATION_OBJECTS = $(TEST_PYTHON_INTEGRATION_C_SOURCES:.c=.o) $(TEST_PYTHON_INTEGRATION_CPP_SOURCES:.cpp=.o)
 TEST_PYTHON_INTEGRATION_TARGET = $(TESTDIR)/test_python_integration
 
-TEST_MEMORY_MGMT_C_SOURCES = $(TESTDIR)/test_memory_management.c $(SRCDIR)/cli/memory_commands.c $(DB_C_SOURCES) $(SRCDIR)/llm/embeddings_service.c $(SRCDIR)/llm/embeddings.c $(SRCDIR)/llm/embedding_provider.c $(SRCDIR)/llm/providers/openai_embedding_provider.c $(SRCDIR)/llm/providers/local_embedding_provider.c $(SRCDIR)/utils/config.c $(SRCDIR)/network/http_client.c $(SRCDIR)/utils/common_utils.c $(SRCDIR)/utils/debug_output.c $(COMMON_TEST_SOURCES)
+TEST_MEMORY_MGMT_C_SOURCES = $(TESTDIR)/test_memory_management.c $(SRCDIR)/cli/memory_commands.c $(DB_C_SOURCES) $(SRCDIR)/llm/embeddings_service.c $(SRCDIR)/llm/embeddings.c $(SRCDIR)/llm/embedding_provider.c $(SRCDIR)/llm/providers/openai_embedding_provider.c $(SRCDIR)/llm/providers/local_embedding_provider.c $(SRCDIR)/utils/config.c $(NETWORK_TEST_DEPS) $(SRCDIR)/utils/common_utils.c $(SRCDIR)/utils/debug_output.c $(COMMON_TEST_SOURCES)
 TEST_MEMORY_MGMT_CPP_SOURCES = $(DB_CPP_SOURCES)
 TEST_MEMORY_MGMT_OBJECTS = $(TEST_MEMORY_MGMT_C_SOURCES:.c=.o) $(TEST_MEMORY_MGMT_CPP_SOURCES:.cpp=.o)
 TEST_MEMORY_MGMT_TARGET = $(TESTDIR)/test_memory_management
@@ -440,14 +446,14 @@ $(TEST_DEBUG_OUTPUT_TARGET): $(TEST_DEBUG_OUTPUT_OBJECTS) $(CJSON_LIB)
 $(TEST_JSON_OUTPUT_TARGET): $(TEST_JSON_OUTPUT_OBJECTS) $(ALL_LIBS)
 	$(CXX) -o $@ $(TEST_JSON_OUTPUT_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(CJSON_LIB) $(PYTHON_LIB) $(ZLIB_LIB) -lm -lpthread
 
-$(TEST_CONVERSATION_TARGET): $(TEST_CONVERSATION_OBJECTS) $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/network/api_error.o src/utils/env_loader.o src/utils/config.o src/utils/debug_output.o src/utils/common_utils.o $(ALL_LIBS)
-	$(CXX) -o $@ test/session/test_conversation_tracker.o src/session/conversation_tracker.o $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/network/api_error.o src/utils/json_escape.o src/utils/env_loader.o src/utils/config.o src/utils/debug_output.o src/utils/common_utils.o test/unity/unity.o $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
+$(TEST_CONVERSATION_TARGET): $(TEST_CONVERSATION_OBJECTS) $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/network/embedded_cacert.o src/network/api_error.o src/utils/env_loader.o src/utils/config.o src/utils/debug_output.o src/utils/common_utils.o $(ALL_LIBS)
+	$(CXX) -o $@ test/session/test_conversation_tracker.o src/session/conversation_tracker.o $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/network/embedded_cacert.o src/network/api_error.o src/utils/json_escape.o src/utils/env_loader.o src/utils/config.o src/utils/debug_output.o src/utils/common_utils.o test/unity/unity.o $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
 
-$(TEST_CONVERSATION_VDB_TARGET): $(TEST_CONVERSATION_VDB_OBJECTS) $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/network/api_error.o src/utils/env_loader.o src/utils/config.o src/utils/debug_output.o src/utils/common_utils.o $(ALL_LIBS)
-	$(CXX) -o $@ test/session/test_conversation_vector_db.o src/session/conversation_tracker.o $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/network/api_error.o src/utils/json_escape.o src/utils/env_loader.o src/utils/config.o src/utils/debug_output.o src/utils/common_utils.o test/unity/unity.o $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
+$(TEST_CONVERSATION_VDB_TARGET): $(TEST_CONVERSATION_VDB_OBJECTS) $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/network/embedded_cacert.o src/network/api_error.o src/utils/env_loader.o src/utils/config.o src/utils/debug_output.o src/utils/common_utils.o $(ALL_LIBS)
+	$(CXX) -o $@ test/session/test_conversation_vector_db.o src/session/conversation_tracker.o $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/network/embedded_cacert.o src/network/api_error.o src/utils/json_escape.o src/utils/env_loader.o src/utils/config.o src/utils/debug_output.o src/utils/common_utils.o test/unity/unity.o $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
 
-$(TEST_TOOL_CALLS_NOT_STORED_TARGET): $(TEST_TOOL_CALLS_NOT_STORED_OBJECTS) $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/network/api_error.o src/utils/env_loader.o src/utils/config.o src/utils/debug_output.o src/utils/common_utils.o $(ALL_LIBS)
-	$(CXX) -o $@ test/session/test_tool_calls_not_stored.o src/session/conversation_tracker.o $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/network/api_error.o src/utils/json_escape.o src/utils/env_loader.o src/utils/config.o src/utils/debug_output.o src/utils/common_utils.o test/unity/unity.o $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
+$(TEST_TOOL_CALLS_NOT_STORED_TARGET): $(TEST_TOOL_CALLS_NOT_STORED_OBJECTS) $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/network/embedded_cacert.o src/network/api_error.o src/utils/env_loader.o src/utils/config.o src/utils/debug_output.o src/utils/common_utils.o $(ALL_LIBS)
+	$(CXX) -o $@ test/session/test_tool_calls_not_stored.o src/session/conversation_tracker.o $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/network/embedded_cacert.o src/network/api_error.o src/utils/json_escape.o src/utils/env_loader.o src/utils/config.o src/utils/debug_output.o src/utils/common_utils.o test/unity/unity.o $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
 
 $(TEST_TODO_MANAGER_TARGET): $(TEST_TODO_MANAGER_OBJECTS)
 	$(CC) -o $@ $(TEST_TODO_MANAGER_OBJECTS)
@@ -505,8 +511,8 @@ $(TEST_PYTHON_INTEGRATION_TARGET): $(TEST_PYTHON_INTEGRATION_OBJECTS) $(ALL_LIBS
 	zipcopy $(CURDIR)/$(BUILDDIR)/stdlib.zip $(CURDIR)/$@; \
 	rm -f $(BUILDDIR)/stdlib.zip
 
-$(TEST_MEMORY_MGMT_TARGET): $(TEST_MEMORY_MGMT_OBJECTS) src/network/api_error.o $(ALL_LIBS)
-	$(CXX) -o $@ $(TEST_MEMORY_MGMT_OBJECTS) src/network/api_error.o $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(PYTHON_LIB) -lm -lpthread
+$(TEST_MEMORY_MGMT_TARGET): $(TEST_MEMORY_MGMT_OBJECTS) $(ALL_LIBS)
+	$(CXX) -o $@ $(TEST_MEMORY_MGMT_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(PYTHON_LIB) -lm -lpthread
 
 $(TEST_TOKEN_MANAGER_TARGET): $(TEST_TOKEN_MANAGER_OBJECTS) $(ALL_LIBS)
 	$(CXX) -o $@ $(TEST_TOKEN_MANAGER_OBJECTS) $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(PYTHON_LIB) -lm -lpthread
@@ -550,8 +556,8 @@ $(TEST_SUBAGENT_TOOL_TARGET): $(TEST_SUBAGENT_TOOL_OBJECTS) $(ALL_LIBS)
 $(TEST_VECTOR_DB_TARGET): $(TEST_VECTOR_DB_OBJECTS) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
 	$(CXX) -o $@ $(TEST_VECTOR_DB_OBJECTS) -lpthread -lm
 
-$(TEST_DOCUMENT_STORE_TARGET): $(TEST_DOCUMENT_STORE_OBJECTS) $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/utils/common_utils.o src/utils/config.o src/utils/debug_output.o src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/network/api_error.o $(ALL_LIBS)
-	$(CXX) -o $@ test/db/test_document_store.o $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/utils/common_utils.o src/utils/config.o src/utils/debug_output.o src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/network/api_error.o test/unity/unity.o $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
+$(TEST_DOCUMENT_STORE_TARGET): $(TEST_DOCUMENT_STORE_OBJECTS) $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/utils/common_utils.o src/utils/config.o src/utils/debug_output.o src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/network/embedded_cacert.o src/network/api_error.o $(ALL_LIBS)
+	$(CXX) -o $@ test/db/test_document_store.o $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) src/utils/common_utils.o src/utils/config.o src/utils/debug_output.o src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o src/network/http_client.o src/network/embedded_cacert.o src/network/api_error.o test/unity/unity.o $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
 
 # =============================================================================
 # TEST EXECUTION
@@ -810,6 +816,30 @@ $(PYTHON_LIB): $(ZLIB_LIB)
 python: $(PYTHON_LIB)
 
 # =============================================================================
+# CA CERTIFICATE BUNDLE
+# =============================================================================
+
+# Download Mozilla CA bundle from curl.se
+$(CACERT_PEM):
+	@echo "Downloading Mozilla CA certificate bundle..."
+	@mkdir -p $(BUILDDIR)
+	curl -sL https://curl.se/ca/cacert.pem -o $(CACERT_PEM)
+	@echo "Downloaded CA bundle ($$(wc -c < $(CACERT_PEM) | tr -d ' ') bytes)"
+
+# Generate embedded CA cert source from PEM file
+$(CACERT_SOURCE): $(CACERT_PEM)
+	@echo "Generating embedded CA certificate source..."
+	./scripts/gen_cacert.sh $(CACERT_PEM) $(CACERT_SOURCE)
+
+# Update CA certificate bundle (force re-download)
+update-cacert:
+	@echo "Updating Mozilla CA certificate bundle..."
+	@mkdir -p $(BUILDDIR)
+	curl -sL https://curl.se/ca/cacert.pem -o $(CACERT_PEM)
+	./scripts/gen_cacert.sh $(CACERT_PEM) $(CACERT_SOURCE)
+	@echo "CA certificate bundle updated. Rebuild with 'make clean && make'"
+
+# =============================================================================
 # CLEAN TARGETS
 # =============================================================================
 
@@ -832,4 +862,4 @@ distclean: clean
 	rm -f $(LINKS_BUNDLED)
 	$(MAKE) -C python distclean
 
-.PHONY: all test check check-valgrind check-valgrind-all clean clean-python distclean python embed-python
+.PHONY: all test check check-valgrind check-valgrind-all clean clean-python distclean python embed-python update-cacert

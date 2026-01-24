@@ -1,5 +1,6 @@
 #include "http_client.h"
 #include "api_error.h"
+#include "embedded_cacert.h"
 #include "../utils/config.h"
 #include "../utils/debug_output.h"
 #include <stdio.h>
@@ -8,6 +9,15 @@
 #include <unistd.h>
 #include <time.h>
 #include <curl/curl.h>
+
+// Configure curl handle with embedded CA certificates for portable SSL/TLS
+static void configure_ssl_certs(CURL *curl) {
+    struct curl_blob blob;
+    blob.data = (void *)embedded_cacert_data;
+    blob.len = embedded_cacert_size;
+    blob.flags = CURL_BLOB_NOCOPY;
+    curl_easy_setopt(curl, CURLOPT_CAINFO_BLOB, &blob);
+}
 
 // Default HTTP configuration
 const struct HTTPConfig DEFAULT_HTTP_CONFIG = {
@@ -151,6 +161,7 @@ int http_post_with_config(const char *url, const char *post_data, const char **h
             response->data = NULL;
             return -1;
         }
+        configure_ssl_certs(curl);
 
         curl_headers = curl_slist_append(NULL, "Content-Type: application/json");
         if (curl_headers == NULL) {
@@ -315,6 +326,7 @@ int http_get_with_config(const char *url, const char **headers,
             response->data = NULL;
             return -1;
         }
+        configure_ssl_certs(curl);
 
         curl_headers = NULL;
         if (headers != NULL) {
@@ -469,6 +481,7 @@ int http_post_streaming(const char *url, const char *post_data,
         fprintf(stderr, "Error: Failed to initialize curl for streaming\n");
         return -1;
     }
+    configure_ssl_certs(curl);
 
     // Set up headers
     curl_headers = curl_slist_append(NULL, "Content-Type: application/json");

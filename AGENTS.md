@@ -13,6 +13,17 @@ The code base is large and has most functionality implemented. Use `ripgrep` to 
 - Remove everything: `make distclean` (this is nuclear!)
 - Run test suite: `make test`
 - Run Valgrind to check memory safety: `make check-valgrind`
+- Update CA certificates: `make update-cacert`
+
+### SSL/TLS CA Certificates
+
+Ralph embeds Mozilla's CA certificate bundle for portable SSL/TLS across all platforms. The bundle is stored in `src/network/embedded_cacert.c` and loaded via `CURLOPT_CAINFO_BLOB`.
+
+To refresh the CA bundle (recommended periodically for security updates):
+```bash
+make update-cacert
+make clean && make
+```
 
 ### Development Environment
 
