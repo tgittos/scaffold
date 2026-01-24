@@ -274,8 +274,9 @@ static int parse_gate_category(const char *str, GateCategory *out) {
 /**
  * Parse a shell type string to ShellType enum.
  * Returns SHELL_TYPE_UNKNOWN if the string is not recognized.
+ * Note: Internal function until shell_parser.c is fully implemented.
  */
-static ShellType parse_shell_type(const char *str) {
+static ShellType parse_shell_type_internal(const char *str) {
     if (str == NULL) {
         return SHELL_TYPE_UNKNOWN;
     }
@@ -382,7 +383,7 @@ static int approval_gate_load_from_json(ApprovalGateConfig *config, cJSON *json)
                     cJSON *shell_type_json = cJSON_GetObjectItem(entry, "shell");
                     ShellType shell_type = SHELL_TYPE_UNKNOWN;
                     if (cJSON_IsString(shell_type_json)) {
-                        shell_type = parse_shell_type(shell_type_json->valuestring);
+                        shell_type = parse_shell_type_internal(shell_type_json->valuestring);
                     }
 
                     approval_gate_add_shell_allowlist(config, command_prefix,

@@ -56,7 +56,7 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 ## Shell Command Parsing
 
-- [ ] **Create `src/core/shell_parser.h`** - Define `ShellType` enum (`POSIX`, `CMD`, `POWERSHELL`, `UNKNOWN`), `ParsedShellCommand` struct with `tokens`, `token_count`, `has_chain`, `has_pipe`, `has_subshell`, `has_redirect`, `is_dangerous`, `shell_type` fields. Declare unified `parse_shell_command()` and `detect_shell_type()` functions.
+- [x] **Create `src/core/shell_parser.h`** - Define `ShellType` enum (`POSIX`, `CMD`, `POWERSHELL`, `UNKNOWN`), `ParsedShellCommand` struct with `tokens`, `token_count`, `has_chain`, `has_pipe`, `has_subshell`, `has_redirect`, `is_dangerous`, `shell_type` fields. Declare unified `parse_shell_command()` and `detect_shell_type()` functions.
 
 - [ ] **Implement `detect_shell_type()`** - On Windows: check `COMSPEC` and `PSModulePath` environment variables to distinguish cmd.exe vs PowerShell. On POSIX: check `SHELL` for pwsh/powershell, default to POSIX. See spec section "Cross-Platform Shell Parsing > Shell Detection".
 

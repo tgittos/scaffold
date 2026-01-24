@@ -12,6 +12,8 @@
 
 /* Include tools_system.h for ToolCall definition */
 #include "../tools/tools_system.h"
+/* Include shell_parser.h for ShellType and shell parsing */
+#include "shell_parser.h"
 
 /**
  * Approval Gates Module
@@ -69,15 +71,7 @@ typedef enum {
     APPROVAL_RATE_LIMITED       /* Tool is in backoff period from previous denials */
 } ApprovalResult;
 
-/**
- * Shell types for cross-platform parsing.
- */
-typedef enum {
-    SHELL_TYPE_POSIX,       /* bash, sh, zsh, dash */
-    SHELL_TYPE_CMD,         /* Windows cmd.exe */
-    SHELL_TYPE_POWERSHELL,  /* PowerShell (Windows or Core) */
-    SHELL_TYPE_UNKNOWN
-} ShellType;
+/* ShellType is defined in shell_parser.h */
 
 /**
  * Result codes from path verification operations.
@@ -452,18 +446,7 @@ void handle_subagent_approval_request(ApprovalGateConfig *config,
  */
 void free_approval_channel(ApprovalChannel *channel);
 
-/* ============================================================================
- * Shell Detection
- * ========================================================================== */
-
-/**
- * Detect the shell type from environment.
- * On Windows: checks COMSPEC and PSModulePath.
- * On POSIX: checks SHELL for pwsh/powershell, defaults to POSIX.
- *
- * @return Detected shell type
- */
-ShellType detect_shell_type(void);
+/* detect_shell_type() is declared in shell_parser.h */
 
 /* ============================================================================
  * Error Formatting
