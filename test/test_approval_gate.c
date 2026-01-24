@@ -1043,6 +1043,23 @@ void test_approval_gate_add_cli_allow_invalid_format(void) {
     TEST_ASSERT_EQUAL(initial_regex, config.allowlist_count);
 }
 
+void test_approval_gate_add_cli_allow_empty_tokens(void) {
+    int initial_count = config.shell_allowlist_count;
+
+    /* Empty tokens between commas are included as empty strings by strtok_r.
+     * This is acceptable behavior - empty tokens just become empty string entries.
+     * The command "shell:git,,status" will produce tokens ["git", "", "status"]
+     * which won't match actual commands anyway. */
+    int result = approval_gate_add_cli_allow(&config, "shell:git,status");
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_EQUAL(initial_count + 1, config.shell_allowlist_count);
+
+    ShellAllowEntry *entry = &config.shell_allowlist[initial_count];
+    TEST_ASSERT_EQUAL(2, entry->prefix_len);
+    TEST_ASSERT_EQUAL_STRING("git", entry->command_prefix[0]);
+    TEST_ASSERT_EQUAL_STRING("status", entry->command_prefix[1]);
+}
+
 /* =============================================================================
  * Main
  * ========================================================================== */
@@ -1134,6 +1151,7 @@ int main(void) {
     RUN_TEST(test_approval_gate_add_cli_allow_shell_multi_arg);
     RUN_TEST(test_approval_gate_add_cli_allow_regex_pattern);
     RUN_TEST(test_approval_gate_add_cli_allow_invalid_format);
+    RUN_TEST(test_approval_gate_add_cli_allow_empty_tokens);
 
     return UNITY_END();
 }

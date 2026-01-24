@@ -157,7 +157,7 @@ int main(int argc, char *argv[])
     for (int i = 0; i < cli_allow_category_count; i++) {
         if (approval_gate_set_category_action(&gate_config, cli_allow_categories[i],
                                               GATE_ACTION_ALLOW) != 0) {
-            fprintf(stderr, "Warning: Unknown category '%s' in --allow-category\n",
+            fprintf(stderr, "Warning: Unknown category '%s' for --allow-category\n",
                     cli_allow_categories[i]);
         } else {
             debug_printf("Category '%s' set to allow via CLI\n", cli_allow_categories[i]);
@@ -167,12 +167,18 @@ int main(int argc, char *argv[])
     // Apply --allow flags (add to session allowlist)
     for (int i = 0; i < cli_allow_count; i++) {
         if (approval_gate_add_cli_allow(&gate_config, cli_allow_entries[i]) != 0) {
-            fprintf(stderr, "Warning: Invalid --allow entry '%s'\n", cli_allow_entries[i]);
+            fprintf(stderr, "Warning: Invalid format '%s' for --allow\n", cli_allow_entries[i]);
         } else {
             debug_printf("Added allow entry '%s' via CLI\n", cli_allow_entries[i]);
         }
     }
-    
+
+    // NOTE: gate_config is currently initialized and configured with CLI overrides,
+    // but not yet wired to RalphSession or tool_executor. This integration will be
+    // done as part of the "Modify tool_executor.c to check gates" task in the plan.
+    // For now, we suppress the unused variable warning until integration.
+    (void)gate_config;
+
     // Check if single message mode or interactive mode
     if (message_arg_index != -1) {
         // Single message mode (original behavior)
