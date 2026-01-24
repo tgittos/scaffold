@@ -369,28 +369,17 @@ all: $(TARGET) embed-python
 $(TARGET): $(OBJECTS) $(ALL_LIBS) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
 	@echo "Linking with PDFio support"
 	$(CXX) $(LDFLAGS) -o $@ $(OBJECTS) $(LIBS) -lpthread
+	@echo "Saving base binary for smart embedding..."
+	@uv run scripts/embed_python.py --save-base
 
-# Embed Python stdlib AND default tools into ralph binary in a single zipcopy call
-# zipcopy overwrites existing zip content, so we must combine everything into one zip
-# The stdlib must be at /zip/lib/python3.12/ for Python to find it with PYTHONHOME=/zip
+# Embed Python stdlib AND default tools into ralph binary
+# Uses scripts/embed_python.py for smart caching:
+# - Preserves clean base binary (without zip content)
+# - Tracks content hashes to detect changes
+# - Only re-embeds when base binary or Python content changes
+# - Avoids size inflation from repeated zipcopy calls
 embed-python: $(TARGET)
-	@if [ ! -d "$(PYTHON_STDLIB_DIR)/lib" ]; then \
-		echo "Error: Python stdlib not found at $(PYTHON_STDLIB_DIR)/lib" >&2; \
-		echo "Run 'make python' first to build the Python stdlib." >&2; \
-		exit 1; \
-	fi
-	@if [ ! -d "$(PYTHON_DEFAULTS_DIR)" ]; then \
-		echo "Error: Python defaults not found at $(PYTHON_DEFAULTS_DIR)" >&2; \
-		exit 1; \
-	fi
-	@echo "Embedding Python stdlib and default tools into ralph binary..."
-	@rm -f $(BUILDDIR)/python-embed.zip
-	@cd $(PYTHON_STDLIB_DIR) && zip -qr $(CURDIR)/$(BUILDDIR)/python-embed.zip lib/
-	@cd $(SRCDIR)/tools && zip -qr $(CURDIR)/$(BUILDDIR)/python-embed.zip python_defaults/
-	@zipcopy $(CURDIR)/$(BUILDDIR)/python-embed.zip $(CURDIR)/$(TARGET)
-	@rm -f $(BUILDDIR)/python-embed.zip
-	@echo "Python embedding complete."
-	@ls -lh $(CURDIR)/$(TARGET) | awk '{print "Binary size: " $$5}'
+	@uv run scripts/embed_python.py
 
 # Embedded links
 $(BIN2C): build/bin2c.c
