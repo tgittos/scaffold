@@ -1,6 +1,7 @@
 #include "output_formatter.h"
 #include "debug_output.h"
 #include "model_capabilities.h"
+#include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -608,17 +609,121 @@ void print_tool_box_line(const char* format, ...) {
 
 static bool is_informational_check(const char *tool_name, const char *arguments) {
     if (!tool_name || !arguments) return false;
-    
+
     // Common informational commands that are expected to sometimes "fail"
-    if (strcmp(tool_name, "shell_execute") == 0) {
+    if (strcmp(tool_name, "shell_execute") == 0 || strcmp(tool_name, "shell") == 0) {
         // Version checks, which commands, etc.
-        if (strstr(arguments, "--version") || strstr(arguments, "which ") || 
+        if (strstr(arguments, "--version") || strstr(arguments, "which ") ||
             strstr(arguments, "command -v") || strstr(arguments, "type ")) {
             return true;
         }
     }
-    
+
     return false;
+}
+
+// Maximum display length for argument values
+#define ARG_DISPLAY_MAX_LEN 50
+
+// Extract a formatted argument summary from JSON arguments
+// Returns a malloc'd string that must be freed by caller, or NULL
+static char* extract_arg_summary(const char *tool_name, const char *arguments) {
+    if (!arguments || strlen(arguments) == 0) {
+        return NULL;
+    }
+
+    cJSON *json = cJSON_Parse(arguments);
+    if (!json) {
+        return NULL;
+    }
+
+    char summary[256];
+    memset(summary, 0, sizeof(summary));
+    const char *value = NULL;
+    const char *label = NULL;
+
+    // Priority order for display - look for the most meaningful parameter
+    // File operations
+    cJSON *path = cJSON_GetObjectItem(json, "path");
+    cJSON *file_path = cJSON_GetObjectItem(json, "file_path");
+    cJSON *directory_path = cJSON_GetObjectItem(json, "directory_path");
+    // Shell/command operations
+    cJSON *command = cJSON_GetObjectItem(json, "command");
+    // Web operations
+    cJSON *url = cJSON_GetObjectItem(json, "url");
+    // Search operations
+    cJSON *query = cJSON_GetObjectItem(json, "query");
+    cJSON *pattern = cJSON_GetObjectItem(json, "pattern");
+    // Memory operations
+    cJSON *key = cJSON_GetObjectItem(json, "key");
+    // Vector DB operations
+    cJSON *collection = cJSON_GetObjectItem(json, "collection");
+    cJSON *text = cJSON_GetObjectItem(json, "text");
+
+    // Determine what to display based on tool name and available args
+    if (tool_name && (strcmp(tool_name, "shell") == 0 || strcmp(tool_name, "shell_execute") == 0)) {
+        // Shell commands - show the command
+        if (command && cJSON_IsString(command)) {
+            value = cJSON_GetStringValue(command);
+            label = "";  // No label needed, command is self-explanatory
+        }
+    } else if (tool_name && strstr(tool_name, "write") != NULL) {
+        // Write operations - show path, indicate content exists
+        if (path && cJSON_IsString(path)) {
+            value = cJSON_GetStringValue(path);
+            label = "";
+        } else if (file_path && cJSON_IsString(file_path)) {
+            value = cJSON_GetStringValue(file_path);
+            label = "";
+        }
+    } else if (path && cJSON_IsString(path)) {
+        value = cJSON_GetStringValue(path);
+        label = "";
+    } else if (file_path && cJSON_IsString(file_path)) {
+        value = cJSON_GetStringValue(file_path);
+        label = "";
+    } else if (directory_path && cJSON_IsString(directory_path)) {
+        value = cJSON_GetStringValue(directory_path);
+        label = "";
+    } else if (command && cJSON_IsString(command)) {
+        value = cJSON_GetStringValue(command);
+        label = "";
+    } else if (url && cJSON_IsString(url)) {
+        value = cJSON_GetStringValue(url);
+        label = "";
+    } else if (query && cJSON_IsString(query)) {
+        value = cJSON_GetStringValue(query);
+        label = "query: ";
+    } else if (pattern && cJSON_IsString(pattern)) {
+        value = cJSON_GetStringValue(pattern);
+        label = "pattern: ";
+    } else if (key && cJSON_IsString(key)) {
+        value = cJSON_GetStringValue(key);
+        label = "key: ";
+    } else if (collection && cJSON_IsString(collection)) {
+        value = cJSON_GetStringValue(collection);
+        label = "collection: ";
+    } else if (text && cJSON_IsString(text)) {
+        value = cJSON_GetStringValue(text);
+        label = "text: ";
+    }
+
+    if (value && strlen(value) > 0) {
+        size_t value_len = strlen(value);
+        if (value_len <= ARG_DISPLAY_MAX_LEN) {
+            snprintf(summary, sizeof(summary), "%s%s", label, value);
+        } else {
+            // Truncate with ellipsis
+            snprintf(summary, sizeof(summary), "%s%.47s...", label, value);
+        }
+    }
+
+    cJSON_Delete(json);
+
+    if (strlen(summary) > 0) {
+        return strdup(summary);
+    }
+    return NULL;
 }
 
 void log_tool_execution_improved(const char *tool_name, const char *arguments, bool success, const char *result) {
@@ -637,32 +742,21 @@ void log_tool_execution_improved(const char *tool_name, const char *arguments, b
     // Check if this is an informational check rather than a real failure
     bool is_info_check = !success && is_informational_check(tool_name, arguments);
 
-    // Build content string
-    char content[256];
-    char context[64] = "";
+    // Extract argument summary for display
+    char *arg_summary = extract_arg_summary(tool_name, arguments);
+    char context[128];
+    memset(context, 0, sizeof(context));
 
-    // Determine context suffix
-    if (arguments && strlen(arguments) > 0) {
-        if (strstr(arguments, "\"directory_path\"")) {
-            snprintf(context, sizeof(context), " (listing directory)");
-        } else if (strstr(arguments, "\"file_path\"")) {
-            snprintf(context, sizeof(context), " (reading file)");
-        } else if (strstr(arguments, "\"command\"")) {
-            snprintf(context, sizeof(context), " (running command)");
-        }
+    if (arg_summary && strlen(arg_summary) > 0) {
+        snprintf(context, sizeof(context), " (%s)", arg_summary);
     }
 
-    // Format: "✓ tool_name (context)" - status icon takes ~2 chars visible
-    if (success) {
-        snprintf(content, sizeof(content), "✓ %s%s", tool_name, context);
-    } else if (is_info_check) {
-        snprintf(content, sizeof(content), "◦ %s%s", tool_name, context);
-    } else {
-        snprintf(content, sizeof(content), "✗ %s%s", tool_name, context);
+    if (arg_summary) {
+        free(arg_summary);
     }
 
-    // Calculate visible length (unicode symbols count as 1 visible char but take 3 bytes)
-    size_t visible_len = strlen(tool_name) + strlen(context) + 2;  // +2 for "X "
+    // Calculate visible length: icon (1) + space (1) + tool_name + context
+    size_t visible_len = strlen(tool_name) + strlen(context) + 2;
 
     // Print left border
     printf(ANSI_CYAN "│" ANSI_RESET " ");
@@ -684,6 +778,7 @@ void log_tool_execution_improved(const char *tool_name, const char *arguments, b
     // Show errors for actual failures with proper indentation
     if (!success && !is_info_check && result && strlen(result) > 0) {
         char error_line[128];
+        memset(error_line, 0, sizeof(error_line));
         if (strlen(result) > 60) {
             snprintf(error_line, sizeof(error_line), "  └─ Error: %.57s...", result);
         } else {

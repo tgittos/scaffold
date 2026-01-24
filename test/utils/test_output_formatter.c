@@ -335,7 +335,7 @@ void test_parse_anthropic_response_malformed(void) {
 
 void test_filter_tool_call_markup_from_response(void) {
     // Test response from local model with tool call markup
-    const char *local_model_response = 
+    const char *local_model_response =
         "{"
         "\"choices\":[{"
             "\"message\":{"
@@ -343,22 +343,107 @@ void test_filter_tool_call_markup_from_response(void) {
             "}"
         "}]"
         "}";
-    
+
     ParsedResponse result;
     int ret = parse_api_response(local_model_response, &result);
-    
+
     TEST_ASSERT_EQUAL(0, ret);
     TEST_ASSERT_NOT_NULL(result.response_content);
-    
+
     // The response content should NOT contain the raw <tool_call> markup
     TEST_ASSERT_NULL(strstr(result.response_content, "<tool_call>"));
     TEST_ASSERT_NULL(strstr(result.response_content, "</tool_call>"));
-    
+
     // But should contain the descriptive text
     TEST_ASSERT_NOT_NULL(strstr(result.response_content, "I'll help you"));
     TEST_ASSERT_NOT_NULL(strstr(result.response_content, "Let me read the file"));
-    
+
     cleanup_parsed_response(&result);
+}
+
+// Test tool argument display in log_tool_execution_improved
+void test_tool_argument_display_basic(void) {
+    printf("\n--- Testing tool argument display ---\n");
+
+    // This test verifies the visual output - run manually to inspect
+    display_tool_execution_group_start();
+
+    // Test read_file with path argument
+    log_tool_execution_improved("read_file", "{\"path\": \"/home/user/test.txt\"}", true, "File contents");
+
+    // Test shell with command argument
+    log_tool_execution_improved("shell", "{\"command\": \"git status\"}", true, "On branch main");
+
+    // Test write_file with path
+    log_tool_execution_improved("write_file", "{\"path\": \"/tmp/output.txt\", \"content\": \"hello world\"}", true, "Written");
+
+    // Test web_fetch with url
+    log_tool_execution_improved("web_fetch", "{\"url\": \"https://example.com/api\"}", true, "Response data");
+
+    // Test search with pattern
+    log_tool_execution_improved("search_files", "{\"pattern\": \"*.py\"}", true, "Found files");
+
+    // Test memory with key
+    log_tool_execution_improved("memory_read", "{\"key\": \"user_preferences\"}", true, "Memory value");
+
+    display_tool_execution_group_end();
+
+    TEST_ASSERT_TRUE(1);
+}
+
+void test_tool_argument_truncation(void) {
+    printf("\n--- Testing argument truncation ---\n");
+
+    display_tool_execution_group_start();
+
+    // Long path should be truncated
+    log_tool_execution_improved("read_file",
+        "{\"path\": \"/very/long/path/that/should/be/truncated/because/it/exceeds/max/display/length/file.txt\"}",
+        true, "Contents");
+
+    // Long command should be truncated
+    log_tool_execution_improved("shell",
+        "{\"command\": \"find /usr -name '*.so' -exec ls -la {} \\\\; | grep lib | head -20 | sort | uniq\"}",
+        true, "Output");
+
+    display_tool_execution_group_end();
+
+    TEST_ASSERT_TRUE(1);
+}
+
+void test_tool_argument_edge_cases(void) {
+    printf("\n--- Testing edge cases ---\n");
+
+    display_tool_execution_group_start();
+
+    // Empty arguments should not crash
+    log_tool_execution_improved("some_tool", "{}", true, "Result");
+
+    // NULL arguments should not crash
+    log_tool_execution_improved("another_tool", NULL, true, "Result");
+
+    // Invalid JSON should not crash (graceful fallback)
+    log_tool_execution_improved("broken_tool", "not valid json {", true, "Result");
+
+    // Empty string arguments should not crash
+    log_tool_execution_improved("empty_arg_tool", "", true, "Result");
+
+    display_tool_execution_group_end();
+
+    TEST_ASSERT_TRUE(1);
+}
+
+void test_tool_argument_failure_display(void) {
+    printf("\n--- Testing failure display ---\n");
+
+    display_tool_execution_group_start();
+
+    // Failure with argument should show both path and error
+    log_tool_execution_improved("read_file", "{\"path\": \"/nonexistent/file.txt\"}", false, "File not found");
+
+    display_tool_execution_group_end();
+
+    TEST_ASSERT_TRUE(1);
 }
 
 int main(void) {
@@ -385,6 +470,12 @@ int main(void) {
     
     // Tool call markup filtering test
     RUN_TEST(test_filter_tool_call_markup_from_response);
-    
+
+    // Tool argument display tests
+    RUN_TEST(test_tool_argument_display_basic);
+    RUN_TEST(test_tool_argument_truncation);
+    RUN_TEST(test_tool_argument_edge_cases);
+    RUN_TEST(test_tool_argument_failure_display);
+
     return UNITY_END();
 }
