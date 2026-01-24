@@ -34,9 +34,9 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 ## Path Normalization (Cross-Platform)
 
-- [ ] **Create `src/core/path_normalize.h`** - Define `NormalizedPath` struct with `normalized`, `basename`, and `is_absolute` fields. Declare `normalize_path()` and `free_normalized_path()` functions.
+- [x] **Create `src/core/path_normalize.h`** - Define `NormalizedPath` struct with `normalized`, `basename`, and `is_absolute` fields. Declare `normalize_path()` and `free_normalized_path()` functions.
 
-- [ ] **Create `src/core/path_normalize.c`** - Implement cross-platform path normalization. On Windows: convert backslashes to forward slashes, lowercase entire path, convert drive letters (`C:` → `/c/`), handle UNC paths (`//server/share` → `/unc/server/share`). On POSIX: minimal normalization. Both: remove trailing slashes, collapse duplicate slashes, extract basename. See spec section "Implementation > Protected Files > Path Normalization".
+- [x] **Create `src/core/path_normalize.c`** - Implement cross-platform path normalization. On Windows: convert backslashes to forward slashes, lowercase entire path, convert drive letters (`C:` → `/c/`), handle UNC paths (`//server/share` → `/unc/server/share`). On POSIX: minimal normalization. Both: remove trailing slashes, collapse duplicate slashes, extract basename. See spec section "Implementation > Protected Files > Path Normalization".
 
 ---
 
@@ -198,7 +198,7 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 - [ ] **Create `test/test_shell_parser_ps.c`** - Test PowerShell parsing: cmdlet detection (case-insensitive), `-EncodedCommand`, `$()` subexpressions, script blocks. Test all dangerous cmdlets from spec.
 
-- [ ] **Create `test/test_path_normalize.c`** - Test Windows backslash conversion, case handling, drive letter normalization (`C:` → `/c/`), UNC paths (`//server/share` → `/unc/server/share`), duplicate slash removal, trailing slash handling.
+- [x] **Create `test/test_path_normalize.c`** - Test Windows backslash conversion, case handling, drive letter normalization (`C:` → `/c/`), UNC paths (`//server/share` → `/unc/server/share`), duplicate slash removal, trailing slash handling.
 
 - [ ] **Create `test/test_protected_files.c`** - Test basename matching, prefix matching (`.env.*`), glob patterns, inode-based detection. Test case sensitivity differences between platforms.
 
