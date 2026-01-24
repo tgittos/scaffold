@@ -247,6 +247,10 @@ int ralph_generate_recap(RalphSession* session, int max_messages) {
             fprintf(stdout, "\r\033[K");
             fflush(stdout);
         }
+        // Log the actual response if we got one (might contain error details)
+        if (response.data != NULL && response.size > 0) {
+            debug_printf("Recap API error response: %s\n", response.data);
+        }
         fprintf(stderr, "Recap API request failed\n");
     }
 

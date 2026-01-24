@@ -326,11 +326,60 @@ void test_parse_anthropic_response_null_parameters(void) {
 
 void test_parse_anthropic_response_malformed(void) {
     const char *malformed_response = "{\"invalid\": \"json structure\"}";
-    
+
     ParsedResponse result;
     int ret = parse_anthropic_response(malformed_response, &result);
-    
+
     TEST_ASSERT_EQUAL(-1, ret);
+}
+
+// Test Anthropic extended thinking format with separate thinking content blocks
+void test_parse_anthropic_response_extended_thinking(void) {
+    // This is the real format Anthropic returns for extended thinking models
+    const char *extended_thinking_response =
+        "{"
+        "\"content\": ["
+            "{\"type\": \"thinking\", \"thinking\": \"Let me analyze this request carefully.\"},"
+            "{\"type\": \"text\", \"text\": \"Here is my response to your question.\"}"
+        "],"
+        "\"usage\": {\"input_tokens\": 100, \"output_tokens\": 50}"
+        "}";
+
+    ParsedResponse result;
+    int ret = parse_anthropic_response(extended_thinking_response, &result);
+
+    TEST_ASSERT_EQUAL(0, ret);
+    TEST_ASSERT_NOT_NULL(result.thinking_content);
+    TEST_ASSERT_NOT_NULL(result.response_content);
+    TEST_ASSERT_EQUAL_STRING("Let me analyze this request carefully.", result.thinking_content);
+    TEST_ASSERT_EQUAL_STRING("Here is my response to your question.", result.response_content);
+    TEST_ASSERT_EQUAL(100, result.prompt_tokens);
+    TEST_ASSERT_EQUAL(50, result.completion_tokens);
+    TEST_ASSERT_EQUAL(150, result.total_tokens);
+
+    cleanup_parsed_response(&result);
+}
+
+// Test that thinking content containing "text": doesn't break parsing
+void test_parse_anthropic_response_thinking_contains_text_field(void) {
+    // Thinking content that mentions "text" field could confuse naive strstr parsing
+    const char *tricky_response =
+        "{"
+        "\"content\": ["
+            "{\"type\": \"thinking\", \"thinking\": \"The \\\"text\\\": field in JSON is important.\"},"
+            "{\"type\": \"text\", \"text\": \"The answer is 42.\"}"
+        "],"
+        "\"usage\": {\"input_tokens\": 30, \"output_tokens\": 20}"
+        "}";
+
+    ParsedResponse result;
+    int ret = parse_anthropic_response(tricky_response, &result);
+
+    TEST_ASSERT_EQUAL(0, ret);
+    TEST_ASSERT_NOT_NULL(result.response_content);
+    TEST_ASSERT_EQUAL_STRING("The answer is 42.", result.response_content);
+
+    cleanup_parsed_response(&result);
 }
 
 void test_filter_tool_call_markup_from_response(void) {
@@ -467,6 +516,8 @@ int main(void) {
     RUN_TEST(test_parse_anthropic_response_with_thinking);
     RUN_TEST(test_parse_anthropic_response_null_parameters);
     RUN_TEST(test_parse_anthropic_response_malformed);
+    RUN_TEST(test_parse_anthropic_response_extended_thinking);
+    RUN_TEST(test_parse_anthropic_response_thinking_contains_text_field);
     
     // Tool call markup filtering test
     RUN_TEST(test_filter_tool_call_markup_from_response);

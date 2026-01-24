@@ -90,48 +90,6 @@ static char *extract_json_string(const char *json, const char *key) {
     
     return result;
 }
-
-static void unescape_json_string(char *str) {
-    if (!str) return;
-    
-    char *src = str;
-    char *dst = str;
-    
-    while (*src) {
-        if (*src == '\\' && *(src + 1)) {
-            switch (*(src + 1)) {
-                case 'n':
-                    *dst++ = '\n';
-                    src += 2;
-                    break;
-                case 't':
-                    *dst++ = '\t';
-                    src += 2;
-                    break;
-                case 'r':
-                    *dst++ = '\r';
-                    src += 2;
-                    break;
-                case '\\':
-                    *dst++ = '\\';
-                    src += 2;
-                    break;
-                case '"':
-                    *dst++ = '"';
-                    src += 2;
-                    break;
-                default:
-                    // Unknown escape, keep as-is
-                    *dst++ = *src++;
-                    break;
-            }
-        } else {
-            *dst++ = *src++;
-        }
-    }
-    *dst = '\0';
-}
-
 // Filter out raw tool call markup from response content to prevent displaying it to users
 static void filter_tool_call_markup(char *str) {
     if (!str) return;
@@ -188,39 +146,6 @@ static void filter_tool_call_markup(char *str) {
         }
     }
     *dst = '\0';
-}
-
-static int extract_json_int(const char *json, const char *key) {
-    if (!json || !key) {
-        return -1;
-    }
-    
-    // Build search pattern: "key":
-    char pattern[256];
-    memset(pattern, 0, sizeof(pattern));  // Explicitly zero-initialize for Valgrind
-    int ret = snprintf(pattern, sizeof(pattern), "\"%s\":", key);
-    if (ret < 0 || ret >= (int)sizeof(pattern)) {
-        return -1;
-    }
-    
-    const char *start = strstr(json, pattern);
-    if (!start) {
-        return -1;
-    }
-    
-    start += strlen(pattern);
-    
-    // Skip whitespace
-    while (*start == ' ' || *start == '\t' || *start == '\n' || *start == '\r') {
-        start++;
-    }
-    
-    int value = 0;
-    if (sscanf(start, "%d", &value) != 1) {
-        return -1;
-    }
-    
-    return value;
 }
 
 // Global model registry - initialized once
@@ -343,46 +268,136 @@ int parse_anthropic_response(const char *json_response, ParsedResponse *result) 
     if (!json_response || !result) {
         return -1;
     }
-    
+
     // Initialize result
     result->thinking_content = NULL;
     result->response_content = NULL;
     result->prompt_tokens = -1;
     result->completion_tokens = -1;
     result->total_tokens = -1;
-    
-    // Anthropic response format has content array
-    // Look for "content": [{"type": "text", "text": "..."}]
-    const char *content_array = strstr(json_response, "\"content\":");
-    if (!content_array) {
+
+    // Parse JSON properly to handle extended thinking format
+    cJSON *root = cJSON_Parse(json_response);
+    if (!root) {
         return -1;
     }
-    
-    // Find the text content within the array
-    const char *text_pos = strstr(content_array, "\"text\":");
-    if (text_pos) {
-        char *raw_content = extract_json_string(text_pos, "text");
-        if (raw_content) {
-            // Unescape JSON strings
-            unescape_json_string(raw_content);
-            
-            // Separate thinking from response (same as OpenAI)
-            separate_thinking_and_response(raw_content, &result->thinking_content, &result->response_content);
-            free(raw_content);
+
+    // Get the content array
+    cJSON *content_array = cJSON_GetObjectItem(root, "content");
+    if (!content_array || !cJSON_IsArray(content_array)) {
+        cJSON_Delete(root);
+        return -1;
+    }
+
+    // Accumulate thinking and text content from multiple blocks
+    char *accumulated_thinking = NULL;
+    char *accumulated_text = NULL;
+
+    // Iterate through content blocks
+    cJSON *block = NULL;
+    cJSON_ArrayForEach(block, content_array) {
+        cJSON *type = cJSON_GetObjectItem(block, "type");
+        if (!type || !cJSON_IsString(type)) {
+            continue;
+        }
+
+        const char *type_str = type->valuestring;
+
+        if (strcmp(type_str, "thinking") == 0) {
+            // Extended thinking block - extract "thinking" field
+            cJSON *thinking = cJSON_GetObjectItem(block, "thinking");
+            if (thinking && cJSON_IsString(thinking) && thinking->valuestring) {
+                if (accumulated_thinking == NULL) {
+                    accumulated_thinking = strdup(thinking->valuestring);
+                } else {
+                    // Append to existing thinking (rare but handle it)
+                    size_t old_len = strlen(accumulated_thinking);
+                    size_t new_len = strlen(thinking->valuestring);
+                    char *new_thinking = realloc(accumulated_thinking, old_len + new_len + 2);
+                    if (new_thinking) {
+                        strcat(new_thinking, "\n");
+                        strcat(new_thinking, thinking->valuestring);
+                        accumulated_thinking = new_thinking;
+                    }
+                }
+            }
+        } else if (strcmp(type_str, "text") == 0) {
+            // Text block - extract "text" field
+            cJSON *text = cJSON_GetObjectItem(block, "text");
+            if (text && cJSON_IsString(text) && text->valuestring) {
+                if (accumulated_text == NULL) {
+                    accumulated_text = strdup(text->valuestring);
+                } else {
+                    // Append to existing text (rare but handle it)
+                    size_t old_len = strlen(accumulated_text);
+                    size_t new_len = strlen(text->valuestring);
+                    char *new_text = realloc(accumulated_text, old_len + new_len + 2);
+                    if (new_text) {
+                        strcat(new_text, "\n");
+                        strcat(new_text, text->valuestring);
+                        accumulated_text = new_text;
+                    }
+                }
+            }
+        }
+        // Ignore other block types (tool_use, etc.) for response parsing
+    }
+
+    // Set thinking content from extended thinking blocks
+    result->thinking_content = accumulated_thinking;
+
+    // For text content, also check for embedded <think> tags (legacy format)
+    if (accumulated_text) {
+        // Check if text contains <think> tags (legacy format)
+        if (strstr(accumulated_text, "<think>") && strstr(accumulated_text, "</think>")) {
+            char *inner_thinking = NULL;
+            char *inner_response = NULL;
+            separate_thinking_and_response(accumulated_text, &inner_thinking, &inner_response);
+
+            // Merge any inner thinking with accumulated thinking
+            if (inner_thinking) {
+                if (result->thinking_content == NULL) {
+                    result->thinking_content = inner_thinking;
+                } else {
+                    // Append inner thinking to existing
+                    size_t old_len = strlen(result->thinking_content);
+                    size_t new_len = strlen(inner_thinking);
+                    char *merged = realloc(result->thinking_content, old_len + new_len + 2);
+                    if (merged) {
+                        strcat(merged, "\n");
+                        strcat(merged, inner_thinking);
+                        result->thinking_content = merged;
+                    }
+                    free(inner_thinking);
+                }
+            }
+
+            result->response_content = inner_response;
+            free(accumulated_text);
+        } else {
+            // No embedded thinking tags, use text as-is
+            result->response_content = accumulated_text;
         }
     }
-    
+
     // Extract token usage from Anthropic response
-    const char *usage_start = strstr(json_response, "\"usage\":");
-    if (usage_start) {
-        result->prompt_tokens = extract_json_int(usage_start, "input_tokens");
-        result->completion_tokens = extract_json_int(usage_start, "output_tokens");
-        // Anthropic doesn't provide total_tokens, so calculate it
+    cJSON *usage = cJSON_GetObjectItem(root, "usage");
+    if (usage) {
+        cJSON *input_tokens = cJSON_GetObjectItem(usage, "input_tokens");
+        cJSON *output_tokens = cJSON_GetObjectItem(usage, "output_tokens");
+
+        if (input_tokens && cJSON_IsNumber(input_tokens)) {
+            result->prompt_tokens = input_tokens->valueint;
+        }
+        if (output_tokens && cJSON_IsNumber(output_tokens)) {
+            result->completion_tokens = output_tokens->valueint;
+        }
         if (result->prompt_tokens > 0 && result->completion_tokens > 0) {
             result->total_tokens = result->prompt_tokens + result->completion_tokens;
         }
     }
-    
+
+    cJSON_Delete(root);
     return 0;
 }
 
@@ -390,62 +405,73 @@ int parse_api_response_with_model(const char *json_response, const char *model_n
     if (!json_response || !result) {
         return -1;
     }
-    
+
     // Initialize result
     result->thinking_content = NULL;
     result->response_content = NULL;
     result->prompt_tokens = -1;
     result->completion_tokens = -1;
     result->total_tokens = -1;
-    
-    // Extract content from choices[0].message.content
-    // Look for "content": pattern in the message object
-    const char *message_start = strstr(json_response, "\"message\":");
-    if (!message_start) {
+
+    // Parse JSON properly
+    cJSON *root = cJSON_Parse(json_response);
+    if (!root) {
         return -1;
     }
-    
-    // Check if content field exists
-    const char *content_pos = strstr(message_start, "\"content\":");
-    if (!content_pos) {
-        // No content field - this is valid for tool calls
-        // Check if there are tool_calls instead
-        const char *tool_calls_pos = strstr(message_start, "\"tool_calls\":");
-        if (tool_calls_pos) {
-            // This is a tool call response with no content - valid, leave fields as NULL
-            // But still extract token usage before returning
-            const char *usage_start = strstr(json_response, "\"usage\":");
-            if (usage_start) {
-                result->prompt_tokens = extract_json_int(usage_start, "prompt_tokens");
-                result->completion_tokens = extract_json_int(usage_start, "completion_tokens");
-                result->total_tokens = extract_json_int(usage_start, "total_tokens");
+
+    // OpenAI format: choices[0].message.content
+    cJSON *choices = cJSON_GetObjectItem(root, "choices");
+    if (!choices || !cJSON_IsArray(choices) || cJSON_GetArraySize(choices) == 0) {
+        cJSON_Delete(root);
+        return -1;
+    }
+
+    cJSON *first_choice = cJSON_GetArrayItem(choices, 0);
+    if (!first_choice) {
+        cJSON_Delete(root);
+        return -1;
+    }
+
+    cJSON *message = cJSON_GetObjectItem(first_choice, "message");
+    if (!message) {
+        cJSON_Delete(root);
+        return -1;
+    }
+
+    // Check for content field
+    cJSON *content = cJSON_GetObjectItem(message, "content");
+    if (!content) {
+        // No content field - check for tool_calls (valid case)
+        cJSON *tool_calls = cJSON_GetObjectItem(message, "tool_calls");
+        if (tool_calls) {
+            // Tool call response - extract usage and return success
+            cJSON *usage = cJSON_GetObjectItem(root, "usage");
+            if (usage) {
+                cJSON *prompt = cJSON_GetObjectItem(usage, "prompt_tokens");
+                cJSON *completion = cJSON_GetObjectItem(usage, "completion_tokens");
+                cJSON *total = cJSON_GetObjectItem(usage, "total_tokens");
+                if (prompt && cJSON_IsNumber(prompt)) result->prompt_tokens = prompt->valueint;
+                if (completion && cJSON_IsNumber(completion)) result->completion_tokens = completion->valueint;
+                if (total && cJSON_IsNumber(total)) result->total_tokens = total->valueint;
             }
+            cJSON_Delete(root);
             return 0;
-        } else {
-            // No content and no tool_calls - invalid
+        }
+        cJSON_Delete(root);
+        return -1;
+    }
+
+    // Content can be null (for tool calls) or a string
+    if (cJSON_IsNull(content)) {
+        // Content is null - valid for tool calls, leave result fields as NULL
+    } else if (cJSON_IsString(content) && content->valuestring) {
+        // Content is a string - process it
+        char *raw_content = strdup(content->valuestring);
+        if (!raw_content) {
+            cJSON_Delete(root);
             return -1;
         }
-    }
-    
-    const char *value_start = content_pos + strlen("\"content\":");
-    // Skip whitespace
-    while (*value_start && (*value_start == ' ' || *value_start == '\t' || *value_start == '\n' || *value_start == '\r')) {
-        value_start++;
-    }
-    
-    // Check if content is null (common for tool calls)
-    if (strncmp(value_start, "null", 4) == 0) {
-        // Content is null - this is valid for tool calls, leave result fields as NULL
-    } else if (*value_start == '"') {
-        // Content is a string - extract it normally
-        char *raw_content = extract_json_string(message_start, "content");
-        if (!raw_content) {
-            return -1; // Failed to extract content string
-        }
-        
-        // Unescape JSON strings (convert \n to actual newlines, etc.)
-        unescape_json_string(raw_content);
-        
+
         // Use model-specific processing if available
         ModelRegistry* registry = get_model_registry();
         if (registry && model_name) {
@@ -454,6 +480,7 @@ int parse_api_response_with_model(const char *json_response, const char *model_n
                 int ret = model->process_response(raw_content, result);
                 free(raw_content);
                 if (ret != 0) {
+                    cJSON_Delete(root);
                     return -1;
                 }
             } else {
@@ -468,17 +495,22 @@ int parse_api_response_with_model(const char *json_response, const char *model_n
         }
     } else {
         // Content is neither null nor a string - invalid format
+        cJSON_Delete(root);
         return -1;
     }
-    
+
     // Extract token usage
-    const char *usage_start = strstr(json_response, "\"usage\":");
-    if (usage_start) {
-        result->prompt_tokens = extract_json_int(usage_start, "prompt_tokens");
-        result->completion_tokens = extract_json_int(usage_start, "completion_tokens");
-        result->total_tokens = extract_json_int(usage_start, "total_tokens");
+    cJSON *usage = cJSON_GetObjectItem(root, "usage");
+    if (usage) {
+        cJSON *prompt = cJSON_GetObjectItem(usage, "prompt_tokens");
+        cJSON *completion = cJSON_GetObjectItem(usage, "completion_tokens");
+        cJSON *total = cJSON_GetObjectItem(usage, "total_tokens");
+        if (prompt && cJSON_IsNumber(prompt)) result->prompt_tokens = prompt->valueint;
+        if (completion && cJSON_IsNumber(completion)) result->completion_tokens = completion->valueint;
+        if (total && cJSON_IsNumber(total)) result->total_tokens = total->valueint;
     }
-    
+
+    cJSON_Delete(root);
     return 0;
 }
 
