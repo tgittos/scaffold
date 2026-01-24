@@ -240,24 +240,231 @@ void test_load_system_prompt_large_content(void) {
 
 void test_core_system_prompt_always_present(void) {
     char *prompt_content = NULL;
-    
+
     // Test with no file
     unlink("AGENTS.md");
     int result = load_system_prompt(&prompt_content);
     TEST_ASSERT_EQUAL(0, result);
     TEST_ASSERT_NOT_NULL(prompt_content);
-    
+
     // Core prompt should always be present
     TEST_ASSERT_TRUE(strstr(prompt_content, "You are an advanced AI programming agent") != NULL);
     TEST_ASSERT_TRUE(strstr(prompt_content, "access to powerful tools") != NULL);
     TEST_ASSERT_TRUE(strstr(prompt_content, "User customization:") != NULL);
-    
+
+    cleanup_system_prompt(&prompt_content);
+}
+
+void test_file_reference_expansion_simple(void) {
+    char *prompt_content = NULL;
+
+    // Create a referenced file
+    FILE *ref_file = fopen("DETAILS.md", "w");
+    TEST_ASSERT_NOT_NULL(ref_file);
+    fprintf(ref_file, "This is the details content.");
+    fclose(ref_file);
+
+    // Create AGENTS.md with a file reference
+    FILE *test_file = fopen("AGENTS.md", "w");
+    TEST_ASSERT_NOT_NULL(test_file);
+    fprintf(test_file, "See @DETAILS.md for more info.");
+    fclose(test_file);
+
+    int result = load_system_prompt(&prompt_content);
+
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_NOT_NULL(prompt_content);
+
+    // Should contain the expanded content with file tags
+    TEST_ASSERT_TRUE(strstr(prompt_content, "<file name=\"DETAILS.md\">") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, "This is the details content.") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, "</file>") != NULL);
+    // Original @DETAILS.md should be replaced
+    TEST_ASSERT_TRUE(strstr(prompt_content, "@DETAILS.md") == NULL);
+
+    cleanup_system_prompt(&prompt_content);
+    unlink("DETAILS.md");
+}
+
+void test_file_reference_missing_file_silent_fail(void) {
+    char *prompt_content = NULL;
+
+    // Create AGENTS.md with a reference to non-existent file
+    FILE *test_file = fopen("AGENTS.md", "w");
+    TEST_ASSERT_NOT_NULL(test_file);
+    fprintf(test_file, "See @NONEXISTENT.md for details.");
+    fclose(test_file);
+
+    int result = load_system_prompt(&prompt_content);
+
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_NOT_NULL(prompt_content);
+
+    // The @NONEXISTENT.md should remain unchanged (silent fail)
+    TEST_ASSERT_TRUE(strstr(prompt_content, "@NONEXISTENT.md") != NULL);
+
+    cleanup_system_prompt(&prompt_content);
+}
+
+void test_file_reference_multiple_references(void) {
+    char *prompt_content = NULL;
+
+    // Create referenced files
+    FILE *file1 = fopen("FILE1.md", "w");
+    TEST_ASSERT_NOT_NULL(file1);
+    fprintf(file1, "Content from file 1.");
+    fclose(file1);
+
+    FILE *file2 = fopen("FILE2.md", "w");
+    TEST_ASSERT_NOT_NULL(file2);
+    fprintf(file2, "Content from file 2.");
+    fclose(file2);
+
+    // Create AGENTS.md with multiple references
+    FILE *test_file = fopen("AGENTS.md", "w");
+    TEST_ASSERT_NOT_NULL(test_file);
+    fprintf(test_file, "First: @FILE1.md\nSecond: @FILE2.md");
+    fclose(test_file);
+
+    int result = load_system_prompt(&prompt_content);
+
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_NOT_NULL(prompt_content);
+
+    // Both files should be expanded
+    TEST_ASSERT_TRUE(strstr(prompt_content, "<file name=\"FILE1.md\">") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, "Content from file 1.") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, "<file name=\"FILE2.md\">") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, "Content from file 2.") != NULL);
+
+    cleanup_system_prompt(&prompt_content);
+    unlink("FILE1.md");
+    unlink("FILE2.md");
+}
+
+void test_file_reference_with_subdirectory(void) {
+    char *prompt_content = NULL;
+
+    // Create subdirectory and file
+    mkdir("subdir", 0755);
+    FILE *ref_file = fopen("subdir/NESTED.md", "w");
+    TEST_ASSERT_NOT_NULL(ref_file);
+    fprintf(ref_file, "Nested file content.");
+    fclose(ref_file);
+
+    // Create AGENTS.md with subdirectory reference
+    FILE *test_file = fopen("AGENTS.md", "w");
+    TEST_ASSERT_NOT_NULL(test_file);
+    fprintf(test_file, "See @subdir/NESTED.md for nested content.");
+    fclose(test_file);
+
+    int result = load_system_prompt(&prompt_content);
+
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_NOT_NULL(prompt_content);
+
+    // Should expand the nested file
+    TEST_ASSERT_TRUE(strstr(prompt_content, "<file name=\"subdir/NESTED.md\">") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, "Nested file content.") != NULL);
+
+    cleanup_system_prompt(&prompt_content);
+    unlink("subdir/NESTED.md");
+    rmdir("subdir");
+}
+
+void test_file_reference_no_recursive_expansion(void) {
+    char *prompt_content = NULL;
+
+    // Create a file that itself contains an @ reference
+    FILE *ref_file = fopen("OUTER.md", "w");
+    TEST_ASSERT_NOT_NULL(ref_file);
+    fprintf(ref_file, "This references @INNER.md which should NOT be expanded.");
+    fclose(ref_file);
+
+    // Create the inner file (should not be expanded)
+    FILE *inner_file = fopen("INNER.md", "w");
+    TEST_ASSERT_NOT_NULL(inner_file);
+    fprintf(inner_file, "Inner content that should not appear.");
+    fclose(inner_file);
+
+    // Create AGENTS.md referencing the outer file
+    FILE *test_file = fopen("AGENTS.md", "w");
+    TEST_ASSERT_NOT_NULL(test_file);
+    fprintf(test_file, "See @OUTER.md for info.");
+    fclose(test_file);
+
+    int result = load_system_prompt(&prompt_content);
+
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_NOT_NULL(prompt_content);
+
+    // OUTER.md should be expanded
+    TEST_ASSERT_TRUE(strstr(prompt_content, "<file name=\"OUTER.md\">") != NULL);
+    // The @INNER.md reference should remain as-is (not expanded)
+    TEST_ASSERT_TRUE(strstr(prompt_content, "@INNER.md") != NULL);
+    // Inner content should NOT appear
+    TEST_ASSERT_TRUE(strstr(prompt_content, "Inner content that should not appear.") == NULL);
+
+    cleanup_system_prompt(&prompt_content);
+    unlink("OUTER.md");
+    unlink("INNER.md");
+}
+
+void test_file_reference_mixed_existing_and_missing(void) {
+    char *prompt_content = NULL;
+
+    // Create only one of the referenced files
+    FILE *ref_file = fopen("EXISTS.md", "w");
+    TEST_ASSERT_NOT_NULL(ref_file);
+    fprintf(ref_file, "This file exists.");
+    fclose(ref_file);
+
+    // Create AGENTS.md with mixed references
+    FILE *test_file = fopen("AGENTS.md", "w");
+    TEST_ASSERT_NOT_NULL(test_file);
+    fprintf(test_file, "File 1: @EXISTS.md\nFile 2: @MISSING.md");
+    fclose(test_file);
+
+    int result = load_system_prompt(&prompt_content);
+
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_NOT_NULL(prompt_content);
+
+    // EXISTS.md should be expanded
+    TEST_ASSERT_TRUE(strstr(prompt_content, "<file name=\"EXISTS.md\">") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, "This file exists.") != NULL);
+    // MISSING.md should remain as @MISSING.md
+    TEST_ASSERT_TRUE(strstr(prompt_content, "@MISSING.md") != NULL);
+
+    cleanup_system_prompt(&prompt_content);
+    unlink("EXISTS.md");
+}
+
+void test_file_reference_at_sign_not_filename(void) {
+    char *prompt_content = NULL;
+
+    // Create AGENTS.md with @ signs that aren't file references
+    FILE *test_file = fopen("AGENTS.md", "w");
+    TEST_ASSERT_NOT_NULL(test_file);
+    fprintf(test_file, "Email: user@example.com\nTwitter: @handle\nPrice: $5 @ store");
+    fclose(test_file);
+
+    int result = load_system_prompt(&prompt_content);
+
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_NOT_NULL(prompt_content);
+
+    // These should remain unchanged (not treated as file references)
+    TEST_ASSERT_TRUE(strstr(prompt_content, "user@example.com") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, "@handle") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, "$5 @ store") != NULL);
+
     cleanup_system_prompt(&prompt_content);
 }
 
 int main(void) {
     UNITY_BEGIN();
-    
+
     RUN_TEST(test_load_system_prompt_with_null_parameter);
     RUN_TEST(test_load_system_prompt_file_not_exists);
     RUN_TEST(test_load_system_prompt_simple_content);
@@ -270,6 +477,15 @@ int main(void) {
     RUN_TEST(test_cleanup_system_prompt_with_allocated_content);
     RUN_TEST(test_load_system_prompt_large_content);
     RUN_TEST(test_core_system_prompt_always_present);
-    
+
+    // File reference expansion tests
+    RUN_TEST(test_file_reference_expansion_simple);
+    RUN_TEST(test_file_reference_missing_file_silent_fail);
+    RUN_TEST(test_file_reference_multiple_references);
+    RUN_TEST(test_file_reference_with_subdirectory);
+    RUN_TEST(test_file_reference_no_recursive_expansion);
+    RUN_TEST(test_file_reference_mixed_existing_and_missing);
+    RUN_TEST(test_file_reference_at_sign_not_filename);
+
     return UNITY_END();
 }

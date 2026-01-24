@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
+#include <ctype.h>
 
 // Core system prompt PART 1 - up to where dynamic tools list goes
 static const char* SYSTEM_PROMPT_PART1 =
@@ -83,6 +85,197 @@ static const char* SYSTEM_PROMPT_PART2 =
     "User customization:\n\n";
 
 
+// Check if character is valid in a filename reference
+static bool is_valid_filename_char(char c) {
+    return isalnum((unsigned char)c) || c == '_' || c == '-' || c == '.' || c == '/';
+}
+
+// Check if the extracted string looks like a file path (must contain a dot for extension)
+static bool looks_like_file_path(const char *str, size_t len) {
+    if (len == 0) return false;
+
+    // Must contain at least one dot (for file extension)
+    bool has_dot = false;
+    for (size_t i = 0; i < len; i++) {
+        if (str[i] == '.') {
+            has_dot = true;
+            break;
+        }
+    }
+    return has_dot;
+}
+
+// Read file content, returns NULL if file doesn't exist or can't be read
+static char *read_file_content(const char *filepath) {
+    FILE *file = fopen(filepath, "r");
+    if (file == NULL) {
+        return NULL;
+    }
+
+    if (fseek(file, 0, SEEK_END) != 0) {
+        fclose(file);
+        return NULL;
+    }
+
+    long file_size = ftell(file);
+    if (file_size == -1 || fseek(file, 0, SEEK_SET) != 0) {
+        fclose(file);
+        return NULL;
+    }
+
+    char *content = malloc((size_t)file_size + 1);
+    if (content == NULL) {
+        fclose(file);
+        return NULL;
+    }
+
+    size_t bytes_read = fread(content, 1, (size_t)file_size, file);
+    fclose(file);
+
+    if (bytes_read != (size_t)file_size) {
+        free(content);
+        return NULL;
+    }
+
+    content[file_size] = '\0';
+    return content;
+}
+
+// Dynamic string buffer for building expanded content
+typedef struct {
+    char *data;
+    size_t len;
+    size_t capacity;
+} StringBuffer;
+
+static bool strbuf_init(StringBuffer *buf, size_t initial_capacity) {
+    buf->data = malloc(initial_capacity);
+    if (buf->data == NULL) return false;
+    buf->data[0] = '\0';
+    buf->len = 0;
+    buf->capacity = initial_capacity;
+    return true;
+}
+
+static bool strbuf_append(StringBuffer *buf, const char *str, size_t len) {
+    if (len == 0) return true;
+
+    size_t new_len = buf->len + len;
+    if (new_len + 1 > buf->capacity) {
+        size_t new_capacity = buf->capacity * 2;
+        while (new_capacity < new_len + 1) {
+            new_capacity *= 2;
+        }
+        char *new_data = realloc(buf->data, new_capacity);
+        if (new_data == NULL) return false;
+        buf->data = new_data;
+        buf->capacity = new_capacity;
+    }
+
+    memcpy(buf->data + buf->len, str, len);
+    buf->len = new_len;
+    buf->data[buf->len] = '\0';
+    return true;
+}
+
+static bool strbuf_append_str(StringBuffer *buf, const char *str) {
+    return strbuf_append(buf, str, strlen(str));
+}
+
+static void strbuf_free(StringBuffer *buf) {
+    free(buf->data);
+    buf->data = NULL;
+    buf->len = 0;
+    buf->capacity = 0;
+}
+
+// Expand @FILENAME references in content (non-recursive)
+static char *expand_file_references(const char *content) {
+    if (content == NULL) return NULL;
+
+    StringBuffer buf;
+    if (!strbuf_init(&buf, strlen(content) + 1024)) {
+        return NULL;
+    }
+
+    const char *p = content;
+    while (*p != '\0') {
+        if (*p == '@') {
+            // Check if this looks like a file reference
+            const char *start = p + 1;
+            const char *end = start;
+
+            // Extract potential filename
+            while (*end != '\0' && is_valid_filename_char(*end)) {
+                end++;
+            }
+
+            size_t filename_len = (size_t)(end - start);
+
+            if (filename_len > 0 && looks_like_file_path(start, filename_len)) {
+                // Extract filename as null-terminated string
+                char *filename = malloc(filename_len + 1);
+                if (filename == NULL) {
+                    strbuf_free(&buf);
+                    return NULL;
+                }
+                memcpy(filename, start, filename_len);
+                filename[filename_len] = '\0';
+
+                // Try to read the file
+                char *file_content = read_file_content(filename);
+
+                if (file_content != NULL) {
+                    // File found - expand with tags
+                    if (!strbuf_append_str(&buf, "<file name=\"") ||
+                        !strbuf_append_str(&buf, filename) ||
+                        !strbuf_append_str(&buf, "\">\n") ||
+                        !strbuf_append_str(&buf, file_content) ||
+                        !strbuf_append_str(&buf, "\n</file>")) {
+                        free(filename);
+                        free(file_content);
+                        strbuf_free(&buf);
+                        return NULL;
+                    }
+                    free(file_content);
+                    free(filename);
+                    p = end;  // Skip past the @FILENAME
+                    continue;
+                } else {
+                    // File not found - leave @FILENAME unchanged (silent fail)
+                    free(filename);
+                    if (!strbuf_append(&buf, p, 1)) {
+                        strbuf_free(&buf);
+                        return NULL;
+                    }
+                    p++;
+                    continue;
+                }
+            } else {
+                // Not a valid file reference, copy the @ literally
+                if (!strbuf_append(&buf, p, 1)) {
+                    strbuf_free(&buf);
+                    return NULL;
+                }
+                p++;
+                continue;
+            }
+        } else {
+            // Regular character, copy it
+            if (!strbuf_append(&buf, p, 1)) {
+                strbuf_free(&buf);
+                return NULL;
+            }
+            p++;
+        }
+    }
+
+    // Transfer ownership of buffer data
+    char *result = buf.data;
+    buf.data = NULL;
+    return result;
+}
+
 int load_system_prompt(char **prompt_content) {
     if (prompt_content == NULL) {
         return -1;
@@ -116,7 +309,14 @@ int load_system_prompt(char **prompt_content) {
                             file_size--;
                         }
 
-                        user_prompt = buffer;
+                        // Expand @FILENAME references
+                        char *expanded = expand_file_references(buffer);
+                        if (expanded != NULL) {
+                            free(buffer);
+                            user_prompt = expanded;
+                        } else {
+                            user_prompt = buffer;
+                        }
                     } else {
                         free(buffer);
                     }
