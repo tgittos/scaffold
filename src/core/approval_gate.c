@@ -8,6 +8,7 @@
  */
 
 #include "approval_gate.h"
+#include "shell_parser.h"
 
 #include <cJSON.h>
 #include <ctype.h>
@@ -756,38 +757,6 @@ GateAction approval_gate_get_category_action(const ApprovalGateConfig *config,
         return GATE_ACTION_GATE; /* Default to gate on invalid input */
     }
     return config->categories[category];
-}
-
-/* =============================================================================
- * Shell Detection
- * ========================================================================== */
-
-ShellType detect_shell_type(void) {
-#ifdef _WIN32
-    /* On Windows, check COMSPEC and PSModulePath */
-    const char *psmodule = getenv("PSModulePath");
-    if (psmodule != NULL && strlen(psmodule) > 0) {
-        return SHELL_TYPE_POWERSHELL;
-    }
-
-    const char *comspec = getenv("COMSPEC");
-    if (comspec != NULL) {
-        /* Check if cmd.exe (case-insensitive for all variations) */
-        if (strcasestr_local(comspec, "cmd.exe") != NULL) {
-            return SHELL_TYPE_CMD;
-        }
-    }
-    return SHELL_TYPE_CMD; /* Default on Windows */
-#else
-    /* On POSIX, check SHELL for PowerShell variants */
-    const char *shell = getenv("SHELL");
-    if (shell != NULL) {
-        if (strstr(shell, "pwsh") != NULL || strstr(shell, "powershell") != NULL) {
-            return SHELL_TYPE_POWERSHELL;
-        }
-    }
-    return SHELL_TYPE_POSIX;
-#endif
 }
 
 /* =============================================================================

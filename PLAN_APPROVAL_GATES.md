@@ -58,15 +58,15 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 - [x] **Create `src/core/shell_parser.h`** - Define `ShellType` enum (`POSIX`, `CMD`, `POWERSHELL`, `UNKNOWN`), `ParsedShellCommand` struct with `tokens`, `token_count`, `has_chain`, `has_pipe`, `has_subshell`, `has_redirect`, `is_dangerous`, `shell_type` fields. Declare unified `parse_shell_command()` and `detect_shell_type()` functions.
 
-- [ ] **Implement `detect_shell_type()`** - On Windows: check `COMSPEC` and `PSModulePath` environment variables to distinguish cmd.exe vs PowerShell. On POSIX: check `SHELL` for pwsh/powershell, default to POSIX. See spec section "Cross-Platform Shell Parsing > Shell Detection".
+- [x] **Implement `detect_shell_type()`** - On Windows: check `COMSPEC` and `PSModulePath` environment variables to distinguish cmd.exe vs PowerShell. On POSIX: check `SHELL` for pwsh/powershell, default to POSIX. See spec section "Cross-Platform Shell Parsing > Shell Detection".
 
-- [ ] **Create `src/core/shell_parser.c`** - Implement POSIX shell parsing. Tokenize on unquoted whitespace, respect single and double quotes, detect metacharacters (`;`, `|`, `&`, `(`, `)`, `$`, backtick, `>`, `<`). Mark command as having chains/pipes/subshells if any metacharacter appears unquoted. See spec section "Shell Command Matching > Parser Security Requirements".
+- [x] **Create `src/core/shell_parser.c`** - Implement POSIX shell parsing. Tokenize on unquoted whitespace, respect single and double quotes, detect metacharacters (`;`, `|`, `&`, `(`, `)`, `$`, backtick, `>`, `<`). Mark command as having chains/pipes/subshells if any metacharacter appears unquoted. See spec section "Shell Command Matching > Parser Security Requirements".
 
 - [ ] **Create `src/core/shell_parser_cmd.c`** - Implement cmd.exe parsing. Detect metacharacters (`&`, `|`, `<`, `>`, `^`, `%`). Only double quotes are string delimiters. Implement `in_double_quotes()` helper. See spec section "Cross-Platform Shell Parsing > cmd.exe Parsing Rules".
 
 - [ ] **Create `src/core/shell_parser_ps.c`** - Implement PowerShell parsing. Detect all POSIX-like operators plus script blocks (`{}`), variables (`$var`), invoke operators (`&`, `.`). Implement `powershell_command_is_dangerous()` to check for dangerous cmdlets (`Invoke-Expression`, `Invoke-Command`, `Start-Process`, `-EncodedCommand`, `DownloadString`, etc.). Case-insensitive matching. See spec section "Cross-Platform Shell Parsing > PowerShell Parsing Rules".
 
-- [ ] **Implement dangerous pattern detection** - Check raw command string against known dangerous patterns before parsing: `rm -rf`, `rm -fr`, `> /dev/sd*`, `dd if=* of=/dev/*`, `chmod 777`, `chmod -R`, `curl * | *sh`, `wget * | *sh`, fork bomb pattern. These always require approval regardless of allowlist. See spec section "Shell Command Matching > Dangerous Pattern Detection".
+- [x] **Implement dangerous pattern detection** - Check raw command string against known dangerous patterns before parsing: `rm -rf`, `rm -fr`, `> /dev/sd*`, `dd if=* of=/dev/*`, `chmod 777`, `chmod -R`, `curl * | *sh`, `wget * | *sh`, fork bomb pattern. These always require approval regardless of allowlist. See spec section "Shell Command Matching > Dangerous Pattern Detection".
 
 ---
 
@@ -192,7 +192,7 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 - [x] **Create `test/test_approval_gate.c`** - Test gate config initialization, category lookup, allowlist matching (regex), rate limiting calculations, denial tracking.
 
-- [ ] **Create `test/test_shell_parser.c`** - Test POSIX shell tokenization, quote handling, metacharacter detection, chain/pipe detection, dangerous pattern matching. Test edge cases: empty commands, only whitespace, unbalanced quotes.
+- [x] **Create `test/test_shell_parser.c`** - Test POSIX shell tokenization, quote handling, metacharacter detection, chain/pipe detection, dangerous pattern matching. Test edge cases: empty commands, only whitespace, unbalanced quotes.
 
 - [ ] **Create `test/test_shell_parser_cmd.c`** - Test cmd.exe parsing: `&` as separator, `%VAR%` detection, `^` escape, double-quote handling. Test dangerous patterns.
 
