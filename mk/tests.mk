@@ -40,6 +40,7 @@ $(eval $(call def_test,document_chunker,test_document_chunker,$(SRCDIR)/utils/do
 $(eval $(call def_test,streaming,network/test_streaming,$(SRCDIR)/network/streaming.c))
 $(eval $(call def_test,darray,test_darray,))
 $(eval $(call def_test,ptrarray,test_ptrarray,))
+$(eval $(call def_test,approval_gate,test_approval_gate,$(SRCDIR)/core/approval_gate.c))
 
 $(TEST_main_TARGET): $(TEST_main_OBJECTS)
 	$(CC) -o $@ $^
@@ -69,6 +70,9 @@ $(TEST_darray_TARGET): $(TEST_darray_OBJECTS)
 	$(CC) -o $@ $^
 
 $(TEST_ptrarray_TARGET): $(TEST_ptrarray_OBJECTS)
+	$(CC) -o $@ $^
+
+$(TEST_approval_gate_TARGET): $(TEST_approval_gate_OBJECTS)
 	$(CC) -o $@ $^
 
 # =============================================================================
@@ -257,7 +261,7 @@ TEST_EXECUTION_ORDER := \
     $(TEST_conversation_compactor_TARGET) $(TEST_incomplete_task_bug_TARGET) \
     $(TEST_messages_array_bug_TARGET) $(TEST_mcp_client_TARGET) $(TEST_vector_db_TARGET) \
     $(TEST_document_store_TARGET) $(TEST_task_store_TARGET) $(TEST_pdf_extractor_TARGET) \
-    $(TEST_document_chunker_TARGET) $(TEST_subagent_tool_TARGET) $(TEST_json_output_TARGET)
+    $(TEST_document_chunker_TARGET) $(TEST_approval_gate_TARGET) $(TEST_subagent_tool_TARGET) $(TEST_json_output_TARGET)
 
 test: $(ALL_TEST_TARGETS)
 	@echo "Running all tests..."
@@ -282,7 +286,7 @@ VALGRIND_TESTS := \
     $(TEST_todo_manager_TARGET) $(TEST_todo_tool_TARGET) $(TEST_vector_db_tool_TARGET) \
     $(TEST_memory_tool_TARGET) $(TEST_token_manager_TARGET) $(TEST_conversation_compactor_TARGET) \
     $(TEST_model_tools_TARGET) $(TEST_vector_db_TARGET) $(TEST_task_store_TARGET) \
-    $(TEST_pdf_extractor_TARGET) $(TEST_document_chunker_TARGET) $(TEST_json_output_TARGET)
+    $(TEST_pdf_extractor_TARGET) $(TEST_document_chunker_TARGET) $(TEST_approval_gate_TARGET) $(TEST_json_output_TARGET)
 
 check-valgrind: $(ALL_TEST_TARGETS)
 	@echo "Running valgrind tests (excluding HTTP and Python tests)..."

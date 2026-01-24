@@ -8,6 +8,7 @@ CORE_SOURCES := \
     $(SRCDIR)/core/streaming_handler.c \
     $(SRCDIR)/core/context_enhancement.c \
     $(SRCDIR)/core/recap.c \
+    $(SRCDIR)/core/approval_gate.c \
     $(SRCDIR)/network/http_client.c \
     $(SRCDIR)/network/embedded_cacert.c \
     $(SRCDIR)/network/streaming.c \

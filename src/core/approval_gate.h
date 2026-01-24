@@ -10,6 +10,9 @@
 #include <windows.h>
 #endif
 
+/* Include tools_system.h for ToolCall definition */
+#include "../tools/tools_system.h"
+
 /**
  * Approval Gates Module
  *
@@ -29,9 +32,6 @@
  * - atomic_file.h: TOCTOU-safe atomic file operations
  * - subagent_approval.h: Subagent approval proxy IPC
  */
-
-/* Forward declarations */
-struct ToolCall;
 
 /**
  * Gate actions determine how a category of tools is handled.
@@ -278,7 +278,7 @@ GateAction approval_gate_get_category_action(const ApprovalGateConfig *config,
  * @return 1 if approval required, 0 if allowed, -1 if denied
  */
 int approval_gate_requires_check(const ApprovalGateConfig *config,
-                                 const struct ToolCall *tool_call);
+                                 const ToolCall *tool_call);
 
 /**
  * Prompt user for approval (TTY only).
@@ -290,7 +290,7 @@ int approval_gate_requires_check(const ApprovalGateConfig *config,
  * @return User's decision
  */
 ApprovalResult approval_gate_prompt(ApprovalGateConfig *config,
-                                    const struct ToolCall *tool_call,
+                                    const ToolCall *tool_call,
                                     ApprovedPath *out_path);
 
 /**
@@ -303,7 +303,7 @@ ApprovalResult approval_gate_prompt(ApprovalGateConfig *config,
  * @return Result of the check/prompt
  */
 ApprovalResult check_approval_gate(ApprovalGateConfig *config,
-                                   const struct ToolCall *tool_call,
+                                   const ToolCall *tool_call,
                                    ApprovedPath *out_path);
 
 /* ============================================================================
@@ -344,7 +344,7 @@ int approval_gate_add_shell_allowlist(ApprovalGateConfig *config,
  * @return 1 if matched (allowed), 0 if not matched
  */
 int approval_gate_matches_allowlist(const ApprovalGateConfig *config,
-                                    const struct ToolCall *tool_call);
+                                    const ToolCall *tool_call);
 
 /* ============================================================================
  * Rate Limiting
@@ -358,7 +358,7 @@ int approval_gate_matches_allowlist(const ApprovalGateConfig *config,
  * @return 1 if rate limited, 0 if not
  */
 int is_rate_limited(const ApprovalGateConfig *config,
-                    const struct ToolCall *tool_call);
+                    const ToolCall *tool_call);
 
 /**
  * Record a denial for rate limiting.
@@ -367,7 +367,7 @@ int is_rate_limited(const ApprovalGateConfig *config,
  * @param tool_call The denied tool call
  */
 void track_denial(ApprovalGateConfig *config,
-                  const struct ToolCall *tool_call);
+                  const ToolCall *tool_call);
 
 /**
  * Reset denial counter for a tool (on approval or backoff expiry).
@@ -433,7 +433,7 @@ void free_approved_path(ApprovedPath *path);
  * @return Parent's decision (DENIED on timeout)
  */
 ApprovalResult subagent_request_approval(const ApprovalChannel *channel,
-                                         const struct ToolCall *tool_call,
+                                         const ToolCall *tool_call,
                                          ApprovedPath *out_path);
 
 /**
@@ -477,7 +477,7 @@ ShellType detect_shell_type(void);
  * @return Allocated JSON error string. Caller must free.
  */
 char *format_rate_limit_error(const ApprovalGateConfig *config,
-                              const struct ToolCall *tool_call);
+                              const ToolCall *tool_call);
 
 /**
  * Format a denial error message as JSON.
@@ -485,7 +485,7 @@ char *format_rate_limit_error(const ApprovalGateConfig *config,
  * @param tool_call The denied tool call
  * @return Allocated JSON error string. Caller must free.
  */
-char *format_denial_error(const struct ToolCall *tool_call);
+char *format_denial_error(const ToolCall *tool_call);
 
 /**
  * Format a protected file error message as JSON.

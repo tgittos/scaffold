@@ -10,7 +10,7 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 - [x] **Create `src/core/approval_gate.h`** - Define all public data structures and function prototypes. Include `GateAction` enum (`ALLOW`, `GATE`, `DENY`), `GateCategory` enum (8 categories), `ApprovalResult` enum, `ApprovalGateConfig` struct, `AllowlistEntry` struct, `ShellAllowEntry` struct, `DenialTracker` struct. See spec section "Implementation > Data Structures" for complete definitions.
 
-- [ ] **Create `src/core/approval_gate.c`** - Implement core approval gate logic including initialization, cleanup, category lookup, and the main `check_approval_gate()` function that orchestrates the approval flow. See spec section "Implementation > Core Functions" for function signatures.
+- [x] **Create `src/core/approval_gate.c`** - Implement core approval gate logic including initialization, cleanup, category lookup, and the main `check_approval_gate()` function that orchestrates the approval flow. See spec section "Implementation > Core Functions" for function signatures.
 
 ---
 
