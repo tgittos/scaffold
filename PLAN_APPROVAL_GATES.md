@@ -44,13 +44,13 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 - [x] **Create `src/core/protected_files.h`** - Define `ProtectedInode` struct and `ProtectedInodeCache` struct. Declare `is_protected_file()`, `refresh_protected_inodes()`, and related functions.
 
-- [ ] **Create `src/core/protected_files.c`** - Implement protected file detection with multiple strategies: (1) basename exact match (`ralph.config.json`, `.env`), (2) basename prefix match (`.env.*`), (3) glob pattern match (`**/ralph.config.json`, `**/.ralph/config.json`, `**/.env`, `**/.env.*`), (4) inode-based detection for hardlinks/renames. See spec section "Protected Files" and "Implementation > Protected Files".
+- [x] **Create `src/core/protected_files.c`** - Implement protected file detection with multiple strategies: (1) basename exact match (`ralph.config.json`, `.env`), (2) basename prefix match (`.env.*`), (3) glob pattern match (recursive patterns like `**/ralph.config.json`), (4) inode-based detection for hardlinks/renames. See spec section "Protected Files" and "Implementation > Protected Files".
 
-- [ ] **Implement inode cache with periodic refresh** - Scan common locations for protected files every 30 seconds. Track device+inode on POSIX, volume serial + file index on Windows. Implement `add_protected_inode_if_exists()` to populate cache. See spec section "Implementation > Protected Files > Inode Tracking with Refresh".
+- [x] **Implement inode cache with periodic refresh** - Scan common locations for protected files every 30 seconds. Track device+inode on POSIX, volume serial + file index on Windows. Implement `add_protected_inode_if_exists()` to populate cache. See spec section "Implementation > Protected Files > Inode Tracking with Refresh".
 
-- [ ] **Add pre-batch cache refresh** - Implement `pre_batch_protection_refresh()` to force cache refresh before processing tool call batches. Ensures late-created protected files are detected. See spec section "Implementation > Protected Files > Late-Created File Handling".
+- [x] **Add pre-batch cache refresh** - Implement `force_protected_inode_refresh()` to force cache refresh before processing tool call batches. Ensures late-created protected files are detected. See spec section "Implementation > Protected Files > Late-Created File Handling".
 
-- [ ] **Windows file identity support** - Use `GetFileInformationByHandle()` to get `nFileIndexHigh`, `nFileIndexLow`, `dwVolumeSerialNumber` for Windows file identity tracking. Conditional compilation with `#ifdef _WIN32`. See spec section "Implementation > Protected Files > Unified Protection Check".
+- [x] **Windows file identity support** - Use `GetFileInformationByHandle()` to get `nFileIndexHigh`, `nFileIndexLow`, `dwVolumeSerialNumber` for Windows file identity tracking. Conditional compilation with `#ifdef _WIN32`. See spec section "Implementation > Protected Files > Unified Protection Check".
 
 ---
 
@@ -200,7 +200,7 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 - [x] **Create `test/test_path_normalize.c`** - Test Windows backslash conversion, case handling, drive letter normalization (`C:` → `/c/`), UNC paths (`//server/share` → `/unc/server/share`), duplicate slash removal, trailing slash handling.
 
-- [ ] **Create `test/test_protected_files.c`** - Test basename matching, prefix matching (`.env.*`), glob patterns, inode-based detection. Test case sensitivity differences between platforms.
+- [x] **Create `test/test_protected_files.c`** - Test basename matching, prefix matching (`.env.*`), glob patterns, inode-based detection. Test case sensitivity differences between platforms.
 
 - [ ] **Create `test/test_atomic_file.c`** - Test `O_NOFOLLOW` symlink rejection, `O_EXCL` existing file failure, `openat()` parent verification, inode mismatch detection. Create actual temp files/symlinks for realistic tests.
 
