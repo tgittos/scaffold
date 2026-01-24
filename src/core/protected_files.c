@@ -31,6 +31,13 @@
 #endif
 
 /* ============================================================================
+ * Internal Constants
+ * ========================================================================== */
+
+/* Maximum path buffer size for internal operations */
+#define PROTECTED_PATH_BUFSIZE 4096
+
+/* ============================================================================
  * Protected File Patterns
  * ========================================================================== */
 
@@ -127,27 +134,6 @@ static int inode_in_cache(dev_t device, ino_t inode) {
     return 0;
 }
 
-#ifdef _WIN32
-/**
- * Check if Windows file identity is already in the cache.
- *
- * @param volume_serial Volume serial number
- * @param index_high File index high DWORD
- * @param index_low File index low DWORD
- * @return 1 if found, 0 if not
- */
-static int win_file_id_in_cache(DWORD volume_serial, DWORD index_high, DWORD index_low) {
-    for (int i = 0; i < inode_cache.count; i++) {
-        if (inode_cache.inodes[i].volume_serial == volume_serial &&
-            inode_cache.inodes[i].index_high == index_high &&
-            inode_cache.inodes[i].index_low == index_low) {
-            return 1;
-        }
-    }
-    return 0;
-}
-#endif
-
 /**
  * Build a full path from directory and filename.
  *
@@ -195,7 +181,7 @@ static void scan_protected_paths_in_dir(const char *base_dir) {
         NULL
     };
 
-    char full_path[4096];
+    char full_path[PROTECTED_PATH_BUFSIZE];
     memset(full_path, 0, sizeof(full_path)); /* Initialize to silence valgrind */
 
     for (int i = 0; SCAN_FILENAMES[i]; i++) {
@@ -219,7 +205,7 @@ void refresh_protected_inodes(void) {
     clear_protected_inode_cache();
 
     /* Get current working directory */
-    char cwd[4096];
+    char cwd[PROTECTED_PATH_BUFSIZE];
     if (!getcwd(cwd, sizeof(cwd))) {
         /* Can't get cwd, just update timestamp and return */
         inode_cache.last_refresh = now;
@@ -230,7 +216,7 @@ void refresh_protected_inodes(void) {
     scan_protected_paths_in_dir(cwd);
 
     /* Scan parent directories up to PROTECTED_INODE_SCAN_DEPTH levels */
-    char parent_dir[4096];
+    char parent_dir[PROTECTED_PATH_BUFSIZE];
     strncpy(parent_dir, cwd, sizeof(parent_dir) - 1);
     parent_dir[sizeof(parent_dir) - 1] = '\0';
 
