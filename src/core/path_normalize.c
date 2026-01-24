@@ -64,7 +64,7 @@ NormalizedPath *normalize_path(const char *path) {
         }
 
         new_work[0] = '/';
-        new_work[1] = (char)tolower((unsigned char)work[0]);
+        new_work[1] = work[0]; /* Already lowercased above */
         if (needs_slash) {
             new_work[2] = '/';
             strcpy(new_work + 3, work + 2);
@@ -79,9 +79,9 @@ NormalizedPath *normalize_path(const char *path) {
     /* Windows: Handle UNC paths - //server/share -> /unc/server/share */
     if (work[0] == '/' && work[1] == '/') {
         size_t old_len = strlen(work);
-        /* //server/share becomes /unc/server/share */
-        /* Need to insert "unc" after first slash, removing one slash */
-        char *new_work = malloc(old_len + 4); /* +4 for "unc" and null */
+        /* //server/share (len=14) becomes /unc/server/share (len=17) */
+        /* We copy "/unc" (4 chars) then work+1, net change is +3 chars */
+        char *new_work = malloc(old_len + 3 + 1); /* +3 for "unc", +1 for null */
         if (!new_work) {
             free(work);
             free(np);

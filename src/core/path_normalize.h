@@ -20,7 +20,7 @@
  */
 typedef struct {
     char *normalized;   /* Normalized path string (allocated, caller owns) */
-    char *basename;     /* Pointer into normalized for final component (not allocated) */
+    char *basename;     /* Points into 'normalized'; valid only while struct exists */
     int is_absolute;    /* Non-zero if path is absolute */
 } NormalizedPath;
 
