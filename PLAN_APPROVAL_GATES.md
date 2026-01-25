@@ -98,13 +98,13 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 ## User Prompt Interface
 
-- [ ] **Implement TTY approval prompt** - Display formatted prompt box showing tool name, arguments/command, and options: `[y] Allow`, `[n] Deny`, `[a] Allow always`, `[?] Details`. Read single keypress response. See spec section "User Prompt Interface".
+- [x] **Implement TTY approval prompt** - Display formatted prompt box showing tool name, arguments/command, and options: `[y] Allow`, `[n] Deny`, `[a] Allow always`, `[?] Details`. Read single keypress response. See spec section "User Prompt Interface".
 
-- [ ] **Implement details view** - When user presses `?`, display full arguments JSON and resolved paths. Return to prompt after display.
+- [x] **Implement details view** - When user presses `?`, display full arguments JSON and resolved paths. Return to prompt after display.
 
 - [ ] **Implement batch approval** - When multiple tool calls are pending, show numbered list of operations. Support `[y] Allow all`, `[n] Deny all`, `[1-N] Review individual`. See spec section "User Prompt Interface > Batch Approval".
 
-- [ ] **Handle Ctrl+C in prompt** - Return `APPROVAL_ABORTED` to signal workflow should stop without executing. See spec section "User Prompt Interface > Options" table.
+- [x] **Handle Ctrl+C in prompt** - Return `APPROVAL_ABORTED` to signal workflow should stop without executing. See spec section "User Prompt Interface > Options" table.
 
 ---
 

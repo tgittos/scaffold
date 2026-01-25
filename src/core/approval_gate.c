@@ -14,14 +14,19 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <termios.h>
 #include <unistd.h>
 
 #include "../tools/python_tool_files.h"
 #include "../utils/debug_output.h"
+
+/* Signal flag for Ctrl+C during prompt */
+static volatile sig_atomic_t g_prompt_interrupted = 0;
 
 /* =============================================================================
  * Internal Helper Functions
@@ -1175,6 +1180,197 @@ int approval_gate_requires_check(const ApprovalGateConfig *config,
     }
 }
 
+/* Signal handler for Ctrl+C during prompt */
+static void prompt_sigint_handler(int sig) {
+    (void)sig;
+    g_prompt_interrupted = 1;
+}
+
+/**
+ * Extract the shell command from tool call arguments.
+ * Returns allocated string or NULL if not a shell command.
+ */
+static char *extract_shell_command(const ToolCall *tool_call) {
+    if (tool_call == NULL || tool_call->arguments == NULL) {
+        return NULL;
+    }
+
+    if (strcmp(tool_call->name, "shell") != 0) {
+        return NULL;
+    }
+
+    cJSON *args = cJSON_Parse(tool_call->arguments);
+    if (args == NULL) {
+        return NULL;
+    }
+
+    cJSON *command_item = cJSON_GetObjectItem(args, "command");
+    char *result = NULL;
+    if (cJSON_IsString(command_item) && command_item->valuestring != NULL) {
+        result = strdup(command_item->valuestring);
+    }
+
+    cJSON_Delete(args);
+    return result;
+}
+
+/**
+ * Extract file path from tool call arguments.
+ * Returns allocated string or NULL if not available.
+ */
+static char *extract_file_path(const ToolCall *tool_call) {
+    if (tool_call == NULL || tool_call->arguments == NULL) {
+        return NULL;
+    }
+
+    cJSON *args = cJSON_Parse(tool_call->arguments);
+    if (args == NULL) {
+        return NULL;
+    }
+
+    /* Try common path argument names */
+    const char *path_keys[] = {"path", "file_path", "filepath", "filename", NULL};
+    char *result = NULL;
+
+    for (int i = 0; path_keys[i] != NULL; i++) {
+        cJSON *path_item = cJSON_GetObjectItem(args, path_keys[i]);
+        if (cJSON_IsString(path_item) && path_item->valuestring != NULL) {
+            result = strdup(path_item->valuestring);
+            break;
+        }
+    }
+
+    cJSON_Delete(args);
+    return result;
+}
+
+/**
+ * Read a single keypress from the terminal in raw mode.
+ * Returns the character read, or -1 on error/interrupt.
+ */
+static int read_single_keypress(void) {
+    struct termios old_termios, new_termios;
+    int ch = -1;
+
+    /* Get current terminal settings */
+    if (tcgetattr(STDIN_FILENO, &old_termios) < 0) {
+        /* Fall back to cooked mode read */
+        char c;
+        if (read(STDIN_FILENO, &c, 1) == 1) {
+            return c;
+        }
+        return -1;
+    }
+
+    /* Set up raw mode: disable canonical mode and echo */
+    new_termios = old_termios;
+    new_termios.c_lflag &= ~(ICANON | ECHO);
+    new_termios.c_cc[VMIN] = 1;   /* Wait for at least 1 character */
+    new_termios.c_cc[VTIME] = 0;  /* No timeout */
+
+    if (tcsetattr(STDIN_FILENO, TCSANOW, &new_termios) < 0) {
+        /* Fall back to cooked mode read */
+        char c;
+        if (read(STDIN_FILENO, &c, 1) == 1) {
+            return c;
+        }
+        return -1;
+    }
+
+    /* Set up Ctrl+C handler */
+    struct sigaction sa, old_sa;
+    sa.sa_handler = prompt_sigint_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, &old_sa);
+    g_prompt_interrupted = 0;
+
+    /* Read single character */
+    char c;
+    ssize_t n = read(STDIN_FILENO, &c, 1);
+    if (n == 1 && !g_prompt_interrupted) {
+        ch = (unsigned char)c;
+    }
+
+    /* Restore terminal settings */
+    tcsetattr(STDIN_FILENO, TCSANOW, &old_termios);
+
+    /* Restore signal handler */
+    sigaction(SIGINT, &old_sa, NULL);
+
+    /* Check if interrupted */
+    if (g_prompt_interrupted) {
+        return -1;
+    }
+
+    return ch;
+}
+
+/**
+ * Display the approval prompt details view.
+ * Shows full arguments and resolved paths.
+ */
+static void display_details_view(const ToolCall *tool_call, const ApprovedPath *path) {
+    fprintf(stderr, "\n");
+    fprintf(stderr, "┌─ Details ────────────────────────────────────────────────────┐\n");
+
+    /* Show tool name */
+    fprintf(stderr, "│  Tool: %-53s │\n", tool_call->name ? tool_call->name : "unknown");
+    fprintf(stderr, "│                                                              │\n");
+
+    /* Show full arguments */
+    fprintf(stderr, "│  Full arguments:                                             │\n");
+    if (tool_call->arguments != NULL) {
+        /* Pretty print JSON if possible */
+        cJSON *json = cJSON_Parse(tool_call->arguments);
+        if (json != NULL) {
+            char *pretty = cJSON_Print(json);
+            if (pretty != NULL) {
+                /* Print each line with proper formatting */
+                char *line = strtok(pretty, "\n");
+                while (line != NULL) {
+                    fprintf(stderr, "│    %-56s │\n", line);
+                    line = strtok(NULL, "\n");
+                }
+                free(pretty);
+            }
+            cJSON_Delete(json);
+        } else {
+            fprintf(stderr, "│    %-56s │\n", tool_call->arguments);
+        }
+    } else {
+        fprintf(stderr, "│    (none)                                                    │\n");
+    }
+
+    /* Show resolved path if available */
+    if (path != NULL && path->resolved_path != NULL) {
+        fprintf(stderr, "│                                                              │\n");
+        fprintf(stderr, "│  Resolved path:                                              │\n");
+        /* Truncate path if too long */
+        char path_display[57];
+        size_t path_len = strlen(path->resolved_path);
+        if (path_len <= 54) {
+            snprintf(path_display, sizeof(path_display), "%s", path->resolved_path);
+        } else {
+            snprintf(path_display, sizeof(path_display), "...%s",
+                     path->resolved_path + path_len - 51);
+        }
+        fprintf(stderr, "│    %-56s │\n", path_display);
+
+        if (path->existed) {
+            fprintf(stderr, "│    (existing file)                                           │\n");
+        } else {
+            fprintf(stderr, "│    (new file)                                                │\n");
+        }
+    }
+
+    fprintf(stderr, "└──────────────────────────────────────────────────────────────┘\n");
+    fprintf(stderr, "\nPress any key to return to prompt...\n");
+
+    /* Wait for keypress */
+    read_single_keypress();
+}
+
 ApprovalResult approval_gate_prompt(ApprovalGateConfig *config,
                                     const ToolCall *tool_call,
                                     ApprovedPath *out_path) {
@@ -1188,20 +1384,50 @@ ApprovalResult approval_gate_prompt(ApprovalGateConfig *config,
         return APPROVAL_DENIED;
     }
 
+    /* Initialize out_path if provided */
+    if (out_path != NULL) {
+        memset(out_path, 0, sizeof(*out_path));
+    }
+
+    /* Extract display information based on tool type */
+    char *shell_command = extract_shell_command(tool_call);
+    char *file_path = extract_file_path(tool_call);
+    GateCategory category = get_tool_category(tool_call->name);
+
     /* Display the approval prompt */
     fprintf(stderr, "\n");
     fprintf(stderr, "┌─ Approval Required ──────────────────────────────────────────┐\n");
     fprintf(stderr, "│                                                              │\n");
     fprintf(stderr, "│  Tool: %-53s │\n", tool_call->name ? tool_call->name : "unknown");
 
-    /* Show abbreviated arguments */
-    if (tool_call->arguments != NULL) {
+    /* Show command for shell, path for file tools, or args for others */
+    if (shell_command != NULL) {
+        char cmd_display[54];
+        size_t cmd_len = strlen(shell_command);
+        if (cmd_len <= 50) {
+            snprintf(cmd_display, sizeof(cmd_display), "%s", shell_command);
+        } else {
+            snprintf(cmd_display, sizeof(cmd_display), "%.47s...", shell_command);
+        }
+        fprintf(stderr, "│  Command: %-50s │\n", cmd_display);
+    } else if (file_path != NULL && (category == GATE_CATEGORY_FILE_READ ||
+                                      category == GATE_CATEGORY_FILE_WRITE)) {
+        char path_display[54];
+        size_t path_len = strlen(file_path);
+        if (path_len <= 50) {
+            snprintf(path_display, sizeof(path_display), "%s", file_path);
+        } else {
+            /* Show end of path for long paths */
+            snprintf(path_display, sizeof(path_display), "...%s",
+                     file_path + path_len - 47);
+        }
+        fprintf(stderr, "│  Path: %-53s │\n", path_display);
+    } else if (tool_call->arguments != NULL) {
         char arg_display[54];
         size_t arg_len = strlen(tool_call->arguments);
         if (arg_len <= 50) {
             snprintf(arg_display, sizeof(arg_display), "%s", tool_call->arguments);
         } else {
-            /* Use snprintf for safe truncation with ellipsis */
             snprintf(arg_display, sizeof(arg_display), "%.47s...", tool_call->arguments);
         }
         fprintf(stderr, "│  Args: %-53s │\n", arg_display);
@@ -1212,24 +1438,26 @@ ApprovalResult approval_gate_prompt(ApprovalGateConfig *config,
     fprintf(stderr, "│                                                              │\n");
     fprintf(stderr, "└──────────────────────────────────────────────────────────────┘\n");
     fprintf(stderr, "> ");
+    fflush(stderr);
 
-    /* Read user input */
-    char response = 0;
-    ssize_t n = read(STDIN_FILENO, &response, 1);
-    if (n <= 0) {
+    /* Read single keypress in raw mode */
+    int response = read_single_keypress();
+    fprintf(stderr, "\n");  /* Echo newline after keypress */
+
+    /* Clean up extracted strings */
+    free(shell_command);
+    free(file_path);
+
+    /* Handle the response */
+    if (response < 0) {
+        /* Interrupted or error */
         return APPROVAL_ABORTED;
     }
 
-    /* Handle the response */
     switch (tolower(response)) {
         case 'y':
             /* Reset denial tracker on approval */
             reset_denial_tracker(config, tool_call->name);
-
-            /* Initialize out_path if provided (basic implementation) */
-            if (out_path != NULL) {
-                memset(out_path, 0, sizeof(*out_path));
-            }
             return APPROVAL_ALLOWED;
 
         case 'n':
@@ -1238,18 +1466,12 @@ ApprovalResult approval_gate_prompt(ApprovalGateConfig *config,
         case 'a':
             /* Allow always - reset tracker and return */
             reset_denial_tracker(config, tool_call->name);
-
             /* TODO: Generate pattern and add to allowlist */
-            /* For now, just allow this single operation */
-            if (out_path != NULL) {
-                memset(out_path, 0, sizeof(*out_path));
-            }
             return APPROVAL_ALLOWED_ALWAYS;
 
         case '?':
             /* Show details and re-prompt */
-            fprintf(stderr, "\nFull arguments:\n%s\n",
-                   tool_call->arguments ? tool_call->arguments : "(none)");
+            display_details_view(tool_call, out_path);
             return approval_gate_prompt(config, tool_call, out_path);
 
         case 3: /* Ctrl+C */
@@ -1257,8 +1479,9 @@ ApprovalResult approval_gate_prompt(ApprovalGateConfig *config,
             return APPROVAL_ABORTED;
 
         default:
-            /* Invalid input, deny */
-            return APPROVAL_DENIED;
+            /* Invalid input, re-prompt */
+            fprintf(stderr, "Invalid input. Press y, n, a, or ? for details.\n");
+            return approval_gate_prompt(config, tool_call, out_path);
     }
 }
 
