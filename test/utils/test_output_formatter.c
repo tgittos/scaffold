@@ -557,9 +557,10 @@ void test_search_files_display(void) {
         "{\"pattern\": \"import.*os\"}",
         true, "Found matches");
 
-    // search_files with long pattern should truncate appropriately
+    // search_files with long pattern should truncate with ellipsis
+    // Pattern exceeds ARG_DISPLAY_MAX_LEN-10, so it should be truncated to 37 chars + "..."
     log_tool_execution_improved("search_files",
-        "{\"path\": \"/some/path\", \"pattern\": \"this is a very long pattern that might need truncation for display\"}",
+        "{\"path\": \"src/\", \"pattern\": \"this_is_a_very_long_pattern_that_should_be_truncated\"}",
         true, "Found matches");
 
     TEST_ASSERT_TRUE(1);

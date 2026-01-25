@@ -646,7 +646,14 @@ static char* extract_arg_summary(const char *tool_name, const char *arguments) {
             const char *pattern_val = cJSON_GetStringValue(pattern);
             const char *path_val = path && cJSON_IsString(path) ? cJSON_GetStringValue(path) : ".";
             // Format: "path → pattern" to show both where and what
-            snprintf(summary, sizeof(summary), "%s → \"%s\"", path_val, pattern_val);
+            // Truncate pattern if too long (leave room for path, arrow, quotes, ellipsis)
+            size_t pattern_len = strlen(pattern_val);
+            if (pattern_len <= ARG_DISPLAY_MAX_LEN - 10) {
+                snprintf(summary, sizeof(summary), "%s → \"%s\"", path_val, pattern_val);
+            } else {
+                // Truncate pattern with ellipsis
+                snprintf(summary, sizeof(summary), "%s → \"%.37s...\"", path_val, pattern_val);
+            }
             cJSON_Delete(json);
             return strdup(summary);
         }
