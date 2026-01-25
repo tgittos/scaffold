@@ -1103,6 +1103,280 @@ void test_approval_gate_add_cli_allow_empty_tokens(void) {
 }
 
 /* =============================================================================
+ * Shell Command Allowlist Matching Tests
+ * ========================================================================== */
+
+void test_shell_allowlist_matches_simple_command(void) {
+    /* Add allowlist entry for "ls" */
+    const char *prefix[] = {"ls"};
+    approval_gate_add_shell_allowlist(&config, prefix, 1, SHELL_TYPE_UNKNOWN);
+
+    /* Create shell tool call with matching command */
+    ToolCall match_call = {
+        .id = "call_1",
+        .name = "shell",
+        .arguments = "{\"command\": \"ls\"}"
+    };
+
+    /* Should match the allowlist */
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &match_call));
+}
+
+void test_shell_allowlist_matches_command_with_args(void) {
+    /* Add allowlist entry for "ls" */
+    const char *prefix[] = {"ls"};
+    approval_gate_add_shell_allowlist(&config, prefix, 1, SHELL_TYPE_UNKNOWN);
+
+    /* Create shell tool call with matching command and extra args */
+    ToolCall match_call = {
+        .id = "call_1",
+        .name = "shell",
+        .arguments = "{\"command\": \"ls -la /tmp\"}"
+    };
+
+    /* Should match - allowlist prefix is a subset */
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &match_call));
+}
+
+void test_shell_allowlist_matches_two_token_prefix(void) {
+    /* Add allowlist entry for "git status" */
+    const char *prefix[] = {"git", "status"};
+    approval_gate_add_shell_allowlist(&config, prefix, 2, SHELL_TYPE_UNKNOWN);
+
+    /* Create shell tool call with matching command */
+    ToolCall match_call = {
+        .id = "call_1",
+        .name = "shell",
+        .arguments = "{\"command\": \"git status\"}"
+    };
+
+    ToolCall match_with_args = {
+        .id = "call_2",
+        .name = "shell",
+        .arguments = "{\"command\": \"git status -s\"}"
+    };
+
+    ToolCall no_match = {
+        .id = "call_3",
+        .name = "shell",
+        .arguments = "{\"command\": \"git log\"}"
+    };
+
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &match_call));
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &match_with_args));
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &no_match));
+}
+
+void test_shell_allowlist_rejects_chained_commands(void) {
+    /* Add allowlist entry for "ls" */
+    const char *prefix[] = {"ls"};
+    approval_gate_add_shell_allowlist(&config, prefix, 1, SHELL_TYPE_UNKNOWN);
+
+    /* Commands with chains should NEVER match, even if prefix matches */
+    ToolCall chained_semicolon = {
+        .id = "call_1",
+        .name = "shell",
+        .arguments = "{\"command\": \"ls; rm -rf /\"}"
+    };
+
+    ToolCall chained_and = {
+        .id = "call_2",
+        .name = "shell",
+        .arguments = "{\"command\": \"ls && rm -rf /\"}"
+    };
+
+    ToolCall chained_or = {
+        .id = "call_3",
+        .name = "shell",
+        .arguments = "{\"command\": \"ls || rm -rf /\"}"
+    };
+
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &chained_semicolon));
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &chained_and));
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &chained_or));
+}
+
+void test_shell_allowlist_rejects_piped_commands(void) {
+    /* Add allowlist entry for "cat" */
+    const char *prefix[] = {"cat"};
+    approval_gate_add_shell_allowlist(&config, prefix, 1, SHELL_TYPE_UNKNOWN);
+
+    /* Commands with pipes should NEVER match */
+    ToolCall piped = {
+        .id = "call_1",
+        .name = "shell",
+        .arguments = "{\"command\": \"cat /etc/passwd | grep root\"}"
+    };
+
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &piped));
+}
+
+void test_shell_allowlist_rejects_subshell_commands(void) {
+    /* Add allowlist entry for "echo" */
+    const char *prefix[] = {"echo"};
+    approval_gate_add_shell_allowlist(&config, prefix, 1, SHELL_TYPE_UNKNOWN);
+
+    /* Commands with subshells should NEVER match */
+    ToolCall subshell_dollar = {
+        .id = "call_1",
+        .name = "shell",
+        .arguments = "{\"command\": \"echo $(cat /etc/passwd)\"}"
+    };
+
+    ToolCall subshell_backtick = {
+        .id = "call_2",
+        .name = "shell",
+        .arguments = "{\"command\": \"echo `cat /etc/passwd`\"}"
+    };
+
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &subshell_dollar));
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &subshell_backtick));
+}
+
+void test_shell_allowlist_rejects_dangerous_commands(void) {
+    /* Add allowlist entry for "rm" */
+    const char *prefix[] = {"rm"};
+    approval_gate_add_shell_allowlist(&config, prefix, 1, SHELL_TYPE_UNKNOWN);
+
+    /* Dangerous commands should NEVER match, even if prefix matches */
+    ToolCall dangerous = {
+        .id = "call_1",
+        .name = "shell",
+        .arguments = "{\"command\": \"rm -rf /\"}"
+    };
+
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &dangerous));
+}
+
+void test_shell_allowlist_shell_type_specific(void) {
+    /* Add entry for "dir" only on cmd.exe */
+    const char *dir_prefix[] = {"dir"};
+    approval_gate_add_shell_allowlist(&config, dir_prefix, 1, SHELL_TYPE_CMD);
+
+    /* Add entry for "ls" only on POSIX */
+    const char *ls_prefix[] = {"ls"};
+    approval_gate_add_shell_allowlist(&config, ls_prefix, 1, SHELL_TYPE_POSIX);
+
+    ToolCall dir_call = {
+        .id = "call_1",
+        .name = "shell",
+        .arguments = "{\"command\": \"dir\"}"
+    };
+
+    ToolCall ls_call = {
+        .id = "call_2",
+        .name = "shell",
+        .arguments = "{\"command\": \"ls\"}"
+    };
+
+    /* On POSIX (current shell), "ls" should match but "dir" should not */
+    /* (unless cmd.exe shell_type matches the entry) */
+#ifndef _WIN32
+    /* On Linux, current shell is POSIX */
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &ls_call));
+    /* dir with CMD shell type should not match on POSIX */
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &dir_call));
+#endif
+}
+
+void test_shell_allowlist_shell_type_unknown_matches_any(void) {
+    /* Add entry for "git" with UNKNOWN shell type (matches any) */
+    const char *prefix[] = {"git", "status"};
+    approval_gate_add_shell_allowlist(&config, prefix, 2, SHELL_TYPE_UNKNOWN);
+
+    ToolCall call = {
+        .id = "call_1",
+        .name = "shell",
+        .arguments = "{\"command\": \"git status\"}"
+    };
+
+    /* SHELL_TYPE_UNKNOWN should match any shell type */
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &call));
+}
+
+void test_shell_allowlist_command_equivalence(void) {
+    /* Add entry for "ls" with UNKNOWN shell type */
+    const char *prefix[] = {"ls"};
+    approval_gate_add_shell_allowlist(&config, prefix, 1, SHELL_TYPE_UNKNOWN);
+
+    /* "dir" is equivalent to "ls" on cmd.exe */
+    ToolCall dir_call = {
+        .id = "call_1",
+        .name = "shell",
+        .arguments = "{\"command\": \"dir\"}"
+    };
+
+    /* This should match via command equivalence (ls <-> dir) */
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &dir_call));
+}
+
+void test_shell_allowlist_handles_missing_command_arg(void) {
+    const char *prefix[] = {"ls"};
+    approval_gate_add_shell_allowlist(&config, prefix, 1, SHELL_TYPE_UNKNOWN);
+
+    /* Tool call without command argument */
+    ToolCall no_command = {
+        .id = "call_1",
+        .name = "shell",
+        .arguments = "{\"cwd\": \"/tmp\"}"
+    };
+
+    /* Should not match (and should not crash) */
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &no_command));
+}
+
+void test_shell_allowlist_handles_null_arguments(void) {
+    const char *prefix[] = {"ls"};
+    approval_gate_add_shell_allowlist(&config, prefix, 1, SHELL_TYPE_UNKNOWN);
+
+    /* Tool call with NULL arguments */
+    ToolCall null_args = {
+        .id = "call_1",
+        .name = "shell",
+        .arguments = NULL
+    };
+
+    /* Should not match (and should not crash) */
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &null_args));
+}
+
+void test_shell_allowlist_handles_malformed_json(void) {
+    const char *prefix[] = {"ls"};
+    approval_gate_add_shell_allowlist(&config, prefix, 1, SHELL_TYPE_UNKNOWN);
+
+    /* Tool call with malformed JSON */
+    ToolCall bad_json = {
+        .id = "call_1",
+        .name = "shell",
+        .arguments = "{invalid json}"
+    };
+
+    /* Should not match (and should not crash) */
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &bad_json));
+}
+
+void test_shell_allowlist_multiple_entries(void) {
+    /* Add multiple allowlist entries */
+    const char *ls_prefix[] = {"ls"};
+    const char *git_status_prefix[] = {"git", "status"};
+    const char *git_log_prefix[] = {"git", "log"};
+
+    approval_gate_add_shell_allowlist(&config, ls_prefix, 1, SHELL_TYPE_UNKNOWN);
+    approval_gate_add_shell_allowlist(&config, git_status_prefix, 2, SHELL_TYPE_UNKNOWN);
+    approval_gate_add_shell_allowlist(&config, git_log_prefix, 2, SHELL_TYPE_UNKNOWN);
+
+    ToolCall ls_call = {.id = "1", .name = "shell", .arguments = "{\"command\": \"ls\"}"};
+    ToolCall git_status_call = {.id = "2", .name = "shell", .arguments = "{\"command\": \"git status\"}"};
+    ToolCall git_log_call = {.id = "3", .name = "shell", .arguments = "{\"command\": \"git log\"}"};
+    ToolCall git_push_call = {.id = "4", .name = "shell", .arguments = "{\"command\": \"git push\"}"};
+
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &ls_call));
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &git_status_call));
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &git_log_call));
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &git_push_call));
+}
+
+/* =============================================================================
  * Main
  * ========================================================================== */
 
@@ -1195,6 +1469,22 @@ int main(void) {
     RUN_TEST(test_approval_gate_add_cli_allow_regex_pattern);
     RUN_TEST(test_approval_gate_add_cli_allow_invalid_format);
     RUN_TEST(test_approval_gate_add_cli_allow_empty_tokens);
+
+    /* Shell command allowlist matching tests */
+    RUN_TEST(test_shell_allowlist_matches_simple_command);
+    RUN_TEST(test_shell_allowlist_matches_command_with_args);
+    RUN_TEST(test_shell_allowlist_matches_two_token_prefix);
+    RUN_TEST(test_shell_allowlist_rejects_chained_commands);
+    RUN_TEST(test_shell_allowlist_rejects_piped_commands);
+    RUN_TEST(test_shell_allowlist_rejects_subshell_commands);
+    RUN_TEST(test_shell_allowlist_rejects_dangerous_commands);
+    RUN_TEST(test_shell_allowlist_shell_type_specific);
+    RUN_TEST(test_shell_allowlist_shell_type_unknown_matches_any);
+    RUN_TEST(test_shell_allowlist_command_equivalence);
+    RUN_TEST(test_shell_allowlist_handles_missing_command_arg);
+    RUN_TEST(test_shell_allowlist_handles_null_arguments);
+    RUN_TEST(test_shell_allowlist_handles_malformed_json);
+    RUN_TEST(test_shell_allowlist_multiple_entries);
 
     return UNITY_END();
 }

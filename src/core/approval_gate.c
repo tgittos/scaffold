@@ -1053,6 +1053,126 @@ static int match_regex_allowlist(const ApprovalGateConfig *config,
     return 0;
 }
 
+/**
+ * Match a shell command against the shell allowlist.
+ *
+ * Shell commands use parsed command prefix matching rather than regex.
+ * This function:
+ * 1. Extracts the "command" field from the tool call arguments JSON
+ * 2. Parses the command using the shell parser
+ * 3. Checks against each shell allowlist entry
+ * 4. Handles shell-type-specific entries and command equivalence
+ *
+ * Commands with chain operators, pipes, subshells, or dangerous patterns
+ * NEVER match the allowlist.
+ */
+static int match_shell_command_allowlist(const ApprovalGateConfig *config,
+                                         const ToolCall *tool_call) {
+    if (config == NULL || tool_call == NULL) {
+        return 0;
+    }
+
+    /* No shell allowlist entries to check */
+    if (config->shell_allowlist_count == 0 || config->shell_allowlist == NULL) {
+        return 0;
+    }
+
+    /* Extract the command from arguments JSON */
+    if (tool_call->arguments == NULL) {
+        return 0;
+    }
+
+    cJSON *args = cJSON_Parse(tool_call->arguments);
+    if (args == NULL) {
+        return 0;
+    }
+
+    cJSON *command_item = cJSON_GetObjectItem(args, "command");
+    if (!cJSON_IsString(command_item) || command_item->valuestring == NULL) {
+        cJSON_Delete(args);
+        return 0;
+    }
+
+    const char *command_str = command_item->valuestring;
+
+    /* Parse the shell command */
+    ParsedShellCommand *parsed = parse_shell_command(command_str);
+    if (parsed == NULL) {
+        cJSON_Delete(args);
+        return 0;
+    }
+
+    /* Commands with chain operators, pipes, subshells, or dangerous patterns
+     * NEVER match the allowlist */
+    if (!shell_command_is_safe_for_matching(parsed)) {
+        free_parsed_shell_command(parsed);
+        cJSON_Delete(args);
+        return 0;
+    }
+
+    /* Get the base command for equivalence checking */
+    const char *base_cmd = shell_command_get_base(parsed);
+    if (base_cmd == NULL) {
+        free_parsed_shell_command(parsed);
+        cJSON_Delete(args);
+        return 0;
+    }
+
+    /* Check against each shell allowlist entry */
+    int matched = 0;
+    for (int i = 0; i < config->shell_allowlist_count && !matched; i++) {
+        const ShellAllowEntry *entry = &config->shell_allowlist[i];
+
+        if (entry->prefix_len <= 0 || entry->command_prefix == NULL) {
+            continue;
+        }
+
+        /* Check shell type compatibility */
+        if (entry->shell_type != SHELL_TYPE_UNKNOWN) {
+            /* Entry is for a specific shell type */
+            if (entry->shell_type != parsed->shell_type) {
+                continue;  /* Shell types don't match */
+            }
+        }
+
+        /* First, try direct prefix matching */
+        if (shell_command_matches_prefix(parsed,
+                                         (const char * const *)entry->command_prefix,
+                                         entry->prefix_len)) {
+            matched = 1;
+            break;
+        }
+
+        /* If entry has SHELL_TYPE_UNKNOWN (any shell), try command equivalence
+         * for the base command only */
+        if (entry->shell_type == SHELL_TYPE_UNKNOWN && entry->prefix_len >= 1) {
+            if (commands_are_equivalent(entry->command_prefix[0], base_cmd,
+                                        entry->shell_type, parsed->shell_type)) {
+                /* Base command is equivalent - check if rest of prefix matches */
+                if (entry->prefix_len == 1) {
+                    /* Single-token entry, base command equivalence is enough */
+                    matched = 1;
+                } else if (parsed->token_count >= entry->prefix_len) {
+                    /* Multi-token entry: first token matches via equivalence,
+                     * check remaining tokens for exact match */
+                    int prefix_match = 1;
+                    for (int j = 1; j < entry->prefix_len; j++) {
+                        if (strcmp(parsed->tokens[j], entry->command_prefix[j]) != 0) {
+                            prefix_match = 0;
+                            break;
+                        }
+                    }
+                    matched = prefix_match;
+                }
+            }
+        }
+    }
+
+    free_parsed_shell_command(parsed);
+    cJSON_Delete(args);
+    return matched;
+}
+
 int approval_gate_matches_allowlist(const ApprovalGateConfig *config,
                                     const ToolCall *tool_call) {
     if (config == NULL || tool_call == NULL || tool_call->name == NULL) {
@@ -1061,12 +1181,9 @@ int approval_gate_matches_allowlist(const ApprovalGateConfig *config,
 
     GateCategory category = get_tool_category(tool_call->name);
 
-    /* Shell commands use parsed command matching (not implemented here yet) */
-    /* For now, we only support regex matching for non-shell tools */
+    /* Shell commands use parsed command prefix matching */
     if (category == GATE_CATEGORY_SHELL) {
-        /* TODO: Implement shell command prefix matching using shell_parser.h */
-        /* For now, don't match any shell commands */
-        return 0;
+        return match_shell_command_allowlist(config, tool_call);
     }
 
     /* For other tools, extract the match target based on Match: directive */

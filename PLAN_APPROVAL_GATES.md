@@ -72,13 +72,13 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 ## Allowlist Matching
 
-- [ ] **Implement shell command allowlist matching** - Shell allowlist entries use parsed command prefix matching, not regex. Entry `["git", "status"]` matches `git status`, `git status -s`, but NOT `git status; rm -rf /`. Commands with chain operators never match allowlist. See spec section "Shell Command Matching > Allowlist Entry Format".
+- [x] **Implement shell command allowlist matching** - Shell allowlist entries use parsed command prefix matching, not regex. Entry `["git", "status"]` matches `git status`, `git status -s`, but NOT `git status; rm -rf /`. Commands with chain operators never match allowlist. See spec section "Shell Command Matching > Allowlist Entry Format".
 
-- [ ] **Implement regex allowlist matching for non-shell tools** - Compile regex patterns at config load time. Match against tool's match target (path argument for file tools, query for memory tools, etc.). See spec section "Allowlist Pattern Syntax".
+- [x] **Implement regex allowlist matching for non-shell tools** - Compile regex patterns at config load time. Match against tool's match target (path argument for file tools, query for memory tools, etc.). See spec section "Allowlist Pattern Syntax".
 
-- [ ] **Implement shell-type-specific allowlist entries** - Allowlist entries can optionally specify `"shell": "posix"`, `"shell": "cmd"`, or `"shell": "powershell"`. When specified, entry only matches that shell type. When omitted, matches any shell. See spec section "Cross-Platform Shell Parsing > Allowlist Matching Per Shell".
+- [x] **Implement shell-type-specific allowlist entries** - Allowlist entries can optionally specify `"shell": "posix"`, `"shell": "cmd"`, or `"shell": "powershell"`. When specified, entry only matches that shell type. When omitted, matches any shell. See spec section "Cross-Platform Shell Parsing > Allowlist Matching Per Shell".
 
-- [ ] **Implement command equivalence matching** - Recognize cross-platform equivalents: `ls`↔`dir`↔`Get-ChildItem`, `cat`↔`type`↔`Get-Content`, etc. When allowlist contains one, match the equivalent on other platforms. See spec section "Cross-Platform Shell Parsing > Safe Command Equivalents".
+- [x] **Implement command equivalence matching** - Recognize cross-platform equivalents: `ls`↔`dir`↔`Get-ChildItem`, `cat`↔`type`↔`Get-Content`, etc. When allowlist contains one, match the equivalent on other platforms. See spec section "Cross-Platform Shell Parsing > Safe Command Equivalents".
 
 ---
 
