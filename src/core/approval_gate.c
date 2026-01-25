@@ -2085,38 +2085,7 @@ ApprovalResult check_approval_gate_batch(ApprovalGateConfig *config,
  * Subagent Approval Proxy
  * ========================================================================== */
 
-ApprovalResult subagent_request_approval(const ApprovalChannel *channel,
-                                         const ToolCall *tool_call,
-                                         ApprovedPath *out_path) {
-    /* TODO: Implement IPC-based approval proxying */
-    /* For now, subagents without a channel deny all gated operations */
-    (void)channel;
-    (void)tool_call;
-    (void)out_path;
-    return APPROVAL_DENIED;
-}
-
-void handle_subagent_approval_request(ApprovalGateConfig *config,
-                                      ApprovalChannel *channel) {
-    /* TODO: Implement parent-side approval request handling */
-    (void)config;
-    (void)channel;
-}
-
-void free_approval_channel(ApprovalChannel *channel) {
-    if (channel == NULL) {
-        return;
-    }
-
-    if (channel->request_fd >= 0) {
-        close(channel->request_fd);
-    }
-    if (channel->response_fd >= 0) {
-        close(channel->response_fd);
-    }
-
-    free(channel);
-}
+/* Full implementations are in subagent_approval.c */
 
 /* =============================================================================
  * Error Formatting
