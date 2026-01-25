@@ -14,6 +14,8 @@
 #include "../tools/tools_system.h"
 /* Include shell_parser.h for ShellType, detect_shell_type(), and shell parsing */
 #include "shell_parser.h"
+/* Include atomic_file.h for ApprovedPath and VerifyResult (TOCTOU protection) */
+#include "atomic_file.h"
 
 /**
  * Approval Gates Module
@@ -72,22 +74,7 @@ typedef enum {
 } ApprovalResult;
 
 /* ShellType is defined in shell_parser.h */
-
-/**
- * Result codes from path verification operations.
- */
-typedef enum {
-    VERIFY_OK,                  /* Path verified successfully */
-    VERIFY_ERR_SYMLINK,         /* Path is a symlink (O_NOFOLLOW) */
-    VERIFY_ERR_DELETED,         /* File was deleted after approval */
-    VERIFY_ERR_OPEN,            /* Failed to open file */
-    VERIFY_ERR_STAT,            /* Failed to stat file */
-    VERIFY_ERR_INODE_MISMATCH,  /* Inode/device changed since approval */
-    VERIFY_ERR_PARENT,          /* Cannot open parent directory */
-    VERIFY_ERR_PARENT_CHANGED,  /* Parent directory inode changed */
-    VERIFY_ERR_ALREADY_EXISTS,  /* File exists when creating new file */
-    VERIFY_ERR_CREATE           /* Failed to create new file */
-} VerifyResult;
+/* VerifyResult is defined in atomic_file.h */
 
 /**
  * Shell-specific allowlist entry.
@@ -151,32 +138,7 @@ typedef struct {
     char *pattern;          /* If ALLOWED_ALWAYS, the generated pattern */
 } ApprovalResponse;
 
-/**
- * Approved path with TOCTOU protection data.
- * Captures filesystem state at approval time for verification at execution.
- */
-typedef struct {
-    char *user_path;        /* Original path from tool call */
-    char *resolved_path;    /* Canonical path at approval time */
-
-    /* For existing files */
-    ino_t inode;            /* Inode at approval (0 if new file) */
-    dev_t device;           /* Device at approval */
-
-    /* For new files - parent directory verification */
-    ino_t parent_inode;     /* Parent directory inode */
-    dev_t parent_device;    /* Parent directory device */
-    char *parent_path;      /* Resolved parent path */
-
-    int existed;            /* File existed at approval time */
-    int is_network_fs;      /* Detected as NFS/CIFS/etc */
-
-#ifdef _WIN32
-    DWORD volume_serial;    /* Windows volume serial number */
-    DWORD index_high;       /* Windows file index (high) */
-    DWORD index_low;        /* Windows file index (low) */
-#endif
-} ApprovedPath;
+/* ApprovedPath is defined in atomic_file.h */
 
 /**
  * Main approval gate configuration.
@@ -386,33 +348,8 @@ int get_rate_limit_remaining(const ApprovalGateConfig *config,
  * Path Verification (TOCTOU Protection)
  * ========================================================================== */
 
-/**
- * Verify that an approved path hasn't changed since approval.
- *
- * @param approved The approved path data
- * @return VERIFY_OK on success, or specific error code
- */
-VerifyResult verify_approved_path(const ApprovedPath *approved);
-
-/**
- * Verify and open an approved path atomically.
- * Opens file with O_NOFOLLOW and verifies inode matches approval.
- *
- * @param approved The approved path data
- * @param flags Open flags (O_RDONLY, O_WRONLY, etc.)
- * @param out_fd Output: file descriptor on success
- * @return VERIFY_OK on success, or specific error code
- */
-VerifyResult verify_and_open_approved_path(const ApprovedPath *approved,
-                                           int flags,
-                                           int *out_fd);
-
-/**
- * Free resources held by an ApprovedPath.
- *
- * @param path The path to free
- */
-void free_approved_path(ApprovedPath *path);
+/* Path verification functions (verify_approved_path, verify_and_open_approved_path,
+   free_approved_path) are defined in atomic_file.h */
 
 /* ============================================================================
  * Subagent Approval Proxy
@@ -476,14 +413,7 @@ char *format_denial_error(const ToolCall *tool_call);
  */
 char *format_protected_file_error(const char *path);
 
-/**
- * Format a path verification error message as JSON.
- *
- * @param result The verification result
- * @param path The path that failed verification
- * @return Allocated JSON error string. Caller must free.
- */
-char *format_verify_error(VerifyResult result, const char *path);
+/* format_verify_error is defined in atomic_file.h */
 
 /* ============================================================================
  * Utility Functions
@@ -513,13 +443,7 @@ const char *gate_action_name(GateAction action);
  */
 const char *approval_result_name(ApprovalResult result);
 
-/**
- * Get verify result error message.
- *
- * @param result The verification result
- * @return Static string message
- */
-const char *verify_result_message(VerifyResult result);
+/* verify_result_message is defined in atomic_file.h */
 
 /* ============================================================================
  * CLI Override Functions

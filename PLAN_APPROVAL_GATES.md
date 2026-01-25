@@ -88,7 +88,7 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 - [x] **Create `src/core/atomic_file.c`** - Implement atomic file operations using `O_NOFOLLOW`, `O_EXCL`, `openat()`, and `fstat()` verification. For existing files: open with `O_NOFOLLOW`, verify inode/device match approval. For new files: verify parent directory inode, create with `O_EXCL`. See spec section "Path Resolution and TOCTOU Protection > Atomic File Operations".
 
-- [ ] **Implement `verify_and_open_approved_path()`** - Unified function that handles both existing and new file verification, returns file descriptor on success. See spec section "Path Resolution and TOCTOU Protection > Verification Flow".
+- [x] **Implement `verify_and_open_approved_path()`** - Unified function that handles both existing and new file verification, returns file descriptor on success. See spec section "Path Resolution and TOCTOU Protection > Verification Flow".
 
 - [ ] **Windows atomic file operations** - Use `CreateFileW` with `FILE_FLAG_OPEN_REPARSE_POINT` to detect symlinks/junctions. Use `CREATE_NEW` for `O_EXCL` equivalent. Check `FILE_ATTRIBUTE_REPARSE_POINT` in file attributes. See spec section "Path Resolution and TOCTOU Protection > Platform-Specific Considerations > Windows".
 
