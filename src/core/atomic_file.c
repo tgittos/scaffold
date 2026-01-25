@@ -31,6 +31,9 @@
 #include <io.h>
 #include <shlwapi.h>
 #define PATH_SEP '\\'
+/* Maximum path length for Windows long paths */
+#define WIN_LONG_PATH_PREFIX L"\\\\?\\"
+#define WIN_LONG_PATH_PREFIX_LEN 4
 #else
 #define PATH_SEP '/'
 #endif
@@ -57,6 +60,66 @@ static const char *NETWORK_FS_TYPES[] = {
     "fuse.rclone",
     NULL
 };
+#endif
+
+#ifdef _WIN32
+/* ============================================================================
+ * Windows Helper Functions
+ * ========================================================================== */
+
+/**
+ * Convert a path to a wide string for Windows API functions.
+ * Prepends long path prefix (\\?\) for paths > 260 chars.
+ *
+ * @param path UTF-8 encoded path
+ * @return Wide string path, caller must free with free()
+ */
+static wchar_t *path_to_wide(const char *path) {
+    if (!path) return NULL;
+
+    /* Calculate required buffer size */
+    int len = MultiByteToWideChar(CP_UTF8, 0, path, -1, NULL, 0);
+    if (len == 0) return NULL;
+
+    /* Check if we need long path prefix */
+    int need_prefix = (strlen(path) >= MAX_PATH);
+    int prefix_len = need_prefix ? WIN_LONG_PATH_PREFIX_LEN : 0;
+
+    wchar_t *wide = malloc((prefix_len + len) * sizeof(wchar_t));
+    if (!wide) return NULL;
+
+    if (need_prefix) {
+        wcscpy(wide, WIN_LONG_PATH_PREFIX);
+    }
+
+    if (MultiByteToWideChar(CP_UTF8, 0, path, -1, wide + prefix_len, len) == 0) {
+        free(wide);
+        return NULL;
+    }
+
+    return wide;
+}
+
+/**
+ * Determine Windows access flags from POSIX open flags.
+ * O_RDONLY is 0, so we check for write flags first.
+ *
+ * @param flags POSIX open flags (O_RDONLY, O_WRONLY, O_RDWR)
+ * @return Windows access flags (GENERIC_READ, GENERIC_WRITE, etc.)
+ */
+static DWORD flags_to_access(int flags) {
+    int access_mode = flags & (O_RDONLY | O_WRONLY | O_RDWR);
+
+    switch (access_mode) {
+        case O_WRONLY:
+            return GENERIC_WRITE;
+        case O_RDWR:
+            return GENERIC_READ | GENERIC_WRITE;
+        case O_RDONLY:
+        default:
+            return GENERIC_READ;
+    }
+}
 #endif
 
 /* ============================================================================
@@ -240,30 +303,74 @@ char *atomic_file_resolve_path(const char *path, int must_exist) {
     }
 
 #ifdef _WIN32
-    /* Windows: Use GetFullPathName */
-    char resolved[MAX_PATH];
-    DWORD len = GetFullPathNameA(path, MAX_PATH, resolved, NULL);
-    if (len == 0 || len >= MAX_PATH) {
+    /* Windows: Use GetFullPathNameW for Unicode and long path support */
+    wchar_t *wide_path = path_to_wide(path);
+    if (!wide_path) {
+        return NULL;
+    }
+
+    /* Get required buffer size */
+    DWORD len = GetFullPathNameW(wide_path, 0, NULL, NULL);
+    if (len == 0) {
+        free(wide_path);
         if (!must_exist) {
             /* For new files, resolve parent and append basename */
             char *parent = atomic_file_dirname(path);
             if (!parent) return NULL;
 
-            char parent_resolved[MAX_PATH];
-            len = GetFullPathNameA(parent, MAX_PATH, parent_resolved, NULL);
+            char *parent_resolved = atomic_file_resolve_path(parent, 1);
             free(parent);
-            if (len == 0 || len >= MAX_PATH) return NULL;
+            if (!parent_resolved) return NULL;
 
             const char *base = atomic_file_basename(path);
             size_t total = strlen(parent_resolved) + strlen(base) + 2;
             char *result = malloc(total);
-            if (!result) return NULL;
+            if (!result) {
+                free(parent_resolved);
+                return NULL;
+            }
             snprintf(result, total, "%s\\%s", parent_resolved, base);
+            free(parent_resolved);
             return result;
         }
         return NULL;
     }
-    return strdup(resolved);
+
+    wchar_t *wide_resolved = malloc(len * sizeof(wchar_t));
+    if (!wide_resolved) {
+        free(wide_path);
+        return NULL;
+    }
+
+    DWORD actual = GetFullPathNameW(wide_path, len, wide_resolved, NULL);
+    free(wide_path);
+
+    if (actual == 0 || actual >= len) {
+        free(wide_resolved);
+        return NULL;
+    }
+
+    /* Convert back to UTF-8 */
+    int utf8_len = WideCharToMultiByte(CP_UTF8, 0, wide_resolved, -1, NULL, 0, NULL, NULL);
+    if (utf8_len == 0) {
+        free(wide_resolved);
+        return NULL;
+    }
+
+    char *result = malloc(utf8_len);
+    if (!result) {
+        free(wide_resolved);
+        return NULL;
+    }
+
+    if (WideCharToMultiByte(CP_UTF8, 0, wide_resolved, -1, result, utf8_len, NULL, NULL) == 0) {
+        free(wide_resolved);
+        free(result);
+        return NULL;
+    }
+
+    free(wide_resolved);
+    return result;
 #else
     /* POSIX: Use realpath for existing files */
     if (must_exist) {
@@ -356,33 +463,33 @@ int is_network_filesystem(const char *path) {
     return is_network;
 
 #elif defined(_WIN32)
-    /* Windows: Check drive type */
-    char root[4];
+    /* Windows: Check drive type using wide path API */
+    wchar_t root[4] = {0};
     if (path[0] && path[1] == ':') {
-        root[0] = path[0];
-        root[1] = ':';
-        root[2] = '\\';
-        root[3] = '\0';
+        root[0] = (wchar_t)path[0];
+        root[1] = L':';
+        root[2] = L'\\';
+        root[3] = L'\0';
     } else if (path[0] == '\\' && path[1] == '\\') {
         /* UNC path - always network */
         return 1;
     } else {
         /* Relative path - check current drive */
-        DWORD len = GetCurrentDirectoryA(0, NULL);
+        DWORD len = GetCurrentDirectoryW(0, NULL);
         if (len == 0) return 0;
-        char *cwd = malloc(len);
+        wchar_t *cwd = malloc(len * sizeof(wchar_t));
         if (!cwd) return 0;
-        GetCurrentDirectoryA(len, cwd);
-        if (cwd[1] == ':') {
+        GetCurrentDirectoryW(len, cwd);
+        if (cwd[1] == L':') {
             root[0] = cwd[0];
-            root[1] = ':';
-            root[2] = '\\';
-            root[3] = '\0';
+            root[1] = L':';
+            root[2] = L'\\';
+            root[3] = L'\0';
         }
         free(cwd);
     }
 
-    UINT drive_type = GetDriveTypeA(root);
+    UINT drive_type = GetDriveTypeW(root);
     return (drive_type == DRIVE_REMOTE);
 
 #else
@@ -449,24 +556,28 @@ VerifyResult capture_approved_path(const char *path, ApprovedPath *out) {
         }
 
 #ifdef _WIN32
-        /* Get Windows file identity */
-        HANDLE h = CreateFileA(
-            path,
-            0,
-            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-            NULL,
-            OPEN_EXISTING,
-            FILE_FLAG_BACKUP_SEMANTICS,
-            NULL
-        );
-        if (h != INVALID_HANDLE_VALUE) {
-            BY_HANDLE_FILE_INFORMATION info;
-            if (GetFileInformationByHandle(h, &info)) {
-                out->volume_serial = info.dwVolumeSerialNumber;
-                out->index_high = info.nFileIndexHigh;
-                out->index_low = info.nFileIndexLow;
+        /* Get Windows file identity using wide path API */
+        wchar_t *wide_path = path_to_wide(path);
+        if (wide_path) {
+            HANDLE h = CreateFileW(
+                wide_path,
+                0,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                NULL,
+                OPEN_EXISTING,
+                FILE_FLAG_BACKUP_SEMANTICS,
+                NULL
+            );
+            if (h != INVALID_HANDLE_VALUE) {
+                BY_HANDLE_FILE_INFORMATION info;
+                if (GetFileInformationByHandle(h, &info)) {
+                    out->volume_serial = info.dwVolumeSerialNumber;
+                    out->index_high = info.nFileIndexHigh;
+                    out->index_low = info.nFileIndexLow;
+                }
+                CloseHandle(h);
             }
-            CloseHandle(h);
+            free(wide_path);
         }
 #endif
     } else {
@@ -497,24 +608,28 @@ VerifyResult capture_approved_path(const char *path, ApprovedPath *out) {
         }
 
 #ifdef _WIN32
-        /* Get Windows parent directory identity */
-        HANDLE h = CreateFileA(
-            out->parent_path,
-            0,
-            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-            NULL,
-            OPEN_EXISTING,
-            FILE_FLAG_BACKUP_SEMANTICS,
-            NULL
-        );
-        if (h != INVALID_HANDLE_VALUE) {
-            BY_HANDLE_FILE_INFORMATION info;
-            if (GetFileInformationByHandle(h, &info)) {
-                out->parent_volume_serial = info.dwVolumeSerialNumber;
-                out->parent_index_high = info.nFileIndexHigh;
-                out->parent_index_low = info.nFileIndexLow;
+        /* Get Windows parent directory identity using wide path API */
+        wchar_t *wide_parent = path_to_wide(out->parent_path);
+        if (wide_parent) {
+            HANDLE h = CreateFileW(
+                wide_parent,
+                0,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                NULL,
+                OPEN_EXISTING,
+                FILE_FLAG_BACKUP_SEMANTICS,
+                NULL
+            );
+            if (h != INVALID_HANDLE_VALUE) {
+                BY_HANDLE_FILE_INFORMATION info;
+                if (GetFileInformationByHandle(h, &info)) {
+                    out->parent_volume_serial = info.dwVolumeSerialNumber;
+                    out->parent_index_high = info.nFileIndexHigh;
+                    out->parent_index_low = info.nFileIndexLow;
+                }
+                CloseHandle(h);
             }
-            CloseHandle(h);
+            free(wide_parent);
         }
 #endif
     }
@@ -550,9 +665,14 @@ VerifyResult verify_approved_path(const ApprovedPath *approved) {
         }
 
 #ifdef _WIN32
-        /* Also verify Windows file identity */
-        HANDLE h = CreateFileA(
-            approved->resolved_path,
+        /* Also verify Windows file identity using wide path API */
+        wchar_t *wide_path = path_to_wide(approved->resolved_path);
+        if (!wide_path) {
+            return VERIFY_ERR_RESOLVE;
+        }
+
+        HANDLE h = CreateFileW(
+            wide_path,
             0,
             FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
             NULL,
@@ -560,6 +680,8 @@ VerifyResult verify_approved_path(const ApprovedPath *approved) {
             FILE_FLAG_BACKUP_SEMANTICS,
             NULL
         );
+        free(wide_path);
+
         if (h == INVALID_HANDLE_VALUE) {
             return VERIFY_ERR_OPEN;
         }
@@ -594,9 +716,14 @@ VerifyResult verify_approved_path(const ApprovedPath *approved) {
         }
 
 #ifdef _WIN32
-        /* Also verify Windows parent identity */
-        HANDLE h = CreateFileA(
-            approved->parent_path,
+        /* Also verify Windows parent identity using wide path API */
+        wchar_t *wide_parent = path_to_wide(approved->parent_path);
+        if (!wide_parent) {
+            return VERIFY_ERR_RESOLVE;
+        }
+
+        HANDLE h = CreateFileW(
+            wide_parent,
             0,
             FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
             NULL,
@@ -604,6 +731,8 @@ VerifyResult verify_approved_path(const ApprovedPath *approved) {
             FILE_FLAG_BACKUP_SEMANTICS,
             NULL
         );
+        free(wide_parent);
+
         if (h == INVALID_HANDLE_VALUE) {
             return VERIFY_ERR_PARENT;
         }
@@ -647,16 +776,17 @@ VerifyResult verify_and_open_approved_path(const ApprovedPath *approved,
                                                        : approved->resolved_path;
 
 #ifdef _WIN32
-        /* Windows: Use CreateFile with FILE_FLAG_OPEN_REPARSE_POINT */
-        DWORD access = 0;
-        if (flags & O_RDONLY) access = GENERIC_READ;
-        if (flags & O_WRONLY) access = GENERIC_WRITE;
-        if (flags & O_RDWR) access = GENERIC_READ | GENERIC_WRITE;
+        /* Windows: Use CreateFileW with FILE_FLAG_OPEN_REPARSE_POINT */
+        wchar_t *wide_path = path_to_wide(path_to_open);
+        if (!wide_path) {
+            return VERIFY_ERR_RESOLVE;
+        }
 
+        DWORD access = flags_to_access(flags);
         DWORD creation = OPEN_EXISTING;
 
-        HANDLE h = CreateFileA(
-            path_to_open,
+        HANDLE h = CreateFileW(
+            wide_path,
             access,
             FILE_SHARE_READ | FILE_SHARE_WRITE,
             NULL,
@@ -664,6 +794,7 @@ VerifyResult verify_and_open_approved_path(const ApprovedPath *approved,
             FILE_FLAG_OPEN_REPARSE_POINT,
             NULL
         );
+        free(wide_path);
 
         if (h == INVALID_HANDLE_VALUE) {
             DWORD err = GetLastError();
@@ -748,9 +879,14 @@ VerifyResult open_verified_parent(const ApprovedPath *approved, int *out_fd) {
     *out_fd = -1;
 
 #ifdef _WIN32
-    /* Windows: Open directory with backup semantics */
-    HANDLE h = CreateFileA(
-        approved->parent_path,
+    /* Windows: Open directory with backup semantics using wide path API */
+    wchar_t *wide_parent = path_to_wide(approved->parent_path);
+    if (!wide_parent) {
+        return VERIFY_ERR_RESOLVE;
+    }
+
+    HANDLE h = CreateFileW(
+        wide_parent,
         GENERIC_READ,
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
         NULL,
@@ -758,6 +894,7 @@ VerifyResult open_verified_parent(const ApprovedPath *approved, int *out_fd) {
         FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
         NULL
     );
+    free(wide_parent);
 
     if (h == INVALID_HANDLE_VALUE) {
         return VERIFY_ERR_PARENT;
@@ -842,11 +979,16 @@ VerifyResult create_file_in_verified_parent(const ApprovedPath *approved,
     }
 
 #ifdef _WIN32
-    /* Windows: Need to construct full path and use CreateFile */
+    /* Windows: Need to construct full path and use CreateFileW */
     close(parent_fd); /* We verified parent, now use full path */
 
-    HANDLE h = CreateFileA(
-        approved->resolved_path,
+    wchar_t *wide_path = path_to_wide(approved->resolved_path);
+    if (!wide_path) {
+        return VERIFY_ERR_RESOLVE;
+    }
+
+    HANDLE h = CreateFileW(
+        wide_path,
         GENERIC_WRITE,
         0,
         NULL,
@@ -854,6 +996,7 @@ VerifyResult create_file_in_verified_parent(const ApprovedPath *approved,
         FILE_FLAG_OPEN_REPARSE_POINT,
         NULL
     );
+    free(wide_path);
 
     if (h == INVALID_HANDLE_VALUE) {
         DWORD err = GetLastError();

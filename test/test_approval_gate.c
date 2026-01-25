@@ -515,10 +515,12 @@ void test_approval_result_name(void) {
 
 void test_verify_result_message(void) {
     TEST_ASSERT_EQUAL_STRING("Path verified successfully", verify_result_message(VERIFY_OK));
-    TEST_ASSERT_EQUAL_STRING("Path is a symbolic link", verify_result_message(VERIFY_ERR_SYMLINK));
+    /* atomic_file.c uses more descriptive message for symlinks */
+    TEST_ASSERT_EQUAL_STRING("Path is a symlink (not allowed for security)", verify_result_message(VERIFY_ERR_SYMLINK));
     TEST_ASSERT_EQUAL_STRING("File was deleted after approval", verify_result_message(VERIFY_ERR_DELETED));
     TEST_ASSERT_EQUAL_STRING("Failed to open file", verify_result_message(VERIFY_ERR_OPEN));
-    TEST_ASSERT_EQUAL_STRING("File changed since approval", verify_result_message(VERIFY_ERR_INODE_MISMATCH));
+    /* atomic_file.c uses more descriptive message for inode mismatch */
+    TEST_ASSERT_EQUAL_STRING("File changed since approval (inode mismatch)", verify_result_message(VERIFY_ERR_INODE_MISMATCH));
 }
 
 /* =============================================================================
@@ -570,8 +572,9 @@ void test_format_rate_limit_error(void) {
 void test_format_verify_error(void) {
     char *error = format_verify_error(VERIFY_ERR_SYMLINK, "/path/to/file");
     TEST_ASSERT_NOT_NULL(error);
-    TEST_ASSERT_TRUE(strstr(error, "path_changed") != NULL);
-    TEST_ASSERT_TRUE(strstr(error, "symbolic link") != NULL);
+    /* atomic_file.c uses "symlink_rejected" error type for symlink errors */
+    TEST_ASSERT_TRUE(strstr(error, "symlink") != NULL);
+    TEST_ASSERT_TRUE(strstr(error, "/path/to/file") != NULL);
     free(error);
 }
 
@@ -592,7 +595,8 @@ void test_verify_approved_path_null_path(void) {
     path.resolved_path = NULL;
 
     VerifyResult result = verify_approved_path(&path);
-    TEST_ASSERT_EQUAL(VERIFY_ERR_OPEN, result);
+    /* atomic_file.c returns VERIFY_ERR_INVALID_PATH for NULL/invalid paths */
+    TEST_ASSERT_EQUAL(VERIFY_ERR_INVALID_PATH, result);
 }
 
 /* =============================================================================

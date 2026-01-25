@@ -90,9 +90,9 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 - [x] **Implement `verify_and_open_approved_path()`** - Unified function that handles both existing and new file verification, returns file descriptor on success. See spec section "Path Resolution and TOCTOU Protection > Verification Flow".
 
-- [ ] **Windows atomic file operations** - Use `CreateFileW` with `FILE_FLAG_OPEN_REPARSE_POINT` to detect symlinks/junctions. Use `CREATE_NEW` for `O_EXCL` equivalent. Check `FILE_ATTRIBUTE_REPARSE_POINT` in file attributes. See spec section "Path Resolution and TOCTOU Protection > Platform-Specific Considerations > Windows".
+- [x] **Windows atomic file operations** - Use `CreateFileW` with `FILE_FLAG_OPEN_REPARSE_POINT` to detect symlinks/junctions. Use `CREATE_NEW` for `O_EXCL` equivalent. Check `FILE_ATTRIBUTE_REPARSE_POINT` in file attributes. See spec section "Path Resolution and TOCTOU Protection > Platform-Specific Considerations > Windows".
 
-- [ ] **Network filesystem detection** - Detect NFS/CIFS/SMB mounts by checking `/proc/mounts` on Linux, `GetVolumeInformation()` on Windows. Set `is_network_fs` flag in `ApprovedPath`. Optionally warn user about unreliable verification. See spec section "Path Resolution and TOCTOU Protection > Platform-Specific Considerations > Network Filesystems".
+- [x] **Network filesystem detection** - Detect NFS/CIFS/SMB mounts by checking `/proc/mounts` on Linux, `GetVolumeInformation()` on Windows. Set `is_network_fs` flag in `ApprovedPath`. Optionally warn user about unreliable verification. See spec section "Path Resolution and TOCTOU Protection > Platform-Specific Considerations > Network Filesystems".
 
 ---
 

@@ -120,31 +120,7 @@ static const char *strcasestr_local(const char *haystack, const char *needle) {
 }
 #endif /* _WIN32 */
 
-#ifdef __linux__
-/**
- * Get the last path component (basename), handling both / and \ separators.
- */
-static const char *get_path_basename(const char *path) {
-    if (!path) {
-        return NULL;
-    }
-
-    const char *last_slash = strrchr(path, '/');
-    const char *last_backslash = strrchr(path, '\\');
-
-    /* Use whichever separator appears last */
-    const char *sep = NULL;
-    if (last_slash && last_backslash) {
-        sep = (last_slash > last_backslash) ? last_slash : last_backslash;
-    } else if (last_slash) {
-        sep = last_slash;
-    } else if (last_backslash) {
-        sep = last_backslash;
-    }
-
-    return sep ? sep + 1 : path;
-}
-#endif /* __linux__ */
+/* get_path_basename() was removed - use atomic_file_basename() from atomic_file.h */
 
 /* =============================================================================
  * Constants and Static Data
@@ -190,19 +166,7 @@ static const char *RESULT_NAMES[] = {
     [APPROVAL_RATE_LIMITED]   = "rate_limited"
 };
 
-/* Verify result messages */
-static const char *VERIFY_MESSAGES[] = {
-    [VERIFY_OK]                 = "Path verified successfully",
-    [VERIFY_ERR_SYMLINK]        = "Path is a symbolic link",
-    [VERIFY_ERR_DELETED]        = "File was deleted after approval",
-    [VERIFY_ERR_OPEN]           = "Failed to open file",
-    [VERIFY_ERR_STAT]           = "Failed to stat file",
-    [VERIFY_ERR_INODE_MISMATCH] = "File changed since approval",
-    [VERIFY_ERR_PARENT]         = "Cannot open parent directory",
-    [VERIFY_ERR_PARENT_CHANGED] = "Parent directory changed since approval",
-    [VERIFY_ERR_ALREADY_EXISTS] = "File already exists",
-    [VERIFY_ERR_CREATE]         = "Failed to create file"
-};
+/* Note: verify_result_message() and VerifyResult messages are in atomic_file.c */
 
 /* Rate limiting backoff schedule (in seconds) */
 static const int BACKOFF_SCHEDULE[] = {
@@ -481,12 +445,7 @@ const char *approval_result_name(ApprovalResult result) {
     return "unknown";
 }
 
-const char *verify_result_message(VerifyResult result) {
-    if (result >= VERIFY_OK && result <= VERIFY_ERR_CREATE) {
-        return VERIFY_MESSAGES[result];
-    }
-    return "Unknown verification error";
-}
+/* verify_result_message() is implemented in atomic_file.c */
 
 /* =============================================================================
  * Initialization and Cleanup
@@ -1361,167 +1320,8 @@ ApprovalResult check_approval_gate(ApprovalGateConfig *config,
     }
 }
 
-/* =============================================================================
- * Path Verification (TOCTOU Protection)
- * ========================================================================== */
-
-VerifyResult verify_approved_path(const ApprovedPath *approved) {
-    if (approved == NULL || approved->resolved_path == NULL) {
-        return VERIFY_ERR_OPEN;
-    }
-
-    struct stat st;
-
-    if (approved->existed) {
-        /* Existing file: verify inode/device match */
-        if (stat(approved->resolved_path, &st) != 0) {
-            if (errno == ENOENT) {
-                return VERIFY_ERR_DELETED;
-            }
-            return VERIFY_ERR_STAT;
-        }
-
-        if (st.st_ino != approved->inode || st.st_dev != approved->device) {
-            return VERIFY_ERR_INODE_MISMATCH;
-        }
-    } else {
-        /* New file: verify parent directory */
-        if (approved->parent_path == NULL) {
-            return VERIFY_ERR_PARENT;
-        }
-
-        if (stat(approved->parent_path, &st) != 0) {
-            return VERIFY_ERR_PARENT;
-        }
-
-        if (st.st_ino != approved->parent_inode ||
-            st.st_dev != approved->parent_device) {
-            return VERIFY_ERR_PARENT_CHANGED;
-        }
-
-        /* Check if file was created in the meantime */
-        if (stat(approved->resolved_path, &st) == 0) {
-            return VERIFY_ERR_ALREADY_EXISTS;
-        }
-    }
-
-    return VERIFY_OK;
-}
-
-VerifyResult verify_and_open_approved_path(const ApprovedPath *approved,
-                                           int flags,
-                                           int *out_fd) {
-    if (approved == NULL || out_fd == NULL) {
-        return VERIFY_ERR_OPEN;
-    }
-
-    *out_fd = -1;
-
-    if (approved->resolved_path == NULL) {
-        return VERIFY_ERR_OPEN;
-    }
-
-    struct stat st;
-
-    if (approved->existed) {
-        /* Existing file: open with O_NOFOLLOW */
-#ifdef O_NOFOLLOW
-        int fd = open(approved->resolved_path, flags | O_NOFOLLOW);
-#else
-        int fd = open(approved->resolved_path, flags);
-#endif
-        if (fd < 0) {
-            if (errno == ELOOP) {
-                return VERIFY_ERR_SYMLINK;
-            }
-            if (errno == ENOENT) {
-                return VERIFY_ERR_DELETED;
-            }
-            return VERIFY_ERR_OPEN;
-        }
-
-        /* Verify inode matches */
-        if (fstat(fd, &st) != 0) {
-            close(fd);
-            return VERIFY_ERR_STAT;
-        }
-
-        if (st.st_ino != approved->inode || st.st_dev != approved->device) {
-            close(fd);
-            return VERIFY_ERR_INODE_MISMATCH;
-        }
-
-        *out_fd = fd;
-        return VERIFY_OK;
-
-    } else {
-        /* New file: verify parent, create with O_EXCL */
-        if (approved->parent_path == NULL) {
-            return VERIFY_ERR_PARENT;
-        }
-
-#ifdef O_DIRECTORY
-        int parent_fd = open(approved->parent_path, O_RDONLY | O_DIRECTORY);
-#else
-        int parent_fd = open(approved->parent_path, O_RDONLY);
-#endif
-        if (parent_fd < 0) {
-            return VERIFY_ERR_PARENT;
-        }
-
-        /* Verify parent inode */
-        if (fstat(parent_fd, &st) != 0 ||
-            st.st_ino != approved->parent_inode ||
-            st.st_dev != approved->parent_device) {
-            close(parent_fd);
-            return VERIFY_ERR_PARENT_CHANGED;
-        }
-
-        /* Create file with O_EXCL */
-#ifdef O_NOFOLLOW
-        int create_flags = flags | O_CREAT | O_EXCL | O_NOFOLLOW;
-#else
-        int create_flags = flags | O_CREAT | O_EXCL;
-#endif
-
-        int fd;
-#ifdef __linux__
-        /* Extract basename (handles both / and \ path separators) */
-        const char *basename = get_path_basename(approved->user_path);
-        fd = openat(parent_fd, basename, create_flags, 0644);
-#else
-        /* Fallback for systems without openat */
-        fd = open(approved->resolved_path, create_flags, 0644);
-#endif
-
-        /* Always close parent_fd after file creation attempt */
-        close(parent_fd);
-
-        if (fd < 0) {
-            if (errno == EEXIST) {
-                return VERIFY_ERR_ALREADY_EXISTS;
-            }
-            return VERIFY_ERR_CREATE;
-        }
-
-        *out_fd = fd;
-        return VERIFY_OK;
-    }
-}
-
-void free_approved_path(ApprovedPath *path) {
-    if (path == NULL) {
-        return;
-    }
-
-    free(path->user_path);
-    free(path->resolved_path);
-    free(path->parent_path);
-
-    path->user_path = NULL;
-    path->resolved_path = NULL;
-    path->parent_path = NULL;
-}
+/* Path verification functions (verify_approved_path, verify_and_open_approved_path,
+ * free_approved_path) are implemented in atomic_file.c */
 
 /* =============================================================================
  * Subagent Approval Proxy
@@ -1652,33 +1452,7 @@ char *format_protected_file_error(const char *path) {
     return error;
 }
 
-char *format_verify_error(VerifyResult result, const char *path) {
-    if (path == NULL) {
-        path = "unknown";
-    }
-
-    const char *message = verify_result_message(result);
-
-    /* Escape path for JSON (message is from static strings, no escaping needed) */
-    char *escaped_path = json_escape_string_simple(path);
-    if (escaped_path == NULL) {
-        return NULL;
-    }
-
-    char *error = NULL;
-    int ret = asprintf(&error,
-                       "{\"error\": \"path_changed\", "
-                       "\"message\": \"%s\", "
-                       "\"path\": \"%s\"}",
-                       message, escaped_path);
-
-    free(escaped_path);
-
-    if (ret < 0) {
-        return NULL;
-    }
-    return error;
-}
+/* format_verify_error() is implemented in atomic_file.c */
 
 /* =============================================================================
  * CLI Override Functions
