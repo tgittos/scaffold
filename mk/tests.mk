@@ -36,6 +36,8 @@ $(eval $(call def_test,prompt,utils/test_prompt_loader,$(SRCDIR)/utils/prompt_lo
 $(eval $(call def_test,todo_manager,tools/test_todo_manager,$(SRCDIR)/tools/todo_manager.c))
 $(eval $(call def_test,document_chunker,test_document_chunker,$(SRCDIR)/utils/document_chunker.c $(SRCDIR)/utils/common_utils.c))
 $(eval $(call def_test,streaming,network/test_streaming,$(SRCDIR)/network/streaming.c))
+$(eval $(call def_test,darray,test_darray,))
+$(eval $(call def_test,ptrarray,test_ptrarray,))
 
 $(TEST_main_TARGET): $(TEST_main_OBJECTS)
 	$(CC) -o $@ $^
@@ -53,6 +55,12 @@ $(TEST_document_chunker_TARGET): $(TEST_document_chunker_OBJECTS)
 	$(CC) -o $@ $^
 
 $(TEST_streaming_TARGET): $(TEST_streaming_OBJECTS)
+	$(CC) -o $@ $^
+
+$(TEST_darray_TARGET): $(TEST_darray_OBJECTS)
+	$(CC) -o $@ $^
+
+$(TEST_ptrarray_TARGET): $(TEST_ptrarray_OBJECTS)
 	$(CC) -o $@ $^
 
 # =============================================================================
@@ -226,7 +234,8 @@ $(TEST_document_store_TARGET): $(TEST_document_store_OBJECTS) $(ALL_LIBS)
 # =============================================================================
 
 TEST_EXECUTION_ORDER := \
-    $(TEST_main_TARGET) $(TEST_http_TARGET) $(TEST_http_retry_TARGET) \
+    $(TEST_main_TARGET) $(TEST_darray_TARGET) $(TEST_ptrarray_TARGET) \
+    $(TEST_http_TARGET) $(TEST_http_retry_TARGET) \
     $(TEST_streaming_TARGET) $(TEST_openai_streaming_TARGET) $(TEST_anthropic_streaming_TARGET) \
     $(TEST_env_TARGET) $(TEST_output_TARGET) $(TEST_prompt_TARGET) $(TEST_debug_output_TARGET) \
     $(TEST_conversation_TARGET) $(TEST_conversation_vdb_TARGET) $(TEST_tools_TARGET) \
@@ -253,7 +262,8 @@ check: test
 
 # Excluded: HTTP (network), Python (embedded stdlib), subagent (fork/exec)
 VALGRIND_TESTS := \
-    $(TEST_main_TARGET) $(TEST_http_retry_TARGET) $(TEST_streaming_TARGET) \
+    $(TEST_main_TARGET) $(TEST_darray_TARGET) $(TEST_ptrarray_TARGET) \
+    $(TEST_http_retry_TARGET) $(TEST_streaming_TARGET) \
     $(TEST_openai_streaming_TARGET) $(TEST_anthropic_streaming_TARGET) $(TEST_env_TARGET) \
     $(TEST_output_TARGET) $(TEST_prompt_TARGET) $(TEST_conversation_TARGET) \
     $(TEST_conversation_vdb_TARGET) $(TEST_tools_TARGET) $(TEST_ralph_TARGET) \
