@@ -1547,6 +1547,537 @@ ApprovalResult check_approval_gate(ApprovalGateConfig *config,
     }
 }
 
+/* =============================================================================
+ * Batch Approval
+ * ========================================================================== */
+
+int init_batch_result(ApprovalBatchResult *batch, int count) {
+    if (batch == NULL || count <= 0) {
+        return -1;
+    }
+
+    memset(batch, 0, sizeof(*batch));
+
+    batch->results = calloc(count, sizeof(ApprovalResult));
+    if (batch->results == NULL) {
+        return -1;
+    }
+
+    batch->paths = calloc(count, sizeof(ApprovedPath));
+    if (batch->paths == NULL) {
+        free(batch->results);
+        batch->results = NULL;
+        return -1;
+    }
+
+    batch->count = count;
+
+    /* Initialize all results to DENIED (safe default) */
+    for (int i = 0; i < count; i++) {
+        batch->results[i] = APPROVAL_DENIED;
+        memset(&batch->paths[i], 0, sizeof(ApprovedPath));
+    }
+
+    return 0;
+}
+
+void free_batch_result(ApprovalBatchResult *batch) {
+    if (batch == NULL) {
+        return;
+    }
+
+    /* Free each approved path */
+    if (batch->paths != NULL) {
+        for (int i = 0; i < batch->count; i++) {
+            free_approved_path(&batch->paths[i]);
+        }
+        free(batch->paths);
+        batch->paths = NULL;
+    }
+
+    free(batch->results);
+    batch->results = NULL;
+    batch->count = 0;
+}
+
+/**
+ * Format a summary line for a tool call (for batch display).
+ * Returns allocated string that must be freed.
+ */
+static char *format_tool_summary(const ToolCall *tool_call) {
+    if (tool_call == NULL || tool_call->name == NULL) {
+        return strdup("unknown");
+    }
+
+    char *summary = NULL;
+    GateCategory category = get_tool_category(tool_call->name);
+
+    /* Extract relevant info based on category */
+    if (category == GATE_CATEGORY_SHELL) {
+        char *cmd = extract_shell_command(tool_call);
+        if (cmd != NULL) {
+            /* Truncate long commands */
+            if (strlen(cmd) > 40) {
+                cmd[37] = '.';
+                cmd[38] = '.';
+                cmd[39] = '.';
+                cmd[40] = '\0';
+            }
+            if (asprintf(&summary, "%s: %s", tool_call->name, cmd) < 0) {
+                summary = NULL;
+            }
+            free(cmd);
+        }
+    } else if (category == GATE_CATEGORY_FILE_READ ||
+               category == GATE_CATEGORY_FILE_WRITE) {
+        char *path = extract_file_path(tool_call);
+        if (path != NULL) {
+            /* Truncate long paths */
+            if (strlen(path) > 40) {
+                /* Show end of path */
+                char *truncated = path + strlen(path) - 37;
+                if (asprintf(&summary, "%s: ...%s", tool_call->name, truncated) < 0) {
+                    summary = NULL;
+                }
+            } else {
+                if (asprintf(&summary, "%s: %s", tool_call->name, path) < 0) {
+                    summary = NULL;
+                }
+            }
+            free(path);
+        }
+    }
+
+    /* Fallback to just tool name */
+    if (summary == NULL) {
+        summary = strdup(tool_call->name);
+    }
+
+    return summary;
+}
+
+/**
+ * Display batch approval prompt.
+ * Shows numbered list of operations.
+ */
+static void display_batch_prompt(const ToolCall *tool_calls, int count,
+                                 const ApprovalResult *current_results) {
+    fprintf(stderr, "\n");
+    fprintf(stderr, "┌─ Approval Required (%d operations) ", count);
+    /* Fill rest of header with dashes */
+    int header_used = 28 + (count >= 10 ? 2 : 1);
+    for (int i = header_used; i < 64; i++) {
+        fprintf(stderr, "─");
+    }
+    fprintf(stderr, "┐\n");
+    fprintf(stderr, "│                                                              │\n");
+
+    /* List each operation */
+    for (int i = 0; i < count; i++) {
+        char *summary = format_tool_summary(&tool_calls[i]);
+        char status_char = ' ';
+
+        /* Show status indicator if already processed */
+        if (current_results != NULL) {
+            switch (current_results[i]) {
+                case APPROVAL_ALLOWED:
+                case APPROVAL_ALLOWED_ALWAYS:
+                    status_char = '+';
+                    break;
+                case APPROVAL_DENIED:
+                    status_char = '-';
+                    break;
+                default:
+                    status_char = ' ';
+                    break;
+            }
+        }
+
+        /* Format: "│  1. [+] shell: ls -la                                         │" */
+        char line[64];
+        snprintf(line, sizeof(line), "%d. %s", i + 1, summary ? summary : "unknown");
+
+        /* Truncate if too long */
+        if (strlen(line) > 52) {
+            line[49] = '.';
+            line[50] = '.';
+            line[51] = '.';
+            line[52] = '\0';
+        }
+
+        if (status_char != ' ') {
+            fprintf(stderr, "│  [%c] %-54s │\n", status_char, line);
+        } else {
+            fprintf(stderr, "│  %-58s │\n", line);
+        }
+
+        free(summary);
+    }
+
+    fprintf(stderr, "│                                                              │\n");
+    if (count <= 9) {
+        fprintf(stderr, "│  [y] Allow all  [n] Deny all  [1-%d] Review individual       │\n", count);
+    } else {
+        fprintf(stderr, "│  [y] Allow all  [n] Deny all  [1-%d] Review individual      │\n", count);
+    }
+    fprintf(stderr, "│                                                              │\n");
+    fprintf(stderr, "└──────────────────────────────────────────────────────────────┘\n");
+    fprintf(stderr, "> ");
+    fflush(stderr);
+}
+
+/**
+ * Read a number from terminal input (for selecting operation 1-N).
+ * Returns the number read, or -1 on error/invalid input.
+ */
+static int read_operation_number(int first_digit, int max_value) {
+    /* For single digit max, just return the first digit */
+    if (max_value <= 9) {
+        int num = first_digit - '0';
+        if (num >= 1 && num <= max_value) {
+            return num;
+        }
+        return -1;
+    }
+
+    /* For multi-digit, need to read more characters */
+    char buf[16];
+    buf[0] = (char)first_digit;
+    int pos = 1;
+
+    /* Read until we get a non-digit or buffer full */
+    struct termios old_termios, new_termios;
+    int have_termios = 0;
+
+    if (tcgetattr(STDIN_FILENO, &old_termios) == 0) {
+        new_termios = old_termios;
+        new_termios.c_lflag &= ~(ICANON | ECHO);
+        new_termios.c_cc[VMIN] = 0;
+        new_termios.c_cc[VTIME] = 2; /* 200ms timeout */
+        if (tcsetattr(STDIN_FILENO, TCSANOW, &new_termios) == 0) {
+            have_termios = 1;
+        }
+    }
+
+    /* Read additional digits with timeout */
+    while (pos < 15) {
+        char c;
+        ssize_t n = read(STDIN_FILENO, &c, 1);
+        if (n <= 0) {
+            break; /* Timeout or error */
+        }
+        if (c >= '0' && c <= '9') {
+            buf[pos++] = c;
+        } else if (c == '\n' || c == '\r') {
+            break;
+        } else {
+            break;
+        }
+    }
+    buf[pos] = '\0';
+
+    if (have_termios) {
+        tcsetattr(STDIN_FILENO, TCSANOW, &old_termios);
+    }
+
+    /* Parse the number */
+    char *endptr;
+    long num = strtol(buf, &endptr, 10);
+    if (*endptr != '\0' || num < 1 || num > max_value) {
+        return -1;
+    }
+
+    return (int)num;
+}
+
+ApprovalResult approval_gate_prompt_batch(ApprovalGateConfig *config,
+                                          const ToolCall *tool_calls,
+                                          int count,
+                                          ApprovalBatchResult *out_batch) {
+    if (config == NULL || tool_calls == NULL || count <= 0 || out_batch == NULL) {
+        return APPROVAL_DENIED;
+    }
+
+    /* Check if we have a TTY available */
+    if (!isatty(STDIN_FILENO)) {
+        /* No TTY, default to deny for gated operations */
+        return APPROVAL_DENIED;
+    }
+
+    /* Initialize batch result */
+    if (init_batch_result(out_batch, count) != 0) {
+        return APPROVAL_DENIED;
+    }
+
+    /* Track which operations are pending */
+    int *pending = calloc(count, sizeof(int));
+    if (pending == NULL) {
+        free_batch_result(out_batch);
+        return APPROVAL_DENIED;
+    }
+
+    /* Initially all are pending */
+    int pending_count = count;
+    for (int i = 0; i < count; i++) {
+        pending[i] = 1;
+    }
+
+    /* Interactive batch prompt loop */
+    for (;;) {
+        /* Display batch prompt with current status */
+        display_batch_prompt(tool_calls, count,
+                             pending_count < count ? out_batch->results : NULL);
+
+        /* Read user input */
+        int response = read_single_keypress();
+        fprintf(stderr, "\n");
+
+        if (response < 0) {
+            /* Interrupted */
+            free(pending);
+            free_batch_result(out_batch);
+            return APPROVAL_ABORTED;
+        }
+
+        switch (tolower(response)) {
+            case 'y':
+                /* Allow all pending operations */
+                for (int i = 0; i < count; i++) {
+                    if (pending[i]) {
+                        out_batch->results[i] = APPROVAL_ALLOWED;
+                        reset_denial_tracker(config, tool_calls[i].name);
+                    }
+                }
+                free(pending);
+                return APPROVAL_ALLOWED;
+
+            case 'n':
+                /* Deny all pending operations */
+                for (int i = 0; i < count; i++) {
+                    if (pending[i]) {
+                        out_batch->results[i] = APPROVAL_DENIED;
+                    }
+                }
+                free(pending);
+                return APPROVAL_DENIED;
+
+            case '1': case '2': case '3': case '4': case '5':
+            case '6': case '7': case '8': case '9':
+                {
+                    /* Review individual operation */
+                    int op_num = read_operation_number(response, count);
+                    if (op_num < 1 || op_num > count) {
+                        fprintf(stderr, "Invalid operation number. Enter 1-%d.\n", count);
+                        continue;
+                    }
+
+                    int idx = op_num - 1;
+                    if (!pending[idx]) {
+                        fprintf(stderr, "Operation %d already processed.\n", op_num);
+                        continue;
+                    }
+
+                    /* Prompt for individual operation */
+                    ApprovalResult single_result = approval_gate_prompt(
+                        config, &tool_calls[idx], &out_batch->paths[idx]);
+
+                    if (single_result == APPROVAL_ABORTED) {
+                        free(pending);
+                        free_batch_result(out_batch);
+                        return APPROVAL_ABORTED;
+                    }
+
+                    out_batch->results[idx] = single_result;
+                    pending[idx] = 0;
+                    pending_count--;
+
+                    /* Check if all operations have been reviewed */
+                    if (pending_count == 0) {
+                        free(pending);
+                        /* Return overall status */
+                        int any_denied = 0;
+                        int all_always = 1;
+                        for (int i = 0; i < count; i++) {
+                            if (out_batch->results[i] == APPROVAL_DENIED) {
+                                any_denied = 1;
+                            }
+                            if (out_batch->results[i] != APPROVAL_ALLOWED_ALWAYS) {
+                                all_always = 0;
+                            }
+                        }
+                        if (any_denied) {
+                            return APPROVAL_DENIED;
+                        }
+                        if (all_always) {
+                            return APPROVAL_ALLOWED_ALWAYS;
+                        }
+                        return APPROVAL_ALLOWED;
+                    }
+
+                    /* Continue with remaining operations */
+                    continue;
+                }
+
+            case 3: /* Ctrl+C */
+            case 4: /* Ctrl+D */
+                free(pending);
+                free_batch_result(out_batch);
+                return APPROVAL_ABORTED;
+
+            default:
+                fprintf(stderr, "Invalid input. Press y, n, or 1-%d.\n", count);
+                continue;
+        }
+    }
+}
+
+ApprovalResult check_approval_gate_batch(ApprovalGateConfig *config,
+                                         const ToolCall *tool_calls,
+                                         int count,
+                                         ApprovalBatchResult *out_batch) {
+    if (config == NULL || tool_calls == NULL || count <= 0 || out_batch == NULL) {
+        return APPROVAL_DENIED;
+    }
+
+    /* Initialize batch result */
+    if (init_batch_result(out_batch, count) != 0) {
+        return APPROVAL_DENIED;
+    }
+
+    /* First pass: check which tool calls need approval */
+    int *needs_approval = calloc(count, sizeof(int));
+    int *needs_approval_indices = calloc(count, sizeof(int));
+    if (needs_approval == NULL || needs_approval_indices == NULL) {
+        free(needs_approval);
+        free(needs_approval_indices);
+        free_batch_result(out_batch);
+        return APPROVAL_DENIED;
+    }
+
+    int approval_count = 0;
+    int any_rate_limited = 0;
+    int any_denied = 0;
+
+    for (int i = 0; i < count; i++) {
+        /* Check rate limiting first */
+        if (is_rate_limited(config, &tool_calls[i])) {
+            out_batch->results[i] = APPROVAL_RATE_LIMITED;
+            any_rate_limited = 1;
+            continue;
+        }
+
+        /* Check if approval is required */
+        int check_result = approval_gate_requires_check(config, &tool_calls[i]);
+
+        switch (check_result) {
+            case 0:
+                /* Allowed without prompt */
+                out_batch->results[i] = APPROVAL_ALLOWED;
+                break;
+
+            case -1:
+                /* Denied by configuration */
+                out_batch->results[i] = APPROVAL_DENIED;
+                any_denied = 1;
+                break;
+
+            case 1:
+                /* Requires approval */
+                needs_approval[i] = 1;
+                needs_approval_indices[approval_count++] = i;
+                break;
+
+            default:
+                out_batch->results[i] = APPROVAL_DENIED;
+                any_denied = 1;
+                break;
+        }
+    }
+
+    /* If no approvals needed, return early */
+    if (approval_count == 0) {
+        free(needs_approval);
+        free(needs_approval_indices);
+        if (any_rate_limited) {
+            return APPROVAL_RATE_LIMITED;
+        }
+        if (any_denied) {
+            return APPROVAL_DENIED;
+        }
+        return APPROVAL_ALLOWED;
+    }
+
+    /* If only one approval needed, use single prompt */
+    if (approval_count == 1) {
+        int idx = needs_approval_indices[0];
+        ApprovalResult result = approval_gate_prompt(
+            config, &tool_calls[idx], &out_batch->paths[idx]);
+        out_batch->results[idx] = result;
+
+        free(needs_approval);
+        free(needs_approval_indices);
+
+        if (result == APPROVAL_ABORTED) {
+            return APPROVAL_ABORTED;
+        }
+        if (result == APPROVAL_DENIED || any_denied) {
+            return APPROVAL_DENIED;
+        }
+        if (any_rate_limited) {
+            return APPROVAL_RATE_LIMITED;
+        }
+        return result;
+    }
+
+    /* Build array of tool calls that need approval */
+    ToolCall *approval_calls = calloc(approval_count, sizeof(ToolCall));
+    if (approval_calls == NULL) {
+        free(needs_approval);
+        free(needs_approval_indices);
+        free_batch_result(out_batch);
+        return APPROVAL_DENIED;
+    }
+
+    for (int i = 0; i < approval_count; i++) {
+        int idx = needs_approval_indices[i];
+        approval_calls[i] = tool_calls[idx];
+    }
+
+    /* Create temporary batch for approval-needing calls */
+    ApprovalBatchResult temp_batch;
+    ApprovalResult batch_result = approval_gate_prompt_batch(
+        config, approval_calls, approval_count, &temp_batch);
+
+    /* Copy results back to out_batch */
+    for (int i = 0; i < approval_count; i++) {
+        int idx = needs_approval_indices[i];
+        out_batch->results[idx] = temp_batch.results[i];
+        /* Copy approved path */
+        out_batch->paths[idx] = temp_batch.paths[i];
+        /* Zero out temp to prevent double-free */
+        memset(&temp_batch.paths[i], 0, sizeof(ApprovedPath));
+    }
+
+    free_batch_result(&temp_batch);
+    free(approval_calls);
+    free(needs_approval);
+    free(needs_approval_indices);
+
+    if (batch_result == APPROVAL_ABORTED) {
+        return APPROVAL_ABORTED;
+    }
+
+    /* Determine overall status */
+    if (any_rate_limited) {
+        return APPROVAL_RATE_LIMITED;
+    }
+    if (any_denied || batch_result == APPROVAL_DENIED) {
+        return APPROVAL_DENIED;
+    }
+
+    return batch_result;
+}
+
 /* Path verification functions (verify_approved_path, verify_and_open_approved_path,
  * free_approved_path) are implemented in atomic_file.c */
 

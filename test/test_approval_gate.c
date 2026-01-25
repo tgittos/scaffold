@@ -1381,6 +1381,181 @@ void test_shell_allowlist_multiple_entries(void) {
 }
 
 /* =============================================================================
+ * Batch Approval Tests
+ * ========================================================================== */
+
+void test_init_batch_result_creates_valid_batch(void) {
+    ApprovalBatchResult batch;
+    int result = init_batch_result(&batch, 3);
+
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_EQUAL(3, batch.count);
+    TEST_ASSERT_NOT_NULL(batch.results);
+    TEST_ASSERT_NOT_NULL(batch.paths);
+
+    /* All results should be initialized to DENIED (safe default) */
+    for (int i = 0; i < 3; i++) {
+        TEST_ASSERT_EQUAL(APPROVAL_DENIED, batch.results[i]);
+    }
+
+    free_batch_result(&batch);
+}
+
+void test_init_batch_result_null_batch_returns_error(void) {
+    int result = init_batch_result(NULL, 3);
+    TEST_ASSERT_EQUAL(-1, result);
+}
+
+void test_init_batch_result_zero_count_returns_error(void) {
+    ApprovalBatchResult batch;
+    int result = init_batch_result(&batch, 0);
+    TEST_ASSERT_EQUAL(-1, result);
+}
+
+void test_init_batch_result_negative_count_returns_error(void) {
+    ApprovalBatchResult batch;
+    int result = init_batch_result(&batch, -1);
+    TEST_ASSERT_EQUAL(-1, result);
+}
+
+void test_free_batch_result_handles_null(void) {
+    /* Should not crash */
+    free_batch_result(NULL);
+}
+
+void test_free_batch_result_handles_empty(void) {
+    ApprovalBatchResult batch = {0};
+    /* Should not crash */
+    free_batch_result(&batch);
+}
+
+void test_check_approval_gate_batch_all_allowed_category(void) {
+    /* All tool calls are in allowed category (file_read) */
+    ToolCall calls[] = {
+        {.id = "1", .name = "read_file", .arguments = "{\"path\": \"a.txt\"}"},
+        {.id = "2", .name = "list_dir", .arguments = "{\"path\": \"/tmp\"}"},
+        {.id = "3", .name = "search_files", .arguments = "{\"pattern\": \"*.c\"}"}
+    };
+
+    ApprovalBatchResult batch;
+    ApprovalResult result = check_approval_gate_batch(&config, calls, 3, &batch);
+
+    TEST_ASSERT_EQUAL(APPROVAL_ALLOWED, result);
+    TEST_ASSERT_EQUAL(3, batch.count);
+
+    for (int i = 0; i < 3; i++) {
+        TEST_ASSERT_EQUAL(APPROVAL_ALLOWED, batch.results[i]);
+    }
+
+    free_batch_result(&batch);
+}
+
+void test_check_approval_gate_batch_mixed_categories_gates_disabled(void) {
+    /* Disable gates */
+    config.enabled = 0;
+
+    /* Mix of normally gated and allowed categories */
+    ToolCall calls[] = {
+        {.id = "1", .name = "shell", .arguments = "{\"command\": \"ls\"}"},       /* Normally gated */
+        {.id = "2", .name = "write_file", .arguments = "{\"path\": \"a.txt\"}"},  /* Normally gated */
+        {.id = "3", .name = "read_file", .arguments = "{\"path\": \"b.txt\"}"}    /* Normally allowed */
+    };
+
+    ApprovalBatchResult batch;
+    ApprovalResult result = check_approval_gate_batch(&config, calls, 3, &batch);
+
+    /* With gates disabled, all should be allowed without prompting */
+    TEST_ASSERT_EQUAL(APPROVAL_ALLOWED, result);
+
+    for (int i = 0; i < 3; i++) {
+        TEST_ASSERT_EQUAL(APPROVAL_ALLOWED, batch.results[i]);
+    }
+
+    free_batch_result(&batch);
+}
+
+void test_check_approval_gate_batch_denied_category(void) {
+    /* Set shell to deny */
+    config.categories[GATE_CATEGORY_SHELL] = GATE_ACTION_DENY;
+
+    ToolCall calls[] = {
+        {.id = "1", .name = "shell", .arguments = "{\"command\": \"ls\"}"},
+        {.id = "2", .name = "read_file", .arguments = "{\"path\": \"a.txt\"}"}
+    };
+
+    ApprovalBatchResult batch;
+    ApprovalResult result = check_approval_gate_batch(&config, calls, 2, &batch);
+
+    /* Overall result should be denied since one operation is denied */
+    TEST_ASSERT_EQUAL(APPROVAL_DENIED, result);
+
+    /* First should be denied, second should be allowed */
+    TEST_ASSERT_EQUAL(APPROVAL_DENIED, batch.results[0]);
+    TEST_ASSERT_EQUAL(APPROVAL_ALLOWED, batch.results[1]);
+
+    free_batch_result(&batch);
+}
+
+void test_check_approval_gate_batch_rate_limited(void) {
+    ToolCall shell_call = {.id = "1", .name = "shell", .arguments = "{\"command\": \"ls\"}"};
+
+    /* Build up rate limit */
+    track_denial(&config, &shell_call);
+    track_denial(&config, &shell_call);
+    track_denial(&config, &shell_call);
+
+    ToolCall calls[] = {
+        {.id = "1", .name = "shell", .arguments = "{\"command\": \"ls\"}"},
+        {.id = "2", .name = "read_file", .arguments = "{\"path\": \"a.txt\"}"}
+    };
+
+    ApprovalBatchResult batch;
+    ApprovalResult result = check_approval_gate_batch(&config, calls, 2, &batch);
+
+    /* Overall result should indicate rate limiting occurred */
+    TEST_ASSERT_EQUAL(APPROVAL_RATE_LIMITED, result);
+
+    /* First should be rate limited, second should be allowed */
+    TEST_ASSERT_EQUAL(APPROVAL_RATE_LIMITED, batch.results[0]);
+    TEST_ASSERT_EQUAL(APPROVAL_ALLOWED, batch.results[1]);
+
+    free_batch_result(&batch);
+}
+
+void test_check_approval_gate_batch_null_params(void) {
+    ToolCall calls[] = {
+        {.id = "1", .name = "read_file", .arguments = "{}"}
+    };
+    ApprovalBatchResult batch;
+
+    TEST_ASSERT_EQUAL(APPROVAL_DENIED, check_approval_gate_batch(NULL, calls, 1, &batch));
+    TEST_ASSERT_EQUAL(APPROVAL_DENIED, check_approval_gate_batch(&config, NULL, 1, &batch));
+    TEST_ASSERT_EQUAL(APPROVAL_DENIED, check_approval_gate_batch(&config, calls, 0, &batch));
+    TEST_ASSERT_EQUAL(APPROVAL_DENIED, check_approval_gate_batch(&config, calls, 1, NULL));
+}
+
+void test_check_approval_gate_batch_allowlist_bypass(void) {
+    /* Add shell command to allowlist */
+    const char *prefix[] = {"ls"};
+    approval_gate_add_shell_allowlist(&config, prefix, 1, SHELL_TYPE_UNKNOWN);
+
+    ToolCall calls[] = {
+        {.id = "1", .name = "shell", .arguments = "{\"command\": \"ls\"}"},    /* Matches allowlist */
+        {.id = "2", .name = "read_file", .arguments = "{\"path\": \"a.txt\"}"} /* Allowed category */
+    };
+
+    ApprovalBatchResult batch;
+    ApprovalResult result = check_approval_gate_batch(&config, calls, 2, &batch);
+
+    /* Both should be allowed (first via allowlist, second via category) */
+    TEST_ASSERT_EQUAL(APPROVAL_ALLOWED, result);
+    TEST_ASSERT_EQUAL(APPROVAL_ALLOWED, batch.results[0]);
+    TEST_ASSERT_EQUAL(APPROVAL_ALLOWED, batch.results[1]);
+
+    free_batch_result(&batch);
+}
+
+/* =============================================================================
  * Main
  * ========================================================================== */
 
@@ -1489,6 +1664,20 @@ int main(void) {
     RUN_TEST(test_shell_allowlist_handles_null_arguments);
     RUN_TEST(test_shell_allowlist_handles_malformed_json);
     RUN_TEST(test_shell_allowlist_multiple_entries);
+
+    /* Batch approval tests */
+    RUN_TEST(test_init_batch_result_creates_valid_batch);
+    RUN_TEST(test_init_batch_result_null_batch_returns_error);
+    RUN_TEST(test_init_batch_result_zero_count_returns_error);
+    RUN_TEST(test_init_batch_result_negative_count_returns_error);
+    RUN_TEST(test_free_batch_result_handles_null);
+    RUN_TEST(test_free_batch_result_handles_empty);
+    RUN_TEST(test_check_approval_gate_batch_all_allowed_category);
+    RUN_TEST(test_check_approval_gate_batch_mixed_categories_gates_disabled);
+    RUN_TEST(test_check_approval_gate_batch_denied_category);
+    RUN_TEST(test_check_approval_gate_batch_rate_limited);
+    RUN_TEST(test_check_approval_gate_batch_null_params);
+    RUN_TEST(test_check_approval_gate_batch_allowlist_bypass);
 
     return UNITY_END();
 }

@@ -263,6 +263,73 @@ ApprovalResult check_approval_gate(ApprovalGateConfig *config,
                                    ApprovedPath *out_path);
 
 /* ============================================================================
+ * Batch Approval
+ * ========================================================================== */
+
+/**
+ * Result structure for batch approval.
+ * Holds results for multiple tool calls processed together.
+ */
+typedef struct {
+    ApprovalResult *results;    /* Array of results, one per tool call */
+    ApprovedPath *paths;        /* Array of approved paths, one per tool call */
+    int count;                  /* Number of tool calls in the batch */
+} ApprovalBatchResult;
+
+/**
+ * Prompt user for batch approval of multiple tool calls.
+ * Displays a numbered list of operations and allows:
+ * - [y] Allow all operations
+ * - [n] Deny all operations
+ * - [1-N] Review an individual operation in detail
+ *
+ * @param config Gate configuration (may be modified if ALLOWED_ALWAYS)
+ * @param tool_calls Array of tool calls requiring approval
+ * @param count Number of tool calls in the array
+ * @param out_batch Output: batch result structure (caller must call free_batch_result)
+ * @return Overall batch status:
+ *         - APPROVAL_ALLOWED if all operations were allowed
+ *         - APPROVAL_DENIED if any operation was denied
+ *         - APPROVAL_ABORTED if user pressed Ctrl+C
+ *         - APPROVAL_ALLOWED_ALWAYS if all operations were allowed-always
+ */
+ApprovalResult approval_gate_prompt_batch(ApprovalGateConfig *config,
+                                          const ToolCall *tool_calls,
+                                          int count,
+                                          ApprovalBatchResult *out_batch);
+
+/**
+ * Check and prompt for batch approval of multiple tool calls.
+ * Filters out tool calls that don't require approval, then prompts for the rest.
+ *
+ * @param config Gate configuration
+ * @param tool_calls Array of tool calls to check
+ * @param count Number of tool calls in the array
+ * @param out_batch Output: batch result structure
+ * @return Overall batch status
+ */
+ApprovalResult check_approval_gate_batch(ApprovalGateConfig *config,
+                                         const ToolCall *tool_calls,
+                                         int count,
+                                         ApprovalBatchResult *out_batch);
+
+/**
+ * Initialize a batch result structure.
+ *
+ * @param batch The batch result to initialize
+ * @param count Number of tool calls in the batch
+ * @return 0 on success, -1 on allocation failure
+ */
+int init_batch_result(ApprovalBatchResult *batch, int count);
+
+/**
+ * Free resources held by a batch result structure.
+ *
+ * @param batch The batch result to clean up
+ */
+void free_batch_result(ApprovalBatchResult *batch);
+
+/* ============================================================================
  * Allowlist Management
  * ========================================================================== */
 

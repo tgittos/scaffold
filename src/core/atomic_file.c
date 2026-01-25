@@ -174,6 +174,11 @@ char *format_verify_error(VerifyResult result, const char *path) {
     const char *message = verify_result_message(result);
     const char *error_type;
 
+    /* Handle NULL path */
+    if (path == NULL) {
+        path = "";
+    }
+
     switch (result) {
         case VERIFY_ERR_SYMLINK:
             error_type = "symlink_rejected";
@@ -196,28 +201,39 @@ char *format_verify_error(VerifyResult result, const char *path) {
             break;
     }
 
-    /* Allocate buffer for JSON output */
-    size_t buf_size = strlen(message) + strlen(path) + strlen(error_type) + JSON_FORMAT_OVERHEAD;
-    char *buf = malloc(buf_size);
-    if (!buf) {
+    /* Calculate escaped path size: worst case every char needs escaping */
+    size_t path_len = strlen(path);
+    size_t escaped_size = path_len * 2 + 1;
+
+    /* Allocate escaped path buffer with calloc for zero-initialization */
+    char *escaped_path = calloc(escaped_size, 1);
+    if (!escaped_path) {
         return NULL;
     }
 
-    /* Escape path for JSON (simple escape of quotes and backslashes) */
-    char escaped_path[PATH_MAX * 2];
+    /* Escape path for JSON (escape quotes and backslashes) */
     size_t j = 0;
-    for (size_t i = 0; path[i] && j < sizeof(escaped_path) - 2; i++) {
+    for (size_t i = 0; i < path_len && j < escaped_size - 2; i++) {
         if (path[i] == '"' || path[i] == '\\') {
             escaped_path[j++] = '\\';
         }
         escaped_path[j++] = path[i];
     }
-    escaped_path[j] = '\0';
+    /* Already null-terminated by calloc */
+
+    /* Allocate buffer for JSON output */
+    size_t buf_size = strlen(message) + j + strlen(error_type) + JSON_FORMAT_OVERHEAD;
+    char *buf = malloc(buf_size);
+    if (!buf) {
+        free(escaped_path);
+        return NULL;
+    }
 
     snprintf(buf, buf_size,
              "{\"error\": \"%s\", \"message\": \"%s\", \"path\": \"%s\"}",
              error_type, message, escaped_path);
 
+    free(escaped_path);
     return buf;
 }
 

@@ -102,7 +102,7 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 - [x] **Implement details view** - When user presses `?`, display full arguments JSON and resolved paths. Return to prompt after display.
 
-- [ ] **Implement batch approval** - When multiple tool calls are pending, show numbered list of operations. Support `[y] Allow all`, `[n] Deny all`, `[1-N] Review individual`. See spec section "User Prompt Interface > Batch Approval".
+- [x] **Implement batch approval** - When multiple tool calls are pending, show numbered list of operations. Support `[y] Allow all`, `[n] Deny all`, `[1-N] Review individual`. See spec section "User Prompt Interface > Batch Approval".
 
 - [x] **Handle Ctrl+C in prompt** - Return `APPROVAL_ABORTED` to signal workflow should stop without executing. See spec section "User Prompt Interface > Options" table.
 
