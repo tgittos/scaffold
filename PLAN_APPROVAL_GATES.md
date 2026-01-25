@@ -62,7 +62,7 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 - [x] **Create `src/core/shell_parser.c`** - Implement POSIX shell parsing. Tokenize on unquoted whitespace, respect single and double quotes, detect metacharacters (`;`, `|`, `&`, `(`, `)`, `$`, backtick, `>`, `<`). Mark command as having chains/pipes/subshells if any metacharacter appears unquoted. See spec section "Shell Command Matching > Parser Security Requirements".
 
-- [ ] **Create `src/core/shell_parser_cmd.c`** - Implement cmd.exe parsing. Detect metacharacters (`&`, `|`, `<`, `>`, `^`, `%`). Only double quotes are string delimiters. Implement `in_double_quotes()` helper. See spec section "Cross-Platform Shell Parsing > cmd.exe Parsing Rules".
+- [x] **Create `src/core/shell_parser_cmd.c`** - Implement cmd.exe parsing. Detect metacharacters (`&`, `|`, `<`, `>`, `^`, `%`). Only double quotes are string delimiters. Implement `in_double_quotes()` helper. See spec section "Cross-Platform Shell Parsing > cmd.exe Parsing Rules".
 
 - [ ] **Create `src/core/shell_parser_ps.c`** - Implement PowerShell parsing. Detect all POSIX-like operators plus script blocks (`{}`), variables (`$var`), invoke operators (`&`, `.`). Implement `powershell_command_is_dangerous()` to check for dangerous cmdlets (`Invoke-Expression`, `Invoke-Command`, `Start-Process`, `-EncodedCommand`, `DownloadString`, etc.). Case-insensitive matching. See spec section "Cross-Platform Shell Parsing > PowerShell Parsing Rules".
 
@@ -194,7 +194,7 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 - [x] **Create `test/test_shell_parser.c`** - Test POSIX shell tokenization, quote handling, metacharacter detection, chain/pipe detection, dangerous pattern matching. Test edge cases: empty commands, only whitespace, unbalanced quotes.
 
-- [ ] **Create `test/test_shell_parser_cmd.c`** - Test cmd.exe parsing: `&` as separator, `%VAR%` detection, `^` escape, double-quote handling. Test dangerous patterns.
+- [x] **Create `test/test_shell_parser_cmd.c`** - Test cmd.exe parsing: `&` as separator, `%VAR%` detection, `^` escape, double-quote handling. Test dangerous patterns.
 
 - [ ] **Create `test/test_shell_parser_ps.c`** - Test PowerShell parsing: cmdlet detection (case-insensitive), `-EncodedCommand`, `$()` subexpressions, script blocks. Test all dangerous cmdlets from spec.
 

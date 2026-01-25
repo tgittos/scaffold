@@ -523,48 +523,12 @@ int parse_posix_shell(const char *command, ParsedShellCommand *result) {
 }
 
 /* ============================================================================
- * Windows cmd.exe Parsing (Placeholder)
+ * Windows cmd.exe Parsing
  *
- * NOTE: This is a conservative placeholder that falls back to POSIX-like
- * parsing with cmd-specific checks. Full cmd.exe parsing would require:
- * - Only double quotes as delimiters (single quotes are literal)
- * - Caret (^) as escape character
- * - Different metacharacter set (&, |, <, >, ^, %)
- * - Environment variable expansion (%VAR%)
- *
- * For now, we err on the side of caution by flagging anything that looks
- * potentially dangerous. This means some safe commands may require approval.
+ * The full implementation is in shell_parser_cmd.c
  * ========================================================================== */
 
-int parse_cmd_shell(const char *command, ParsedShellCommand *result) {
-    /* Fall back to POSIX-like parsing with cmd-specific checks */
-    if (parse_posix_shell(command, result) != 0) {
-        return -1;
-    }
-    result->shell_type = SHELL_TYPE_CMD;
-
-    if (!command) {
-        return 0;
-    }
-
-    /* cmd.exe uses & as unconditional command separator */
-    /* Re-scan for cmd-specific metacharacters */
-    if (strstr(command, "&")) {
-        result->has_chain = 1;
-    }
-
-    /* % indicates variable expansion */
-    if (strchr(command, '%')) {
-        result->has_subshell = 1;
-    }
-
-    /* ^ is the escape character in cmd.exe */
-    if (strchr(command, '^')) {
-        result->has_chain = 1;  /* Could escape metacharacters */
-    }
-
-    return 0;
-}
+/* parse_cmd_shell() is implemented in shell_parser_cmd.c */
 
 /* ============================================================================
  * PowerShell Parsing (Placeholder)
