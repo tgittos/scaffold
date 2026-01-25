@@ -41,6 +41,13 @@ $(eval $(call def_test,streaming,network/test_streaming,$(SRCDIR)/network/stream
 $(eval $(call def_test,darray,test_darray,))
 $(eval $(call def_test,ptrarray,test_ptrarray,))
 $(eval $(call def_test,approval_gate,test_approval_gate,$(SRCDIR)/core/approval_gate.c))
+$(eval $(call def_test,atomic_file,test_atomic_file,$(SRCDIR)/core/atomic_file.c))
+$(eval $(call def_test,path_normalize,test_path_normalize,$(SRCDIR)/core/path_normalize.c))
+$(eval $(call def_test,protected_files,test_protected_files,$(SRCDIR)/core/protected_files.c $(SRCDIR)/core/path_normalize.c))
+$(eval $(call def_test,shell_parser,test_shell_parser,$(SRCDIR)/core/shell_parser.c))
+$(eval $(call def_test,shell_parser_cmd,test_shell_parser_cmd,$(SRCDIR)/core/shell_parser_cmd.c $(SRCDIR)/core/shell_parser.c))
+$(eval $(call def_test,shell_parser_ps,test_shell_parser_ps,$(SRCDIR)/core/shell_parser_ps.c $(SRCDIR)/core/shell_parser.c))
+$(eval $(call def_test,subagent_approval,test_subagent_approval,$(SRCDIR)/core/subagent_approval.c))
 
 $(TEST_main_TARGET): $(TEST_main_OBJECTS)
 	$(CC) -o $@ $^
@@ -73,6 +80,27 @@ $(TEST_ptrarray_TARGET): $(TEST_ptrarray_OBJECTS)
 	$(CC) -o $@ $^
 
 $(TEST_approval_gate_TARGET): $(TEST_approval_gate_OBJECTS)
+	$(CC) -o $@ $^
+
+$(TEST_atomic_file_TARGET): $(TEST_atomic_file_OBJECTS)
+	$(CC) -o $@ $^
+
+$(TEST_path_normalize_TARGET): $(TEST_path_normalize_OBJECTS)
+	$(CC) -o $@ $^
+
+$(TEST_protected_files_TARGET): $(TEST_protected_files_OBJECTS)
+	$(CC) -o $@ $^
+
+$(TEST_shell_parser_TARGET): $(TEST_shell_parser_OBJECTS)
+	$(CC) -o $@ $^
+
+$(TEST_shell_parser_cmd_TARGET): $(TEST_shell_parser_cmd_OBJECTS)
+	$(CC) -o $@ $^
+
+$(TEST_shell_parser_ps_TARGET): $(TEST_shell_parser_ps_OBJECTS)
+	$(CC) -o $@ $^
+
+$(TEST_subagent_approval_TARGET): $(TEST_subagent_approval_OBJECTS)
 	$(CC) -o $@ $^
 
 # =============================================================================
@@ -261,7 +289,10 @@ TEST_EXECUTION_ORDER := \
     $(TEST_conversation_compactor_TARGET) $(TEST_incomplete_task_bug_TARGET) \
     $(TEST_messages_array_bug_TARGET) $(TEST_mcp_client_TARGET) $(TEST_vector_db_TARGET) \
     $(TEST_document_store_TARGET) $(TEST_task_store_TARGET) $(TEST_pdf_extractor_TARGET) \
-    $(TEST_document_chunker_TARGET) $(TEST_approval_gate_TARGET) $(TEST_subagent_tool_TARGET) $(TEST_json_output_TARGET)
+    $(TEST_document_chunker_TARGET) $(TEST_approval_gate_TARGET) $(TEST_atomic_file_TARGET) \
+    $(TEST_path_normalize_TARGET) $(TEST_protected_files_TARGET) $(TEST_shell_parser_TARGET) \
+    $(TEST_shell_parser_cmd_TARGET) $(TEST_shell_parser_ps_TARGET) $(TEST_subagent_approval_TARGET) \
+    $(TEST_subagent_tool_TARGET) $(TEST_json_output_TARGET)
 
 test: $(ALL_TEST_TARGETS)
 	@echo "Running all tests..."
@@ -286,7 +317,10 @@ VALGRIND_TESTS := \
     $(TEST_todo_manager_TARGET) $(TEST_todo_tool_TARGET) $(TEST_vector_db_tool_TARGET) \
     $(TEST_memory_tool_TARGET) $(TEST_token_manager_TARGET) $(TEST_conversation_compactor_TARGET) \
     $(TEST_model_tools_TARGET) $(TEST_vector_db_TARGET) $(TEST_task_store_TARGET) \
-    $(TEST_pdf_extractor_TARGET) $(TEST_document_chunker_TARGET) $(TEST_approval_gate_TARGET) $(TEST_json_output_TARGET)
+    $(TEST_pdf_extractor_TARGET) $(TEST_document_chunker_TARGET) $(TEST_approval_gate_TARGET) \
+    $(TEST_atomic_file_TARGET) $(TEST_path_normalize_TARGET) $(TEST_protected_files_TARGET) \
+    $(TEST_shell_parser_TARGET) $(TEST_shell_parser_cmd_TARGET) $(TEST_shell_parser_ps_TARGET) \
+    $(TEST_subagent_approval_TARGET) $(TEST_json_output_TARGET)
 
 check-valgrind: $(ALL_TEST_TARGETS)
 	@echo "Running valgrind tests (excluding HTTP and Python tests)..."

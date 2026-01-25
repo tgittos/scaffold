@@ -9,6 +9,13 @@ CORE_SOURCES := \
     $(SRCDIR)/core/context_enhancement.c \
     $(SRCDIR)/core/recap.c \
     $(SRCDIR)/core/approval_gate.c \
+    $(SRCDIR)/core/atomic_file.c \
+    $(SRCDIR)/core/path_normalize.c \
+    $(SRCDIR)/core/protected_files.c \
+    $(SRCDIR)/core/shell_parser.c \
+    $(SRCDIR)/core/shell_parser_cmd.c \
+    $(SRCDIR)/core/shell_parser_ps.c \
+    $(SRCDIR)/core/subagent_approval.c \
     $(SRCDIR)/network/http_client.c \
     $(SRCDIR)/network/embedded_cacert.c \
     $(SRCDIR)/network/streaming.c \

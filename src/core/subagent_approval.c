@@ -50,7 +50,10 @@
 /* Maximum size for serialized approval messages */
 #define APPROVAL_MSG_MAX_SIZE 65536
 
-/* Request ID counter (simple incrementing integer) */
+/* Request ID counter (simple incrementing integer).
+ * IMPORTANT: This counter is NOT thread-safe. All calls to next_request_id()
+ * must occur from the same thread. In the current architecture, subagents
+ * are separate processes (not threads), so each process has its own counter. */
 static uint32_t g_next_request_id = 1;
 
 /* =============================================================================
@@ -59,7 +62,10 @@ static uint32_t g_next_request_id = 1;
 
 /**
  * Generate the next unique request ID.
- * Uses simple incrementing counter - sufficient for single-threaded use.
+ * Uses simple incrementing counter.
+ *
+ * NOTE: Not thread-safe. Must only be called from a single thread.
+ * This is safe in the current process-based subagent architecture.
  */
 static uint32_t next_request_id(void) {
     return g_next_request_id++;
@@ -70,7 +76,7 @@ static uint32_t next_request_id(void) {
  * Returns allocated string that caller must free.
  */
 static char *format_tool_summary(const ToolCall *tool_call) {
-    if (tool_call == NULL) {
+    if (tool_call == NULL || tool_call->name == NULL) {
         return strdup("[unknown tool]");
     }
 
@@ -750,7 +756,7 @@ int poll_subagent_approval_requests(ApprovalChannel *channels,
 /**
  * Run the parent approval loop.
  *
- * Monitors stdin and all subagent request pipes using select().
+ * Monitors all subagent request pipes using poll().
  * Handles interleaved approvals from multiple concurrent subagents.
  *
  * This function runs continuously until:
