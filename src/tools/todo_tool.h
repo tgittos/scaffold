@@ -21,11 +21,8 @@ char* todo_tool_list(TodoTool* tool, const char* status_filter, const char* min_
 char* todo_tool_serialize(TodoTool* tool);
 
 // Tool system integration
-int register_todo_tool(ToolRegistry* registry, TodoList* todo_list, const char* session_id);
+int register_todo_tool(ToolRegistry* registry, TodoList* todo_list);
 int execute_todo_tool_call(const ToolCall *tool_call, ToolResult *result);
 void clear_todo_tool_reference(void);
-
-// Get the current session ID (for task_store integration)
-const char* get_todo_session_id(void);
 
 #endif

@@ -123,9 +123,9 @@ int ralph_init_session(RalphSession* session) {
         return -1;
     }
     
-    // Register todo tool with the tool registry (pass session_id for task_store integration)
-    if (register_todo_tool(&session->tools, &session->todo_list, session->session_id) != 0) {
-        fprintf(stderr, "Warning: Failed to register todo tool\n");
+    // Register todo tools (TodoRead and TodoWrite) with the tool registry
+    if (register_todo_tool(&session->tools, &session->todo_list) != 0) {
+        fprintf(stderr, "Warning: Failed to register todo tools\n");
     }
     
     // Initialize todo display system
