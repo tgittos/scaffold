@@ -1,12 +1,14 @@
 #include "unity/unity.h"
 #include "ralph.h"
 #include "todo_manager.h"
+#include "../src/db/task_store.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 void setUp(void) {
-    // No file cleanup needed - using vector database for conversation storage
+    // Reset task store to ensure clean state between tests
+    task_store_reset_instance();
 }
 
 void tearDown(void) {

@@ -138,6 +138,14 @@ void task_store_reset_instance(void) {
     }
     // Reset pthread_once for testing
     g_store_once = (pthread_once_t)PTHREAD_ONCE_INIT;
+
+    // Delete the database file to ensure clean state for tests
+    const char* home = getenv("HOME");
+    if (home != NULL) {
+        char db_path[512];
+        snprintf(db_path, sizeof(db_path), "%s/.local/ralph/tasks.db", home);
+        unlink(db_path);
+    }
 }
 
 // Helper functions

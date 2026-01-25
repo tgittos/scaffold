@@ -1,0 +1,272 @@
+# Test definitions and rules for ralph
+# Uses explicit templates to reduce repetition while maintaining clarity
+
+UNITY := $(TESTDIR)/unity/unity.c
+
+# =============================================================================
+# TEST DEFINITION TEMPLATES
+# =============================================================================
+
+# Template for test variable generation
+# $(1) = test name (lowercase, no prefix)
+# $(2) = test file path (relative to TESTDIR, no .c)
+# $(3) = additional source files
+define def_test
+TEST_$(1)_SOURCES := $$(TESTDIR)/$(2).c $(3) $$(UNITY)
+TEST_$(1)_OBJECTS := $$(TEST_$(1)_SOURCES:.c=.o)
+TEST_$(1)_TARGET := $$(TESTDIR)/test_$(1)
+ALL_TEST_TARGETS += $$(TEST_$(1)_TARGET)
+endef
+
+# Template for mixed C/C++ test (adds CPP objects)
+define def_test_mixed
+TEST_$(1)_SOURCES := $$(TESTDIR)/$(2).c $(3) $$(UNITY)
+TEST_$(1)_OBJECTS := $$(TEST_$(1)_SOURCES:.c=.o) $$(DB_CPP_SOURCES:.cpp=.o)
+TEST_$(1)_TARGET := $$(TESTDIR)/test_$(1)
+ALL_TEST_TARGETS += $$(TEST_$(1)_TARGET)
+endef
+
+# =============================================================================
+# MINIMAL TESTS (no external libraries)
+# =============================================================================
+
+$(eval $(call def_test,main,core/test_main,))
+$(eval $(call def_test,env,utils/test_env_loader,$(SRCDIR)/utils/env_loader.c))
+$(eval $(call def_test,prompt,utils/test_prompt_loader,$(SRCDIR)/utils/prompt_loader.c))
+$(eval $(call def_test,todo_manager,tools/test_todo_manager,$(SRCDIR)/tools/todo_manager.c))
+$(eval $(call def_test,document_chunker,test_document_chunker,$(SRCDIR)/utils/document_chunker.c $(SRCDIR)/utils/common_utils.c))
+$(eval $(call def_test,streaming,network/test_streaming,$(SRCDIR)/network/streaming.c))
+
+$(TEST_main_TARGET): $(TEST_main_OBJECTS)
+	$(CC) -o $@ $^
+
+$(TEST_env_TARGET): $(TEST_env_OBJECTS)
+	$(CC) -o $@ $^
+
+$(TEST_prompt_TARGET): $(TEST_prompt_OBJECTS)
+	$(CC) -o $@ $^
+
+$(TEST_todo_manager_TARGET): $(TEST_todo_manager_OBJECTS)
+	$(CC) -o $@ $^
+
+$(TEST_document_chunker_TARGET): $(TEST_document_chunker_OBJECTS)
+	$(CC) -o $@ $^
+
+$(TEST_streaming_TARGET): $(TEST_streaming_OBJECTS)
+	$(CC) -o $@ $^
+
+# =============================================================================
+# CJSON TESTS
+# =============================================================================
+
+$(eval $(call def_test,config,utils/test_config,$(SRCDIR)/utils/config.c))
+$(eval $(call def_test,debug_output,utils/test_debug_output,$(SRCDIR)/utils/debug_output.c))
+
+$(TEST_config_TARGET): $(TEST_config_OBJECTS) $(CJSON_LIB)
+	$(CC) -o $@ $(TEST_config_OBJECTS) $(CJSON_LIB)
+
+$(TEST_debug_output_TARGET): $(TEST_debug_output_OBJECTS) $(CJSON_LIB)
+	$(CC) -o $@ $(TEST_debug_output_OBJECTS) $(CJSON_LIB)
+
+# =============================================================================
+# PDF TEST
+# =============================================================================
+
+$(eval $(call def_test,pdf_extractor,pdf/test_pdf_extractor,$(SRCDIR)/pdf/pdf_extractor.c))
+
+$(TEST_pdf_extractor_TARGET): $(TEST_pdf_extractor_OBJECTS) $(PDFIO_LIB) $(ZLIB_LIB)
+	$(CC) -o $@ $(TEST_pdf_extractor_OBJECTS) $(PDFIO_LIB) $(ZLIB_LIB) -lm
+
+# =============================================================================
+# HTTP RETRY TEST
+# =============================================================================
+
+$(eval $(call def_test,http_retry,network/test_http_retry,$(SRCDIR)/network/api_error.c $(SRCDIR)/utils/config.c))
+
+$(TEST_http_retry_TARGET): $(TEST_http_retry_OBJECTS) $(CJSON_LIB) $(LIBS_MBEDTLS)
+	$(CC) -o $@ $(TEST_http_retry_OBJECTS) $(CJSON_LIB) $(LIBS_MBEDTLS) -lm
+
+# =============================================================================
+# SQLITE TEST
+# =============================================================================
+
+$(eval $(call def_test,task_store,db/test_task_store,$(SRCDIR)/db/task_store.c $(SRCDIR)/utils/uuid_utils.c))
+
+$(TEST_task_store_TARGET): $(TEST_task_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB)
+	$(CC) -o $@ $(TEST_task_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) -lpthread -lm
+
+# =============================================================================
+# CONVERSATION TESTS (special linking)
+# =============================================================================
+
+$(eval $(call def_test,conversation,session/test_conversation_tracker,$(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/utils/json_escape.c))
+$(eval $(call def_test_mixed,conversation_vdb,session/test_conversation_vector_db,$(CONV_DEPS)))
+$(eval $(call def_test_mixed,tool_calls_not_stored,session/test_tool_calls_not_stored,$(CONV_DEPS)))
+
+$(TEST_conversation_TARGET): $(TEST_conversation_OBJECTS) $(ALL_LIBS)
+	$(CXX) -o $@ $(TEST_conversation_OBJECTS) $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) \
+		src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o \
+		src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o \
+		src/network/http_client.o src/network/embedded_cacert.o src/network/api_error.o \
+		src/utils/env_loader.o src/utils/config.o src/utils/debug_output.o src/utils/common_utils.o \
+		$(LIBS_MBEDTLS) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
+
+$(TEST_conversation_vdb_TARGET): $(TEST_conversation_vdb_OBJECTS) $(ALL_LIBS)
+	$(CXX) -o $@ $(TEST_conversation_vdb_OBJECTS) $(LIBS_MBEDTLS) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
+
+$(TEST_tool_calls_not_stored_TARGET): $(TEST_tool_calls_not_stored_OBJECTS) $(ALL_LIBS)
+	$(CXX) -o $@ $(TEST_tool_calls_not_stored_OBJECTS) $(LIBS_MBEDTLS) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
+
+# =============================================================================
+# STANDARD MIXED TESTS (CXX linker with LIBS_STANDARD)
+# =============================================================================
+
+$(eval $(call def_test_mixed,json_output,utils/test_json_output,$(SRCDIR)/network/streaming.c $(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,todo_tool,tools/test_todo_tool,$(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,output,utils/test_output_formatter,$(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,tools,tools/test_tools_system,$(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,vector_db_tool,tools/test_vector_db_tool,$(SRCDIR)/utils/env_loader.c $(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,memory_tool,tools/test_memory_tool,$(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,memory_mgmt,test_memory_management,$(SRCDIR)/cli/memory_commands.c $(DB_C_SOURCES) $(EMBEDDING_DEPS) $(SRCDIR)/utils/config.c $(NETWORK_DEPS) $(SRCDIR)/utils/common_utils.c $(SRCDIR)/utils/debug_output.c))
+$(eval $(call def_test_mixed,token_manager,session/test_token_manager,$(SRCDIR)/session/token_manager.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,conversation_compactor,session/test_conversation_compactor,$(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/token_manager.c $(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,model_tools,llm/test_model_tools,$(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,openai_streaming,llm/test_openai_streaming,$(SRCDIR)/network/streaming.c $(SRCDIR)/llm/llm_provider.c $(SRCDIR)/llm/providers/openai_provider.c $(SRCDIR)/llm/providers/anthropic_provider.c $(SRCDIR)/llm/providers/local_ai_provider.c $(SRCDIR)/network/api_common.c $(SRCDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,anthropic_streaming,llm/test_anthropic_streaming,$(SRCDIR)/network/streaming.c $(SRCDIR)/llm/llm_provider.c $(SRCDIR)/llm/providers/openai_provider.c $(SRCDIR)/llm/providers/anthropic_provider.c $(SRCDIR)/llm/providers/local_ai_provider.c $(SRCDIR)/network/api_common.c $(SRCDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,messages_array_bug,network/test_messages_array_bug,$(SRCDIR)/network/api_common.c $(SRCDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,mcp_client,mcp/test_mcp_client,$(RALPH_CORE_DEPS) $(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,subagent_tool,tools/test_subagent_tool,$(RALPH_CORE_DEPS) $(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,incomplete_task_bug,core/test_incomplete_task_bug,$(RALPH_CORE_DEPS) $(COMPLEX_DEPS)))
+
+# Batch link rule for standard tests
+STANDARD_TESTS := json_output todo_tool vector_db_tool memory_tool memory_mgmt \
+    token_manager conversation_compactor model_tools openai_streaming \
+    anthropic_streaming messages_array_bug mcp_client subagent_tool incomplete_task_bug
+
+$(foreach t,$(STANDARD_TESTS),$(eval \
+$$(TEST_$(t)_TARGET): $$(TEST_$(t)_OBJECTS) $$(ALL_LIBS) ; \
+	$$(CXX) -o $$@ $$(TEST_$(t)_OBJECTS) $$(LIBS_STANDARD)))
+
+# These two need extra objects
+$(TEST_output_TARGET): $(TEST_output_OBJECTS) $(ALL_LIBS)
+	$(CXX) -o $@ $(TEST_output_OBJECTS) src/session/conversation_tracker.o $(LIBS_STANDARD)
+
+$(TEST_tools_TARGET): $(TEST_tools_OBJECTS) $(ALL_LIBS)
+	$(CXX) -o $@ $(TEST_tools_OBJECTS) src/session/conversation_tracker.o $(LIBS_STANDARD)
+
+# =============================================================================
+# PYTHON TESTS (need stdlib embedding)
+# =============================================================================
+
+$(eval $(call def_test_mixed,python_tool,tools/test_python_tool,$(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,python_integration,tools/test_python_integration,$(COMPLEX_DEPS)))
+
+define PYTHON_TEST_EMBED
+	@set -e; \
+	if [ ! -d "$(PYTHON_STDLIB_DIR)/lib" ]; then \
+		echo "Error: Python stdlib directory '$(PYTHON_STDLIB_DIR)/lib' not found."; \
+		exit 1; \
+	fi; \
+	echo "Embedding Python stdlib into test binary..."; \
+	rm -f $(BUILDDIR)/stdlib.zip; \
+	cd $(PYTHON_STDLIB_DIR) && zip -qr $(CURDIR)/$(BUILDDIR)/stdlib.zip lib/; \
+	zipcopy $(CURDIR)/$(BUILDDIR)/stdlib.zip $(CURDIR)/$@; \
+	rm -f $(BUILDDIR)/stdlib.zip
+endef
+
+$(TEST_python_tool_TARGET): $(TEST_python_tool_OBJECTS) $(ALL_LIBS)
+	$(CXX) -o $@ $(TEST_python_tool_OBJECTS) $(LIBS_STANDARD)
+	$(PYTHON_TEST_EMBED)
+
+$(TEST_python_integration_TARGET): $(TEST_python_integration_OBJECTS) $(ALL_LIBS)
+	$(CXX) -o $@ $(TEST_python_integration_OBJECTS) $(LIBS_STANDARD)
+	$(PYTHON_TEST_EMBED)
+
+# =============================================================================
+# FULL INTEGRATION TESTS
+# =============================================================================
+
+$(eval $(call def_test_mixed,http,network/test_http_client,$(SRCDIR)/utils/env_loader.c $(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,ralph,core/test_ralph,$(TESTDIR)/mock_api_server.c $(RALPH_CORE_DEPS) $(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,recap,core/test_recap,$(RALPH_CORE_DEPS) $(COMPLEX_DEPS)))
+
+$(TEST_http_TARGET): $(TEST_http_OBJECTS) $(ALL_LIBS)
+	$(CC) $(LDFLAGS) -o $@ $(TEST_http_OBJECTS) $(LIBS)
+
+$(TEST_ralph_TARGET): $(TEST_ralph_OBJECTS) $(ALL_LIBS)
+	$(CXX) $(LDFLAGS) -o $@ $(TEST_ralph_OBJECTS) $(LIBS) -lpthread
+
+$(TEST_recap_TARGET): $(TEST_recap_OBJECTS) $(ALL_LIBS)
+	$(CXX) $(LDFLAGS) -o $@ $(TEST_recap_OBJECTS) $(LIBS) -lpthread
+
+# =============================================================================
+# SPECIAL TESTS (unique structure)
+# =============================================================================
+
+# Vector DB test - minimal, just hnswlib
+TEST_vector_db_SOURCES := $(TESTDIR)/db/test_vector_db.c $(SRCDIR)/db/vector_db.c $(DB_CPP_SOURCES) $(UNITY)
+TEST_vector_db_OBJECTS := $(TESTDIR)/db/test_vector_db.o $(SRCDIR)/db/vector_db.o $(SRCDIR)/db/hnswlib_wrapper.o $(TESTDIR)/unity/unity.o
+TEST_vector_db_TARGET := $(TESTDIR)/test_vector_db
+ALL_TEST_TARGETS += $(TEST_vector_db_TARGET)
+
+$(TEST_vector_db_TARGET): $(TEST_vector_db_OBJECTS) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
+	$(CXX) -o $@ $(TEST_vector_db_OBJECTS) -lpthread -lm
+
+# Document store test
+TEST_document_store_SOURCES := $(TESTDIR)/db/test_document_store.c $(DB_C_SOURCES) $(SRCDIR)/utils/common_utils.c $(SRCDIR)/utils/config.c $(SRCDIR)/utils/debug_output.c $(EMBEDDING_DEPS) $(NETWORK_DEPS) $(UNITY)
+TEST_document_store_OBJECTS := $(TEST_document_store_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o)
+TEST_document_store_TARGET := $(TESTDIR)/test_document_store
+ALL_TEST_TARGETS += $(TEST_document_store_TARGET)
+
+$(TEST_document_store_TARGET): $(TEST_document_store_OBJECTS) $(ALL_LIBS)
+	$(CXX) -o $@ $(TEST_document_store_OBJECTS) $(LIBS_MBEDTLS) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(SQLITE_LIB) $(OSSP_UUID_LIB) -lm -lpthread
+
+# =============================================================================
+# TEST EXECUTION
+# =============================================================================
+
+TEST_EXECUTION_ORDER := \
+    $(TEST_main_TARGET) $(TEST_http_TARGET) $(TEST_http_retry_TARGET) \
+    $(TEST_streaming_TARGET) $(TEST_openai_streaming_TARGET) $(TEST_anthropic_streaming_TARGET) \
+    $(TEST_env_TARGET) $(TEST_output_TARGET) $(TEST_prompt_TARGET) $(TEST_debug_output_TARGET) \
+    $(TEST_conversation_TARGET) $(TEST_conversation_vdb_TARGET) $(TEST_tools_TARGET) \
+    $(TEST_ralph_TARGET) $(TEST_todo_manager_TARGET) $(TEST_todo_tool_TARGET) \
+    $(TEST_vector_db_tool_TARGET) $(TEST_memory_tool_TARGET) $(TEST_python_tool_TARGET) \
+    $(TEST_python_integration_TARGET) $(TEST_token_manager_TARGET) $(TEST_model_tools_TARGET) \
+    $(TEST_conversation_compactor_TARGET) $(TEST_incomplete_task_bug_TARGET) \
+    $(TEST_messages_array_bug_TARGET) $(TEST_mcp_client_TARGET) $(TEST_vector_db_TARGET) \
+    $(TEST_document_store_TARGET) $(TEST_task_store_TARGET) $(TEST_pdf_extractor_TARGET) \
+    $(TEST_document_chunker_TARGET) $(TEST_subagent_tool_TARGET) $(TEST_json_output_TARGET)
+
+test: $(ALL_TEST_TARGETS)
+	@echo "Running all tests..."
+	@for t in $(TEST_EXECUTION_ORDER); do \
+		./$$t || exit 1; \
+	done
+	@echo "All tests completed"
+
+check: test
+
+# =============================================================================
+# VALGRIND
+# =============================================================================
+
+# Excluded: HTTP (network), Python (embedded stdlib), subagent (fork/exec)
+VALGRIND_TESTS := \
+    $(TEST_main_TARGET) $(TEST_http_retry_TARGET) $(TEST_streaming_TARGET) \
+    $(TEST_openai_streaming_TARGET) $(TEST_anthropic_streaming_TARGET) $(TEST_env_TARGET) \
+    $(TEST_output_TARGET) $(TEST_prompt_TARGET) $(TEST_conversation_TARGET) \
+    $(TEST_conversation_vdb_TARGET) $(TEST_tools_TARGET) $(TEST_ralph_TARGET) \
+    $(TEST_todo_manager_TARGET) $(TEST_todo_tool_TARGET) $(TEST_vector_db_tool_TARGET) \
+    $(TEST_memory_tool_TARGET) $(TEST_token_manager_TARGET) $(TEST_conversation_compactor_TARGET) \
+    $(TEST_model_tools_TARGET) $(TEST_vector_db_TARGET) $(TEST_task_store_TARGET) \
+    $(TEST_pdf_extractor_TARGET) $(TEST_document_chunker_TARGET) $(TEST_json_output_TARGET)
+
+check-valgrind: $(ALL_TEST_TARGETS)
+	@echo "Running valgrind tests (excluding HTTP and Python tests)..."
+	@for t in $(VALGRIND_TESTS); do \
+		valgrind $(VALGRIND_FLAGS) ./$$t.aarch64.elf || exit 1; \
+	done
+	@echo "Valgrind tests completed (subagent tests excluded - see AGENTS.md)"
+
+.PHONY: test check check-valgrind

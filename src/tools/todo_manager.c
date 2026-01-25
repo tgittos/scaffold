@@ -5,8 +5,12 @@
 
 char* todo_serialize_json(TodoList* list) {
     if (!list) return NULL;
-    
-    size_t buffer_size = 1024 + (list->count * 256);
+
+    // Each todo entry can be up to ~450 bytes when serialized:
+    // - UUID id: 36 chars, content: up to 256 chars (%.256s), status/priority: ~25 chars
+    // - timestamps: ~20 chars, JSON overhead: ~80 chars, comma: 1 char
+    // Using 512 per entry for safety margin
+    size_t buffer_size = 1024 + (list->count * 512);
     char* json = malloc(buffer_size);
     if (!json) return NULL;
     
