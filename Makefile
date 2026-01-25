@@ -27,6 +27,7 @@ ZLIB_VERSION := 1.3.1
 CJSON_VERSION := 1.7.18
 READLINE_VERSION := 8.2
 NCURSES_VERSION := 6.4
+SQLITE_VERSION := 3450000
 
 # =============================================================================
 # SOURCE FILES
@@ -122,6 +123,7 @@ ZLIB_DIR = $(DEPDIR)/zlib-$(ZLIB_VERSION)
 CJSON_DIR = $(DEPDIR)/cJSON-$(CJSON_VERSION)
 READLINE_DIR = $(DEPDIR)/readline-$(READLINE_VERSION)
 NCURSES_DIR = $(DEPDIR)/ncurses-$(NCURSES_VERSION)
+SQLITE_DIR = $(DEPDIR)/sqlite-autoconf-$(SQLITE_VERSION)
 
 # Library files
 CURL_LIB = $(CURL_DIR)/lib/.libs/libcurl.a
@@ -134,6 +136,7 @@ CJSON_LIB = $(CJSON_DIR)/libcjson.a
 READLINE_LIB = $(READLINE_DIR)/libreadline.a
 HISTORY_LIB = $(READLINE_DIR)/libhistory.a
 NCURSES_LIB = $(NCURSES_DIR)/lib/libncurses.a
+SQLITE_LIB = $(SQLITE_DIR)/.libs/libsqlite3.a
 
 # Python library (built from python/ subdirectory)
 PYTHON_VERSION := 3.12
@@ -141,13 +144,13 @@ PYTHON_LIB := $(BUILDDIR)/libpython$(PYTHON_VERSION).a
 PYTHON_INCLUDE := $(BUILDDIR)/python-include
 
 # All required libraries
-ALL_LIBS := $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(READLINE_LIB) $(HISTORY_LIB) $(NCURSES_LIB) $(PYTHON_LIB)
+ALL_LIBS := $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(READLINE_LIB) $(HISTORY_LIB) $(NCURSES_LIB) $(SQLITE_LIB) $(PYTHON_LIB)
 
 # Include and library flags
-INCLUDES = -I$(CURL_DIR)/include -I$(MBEDTLS_DIR)/include -I$(HNSWLIB_DIR) -I$(PDFIO_DIR) -I$(ZLIB_DIR) -I$(CJSON_DIR) -I$(READLINE_DIR) -I$(READLINE_DIR)/readline -I$(NCURSES_DIR)/include -I$(PYTHON_INCLUDE) -I$(SRCDIR) -I$(SRCDIR)/core -I$(SRCDIR)/network -I$(SRCDIR)/llm -I$(SRCDIR)/session -I$(SRCDIR)/tools -I$(SRCDIR)/utils -I$(SRCDIR)/db -I$(SRCDIR)/pdf -I$(SRCDIR)/cli
+INCLUDES = -I$(CURL_DIR)/include -I$(MBEDTLS_DIR)/include -I$(HNSWLIB_DIR) -I$(PDFIO_DIR) -I$(ZLIB_DIR) -I$(CJSON_DIR) -I$(READLINE_DIR) -I$(READLINE_DIR)/readline -I$(NCURSES_DIR)/include -I$(SQLITE_DIR) -I$(PYTHON_INCLUDE) -I$(SRCDIR) -I$(SRCDIR)/core -I$(SRCDIR)/network -I$(SRCDIR)/llm -I$(SRCDIR)/session -I$(SRCDIR)/tools -I$(SRCDIR)/utils -I$(SRCDIR)/db -I$(SRCDIR)/pdf -I$(SRCDIR)/cli
 TEST_INCLUDES = $(INCLUDES) -I$(TESTDIR)/unity -I$(TESTDIR) -I$(TESTDIR)/core -I$(TESTDIR)/network -I$(TESTDIR)/llm -I$(TESTDIR)/session -I$(TESTDIR)/tools -I$(TESTDIR)/utils
 LDFLAGS = -L$(CURL_DIR)/lib/.libs -L$(MBEDTLS_DIR)/library -L$(PDFIO_DIR) -L$(ZLIB_DIR) -L$(CJSON_DIR) -L$(READLINE_DIR) -L$(NCURSES_DIR)/lib
-LIBS = -lcurl -lmbedtls -lmbedx509 -lmbedcrypto $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(READLINE_LIB) $(HISTORY_LIB) $(NCURSES_LIB) $(PYTHON_LIB) -lm
+LIBS = -lcurl -lmbedtls -lmbedx509 -lmbedcrypto $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(READLINE_LIB) $(HISTORY_LIB) $(NCURSES_LIB) $(SQLITE_LIB) $(PYTHON_LIB) -lm
 
 # =============================================================================
 # TOOLS AND UTILITIES
@@ -800,6 +803,31 @@ $(READLINE_LIB) $(HISTORY_LIB): $(NCURSES_LIB)
 	mkdir -p readline && \
 	cd readline && \
 	for f in ../*.h; do ln -sf "$$f" $$(basename "$$f"); done
+
+# Build SQLite library (compile amalgamation directly - avoids configure issues with cosmocc)
+$(SQLITE_LIB): | $(DEPDIR)
+	@echo "Building SQLite..."
+	@mkdir -p $(DEPDIR)
+	cd $(DEPDIR) && \
+	if [ ! -f sqlite-autoconf-$(SQLITE_VERSION).tar.gz ]; then \
+		curl -L -o sqlite-autoconf-$(SQLITE_VERSION).tar.gz https://www.sqlite.org/2024/sqlite-autoconf-$(SQLITE_VERSION).tar.gz || \
+		wget -O sqlite-autoconf-$(SQLITE_VERSION).tar.gz https://www.sqlite.org/2024/sqlite-autoconf-$(SQLITE_VERSION).tar.gz; \
+	fi && \
+	if [ ! -d sqlite-autoconf-$(SQLITE_VERSION) ]; then \
+		tar -xzf sqlite-autoconf-$(SQLITE_VERSION).tar.gz; \
+	fi && \
+	cd sqlite-autoconf-$(SQLITE_VERSION) && \
+	$(CC) -O2 -fno-stack-protector \
+		-DSQLITE_THREADSAFE=1 \
+		-DSQLITE_ENABLE_FTS5 \
+		-DSQLITE_ENABLE_JSON1 \
+		-DSQLITE_ENABLE_RTREE \
+		-DSQLITE_ENABLE_MATH_FUNCTIONS \
+		-DSQLITE_DQS=0 \
+		-c sqlite3.c -o sqlite3.o && \
+	mkdir -p .libs && \
+	cosmoar rcs .libs/libsqlite3.a sqlite3.o && \
+	aarch64-linux-cosmo-ranlib .libs/libsqlite3.a
 
 # =============================================================================
 # PYTHON BUILD
