@@ -10,6 +10,7 @@
 #include "session_manager.h"
 #include "../mcp/mcp_client.h"
 #include "../tools/subagent_tool.h"
+#include "../utils/uuid_utils.h"
 
 // API type enumeration - used for provider-specific behavior
 typedef enum {
@@ -20,6 +21,7 @@ typedef enum {
 
 // Ralph session structure - uses SessionData for core session functionality
 typedef struct {
+    char session_id[40];                 // UUID v4 unique session identifier
     SessionData session_data;            // Core session data (config, conversation, tool_count)
     TodoList todo_list;
     ToolRegistry tools;

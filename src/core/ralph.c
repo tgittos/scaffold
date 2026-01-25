@@ -21,9 +21,12 @@
 #include "model_capabilities.h"
 #include "python_tool.h"
 #include "llm_provider.h"
+#include "uuid_utils.h"
+#include "../db/task_store.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <curl/curl.h>
 #include "json_escape.h"
 
@@ -85,7 +88,18 @@ char* ralph_build_anthropic_json_payload_with_todos(const RalphSession* session,
 
 int ralph_init_session(RalphSession* session) {
     if (session == NULL) return -1;
-    
+
+    // Generate unique session ID
+    if (uuid_generate_v4(session->session_id) != 0) {
+        fprintf(stderr, "Warning: Failed to generate session ID, using fallback\n");
+        snprintf(session->session_id, sizeof(session->session_id), "fallback-%ld", (long)time(NULL));
+    }
+
+    // Initialize task store singleton (for persistent task storage)
+    if (task_store_get_instance() == NULL) {
+        fprintf(stderr, "Warning: Task store unavailable, using in-memory tasks only\n");
+    }
+
     // Initialize session data
     session_data_init(&session->session_data);
     
@@ -109,8 +123,8 @@ int ralph_init_session(RalphSession* session) {
         return -1;
     }
     
-    // Register todo tool with the tool registry
-    if (register_todo_tool(&session->tools, &session->todo_list) != 0) {
+    // Register todo tool with the tool registry (pass session_id for task_store integration)
+    if (register_todo_tool(&session->tools, &session->todo_list, session->session_id) != 0) {
         fprintf(stderr, "Warning: Failed to register todo tool\n");
     }
     

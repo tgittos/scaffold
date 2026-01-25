@@ -1,5 +1,6 @@
 #include "todo_tool.h"
 #include "todo_display.h"
+#include "../db/task_store.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -190,6 +191,65 @@ char* todo_tool_execute(TodoTool* tool, const char* action, const char* args) {
 
 // Global static reference to the todo list for tool calls
 static TodoList* g_todo_list = NULL;
+static char g_current_session_id[40] = {0};
+
+// Sync in-memory TodoList from task_store for the current session
+// This keeps TodoList as a cache of the SQLite-backed store
+static void sync_todolist_from_store(void) {
+    if (g_todo_list == NULL || g_current_session_id[0] == '\0') {
+        return;
+    }
+
+    task_store_t* store = task_store_get_instance();
+    if (store == NULL) {
+        return;  // SQLite unavailable, keep in-memory only
+    }
+
+    // Get all tasks for this session
+    size_t count = 0;
+    Task** tasks = task_store_list_by_session(store, g_current_session_id, -1, &count);
+    if (tasks == NULL) {
+        return;
+    }
+
+    // Clear in-memory list
+    g_todo_list->count = 0;
+
+    // Copy tasks from store to in-memory list
+    for (size_t i = 0; i < count; i++) {
+        Task* task = tasks[i];
+        if (task == NULL || task->content == NULL) continue;
+
+        // Ensure list has capacity
+        if (g_todo_list->count >= g_todo_list->capacity) {
+            size_t new_capacity = g_todo_list->capacity * 2;
+            if (new_capacity > TODO_MAX_COUNT) new_capacity = TODO_MAX_COUNT;
+            if (new_capacity <= g_todo_list->capacity) break;  // At max
+
+            Todo* new_todos = realloc(g_todo_list->todos, sizeof(Todo) * new_capacity);
+            if (!new_todos) break;
+            g_todo_list->todos = new_todos;
+            g_todo_list->capacity = new_capacity;
+        }
+
+        // Copy task to todo
+        Todo* todo = &g_todo_list->todos[g_todo_list->count];
+        strncpy(todo->id, task->id, TODO_MAX_ID_LENGTH - 1);
+        todo->id[TODO_MAX_ID_LENGTH - 1] = '\0';
+
+        strncpy(todo->content, task->content, TODO_MAX_CONTENT_LENGTH - 1);
+        todo->content[TODO_MAX_CONTENT_LENGTH - 1] = '\0';
+
+        todo->status = (TodoStatus)task->status;
+        todo->priority = (TodoPriority)task->priority;
+        todo->created_at = task->created_at;
+        todo->updated_at = task->updated_at;
+
+        g_todo_list->count++;
+    }
+
+    task_free_list(tasks, count);
+}
 
 // Helper function to extract a JSON array parameter
 static char* extract_json_array_parameter(const char *arguments, const char *param_name) {
@@ -263,24 +323,36 @@ int execute_todo_tool_call(const ToolCall *tool_call, ToolResult *result) {
             // Extract the todos array from arguments
             char *todos_json = extract_json_array_parameter(tool_call->arguments, "todos");
             if (todos_json) {
-                // Process the todos array - for now, we'll clear and rebuild the entire list
-                // This is a simple implementation that replaces the entire todo list
-                
-                // Clear existing todos
+                // Get task_store instance for persistence
+                task_store_t* store = task_store_get_instance();
+                int use_sqlite = (store != NULL && g_current_session_id[0] != '\0');
+
+                // Collect tasks for bulk replacement if using SQLite
+                Task* bulk_tasks = NULL;
+                size_t bulk_count = 0;
+                size_t bulk_capacity = 0;
+
+                if (use_sqlite) {
+                    bulk_capacity = 16;  // Initial capacity
+                    bulk_tasks = malloc(sizeof(Task) * bulk_capacity);
+                    if (!bulk_tasks) use_sqlite = 0;  // Fallback to in-memory
+                }
+
+                // Clear in-memory list (will be repopulated from SQLite or directly)
                 g_todo_list->count = 0;
-                
+
                 // Parse each todo item from the JSON array
                 const char *current = todos_json + 1; // Skip opening '['
                 while (*current && *current != ']') {
                     // Skip whitespace and commas
                     while (*current == ' ' || *current == '\t' || *current == ',' || *current == '\n') current++;
-                    
+
                     if (*current == '{') {
                         // Find the end of this todo object
                         const char *obj_start = current;
                         const char *obj_end = current + 1;
                         int brace_count = 1;
-                        
+
                         while (*obj_end && brace_count > 0) {
                             if (*obj_end == '{') brace_count++;
                             else if (*obj_end == '}') brace_count--;
@@ -293,7 +365,7 @@ int execute_todo_tool_call(const ToolCall *tool_call, ToolResult *result) {
                             }
                             if (brace_count > 0) obj_end++;
                         }
-                        
+
                         if (brace_count == 0) {
                             // Extract todo fields from this object
                             size_t obj_len = obj_end - obj_start;
@@ -301,13 +373,13 @@ int execute_todo_tool_call(const ToolCall *tool_call, ToolResult *result) {
                             if (todo_obj) {
                                 memcpy(todo_obj, obj_start, obj_len);
                                 todo_obj[obj_len] = '\0';
-                                
+
                                 // Parse todo fields - look for "content", "status", "priority"
-                                char content[TODO_MAX_CONTENT_LENGTH] = {0};
+                                char content[4096] = {0};  // Large buffer for content
                                 char status_str[32] = "pending";
                                 char priority_str[32] = "medium";
-                                char id[TODO_MAX_ID_LENGTH] = {0};
-                                
+                                char parent_id[40] = {0};
+
                                 // Extract content (try "content" first, then "title" as fallback)
                                 const char *content_start = strstr(todo_obj, "\"content\":");
                                 int skip_len = 10; // Length of "content":
@@ -333,7 +405,7 @@ int execute_todo_tool_call(const ToolCall *tool_call, ToolResult *result) {
                                         }
                                     }
                                 }
-                                
+
                                 // Extract status
                                 const char *status_start = strstr(todo_obj, "\"status\":");
                                 if (status_start) {
@@ -353,7 +425,7 @@ int execute_todo_tool_call(const ToolCall *tool_call, ToolResult *result) {
                                         }
                                     }
                                 }
-                                
+
                                 // Extract priority
                                 const char *priority_start = strstr(todo_obj, "\"priority\":");
                                 if (priority_start) {
@@ -373,41 +445,70 @@ int execute_todo_tool_call(const ToolCall *tool_call, ToolResult *result) {
                                         }
                                     }
                                 }
-                                
-                                // Extract id (if provided)
-                                const char *id_start = strstr(todo_obj, "\"id\":");
-                                if (id_start) {
-                                    id_start += 5; // Skip "id":
-                                    while (*id_start == ' ' || *id_start == '\t') id_start++;
-                                    if (*id_start == '"') {
-                                        id_start++;
-                                        const char *id_end = id_start;
-                                        while (*id_end && *id_end != '"') {
-                                            if (*id_end == '\\' && *(id_end + 1)) id_end += 2;
-                                            else id_end++;
+
+                                // Extract parent_id (for subtask support)
+                                const char *parent_start = strstr(todo_obj, "\"parent_id\":");
+                                if (parent_start) {
+                                    parent_start += 12; // Skip "parent_id":
+                                    while (*parent_start == ' ' || *parent_start == '\t') parent_start++;
+                                    if (*parent_start == '"') {
+                                        parent_start++;
+                                        const char *parent_end = parent_start;
+                                        while (*parent_end && *parent_end != '"') {
+                                            if (*parent_end == '\\' && *(parent_end + 1)) parent_end += 2;
+                                            else parent_end++;
                                         }
-                                        size_t id_len = id_end - id_start;
-                                        if (id_len < sizeof(id)) {
-                                            memcpy(id, id_start, id_len);
-                                            id[id_len] = '\0';
+                                        size_t parent_len = parent_end - parent_start;
+                                        if (parent_len < sizeof(parent_id)) {
+                                            memcpy(parent_id, parent_start, parent_len);
+                                            parent_id[parent_len] = '\0';
                                         }
                                     }
                                 }
-                                
-                                // Create the todo if we have content
+
+                                // Create the task if we have content
                                 if (strlen(content) > 0) {
-                                    TodoPriority priority = todo_priority_from_string(priority_str);
-                                    TodoStatus status = todo_status_from_string(status_str);
-                                    
-                                    char new_id[TODO_MAX_ID_LENGTH] = {0};
-                                    if (todo_create(g_todo_list, content, priority, new_id) == 0) {
-                                        // Update status if different from default
-                                        if (status != TODO_STATUS_PENDING) {
-                                            todo_update_status(g_todo_list, new_id, status);
+                                    TaskPriority priority = task_priority_from_string(priority_str);
+                                    TaskStatus status = task_status_from_string(status_str);
+
+                                    if (use_sqlite && bulk_tasks) {
+                                        // Grow array if needed
+                                        if (bulk_count >= bulk_capacity) {
+                                            bulk_capacity *= 2;
+                                            Task* new_tasks = realloc(bulk_tasks, sizeof(Task) * bulk_capacity);
+                                            if (new_tasks) {
+                                                bulk_tasks = new_tasks;
+                                            } else {
+                                                // Continue with current capacity
+                                            }
+                                        }
+
+                                        if (bulk_count < bulk_capacity) {
+                                            Task* task = &bulk_tasks[bulk_count];
+                                            memset(task, 0, sizeof(Task));
+                                            task->content = strdup(content);
+                                            task->status = status;
+                                            task->priority = priority;
+                                            // Copy parent_id safely (memset already zeroed the struct)
+                                            size_t parent_len = strlen(parent_id);
+                                            if (parent_len > 0 && parent_len < sizeof(task->parent_id)) {
+                                                memcpy(task->parent_id, parent_id, parent_len);
+                                            }
+                                            task->created_at = time(NULL);
+                                            task->updated_at = task->created_at;
+                                            bulk_count++;
+                                        }
+                                    } else {
+                                        // Fallback: in-memory only
+                                        char new_id[TODO_MAX_ID_LENGTH] = {0};
+                                        if (todo_create(g_todo_list, content, (TodoPriority)priority, new_id) == 0) {
+                                            if (status != TASK_STATUS_PENDING) {
+                                                todo_update_status(g_todo_list, new_id, (TodoStatus)status);
+                                            }
                                         }
                                     }
                                 }
-                                
+
                                 free(todo_obj);
                             }
                             current = obj_end;
@@ -420,12 +521,27 @@ int execute_todo_tool_call(const ToolCall *tool_call, ToolResult *result) {
                         current++; // Skip unexpected character
                     }
                 }
-                
+
                 free(todos_json);
-                
+
+                // Persist to SQLite if available
+                if (use_sqlite && bulk_tasks && bulk_count > 0) {
+                    task_store_replace_session_tasks(store, g_current_session_id, bulk_tasks, bulk_count);
+                    // Sync back to in-memory list for display
+                    sync_todolist_from_store();
+                }
+
+                // Clean up bulk tasks
+                if (bulk_tasks) {
+                    for (size_t i = 0; i < bulk_count; i++) {
+                        free(bulk_tasks[i].content);
+                    }
+                    free(bulk_tasks);
+                }
+
                 // Update the todo display after successful modification
                 todo_display_update(g_todo_list);
-                
+
                 // Return success message with updated todo list
                 response = strdup("Todos updated. Continue with systematic execution of remaining tasks.");
             } else {
@@ -452,16 +568,34 @@ int execute_todo_tool_call(const ToolCall *tool_call, ToolResult *result) {
 // Clear the global todo list reference (called during cleanup)
 void clear_todo_tool_reference(void) {
     g_todo_list = NULL;
+    g_current_session_id[0] = '\0';
 }
 
-int register_todo_tool(ToolRegistry* registry, TodoList* todo_list) {
+// Get the current session ID
+const char* get_todo_session_id(void) {
+    return g_current_session_id;
+}
+
+int register_todo_tool(ToolRegistry* registry, TodoList* todo_list, const char* session_id) {
     if (registry == NULL || todo_list == NULL) {
         return -1;
     }
-    
+
     // Store reference to todo list for tool calls
     g_todo_list = todo_list;
-    
+
+    // Store session ID for task_store integration
+    if (session_id != NULL) {
+        strncpy(g_current_session_id, session_id, sizeof(g_current_session_id) - 1);
+        g_current_session_id[sizeof(g_current_session_id) - 1] = '\0';
+
+        // Load any existing tasks from SQLite for this session
+        // This enables persistence across ralph restarts
+        sync_todolist_from_store();
+    } else {
+        g_current_session_id[0] = '\0';
+    }
+
     // Define parameters
     ToolParameter parameters[1];
     
