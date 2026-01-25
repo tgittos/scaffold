@@ -533,7 +533,8 @@ int register_memory_tools(ToolRegistry *registry) {
     
     // 1. Register remember tool
     ToolParameter remember_parameters[4];
-    
+    memset(remember_parameters, 0, sizeof(remember_parameters));
+
     remember_parameters[0].name = strdup("content");
     remember_parameters[0].type = strdup("string");
     remember_parameters[0].description = strdup("The content to remember");
@@ -593,7 +594,8 @@ int register_memory_tools(ToolRegistry *registry) {
     
     // 2. Register recall_memories tool
     ToolParameter recall_parameters[2];
-    
+    memset(recall_parameters, 0, sizeof(recall_parameters));
+
     recall_parameters[0].name = strdup("query");
     recall_parameters[0].type = strdup("string");
     recall_parameters[0].description = strdup("Query to search for relevant memories");
@@ -639,7 +641,8 @@ int register_memory_tools(ToolRegistry *registry) {
     
     // 3. Register forget_memory tool
     ToolParameter forget_parameters[1];
-    
+    memset(forget_parameters, 0, sizeof(forget_parameters));
+
     forget_parameters[0].name = strdup("memory_id");
     forget_parameters[0].type = strdup("number");
     forget_parameters[0].description = strdup("The ID of the memory to delete");

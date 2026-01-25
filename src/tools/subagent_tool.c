@@ -935,6 +935,7 @@ int register_subagent_tool(ToolRegistry *registry, SubagentManager *manager) {
 
     // Define parameters
     ToolParameter parameters[2];
+    memset(parameters, 0, sizeof(parameters));
 
     // Parameter 1: task (required)
     parameters[0].name = strdup("task");
@@ -1006,6 +1007,7 @@ int register_subagent_status_tool(ToolRegistry *registry, SubagentManager *manag
 
     // Define parameters
     ToolParameter parameters[2];
+    memset(parameters, 0, sizeof(parameters));
 
     // Parameter 1: subagent_id (required)
     parameters[0].name = strdup("subagent_id");

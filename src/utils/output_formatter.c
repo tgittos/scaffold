@@ -1,6 +1,7 @@
 #include "output_formatter.h"
 #include "debug_output.h"
 #include "model_capabilities.h"
+#include "../tools/todo_display.h"
 #include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -602,7 +603,14 @@ void display_tool_execution_group_end(void) {
         printf(ANSI_CYAN "└──────────────────────────────────────────────────────────────────────────────┘" ANSI_RESET "\n\n");
         fflush(stdout);
         tool_execution_group_active = false;
+
+        // Flush any deferred todo display now that the tool box is closed
+        todo_display_flush_deferred();
     }
+}
+
+bool is_tool_execution_group_active(void) {
+    return tool_execution_group_active;
 }
 
 // Box width is 80 characters total: │ (1) + space (1) + content+padding (77) + │ (1)
@@ -743,6 +751,34 @@ static char* extract_arg_summary(const char *tool_name, const char *arguments) {
         label = "text: ";
     }
 
+    // Task/Todo tool specific parameters
+    if (value == NULL) {
+        cJSON *subject = cJSON_GetObjectItem(json, "subject");
+        cJSON *taskId = cJSON_GetObjectItem(json, "taskId");
+        cJSON *status = cJSON_GetObjectItem(json, "status");
+        cJSON *content_field = cJSON_GetObjectItem(json, "content");
+
+        if (subject && cJSON_IsString(subject)) {
+            value = cJSON_GetStringValue(subject);
+            label = "";
+        } else if (taskId && cJSON_IsString(taskId)) {
+            // For task updates, show both taskId and status if available
+            const char *task_id_val = cJSON_GetStringValue(taskId);
+            if (status && cJSON_IsString(status)) {
+                const char *status_val = cJSON_GetStringValue(status);
+                snprintf(summary, sizeof(summary), "#%s → %s", task_id_val, status_val);
+                cJSON_Delete(json);
+                return strdup(summary);
+            } else {
+                value = task_id_val;
+                label = "#";
+            }
+        } else if (content_field && cJSON_IsString(content_field)) {
+            value = cJSON_GetStringValue(content_field);
+            label = "";
+        }
+    }
+
     if (value && strlen(value) > 0) {
         size_t value_len = strlen(value);
         if (value_len <= ARG_DISPLAY_MAX_LEN) {
@@ -769,8 +805,70 @@ void log_tool_execution_improved(const char *tool_name, const char *arguments, b
         return;
     }
 
-    // Skip internal todo tool logging
+    // For TodoWrite, show a meaningful summary of what tasks were written
     if (strcmp(tool_name, "TodoWrite") == 0) {
+        char summary[128];
+        memset(summary, 0, sizeof(summary));
+        int task_count = 0;
+        char first_task[64];
+        memset(first_task, 0, sizeof(first_task));
+
+        // Parse the todos array to extract summary info
+        if (arguments) {
+            cJSON *json = cJSON_Parse(arguments);
+            if (json) {
+                cJSON *todos = cJSON_GetObjectItem(json, "todos");
+                if (todos && cJSON_IsArray(todos)) {
+                    task_count = cJSON_GetArraySize(todos);
+
+                    // Get first task's content/title for display
+                    if (task_count > 0) {
+                        cJSON *first = cJSON_GetArrayItem(todos, 0);
+                        if (first) {
+                            cJSON *content = cJSON_GetObjectItem(first, "content");
+                            if (!content) content = cJSON_GetObjectItem(first, "title");
+                            if (content && cJSON_IsString(content)) {
+                                const char *text = cJSON_GetStringValue(content);
+                                if (text) {
+                                    size_t len = strlen(text);
+                                    if (len <= 40) {
+                                        snprintf(first_task, sizeof(first_task), "%s", text);
+                                    } else {
+                                        snprintf(first_task, sizeof(first_task), "%.37s...", text);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                cJSON_Delete(json);
+            }
+        }
+
+        // Build the display summary
+        if (task_count > 0 && first_task[0] != '\0') {
+            if (task_count == 1) {
+                snprintf(summary, sizeof(summary), "1 task: \"%s\"", first_task);
+            } else {
+                snprintf(summary, sizeof(summary), "%d tasks: \"%s\"%s",
+                         task_count, first_task,
+                         task_count > 1 ? ", ..." : "");
+            }
+        } else if (task_count > 0) {
+            snprintf(summary, sizeof(summary), "%d task%s", task_count, task_count == 1 ? "" : "s");
+        } else {
+            snprintf(summary, sizeof(summary), "updated");
+        }
+
+        printf(ANSI_CYAN "│" ANSI_RESET " ");
+        printf(ANSI_GREEN "✓" ANSI_RESET " TodoWrite" ANSI_DIM " (%s)" ANSI_RESET, summary);
+
+        // Calculate visible length: icon(1) + space(1) + "TodoWrite"(9) + " ("(2) + summary + ")"(1) = 14 + summary_len
+        size_t visible_len = 14 + strlen(summary);
+        int padding = TOOL_BOX_CONTENT_WIDTH - (int)visible_len;
+        if (padding < 0) padding = 0;
+        printf("%*s" ANSI_CYAN "│" ANSI_RESET "\n", padding, "");
+        fflush(stdout);
         return;
     }
 

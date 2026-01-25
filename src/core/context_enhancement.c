@@ -85,16 +85,12 @@ char* ralph_build_enhanced_system_prompt(const RalphSession* session) {
                               "This is YOUR todo list for breaking down and tracking your work. "
                               "Your current internal todo list state is:\n\n";
 
-    const char* todo_instructions = "\n\nCRITICAL TODO SYSTEM RULES:\n"
-                                   "1. IMMEDIATELY after creating todos with TodoWrite, you MUST begin executing them\n"
-                                   "2. NEVER create todos and then stop - you must DO THE WORK\n"
-                                   "3. Mark tasks 'in_progress' when starting, 'completed' when done\n"
-                                   "4. Your response is NOT COMPLETE until ALL todos are 'completed'\n"
-                                   "5. If you have pending or in_progress todos, you MUST continue working\n"
-                                   "6. Use tool calls, provide responses, and take actions to complete each todo\n"
-                                   "7. Only end your response when your todo list shows all tasks completed\n\n"
-                                   "WORKFLOW: TodoWrite -> Execute Tasks -> Mark Complete -> Verify All Done -> End Response\n"
-                                   "DO NOT create a todo list and then do nothing. ACT ON YOUR TODOS.";
+    const char* todo_instructions = "\n\nTODO SYSTEM USAGE:\n"
+                                   "- Use TodoWrite to track tasks when the user requests task tracking\n"
+                                   "- Update task status (in_progress, completed) as you work on them\n"
+                                   "- Only execute tasks if the user explicitly asks you to do so\n"
+                                   "- Creating a todo list does NOT mean you should start implementing the tasks\n"
+                                   "- Follow the user's actual request, not the existence of todos";
 
     size_t total_len = strlen(base_prompt) + strlen(todo_section) +
                        strlen(todo_json) + strlen(todo_instructions) + 1;

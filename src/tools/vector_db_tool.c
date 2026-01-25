@@ -20,7 +20,8 @@ int register_vector_db_tool(ToolRegistry *registry) {
     
     // 1. Register vector_db_create_index
     ToolParameter create_parameters[6];
-    
+    memset(create_parameters, 0, sizeof(create_parameters));
+
     create_parameters[0].name = strdup("index_name");
     create_parameters[0].type = strdup("string");
     create_parameters[0].description = strdup("Name of the index to create");
@@ -90,7 +91,8 @@ int register_vector_db_tool(ToolRegistry *registry) {
     
     // 2. Register vector_db_delete_index
     ToolParameter delete_parameters[1];
-    
+    memset(delete_parameters, 0, sizeof(delete_parameters));
+
     delete_parameters[0].name = strdup("index_name");
     delete_parameters[0].type = strdup("string");
     delete_parameters[0].description = strdup("Name of the index to delete");
@@ -126,7 +128,8 @@ int register_vector_db_tool(ToolRegistry *registry) {
     
     // 4. Register vector_db_add_vector
     ToolParameter add_parameters[3];
-    
+    memset(add_parameters, 0, sizeof(add_parameters));
+
     add_parameters[0].name = strdup("index_name");
     add_parameters[0].type = strdup("string");
     add_parameters[0].description = strdup("Name of the index");
@@ -175,7 +178,8 @@ int register_vector_db_tool(ToolRegistry *registry) {
     
     // 5. Register vector_db_update_vector
     ToolParameter update_parameters[4];
-    
+    memset(update_parameters, 0, sizeof(update_parameters));
+
     update_parameters[0].name = strdup("index_name");
     update_parameters[0].type = strdup("string");
     update_parameters[0].description = strdup("Name of the index");
@@ -231,7 +235,8 @@ int register_vector_db_tool(ToolRegistry *registry) {
     
     // 6. Register vector_db_delete_vector
     ToolParameter delete_vec_parameters[2];
-    
+    memset(delete_vec_parameters, 0, sizeof(delete_vec_parameters));
+
     delete_vec_parameters[0].name = strdup("index_name");
     delete_vec_parameters[0].type = strdup("string");
     delete_vec_parameters[0].description = strdup("Name of the index");
@@ -273,7 +278,8 @@ int register_vector_db_tool(ToolRegistry *registry) {
     
     // 7. Register vector_db_get_vector
     ToolParameter get_parameters[2];
-    
+    memset(get_parameters, 0, sizeof(get_parameters));
+
     get_parameters[0].name = strdup("index_name");
     get_parameters[0].type = strdup("string");
     get_parameters[0].description = strdup("Name of the index");
@@ -315,7 +321,8 @@ int register_vector_db_tool(ToolRegistry *registry) {
     
     // 8. Register vector_db_search
     ToolParameter search_parameters[3];
-    
+    memset(search_parameters, 0, sizeof(search_parameters));
+
     search_parameters[0].name = strdup("index_name");
     search_parameters[0].type = strdup("string");
     search_parameters[0].description = strdup("Name of the index to search");
@@ -364,7 +371,8 @@ int register_vector_db_tool(ToolRegistry *registry) {
     
     // 9. Register vector_db_add_text
     ToolParameter add_text_parameters[3];
-    
+    memset(add_text_parameters, 0, sizeof(add_text_parameters));
+
     add_text_parameters[0].name = strdup("index_name");
     add_text_parameters[0].type = strdup("string");
     add_text_parameters[0].description = strdup("Name of the index");
@@ -413,7 +421,8 @@ int register_vector_db_tool(ToolRegistry *registry) {
     
     // 10. Register vector_db_add_chunked_text
     ToolParameter add_chunked_parameters[5];
-    
+    memset(add_chunked_parameters, 0, sizeof(add_chunked_parameters));
+
     add_chunked_parameters[0].name = strdup("index_name");
     add_chunked_parameters[0].type = strdup("string");
     add_chunked_parameters[0].description = strdup("Name of the index");
@@ -476,7 +485,8 @@ int register_vector_db_tool(ToolRegistry *registry) {
     
     // 11. Register vector_db_add_pdf_document
     ToolParameter add_pdf_parameters[4];
-    
+    memset(add_pdf_parameters, 0, sizeof(add_pdf_parameters));
+
     add_pdf_parameters[0].name = strdup("index_name");
     add_pdf_parameters[0].type = strdup("string");
     add_pdf_parameters[0].description = strdup("Name of the index");
@@ -532,7 +542,8 @@ int register_vector_db_tool(ToolRegistry *registry) {
     
     // 12. Register vector_db_search_text
     ToolParameter search_text_parameters[3];
-    
+    memset(search_text_parameters, 0, sizeof(search_text_parameters));
+
     search_text_parameters[0].name = strdup("index_name");
     search_text_parameters[0].type = strdup("string");
     search_text_parameters[0].description = strdup("Name of the index to search");
@@ -581,7 +592,8 @@ int register_vector_db_tool(ToolRegistry *registry) {
     
     // 13. Register vector_db_search_by_time
     ToolParameter search_time_parameters[4];
-    
+    memset(search_time_parameters, 0, sizeof(search_time_parameters));
+
     search_time_parameters[0].name = strdup("index_name");
     search_time_parameters[0].type = strdup("string");
     search_time_parameters[0].description = strdup("Name of the index to search");

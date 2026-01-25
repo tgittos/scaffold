@@ -13,6 +13,7 @@ typedef struct {
     char **enum_values;  // For enum types, NULL if not enum
     int enum_count;
     int required;        // 1 if required, 0 if optional
+    char *items_schema;  // For array types: JSON schema defining item structure, NULL for default {"type": "object"}
 } ToolParameter;
 
 /**

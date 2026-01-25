@@ -525,6 +525,86 @@ void test_tool_argument_failure_display(void) {
     TEST_ASSERT_TRUE(1);
 }
 
+void test_todowrite_display(void) {
+    printf("\n--- Testing TodoWrite display ---\n");
+
+    display_tool_execution_group_start();
+
+    // Single task should show "1 task: <content>"
+    log_tool_execution_improved("TodoWrite",
+        "{\"todos\": [{\"content\": \"Implement feature X\", \"status\": \"pending\"}]}",
+        true, "Todos updated");
+
+    // Multiple tasks should show count and first task
+    log_tool_execution_improved("TodoWrite",
+        "{\"todos\": [{\"content\": \"First task\", \"status\": \"pending\"}, "
+        "{\"content\": \"Second task\", \"status\": \"in_progress\"}]}",
+        true, "Todos updated");
+
+    // Long content should be truncated
+    log_tool_execution_improved("TodoWrite",
+        "{\"todos\": [{\"content\": \"This is a very long task description that should be truncated for display purposes\", \"status\": \"pending\"}]}",
+        true, "Todos updated");
+
+    // Empty todos array should show "updated"
+    log_tool_execution_improved("TodoWrite", "{\"todos\": []}", true, "Todos updated");
+
+    // Malformed JSON should not crash
+    log_tool_execution_improved("TodoWrite", "invalid json", true, "Todos updated");
+
+    display_tool_execution_group_end();
+
+    TEST_ASSERT_TRUE(1);
+}
+
+void test_task_tool_display(void) {
+    printf("\n--- Testing task tool display ---\n");
+
+    display_tool_execution_group_start();
+
+    // TaskCreate should show subject
+    log_tool_execution_improved("TaskCreate",
+        "{\"subject\": \"Implement authentication\", \"description\": \"Add user login flow\"}",
+        true, "Task created");
+
+    // TaskUpdate should show taskId and status
+    log_tool_execution_improved("TaskUpdate",
+        "{\"taskId\": \"123\", \"status\": \"completed\"}",
+        true, "Task updated");
+
+    // TaskUpdate with just taskId
+    log_tool_execution_improved("TaskUpdate",
+        "{\"taskId\": \"456\", \"description\": \"Updated description\"}",
+        true, "Task updated");
+
+    display_tool_execution_group_end();
+
+    TEST_ASSERT_TRUE(1);
+}
+
+void test_tool_execution_group_active_flag(void) {
+    printf("\n--- Testing tool execution group active flag ---\n");
+
+    // Initially should be inactive
+    TEST_ASSERT_FALSE(is_tool_execution_group_active());
+
+    // Start group
+    display_tool_execution_group_start();
+    TEST_ASSERT_TRUE(is_tool_execution_group_active());
+
+    // Still active after log
+    log_tool_execution_improved("test_tool", "{}", true, "result");
+    TEST_ASSERT_TRUE(is_tool_execution_group_active());
+
+    // End group
+    display_tool_execution_group_end();
+    TEST_ASSERT_FALSE(is_tool_execution_group_active());
+
+    // Calling end again should be safe
+    display_tool_execution_group_end();
+    TEST_ASSERT_FALSE(is_tool_execution_group_active());
+}
+
 int main(void) {
     UNITY_BEGIN();
     
@@ -558,6 +638,13 @@ int main(void) {
     RUN_TEST(test_tool_argument_truncation);
     RUN_TEST(test_tool_argument_edge_cases);
     RUN_TEST(test_tool_argument_failure_display);
+
+    // Todo/Task tool display tests
+    RUN_TEST(test_todowrite_display);
+    RUN_TEST(test_task_tool_display);
+
+    // Tool execution group state tests
+    RUN_TEST(test_tool_execution_group_active_flag);
 
     return UNITY_END();
 }

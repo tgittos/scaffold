@@ -215,7 +215,8 @@ int register_pdf_tool(ToolRegistry *registry) {
     
     // Define parameters
     ToolParameter parameters[4];
-    
+    memset(parameters, 0, sizeof(parameters));
+
     // Parameter 1: file_path (required)
     parameters[0].name = strdup("file_path");
     parameters[0].type = strdup("string");

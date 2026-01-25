@@ -62,4 +62,10 @@ void todo_display_print_compact(const TodoList* todo_list);
  */
 void todo_display_cleanup(void);
 
+/**
+ * Flush any deferred todo display
+ * Called after tool execution group ends to show deferred updates
+ */
+void todo_display_flush_deferred(void);
+
 #endif // TODO_DISPLAY_H

@@ -114,7 +114,8 @@ int register_tool(ToolRegistry *registry, const char *name, const char *descript
             dst_param->description = strdup(src_param->description);
             dst_param->required = src_param->required;
             dst_param->enum_count = src_param->enum_count;
-            
+            dst_param->items_schema = src_param->items_schema ? strdup(src_param->items_schema) : NULL;
+
             if (dst_param->name == NULL || dst_param->type == NULL || dst_param->description == NULL) {
                 // Cleanup on failure
                 for (int j = 0; j <= i; j++) {
@@ -208,11 +209,16 @@ char* generate_tools_json(const ToolRegistry *registry) {
         for (int j = 0; j < func->parameter_count; j++) {
             const ToolParameter *param = &func->parameters[j];
             required_size += strlen(param->name) + strlen(param->type) + strlen(param->description) + 100;
-            
+
             if (param->enum_values != NULL) {
                 for (int k = 0; k < param->enum_count; k++) {
                     required_size += strlen(param->enum_values[k]) + 10; // quotes, comma, safety
                 }
+            }
+
+            // Account for items_schema in array types
+            if (param->items_schema != NULL) {
+                required_size += strlen(param->items_schema) + 20;
             }
         }
     }
@@ -299,7 +305,13 @@ char* generate_tools_json(const ToolRegistry *registry) {
                 
                 // Add items schema for array types
                 if (strcmp(param->type, "array") == 0) {
-                    ret = snprintf(json + pos, required_size - pos, ", \"items\": {\"type\": \"object\"}");
+                    if (param->items_schema != NULL) {
+                        // Use the provided items schema
+                        ret = snprintf(json + pos, required_size - pos, ", \"items\": %s", param->items_schema);
+                    } else {
+                        // Default to generic object
+                        ret = snprintf(json + pos, required_size - pos, ", \"items\": {\"type\": \"object\"}");
+                    }
                     if (ret < 0 || (size_t)ret >= required_size - pos) {
                         free(json);
                         return NULL;
@@ -1148,7 +1160,8 @@ void cleanup_tool_registry(ToolRegistry *registry) {
             free(param->name);
             free(param->type);
             free(param->description);
-            
+            free(param->items_schema);
+
             for (int k = 0; k < param->enum_count; k++) {
                 free(param->enum_values[k]);
             }

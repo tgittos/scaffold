@@ -311,8 +311,8 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
             fflush(stdout);
         }
 
-        // Display the response
-        print_formatted_response_improved(&parsed_response);
+        // NOTE: Response display is deferred until after we check for tool calls
+        // so we can close the tool box first if this is the final response
 
         // Check for tool calls in the response FIRST
         ToolCall *tool_calls = NULL;
@@ -395,16 +395,23 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
             }
         }
 
-        cleanup_parsed_response(&parsed_response);
         cleanup_response(&response);
         free(post_data);
 
-        // If no tool calls found, exit the loop
+        // If no tool calls found, close the tool box and display the final response
         if (tool_parse_result != 0 || call_count == 0) {
             debug_printf("No more tool calls found - ending tool loop after %d iterations\n", loop_count);
+            // Close the tool execution box BEFORE displaying the response
+            display_tool_execution_group_end();
+            // Now display the response outside the tool box
+            print_formatted_response_improved(&parsed_response);
+            cleanup_parsed_response(&parsed_response);
             cleanup_executed_tool_tracker(&tracker);
             return 0;
         }
+
+        // Clean up parsed response for iterations that continue with more tool calls
+        cleanup_parsed_response(&parsed_response);
 
         // Check if we've already executed these tool calls (prevent infinite loops)
         int new_tool_calls = 0;
@@ -417,6 +424,7 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
         if (new_tool_calls == 0) {
             debug_printf("All %d tool calls already executed - ending loop to prevent infinite iteration\n", call_count);
             cleanup_tool_calls(tool_calls, call_count);
+            // Note: Group is closed by caller (tool_executor_run_workflow)
             cleanup_executed_tool_tracker(&tracker);
             return 0;
         }
@@ -424,13 +432,14 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
         debug_printf("Found %d new tool calls (out of %d total) in iteration %d - executing them\n",
                     new_tool_calls, call_count, loop_count);
 
-        // Start tool execution group for improved visual formatting
-        display_tool_execution_group_start();
+        // Note: Tool execution group was started by caller (tool_executor_run_workflow)
+        // The display_tool_execution_group_start() is safe to call here as it checks global state
 
         // Execute only the new tool calls - use calloc to zero-initialize
         ToolResult *results = calloc(call_count, sizeof(ToolResult));
         if (results == NULL) {
             cleanup_tool_calls(tool_calls, call_count);
+            // Note: Group is closed by caller (tool_executor_run_workflow)
             cleanup_executed_tool_tracker(&tracker);
             return -1;
         }
@@ -440,6 +449,7 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
         if (tool_call_indices == NULL) {
             free(results);
             cleanup_tool_calls(tool_calls, call_count);
+            // Note: Group is closed by caller (tool_executor_run_workflow)
             cleanup_executed_tool_tracker(&tracker);
             return -1;
         }
@@ -495,8 +505,8 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
             executed_count++;
         }
 
-        // End tool execution group for improved visual formatting
-        display_tool_execution_group_end();
+        // Note: Tool execution group is NOT ended here - it spans the entire agentic loop
+        // and will be closed when exiting the loop
 
         // Add tool result messages to conversation (only for executed tools)
         for (int i = 0; i < executed_count; i++) {
@@ -570,8 +580,7 @@ int tool_executor_run_workflow(RalphSession* session, ToolCall* tool_calls, int 
         }
     }
 
-    // End tool execution group for improved visual formatting
-    display_tool_execution_group_end();
+    // Note: Group is NOT ended here - tool_executor_run_loop may add more tools to the group
 
     // Add tool result messages to conversation
     for (int i = 0; i < call_count; i++) {
@@ -590,6 +599,9 @@ int tool_executor_run_workflow(RalphSession* session, ToolCall* tool_calls, int 
         debug_printf("Follow-up tool loop failed, but initial tools executed successfully\n");
         result = 0;
     }
+
+    // End tool execution group - this closes the box that spans all tool executions
+    display_tool_execution_group_end();
 
     cleanup_tool_results(results, call_count);
     return result;

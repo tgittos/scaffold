@@ -106,6 +106,14 @@ void display_tool_execution_group_start(void);
 void display_tool_execution_group_end(void);
 
 /**
+ * Check if a tool execution group is currently active
+ * Useful for suppressing other output that would interleave with the tool box
+ *
+ * @return true if tool execution group is active, false otherwise
+ */
+bool is_tool_execution_group_active(void);
+
+/**
  * Print a line of content inside the tool execution box with proper borders
  * The line will be padded to fit within the 80-character box width
  *
