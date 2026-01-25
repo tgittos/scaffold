@@ -534,60 +534,12 @@ int parse_posix_shell(const char *command, ParsedShellCommand *result) {
 /* parse_cmd_shell() is implemented in shell_parser_cmd.c */
 
 /* ============================================================================
- * PowerShell Parsing (Placeholder)
+ * PowerShell Parsing
  *
- * NOTE: This is a conservative placeholder that falls back to POSIX-like
- * parsing with PowerShell-specific checks. Full PowerShell parsing would require:
- * - Different quoting rules (both ' and " but with different semantics)
- * - Script block syntax { }
- * - Pipeline chaining (;, |, &&, ||)
- * - Call operators (& and . at start of expression)
- * - Subexpression syntax $( )
- * - Here-strings (@' '@ and @" "@)
- *
- * For now, we err on the side of caution by flagging anything that looks
- * potentially dangerous.
+ * The full implementation is in shell_parser_ps.c
  * ========================================================================== */
 
-int parse_powershell(const char *command, ParsedShellCommand *result) {
-    /* Fall back to POSIX-like parsing with PS-specific checks */
-    if (parse_posix_shell(command, result) != 0) {
-        return -1;
-    }
-    result->shell_type = SHELL_TYPE_POWERSHELL;
-
-    if (!command) {
-        return 0;
-    }
-
-    /* Add PowerShell-specific dangerous pattern check */
-    if (powershell_command_is_dangerous(command)) {
-        result->is_dangerous = 1;
-    }
-
-    /* Check for script blocks { } */
-    if (strchr(command, '{') && strchr(command, '}')) {
-        result->has_subshell = 1;
-    }
-
-    /* Check for call operators at start of command */
-    /* Skip leading whitespace */
-    const char *p = command;
-    while (*p && isspace((unsigned char)*p)) {
-        p++;
-    }
-    if (*p == '&' || *p == '.') {
-        /* & or . at start indicates call operator */
-        result->has_subshell = 1;
-    }
-
-    /* Check for subexpression syntax $( ) */
-    if (strstr(command, "$(")) {
-        result->has_subshell = 1;
-    }
-
-    return 0;
-}
+/* parse_powershell() is implemented in shell_parser_ps.c */
 
 /* ============================================================================
  * Unified Parser Interface
