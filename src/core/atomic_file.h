@@ -2,6 +2,7 @@
 #define ATOMIC_FILE_H
 
 #include <sys/types.h>
+#include <sys/stat.h>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -38,6 +39,11 @@
  * Related headers:
  * - approval_gate.h: Integration with approval gates system
  * - path_normalize.h: Cross-platform path normalization
+ *
+ * Note: This header defines VerifyResult and ApprovedPath as the canonical
+ * source for these types. The approval_gate.h header currently has duplicate
+ * definitions for backward compatibility; it should be updated to include
+ * this header and remove its local definitions.
  */
 
 /* ============================================================================
@@ -199,7 +205,7 @@ VerifyResult verify_and_open_approved_path(const ApprovedPath *approved,
  */
 VerifyResult create_file_in_verified_parent(const ApprovedPath *approved,
                                             int flags,
-                                            int mode,
+                                            mode_t mode,
                                             int *out_fd);
 
 /* ============================================================================
@@ -263,7 +269,7 @@ const char *verify_result_message(VerifyResult result);
  * @param path The path that failed verification
  * @return Allocated JSON error string. Caller must free.
  */
-char *format_verify_error_json(VerifyResult result, const char *path);
+char *format_verify_error(VerifyResult result, const char *path);
 
 /* ============================================================================
  * Path Utilities
@@ -283,9 +289,17 @@ const char *atomic_file_basename(const char *path);
 /**
  * Extract the parent directory from a path.
  *
+ * Examples:
+ *   "/foo/bar" -> "/foo"
+ *   "/foo"     -> "/"
+ *   "foo/bar"  -> "foo"
+ *   "foo"      -> "."
+ *   "/"        -> "/"
+ *
  * @param path The path
  * @return Allocated string containing parent directory. Caller must free.
- *         Returns "." if path has no directory component.
+ *         Returns "/" for paths directly under root, "." for relative paths
+ *         with no directory component.
  */
 char *atomic_file_dirname(const char *path);
 
@@ -293,12 +307,12 @@ char *atomic_file_dirname(const char *path);
  * Resolve a path to its canonical form.
  *
  * On POSIX, uses realpath() for existing files.
- * For new files, resolves the parent directory.
+ * For new files, resolves the parent directory and appends the basename.
  *
  * @param path The path to resolve
  * @param must_exist If non-zero, path must exist
  * @return Allocated canonical path, or NULL on error. Caller must free.
  */
-char *resolve_canonical_path(const char *path, int must_exist);
+char *atomic_file_resolve_path(const char *path, int must_exist);
 
 #endif /* ATOMIC_FILE_H */
