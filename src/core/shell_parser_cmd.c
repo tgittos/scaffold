@@ -54,6 +54,9 @@ static int cmd_token_list_init(CmdTokenList *list) {
 static int cmd_token_list_add(CmdTokenList *list, const char *start, size_t len) {
     if (list->count >= list->capacity) {
         int new_cap = list->capacity * 2;
+        if (new_cap < list->capacity) {  /* Overflow check */
+            return -1;
+        }
         char **new_tokens = realloc(list->tokens, (size_t)new_cap * sizeof(char *));
         if (!new_tokens) {
             return -1;
@@ -92,6 +95,64 @@ static int is_cmd_metachar(char c) {
 }
 
 /* ============================================================================
+ * Windows cmd.exe Dangerous Pattern Detection
+ * ========================================================================== */
+
+/**
+ * Windows-specific dangerous command patterns that always require approval.
+ * These are checked case-insensitively.
+ */
+static const char *CMD_DANGEROUS_PATTERNS[] = {
+    "format ",      /* Format disk */
+    "del /s",       /* Recursive delete */
+    "del /q",       /* Quiet delete (no confirmation) */
+    "rd /s",        /* Recursive directory removal */
+    "rmdir /s",     /* Recursive directory removal */
+    "diskpart",     /* Disk partitioning */
+    "bcdedit",      /* Boot configuration */
+    "reg delete",   /* Registry deletion */
+    "powershell",   /* PowerShell invocation from cmd */
+    "pwsh",         /* PowerShell Core invocation */
+    NULL
+};
+
+/**
+ * Check if a cmd.exe command contains dangerous patterns.
+ *
+ * Case-insensitive check for Windows-specific dangerous commands.
+ *
+ * @param command Raw command string
+ * @return 1 if dangerous pattern detected, 0 otherwise
+ */
+static int cmd_command_is_dangerous(const char *command) {
+    if (!command || !*command) {
+        return 0;
+    }
+
+    /* Create lowercase copy for case-insensitive search */
+    size_t len = strlen(command);
+    char *lower = malloc(len + 1);
+    if (!lower) {
+        return 0;  /* Conservative: assume not dangerous if allocation fails */
+    }
+
+    for (size_t i = 0; i <= len; i++) {
+        lower[i] = (char)tolower((unsigned char)command[i]);
+    }
+
+    int is_dangerous = 0;
+    for (int i = 0; CMD_DANGEROUS_PATTERNS[i]; i++) {
+        if (strstr(lower, CMD_DANGEROUS_PATTERNS[i])) {
+            is_dangerous = 1;
+            break;
+        }
+    }
+
+    free(lower);
+    return is_dangerous;
+}
+
+/* ============================================================================
  * cmd.exe Parser Implementation
  * ========================================================================== */
 
@@ -117,7 +178,8 @@ int parse_cmd_shell(const char *command, ParsedShellCommand *result) {
     result->has_pipe = 0;
     result->has_subshell = 0;
     result->has_redirect = 0;
-    result->is_dangerous = shell_command_is_dangerous(command);
+    result->is_dangerous = shell_command_is_dangerous(command) ||
+                           cmd_command_is_dangerous(command);
     result->shell_type = SHELL_TYPE_CMD;
 
     /* Empty command is valid */

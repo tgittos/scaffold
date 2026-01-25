@@ -275,12 +275,12 @@ void test_cmd_percent_quoted_detected(void) {
     free_parsed_shell_command(cmd);
 }
 
-void test_cmd_single_percent_not_detected(void) {
-    /* A single % at word boundary without another % is not expansion */
+void test_cmd_single_percent_flagged_conservatively(void) {
+    /* A single % is still flagged for safety (conservative approach) */
+    /* This prevents attacks using pseudo-variables like %cd% */
     ParsedShellCommand *cmd = parse_shell_command_for_type("echo 50%", SHELL_TYPE_CMD);
     TEST_ASSERT_NOT_NULL(cmd);
-    /* However for safety, we flag any % character */
-    /* This is conservative but prevents attacks like %cd% */
+    /* Conservative: flag any % character to prevent variable injection */
     TEST_ASSERT_EQUAL_INT(1, cmd->has_subshell);
     free_parsed_shell_command(cmd);
 }
@@ -301,13 +301,11 @@ void test_cmd_unbalanced_quotes_flagged(void) {
  * Dangerous Patterns (cmd.exe specific)
  * ========================================================================== */
 
-void test_cmd_del_star_dangerous(void) {
-    /* del with wildcards is dangerous */
+void test_cmd_del_recursive_dangerous(void) {
+    /* del /s is flagged as dangerous */
     ParsedShellCommand *cmd = parse_shell_command_for_type("del /s /q *.*", SHELL_TYPE_CMD);
     TEST_ASSERT_NOT_NULL(cmd);
-    /* The dangerous check may or may not catch this, but chain/subshell shouldn't be set for simple del */
-    /* We don't flag this as is_dangerous since the POSIX dangerous patterns don't include del */
-    /* The main defense is that del commands require gate approval */
+    TEST_ASSERT_EQUAL_INT(1, cmd->is_dangerous);
     free_parsed_shell_command(cmd);
 }
 
@@ -315,6 +313,47 @@ void test_cmd_format_dangerous(void) {
     /* format command is dangerous */
     ParsedShellCommand *cmd = parse_shell_command_for_type("format c:", SHELL_TYPE_CMD);
     TEST_ASSERT_NOT_NULL(cmd);
+    TEST_ASSERT_EQUAL_INT(1, cmd->is_dangerous);
+    free_parsed_shell_command(cmd);
+}
+
+void test_cmd_diskpart_dangerous(void) {
+    /* diskpart is dangerous */
+    ParsedShellCommand *cmd = parse_shell_command_for_type("diskpart /s script.txt", SHELL_TYPE_CMD);
+    TEST_ASSERT_NOT_NULL(cmd);
+    TEST_ASSERT_EQUAL_INT(1, cmd->is_dangerous);
+    free_parsed_shell_command(cmd);
+}
+
+void test_cmd_rd_recursive_dangerous(void) {
+    /* rd /s is dangerous (recursive directory removal) */
+    ParsedShellCommand *cmd = parse_shell_command_for_type("rd /s /q C:\\temp", SHELL_TYPE_CMD);
+    TEST_ASSERT_NOT_NULL(cmd);
+    TEST_ASSERT_EQUAL_INT(1, cmd->is_dangerous);
+    free_parsed_shell_command(cmd);
+}
+
+void test_cmd_powershell_invocation_dangerous(void) {
+    /* Invoking PowerShell from cmd.exe is dangerous */
+    ParsedShellCommand *cmd = parse_shell_command_for_type("powershell -ExecutionPolicy Bypass -File script.ps1", SHELL_TYPE_CMD);
+    TEST_ASSERT_NOT_NULL(cmd);
+    TEST_ASSERT_EQUAL_INT(1, cmd->is_dangerous);
+    free_parsed_shell_command(cmd);
+}
+
+void test_cmd_reg_delete_dangerous(void) {
+    /* Registry deletion is dangerous */
+    ParsedShellCommand *cmd = parse_shell_command_for_type("reg delete HKCU\\Software\\Test", SHELL_TYPE_CMD);
+    TEST_ASSERT_NOT_NULL(cmd);
+    TEST_ASSERT_EQUAL_INT(1, cmd->is_dangerous);
+    free_parsed_shell_command(cmd);
+}
+
+void test_cmd_safe_command_not_dangerous(void) {
+    /* Safe commands should not be flagged */
+    ParsedShellCommand *cmd = parse_shell_command_for_type("dir /w", SHELL_TYPE_CMD);
+    TEST_ASSERT_NOT_NULL(cmd);
+    TEST_ASSERT_EQUAL_INT(0, cmd->is_dangerous);
     free_parsed_shell_command(cmd);
 }
 
@@ -458,6 +497,29 @@ void test_cmd_quoted_path_with_spaces(void) {
     free_parsed_shell_command(cmd);
 }
 
+void test_cmd_escaped_quote_inside_string(void) {
+    /*
+     * In cmd.exe, "" inside quotes represents a literal quote.
+     * The current parser doesn't fully handle this, but it should
+     * still parse safely without crashing or detecting false positives.
+     */
+    ParsedShellCommand *cmd = parse_shell_command_for_type("echo \"hello \"\"world\"\"\"", SHELL_TYPE_CMD);
+    TEST_ASSERT_NOT_NULL(cmd);
+    /* Parser sees this as valid (no crash, no false chain detection) */
+    TEST_ASSERT_EQUAL_INT(0, cmd->has_chain);
+    free_parsed_shell_command(cmd);
+}
+
+void test_cmd_mixed_metacharacters(void) {
+    /* Command with multiple metacharacter types */
+    ParsedShellCommand *cmd = parse_shell_command_for_type("dir ^& echo | findstr test", SHELL_TYPE_CMD);
+    TEST_ASSERT_NOT_NULL(cmd);
+    /* Should detect both chain (from ^) and pipe */
+    TEST_ASSERT_EQUAL_INT(1, cmd->has_chain);
+    TEST_ASSERT_EQUAL_INT(1, cmd->has_pipe);
+    free_parsed_shell_command(cmd);
+}
+
 /* ============================================================================
  * Test Runner
  * ========================================================================== */
@@ -505,14 +567,19 @@ int main(void) {
     RUN_TEST(test_cmd_percent_variable_detected);
     RUN_TEST(test_cmd_percent_in_for_loop);
     RUN_TEST(test_cmd_percent_quoted_detected);
-    RUN_TEST(test_cmd_single_percent_not_detected);
+    RUN_TEST(test_cmd_single_percent_flagged_conservatively);
 
     /* Unbalanced Quotes */
     RUN_TEST(test_cmd_unbalanced_quotes_flagged);
 
     /* Dangerous Patterns */
-    RUN_TEST(test_cmd_del_star_dangerous);
+    RUN_TEST(test_cmd_del_recursive_dangerous);
     RUN_TEST(test_cmd_format_dangerous);
+    RUN_TEST(test_cmd_diskpart_dangerous);
+    RUN_TEST(test_cmd_rd_recursive_dangerous);
+    RUN_TEST(test_cmd_powershell_invocation_dangerous);
+    RUN_TEST(test_cmd_reg_delete_dangerous);
+    RUN_TEST(test_cmd_safe_command_not_dangerous);
 
     /* Allowlist Matching */
     RUN_TEST(test_cmd_simple_match);
@@ -535,6 +602,8 @@ int main(void) {
     RUN_TEST(test_cmd_whitespace_only);
     RUN_TEST(test_cmd_path_with_backslashes);
     RUN_TEST(test_cmd_quoted_path_with_spaces);
+    RUN_TEST(test_cmd_escaped_quote_inside_string);
+    RUN_TEST(test_cmd_mixed_metacharacters);
 
     return UNITY_END();
 }

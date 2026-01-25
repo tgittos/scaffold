@@ -288,6 +288,9 @@ static int token_list_init(TokenList *list) {
 static int token_list_add(TokenList *list, const char *start, size_t len) {
     if (list->count >= list->capacity) {
         int new_cap = list->capacity * 2;
+        if (new_cap < list->capacity) {  /* Overflow check */
+            return -1;
+        }
         char **new_tokens = realloc(list->tokens, (size_t)new_cap * sizeof(char *));
         if (!new_tokens) {
             return -1;
