@@ -47,6 +47,9 @@
 #define PATH_MAX 4096
 #endif
 
+/* JSON format overhead for error messages (quotes, keys, braces, etc.) */
+#define JSON_FORMAT_OVERHEAD 128
+
 #ifdef __linux__
 /* Network filesystem type strings for Linux /proc/mounts */
 static const char *NETWORK_FS_TYPES[] = {
@@ -79,13 +82,21 @@ static wchar_t *path_to_wide(const char *path) {
 
     /* Calculate required buffer size */
     int len = MultiByteToWideChar(CP_UTF8, 0, path, -1, NULL, 0);
-    if (len == 0) return NULL;
+    if (len <= 0) return NULL;
 
     /* Check if we need long path prefix */
-    int need_prefix = (strlen(path) >= MAX_PATH);
-    int prefix_len = need_prefix ? WIN_LONG_PATH_PREFIX_LEN : 0;
+    size_t path_len = strlen(path);
+    size_t need_prefix = (path_len >= MAX_PATH) ? 1 : 0;
+    size_t prefix_len = need_prefix ? WIN_LONG_PATH_PREFIX_LEN : 0;
 
-    wchar_t *wide = malloc((prefix_len + len) * sizeof(wchar_t));
+    /* Calculate allocation size with overflow check */
+    size_t total_len = prefix_len + (size_t)len;
+    size_t alloc_size = total_len * sizeof(wchar_t);
+    if (alloc_size / sizeof(wchar_t) < total_len) {
+        return NULL; /* Overflow */
+    }
+
+    wchar_t *wide = malloc(alloc_size);
     if (!wide) return NULL;
 
     if (need_prefix) {
@@ -186,7 +197,7 @@ char *format_verify_error(VerifyResult result, const char *path) {
     }
 
     /* Allocate buffer for JSON output */
-    size_t buf_size = strlen(message) + strlen(path) + strlen(error_type) + 128;
+    size_t buf_size = strlen(message) + strlen(path) + strlen(error_type) + JSON_FORMAT_OVERHEAD;
     char *buf = malloc(buf_size);
     if (!buf) {
         return NULL;
@@ -824,7 +835,9 @@ VerifyResult verify_and_open_approved_path(const ApprovedPath *approved,
             return VERIFY_ERR_INODE_MISMATCH;
         }
 
-        /* Convert HANDLE to file descriptor */
+        /* Convert HANDLE to file descriptor.
+         * Note: Cosmopolitan Libc maps POSIX O_* flags to MSVC _O_* flags
+         * internally, so we can pass POSIX flags directly. */
         *out_fd = _open_osfhandle((intptr_t)h, flags);
         if (*out_fd == -1) {
             CloseHandle(h);

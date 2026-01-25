@@ -97,30 +97,10 @@ static char *json_escape_string_simple(const char *str) {
     return result;
 }
 
-#ifdef _WIN32
-/**
- * Case-insensitive substring search.
- * Returns pointer to first occurrence of needle in haystack, or NULL if not found.
- */
-static const char *strcasestr_local(const char *haystack, const char *needle) {
-    if (!haystack || !needle) {
-        return NULL;
-    }
-    if (*needle == '\0') {
-        return haystack;
-    }
+/* Note: strcasestr_local() was removed - use standard strcasestr() where available,
+ * or strstr() for case-sensitive matching. Cosmopolitan provides strcasestr(). */
 
-    size_t needle_len = strlen(needle);
-    for (const char *p = haystack; *p != '\0'; p++) {
-        if (strncasecmp(p, needle, needle_len) == 0) {
-            return p;
-        }
-    }
-    return NULL;
-}
-#endif /* _WIN32 */
-
-/* get_path_basename() was removed - use atomic_file_basename() from atomic_file.h */
+/* Note: get_path_basename() was removed - use atomic_file_basename() from atomic_file.h */
 
 /* =============================================================================
  * Constants and Static Data
