@@ -84,7 +84,7 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 ## TOCTOU Protection
 
-- [ ] **Create `src/core/atomic_file.h`** - Define `ApprovedPath` struct with fields for user path, resolved path, inode, device, parent inode/device (for new files), `existed` flag, `is_network_fs` flag, and Windows-specific fields. Define `VERIFY_OK`, `VERIFY_ERR_*` error codes.
+- [x] **Create `src/core/atomic_file.h`** - Define `ApprovedPath` struct with fields for user path, resolved path, inode, device, parent inode/device (for new files), `existed` flag, `is_network_fs` flag, and Windows-specific fields. Define `VERIFY_OK`, `VERIFY_ERR_*` error codes.
 
 - [ ] **Create `src/core/atomic_file.c`** - Implement atomic file operations using `O_NOFOLLOW`, `O_EXCL`, `openat()`, and `fstat()` verification. For existing files: open with `O_NOFOLLOW`, verify inode/device match approval. For new files: verify parent directory inode, create with `O_EXCL`. See spec section "Path Resolution and TOCTOU Protection > Atomic File Operations".
 
