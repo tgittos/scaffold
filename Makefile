@@ -14,15 +14,23 @@ include mk/tests.mk
 # PRIMARY TARGETS
 # =============================================================================
 
-all: $(TARGET) embed-python
+# Default target builds the complete ralph binary with embedded Python
+all: ralph
 
-$(TARGET): $(OBJECTS) $(ALL_LIBS) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
+# The complete ralph binary - links code and embeds Python stdlib
+# This is what users expect when they run "make ralph"
+ralph: $(BUILDDIR)/.ralph-linked embed-python
+
+# Linking step - produces the base binary and saves it for embedding
+$(BUILDDIR)/.ralph-linked: $(OBJECTS) $(ALL_LIBS) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
 	@echo "Linking with PDFio support"
-	$(CXX) $(LDFLAGS) -o $@ $(OBJECTS) $(LIBS) -lpthread
+	$(CXX) $(LDFLAGS) -o $(TARGET) $(OBJECTS) $(LIBS) -lpthread
 	@echo "Saving base binary for smart embedding..."
 	@uv run scripts/embed_python.py --save-base
+	@touch $@
 
-embed-python: $(TARGET)
+# Embed Python stdlib into the binary (can be run separately to re-embed)
+embed-python: $(BUILDDIR)/.ralph-linked
 	@uv run scripts/embed_python.py
 
 python: $(PYTHON_LIB)
@@ -55,6 +63,7 @@ clean:
 	rm -f test/*.aarch64.elf test/*/*.aarch64.elf test/*.com.dbg test/*/*.com.dbg test/*.dbg test/*/*.dbg
 	rm -f test/*.log test/*.trs test/test-suite.log
 	rm -f $(EMBEDDED_LINKS_HEADER)
+	rm -f $(BUILDDIR)/.ralph-linked
 	find build -type f ! -name 'bin2c.c' ! -name 'links' ! -name 'libpython*.a' ! -path 'build/python-include/*' -delete 2>/dev/null || true
 
 clean-python:
@@ -72,4 +81,4 @@ distclean: clean
 # PHONY TARGETS
 # =============================================================================
 
-.PHONY: all test check check-valgrind clean clean-python distclean python embed-python update-cacert
+.PHONY: all ralph test check check-valgrind clean clean-python distclean python embed-python update-cacert
