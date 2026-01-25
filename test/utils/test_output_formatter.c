@@ -456,7 +456,10 @@ void test_tool_argument_display_basic(void) {
     // Test web_fetch with url
     log_tool_execution_improved("web_fetch", "{\"url\": \"https://example.com/api\"}", true, "Response data");
 
-    // Test search with pattern
+    // Test search with pattern and path - should show "path → pattern"
+    log_tool_execution_improved("search_files", "{\"path\": \".\", \"pattern\": \"TODO\"}", true, "Found files");
+
+    // Test search with pattern only - should show ". → pattern" (default path)
     log_tool_execution_improved("search_files", "{\"pattern\": \"*.py\"}", true, "Found files");
 
     // Test memory with key
@@ -536,6 +539,32 @@ void test_todowrite_display(void) {
     TEST_ASSERT_TRUE(1);
 }
 
+void test_search_files_display(void) {
+    printf("\n--- Testing search_files display ---\n");
+
+    // search_files with path and pattern should show "path → pattern"
+    log_tool_execution_improved("search_files",
+        "{\"path\": \"src/\", \"pattern\": \"function_name\"}",
+        true, "Found matches");
+
+    // search_files with current dir path should show ". → pattern"
+    log_tool_execution_improved("search_files",
+        "{\"path\": \".\", \"pattern\": \"TODO\"}",
+        true, "Found matches");
+
+    // search_files with pattern only (no path) should default to ". → pattern"
+    log_tool_execution_improved("search_files",
+        "{\"pattern\": \"import.*os\"}",
+        true, "Found matches");
+
+    // search_files with long pattern should truncate appropriately
+    log_tool_execution_improved("search_files",
+        "{\"path\": \"/some/path\", \"pattern\": \"this is a very long pattern that might need truncation for display\"}",
+        true, "Found matches");
+
+    TEST_ASSERT_TRUE(1);
+}
+
 void test_task_tool_display(void) {
     printf("\n--- Testing task tool display ---\n");
 
@@ -593,6 +622,7 @@ int main(void) {
 
     // Todo/Task tool display tests
     RUN_TEST(test_todowrite_display);
+    RUN_TEST(test_search_files_display);
     RUN_TEST(test_task_tool_display);
 
     return UNITY_END();

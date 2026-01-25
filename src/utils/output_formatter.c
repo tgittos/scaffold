@@ -640,6 +640,16 @@ static char* extract_arg_summary(const char *tool_name, const char *arguments) {
             value = cJSON_GetStringValue(command);
             label = "";  // No label needed, command is self-explanatory
         }
+    } else if (tool_name && strcmp(tool_name, "search_files") == 0) {
+        // Search tools - show the pattern (what we're searching for) with path context
+        if (pattern && cJSON_IsString(pattern)) {
+            const char *pattern_val = cJSON_GetStringValue(pattern);
+            const char *path_val = path && cJSON_IsString(path) ? cJSON_GetStringValue(path) : ".";
+            // Format: "path → pattern" to show both where and what
+            snprintf(summary, sizeof(summary), "%s → \"%s\"", path_val, pattern_val);
+            cJSON_Delete(json);
+            return strdup(summary);
+        }
     } else if (tool_name && strstr(tool_name, "write") != NULL) {
         // Write operations - show path, indicate content exists
         if (path && cJSON_IsString(path)) {
