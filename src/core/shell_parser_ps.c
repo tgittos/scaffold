@@ -33,8 +33,7 @@
 /* Initial capacity for token array */
 #define PS_INITIAL_TOKEN_CAPACITY 16
 
-/* Maximum command length we'll process */
-#define PS_MAX_COMMAND_LENGTH 65536
+/* Note: Maximum command length check is in parse_shell_command_for_type() */
 
 /* ============================================================================
  * Internal Helpers
@@ -242,14 +241,18 @@ int parse_powershell(const char *command, ParsedShellCommand *result) {
         /*
          * Handle backtick escape outside quotes.
          * In PowerShell, backtick is the escape character.
+         * Include the escaped character in the token but mark as unsafe.
          */
         if (c == '`') {
             result->has_chain = 1;  /* Escape sequences make matching unsafe */
             if (*(p + 1)) {
-                p += 2;  /* Skip backtick and escaped character */
+                p++;  /* Skip backtick */
+                token_buf[token_len++] = *p;  /* Add escaped character */
+                p++;
             } else {
                 p++;  /* Line continuation */
             }
+            at_expression_start = 0;
             continue;
         }
 
@@ -326,11 +329,12 @@ int parse_powershell(const char *command, ParsedShellCommand *result) {
                     result->has_pipe = 1;
                 }
             } else if (c == '&') {
-                /* Check for && (conditional AND, PS 7+) */
-                if (*(p + 1) == '&') {
-                    result->has_chain = 1;
-                }
-                /* Single & not at expression start is handled above */
+                /*
+                 * Single & reaching here is NOT at expression start (call operator handled above)
+                 * and NOT part of && (handled earlier). This is unusual in PowerShell and
+                 * should be flagged as potentially dangerous.
+                 */
+                result->has_chain = 1;
             } else if (c == '$') {
                 /* Check for $( subexpression */
                 if (*(p + 1) == '(') {

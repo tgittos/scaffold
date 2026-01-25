@@ -700,6 +700,44 @@ void test_ps_hashtable_notation(void) {
     free_parsed_shell_command(cmd);
 }
 
+void test_ps_here_string_single_quote(void) {
+    /* Single-quoted here-string @'...'@ - should be flagged as unsafe due to complexity */
+    ParsedShellCommand *cmd = parse_shell_command_for_type("$text = @'\nline1\nline2\n'@", SHELL_TYPE_POWERSHELL);
+    TEST_ASSERT_NOT_NULL(cmd);
+    /* Should be unsafe for matching due to $ and complex structure */
+    TEST_ASSERT_EQUAL_INT(1, cmd->has_subshell);
+    free_parsed_shell_command(cmd);
+}
+
+void test_ps_here_string_double_quote(void) {
+    /* Double-quoted here-string @"..."@ - should be flagged as unsafe */
+    ParsedShellCommand *cmd = parse_shell_command_for_type("$text = @\"\nHello $name\n\"@", SHELL_TYPE_POWERSHELL);
+    TEST_ASSERT_NOT_NULL(cmd);
+    /* Should be unsafe for matching due to $ */
+    TEST_ASSERT_EQUAL_INT(1, cmd->has_subshell);
+    free_parsed_shell_command(cmd);
+}
+
+void test_ps_nested_quotes_double_single(void) {
+    /* Double quotes containing single quotes */
+    ParsedShellCommand *cmd = parse_shell_command_for_type("Write-Output \"value with 'single' inside\"", SHELL_TYPE_POWERSHELL);
+    TEST_ASSERT_NOT_NULL(cmd);
+    TEST_ASSERT_EQUAL_INT(2, cmd->token_count);
+    TEST_ASSERT_EQUAL_STRING("Write-Output", cmd->tokens[0]);
+    TEST_ASSERT_EQUAL_STRING("value with 'single' inside", cmd->tokens[1]);
+    free_parsed_shell_command(cmd);
+}
+
+void test_ps_nested_quotes_single_double(void) {
+    /* Single quotes containing double quotes */
+    ParsedShellCommand *cmd = parse_shell_command_for_type("Write-Output 'value with \"double\" inside'", SHELL_TYPE_POWERSHELL);
+    TEST_ASSERT_NOT_NULL(cmd);
+    TEST_ASSERT_EQUAL_INT(2, cmd->token_count);
+    TEST_ASSERT_EQUAL_STRING("Write-Output", cmd->tokens[0]);
+    TEST_ASSERT_EQUAL_STRING("value with \"double\" inside", cmd->tokens[1]);
+    free_parsed_shell_command(cmd);
+}
+
 /* ============================================================================
  * Command Equivalence Tests
  * ========================================================================== */
@@ -844,6 +882,10 @@ int main(void) {
     RUN_TEST(test_ps_cmdlet_with_hyphen);
     RUN_TEST(test_ps_array_notation);
     RUN_TEST(test_ps_hashtable_notation);
+    RUN_TEST(test_ps_here_string_single_quote);
+    RUN_TEST(test_ps_here_string_double_quote);
+    RUN_TEST(test_ps_nested_quotes_double_single);
+    RUN_TEST(test_ps_nested_quotes_single_double);
 
     /* Command Equivalence */
     RUN_TEST(test_ps_command_equivalence_ls_gci);
