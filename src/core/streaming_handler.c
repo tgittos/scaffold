@@ -210,6 +210,10 @@ int streaming_process_message(RalphSession* session, const char* user_message,
     free(post_data);
 
     if (result != 0) {
+        // Clean up any provider-specific streaming state (e.g., thread-local allocations)
+        if (provider->cleanup_stream_state != NULL) {
+            provider->cleanup_stream_state(provider);
+        }
         streaming_context_free(ctx);
         fprintf(stderr, "Error: Streaming HTTP request failed\n");
         return -1;

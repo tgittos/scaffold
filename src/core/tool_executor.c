@@ -31,10 +31,27 @@ char* construct_openai_assistant_message_with_tools(const char* content,
         return content ? strdup(content) : NULL;
     }
 
-    // Estimate size needed for the JSON message
+    // Estimate size needed for the JSON message with overflow protection
     size_t base_size = 200; // Base structure
-    size_t content_size = content ? strlen(content) * 2 + 50 : 50; // Escaped content
-    size_t tools_size = call_count * 200; // Rough estimate per tool call
+    size_t content_len = content ? strlen(content) : 0;
+
+    // Check for potential overflow in content size calculation
+    if (content_len > SIZE_MAX / 2 - 50) {
+        return NULL;
+    }
+    size_t content_size = content_len * 2 + 50; // Escaped content
+
+    // Check for potential overflow in tools size calculation
+    if (call_count > 0 && (size_t)call_count > SIZE_MAX / 200) {
+        return NULL;
+    }
+    size_t tools_size = (size_t)call_count * 200; // Rough estimate per tool call
+
+    // Check for overflow in total size
+    if (base_size > SIZE_MAX - content_size ||
+        base_size + content_size > SIZE_MAX - tools_size) {
+        return NULL;
+    }
 
     char* message = malloc(base_size + content_size + tools_size);
     if (message == NULL) {

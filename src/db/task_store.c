@@ -123,6 +123,14 @@ void task_store_destroy(task_store_t* store) {
     free(store);
 }
 
+/**
+ * Reset the singleton instance for testing purposes.
+ *
+ * WARNING: This function is ONLY safe to call in single-threaded test contexts.
+ * It is NOT safe to call while task_store_get_instance() may be called from
+ * another thread. The pthread_once reset is also non-portable and may not
+ * work correctly on all platforms.
+ */
 void task_store_reset_instance(void) {
     if (g_store_instance != NULL) {
         task_store_destroy(g_store_instance);

@@ -301,7 +301,8 @@ static LLMProvider openai_provider = {
     // Streaming support
     .supports_streaming = openai_supports_streaming,
     .parse_stream_event = openai_parse_stream_event,
-    .build_streaming_request_json = openai_build_streaming_request_json
+    .build_streaming_request_json = openai_build_streaming_request_json,
+    .cleanup_stream_state = NULL  // OpenAI doesn't use thread-local state
 };
 
 int register_openai_provider(ProviderRegistry* registry) {

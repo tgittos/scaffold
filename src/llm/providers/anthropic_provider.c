@@ -170,11 +170,19 @@ static int anthropic_supports_streaming(const LLMProvider* provider) {
  * Clean up thread-local streaming state
  * Called when stream is complete or on error
  */
-static void anthropic_cleanup_stream_state(void) {
+static void anthropic_cleanup_stream_state_internal(void) {
     free(current_block_type);
     current_block_type = NULL;
     free(current_tool_id);
     current_tool_id = NULL;
+}
+
+/**
+ * Provider interface function for cleanup
+ */
+static void anthropic_cleanup_stream_state(const LLMProvider* provider) {
+    (void)provider;
+    anthropic_cleanup_stream_state_internal();
 }
 
 /**
@@ -220,7 +228,7 @@ static int anthropic_parse_stream_event(const LLMProvider* provider,
     // Handle message_start - contains input tokens
     // Also clean up any stale state from previous streams
     if (strcmp(type_str, "message_start") == 0) {
-        anthropic_cleanup_stream_state();  // Ensure clean state for new stream
+        anthropic_cleanup_stream_state_internal();  // Ensure clean state for new stream
 
         cJSON* message = cJSON_GetObjectItem(root, "message");
         if (message != NULL) {
@@ -320,7 +328,7 @@ static int anthropic_parse_stream_event(const LLMProvider* provider,
     // Handle message_stop - stream complete
     else if (strcmp(type_str, "message_stop") == 0) {
         streaming_emit_complete(ctx, ctx->stop_reason ? ctx->stop_reason : "end_turn");
-        anthropic_cleanup_stream_state();
+        anthropic_cleanup_stream_state_internal();
     }
     // Handle error
     else if (strcmp(type_str, "error") == 0) {
@@ -331,7 +339,7 @@ static int anthropic_parse_stream_event(const LLMProvider* provider,
                 streaming_emit_error(ctx, message->valuestring);
             }
         }
-        anthropic_cleanup_stream_state();
+        anthropic_cleanup_stream_state_internal();
     }
     // Handle ping - just ignore
     else if (strcmp(type_str, "ping") == 0) {
@@ -404,7 +412,8 @@ static LLMProvider anthropic_provider = {
     // Streaming support
     .supports_streaming = anthropic_supports_streaming,
     .parse_stream_event = anthropic_parse_stream_event,
-    .build_streaming_request_json = anthropic_build_streaming_request_json
+    .build_streaming_request_json = anthropic_build_streaming_request_json,
+    .cleanup_stream_state = anthropic_cleanup_stream_state
 };
 
 int register_anthropic_provider(ProviderRegistry* registry) {

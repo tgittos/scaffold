@@ -63,7 +63,7 @@ static char* retrieve_relevant_memories(const char* query) {
     return memories;
 }
 
-char* ralph_build_enhanced_system_prompt(const RalphSession* session) {
+static char* ralph_build_enhanced_system_prompt(const RalphSession* session) {
     if (session == NULL) return NULL;
 
     const char* base_prompt = session->session_data.config.system_prompt;

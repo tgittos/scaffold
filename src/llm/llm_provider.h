@@ -73,6 +73,9 @@ typedef struct LLMProvider {
                                           int max_tokens,
                                           const ToolRegistry* tools);
 
+    // Clean up any provider-specific streaming state (called on stream end or error)
+    void (*cleanup_stream_state)(const struct LLMProvider* provider);
+
 } LLMProvider;
 
 // Provider registry and factory
