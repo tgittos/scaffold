@@ -110,13 +110,13 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 ## Allow Always Pattern Generation
 
-- [ ] **Implement file path pattern generation** - Extract directory component, generate pattern matching that directory and similar extensions. Root files get exact match. `/tmp` paths get exact match (security). See spec section "Allow Always Pattern Generation > Strategy" table for examples.
+- [x] **Implement file path pattern generation** - Extract directory component, generate pattern matching that directory and similar extensions. Root files get exact match. `/tmp` paths get exact match (security). See spec section "Allow Always Pattern Generation > Strategy" table for examples.
 
-- [ ] **Implement shell command pattern generation** - Add base command and first argument to allowlist. Never auto-allow commands with pipes, chains, or redirects. Generate `ShellAllowEntry` with command prefix. See spec section "Allow Always Pattern Generation > Strategy" for shell examples.
+- [x] **Implement shell command pattern generation** - Add base command and first argument to allowlist. Never auto-allow commands with pipes, chains, or redirects. Generate `ShellAllowEntry` with command prefix. See spec section "Allow Always Pattern Generation > Strategy" for shell examples.
 
-- [ ] **Implement network URL pattern generation** - Parse URL, extract scheme + hostname, generate pattern that matches scheme, exact hostname, and requires path separator: `^https://api\.example\.com(/|$)`. Prevents subdomain spoofing. See spec section "Allow Always Pattern Generation > Strategy".
+- [x] **Implement network URL pattern generation** - Parse URL, extract scheme + hostname, generate pattern that matches scheme, exact hostname, and requires path separator: `^https://api\.example\.com(/|$)`. Prevents subdomain spoofing. See spec section "Allow Always Pattern Generation > Strategy".
 
-- [ ] **Implement pattern confirmation dialog** - When generated pattern would match more than current operation, show confirmation with example matches. Offer `[y] Confirm`, `[e] Edit pattern`, `[x] Exact match only`. See spec section "Allow Always Pattern Generation > User Confirmation for Broad Patterns".
+- [x] **Implement pattern confirmation dialog** - When generated pattern would match more than current operation, show confirmation with example matches. Offer `[y] Confirm`, `[e] Edit pattern`, `[x] Exact match only`. See spec section "Allow Always Pattern Generation > User Confirmation for Broad Patterns".
 
 ---
 

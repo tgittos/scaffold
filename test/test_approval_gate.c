@@ -1556,6 +1556,343 @@ void test_check_approval_gate_batch_allowlist_bypass(void) {
 }
 
 /* =============================================================================
+ * Pattern Generation Tests
+ * ========================================================================== */
+
+void test_generate_file_path_pattern_root_file_exact_match(void) {
+    GeneratedPattern pattern;
+
+    int result = generate_file_path_pattern("./README.md", &pattern);
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_NOT_NULL(pattern.pattern);
+    TEST_ASSERT_EQUAL(1, pattern.is_exact_match);
+    TEST_ASSERT_EQUAL(0, pattern.needs_confirmation);
+    TEST_ASSERT_EQUAL_STRING("^\\./README\\.md$", pattern.pattern);
+
+    free_generated_pattern(&pattern);
+}
+
+void test_generate_file_path_pattern_tmp_path_exact_match(void) {
+    GeneratedPattern pattern;
+
+    int result = generate_file_path_pattern("/tmp/scratch.txt", &pattern);
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_NOT_NULL(pattern.pattern);
+    TEST_ASSERT_EQUAL(1, pattern.is_exact_match);
+    TEST_ASSERT_EQUAL(0, pattern.needs_confirmation);
+    TEST_ASSERT_EQUAL_STRING("^/tmp/scratch\\.txt$", pattern.pattern);
+
+    free_generated_pattern(&pattern);
+}
+
+void test_generate_file_path_pattern_nested_path_directory_match(void) {
+    GeneratedPattern pattern;
+
+    int result = generate_file_path_pattern("./src/foo/bar.c", &pattern);
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_NOT_NULL(pattern.pattern);
+    TEST_ASSERT_EQUAL(0, pattern.is_exact_match);
+    TEST_ASSERT_EQUAL(1, pattern.needs_confirmation);
+    /* Should match any .c file in the same directory */
+    TEST_ASSERT_EQUAL_STRING("^\\./src/foo/.*\\.c$", pattern.pattern);
+
+    free_generated_pattern(&pattern);
+}
+
+void test_generate_file_path_pattern_test_prefix_preserved(void) {
+    GeneratedPattern pattern;
+
+    int result = generate_file_path_pattern("./test/test_gates.c", &pattern);
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_NOT_NULL(pattern.pattern);
+    TEST_ASSERT_EQUAL(0, pattern.is_exact_match);
+    TEST_ASSERT_EQUAL(1, pattern.needs_confirmation);
+    /* Should preserve the test_ prefix */
+    TEST_ASSERT_EQUAL_STRING("^\\./test/test_.*\\.c$", pattern.pattern);
+
+    free_generated_pattern(&pattern);
+}
+
+void test_generate_file_path_pattern_no_extension_exact_match(void) {
+    GeneratedPattern pattern;
+
+    int result = generate_file_path_pattern("./src/Makefile", &pattern);
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_NOT_NULL(pattern.pattern);
+    TEST_ASSERT_EQUAL(1, pattern.is_exact_match);
+    TEST_ASSERT_EQUAL(0, pattern.needs_confirmation);
+    TEST_ASSERT_EQUAL_STRING("^\\./src/Makefile$", pattern.pattern);
+
+    free_generated_pattern(&pattern);
+}
+
+void test_generate_file_path_pattern_null_params(void) {
+    GeneratedPattern pattern;
+
+    TEST_ASSERT_EQUAL(-1, generate_file_path_pattern(NULL, &pattern));
+    TEST_ASSERT_EQUAL(-1, generate_file_path_pattern("./test.c", NULL));
+}
+
+void test_generate_file_path_pattern_escapes_special_chars(void) {
+    GeneratedPattern pattern;
+
+    /* /tmp paths get exact match, so escaping is visible in the pattern */
+    int result = generate_file_path_pattern("/tmp/test[1].txt", &pattern);
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_NOT_NULL(pattern.pattern);
+    TEST_ASSERT_EQUAL(1, pattern.is_exact_match);
+    /* Brackets should be escaped in the exact match pattern */
+    TEST_ASSERT_TRUE(strstr(pattern.pattern, "\\[1\\]") != NULL);
+
+    free_generated_pattern(&pattern);
+}
+
+void test_generate_shell_command_pattern_simple_command(void) {
+    GeneratedPattern pattern;
+
+    int result = generate_shell_command_pattern("ls", &pattern);
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_NOT_NULL(pattern.command_prefix);
+    TEST_ASSERT_EQUAL(1, pattern.prefix_len);
+    TEST_ASSERT_EQUAL_STRING("ls", pattern.command_prefix[0]);
+    TEST_ASSERT_EQUAL(1, pattern.is_exact_match);
+    TEST_ASSERT_EQUAL(0, pattern.needs_confirmation);
+
+    free_generated_pattern(&pattern);
+}
+
+void test_generate_shell_command_pattern_two_args(void) {
+    GeneratedPattern pattern;
+
+    int result = generate_shell_command_pattern("git commit -m \"msg\"", &pattern);
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_NOT_NULL(pattern.command_prefix);
+    TEST_ASSERT_EQUAL(2, pattern.prefix_len);
+    TEST_ASSERT_EQUAL_STRING("git", pattern.command_prefix[0]);
+    TEST_ASSERT_EQUAL_STRING("commit", pattern.command_prefix[1]);
+    TEST_ASSERT_EQUAL(0, pattern.is_exact_match);
+    TEST_ASSERT_EQUAL(1, pattern.needs_confirmation);
+
+    free_generated_pattern(&pattern);
+}
+
+void test_generate_shell_command_pattern_unsafe_command_no_pattern(void) {
+    GeneratedPattern pattern;
+
+    /* Commands with pipes should not generate patterns */
+    int result = generate_shell_command_pattern("cat /etc/passwd | grep root", &pattern);
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_EQUAL(1, pattern.is_exact_match);
+    TEST_ASSERT_NULL(pattern.command_prefix);
+
+    /* Commands with chains should not generate patterns */
+    result = generate_shell_command_pattern("ls && rm -rf /", &pattern);
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_EQUAL(1, pattern.is_exact_match);
+    TEST_ASSERT_NULL(pattern.command_prefix);
+
+    /* Commands with subshells should not generate patterns */
+    result = generate_shell_command_pattern("echo $(cat /etc/passwd)", &pattern);
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_EQUAL(1, pattern.is_exact_match);
+    TEST_ASSERT_NULL(pattern.command_prefix);
+
+    free_generated_pattern(&pattern);
+}
+
+void test_generate_shell_command_pattern_null_params(void) {
+    GeneratedPattern pattern;
+
+    TEST_ASSERT_EQUAL(-1, generate_shell_command_pattern(NULL, &pattern));
+    TEST_ASSERT_EQUAL(-1, generate_shell_command_pattern("ls", NULL));
+}
+
+void test_generate_network_url_pattern_basic_url(void) {
+    GeneratedPattern pattern;
+
+    int result = generate_network_url_pattern("https://api.example.com/v1/users", &pattern);
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_NOT_NULL(pattern.pattern);
+    TEST_ASSERT_EQUAL(0, pattern.is_exact_match);
+    TEST_ASSERT_EQUAL(1, pattern.needs_confirmation);
+    /* Pattern should match scheme + hostname with path boundary */
+    TEST_ASSERT_EQUAL_STRING("^https://api\\.example\\.com(/|$)", pattern.pattern);
+
+    free_generated_pattern(&pattern);
+}
+
+void test_generate_network_url_pattern_with_port(void) {
+    GeneratedPattern pattern;
+
+    int result = generate_network_url_pattern("http://localhost:8080/api", &pattern);
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_NOT_NULL(pattern.pattern);
+    /* Should only capture up to the port colon */
+    TEST_ASSERT_EQUAL_STRING("^http://localhost(/|$)", pattern.pattern);
+
+    free_generated_pattern(&pattern);
+}
+
+void test_generate_network_url_pattern_prevents_subdomain_spoofing(void) {
+    GeneratedPattern pattern;
+
+    /* Generate pattern for api.example.com */
+    int result = generate_network_url_pattern("https://api.example.com/test", &pattern);
+    TEST_ASSERT_EQUAL(0, result);
+
+    /* The pattern should require a path separator after hostname,
+     * preventing api.example.com.evil.com from matching */
+    TEST_ASSERT_TRUE(strstr(pattern.pattern, "(/|$)") != NULL);
+
+    free_generated_pattern(&pattern);
+}
+
+void test_generate_network_url_pattern_invalid_url_exact_match(void) {
+    GeneratedPattern pattern;
+
+    int result = generate_network_url_pattern("not-a-valid-url", &pattern);
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_NOT_NULL(pattern.pattern);
+    TEST_ASSERT_EQUAL(1, pattern.is_exact_match);
+    TEST_ASSERT_EQUAL_STRING("^not-a-valid-url$", pattern.pattern);
+
+    free_generated_pattern(&pattern);
+}
+
+void test_generate_network_url_pattern_null_params(void) {
+    GeneratedPattern pattern;
+
+    TEST_ASSERT_EQUAL(-1, generate_network_url_pattern(NULL, &pattern));
+    TEST_ASSERT_EQUAL(-1, generate_network_url_pattern("https://example.com", NULL));
+}
+
+void test_generate_allowlist_pattern_shell_tool(void) {
+    GeneratedPattern pattern;
+
+    ToolCall call = {
+        .id = "1",
+        .name = "shell",
+        .arguments = "{\"command\": \"git status\"}"
+    };
+
+    int result = generate_allowlist_pattern(&call, &pattern);
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_NOT_NULL(pattern.command_prefix);
+    TEST_ASSERT_EQUAL(2, pattern.prefix_len);
+    TEST_ASSERT_EQUAL_STRING("git", pattern.command_prefix[0]);
+    TEST_ASSERT_EQUAL_STRING("status", pattern.command_prefix[1]);
+
+    free_generated_pattern(&pattern);
+}
+
+void test_generate_allowlist_pattern_file_write_tool(void) {
+    GeneratedPattern pattern;
+
+    ToolCall call = {
+        .id = "1",
+        .name = "write_file",
+        .arguments = "{\"path\": \"./src/foo.c\"}"
+    };
+
+    int result = generate_allowlist_pattern(&call, &pattern);
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_NOT_NULL(pattern.pattern);
+    TEST_ASSERT_TRUE(strstr(pattern.pattern, "src") != NULL);
+    TEST_ASSERT_TRUE(strstr(pattern.pattern, "\\.c") != NULL);
+
+    free_generated_pattern(&pattern);
+}
+
+void test_generate_allowlist_pattern_network_tool(void) {
+    GeneratedPattern pattern;
+
+    ToolCall call = {
+        .id = "1",
+        .name = "web_fetch",
+        .arguments = "{\"url\": \"https://api.github.com/repos\"}"
+    };
+
+    int result = generate_allowlist_pattern(&call, &pattern);
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_NOT_NULL(pattern.pattern);
+    TEST_ASSERT_TRUE(strstr(pattern.pattern, "api\\.github\\.com") != NULL);
+
+    free_generated_pattern(&pattern);
+}
+
+void test_generate_allowlist_pattern_null_params(void) {
+    GeneratedPattern pattern;
+
+    TEST_ASSERT_EQUAL(-1, generate_allowlist_pattern(NULL, &pattern));
+
+    ToolCall call = {.id = "1", .name = "shell", .arguments = "{}"};
+    TEST_ASSERT_EQUAL(-1, generate_allowlist_pattern(&call, NULL));
+}
+
+void test_free_generated_pattern_handles_null(void) {
+    /* Should not crash */
+    free_generated_pattern(NULL);
+}
+
+void test_free_generated_pattern_handles_empty(void) {
+    GeneratedPattern pattern = {0};
+    /* Should not crash */
+    free_generated_pattern(&pattern);
+}
+
+void test_apply_generated_pattern_shell_command(void) {
+    GeneratedPattern pattern = {0};
+    pattern.command_prefix = calloc(2, sizeof(char *));
+    TEST_ASSERT_NOT_NULL(pattern.command_prefix);
+    pattern.command_prefix[0] = strdup("git");
+    pattern.command_prefix[1] = strdup("log");
+    pattern.prefix_len = 2;
+
+    int initial_count = config.shell_allowlist_count;
+
+    int result = apply_generated_pattern(&config, "shell", &pattern);
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_EQUAL(initial_count + 1, config.shell_allowlist_count);
+
+    /* Verify the entry was added correctly */
+    ShellAllowEntry *entry = &config.shell_allowlist[initial_count];
+    TEST_ASSERT_EQUAL(2, entry->prefix_len);
+    TEST_ASSERT_EQUAL_STRING("git", entry->command_prefix[0]);
+    TEST_ASSERT_EQUAL_STRING("log", entry->command_prefix[1]);
+
+    free_generated_pattern(&pattern);
+}
+
+void test_apply_generated_pattern_regex_pattern(void) {
+    GeneratedPattern pattern = {0};
+    pattern.pattern = strdup("^\\./src/.*\\.c$");
+
+    int initial_count = config.allowlist_count;
+
+    int result = apply_generated_pattern(&config, "write_file", &pattern);
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_EQUAL(initial_count + 1, config.allowlist_count);
+
+    /* Verify the entry was added correctly */
+    AllowlistEntry *entry = &config.allowlist[initial_count];
+    TEST_ASSERT_EQUAL_STRING("write_file", entry->tool);
+    TEST_ASSERT_EQUAL_STRING("^\\./src/.*\\.c$", entry->pattern);
+
+    free_generated_pattern(&pattern);
+}
+
+void test_apply_generated_pattern_null_params(void) {
+    GeneratedPattern pattern = {0};
+    pattern.pattern = strdup("test");
+
+    TEST_ASSERT_EQUAL(-1, apply_generated_pattern(NULL, "test", &pattern));
+    TEST_ASSERT_EQUAL(-1, apply_generated_pattern(&config, NULL, &pattern));
+    TEST_ASSERT_EQUAL(-1, apply_generated_pattern(&config, "test", NULL));
+
+    free_generated_pattern(&pattern);
+}
+
+/* =============================================================================
  * Main
  * ========================================================================== */
 
@@ -1678,6 +2015,33 @@ int main(void) {
     RUN_TEST(test_check_approval_gate_batch_rate_limited);
     RUN_TEST(test_check_approval_gate_batch_null_params);
     RUN_TEST(test_check_approval_gate_batch_allowlist_bypass);
+
+    /* Pattern generation tests */
+    RUN_TEST(test_generate_file_path_pattern_root_file_exact_match);
+    RUN_TEST(test_generate_file_path_pattern_tmp_path_exact_match);
+    RUN_TEST(test_generate_file_path_pattern_nested_path_directory_match);
+    RUN_TEST(test_generate_file_path_pattern_test_prefix_preserved);
+    RUN_TEST(test_generate_file_path_pattern_no_extension_exact_match);
+    RUN_TEST(test_generate_file_path_pattern_null_params);
+    RUN_TEST(test_generate_file_path_pattern_escapes_special_chars);
+    RUN_TEST(test_generate_shell_command_pattern_simple_command);
+    RUN_TEST(test_generate_shell_command_pattern_two_args);
+    RUN_TEST(test_generate_shell_command_pattern_unsafe_command_no_pattern);
+    RUN_TEST(test_generate_shell_command_pattern_null_params);
+    RUN_TEST(test_generate_network_url_pattern_basic_url);
+    RUN_TEST(test_generate_network_url_pattern_with_port);
+    RUN_TEST(test_generate_network_url_pattern_prevents_subdomain_spoofing);
+    RUN_TEST(test_generate_network_url_pattern_invalid_url_exact_match);
+    RUN_TEST(test_generate_network_url_pattern_null_params);
+    RUN_TEST(test_generate_allowlist_pattern_shell_tool);
+    RUN_TEST(test_generate_allowlist_pattern_file_write_tool);
+    RUN_TEST(test_generate_allowlist_pattern_network_tool);
+    RUN_TEST(test_generate_allowlist_pattern_null_params);
+    RUN_TEST(test_free_generated_pattern_handles_null);
+    RUN_TEST(test_free_generated_pattern_handles_empty);
+    RUN_TEST(test_apply_generated_pattern_shell_command);
+    RUN_TEST(test_apply_generated_pattern_regex_pattern);
+    RUN_TEST(test_apply_generated_pattern_null_params);
 
     return UNITY_END();
 }
