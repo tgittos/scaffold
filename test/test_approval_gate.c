@@ -1677,27 +1677,31 @@ void test_generate_shell_command_pattern_two_args(void) {
 }
 
 void test_generate_shell_command_pattern_unsafe_command_no_pattern(void) {
-    GeneratedPattern pattern;
+    GeneratedPattern pattern_pipe;
+    GeneratedPattern pattern_chain;
+    GeneratedPattern pattern_subshell;
 
     /* Commands with pipes should not generate patterns */
-    int result = generate_shell_command_pattern("cat /etc/passwd | grep root", &pattern);
+    int result = generate_shell_command_pattern("cat /etc/passwd | grep root", &pattern_pipe);
     TEST_ASSERT_EQUAL(0, result);
-    TEST_ASSERT_EQUAL(1, pattern.is_exact_match);
-    TEST_ASSERT_NULL(pattern.command_prefix);
+    TEST_ASSERT_EQUAL(1, pattern_pipe.is_exact_match);
+    TEST_ASSERT_NULL(pattern_pipe.command_prefix);
 
     /* Commands with chains should not generate patterns */
-    result = generate_shell_command_pattern("ls && rm -rf /", &pattern);
+    result = generate_shell_command_pattern("ls && rm -rf /", &pattern_chain);
     TEST_ASSERT_EQUAL(0, result);
-    TEST_ASSERT_EQUAL(1, pattern.is_exact_match);
-    TEST_ASSERT_NULL(pattern.command_prefix);
+    TEST_ASSERT_EQUAL(1, pattern_chain.is_exact_match);
+    TEST_ASSERT_NULL(pattern_chain.command_prefix);
 
     /* Commands with subshells should not generate patterns */
-    result = generate_shell_command_pattern("echo $(cat /etc/passwd)", &pattern);
+    result = generate_shell_command_pattern("echo $(cat /etc/passwd)", &pattern_subshell);
     TEST_ASSERT_EQUAL(0, result);
-    TEST_ASSERT_EQUAL(1, pattern.is_exact_match);
-    TEST_ASSERT_NULL(pattern.command_prefix);
+    TEST_ASSERT_EQUAL(1, pattern_subshell.is_exact_match);
+    TEST_ASSERT_NULL(pattern_subshell.command_prefix);
 
-    free_generated_pattern(&pattern);
+    free_generated_pattern(&pattern_pipe);
+    free_generated_pattern(&pattern_chain);
+    free_generated_pattern(&pattern_subshell);
 }
 
 void test_generate_shell_command_pattern_null_params(void) {

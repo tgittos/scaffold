@@ -2619,14 +2619,22 @@ int generate_file_path_pattern(const char *path, GeneratedPattern *out_pattern) 
         out_pattern->is_exact_match = 0;
         out_pattern->needs_confirmation = 1;
 
-        /* Generate example matches */
+        /* Generate example matches (failures here are non-fatal) */
         out_pattern->example_matches = calloc(3, sizeof(char *));
         if (out_pattern->example_matches != NULL) {
             dir = get_directory(path);
             if (dir != NULL) {
-                asprintf(&out_pattern->example_matches[0], "%s/foo%s", dir, ext);
-                asprintf(&out_pattern->example_matches[1], "%s/bar%s", dir, ext);
-                asprintf(&out_pattern->example_matches[2], "%s/other%s", dir, ext);
+                /* asprintf returns -1 on failure; glibc sets ptr to NULL but
+                 * POSIX doesn't guarantee this, so we explicitly set on failure */
+                if (asprintf(&out_pattern->example_matches[0], "%s/foo%s", dir, ext) < 0) {
+                    out_pattern->example_matches[0] = NULL;
+                }
+                if (asprintf(&out_pattern->example_matches[1], "%s/bar%s", dir, ext) < 0) {
+                    out_pattern->example_matches[1] = NULL;
+                }
+                if (asprintf(&out_pattern->example_matches[2], "%s/other%s", dir, ext) < 0) {
+                    out_pattern->example_matches[2] = NULL;
+                }
                 out_pattern->example_count = 3;
                 free(dir);
             }
@@ -2710,20 +2718,32 @@ int generate_shell_command_pattern(const char *command, GeneratedPattern *out_pa
         out_pattern->is_exact_match = 0;
         out_pattern->needs_confirmation = 1;
 
-        /* Generate example matches */
+        /* Generate example matches (failures here are non-fatal) */
         out_pattern->example_matches = calloc(3, sizeof(char *));
         if (out_pattern->example_matches != NULL) {
             if (prefix_len == 1) {
-                asprintf(&out_pattern->example_matches[0], "%s --help", parsed->tokens[0]);
-                asprintf(&out_pattern->example_matches[1], "%s -v", parsed->tokens[0]);
-                asprintf(&out_pattern->example_matches[2], "%s <any args>", parsed->tokens[0]);
+                if (asprintf(&out_pattern->example_matches[0], "%s --help", parsed->tokens[0]) < 0) {
+                    out_pattern->example_matches[0] = NULL;
+                }
+                if (asprintf(&out_pattern->example_matches[1], "%s -v", parsed->tokens[0]) < 0) {
+                    out_pattern->example_matches[1] = NULL;
+                }
+                if (asprintf(&out_pattern->example_matches[2], "%s <any args>", parsed->tokens[0]) < 0) {
+                    out_pattern->example_matches[2] = NULL;
+                }
             } else {
-                asprintf(&out_pattern->example_matches[0], "%s %s <any args>",
-                         parsed->tokens[0], parsed->tokens[1]);
-                asprintf(&out_pattern->example_matches[1], "%s %s -v",
-                         parsed->tokens[0], parsed->tokens[1]);
-                asprintf(&out_pattern->example_matches[2], "%s %s --all",
-                         parsed->tokens[0], parsed->tokens[1]);
+                if (asprintf(&out_pattern->example_matches[0], "%s %s <any args>",
+                             parsed->tokens[0], parsed->tokens[1]) < 0) {
+                    out_pattern->example_matches[0] = NULL;
+                }
+                if (asprintf(&out_pattern->example_matches[1], "%s %s -v",
+                             parsed->tokens[0], parsed->tokens[1]) < 0) {
+                    out_pattern->example_matches[1] = NULL;
+                }
+                if (asprintf(&out_pattern->example_matches[2], "%s %s --all",
+                             parsed->tokens[0], parsed->tokens[1]) < 0) {
+                    out_pattern->example_matches[2] = NULL;
+                }
             }
             out_pattern->example_count = 3;
         }
@@ -2819,7 +2839,7 @@ int generate_network_url_pattern(const char *url, GeneratedPattern *out_pattern)
     out_pattern->is_exact_match = 0;
     out_pattern->needs_confirmation = 1;
 
-    /* Generate example matches */
+    /* Generate example matches (failures here are non-fatal) */
     out_pattern->example_matches = calloc(3, sizeof(char *));
     if (out_pattern->example_matches != NULL) {
         /* Reconstruct base URL for examples */
@@ -2830,9 +2850,15 @@ int generate_network_url_pattern(const char *url, GeneratedPattern *out_pattern)
             memcpy(base_url, url, base_len);
             base_url[base_len] = '\0';
 
-            asprintf(&out_pattern->example_matches[0], "%s/any/path", base_url);
-            asprintf(&out_pattern->example_matches[1], "%s/api/v1", base_url);
-            asprintf(&out_pattern->example_matches[2], "%s", base_url);
+            if (asprintf(&out_pattern->example_matches[0], "%s/any/path", base_url) < 0) {
+                out_pattern->example_matches[0] = NULL;
+            }
+            if (asprintf(&out_pattern->example_matches[1], "%s/api/v1", base_url) < 0) {
+                out_pattern->example_matches[1] = NULL;
+            }
+            if (asprintf(&out_pattern->example_matches[2], "%s", base_url) < 0) {
+                out_pattern->example_matches[2] = NULL;
+            }
             out_pattern->example_count = 3;
             free(base_url);
         }
@@ -3069,8 +3095,19 @@ int apply_generated_pattern(ApprovalGateConfig *config,
         return -1;
     }
 
+    /* A GeneratedPattern should have either command_prefix (for shell) OR
+     * pattern (for other tools), but not both. If both are set, prefer
+     * command_prefix since that's more specific for shell commands. */
+    int has_prefix = (pattern->command_prefix != NULL && pattern->prefix_len > 0);
+    int has_regex = (pattern->pattern != NULL);
+
+    /* If neither is set, this is an invalid/empty pattern */
+    if (!has_prefix && !has_regex) {
+        return -1;
+    }
+
     /* For shell commands, add to shell allowlist */
-    if (pattern->command_prefix != NULL && pattern->prefix_len > 0) {
+    if (has_prefix) {
         return approval_gate_add_shell_allowlist(
             config,
             (const char **)pattern->command_prefix,
@@ -3079,7 +3116,7 @@ int apply_generated_pattern(ApprovalGateConfig *config,
     }
 
     /* For other tools, add regex pattern */
-    if (pattern->pattern != NULL) {
+    if (has_regex) {
         return approval_gate_add_allowlist(config, tool_name, pattern->pattern);
     }
 
