@@ -323,19 +323,6 @@ void test_json_output_streaming_tool_calls_zero_count(void) {
 // Tests for JSON mode terminal output suppression
 // =============================================================================
 
-void test_json_mode_suppresses_print_tool_box_line(void) {
-    set_json_output_mode(true);
-
-    start_stdout_capture();
-    print_tool_box_line("Reading file: %s", "test.txt");
-    ssize_t bytes_read = end_stdout_capture();
-
-    set_json_output_mode(false);
-
-    TEST_ASSERT_EQUAL_MESSAGE(0, bytes_read,
-        "print_tool_box_line should output nothing when JSON mode is enabled");
-}
-
 void test_json_mode_suppresses_display_system_info_group_start(void) {
     set_json_output_mode(true);
 
@@ -373,18 +360,6 @@ void test_json_mode_suppresses_log_system_info(void) {
 
     TEST_ASSERT_EQUAL_MESSAGE(0, bytes_read,
         "log_system_info should output nothing when JSON mode is enabled");
-}
-
-void test_normal_mode_allows_print_tool_box_line(void) {
-    set_json_output_mode(false);
-
-    start_stdout_capture();
-    print_tool_box_line("Reading file: %s", "test.txt");
-    ssize_t bytes_read = end_stdout_capture();
-
-    TEST_ASSERT_GREATER_THAN_MESSAGE(0, bytes_read,
-        "print_tool_box_line should output content when JSON mode is disabled");
-    TEST_ASSERT_NOT_NULL(strstr(captured_output, "Reading file: test.txt"));
 }
 
 // =============================================================================
@@ -427,11 +402,9 @@ int main(void) {
     RUN_TEST(test_json_output_streaming_tool_calls_zero_count);
 
     // JSON mode terminal output suppression tests
-    RUN_TEST(test_json_mode_suppresses_print_tool_box_line);
     RUN_TEST(test_json_mode_suppresses_display_system_info_group_start);
     RUN_TEST(test_json_mode_suppresses_display_system_info_group_end);
     RUN_TEST(test_json_mode_suppresses_log_system_info);
-    RUN_TEST(test_normal_mode_allows_print_tool_box_line);
 
     return UNITY_END();
 }

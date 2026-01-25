@@ -544,7 +544,6 @@ void cleanup_parsed_response(ParsedResponse *response) {
 
 // Global state for output grouping
 static bool system_info_group_active = false;
-static bool tool_execution_group_active = false;
 
 
 void print_formatted_response_improved(const ParsedResponse *response) {
@@ -580,75 +579,6 @@ void print_formatted_response_improved(const ParsedResponse *response) {
     }
 }
 
-void display_tool_execution_group_start(void) {
-    // In JSON mode, terminal display is suppressed
-    if (g_json_output_mode) {
-        return;
-    }
-
-    if (!tool_execution_group_active) {
-        // Professional header for tool execution section with proper width (80 chars total)
-        printf(ANSI_CYAN "┌─ " ANSI_BOLD "Tool Execution" ANSI_RESET ANSI_CYAN " ─────────────────────────────────────────────────────────────┐" ANSI_RESET "\n");
-        tool_execution_group_active = true;
-    }
-}
-
-void display_tool_execution_group_end(void) {
-    // In JSON mode, terminal display is suppressed
-    if (g_json_output_mode) {
-        return;
-    }
-
-    if (tool_execution_group_active) {
-        printf(ANSI_CYAN "└──────────────────────────────────────────────────────────────────────────────┘" ANSI_RESET "\n\n");
-        fflush(stdout);
-        tool_execution_group_active = false;
-
-        // Flush any deferred todo display now that the tool box is closed
-        todo_display_flush_deferred();
-    }
-}
-
-bool is_tool_execution_group_active(void) {
-    return tool_execution_group_active;
-}
-
-// Box width is 80 characters total: │ (1) + space (1) + content+padding (77) + │ (1)
-#define TOOL_BOX_WIDTH 80
-#define TOOL_BOX_CONTENT_WIDTH (TOOL_BOX_WIDTH - 3)  // 77 chars for content+padding
-
-void print_tool_box_line(const char* format, ...) {
-    if (format == NULL) return;
-
-    // In JSON mode, terminal display is suppressed
-    if (g_json_output_mode) {
-        return;
-    }
-
-    // Format the content
-    char content[512];
-    va_list args;
-    va_start(args, format);
-    vsnprintf(content, sizeof(content), format, args);
-    va_end(args);
-
-    // Calculate content length (visible characters only)
-    size_t content_len = strlen(content);
-
-    // Print left border with space
-    printf(ANSI_CYAN "│" ANSI_RESET " ");
-
-    // Print content
-    printf("%s", content);
-
-    // Calculate padding needed (account for content width)
-    int padding = TOOL_BOX_CONTENT_WIDTH - (int)content_len;
-    if (padding < 0) padding = 0;
-
-    // Print padding and right border
-    printf("%*s" ANSI_CYAN "│" ANSI_RESET "\n", padding, "");
-    fflush(stdout);
-}
 
 static bool is_informational_check(const char *tool_name, const char *arguments) {
     if (!tool_name || !arguments) return false;
@@ -860,14 +790,7 @@ void log_tool_execution_improved(const char *tool_name, const char *arguments, b
             snprintf(summary, sizeof(summary), "updated");
         }
 
-        printf(ANSI_CYAN "│" ANSI_RESET " ");
-        printf(ANSI_GREEN "✓" ANSI_RESET " TodoWrite" ANSI_DIM " (%s)" ANSI_RESET, summary);
-
-        // Calculate visible length: icon(1) + space(1) + "TodoWrite"(9) + " ("(2) + summary + ")"(1) = 14 + summary_len
-        size_t visible_len = 14 + strlen(summary);
-        int padding = TOOL_BOX_CONTENT_WIDTH - (int)visible_len;
-        if (padding < 0) padding = 0;
-        printf("%*s" ANSI_CYAN "│" ANSI_RESET "\n", padding, "");
+        printf(ANSI_GREEN "✓" ANSI_RESET " TodoWrite" ANSI_DIM " (%s)" ANSI_RESET "\n\n", summary);
         fflush(stdout);
         return;
     }
@@ -888,40 +811,23 @@ void log_tool_execution_improved(const char *tool_name, const char *arguments, b
         free(arg_summary);
     }
 
-    // Calculate visible length: icon (1) + space (1) + tool_name + context
-    size_t visible_len = strlen(tool_name) + strlen(context) + 2;
-
-    // Print left border
-    printf(ANSI_CYAN "│" ANSI_RESET " ");
-
-    // Print content with color
+    // Print content with color - no box borders
     if (success) {
-        printf(ANSI_GREEN "✓" ANSI_RESET " %s" ANSI_DIM "%s" ANSI_RESET, tool_name, context);
+        printf(ANSI_GREEN "✓" ANSI_RESET " %s" ANSI_DIM "%s" ANSI_RESET "\n\n", tool_name, context);
     } else if (is_info_check) {
-        printf(ANSI_YELLOW "◦" ANSI_RESET " %s" ANSI_DIM "%s" ANSI_RESET, tool_name, context);
+        printf(ANSI_YELLOW "◦" ANSI_RESET " %s" ANSI_DIM "%s" ANSI_RESET "\n\n", tool_name, context);
     } else {
-        printf(ANSI_RED "✗" ANSI_RESET " %s" ANSI_DIM "%s" ANSI_RESET, tool_name, context);
-    }
-
-    // Padding and right border
-    int padding = TOOL_BOX_CONTENT_WIDTH - (int)visible_len;
-    if (padding < 0) padding = 0;
-    printf("%*s" ANSI_CYAN "│" ANSI_RESET "\n", padding, "");
-
-    // Show errors for actual failures with proper indentation
-    if (!success && !is_info_check && result && strlen(result) > 0) {
-        char error_line[128];
-        memset(error_line, 0, sizeof(error_line));
-        if (strlen(result) > 60) {
-            snprintf(error_line, sizeof(error_line), "  └─ Error: %.57s...", result);
+        printf(ANSI_RED "✗" ANSI_RESET " %s" ANSI_DIM "%s" ANSI_RESET "\n", tool_name, context);
+        // Show errors for actual failures
+        if (result && strlen(result) > 0) {
+            if (strlen(result) > 70) {
+                printf(ANSI_RED "  └─ Error: %.67s..." ANSI_RESET "\n\n", result);
+            } else {
+                printf(ANSI_RED "  └─ Error: %s" ANSI_RESET "\n\n", result);
+            }
         } else {
-            snprintf(error_line, sizeof(error_line), "  └─ Error: %s", result);
+            printf("\n");
         }
-        size_t err_visible_len = strlen(error_line);
-        int err_padding = TOOL_BOX_CONTENT_WIDTH - (int)err_visible_len;
-        if (err_padding < 0) err_padding = 0;
-        printf(ANSI_CYAN "│" ANSI_RESET " " ANSI_RED "%s" ANSI_RESET "%*s" ANSI_CYAN "│" ANSI_RESET "\n",
-               error_line, err_padding, "");
     }
 
     fflush(stdout);

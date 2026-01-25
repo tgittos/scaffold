@@ -95,32 +95,6 @@ void cleanup_parsed_response(ParsedResponse *response);
  */
 void print_formatted_response_improved(const ParsedResponse *response);
 
-/**
- * Display start of tool execution group with visual separator
- */
-void display_tool_execution_group_start(void);
-
-/**
- * Display end of tool execution group with visual separator
- */
-void display_tool_execution_group_end(void);
-
-/**
- * Check if a tool execution group is currently active
- * Useful for suppressing other output that would interleave with the tool box
- *
- * @return true if tool execution group is active, false otherwise
- */
-bool is_tool_execution_group_active(void);
-
-/**
- * Print a line of content inside the tool execution box with proper borders
- * The line will be padded to fit within the 80-character box width
- *
- * @param format Printf-style format string
- * @param ... Format arguments
- */
-void print_tool_box_line(const char* format, ...);
 
 /**
  * Log tool execution with improved formatting and grouping

@@ -250,8 +250,12 @@ int streaming_process_message(RalphSession* session, const char* user_message,
                 free(constructed_message);
             }
 
-            // Output tool calls in JSON mode
+            // Output in JSON mode: text content first, then tool calls
             if (session->session_data.config.json_output_mode) {
+                // Output any text content that was streamed alongside tool calls
+                if (ctx->text_content != NULL && ctx->text_len > 0) {
+                    json_output_assistant_text(ctx->text_content, input_tokens, output_tokens);
+                }
                 json_output_assistant_tool_calls(ctx->tool_uses, ctx->tool_use_count, input_tokens, output_tokens);
             }
 

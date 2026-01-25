@@ -444,9 +444,6 @@ void test_filter_tool_call_markup_from_response(void) {
 void test_tool_argument_display_basic(void) {
     printf("\n--- Testing tool argument display ---\n");
 
-    // This test verifies the visual output - run manually to inspect
-    display_tool_execution_group_start();
-
     // Test read_file with path argument
     log_tool_execution_improved("read_file", "{\"path\": \"/home/user/test.txt\"}", true, "File contents");
 
@@ -465,15 +462,11 @@ void test_tool_argument_display_basic(void) {
     // Test memory with key
     log_tool_execution_improved("memory_read", "{\"key\": \"user_preferences\"}", true, "Memory value");
 
-    display_tool_execution_group_end();
-
     TEST_ASSERT_TRUE(1);
 }
 
 void test_tool_argument_truncation(void) {
     printf("\n--- Testing argument truncation ---\n");
-
-    display_tool_execution_group_start();
 
     // Long path should be truncated
     log_tool_execution_improved("read_file",
@@ -485,15 +478,11 @@ void test_tool_argument_truncation(void) {
         "{\"command\": \"find /usr -name '*.so' -exec ls -la {} \\\\; | grep lib | head -20 | sort | uniq\"}",
         true, "Output");
 
-    display_tool_execution_group_end();
-
     TEST_ASSERT_TRUE(1);
 }
 
 void test_tool_argument_edge_cases(void) {
     printf("\n--- Testing edge cases ---\n");
-
-    display_tool_execution_group_start();
 
     // Empty arguments should not crash
     log_tool_execution_improved("some_tool", "{}", true, "Result");
@@ -507,28 +496,20 @@ void test_tool_argument_edge_cases(void) {
     // Empty string arguments should not crash
     log_tool_execution_improved("empty_arg_tool", "", true, "Result");
 
-    display_tool_execution_group_end();
-
     TEST_ASSERT_TRUE(1);
 }
 
 void test_tool_argument_failure_display(void) {
     printf("\n--- Testing failure display ---\n");
 
-    display_tool_execution_group_start();
-
     // Failure with argument should show both path and error
     log_tool_execution_improved("read_file", "{\"path\": \"/nonexistent/file.txt\"}", false, "File not found");
-
-    display_tool_execution_group_end();
 
     TEST_ASSERT_TRUE(1);
 }
 
 void test_todowrite_display(void) {
     printf("\n--- Testing TodoWrite display ---\n");
-
-    display_tool_execution_group_start();
 
     // Single task should show "1 task: <content>"
     log_tool_execution_improved("TodoWrite",
@@ -552,15 +533,11 @@ void test_todowrite_display(void) {
     // Malformed JSON should not crash
     log_tool_execution_improved("TodoWrite", "invalid json", true, "Todos updated");
 
-    display_tool_execution_group_end();
-
     TEST_ASSERT_TRUE(1);
 }
 
 void test_task_tool_display(void) {
     printf("\n--- Testing task tool display ---\n");
-
-    display_tool_execution_group_start();
 
     // TaskCreate should show subject
     log_tool_execution_improved("TaskCreate",
@@ -577,32 +554,7 @@ void test_task_tool_display(void) {
         "{\"taskId\": \"456\", \"description\": \"Updated description\"}",
         true, "Task updated");
 
-    display_tool_execution_group_end();
-
     TEST_ASSERT_TRUE(1);
-}
-
-void test_tool_execution_group_active_flag(void) {
-    printf("\n--- Testing tool execution group active flag ---\n");
-
-    // Initially should be inactive
-    TEST_ASSERT_FALSE(is_tool_execution_group_active());
-
-    // Start group
-    display_tool_execution_group_start();
-    TEST_ASSERT_TRUE(is_tool_execution_group_active());
-
-    // Still active after log
-    log_tool_execution_improved("test_tool", "{}", true, "result");
-    TEST_ASSERT_TRUE(is_tool_execution_group_active());
-
-    // End group
-    display_tool_execution_group_end();
-    TEST_ASSERT_FALSE(is_tool_execution_group_active());
-
-    // Calling end again should be safe
-    display_tool_execution_group_end();
-    TEST_ASSERT_FALSE(is_tool_execution_group_active());
 }
 
 int main(void) {
@@ -642,9 +594,6 @@ int main(void) {
     // Todo/Task tool display tests
     RUN_TEST(test_todowrite_display);
     RUN_TEST(test_task_tool_display);
-
-    // Tool execution group state tests
-    RUN_TEST(test_tool_execution_group_active_flag);
 
     return UNITY_END();
 }

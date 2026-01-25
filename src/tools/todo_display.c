@@ -1,8 +1,11 @@
 #include "todo_display.h"
-#include "output_formatter.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#define ANSI_RESET "\033[0m"
+#define ANSI_GRAY  "\033[90m"
+#define ANSI_DIM   "\033[2m"
 
 // Global display configuration
 static TodoDisplayConfig g_display_config = {
@@ -11,9 +14,6 @@ static TodoDisplayConfig g_display_config = {
     .compact_mode = true,
     .max_display_items = 5
 };
-
-// Deferred todo list for display after tool execution group ends
-static const TodoList* g_deferred_todo_list = NULL;
 
 // Status symbols for visual representation
 static const char* get_status_symbol(TodoStatus status) {
@@ -138,25 +138,7 @@ void todo_display_print_compact(const TodoList* todo_list) {
 }
 
 void todo_display_update(const TodoList* todo_list) {
-    // Suppress todo display while tool execution box is active to prevent
-    // interleaved output that corrupts the terminal display
-    if (is_tool_execution_group_active()) {
-        // Defer the display until the tool execution group ends
-        g_deferred_todo_list = todo_list;
-        return;
-    }
-
-    // For real-time updates, we use the compact print function
-    // In a more sophisticated implementation, this could use terminal
-    // cursor control to update in place
     todo_display_print_compact(todo_list);
-}
-
-void todo_display_flush_deferred(void) {
-    if (g_deferred_todo_list != NULL) {
-        todo_display_print_compact(g_deferred_todo_list);
-        g_deferred_todo_list = NULL;
-    }
 }
 
 void todo_display_cleanup(void) {
