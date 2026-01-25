@@ -1,16 +1,17 @@
 #include "recap.h"
+#include "streaming_handler.h"
+#include "streaming.h"
+#include "llm_provider.h"
 #include "http_client.h"
 #include "output_formatter.h"
-#include "api_common.h"
 #include "debug_output.h"
 #include "token_manager.h"
-#include <curl/curl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 // =============================================================================
-// Recap Generation (One-shot LLM call without history persistence)
+// Recap Generation (Streaming LLM call without history persistence)
 // =============================================================================
 
 #define RECAP_DEFAULT_MAX_MESSAGES 5
@@ -78,6 +79,75 @@ static char* format_recent_messages_for_recap(const ConversationHistory* history
     return buffer;
 }
 
+// =============================================================================
+// Streaming Callbacks for Recap
+// =============================================================================
+
+// User data for SSE callbacks
+typedef struct {
+    StreamingContext* ctx;
+    LLMProvider* provider;
+} RecapSSEUserData;
+
+// Callback: SSE data event - parse with provider-specific parser
+static void recap_sse_data_callback(const char* data, size_t len, void* user_data) {
+    if (data == NULL || len == 0 || user_data == NULL) {
+        return;
+    }
+
+    RecapSSEUserData* sse_data = (RecapSSEUserData*)user_data;
+    if (sse_data->ctx == NULL || sse_data->provider == NULL) {
+        return;
+    }
+
+    if (sse_data->provider->parse_stream_event != NULL) {
+        sse_data->provider->parse_stream_event(sse_data->provider, sse_data->ctx, data, len);
+    }
+}
+
+// Callback: display text chunks as they arrive
+static void recap_text_callback(const char* text, size_t len, void* user_data) {
+    (void)user_data;
+    display_streaming_text(text, len);
+}
+
+// Callback: display thinking chunks (if model supports it)
+static void recap_thinking_callback(const char* text, size_t len, void* user_data) {
+    (void)user_data;
+    display_streaming_thinking(text, len);
+}
+
+// Callback: stream end (no-op, completion handled after HTTP returns)
+static void recap_end_callback(const char* stop_reason, void* user_data) {
+    (void)stop_reason;
+    (void)user_data;
+}
+
+// Callback: stream error
+static void recap_error_callback(const char* error, void* user_data) {
+    (void)user_data;
+    display_streaming_error(error);
+}
+
+// HTTP streaming callback that processes SSE chunks
+static size_t recap_stream_http_callback(const char* data, size_t size, void* user_data) {
+    if (data == NULL || size == 0 || user_data == NULL) {
+        return 0;
+    }
+
+    StreamingContext* ctx = (StreamingContext*)user_data;
+
+    if (streaming_process_chunk(ctx, data, size) != 0) {
+        return 0;
+    }
+
+    return size;
+}
+
+// =============================================================================
+// Main Recap Function
+// =============================================================================
+
 // Generate a recap of recent conversation without persisting to history
 int ralph_generate_recap(RalphSession* session, int max_messages) {
     if (session == NULL) {
@@ -119,46 +189,48 @@ int ralph_generate_recap(RalphSession* session, int max_messages) {
 
     debug_printf("Generating recap with prompt: %s\n", recap_prompt);
 
-    // Build minimal JSON payload (no conversation history - just the recap prompt)
-    // We use an empty conversation to avoid the context being duplicated
-    ConversationHistory empty_history = {0};
+    // Get provider registry
+    ProviderRegistry* registry = streaming_get_provider_registry();
+    if (registry == NULL) {
+        fprintf(stderr, "Error: Failed to get provider registry for recap\n");
+        free(recap_prompt);
+        return -1;
+    }
 
-    // Get token allocation for the recap request
-    TokenConfig token_config;
-    token_config_init(&token_config, session->session_data.config.context_window);
+    // Detect provider for this URL
+    LLMProvider* provider = detect_provider_for_url(registry, session->session_data.config.api_url);
+    if (provider == NULL) {
+        fprintf(stderr, "Error: No provider found for URL: %s\n", session->session_data.config.api_url);
+        free(recap_prompt);
+        return -1;
+    }
+
+    // Build minimal conversation (empty - just the recap prompt as user message)
+    ConversationHistory empty_history = {0};
 
     // Use a reasonable max_tokens for a short recap response
     int max_tokens = 300;
 
-    // Build the API payload
-    char* post_data = NULL;
-    if (session->session_data.config.api_type == API_TYPE_ANTHROPIC) {
-        post_data = ralph_build_anthropic_json_payload(
-            session->session_data.config.model,
-            session->session_data.config.system_prompt,
-            &empty_history,
-            recap_prompt,
-            max_tokens,
-            NULL  // No tools for recap
-        );
-    } else {
-        post_data = ralph_build_json_payload(
-            session->session_data.config.model,
-            session->session_data.config.system_prompt,
-            &empty_history,
-            recap_prompt,
-            session->session_data.config.max_tokens_param,
-            max_tokens,
-            NULL  // No tools for recap
-        );
-    }
+    // Build streaming request JSON using provider's method
+    char* post_data = provider->build_streaming_request_json(
+        provider,
+        session->session_data.config.model,
+        session->session_data.config.system_prompt,
+        &empty_history,
+        recap_prompt,
+        max_tokens,
+        NULL  // No tools for recap
+    );
 
     free(recap_prompt);
 
     if (post_data == NULL) {
-        fprintf(stderr, "Error: Failed to build recap JSON payload\n");
+        fprintf(stderr, "Error: Failed to build recap streaming JSON payload\n");
         return -1;
     }
+
+    debug_printf("Making recap streaming API request to %s\n", session->session_data.config.api_url);
+    debug_printf("POST data: %s\n\n", post_data);
 
     // Setup authorization headers
     char auth_header[512];
@@ -189,77 +261,68 @@ int ralph_generate_recap(RalphSession* session, int max_messages) {
         }
     }
 
-    curl_global_init(CURL_GLOBAL_DEFAULT);
-
-    debug_printf("Making recap API request to %s\n", session->session_data.config.api_url);
-    debug_printf("POST data: %s\n\n", post_data);
-
-    // Display thinking indicator
-    if (!session->session_data.config.json_output_mode) {
-        fprintf(stdout, "\033[36m•\033[0m ");
-        fflush(stdout);
+    // Create streaming context
+    StreamingContext* ctx = streaming_context_create();
+    if (ctx == NULL) {
+        free(post_data);
+        fprintf(stderr, "Error: Failed to create streaming context for recap\n");
+        return -1;
     }
 
-    struct HTTPResponse response = {0};
-    int result = -1;
+    // Set up user data for SSE callbacks
+    RecapSSEUserData sse_user_data = {
+        .ctx = ctx,
+        .provider = provider
+    };
+    ctx->user_data = &sse_user_data;
 
-    if (http_post_with_headers(session->session_data.config.api_url, post_data, headers, &response) == 0) {
-        if (response.data == NULL) {
-            fprintf(stderr, "Error: Empty response from API\n");
-            cleanup_response(&response);
-            free(post_data);
-            curl_global_cleanup();
-            return -1;
-        }
+    // Set up callbacks for real-time display
+    ctx->on_text_chunk = recap_text_callback;
+    ctx->on_thinking_chunk = recap_thinking_callback;
+    ctx->on_stream_end = recap_end_callback;
+    ctx->on_error = recap_error_callback;
+    ctx->on_sse_data = recap_sse_data_callback;
 
-        // Parse the response
-        ParsedResponse parsed_response;
-        int parse_result;
-        if (session->session_data.config.api_type == API_TYPE_ANTHROPIC) {
-            parse_result = parse_anthropic_response(response.data, &parsed_response);
-        } else {
-            parse_result = parse_api_response(response.data, &parsed_response);
-        }
+    // Initialize streaming display (shows thinking indicator)
+    display_streaming_init();
 
-        if (parse_result == 0) {
-            // Clear the thinking indicator
-            if (!session->session_data.config.json_output_mode) {
-                fprintf(stdout, "\r\033[K");
-                fflush(stdout);
-            }
+    // Configure streaming HTTP request
+    struct StreamingHTTPConfig streaming_config = {
+        .base = DEFAULT_HTTP_CONFIG,
+        .stream_callback = recap_stream_http_callback,
+        .callback_data = ctx,
+        .low_speed_limit = 1,
+        .low_speed_time = 30
+    };
 
-            // Display the recap response (using the standard formatter)
-            print_formatted_response_improved(&parsed_response);
-            result = 0;
+    // Execute streaming request
+    int result = http_post_streaming(
+        session->session_data.config.api_url,
+        post_data,
+        headers,
+        &streaming_config
+    );
 
-            cleanup_parsed_response(&parsed_response);
-        } else {
-            // Clear thinking indicator on error
-            if (!session->session_data.config.json_output_mode) {
-                fprintf(stdout, "\r\033[K");
-                fflush(stdout);
-            }
-            fprintf(stderr, "Error: Failed to parse recap response\n");
-        }
-    } else {
-        // Clear thinking indicator on error
-        if (!session->session_data.config.json_output_mode) {
-            fprintf(stdout, "\r\033[K");
-            fflush(stdout);
-        }
-        // Log the actual response if we got one (might contain error details)
-        if (response.data != NULL && response.size > 0) {
-            debug_printf("Recap API error response: %s\n", response.data);
-        }
-        fprintf(stderr, "Recap API request failed\n");
-    }
-
-    cleanup_response(&response);
     free(post_data);
-    curl_global_cleanup();
+
+    if (result != 0) {
+        // Clean up provider-specific streaming state if needed
+        if (provider->cleanup_stream_state != NULL) {
+            provider->cleanup_stream_state(provider);
+        }
+        streaming_context_free(ctx);
+        fprintf(stderr, "Error: Recap streaming HTTP request failed\n");
+        return -1;
+    }
+
+    // Display completion with token counts
+    display_streaming_complete(ctx->input_tokens, ctx->output_tokens);
+
+    // Clean up
+    streaming_context_free(ctx);
 
     // NOTE: We intentionally do NOT save the recap exchange to conversation history
     // This keeps the history clean and avoids bloating it with recap prompts
 
-    return result;
+    return 0;
 }
