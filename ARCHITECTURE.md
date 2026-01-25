@@ -705,7 +705,7 @@ graph TB
 - **`forget_memory`**: Delete a memory by ID
 
 ### PDF Processing Tools
-- **`process_pdf_document`**: Extract text from PDFs and automatically index in vector database
+- **`pdf_extract_text`**: Extract text from PDFs with configurable page ranges and output format
 
 ### Python Tools (1 tool + file-based tools)
 - **`python`**: Execute arbitrary Python code with embedded interpreter
@@ -725,8 +725,9 @@ graph TB
 - **`subagent`**: Spawn a child ralph process for parallel task execution
 - **`subagent_status`**: Query the status of a running subagent
 
-### Todo Tools (1 tool)
-- **`todo`**: Manage task list (create, update, complete, delete todos)
+### Todo Tools (2 tools)
+- **`TodoWrite`**: Create, update status/priority, delete, or bulk set todos
+- **`TodoRead`**: List and filter todos by status and priority
 
 ### Vector Database Tools (13 tools)
 - **Index Management**: `vector_db_create_index`, `vector_db_delete_index`, `vector_db_list_indices`
@@ -760,6 +761,7 @@ src/
 │   ├── vector_db_service.c/h # Thread-safe singleton service
 │   ├── document_store.c/h  # High-level document storage
 │   ├── metadata_store.c/h  # Chunk metadata storage
+│   ├── task_store.c/h      # SQLite-based persistent task storage
 │   └── hnswlib_wrapper.cpp/h # C++ bridge
 ├── llm/                    # LLM integration
 │   ├── llm_provider.c/h    # Provider abstraction
@@ -832,7 +834,3 @@ src/
 └── embedded_links.h        # Embedded Links browser binary
 ```
 
-### Unused Directories
-The following directories exist but contain no production source code:
-- `src/http/` - Contains only test subdirectory; HTTP code is in `src/network/`
-- `src/daemon/` - Contains only build artifacts; not implemented

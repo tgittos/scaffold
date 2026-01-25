@@ -44,6 +44,7 @@ This document provides a comprehensive overview of Ralph's codebase structure an
 - **`api_common.c/h`** - Common API utilities, JSON payload building for OpenAI/Anthropic formats
 - **`streaming.c/h`** - SSE streaming infrastructure for real-time response handling
 - **`api_error.c/h`** - Enhanced API error handling with retry logic
+- **`embedded_cacert.c/h`** - Embedded Mozilla CA certificate bundle for portable SSL/TLS
 
 #### `src/session/` - User Session Management
 - **`session_manager.c/h`** - Session data structures and API payload building
@@ -86,6 +87,7 @@ This document provides a comprehensive overview of Ralph's codebase structure an
 - **`vector_db_service.c/h`** - Thread-safe vector database singleton service
 - **`document_store.c/h`** - High-level document storage with embeddings and JSON persistence
 - **`metadata_store.c/h`** - Chunk metadata storage layer (separate from vectors)
+- **`task_store.c/h`** - SQLite-based persistent task storage with hierarchies, dependencies, and session scoping
 - **`hnswlib_wrapper.cpp/h`** - C++ wrapper for HNSW vector indexing
 
 #### `src/pdf/` - PDF Processing
@@ -103,6 +105,7 @@ This document provides a comprehensive overview of Ralph's codebase structure an
 - **`context_retriever.c/h`** - Vector database context retrieval for prompts
 - **`document_chunker.c/h`** - Intelligent text chunking for embeddings
 - **`pdf_processor.c/h`** - PDF download, extraction, chunking, and indexing pipeline
+- **`uuid_utils.c/h`** - UUID v4 generation and validation utilities
 
 ---
 
@@ -154,6 +157,7 @@ The test directory mirrors the source structure:
 #### `test/db/` - Database Tests
 - **`test_vector_db.c`** - Vector database core tests
 - **`test_document_store.c`** - Document store tests
+- **`test_task_store.c`** - Task store persistence tests
 
 #### `test/mcp/` - MCP Integration Tests
 - **`test_mcp_client.c`** - MCP client functionality tests
@@ -166,7 +170,6 @@ The test directory mirrors the source structure:
 - **`test_config.c`** - Configuration system tests
 - **`test_json_output.c`** - JSON output mode tests
 - **`test_debug_output.c`** - Debug output tests
-- **`test_output_improvement.c`** - Output improvement tests
 
 #### Test Infrastructure
 - **`test/unity/`** - Unity testing framework (vendored)
@@ -226,12 +229,6 @@ Centralized configuration in `src/utils/config.c`:
 - **MCP Config**: Server definitions in `mcpServers` section
 
 ---
-
-## Unused Directories
-
-The following directories exist but contain no production source code:
-- `src/http/` - Contains only test subdirectory; HTTP code is in `src/network/`
-- `src/daemon/` - Contains only build artifacts; not implemented
 
 ---
 

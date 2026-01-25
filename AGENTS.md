@@ -125,6 +125,10 @@ To test Python tool memory safety, rely on the unit tests for the C code paths (
 - Compiled with Cosmopolitan
 - Inside a Docker devcontainer running Debian
 - Using `mbedtls` for TLS/SSL support, and `unity` for unit testing
+- Using `SQLite` for persistent task storage
+- Using `HNSWLIB` for vector similarity search
+- Using `PDFio` for PDF text extraction
+- Using `cJSON` for JSON parsing
 - With `valgrind`, `gdb` and all common C debugging tools preconfigured
 
 ## Architecture
