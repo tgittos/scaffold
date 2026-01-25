@@ -655,11 +655,22 @@ int commands_are_equivalent(const char *allowed_cmd,
         return 1;
     }
 
-    /* Cross-platform equivalents */
+    /*
+     * Cross-platform equivalents.
+     *
+     * Note: We only include commands with truly equivalent behavior:
+     * - Get-Item is NOT equivalent to ls/dir (it gets a single item, not a listing)
+     * - cd is NOT equivalent to pwd (cd with arguments changes directory)
+     *
+     * The shell type parameters are currently unused. A future enhancement
+     * could use them to restrict equivalence to appropriate contexts (e.g.,
+     * only match 'dir' on cmd.exe, not on POSIX). For now, we allow broad
+     * equivalence which is more permissive but simpler.
+     */
     static const char *equivalents[][6] = {
-        {"ls", "dir", "Get-ChildItem", "gci", "Get-Item", NULL},
+        {"ls", "dir", "Get-ChildItem", "gci", NULL, NULL},
         {"cat", "type", "Get-Content", "gc", NULL, NULL},
-        {"pwd", "cd", "Get-Location", "gl", NULL, NULL},
+        {"pwd", "Get-Location", "gl", NULL, NULL, NULL},
         {"rm", "del", "erase", "Remove-Item", "ri", NULL},
         {"cp", "copy", "Copy-Item", "cpi", NULL, NULL},
         {"mv", "move", "ren", "Move-Item", "mi", NULL},
@@ -668,7 +679,7 @@ int commands_are_equivalent(const char *allowed_cmd,
         {NULL, NULL, NULL, NULL, NULL, NULL}
     };
 
-    /* Suppress unused parameter warnings */
+    /* Shell types reserved for future shell-context-aware equivalence */
     (void)allowed_shell;
     (void)actual_shell;
 
