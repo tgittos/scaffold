@@ -4,7 +4,6 @@
 #include "streaming_handler.h"
 #include "recap.h"
 #include <cJSON.h>
-#include "env_loader.h"
 #include "utils/config.h"
 #include "output_formatter.h"
 #include "json_output.h"
@@ -29,11 +28,6 @@
 #include <time.h>
 #include <curl/curl.h>
 #include "json_escape.h"
-
-// Compatibility wrapper for tests - use json_escape_string instead in new code
-char* ralph_escape_json_string(const char* str) {
-    return json_escape_string(str);
-}
 
 // Helper function to build JSON payload with conversation history and tools
 char* ralph_build_json_payload(const char* model, const char* system_prompt, 

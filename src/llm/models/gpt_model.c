@@ -160,8 +160,6 @@ static ModelCapabilities gpt_model = {
     .parse_tool_calls = parse_tool_calls,
     .format_tool_result_message = generate_single_tool_message,
     .format_assistant_tool_message = gpt_format_assistant_tool_message,
-    .supports_structured_output = 1,
-    .supports_json_mode = 1,
     .max_context_length = 128000
 };
 
@@ -177,8 +175,6 @@ static ModelCapabilities o_series_model = {
     .parse_tool_calls = parse_tool_calls,
     .format_tool_result_message = generate_single_tool_message,
     .format_assistant_tool_message = gpt_format_assistant_tool_message,
-    .supports_structured_output = 1,
-    .supports_json_mode = 1,
     .max_context_length = 128000
 };
 
@@ -194,8 +190,6 @@ static ModelCapabilities o4_model = {
     .parse_tool_calls = parse_tool_calls,
     .format_tool_result_message = generate_single_tool_message,
     .format_assistant_tool_message = gpt_format_assistant_tool_message,
-    .supports_structured_output = 1,
-    .supports_json_mode = 1,
     .max_context_length = 128000
 };
 

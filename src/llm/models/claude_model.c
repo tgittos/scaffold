@@ -31,8 +31,6 @@ static ModelCapabilities claude_model = {
     .parse_tool_calls = parse_anthropic_tool_calls,
     .format_tool_result_message = generate_single_tool_message,
     .format_assistant_tool_message = claude_format_assistant_tool_message,
-    .supports_structured_output = 0,
-    .supports_json_mode = 0,
     .max_context_length = 200000
 };
 

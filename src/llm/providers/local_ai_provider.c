@@ -266,7 +266,6 @@ static LLMProvider local_ai_provider = {
         .name = "Local AI",
         .max_tokens_param = "max_tokens",
         .supports_system_message = 1,
-        .supports_tool_calling = 1,  // Deprecated - use ModelCapabilities instead
         .requires_version_header = 0,
         .auth_header_format = "Authorization: Bearer %s",
         .version_header = NULL

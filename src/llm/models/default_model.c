@@ -14,8 +14,6 @@ static ModelCapabilities default_model = {
     .parse_tool_calls = NULL,
     .format_tool_result_message = NULL,
     .format_assistant_tool_message = NULL,
-    .supports_structured_output = 0,
-    .supports_json_mode = 0,
     .max_context_length = 4096
 };
 

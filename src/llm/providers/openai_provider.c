@@ -287,7 +287,6 @@ static LLMProvider openai_provider = {
         .name = "OpenAI",
         .max_tokens_param = "max_completion_tokens",
         .supports_system_message = 1,
-        .supports_tool_calling = 1,
         .requires_version_header = 0,
         .auth_header_format = "Authorization: Bearer %s",
         .version_header = NULL

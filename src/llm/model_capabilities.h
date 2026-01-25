@@ -27,8 +27,6 @@ typedef struct {
     char* (*format_assistant_tool_message)(const char* response_content, const ToolCall* tool_calls, int tool_call_count);
     
     // Other model-specific features
-    int supports_structured_output;
-    int supports_json_mode;
     int max_context_length;
 } ModelCapabilities;
 

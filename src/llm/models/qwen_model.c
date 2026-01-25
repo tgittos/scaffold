@@ -15,8 +15,6 @@ static ModelCapabilities qwen_model = {
     .parse_tool_calls = parse_tool_calls,
     .format_tool_result_message = generate_single_tool_message,
     .format_assistant_tool_message = NULL,
-    .supports_structured_output = 0,
-    .supports_json_mode = 0,
     .max_context_length = 32768
 };
 

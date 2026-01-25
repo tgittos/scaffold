@@ -15,7 +15,6 @@ typedef struct {
     const char* name;
     const char* max_tokens_param;
     int supports_system_message;
-    int supports_tool_calling;  // Deprecated - use ModelCapabilities instead
     int requires_version_header;
     const char* auth_header_format;  // "Authorization: Bearer %s" or "x-api-key: %s"
     const char* version_header;      // Optional version header

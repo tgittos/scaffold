@@ -2,6 +2,7 @@
 #include "ralph.h"
 #include "mock_api_server.h"
 #include "../src/db/document_store.h"
+#include "json_escape.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,40 +14,40 @@ void setUp(void) {
 }
 void tearDown(void) {}
 
-void test_ralph_escape_json_string_null(void) {
-    char* result = ralph_escape_json_string(NULL);
+void test_json_escape_string_null(void) {
+    char* result = json_escape_string(NULL);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_STRING("", result);
     free(result);
 }
 
-void test_ralph_escape_json_string_basic(void) {
+void test_json_escape_string_basic(void) {
     const char* input = "Hello, World!";
-    char* result = ralph_escape_json_string(input);
+    char* result = json_escape_string(input);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_STRING("Hello, World!", result);
     free(result);
 }
 
-void test_ralph_escape_json_string_quotes(void) {
+void test_json_escape_string_quotes(void) {
     const char* input = "Say \"Hello\" to the world";
-    char* result = ralph_escape_json_string(input);
+    char* result = json_escape_string(input);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_STRING("Say \\\"Hello\\\" to the world", result);
     free(result);
 }
 
-void test_ralph_escape_json_string_backslashes(void) {
+void test_json_escape_string_backslashes(void) {
     const char* input = "Path: C:\\Users\\Test";
-    char* result = ralph_escape_json_string(input);
+    char* result = json_escape_string(input);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_STRING("Path: C:\\\\Users\\\\Test", result);
     free(result);
 }
 
-void test_ralph_escape_json_string_newlines(void) {
+void test_json_escape_string_newlines(void) {
     const char* input = "Line 1\nLine 2\rLine 3\tTabbed";
-    char* result = ralph_escape_json_string(input);
+    char* result = json_escape_string(input);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_STRING("Line 1\\nLine 2\\rLine 3\\tTabbed", result);
     free(result);
@@ -858,11 +859,11 @@ void test_ralph_api_type_detection(void) {
 int main(void) {
     UNITY_BEGIN();
     
-    RUN_TEST(test_ralph_escape_json_string_null);
-    RUN_TEST(test_ralph_escape_json_string_basic);
-    RUN_TEST(test_ralph_escape_json_string_quotes);
-    RUN_TEST(test_ralph_escape_json_string_backslashes);
-    RUN_TEST(test_ralph_escape_json_string_newlines);
+    RUN_TEST(test_json_escape_string_null);
+    RUN_TEST(test_json_escape_string_basic);
+    RUN_TEST(test_json_escape_string_quotes);
+    RUN_TEST(test_json_escape_string_backslashes);
+    RUN_TEST(test_json_escape_string_newlines);
     RUN_TEST(test_ralph_build_json_payload_basic);
     RUN_TEST(test_ralph_build_json_payload_with_system_prompt);
     RUN_TEST(test_ralph_init_session_null_parameter);

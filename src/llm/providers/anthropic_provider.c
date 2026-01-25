@@ -398,7 +398,6 @@ static LLMProvider anthropic_provider = {
         .name = "Anthropic",
         .max_tokens_param = "max_tokens",
         .supports_system_message = 1,
-        .supports_tool_calling = 1,
         .requires_version_header = 1,
         .auth_header_format = "x-api-key: %s",
         .version_header = "anthropic-version: 2023-06-01"

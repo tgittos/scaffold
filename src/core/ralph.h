@@ -39,7 +39,6 @@ int ralph_load_config(RalphSession* session);
 int ralph_process_message(RalphSession* session, const char* user_message);
 
 // Internal helper functions (exposed for testing)
-char* ralph_escape_json_string(const char* str);  // Compatibility wrapper - use json_escape_string instead
 char* ralph_build_json_payload(const char* model, const char* system_prompt, 
                               const ConversationHistory* conversation, 
                               const char* user_message, const char* max_tokens_param, 
