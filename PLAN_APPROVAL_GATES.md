@@ -232,7 +232,7 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 - [x] **Create `test/test_subagent_approval.c`** - Test pipe creation, channel setup, cleanup functions, poll functions, and null safety. Note: Full fork/exec tests are excluded from valgrind per CLAUDE.md subagent test guidelines.
 
-- [ ] **Add approval gate tests to existing tool tests** - Extend `test_tools_system.c` to verify gates are checked. Test that protected files are rejected. Test that denied operations return proper error JSON.
+- [x] **Add approval gate tests to existing tool tests** - Extended `test_tools_system.c` with 20 new tests covering: tool category mapping (file_write, file_read, shell, network, memory, subagent, mcp, python), protected file detection (ralph.config.json, .env files, .ralph/config.json), error JSON formatting (protected file errors, denial errors, non-interactive errors), and default category action verification. Updated Makefile to include RALPH_CORE_DEPS for approval gate integration.
 
 ---
 

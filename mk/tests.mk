@@ -219,7 +219,8 @@ $(TEST_tool_calls_not_stored_TARGET): $(TEST_tool_calls_not_stored_OBJECTS) $(AL
 $(eval $(call def_test_mixed,json_output,utils/test_json_output,$(SRCDIR)/network/streaming.c $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,todo_tool,tools/test_todo_tool,$(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,output,utils/test_output_formatter,$(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,tools,tools/test_tools_system,$(COMPLEX_DEPS)))
+# test_tools now includes approval gate integration tests, requires RALPH_CORE_DEPS
+$(eval $(call def_test_mixed,tools,tools/test_tools_system,$(RALPH_CORE_DEPS) $(COMPLEX_DEPS)))
 # Mock embeddings sources for tests that need mocked embedding API
 MOCK_EMBEDDINGS_SOURCES := $(TESTDIR)/mock_api_server.c $(TESTDIR)/mock_embeddings.c $(TESTDIR)/mock_embeddings_server.c
 
@@ -237,7 +238,7 @@ $(eval $(call def_test_mixed,subagent_tool,tools/test_subagent_tool,$(RALPH_CORE
 $(eval $(call def_test_mixed,incomplete_task_bug,core/test_incomplete_task_bug,$(RALPH_CORE_DEPS) $(COMPLEX_DEPS)))
 
 # Batch link rule for standard tests
-STANDARD_TESTS := json_output todo_tool vector_db_tool memory_tool memory_mgmt \
+STANDARD_TESTS := json_output todo_tool tools vector_db_tool memory_tool memory_mgmt \
     token_manager conversation_compactor model_tools openai_streaming \
     anthropic_streaming messages_array_bug mcp_client subagent_tool incomplete_task_bug
 
@@ -245,12 +246,9 @@ $(foreach t,$(STANDARD_TESTS),$(eval \
 $$(TEST_$(t)_TARGET): $$(TEST_$(t)_OBJECTS) $$(ALL_LIBS) ; \
 	$$(CXX) -o $$@ $$(TEST_$(t)_OBJECTS) $$(LIBS_STANDARD)))
 
-# These two need extra objects
+# test_output needs extra conversation_tracker object (not in its deps)
 $(TEST_output_TARGET): $(TEST_output_OBJECTS) $(SRCDIR)/session/conversation_tracker.o $(ALL_LIBS)
 	$(CXX) -o $@ $(TEST_output_OBJECTS) $(SRCDIR)/session/conversation_tracker.o $(LIBS_STANDARD)
-
-$(TEST_tools_TARGET): $(TEST_tools_OBJECTS) $(SRCDIR)/session/conversation_tracker.o $(ALL_LIBS)
-	$(CXX) -o $@ $(TEST_tools_OBJECTS) $(SRCDIR)/session/conversation_tracker.o $(LIBS_STANDARD)
 
 # =============================================================================
 # PYTHON TESTS (need stdlib embedding)
