@@ -4,16 +4,17 @@
 #include "../core/subagent_approval.h"
 #include "../session/conversation_tracker.h"
 #include <cJSON.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <limits.h>
 #include <poll.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
-#include <sys/wait.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <signal.h>
 
 /* Environment variable names for passing approval channel FDs to child */
 #define RALPH_APPROVAL_REQUEST_FD "RALPH_APPROVAL_REQUEST_FD"
@@ -46,6 +47,9 @@ static ApprovalChannel *g_subagent_approval_channel = NULL;
  * Initialize approval channel from environment variables.
  * Called when ralph is running as a subagent process.
  * Returns 0 on success, -1 on error or if not a subagent.
+ *
+ * Uses strtol() instead of atoi() to properly detect parse failures.
+ * FDs must be > 2 (skip stdin/stdout/stderr) and <= INT_MAX.
  */
 static int init_subagent_approval_channel(void) {
     const char *request_fd_str = getenv(RALPH_APPROVAL_REQUEST_FD);
@@ -56,10 +60,18 @@ static int init_subagent_approval_channel(void) {
         return -1;
     }
 
-    int request_fd = atoi(request_fd_str);
-    int response_fd = atoi(response_fd_str);
+    /* Parse request FD with proper error checking */
+    char *endptr;
+    errno = 0;
+    long request_fd_long = strtol(request_fd_str, &endptr, 10);
+    if (errno != 0 || *endptr != '\0' || request_fd_long <= 2 || request_fd_long > INT_MAX) {
+        return -1;
+    }
 
-    if (request_fd < 0 || response_fd < 0) {
+    /* Parse response FD with proper error checking */
+    errno = 0;
+    long response_fd_long = strtol(response_fd_str, &endptr, 10);
+    if (errno != 0 || *endptr != '\0' || response_fd_long <= 2 || response_fd_long > INT_MAX) {
         return -1;
     }
 
@@ -68,8 +80,8 @@ static int init_subagent_approval_channel(void) {
         return -1;
     }
 
-    g_subagent_approval_channel->request_fd = request_fd;
-    g_subagent_approval_channel->response_fd = response_fd;
+    g_subagent_approval_channel->request_fd = (int)request_fd_long;
+    g_subagent_approval_channel->response_fd = (int)response_fd_long;
     g_subagent_approval_channel->subagent_pid = getpid();
 
     return 0;
@@ -715,6 +727,12 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
     // Initialize the new subagent entry
     Subagent new_sub;
     memset(&new_sub, 0, sizeof(Subagent));
+
+    // Initialize FDs to -1 for safety (prevents accidental close of stdin/stdout/stderr)
+    new_sub.stdout_pipe[0] = -1;
+    new_sub.stdout_pipe[1] = -1;
+    new_sub.approval_channel.request_fd = -1;
+    new_sub.approval_channel.response_fd = -1;
 
     memcpy(new_sub.id, id, SUBAGENT_ID_LENGTH);
     new_sub.id[SUBAGENT_ID_LENGTH] = '\0';
@@ -1505,7 +1523,7 @@ int subagent_poll_approval_requests(SubagentManager *manager, int timeout_ms) {
     for (size_t i = 0; i < manager->subagents.count; i++) {
         Subagent *sub = &manager->subagents.data[i];
         if (sub->status == SUBAGENT_STATUS_RUNNING &&
-            sub->approval_channel.request_fd >= 0) {
+            sub->approval_channel.request_fd > 2) {  // > 2 to skip stdin/stdout/stderr
             pfds[poll_idx].fd = sub->approval_channel.request_fd;
             pfds[poll_idx].events = POLLIN;
             pfds[poll_idx].revents = 0;
@@ -1522,10 +1540,10 @@ int subagent_poll_approval_requests(SubagentManager *manager, int timeout_ms) {
         return -1;
     }
 
-    // Find the first subagent with pending data
+    // Find the first subagent with pending data or error/hangup
     int result = -1;
     for (int i = 0; i < poll_idx; i++) {
-        if (pfds[i].revents & POLLIN) {
+        if (pfds[i].revents & (POLLIN | POLLERR | POLLHUP)) {
             result = indices[i];
             break;
         }

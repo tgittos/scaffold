@@ -48,7 +48,8 @@ GATE_DEPS := \
     $(SRCDIR)/core/shell_parser_cmd.c \
     $(SRCDIR)/core/shell_parser_ps.c \
     $(SRCDIR)/core/subagent_approval.c \
-    $(SRCDIR)/utils/debug_output.c
+    $(SRCDIR)/utils/debug_output.c \
+    $(TESTDIR)/stubs/subagent_stub.c
 
 $(eval $(call def_test,approval_gate,test_approval_gate,$(GATE_DEPS)))
 $(eval $(call def_test,atomic_file,test_atomic_file,$(SRCDIR)/core/atomic_file.c))

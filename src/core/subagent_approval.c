@@ -87,7 +87,7 @@ static char *format_tool_summary(const ToolCall *tool_call) {
             cJSON *cmd = cJSON_GetObjectItem(args, "command");
             if (cmd != NULL && cJSON_IsString(cmd)) {
                 char *summary = NULL;
-                if (asprintf(&summary, "%s: %s", tool_call->name, cmd->valuestring) > 0) {
+                if (asprintf(&summary, "%s: %s", tool_call->name, cmd->valuestring) != -1) {
                     cJSON_Delete(args);
                     return summary;
                 }
@@ -106,7 +106,7 @@ static char *format_tool_summary(const ToolCall *tool_call) {
             cJSON *path = cJSON_GetObjectItem(args, "path");
             if (path != NULL && cJSON_IsString(path)) {
                 char *summary = NULL;
-                if (asprintf(&summary, "%s: %s", tool_call->name, path->valuestring) > 0) {
+                if (asprintf(&summary, "%s: %s", tool_call->name, path->valuestring) != -1) {
                     cJSON_Delete(args);
                     return summary;
                 }
@@ -122,7 +122,7 @@ static char *format_tool_summary(const ToolCall *tool_call) {
             cJSON *url = cJSON_GetObjectItem(args, "url");
             if (url != NULL && cJSON_IsString(url)) {
                 char *summary = NULL;
-                if (asprintf(&summary, "%s: %s", tool_call->name, url->valuestring) > 0) {
+                if (asprintf(&summary, "%s: %s", tool_call->name, url->valuestring) != -1) {
                     cJSON_Delete(args);
                     return summary;
                 }

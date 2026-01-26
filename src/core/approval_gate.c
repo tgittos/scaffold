@@ -9,6 +9,7 @@
 
 #include "approval_gate.h"
 #include "shell_parser.h"
+#include "subagent_approval.h"
 
 #include <cJSON.h>
 #include <ctype.h>
@@ -23,6 +24,7 @@
 #include <unistd.h>
 
 #include "../tools/python_tool_files.h"
+#include "../tools/subagent_tool.h"
 #include "../utils/debug_output.h"
 
 /* Signal flag for Ctrl+C during prompt */
@@ -1539,8 +1541,16 @@ ApprovalResult check_approval_gate(ApprovalGateConfig *config,
             return APPROVAL_DENIED;
 
         case 1:
-            /* Requires approval - prompt user */
-            return approval_gate_prompt(config, tool_call, out_path);
+            /* Requires approval - check if we're a subagent */
+            {
+                ApprovalChannel *channel = subagent_get_approval_channel();
+                if (channel != NULL) {
+                    /* We're a subagent - route through IPC to parent */
+                    return subagent_request_approval(channel, tool_call, out_path);
+                }
+                /* Not a subagent - prompt user directly via TTY */
+                return approval_gate_prompt(config, tool_call, out_path);
+            }
 
         default:
             return APPROVAL_DENIED;
