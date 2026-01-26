@@ -12,9 +12,47 @@
 #include "../utils/ralph_home.h"
 
 #define MAX_INPUT_SIZE 8192
+#define RALPH_VERSION "0.1.0"
+
+static void print_version(void) {
+    printf("ralph %s\n", RALPH_VERSION);
+}
+
+static void print_help(const char *program_name) {
+    printf("ralph %s - AI Assistant\n\n", RALPH_VERSION);
+    printf("Usage: %s [OPTIONS] [MESSAGE]\n\n", program_name);
+    printf("Options:\n");
+    printf("  -h, --help        Show this help message and exit\n");
+    printf("  -v, --version     Show version information and exit\n");
+    printf("  --debug           Enable debug output (shows HTTP requests and data exchange)\n");
+    printf("  --no-stream       Disable response streaming\n");
+    printf("  --json            Enable JSON output mode\n");
+    printf("  --home <path>     Override Ralph home directory (default: ~/.local/ralph)\n");
+    printf("\n");
+    printf("Arguments:\n");
+    printf("  MESSAGE           Process a single message and exit\n");
+    printf("                    If omitted, enters interactive mode\n");
+    printf("\n");
+    printf("Interactive Mode Commands:\n");
+    printf("  quit, exit        Exit the program\n");
+    printf("  /memory           Memory management commands (use /memory help for details)\n");
+    printf("  Ctrl+D            End session\n");
+}
 
 int main(int argc, char *argv[])
 {
+    // Handle --version and --help first, before any initialization
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-v") == 0) {
+            print_version();
+            return EXIT_SUCCESS;
+        }
+        if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
+            print_help(argv[0]);
+            return EXIT_SUCCESS;
+        }
+    }
+
     // Parse --home flag FIRST, before any initialization
     // This must be done early because other modules depend on ralph_home
     char *home_override = NULL;

@@ -31,6 +31,7 @@ endef
 # =============================================================================
 
 $(eval $(call def_test,main,core/test_main,))
+$(eval $(call def_test,cli_flags,core/test_cli_flags,))
 $(eval $(call def_test,env,utils/test_env_loader,$(SRCDIR)/utils/env_loader.c))
 $(eval $(call def_test,prompt,utils/test_prompt_loader,$(SRCDIR)/utils/prompt_loader.c))
 $(eval $(call def_test,ralph_home,utils/test_ralph_home,$(SRCDIR)/utils/ralph_home.c))
@@ -42,6 +43,9 @@ $(eval $(call def_test,ptrarray,test_ptrarray,))
 
 $(TEST_main_TARGET): $(TEST_main_OBJECTS)
 	$(CC) -o $@ $^
+
+$(TEST_cli_flags_TARGET): $(TEST_cli_flags_OBJECTS) ralph
+	$(CC) -o $@ $(TEST_cli_flags_OBJECTS)
 
 $(TEST_env_TARGET): $(TEST_env_OBJECTS)
 	$(CC) -o $@ $^
@@ -242,7 +246,7 @@ $(TEST_document_store_TARGET): $(TEST_document_store_OBJECTS) $(ALL_LIBS)
 # =============================================================================
 
 TEST_EXECUTION_ORDER := \
-    $(TEST_main_TARGET) $(TEST_darray_TARGET) $(TEST_ptrarray_TARGET) \
+    $(TEST_main_TARGET) $(TEST_cli_flags_TARGET) $(TEST_darray_TARGET) $(TEST_ptrarray_TARGET) \
     $(TEST_ralph_home_TARGET) $(TEST_http_TARGET) $(TEST_http_retry_TARGET) \
     $(TEST_streaming_TARGET) $(TEST_openai_streaming_TARGET) $(TEST_anthropic_streaming_TARGET) \
     $(TEST_env_TARGET) $(TEST_output_TARGET) $(TEST_prompt_TARGET) $(TEST_debug_output_TARGET) \
@@ -270,7 +274,7 @@ check: test
 
 # Excluded: HTTP (network), Python (embedded stdlib), subagent (fork/exec)
 VALGRIND_TESTS := \
-    $(TEST_main_TARGET) $(TEST_darray_TARGET) $(TEST_ptrarray_TARGET) \
+    $(TEST_main_TARGET) $(TEST_cli_flags_TARGET) $(TEST_darray_TARGET) $(TEST_ptrarray_TARGET) \
     $(TEST_ralph_home_TARGET) $(TEST_http_retry_TARGET) $(TEST_streaming_TARGET) \
     $(TEST_openai_streaming_TARGET) $(TEST_anthropic_streaming_TARGET) $(TEST_env_TARGET) \
     $(TEST_output_TARGET) $(TEST_prompt_TARGET) $(TEST_conversation_TARGET) \
