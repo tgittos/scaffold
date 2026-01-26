@@ -11,6 +11,7 @@
 #include "../mcp/mcp_client.h"
 #include "../tools/subagent_tool.h"
 #include "../utils/uuid_utils.h"
+#include "../policy/approval_gate.h"
 
 // API type enumeration - used for provider-specific behavior
 typedef enum {
@@ -29,6 +30,7 @@ typedef struct {
     LLMProvider* provider;               // Current active provider
     MCPClient mcp_client;                // Model Context Protocol client
     SubagentManager subagent_manager;    // Subagent process management
+    ApprovalGateConfig gate_config;      // Approval gates for user confirmation
 } RalphSession;
 
 // Core Ralph functions

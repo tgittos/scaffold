@@ -194,7 +194,7 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 ## Integration with Tool Executor
 
-- [ ] **Modify `tool_executor.c` to check gates** - Before `execute_tool_call()`, check protected files first (hard block), then rate limiting, then approval gate. Handle all `ApprovalResult` cases. See spec section "Implementation > Integration Point" for code structure.
+- [x] **Modify `tool_executor.c` to check gates** - Before `execute_tool_call()`, check protected files first (hard block), then rate limiting, then approval gate. Handle all `ApprovalResult` cases. See spec section "Implementation > Integration Point" for code structure. Implemented `check_tool_approval()` helper function that checks protected files, rate limiting, and approval gates. Added to both `tool_executor_run_workflow()` and `tool_executor_run_loop()`. Modified `mk/sources.mk` to include `protected_files.c` and `path_normalize.c` in `RALPH_CORE_DEPS`.
 
 - [ ] **Pass `ApprovedPath` to file tools** - When approval includes path verification, pass the `ApprovedPath` struct to file tools so they use `verify_and_open_approved_path()` instead of direct `open()`.
 

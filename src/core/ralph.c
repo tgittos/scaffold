@@ -175,6 +175,14 @@ int ralph_init_session(RalphSession* session) {
         }
     }
 
+    // Initialize approval gates (non-critical - gate enforcement is optional)
+    if (approval_gate_init(&session->gate_config) != 0) {
+        fprintf(stderr, "Warning: Failed to initialize approval gates\n");
+    } else {
+        // Detect if we're running interactively (has TTY)
+        approval_gate_detect_interactive(&session->gate_config);
+    }
+
     return 0;
 }
 
@@ -186,6 +194,9 @@ void ralph_cleanup_session(RalphSession* session) {
 
     // Shutdown Python interpreter if it was initialized
     python_interpreter_shutdown();
+
+    // Cleanup approval gates
+    approval_gate_cleanup(&session->gate_config);
 
     // Cleanup subagent manager (kills any running subagents)
     subagent_manager_cleanup(&session->subagent_manager);

@@ -149,7 +149,9 @@ RALPH_CORE_DEPS := \
     $(SRCDIR)/policy/subagent_approval.c \
     $(SRCDIR)/policy/atomic_file.c \
     $(SRCDIR)/policy/gate_prompter.c \
+    $(SRCDIR)/policy/path_normalize.c \
     $(SRCDIR)/policy/pattern_generator.c \
+    $(SRCDIR)/policy/protected_files.c \
     $(SRCDIR)/policy/rate_limiter.c \
     $(SRCDIR)/policy/shell_parser.c \
     $(SRCDIR)/policy/shell_parser_cmd.c \

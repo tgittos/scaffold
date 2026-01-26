@@ -16,10 +16,127 @@
 #include "model_capabilities.h"
 #include "../mcp/mcp_client.h"
 #include "../utils/ptrarray.h"
+#include "../policy/approval_gate.h"
+#include "../policy/protected_files.h"
+#include "../policy/tool_args.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "json_escape.h"
+
+// =============================================================================
+// Approval Gate Helpers
+// =============================================================================
+
+/**
+ * Check if a tool performs file write operations.
+ * These tools need protected file checks before execution.
+ */
+static int is_file_write_tool(const char *tool_name) {
+    if (tool_name == NULL) return 0;
+    return (strcmp(tool_name, "write_file") == 0 ||
+            strcmp(tool_name, "append_file") == 0 ||
+            strcmp(tool_name, "apply_delta") == 0);
+}
+
+/**
+ * Check approval gates and protected files before tool execution.
+ *
+ * @param session The ralph session with gate config
+ * @param tool_call The tool call to check
+ * @param result Output: populated with error if operation is blocked
+ * @return 0 if tool can be executed, -1 if blocked (result contains error)
+ */
+static int check_tool_approval(RalphSession *session, const ToolCall *tool_call,
+                               ToolResult *result) {
+    if (session == NULL || tool_call == NULL || result == NULL) {
+        return 0; // No session or tool call - allow execution
+    }
+
+    // Skip gate checking if gates are disabled
+    if (!session->gate_config.enabled) {
+        return 0;
+    }
+
+    // Check protected files first (hard block, cannot be bypassed)
+    if (is_file_write_tool(tool_call->name)) {
+        char *path = tool_args_get_path(tool_call);
+        if (path != NULL) {
+            if (is_protected_file(path)) {
+                result->tool_call_id = tool_call->id ? strdup(tool_call->id) : NULL;
+                result->result = format_protected_file_error(path);
+                result->success = 0;
+                free(path);
+                return -1; // Blocked
+            }
+            free(path);
+        }
+    }
+
+    // Check rate limiting
+    if (is_rate_limited(&session->gate_config, tool_call)) {
+        result->tool_call_id = tool_call->id ? strdup(tool_call->id) : NULL;
+        result->result = format_rate_limit_error(&session->gate_config, tool_call);
+        result->success = 0;
+        return -1; // Blocked
+    }
+
+    // Check approval gate
+    ApprovedPath approved_path;
+    init_approved_path(&approved_path);
+
+    ApprovalResult approval = check_approval_gate(&session->gate_config,
+                                                   tool_call,
+                                                   &approved_path);
+
+    switch (approval) {
+        case APPROVAL_ALLOWED:
+        case APPROVAL_ALLOWED_ALWAYS:
+            // Verify path hasn't changed (TOCTOU protection) for file operations
+            if (approved_path.resolved_path != NULL) {
+                VerifyResult verify = verify_approved_path(&approved_path);
+                if (verify != VERIFY_OK) {
+                    result->tool_call_id = tool_call->id ? strdup(tool_call->id) : NULL;
+                    result->result = format_verify_error(verify, approved_path.resolved_path);
+                    result->success = 0;
+                    free_approved_path(&approved_path);
+                    return -1; // Blocked
+                }
+            }
+            free_approved_path(&approved_path);
+            return 0; // Proceed with execution
+
+        case APPROVAL_DENIED:
+            track_denial(&session->gate_config, tool_call);
+            result->tool_call_id = tool_call->id ? strdup(tool_call->id) : NULL;
+            result->result = format_denial_error(tool_call);
+            result->success = 0;
+            free_approved_path(&approved_path);
+            return -1; // Blocked
+
+        case APPROVAL_RATE_LIMITED:
+            result->tool_call_id = tool_call->id ? strdup(tool_call->id) : NULL;
+            result->result = format_rate_limit_error(&session->gate_config, tool_call);
+            result->success = 0;
+            free_approved_path(&approved_path);
+            return -1; // Blocked
+
+        case APPROVAL_NON_INTERACTIVE_DENIED:
+            result->tool_call_id = tool_call->id ? strdup(tool_call->id) : NULL;
+            result->result = format_non_interactive_error(tool_call);
+            result->success = 0;
+            free_approved_path(&approved_path);
+            return -1; // Blocked
+
+        case APPROVAL_ABORTED:
+            // User pressed Ctrl+C - signal abort
+            free_approved_path(&approved_path);
+            return -2; // Special return code for abort
+    }
+
+    free_approved_path(&approved_path);
+    return 0; // Default: allow
+}
 
 // =============================================================================
 // OpenAI Assistant Message Construction
@@ -458,7 +575,11 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
             return -1;
         }
 
+        // Force refresh of protected inode cache before batch processing
+        force_protected_inode_refresh();
+
         int executed_count = 0;
+        int loop_aborted = 0;
         for (int i = 0; i < call_count; i++) {
             // Skip already executed tool calls
             if (is_tool_already_executed(&tracker, tool_calls[i].id)) {
@@ -476,6 +597,27 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
 
             // Store mapping from result index to tool call index
             tool_call_indices[executed_count] = i;
+
+            // Check approval gates before execution
+            int approval_check = check_tool_approval(session, &tool_calls[i], &results[executed_count]);
+            if (approval_check == -2) {
+                // User aborted (Ctrl+C) - stop processing remaining tools
+                loop_aborted = 1;
+                debug_printf("User aborted tool execution in loop iteration %d\n", loop_count);
+                executed_count++;
+                break;
+            }
+            if (approval_check == -1) {
+                // Tool was blocked (result already populated)
+                debug_printf("Tool %s blocked by approval gate in iteration %d\n",
+                           tool_calls[i].name, loop_count);
+                // Output tool result in JSON mode
+                if (session->session_data.config.json_output_mode) {
+                    json_output_tool_result(tool_calls[i].id, results[executed_count].result, !results[executed_count].success);
+                }
+                executed_count++;
+                continue;
+            }
 
             int tool_executed = 0;
 
@@ -507,6 +649,24 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
             }
 
             executed_count++;
+        }
+
+        // Handle abort case - exit the entire tool loop
+        if (loop_aborted) {
+            // Still add results for tools that were processed before abort
+            for (int i = 0; i < executed_count; i++) {
+                int tool_call_index = tool_call_indices[i];
+                const char* tool_name = tool_calls[tool_call_index].name;
+                if (append_tool_message(&session->session_data.conversation, results[i].result,
+                                       results[i].tool_call_id, tool_name) != 0) {
+                    fprintf(stderr, "Warning: Failed to save tool result to conversation history\n");
+                }
+            }
+            free(tool_call_indices);
+            cleanup_tool_results(results, executed_count);
+            cleanup_tool_calls(tool_calls, call_count);
+            StringArray_destroy(&tracker);
+            return -1; // Signal abort
         }
 
         // Note: Tool execution group is NOT ended here - it spans the entire agentic loop
@@ -552,7 +712,37 @@ int tool_executor_run_workflow(RalphSession* session, ToolCall* tool_calls, int 
         return -1;
     }
 
+    // Force refresh of protected inode cache before batch processing
+    force_protected_inode_refresh();
+
+    int aborted = 0;
     for (int i = 0; i < call_count; i++) {
+        // Check approval gates before execution
+        int approval_check = check_tool_approval(session, &tool_calls[i], &results[i]);
+        if (approval_check == -2) {
+            // User aborted (Ctrl+C) - stop processing remaining tools
+            aborted = 1;
+            debug_printf("User aborted tool execution at tool %d of %d\n", i + 1, call_count);
+            // Still need to add placeholder results for unprocessed tools
+            for (int j = i; j < call_count; j++) {
+                if (results[j].result == NULL) {
+                    results[j].tool_call_id = tool_calls[j].id ? strdup(tool_calls[j].id) : NULL;
+                    results[j].result = strdup("{\"error\": \"aborted\", \"message\": \"Operation aborted by user\"}");
+                    results[j].success = 0;
+                }
+            }
+            break;
+        }
+        if (approval_check == -1) {
+            // Tool was blocked (result already populated)
+            debug_printf("Tool %s blocked by approval gate\n", tool_calls[i].name);
+            // Output tool result in JSON mode
+            if (session->session_data.config.json_output_mode) {
+                json_output_tool_result(tool_calls[i].id, results[i].result, !results[i].success);
+            }
+            continue;
+        }
+
         int tool_executed = 0;
 
         // Check if this is an MCP tool call
@@ -586,6 +776,12 @@ int tool_executor_run_workflow(RalphSession* session, ToolCall* tool_calls, int 
         if (append_tool_message(&session->session_data.conversation, results[i].result, tool_calls[i].id, tool_calls[i].name) != 0) {
             fprintf(stderr, "Warning: Failed to save tool result to conversation history\n");
         }
+    }
+
+    // If user aborted, don't continue with follow-up API calls
+    if (aborted) {
+        cleanup_tool_results(results, call_count);
+        return -2; // Signal abort to caller
     }
 
     // CRITICAL FIX: Now that initial tools are executed and saved to conversation,
