@@ -1,5 +1,6 @@
 #include "python_tool.h"
 #include "python_tool_files.h"
+#include "../policy/verified_file_python.h"
 #include <cJSON.h>
 #include <Python.h>
 #include <stdio.h>
@@ -9,6 +10,9 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <unistd.h>
+
+/* Track whether verified file module was registered (must be before Py_Initialize) */
+static int verified_file_module_registered = 0;
 
 /*
  * Static globals for persistent interpreter state.
@@ -66,6 +70,15 @@ int python_interpreter_init(void) {
 
     // Disable bytecode writing since we're embedded
     setenv("PYTHONDONTWRITEBYTECODE", "1", 1);
+
+    // Register verified file I/O module before Python initialization
+    // This must be done exactly once, before Py_Initialize()
+    if (!verified_file_module_registered) {
+        if (verified_file_python_init() == 0) {
+            verified_file_module_registered = 1;
+        }
+        // If registration fails, continue anyway - tools will use fallback I/O
+    }
 
     // Initialize Python
     Py_Initialize();

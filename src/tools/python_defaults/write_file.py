@@ -20,6 +20,7 @@ def write_file(path: str, content: str, backup: bool = False) -> dict:
     from pathlib import Path
     from datetime import datetime
     import shutil
+    import os
 
     # Security check - prevent directory traversal (check BEFORE resolving)
     if '..' in path:
@@ -41,7 +42,29 @@ def write_file(path: str, content: str, backup: bool = False) -> dict:
     # Create parent directories if needed
     p.parent.mkdir(parents=True, exist_ok=True)
 
-    # Write content
+    # Try to use verified file I/O for TOCTOU-safe writes
+    # This is available when approval gates have verified the path
+    try:
+        import _ralph_verified_io
+        if _ralph_verified_io.has_verified_context():
+            # Use the verified file context for atomic open
+            fd = _ralph_verified_io.open_verified(str(p), 'w')
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                f.write(content)
+            return {
+                "success": True,
+                "path": str(p),
+                "bytes_written": len(content_bytes),
+                "verified": True
+            }
+    except ImportError:
+        # Module not available - fall through to standard I/O
+        pass
+    except OSError as e:
+        # Verification failed - report the error
+        raise ValueError(f"File verification failed: {e}")
+
+    # Fall back to standard file I/O (when gates disabled or no context)
     p.write_text(content, encoding='utf-8')
 
     return {

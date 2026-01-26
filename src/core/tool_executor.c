@@ -19,6 +19,7 @@
 #include "../policy/approval_gate.h"
 #include "../policy/protected_files.h"
 #include "../policy/tool_args.h"
+#include "../policy/verified_file_context.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -37,6 +38,18 @@ static int is_file_write_tool(const char *tool_name) {
     return (strcmp(tool_name, "write_file") == 0 ||
             strcmp(tool_name, "append_file") == 0 ||
             strcmp(tool_name, "apply_delta") == 0);
+}
+
+/**
+ * Check if a tool performs file operations that need verified access.
+ * These tools benefit from TOCTOU-safe file access via verified file context.
+ */
+static int is_file_tool(const char *tool_name) {
+    if (tool_name == NULL) return 0;
+    return (strcmp(tool_name, "write_file") == 0 ||
+            strcmp(tool_name, "append_file") == 0 ||
+            strcmp(tool_name, "apply_delta") == 0 ||
+            strcmp(tool_name, "read_file") == 0);
 }
 
 /**
@@ -86,16 +99,25 @@ static int check_tool_approval(RalphSession *session, const ToolCall *tool_call,
     switch (approval) {
         case APPROVAL_ALLOWED:
         case APPROVAL_ALLOWED_ALWAYS:
-            // Verify path hasn't changed (TOCTOU protection) for file operations
-            if (approved_path.resolved_path != NULL) {
-                VerifyResult verify = verify_approved_path(&approved_path);
-                if (verify != VERIFY_OK) {
-                    result->tool_call_id = tool_call->id ? strdup(tool_call->id) : NULL;
-                    result->result = format_verify_error(verify, approved_path.resolved_path);
-                    result->success = 0;
-                    free_approved_path(&approved_path);
-                    return -1; // Blocked
+            // For file tools with approved paths, set up the verified file context
+            // This enables TOCTOU-safe file operations via verify_and_open_approved_path()
+            if (approved_path.resolved_path != NULL && is_file_tool(tool_call->name)) {
+                // Set the verified file context before tool execution
+                // The context stores the approved path and enables Python tools
+                // to use verified file descriptors instead of direct open()
+                if (verified_file_context_set(&approved_path) != 0) {
+                    // Context setup failed - fall back to verification-only check
+                    VerifyResult verify = verify_approved_path(&approved_path);
+                    if (verify != VERIFY_OK) {
+                        result->tool_call_id = tool_call->id ? strdup(tool_call->id) : NULL;
+                        result->result = format_verify_error(verify, approved_path.resolved_path);
+                        result->success = 0;
+                        free_approved_path(&approved_path);
+                        return -1; // Blocked
+                    }
                 }
+                // Note: We don't free approved_path here when context is set successfully
+                // The context owns a copy, and we free the original after setting
             }
             free_approved_path(&approved_path);
             return 0; // Proceed with execution
@@ -646,6 +668,10 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
                            tool_calls[i].name, tool_calls[i].id, loop_count);
             }
 
+            // Clear verified file context after tool execution completes
+            // This ensures the context doesn't leak to subsequent tool calls
+            verified_file_context_clear();
+
             // Output tool result in JSON mode
             if (session->session_data.config.json_output_mode) {
                 json_output_tool_result(tool_calls[i].id, results[executed_count].result, !results[executed_count].success);
@@ -770,6 +796,10 @@ int tool_executor_run_workflow(RalphSession* session, ToolCall* tool_calls, int 
         } else {
             debug_printf("Executed tool: %s (ID: %s)\n", tool_calls[i].name, tool_calls[i].id);
         }
+
+        // Clear verified file context after tool execution completes
+        // This ensures the context doesn't leak to subsequent tool calls
+        verified_file_context_clear();
 
         // Output tool result in JSON mode
         if (session->session_data.config.json_output_mode) {

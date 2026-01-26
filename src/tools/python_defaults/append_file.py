@@ -17,6 +17,7 @@ def append_file(path: str, content: str) -> dict:
         Dictionary with success status and path
     """
     from pathlib import Path
+    import os
 
     # Security check - prevent directory traversal (check BEFORE resolving)
     if '..' in path:
@@ -32,7 +33,29 @@ def append_file(path: str, content: str) -> dict:
     # Create parent directories if needed
     p.parent.mkdir(parents=True, exist_ok=True)
 
-    # Append content
+    # Try to use verified file I/O for TOCTOU-safe appends
+    # This is available when approval gates have verified the path
+    try:
+        import _ralph_verified_io
+        if _ralph_verified_io.has_verified_context():
+            # Use the verified file context for atomic open
+            fd = _ralph_verified_io.open_verified(str(p), 'a')
+            with os.fdopen(fd, 'a', encoding='utf-8') as f:
+                f.write(content)
+            return {
+                "success": True,
+                "path": str(p),
+                "bytes_appended": len(content_bytes),
+                "verified": True
+            }
+    except ImportError:
+        # Module not available - fall through to standard I/O
+        pass
+    except OSError as e:
+        # Verification failed - report the error
+        raise ValueError(f"File verification failed: {e}")
+
+    # Fall back to standard file I/O (when gates disabled or no context)
     with open(p, 'a', encoding='utf-8') as f:
         f.write(content)
 

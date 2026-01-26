@@ -19,8 +19,9 @@ ALL_TEST_TARGETS += $$(TEST_$(1)_TARGET)
 endef
 
 # Template for mixed C/C++ test (adds CPP objects)
+# Uses $(sort) to deduplicate sources when tests use multiple dependency sets
 define def_test_mixed
-TEST_$(1)_SOURCES := $$(TESTDIR)/$(2).c $(3) $$(UNITY)
+TEST_$(1)_SOURCES := $$(sort $$(TESTDIR)/$(2).c $(3) $$(UNITY))
 TEST_$(1)_OBJECTS := $$(TEST_$(1)_SOURCES:.c=.o) $$(DB_CPP_SOURCES:.cpp=.o)
 TEST_$(1)_TARGET := $$(TESTDIR)/test_$(1)
 ALL_TEST_TARGETS += $$(TEST_$(1)_TARGET)
@@ -65,6 +66,7 @@ GATE_DEPS := \
 $(eval $(call def_test,approval_gate,test_approval_gate,$(GATE_DEPS)))
 $(eval $(call def_test,atomic_file,test_atomic_file,$(SRCDIR)/policy/atomic_file.c))
 $(eval $(call def_test,path_normalize,test_path_normalize,$(SRCDIR)/policy/path_normalize.c))
+$(eval $(call def_test,verified_file_context,test_verified_file_context,$(SRCDIR)/policy/verified_file_context.c $(SRCDIR)/policy/atomic_file.c $(SRCDIR)/policy/path_normalize.c))
 $(eval $(call def_test,protected_files,test_protected_files,$(SRCDIR)/policy/protected_files.c $(SRCDIR)/policy/path_normalize.c))
 $(eval $(call def_test,shell_parser,test_shell_parser,$(SRCDIR)/policy/shell_parser.c $(SRCDIR)/policy/shell_parser_cmd.c $(SRCDIR)/policy/shell_parser_ps.c))
 $(eval $(call def_test,shell_parser_cmd,test_shell_parser_cmd,$(SRCDIR)/policy/shell_parser_cmd.c $(SRCDIR)/policy/shell_parser.c $(SRCDIR)/policy/shell_parser_ps.c))
@@ -123,6 +125,9 @@ $(TEST_path_normalize_TARGET): $(TEST_path_normalize_OBJECTS)
 	$(CC) -o $@ $^
 
 $(TEST_protected_files_TARGET): $(TEST_protected_files_OBJECTS)
+	$(CC) -o $@ $^
+
+$(TEST_verified_file_context_TARGET): $(TEST_verified_file_context_OBJECTS)
 	$(CC) -o $@ $^
 
 $(TEST_shell_parser_TARGET): $(TEST_shell_parser_OBJECTS)
@@ -331,7 +336,7 @@ TEST_EXECUTION_ORDER := \
     $(TEST_document_chunker_TARGET) $(TEST_approval_gate_TARGET) $(TEST_atomic_file_TARGET) \
     $(TEST_path_normalize_TARGET) $(TEST_protected_files_TARGET) $(TEST_shell_parser_TARGET) \
     $(TEST_shell_parser_cmd_TARGET) $(TEST_shell_parser_ps_TARGET) $(TEST_subagent_approval_TARGET) \
-    $(TEST_subagent_tool_TARGET) $(TEST_json_output_TARGET)
+    $(TEST_subagent_tool_TARGET) $(TEST_json_output_TARGET) $(TEST_verified_file_context_TARGET)
 
 test: $(ALL_TEST_TARGETS)
 	@echo "Running all tests..."
@@ -360,7 +365,7 @@ VALGRIND_TESTS := \
     $(TEST_pdf_extractor_TARGET) $(TEST_document_chunker_TARGET) $(TEST_approval_gate_TARGET) \
     $(TEST_atomic_file_TARGET) $(TEST_path_normalize_TARGET) $(TEST_protected_files_TARGET) \
     $(TEST_shell_parser_TARGET) $(TEST_shell_parser_cmd_TARGET) $(TEST_shell_parser_ps_TARGET) \
-    $(TEST_subagent_approval_TARGET) $(TEST_json_output_TARGET)
+    $(TEST_subagent_approval_TARGET) $(TEST_json_output_TARGET) $(TEST_verified_file_context_TARGET)
 
 check-valgrind: $(ALL_TEST_TARGETS)
 	@echo "Running valgrind tests (excluding HTTP and Python tests)..."

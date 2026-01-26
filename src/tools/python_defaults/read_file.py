@@ -16,6 +16,7 @@ def read_file(path: str, start_line: int = 0, end_line: int = 0) -> str:
         File contents as a string
     """
     from pathlib import Path
+    import os
 
     # Security check - prevent directory traversal (check BEFORE resolving)
     if '..' in path:
@@ -34,7 +35,26 @@ def read_file(path: str, start_line: int = 0, end_line: int = 0) -> str:
     if p.stat().st_size > max_size:
         raise ValueError(f"File too large (>{max_size} bytes): {path}")
 
-    content = p.read_text(encoding='utf-8', errors='replace')
+    # Try to use verified file I/O for TOCTOU-safe reads
+    # This is available when approval gates have verified the path
+    content = None
+    try:
+        import _ralph_verified_io
+        if _ralph_verified_io.has_verified_context():
+            # Use the verified file context for atomic open
+            fd = _ralph_verified_io.open_verified(str(p), 'r')
+            with os.fdopen(fd, 'r', encoding='utf-8', errors='replace') as f:
+                content = f.read()
+    except ImportError:
+        # Module not available - fall through to standard I/O
+        pass
+    except OSError as e:
+        # Verification failed - report the error
+        raise ValueError(f"File verification failed: {e}")
+
+    # Fall back to standard file I/O (when gates disabled or no context)
+    if content is None:
+        content = p.read_text(encoding='utf-8', errors='replace')
 
     if start_line > 0 or end_line > 0:
         lines = content.splitlines(keepends=True)
