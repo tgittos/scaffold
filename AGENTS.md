@@ -33,6 +33,19 @@ The container has a valid `.env` file that is configured to allow ralph to lever
 You may use apt to install missing tooling that you need, however do not use it to install libraries as dependencies of ralph, as that will break ralph's portability. Any ralph dependencies should be built locally using Cosmopolitan, with recipes in the Makefile.
 Run ralph with `--debug` to see all HTTP requests and data exchange from upstream LLM providers.
 
+### Approval Gate Flags
+
+Ralph has an approval gate system that prompts before executing certain tool categories. For development:
+
+- `--yolo`: Disable all approval gates for the session. Use when you trust the LLM to execute tools without confirmation.
+- `--allow "tool:pattern"`: Add a specific pattern to the session allowlist
+- `--allow-category=<category>`: Set a category (file_write, shell, network, etc.) to allow without prompting
+
+Example for development workflow:
+```bash
+./ralph --yolo "implement the feature"
+```
+
 ## Code Style
 
 Write modern, memory safe defensive portable C code. Always initialize pointers, always free memory, always check your parameters before you use them as a few examples.
@@ -84,6 +97,17 @@ The subagent tests use `fork()` and `execv()` to spawn child ralph processes. Ru
 - This exhausts memory and crashes the devcontainer
 
 To test subagent memory safety, run the subagent code paths directly without the fork/exec layer.
+
+### Approval Gate Tests and Valgrind
+
+**Subagent approval tests (`test_subagent_approval`) are excluded from valgrind** for the same reasons as subagent tests.
+
+Approval gate tests that require user prompting use mock inputs or test non-interactive code paths. The `gate_prompter` module handles TTY interaction, which cannot be easily mocked in unit tests. Integration tests for approval gates focus on:
+- Non-interactive mode behavior (stdin is not a TTY)
+- Allowlist bypass (patterns that skip prompting)
+- Rate limiting logic
+- Category configuration
+- Error message formatting
 
 ## Debugging
 

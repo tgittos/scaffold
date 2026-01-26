@@ -93,6 +93,34 @@ This document provides a comprehensive overview of Ralph's codebase structure an
 #### `src/pdf/` - PDF Processing
 - **`pdf_extractor.c/h`** - PDF text extraction using PDFio library
 
+#### `src/policy/` - Approval Gate System
+The policy module implements approval gates for controlling tool execution.
+
+##### Core Components
+- **`approval_gate.c/h`** - Core orchestration: category lookup, gate checking, config management
+- **`rate_limiter.c/h`** - Opaque rate limiter type with exponential backoff tracking
+- **`allowlist.c/h`** - Opaque allowlist type for regex and shell pattern matching
+- **`gate_prompter.c/h`** - Terminal UI for single and batch approval prompts
+- **`pattern_generator.c/h`** - Pure functions for generating allowlist patterns
+- **`tool_args.c/h`** - Centralized cJSON argument extraction from ToolCall structs
+
+##### Protected Files
+- **`protected_files.c/h`** - Protected file detection via basename, prefix, glob, and inode matching
+- **`path_normalize.c/h`** - Cross-platform path normalization (Windows drive letters, UNC paths)
+
+##### Shell Parsing
+- **`shell_parser.c/h`** - POSIX shell tokenization and dangerous pattern detection
+- **`shell_parser_cmd.c`** - cmd.exe parsing with metacharacter detection
+- **`shell_parser_ps.c`** - PowerShell parsing with cmdlet detection
+
+##### TOCTOU Protection
+- **`atomic_file.c/h`** - Atomic file operations with O_NOFOLLOW, O_EXCL, inode verification
+- **`verified_file_context.c/h`** - Thread-local storage for approved path context
+- **`verified_file_python.c/h`** - Python extension for TOCTOU-safe file operations
+
+##### Subagent Support
+- **`subagent_approval.c/h`** - IPC-based approval proxying for child processes
+
 #### `src/utils/` - Utility Functions
 - **`config.c/h`** - Configuration management with cascading priority (local → user → env → defaults)
 - **`common_utils.c/h`** - General utility functions (string ops, JSON extraction)
@@ -171,6 +199,19 @@ The test directory mirrors the source structure:
 - **`test_json_output.c`** - JSON output mode tests
 - **`test_debug_output.c`** - Debug output tests
 
+#### Policy Tests (Approval Gates)
+- **`test_approval_gate.c`** - Gate config initialization, category lookup, non-interactive mode
+- **`test_approval_gate_integration.c`** - End-to-end approval flow tests (26 tests)
+- **`test_rate_limiter.c`** - Denial tracking, exponential backoff, reset behavior
+- **`test_allowlist.c`** - Regex and shell pattern matching, JSON loading
+- **`test_shell_parser.c`** - POSIX shell tokenization and dangerous pattern detection
+- **`test_shell_parser_cmd.c`** - cmd.exe parsing tests
+- **`test_shell_parser_ps.c`** - PowerShell parsing and dangerous cmdlet detection
+- **`test_path_normalize.c`** - Cross-platform path normalization
+- **`test_protected_files.c`** - Protected file detection (basename, prefix, glob, inode)
+- **`test_atomic_file.c`** - TOCTOU-safe file operations (symlink rejection, O_EXCL)
+- **`test_subagent_approval.c`** - Approval proxy pipe management (excluded from valgrind)
+
 #### Test Infrastructure
 - **`test/unity/`** - Unity testing framework (vendored)
 - **`mock_api_server.c/h`** - Mock API server for testing
@@ -227,6 +268,16 @@ Centralized configuration in `src/utils/config.c`:
 - **Priority**: Local `ralph.config.json` → User config → Environment → Defaults
 - **Auto-Generation**: Creates config from environment variables
 - **MCP Config**: Server definitions in `mcpServers` section
+
+### 9. Approval Gate System
+The `src/policy/` directory implements security-aware tool execution control:
+- **Category-Based Gates**: Tools categorized as file_read, file_write, shell, network, memory, subagent, mcp, python
+- **Allowlist Matching**: Regex patterns for paths/URLs, shell command prefix matching
+- **Protected Files**: Hard-block access to config files (.env, ralph.config.json) via basename, glob, and inode detection
+- **Rate Limiting**: Exponential backoff (5s → 15s → 60s → 5min) after repeated denials
+- **Subagent Proxy**: IPC-based approval forwarding for child processes
+- **TOCTOU Protection**: Atomic file operations with inode verification
+- **Cross-Platform Shell Parsing**: POSIX, cmd.exe, and PowerShell with dangerous pattern detection
 
 ---
 

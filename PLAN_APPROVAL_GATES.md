@@ -246,11 +246,11 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 ## Documentation
 
-- [ ] **Update ARCHITECTURE.md** - Add approval gate layer to system architecture diagram. Show integration with tool executor and subagent system.
+- [x] **Update ARCHITECTURE.md** - Add approval gate layer to system architecture diagram. Show integration with tool executor and subagent system. Added policy layer to main architecture diagram, module dependencies, new Approval Gate System section with flow diagram, tool categories table, component descriptions, CLI flags, and configuration examples.
 
-- [ ] **Update CODE_OVERVIEW.md** - Add entries for all new files in `src/core/`. Update tool system description to mention gate checking.
+- [x] **Update CODE_OVERVIEW.md** - Add entries for all new files in `src/policy/`. Update tool system description to mention gate checking. Added src/policy/ section with all module descriptions, policy tests section, and Key Architectural Component #9 for Approval Gate System.
 
-- [ ] **Update CLAUDE.md** - Document `--yolo` flag usage for development. Note that approval gate tests may require TTY mocking.
+- [x] **Update CLAUDE.md** - Document `--yolo` flag usage for development. Note that approval gate tests may require TTY mocking. Added Approval Gate Flags section in Development Environment and testing notes in Subagent Tests section.
 
 ---
 

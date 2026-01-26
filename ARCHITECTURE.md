@@ -19,6 +19,18 @@ graph TB
     Core --> StreamingHandler[Streaming Handler<br/>streaming_handler.c/h]
     Core --> ToolExecutor[Tool Executor<br/>tool_executor.c/h]
 
+    %% Approval Gate System
+    ToolExecutor --> ApprovalGate[Approval Gate<br/>approval_gate.c/h]
+    ApprovalGate --> RateLimiter[Rate Limiter<br/>rate_limiter.c/h]
+    ApprovalGate --> Allowlist[Allowlist<br/>allowlist.c/h]
+    ApprovalGate --> GatePrompter[Gate Prompter<br/>gate_prompter.c/h]
+    ApprovalGate --> ProtectedFiles[Protected Files<br/>protected_files.c/h]
+    ApprovalGate --> ShellParser[Shell Parser<br/>shell_parser.c/h]
+    ApprovalGate --> AtomicFile[Atomic File<br/>atomic_file.c/h]
+    ApprovalGate --> SubagentApproval[Subagent Approval<br/>subagent_approval.c/h]
+    GatePrompter --> PatternGen[Pattern Generator<br/>pattern_generator.c/h]
+    ProtectedFiles --> PathNormalize[Path Normalize<br/>path_normalize.c/h]
+
     %% MCP Integration
     MCPClient --> MCPServers[MCP Server Connections<br/>STDIO/HTTP/SSE]
     MCPClient --> ToolRegistry
@@ -148,8 +160,10 @@ graph TB
     classDef vectorLayer fill:#e3f2fd
     classDef externalLayer fill:#efebe9
     classDef mcpLayer fill:#fff9c4
+    classDef policyLayer fill:#ffccbc
 
     class CLI,Core,Session,ConfigSystem,MemoryCommands,ContextEnhancement,RecapModule,StreamingHandler,ToolExecutor coreLayer
+    class ApprovalGate,RateLimiter,Allowlist,GatePrompter,ProtectedFiles,ShellParser,AtomicFile,SubagentApproval,PatternGen,PathNormalize policyLayer
     class LLMProvider,ProviderRegistry,Anthropic,OpenAI,LocalAI,ModelCaps,ClaudeModel,GPTModel,QwenModel,DeepSeekModel,DefaultModel llmLayer
     class ToolsSystem,ToolRegistry,PythonTool,PythonFileTools,PythonDefaults,TodoTool,MemoryTool,PDFTool,VectorDBTool,SubagentTool,TodoManager,TodoDisplay toolsLayer
     class ConversationTracker,TokenManager,ConversationCompactor sessionLayer
@@ -274,6 +288,10 @@ graph TB
     Core --> Utils[Utils Layer]
     Core --> Vector[Vector Layer]
     Core --> MCP[MCP Layer]
+    Core --> Policy[Policy Layer<br/>Approval Gates]
+
+    Tools --> Policy
+    Policy --> Utils
 
     CLI[CLI Layer<br/>main.c, memory_commands.c] --> Core
     CLI --> Vector
@@ -308,8 +326,10 @@ graph TB
     classDef external fill:#ffebee,stroke:#d32f2f,stroke-width:2px
     classDef mcpLayer fill:#fff9c4,stroke:#f9a825,stroke-width:2px
     classDef cliLayer fill:#e1f5fe,stroke:#0288d1,stroke-width:2px
+    classDef policyLayer fill:#ffccbc,stroke:#e64a19,stroke-width:2px
 
     class Core,LLM,Tools,Session,Utils,Network layer
+    class Policy policyLayer
     class Vector,Persistence vectorLayer
     class External,FileSystem,Database,Document,CPPRuntime,VectorStorage,JSONStorage external
     class MCP mcpLayer
@@ -537,6 +557,108 @@ graph TB
 - `subagent`: Spawn a new subagent with a task
 - `subagent_status`: Query subagent status with optional blocking wait
 
+## Approval Gate System
+
+Ralph implements a comprehensive approval gate system that controls tool execution based on security categories and user preferences.
+
+```mermaid
+graph TB
+    ToolExec[Tool Executor] --> CheckGate[check_approval_gate]
+
+    CheckGate --> ProtectedCheck{Protected File?}
+    ProtectedCheck -->|Yes| Deny[Hard Deny]
+    ProtectedCheck -->|No| RateCheck{Rate Limited?}
+
+    RateCheck -->|Yes| RateLimitErr[Rate Limit Error]
+    RateCheck -->|No| AllowlistCheck{Matches Allowlist?}
+
+    AllowlistCheck -->|Yes| Allow[Allow Execution]
+    AllowlistCheck -->|No| CategoryCheck{Category Action}
+
+    CategoryCheck -->|ALLOW| Allow
+    CategoryCheck -->|DENY| Deny
+    CategoryCheck -->|GATE| InteractiveCheck{Interactive?}
+
+    InteractiveCheck -->|No| NonInteractiveDeny[Non-Interactive Deny]
+    InteractiveCheck -->|Yes| SubagentCheck{Is Subagent?}
+
+    SubagentCheck -->|Yes| ProxyRequest[Proxy to Parent]
+    SubagentCheck -->|No| UserPrompt[User Prompt]
+
+    ProxyRequest --> ParentPrompt[Parent Prompts User]
+    ParentPrompt --> ProxyResponse[Response to Subagent]
+
+    UserPrompt --> UserDecision{User Decision}
+    ProxyResponse --> UserDecision
+
+    UserDecision -->|Allow| Allow
+    UserDecision -->|Deny| TrackDenial[Track Denial]
+    UserDecision -->|Allow Always| AddPattern[Add to Allowlist]
+
+    TrackDenial --> Deny
+    AddPattern --> Allow
+
+    classDef check fill:#e3f2fd
+    classDef action fill:#e8f5e8
+    classDef deny fill:#ffcdd2
+    classDef prompt fill:#fff3e0
+
+    class CheckGate,ProtectedCheck,RateCheck,AllowlistCheck,CategoryCheck,InteractiveCheck,SubagentCheck check
+    class Allow,AddPattern action
+    class Deny,RateLimitErr,NonInteractiveDeny,TrackDenial deny
+    class UserPrompt,ParentPrompt,ProxyRequest,ProxyResponse,UserDecision prompt
+```
+
+### Tool Categories
+
+| Category | Default Action | Description |
+|----------|---------------|-------------|
+| `file_read` | ALLOW | File reading operations |
+| `file_write` | GATE | File writing operations |
+| `shell` | GATE | Shell command execution |
+| `network` | GATE | Network requests |
+| `memory` | ALLOW | Memory tool operations |
+| `subagent` | GATE | Spawning subagents |
+| `mcp` | GATE | MCP tool execution |
+| `python` | ALLOW | Python code execution |
+
+### Key Components
+
+- **Approval Gate** (`approval_gate.c/h`): Core orchestration logic for gate checking
+- **Rate Limiter** (`rate_limiter.c/h`): Exponential backoff after repeated denials
+- **Allowlist** (`allowlist.c/h`): Regex and shell command pattern matching
+- **Gate Prompter** (`gate_prompter.c/h`): Terminal UI for user approval
+- **Pattern Generator** (`pattern_generator.c/h`): Auto-generate allowlist patterns
+- **Protected Files** (`protected_files.c/h`): Hard-block access to sensitive files
+- **Shell Parser** (`shell_parser.c/h`): Cross-platform shell command parsing (POSIX/CMD/PowerShell)
+- **Atomic File** (`atomic_file.c/h`): TOCTOU-safe file operations
+- **Subagent Approval** (`subagent_approval.c/h`): IPC-based approval proxying for child processes
+
+### CLI Flags
+
+- `--yolo`: Disable all approval gates for the session
+- `--allow "tool:pattern"`: Add entry to session allowlist
+- `--allow-category=<category>`: Set category action to ALLOW
+
+### Configuration
+
+Gates are configured in `ralph.config.json`:
+```json
+{
+  "approval_gates": {
+    "enabled": true,
+    "categories": {
+      "file_write": "gate",
+      "shell": "gate",
+      "network": "allow"
+    },
+    "allowlist": [
+      {"tool": "shell", "pattern": ["git", "status"]}
+    ]
+  }
+}
+```
+
 ## CLI Commands
 
 Interactive slash commands provide direct access to memory management without LLM involvement.
@@ -682,6 +804,7 @@ graph TB
 
 - **Multi-Provider Support**: Seamlessly works with Anthropic, OpenAI, and local LLM servers
 - **Extensible Tools**: Plugin architecture for adding new tools and capabilities
+- **Approval Gates**: Category-based tool access control with user prompts, allowlists, and rate limiting
 - **MCP Integration**: Model Context Protocol support for external tool servers (STDIO/HTTP/SSE)
 - **Interactive CLI Commands**: Slash commands for direct memory management (`/memory`)
 - **Conversation Persistence**: Automatic conversation tracking with vector database integration
@@ -791,6 +914,22 @@ src/
 │   └── api_error.c/h       # Enhanced error handling with retries
 ├── pdf/                    # PDF processing
 │   └── pdf_extractor.c/h   # PDFio-based text extraction
+├── policy/                 # Approval gate system
+│   ├── approval_gate.c/h   # Core approval orchestration
+│   ├── allowlist.c/h       # Pattern matching allowlist
+│   ├── rate_limiter.c/h    # Denial rate limiting
+│   ├── gate_prompter.c/h   # Terminal UI prompts
+│   ├── pattern_generator.c/h # Auto-generate patterns
+│   ├── tool_args.c/h       # Tool argument extraction
+│   ├── protected_files.c/h # Protected file detection
+│   ├── path_normalize.c/h  # Cross-platform path normalization
+│   ├── shell_parser.c/h    # POSIX shell parsing
+│   ├── shell_parser_cmd.c  # cmd.exe parsing
+│   ├── shell_parser_ps.c   # PowerShell parsing
+│   ├── atomic_file.c/h     # TOCTOU-safe file operations
+│   ├── subagent_approval.c/h # Subagent approval proxy
+│   ├── verified_file_context.c/h # Thread-local verified file context
+│   └── verified_file_python.c/h  # Python extension for verified I/O
 ├── session/                # Session management
 │   ├── session_manager.c/h # Session data structures
 │   ├── conversation_tracker.c/h # Conversation persistence
