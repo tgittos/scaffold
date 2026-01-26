@@ -4,13 +4,29 @@ This document provides a flat list of implementation tasks for the Approval Gate
 
 Reference: `./SPEC_APPROVAL_GATES.md`
 
+**Architecture Note**: The approval gate system lives in the `src/policy/` subsystem, which uses opaque types (`RateLimiter`, `Allowlist`, `GatePrompter`) for better encapsulation and testability. Helper modules (`tool_args`, `pattern_generator`) extract shared functionality.
+
 ---
 
 ## Core Data Structures
 
-- [x] **Create `src/core/approval_gate.h`** - Define all public data structures and function prototypes. Include `GateAction` enum (`ALLOW`, `GATE`, `DENY`), `GateCategory` enum (8 categories), `ApprovalResult` enum, `ApprovalGateConfig` struct, `AllowlistEntry` struct, `ShellAllowEntry` struct, `DenialTracker` struct. See spec section "Implementation > Data Structures" for complete definitions.
+- [x] **Create `src/policy/approval_gate.h`** - Define all public data structures and function prototypes. Include `GateAction` enum (`ALLOW`, `GATE`, `DENY`), `GateCategory` enum (8 categories), `ApprovalResult` enum (including `APPROVAL_NON_INTERACTIVE_DENIED`), `ApprovalGateConfig` struct with opaque type pointers. See spec section "Implementation > Data Structures" for complete definitions.
 
-- [x] **Create `src/core/approval_gate.c`** - Implement core approval gate logic including initialization, cleanup, category lookup, and the main `check_approval_gate()` function that orchestrates the approval flow. See spec section "Implementation > Core Functions" for function signatures.
+- [x] **Create `src/policy/approval_gate.c`** - Implement core approval gate orchestration logic including initialization, cleanup, category lookup, and the main `check_approval_gate()` function. Delegates to opaque types for rate limiting, allowlist matching, and prompting. See spec section "Implementation > Core Functions" for function signatures.
+
+---
+
+## Opaque Types (Policy Module)
+
+- [x] **Create `src/policy/rate_limiter.h` and `rate_limiter.c`** - Implement opaque `RateLimiter` type that owns denial tracking data internally. Provides `rate_limiter_create()`, `rate_limiter_destroy()`, `rate_limiter_is_limited()`, `rate_limiter_track_denial()`, `rate_limiter_reset()`, `rate_limiter_get_retry_after()`. See spec section "Implementation > Opaque Types > RateLimiter".
+
+- [x] **Create `src/policy/allowlist.h` and `allowlist.c`** - Implement opaque `Allowlist` type that owns regex and shell allowlist entries. Provides `allowlist_create()`, `allowlist_destroy()`, `allowlist_add_regex()`, `allowlist_add_shell()`, `allowlist_matches_regex()`, `allowlist_matches_shell()`, `allowlist_load_from_json()`. See spec section "Implementation > Opaque Types > Allowlist".
+
+- [x] **Create `src/policy/gate_prompter.h` and `gate_prompter.c`** - Implement opaque `GatePrompter` type that encapsulates terminal UI handling. Provides `gate_prompter_create()`, `gate_prompter_destroy()`, `gate_prompter_single()`, `gate_prompter_batch()`, `gate_prompter_generate_pattern()`. See spec section "Implementation > Opaque Types > GatePrompter".
+
+- [x] **Create `src/policy/tool_args.h` and `tool_args.c`** - Centralized cJSON argument extraction from ToolCall structs. Provides `tool_args_get_string()`, `tool_args_get_int()`, `tool_args_parse()`. Eliminates duplicate JSON parsing across modules.
+
+- [x] **Create `src/policy/pattern_generator.h` and `pattern_generator.c`** - Pure functions for generating allowlist patterns without terminal I/O. Provides `pattern_generate_for_path()`, `pattern_generate_for_url()`, `pattern_generate_for_shell()`. See spec section "Allow Always Pattern Generation".
 
 ---
 
@@ -34,17 +50,17 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 ## Path Normalization (Cross-Platform)
 
-- [x] **Create `src/core/path_normalize.h`** - Define `NormalizedPath` struct with `normalized`, `basename`, and `is_absolute` fields. Declare `normalize_path()` and `free_normalized_path()` functions.
+- [x] **Create `src/policy/path_normalize.h`** - Define `NormalizedPath` struct with `normalized`, `basename`, and `is_absolute` fields. Declare `normalize_path()` and `free_normalized_path()` functions.
 
-- [x] **Create `src/core/path_normalize.c`** - Implement cross-platform path normalization. On Windows: convert backslashes to forward slashes, lowercase entire path, convert drive letters (`C:` → `/c/`), handle UNC paths (`//server/share` → `/unc/server/share`). On POSIX: minimal normalization. Both: remove trailing slashes, collapse duplicate slashes, extract basename. See spec section "Implementation > Protected Files > Path Normalization".
+- [x] **Create `src/policy/path_normalize.c`** - Implement cross-platform path normalization. On Windows: convert backslashes to forward slashes, lowercase entire path, convert drive letters (`C:` → `/c/`), handle UNC paths (`//server/share` → `/unc/server/share`). On POSIX: minimal normalization. Both: remove trailing slashes, collapse duplicate slashes, extract basename. See spec section "Implementation > Protected Files > Path Normalization".
 
 ---
 
 ## Protected File Detection
 
-- [x] **Create `src/core/protected_files.h`** - Define `ProtectedInode` struct and `ProtectedInodeCache` struct. Declare `is_protected_file()`, `refresh_protected_inodes()`, and related functions.
+- [x] **Create `src/policy/protected_files.h`** - Define `ProtectedInode` struct and `ProtectedInodeCache` struct. Declare `is_protected_file()`, `refresh_protected_inodes()`, and related functions.
 
-- [x] **Create `src/core/protected_files.c`** - Implement protected file detection with multiple strategies: (1) basename exact match (`ralph.config.json`, `.env`), (2) basename prefix match (`.env.*`), (3) glob pattern match (recursive patterns like `**/ralph.config.json`), (4) inode-based detection for hardlinks/renames. See spec section "Protected Files" and "Implementation > Protected Files".
+- [x] **Create `src/policy/protected_files.c`** - Implement protected file detection with multiple strategies: (1) basename exact match (`ralph.config.json`, `.env`), (2) basename prefix match (`.env.*`), (3) glob pattern match (recursive patterns like `**/ralph.config.json`), (4) inode-based detection for hardlinks/renames. See spec section "Protected Files" and "Implementation > Protected Files".
 
 - [x] **Implement inode cache with periodic refresh** - Scan common locations for protected files every 30 seconds. Track device+inode on POSIX, volume serial + file index on Windows. Implement `add_protected_inode_if_exists()` to populate cache. See spec section "Implementation > Protected Files > Inode Tracking with Refresh".
 
@@ -56,15 +72,15 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 ## Shell Command Parsing
 
-- [x] **Create `src/core/shell_parser.h`** - Define `ShellType` enum (`POSIX`, `CMD`, `POWERSHELL`, `UNKNOWN`), `ParsedShellCommand` struct with `tokens`, `token_count`, `has_chain`, `has_pipe`, `has_subshell`, `has_redirect`, `is_dangerous`, `shell_type` fields. Declare unified `parse_shell_command()` and `detect_shell_type()` functions.
+- [x] **Create `src/policy/shell_parser.h`** - Define `ShellType` enum (`POSIX`, `CMD`, `POWERSHELL`, `UNKNOWN`), `ParsedShellCommand` struct with `tokens`, `token_count`, `has_chain`, `has_pipe`, `has_subshell`, `has_redirect`, `is_dangerous`, `shell_type` fields. Declare unified `parse_shell_command()` and `detect_shell_type()` functions.
 
 - [x] **Implement `detect_shell_type()`** - On Windows: check `COMSPEC` and `PSModulePath` environment variables to distinguish cmd.exe vs PowerShell. On POSIX: check `SHELL` for pwsh/powershell, default to POSIX. See spec section "Cross-Platform Shell Parsing > Shell Detection".
 
-- [x] **Create `src/core/shell_parser.c`** - Implement POSIX shell parsing. Tokenize on unquoted whitespace, respect single and double quotes, detect metacharacters (`;`, `|`, `&`, `(`, `)`, `$`, backtick, `>`, `<`). Mark command as having chains/pipes/subshells if any metacharacter appears unquoted. See spec section "Shell Command Matching > Parser Security Requirements".
+- [x] **Create `src/policy/shell_parser.c`** - Implement POSIX shell parsing. Tokenize on unquoted whitespace, respect single and double quotes, detect metacharacters (`;`, `|`, `&`, `(`, `)`, `$`, backtick, `>`, `<`). Mark command as having chains/pipes/subshells if any metacharacter appears unquoted. See spec section "Shell Command Matching > Parser Security Requirements".
 
-- [x] **Create `src/core/shell_parser_cmd.c`** - Implement cmd.exe parsing. Detect metacharacters (`&`, `|`, `<`, `>`, `^`, `%`). Only double quotes are string delimiters. Implement `in_double_quotes()` helper. See spec section "Cross-Platform Shell Parsing > cmd.exe Parsing Rules".
+- [x] **Create `src/policy/shell_parser_cmd.c`** - Implement cmd.exe parsing. Detect metacharacters (`&`, `|`, `<`, `>`, `^`, `%`). Only double quotes are string delimiters. Implement `in_double_quotes()` helper. See spec section "Cross-Platform Shell Parsing > cmd.exe Parsing Rules".
 
-- [x] **Create `src/core/shell_parser_ps.c`** - Implement PowerShell parsing. Detect all POSIX-like operators plus script blocks (`{}`), variables (`$var`), invoke operators (`&`, `.`). Implement `powershell_command_is_dangerous()` to check for dangerous cmdlets (`Invoke-Expression`, `Invoke-Command`, `Start-Process`, `-EncodedCommand`, `DownloadString`, etc.). Case-insensitive matching. See spec section "Cross-Platform Shell Parsing > PowerShell Parsing Rules".
+- [x] **Create `src/policy/shell_parser_ps.c`** - Implement PowerShell parsing. Detect all POSIX-like operators plus script blocks (`{}`), variables (`$var`), invoke operators (`&`, `.`). Implement `powershell_command_is_dangerous()` to check for dangerous cmdlets (`Invoke-Expression`, `Invoke-Command`, `Start-Process`, `-EncodedCommand`, `DownloadString`, etc.). Case-insensitive matching. See spec section "Cross-Platform Shell Parsing > PowerShell Parsing Rules".
 
 - [x] **Implement dangerous pattern detection** - Check raw command string against known dangerous patterns before parsing: `rm -rf`, `rm -fr`, `> /dev/sd*`, `dd if=* of=/dev/*`, `chmod 777`, `chmod -R`, `curl * | *sh`, `wget * | *sh`, fork bomb pattern. These always require approval regardless of allowlist. See spec section "Shell Command Matching > Dangerous Pattern Detection".
 
@@ -84,9 +100,9 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 ## TOCTOU Protection
 
-- [x] **Create `src/core/atomic_file.h`** - Define `ApprovedPath` struct with fields for user path, resolved path, inode, device, parent inode/device (for new files), `existed` flag, `is_network_fs` flag, and Windows-specific fields. Define `VERIFY_OK`, `VERIFY_ERR_*` error codes.
+- [x] **Create `src/policy/atomic_file.h`** - Define `ApprovedPath` struct with fields for user path, resolved path, inode, device, parent inode/device (for new files), `existed` flag, `is_network_fs` flag, and Windows-specific fields. Define `VERIFY_OK`, `VERIFY_ERR_*` error codes.
 
-- [x] **Create `src/core/atomic_file.c`** - Implement atomic file operations using `O_NOFOLLOW`, `O_EXCL`, `openat()`, and `fstat()` verification. For existing files: open with `O_NOFOLLOW`, verify inode/device match approval. For new files: verify parent directory inode, create with `O_EXCL`. See spec section "Path Resolution and TOCTOU Protection > Atomic File Operations".
+- [x] **Create `src/policy/atomic_file.c`** - Implement atomic file operations using `O_NOFOLLOW`, `O_EXCL`, `openat()`, and `fstat()` verification. For existing files: open with `O_NOFOLLOW`, verify inode/device match approval. For new files: verify parent directory inode, create with `O_EXCL`. See spec section "Path Resolution and TOCTOU Protection > Atomic File Operations".
 
 - [x] **Implement `verify_and_open_approved_path()`** - Unified function that handles both existing and new file verification, returns file descriptor on success. See spec section "Path Resolution and TOCTOU Protection > Verification Flow".
 
@@ -136,9 +152,9 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 ## Subagent Approval Proxy
 
-- [x] **Create `src/core/subagent_approval.h`** - Define `ApprovalChannel` struct with request/response file descriptors and subagent PID. Define `ApprovalRequest` and `ApprovalResponse` structs for IPC messages. (Note: Core structs defined in approval_gate.h; helper functions for pipe management in subagent_approval.h)
+- [x] **Create `src/policy/subagent_approval.h`** - Define `ApprovalChannel` struct with request/response file descriptors and subagent PID. Define `ApprovalRequest` and `ApprovalResponse` structs for IPC messages. (Note: Core structs defined in approval_gate.h; helper functions for pipe management in subagent_approval.h)
 
-- [x] **Create `src/core/subagent_approval.c`** - Implement IPC-based approval proxying. Parent maintains exclusive TTY ownership, subagents send approval requests via pipe, parent prompts user and sends response. See spec section "Subagent Behavior > Subagent Deadlock Prevention > Architecture: Approval Proxy".
+- [x] **Create `src/policy/subagent_approval.c`** - Implement IPC-based approval proxying. Parent maintains exclusive TTY ownership, subagents send approval requests via pipe, parent prompts user and sends response. See spec section "Subagent Behavior > Subagent Deadlock Prevention > Architecture: Approval Proxy".
 
 - [x] **Implement `subagent_request_approval()`** - Subagent-side function that serializes request, writes to pipe, blocks waiting for response with timeout (5 minutes). Timeout results in denial. See spec section "Subagent Behavior > Subagent Deadlock Prevention > Subagent Side".
 
@@ -190,7 +206,11 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 ## Unit Tests
 
-- [x] **Create `test/test_approval_gate.c`** - Test gate config initialization, category lookup, allowlist matching (regex), rate limiting calculations, denial tracking.
+- [x] **Create `test/test_approval_gate.c`** - Test gate config initialization, category lookup, non-interactive mode behavior, allowlist and rate limiter integration.
+
+- [x] **Create `test/test_rate_limiter.c`** - Test opaque RateLimiter type: creation/destruction, denial tracking, backoff calculation, reset behavior, retry_after values. 18 comprehensive tests.
+
+- [x] **Create `test/test_allowlist.c`** - Test opaque Allowlist type: creation/destruction, regex pattern addition/matching, shell allowlist entries, shell-type filtering, JSON loading. 12 comprehensive tests.
 
 - [x] **Create `test/test_shell_parser.c`** - Test POSIX shell tokenization, quote handling, metacharacter detection, chain/pipe detection, dangerous pattern matching. Test edge cases: empty commands, only whitespace, unbalanced quotes.
 
@@ -218,9 +238,9 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 ## Makefile Updates
 
-- [ ] **Add new source files to Makefile** - Add all new `.c` files to appropriate build targets. Maintain Makefile organization per CLAUDE.md guidelines.
+- [x] **Add new source files to Makefile** - Added all `src/policy/*.c` files to appropriate build targets in `mk/sources.mk`. Includes: approval_gate.c, allowlist.c, rate_limiter.c, gate_prompter.c, pattern_generator.c, tool_args.c, shell_parser.c, shell_parser_cmd.c, shell_parser_ps.c, protected_files.c, path_normalize.c, atomic_file.c, subagent_approval.c.
 
-- [ ] **Add new test targets** - Add test executables for all new test files. Add to `make test` target. Exclude subagent approval tests from valgrind per CLAUDE.md guidelines.
+- [x] **Add new test targets** - Added test executables for test_approval_gate, test_allowlist, test_rate_limiter, test_shell_parser, test_path_normalize, test_protected_files, test_atomic_file, test_subagent_approval in `mk/tests.mk`. Subagent approval tests excluded from valgrind per CLAUDE.md guidelines.
 
 ---
 

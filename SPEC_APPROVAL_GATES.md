@@ -1295,8 +1295,10 @@ This allows the LLM to adapt its approach rather than repeatedly attempting deni
 
 ### Data Structures
 
+The policy subsystem uses **opaque types** for better encapsulation and testability. Internal data is hidden behind abstract interfaces, eliminating the "god struct" pattern.
+
 ```c
-// src/core/approval_gate.h
+// src/policy/approval_gate.h
 
 typedef enum {
     GATE_ACTION_ALLOW,      // Execute without prompting
@@ -1316,33 +1318,20 @@ typedef enum {
     GATE_CATEGORY_COUNT
 } GateCategory;
 
-// Shell-specific allowlist entry
-typedef struct {
-    char **command_prefix;  // ["git", "status"]
-    int prefix_len;
-} ShellAllowEntry;
-
-// General allowlist entry
-typedef struct {
-    char *tool;             // Tool name (no wildcards)
-    char *pattern;          // Regex for argument matching (non-shell)
-    regex_t compiled;       // Pre-compiled regex
-    int valid;              // Regex compilation succeeded
-} AllowlistEntry;
+// Opaque types - internal structure hidden from callers
+typedef struct RateLimiter RateLimiter;    // src/policy/rate_limiter.h
+typedef struct Allowlist Allowlist;        // src/policy/allowlist.h
+typedef struct GatePrompter GatePrompter;  // src/policy/gate_prompter.h
 
 typedef struct ApprovalChannel ApprovalChannel;  // Forward declaration
 
 typedef struct {
     int enabled;
+    int is_interactive;     // TTY available for prompts
     GateAction categories[GATE_CATEGORY_COUNT];
-    AllowlistEntry *allowlist;
-    int allowlist_count;
-    int allowlist_capacity;
-    ShellAllowEntry *shell_allowlist;
-    int shell_allowlist_count;
-    int shell_allowlist_capacity;
-    DenialTracker *denial_trackers;
-    int denial_tracker_count;
+    RateLimiter *rate_limiter;      // Opaque denial tracking
+    Allowlist *allowlist;           // Opaque pattern matching
+    GatePrompter *prompter;         // Opaque TTY UI handling
     ApprovalChannel *approval_channel;  // NULL for root, set for subagents
 } ApprovalGateConfig;
 
@@ -1366,8 +1355,88 @@ typedef enum {
     APPROVAL_DENIED,
     APPROVAL_ALLOWED_ALWAYS,
     APPROVAL_ABORTED,
-    APPROVAL_RATE_LIMITED
+    APPROVAL_RATE_LIMITED,
+    APPROVAL_NON_INTERACTIVE_DENIED  // Cannot prompt when no TTY
 } ApprovalResult;
+```
+
+### Opaque Types
+
+The policy subsystem uses opaque types to encapsulate implementation details and improve testability:
+
+#### RateLimiter (`src/policy/rate_limiter.h`)
+
+Owns denial tracking data internally. Tracks per-tool denial counts, timestamps, and backoff periods.
+
+```c
+// Create/destroy
+RateLimiter *rate_limiter_create(void);
+void rate_limiter_destroy(RateLimiter *rl);
+
+// Check and track
+int rate_limiter_is_limited(const RateLimiter *rl, const char *tool, const char *category);
+void rate_limiter_track_denial(RateLimiter *rl, const char *tool, const char *category);
+void rate_limiter_reset(RateLimiter *rl, const char *tool);
+int rate_limiter_get_retry_after(const RateLimiter *rl, const char *tool);
+```
+
+#### Allowlist (`src/policy/allowlist.h`)
+
+Owns regex and shell allowlist entries. Provides pattern matching against tool calls.
+
+```c
+// Create/destroy
+Allowlist *allowlist_create(void);
+void allowlist_destroy(Allowlist *al);
+
+// Add entries
+int allowlist_add_regex(Allowlist *al, const char *tool, const char *pattern);
+int allowlist_add_shell(Allowlist *al, const char **command_prefix, int prefix_len,
+                        const char *shell_type);
+
+// Matching
+int allowlist_matches_regex(const Allowlist *al, const char *tool, const char *target);
+int allowlist_matches_shell(const Allowlist *al, const ParsedShellCommand *cmd);
+
+// Load from JSON
+int allowlist_load_from_json(Allowlist *al, const cJSON *json_array);
+```
+
+#### GatePrompter (`src/policy/gate_prompter.h`)
+
+Encapsulates terminal UI handling for approval prompts.
+
+```c
+// Create/destroy
+GatePrompter *gate_prompter_create(void);
+void gate_prompter_destroy(GatePrompter *gp);
+
+// Prompting
+ApprovalResult gate_prompter_single(GatePrompter *gp, const ToolCall *tool_call,
+                                    ApprovedPath *out_path);
+ApprovalResult gate_prompter_batch(GatePrompter *gp, const ToolCall *tool_calls,
+                                   int count, ApprovalResult *results);
+
+// Pattern generation with confirmation
+char *gate_prompter_generate_pattern(GatePrompter *gp, const ToolCall *tool_call);
+```
+
+#### Helper Modules
+
+**tool_args (`src/policy/tool_args.h`)**: Centralized cJSON argument extraction from ToolCall structs.
+
+```c
+char *tool_args_get_string(const ToolCall *tool_call, const char *key);
+int tool_args_get_int(const ToolCall *tool_call, const char *key, int default_val);
+cJSON *tool_args_parse(const ToolCall *tool_call);
+```
+
+**pattern_generator (`src/policy/pattern_generator.h`)**: Pure functions for generating allowlist patterns without terminal I/O.
+
+```c
+char *pattern_generate_for_path(const char *path);
+char *pattern_generate_for_url(const char *url);
+ShellAllowEntry *pattern_generate_for_shell(const ParsedShellCommand *cmd);
 ```
 
 ### Protected Files
@@ -1956,29 +2025,42 @@ void free_approved_path(ApprovedPath *path);
 
 ```
 src/
+  policy/                    # Approval gate policy subsystem
+    approval_gate.h          # Public interface
+    approval_gate.c          # Core approval gate orchestration
+    allowlist.h              # Opaque Allowlist type for pattern matching
+    allowlist.c              # Regex + shell allowlist entry management
+    rate_limiter.h           # Opaque RateLimiter type for denial tracking
+    rate_limiter.c           # Exponential backoff for repeated denials
+    gate_prompter.h          # Opaque GatePrompter type for TTY prompts
+    gate_prompter.c          # Terminal UI for approval prompts
+    pattern_generator.h      # Pattern generation from tool calls
+    pattern_generator.c      # Pure functions for allowlist pattern creation
+    tool_args.h              # Centralized cJSON argument extraction
+    tool_args.c              # Extract arguments from ToolCall structs
+    shell_parser.h           # Shell command parsing (unified interface)
+    shell_parser.c           # POSIX shell parsing implementation
+    shell_parser_cmd.c       # Windows cmd.exe parsing
+    shell_parser_ps.c        # PowerShell parsing
+    protected_files.h        # Protected file interface
+    protected_files.c        # Protected file checking
+    path_normalize.h         # Cross-platform path normalization
+    path_normalize.c         # Path normalization implementation
+    atomic_file.h            # Atomic file operations
+    atomic_file.c            # TOCTOU-safe file operations
+    subagent_approval.h      # Subagent approval proxy
+    subagent_approval.c      # IPC for subagent approvals
   core/
-    approval_gate.h         # Public interface
-    approval_gate.c         # Implementation
-    shell_parser.h          # Shell command parsing (unified interface)
-    shell_parser.c          # POSIX shell parsing implementation
-    shell_parser_cmd.c      # Windows cmd.exe parsing
-    shell_parser_ps.c       # PowerShell parsing
-    protected_files.h       # Protected file interface
-    protected_files.c       # Protected file checking
-    path_normalize.h        # Cross-platform path normalization
-    path_normalize.c        # Path normalization implementation
-    atomic_file.h           # Atomic file operations
-    atomic_file.c           # TOCTOU-safe file operations
-    subagent_approval.h     # Subagent approval proxy
-    subagent_approval.c     # IPC for subagent approvals
-    tool_executor.c         # Modified to call gates
+    tool_executor.c          # Modified to call gates
 test/
-  test_approval_gate.c      # Unit tests
-  test_shell_parser.c       # POSIX shell parsing tests
-  test_shell_parser_cmd.c   # cmd.exe parsing tests
-  test_shell_parser_ps.c    # PowerShell parsing tests
-  test_path_normalize.c     # Path normalization tests
-  test_protected_files.c    # Protected file tests
-  test_atomic_file.c        # TOCTOU protection tests
-  test_subagent_approval.c  # Subagent deadlock prevention tests
+  test_approval_gate.c       # Unit tests for core gate logic
+  test_allowlist.c           # Unit tests for Allowlist opaque type
+  test_rate_limiter.c        # Unit tests for RateLimiter opaque type
+  test_shell_parser.c        # POSIX shell parsing tests
+  test_shell_parser_cmd.c    # cmd.exe parsing tests
+  test_shell_parser_ps.c     # PowerShell parsing tests
+  test_path_normalize.c      # Path normalization tests
+  test_protected_files.c     # Protected file tests
+  test_atomic_file.c         # TOCTOU protection tests
+  test_subagent_approval.c   # Subagent deadlock prevention tests
 ```
