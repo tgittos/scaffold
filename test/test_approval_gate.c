@@ -646,7 +646,10 @@ void test_approval_result_name(void) {
     TEST_ASSERT_EQUAL_STRING("aborted", approval_result_name(APPROVAL_ABORTED));
     TEST_ASSERT_EQUAL_STRING("rate_limited", approval_result_name(APPROVAL_RATE_LIMITED));
     TEST_ASSERT_EQUAL_STRING("non_interactive_denied", approval_result_name(APPROVAL_NON_INTERACTIVE_DENIED));
+    /* Bounds checks - values outside enum range should return "unknown" */
     TEST_ASSERT_EQUAL_STRING("unknown", approval_result_name(-1));
+    TEST_ASSERT_EQUAL_STRING("unknown", approval_result_name(APPROVAL_NON_INTERACTIVE_DENIED + 1));
+    TEST_ASSERT_EQUAL_STRING("unknown", approval_result_name(999));
 }
 
 void test_verify_result_message(void) {
@@ -2094,6 +2097,21 @@ void test_format_non_interactive_error_file_write(void) {
     free(error);
 }
 
+void test_format_non_interactive_error_special_chars(void) {
+    /* Test that special characters in tool name are properly JSON escaped */
+    ToolCall call = {
+        .id = "call_1",
+        .name = "tool\"with\\special/chars",
+        .arguments = "{}"
+    };
+
+    char *error = format_non_interactive_error(&call);
+    TEST_ASSERT_NOT_NULL(error);
+    /* Verify the output is valid JSON by checking escaped characters */
+    TEST_ASSERT_NOT_NULL(strstr(error, "tool\\\"with\\\\special\\/chars"));
+    free(error);
+}
+
 void test_check_approval_gate_non_interactive_gated_category(void) {
     /* Set non-interactive mode */
     config.is_interactive = 0;
@@ -2330,6 +2348,7 @@ int main(void) {
     RUN_TEST(test_format_non_interactive_error);
     RUN_TEST(test_format_non_interactive_error_null_safe);
     RUN_TEST(test_format_non_interactive_error_file_write);
+    RUN_TEST(test_format_non_interactive_error_special_chars);
     RUN_TEST(test_check_approval_gate_non_interactive_gated_category);
     RUN_TEST(test_check_approval_gate_non_interactive_allowed_category);
     RUN_TEST(test_check_approval_gate_non_interactive_allow_category_override);
