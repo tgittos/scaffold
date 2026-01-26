@@ -20,6 +20,7 @@
 #include "../policy/protected_files.h"
 #include "../policy/tool_args.h"
 #include "../policy/verified_file_context.h"
+#include "../policy/pattern_generator.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -97,8 +98,17 @@ static int check_tool_approval(RalphSession *session, const ToolCall *tool_call,
                                                    &approved_path);
 
     switch (approval) {
+        case APPROVAL_ALLOWED_ALWAYS: {
+            // User selected "allow always" - generate and apply pattern to session allowlist
+            GeneratedPattern gen_pattern = {0};
+            if (generate_allowlist_pattern(tool_call, &gen_pattern) == 0) {
+                apply_generated_pattern(&session->gate_config, tool_call->name, &gen_pattern);
+                free_generated_pattern(&gen_pattern);
+            }
+            // Fall through to APPROVAL_ALLOWED handling for file context setup
+        }
+        /* fallthrough */
         case APPROVAL_ALLOWED:
-        case APPROVAL_ALLOWED_ALWAYS:
             // For file tools with approved paths, set up the verified file context
             // This enables TOCTOU-safe file operations via verify_and_open_approved_path()
             if (approved_path.resolved_path != NULL && is_file_tool(tool_call->name)) {
