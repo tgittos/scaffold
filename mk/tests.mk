@@ -33,7 +33,7 @@ endef
 $(eval $(call def_test,main,core/test_main,))
 $(eval $(call def_test,cli_flags,core/test_cli_flags,))
 $(eval $(call def_test,env,utils/test_env_loader,$(SRCDIR)/utils/env_loader.c))
-$(eval $(call def_test,prompt,utils/test_prompt_loader,$(SRCDIR)/utils/prompt_loader.c))
+$(eval $(call def_test,prompt,utils/test_prompt_loader,$(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/utils/ralph_home.c))
 $(eval $(call def_test,ralph_home,utils/test_ralph_home,$(SRCDIR)/utils/ralph_home.c))
 $(eval $(call def_test,todo_manager,tools/test_todo_manager,$(SRCDIR)/tools/todo_manager.c))
 $(eval $(call def_test,document_chunker,test_document_chunker,$(SRCDIR)/utils/document_chunker.c $(SRCDIR)/utils/common_utils.c))
@@ -49,6 +49,7 @@ GATE_DEPS := \
     $(SRCDIR)/core/shell_parser_ps.c \
     $(SRCDIR)/core/subagent_approval.c \
     $(SRCDIR)/utils/debug_output.c \
+    $(SRCDIR)/utils/ralph_home.c \
     $(TESTDIR)/stubs/subagent_stub.c
 
 $(eval $(call def_test,approval_gate,test_approval_gate,$(GATE_DEPS)))
@@ -231,10 +232,11 @@ define PYTHON_TEST_EMBED
 		exit 1; \
 	fi; \
 	echo "Embedding Python stdlib into test binary..."; \
-	rm -f $(BUILDDIR)/stdlib.zip; \
-	cd $(PYTHON_STDLIB_DIR) && zip -qr $(CURDIR)/$(BUILDDIR)/stdlib.zip lib/; \
-	zipcopy $(CURDIR)/$(BUILDDIR)/stdlib.zip $(CURDIR)/$@; \
-	rm -f $(BUILDDIR)/stdlib.zip
+	rm -f $(BUILDDIR)/python-test-embed.zip; \
+	cd $(PYTHON_STDLIB_DIR) && zip -qr $(CURDIR)/$(BUILDDIR)/python-test-embed.zip lib/; \
+	cd $(CURDIR)/$(SRCDIR)/tools && zip -qr $(CURDIR)/$(BUILDDIR)/python-test-embed.zip python_defaults/; \
+	zipcopy $(CURDIR)/$(BUILDDIR)/python-test-embed.zip $(CURDIR)/$@; \
+	rm -f $(BUILDDIR)/python-test-embed.zip
 endef
 
 $(TEST_python_tool_TARGET): $(TEST_python_tool_OBJECTS) $(ALL_LIBS)

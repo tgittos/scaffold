@@ -1,15 +1,16 @@
 #include "unity/unity.h"
 #include "python_tool.h"
 #include "tools_system.h"
+#include "utils/ralph_home.h"
 #include <string.h>
 #include <stdlib.h>
 
 void setUp(void) {
-    // Set up code before each test
+    ralph_home_init(NULL);
 }
 
 void tearDown(void) {
-    // Clean up code after each test
+    ralph_home_cleanup();
 }
 
 // Test tool registration

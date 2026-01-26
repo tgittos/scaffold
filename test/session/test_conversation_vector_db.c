@@ -3,12 +3,16 @@
 #include "../../src/db/document_store.h"
 #include "../../src/db/vector_db_service.h"
 #include "../../src/utils/config.h"
+#include "../../src/utils/ralph_home.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
 void setUp(void) {
+    // Initialize ralph home directory (required for document store)
+    ralph_home_init(NULL);
+
     // Initialize config to load API key from environment
     config_init();
 }
@@ -16,9 +20,12 @@ void setUp(void) {
 void tearDown(void) {
     // Clear conversation data after each test to prevent interference
     document_store_clear_conversations();
-    
+
     // Cleanup config
     config_cleanup();
+
+    // Cleanup ralph home
+    ralph_home_cleanup();
 }
 
 void test_conversation_stored_in_vector_db(void) {

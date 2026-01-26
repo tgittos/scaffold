@@ -2,6 +2,7 @@
 #include "../src/db/metadata_store.h"
 #include "../src/cli/memory_commands.h"
 #include "../src/db/vector_db_service.h"
+#include "../src/utils/ralph_home.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,6 +10,8 @@
 #include <time.h>
 
 void setUp(void) {
+    ralph_home_init(NULL);
+
     // Clean up any existing test data
     const char* home = getenv("HOME");
     if (home != NULL) {
@@ -26,6 +29,8 @@ void tearDown(void) {
         snprintf(cmd, sizeof(cmd), "rm -rf %s/.local/ralph/metadata/test_index 2>/dev/null", home);
         system(cmd);
     }
+
+    ralph_home_cleanup();
 }
 
 void test_metadata_store_create_and_destroy(void) {

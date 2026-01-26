@@ -5,12 +5,14 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include "ralph_home.h"
 
 // Test globals
 static ModelRegistry* test_registry = NULL;
 static ToolRegistry tool_registry;
 
 void setUp(void) {
+    ralph_home_init(NULL);
     // Initialize model registry
     test_registry = malloc(sizeof(ModelRegistry));
     init_model_registry(test_registry);
@@ -33,6 +35,8 @@ void tearDown(void) {
     test_registry = NULL;
     
     cleanup_tool_registry(&tool_registry);
+
+    ralph_home_cleanup();
 }
 
 void test_gpt_model_tool_generation(void) {

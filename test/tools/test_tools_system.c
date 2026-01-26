@@ -3,13 +3,17 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include "ralph_home.h"
 
 void setUp(void) {
+    ralph_home_init(NULL);
     // Clean up any existing test files
 }
 
 void tearDown(void) {
     // Clean up test files
+
+    ralph_home_cleanup();
 }
 
 void test_init_tool_registry(void) {

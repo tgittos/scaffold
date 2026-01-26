@@ -9,6 +9,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include "../src/utils/ralph_home.h"
 
 /*
  * Stub implementations for Python tool functions.
@@ -67,12 +68,15 @@ static void restore_config_file(void) {
 }
 
 void setUp(void) {
+    ralph_home_init(NULL);
     int result = approval_gate_init(&config);
     TEST_ASSERT_EQUAL(0, result);
 }
 
 void tearDown(void) {
     approval_gate_cleanup(&config);
+
+    ralph_home_cleanup();
 }
 
 /* =============================================================================

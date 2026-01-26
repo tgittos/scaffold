@@ -3,17 +3,21 @@
 #include "unity.h"
 #include "../src/db/document_store.h"
 #include <stdlib.h>
+#include "../src/utils/ralph_home.h"
 
 // Test that reproduces the "messages array misformatted" bug
 // The bug occurs when conversation history contains messages with NULL role or content
 
 void setUp(void) {
+    ralph_home_init(NULL);
     // Clear conversation data to ensure test isolation
     document_store_clear_conversations();
 }
 
 void tearDown(void) {
     // Unity teardown
+
+    ralph_home_cleanup();
 }
 
 // Test format_openai_message with NULL role

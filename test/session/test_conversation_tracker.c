@@ -5,14 +5,18 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include "../src/utils/ralph_home.h"
 
 void setUp(void) {
+    ralph_home_init(NULL);
     // Clear conversation data to ensure test isolation
     document_store_clear_conversations();
 }
 
 void tearDown(void) {
     // No file cleanup needed - using vector DB only
+
+    ralph_home_cleanup();
 }
 
 void test_init_conversation_history(void) {

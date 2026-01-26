@@ -3,6 +3,7 @@
 #include "../../src/tools/tools_system.h"
 #include "../../src/db/vector_db.h"
 #include "../../src/utils/config.h"
+#include "../../src/utils/ralph_home.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,13 +13,16 @@
 static char *saved_ralph_config_backup = NULL;
 
 void setUp(void) {
+    // Initialize ralph home directory (required for document store)
+    ralph_home_init(NULL);
+
     // Back up existing ralph.config.json file if it exists
     FILE *ralph_config_file = fopen("ralph.config.json", "r");
     if (ralph_config_file) {
         fseek(ralph_config_file, 0, SEEK_END);
         long file_size = ftell(ralph_config_file);
         fseek(ralph_config_file, 0, SEEK_SET);
-        
+
         saved_ralph_config_backup = malloc(file_size + 1);
         if (saved_ralph_config_backup) {
             fread(saved_ralph_config_backup, 1, file_size, ralph_config_file);
@@ -27,7 +31,7 @@ void setUp(void) {
         fclose(ralph_config_file);
         remove("ralph.config.json");  // Remove temporarily
     }
-    
+
     // Initialize config system
     config_init();
 }
@@ -36,7 +40,7 @@ void tearDown(void) {
     // Clean up after each test
     config_cleanup();
     remove("ralph.config.json");
-    
+
     // Restore backed up ralph.config.json file if it existed
     if (saved_ralph_config_backup) {
         FILE *ralph_config_file = fopen("ralph.config.json", "w");
@@ -47,6 +51,9 @@ void tearDown(void) {
         free(saved_ralph_config_backup);
         saved_ralph_config_backup = NULL;
     }
+
+    // Cleanup ralph home
+    ralph_home_cleanup();
 }
 
 void test_register_vector_db_tool(void) {

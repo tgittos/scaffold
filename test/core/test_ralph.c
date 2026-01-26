@@ -7,12 +7,16 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include "../src/utils/ralph_home.h"
 
 void setUp(void) {
+    ralph_home_init(NULL);
     // Reset document store completely to ensure clean state between tests
     document_store_reset_instance();
 }
-void tearDown(void) {}
+void tearDown(void) {
+    ralph_home_cleanup();
+}
 
 void test_json_escape_string_null(void) {
     char* result = json_escape_string(NULL);

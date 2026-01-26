@@ -4,6 +4,7 @@
 #include "../../src/db/vector_db.h"
 #include "../../src/llm/embeddings.h"
 #include "../../src/llm/embeddings_service.h"
+#include "../../src/utils/ralph_home.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,6 +14,9 @@
 static char *g_saved_api_key = NULL;
 
 void setUp(void) {
+    // Initialize ralph home directory (required for document store)
+    ralph_home_init(NULL);
+
     // Save the API key at the start of each test
     const char *key = getenv("OPENAI_API_KEY");
     if (key) {
@@ -29,6 +33,9 @@ void tearDown(void) {
         free(g_saved_api_key);
         g_saved_api_key = NULL;
     }
+
+    // Cleanup ralph home
+    ralph_home_cleanup();
 }
 
 void test_register_memory_tools(void) {

@@ -7,8 +7,10 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <cJSON.h>
+#include "../../src/utils/ralph_home.h"
 
 void setUp(void) {
+    ralph_home_init(NULL);
     // Initialize config to load API key from environment
     config_init();
     // Clear any existing conversation data
@@ -20,6 +22,8 @@ void tearDown(void) {
     document_store_clear_conversations();
     // Cleanup config
     config_cleanup();
+
+    ralph_home_cleanup();
 }
 
 /**

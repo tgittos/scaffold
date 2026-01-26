@@ -1,17 +1,18 @@
 #include "../unity/unity.h"
 #include "../../src/db/document_store.h"
 #include "../../src/db/vector_db_service.h"
+#include "../../src/utils/ralph_home.h"
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
 
 void setUp(void) {
-    // Setup code
+    ralph_home_init(NULL);
 }
 
 void tearDown(void) {
-    // Cleanup code
+    ralph_home_cleanup();
 }
 
 void test_document_store_create_and_destroy(void) {

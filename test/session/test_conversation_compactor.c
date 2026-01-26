@@ -5,14 +5,18 @@
 #include "../src/db/document_store.h"
 #include <string.h>
 #include <stdlib.h>
+#include "../src/utils/ralph_home.h"
 
 void setUp(void) {
+    ralph_home_init(NULL);
     // Clear conversation data to ensure test isolation
     document_store_clear_conversations();
 }
 
 void tearDown(void) {
     // This is run after each test
+
+    ralph_home_cleanup();
 }
 
 void test_compaction_config_init(void) {
