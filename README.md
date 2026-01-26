@@ -4,6 +4,20 @@
 
 Ralph is an AI-powered command-line tool that helps developers write code, debug issues, and automate workflows. Built as a single portable binary using [Cosmopolitan Libc](https://github.com/jart/cosmopolitan), Ralph runs on Linux, macOS, Windows, FreeBSD, NetBSD, and OpenBSD without installation or dependencies.
 
+## Why Ralph?
+
+Most AI coding tools require specific environments, package managers, or runtimes. Ralph takes a different approach: a single binary that runs anywhere and grows with your project.
+
+**Bring AI anywhere.** Copy one file to a server, CI runner, or colleague's machine and it works. No installation, no dependencies, no containers. Useful for air-gapped systems, quick SSH sessions, or environments where you can't (or don't want to) install software.
+
+**Fits into your workflow.** Ralph follows Unix conventions—it reads from stdin, accepts pipes, and runs one-shot commands. Build AI into existing scripts: `git diff | ralph "summarize"` or `make 2>&1 | ralph "explain these errors"`. It's a tool in your toolchain, not a replacement for it.
+
+**Accumulates project knowledge.** The memory system, AGENTS.md support, and extensible tools combine so Ralph becomes more useful over time. Store coding conventions, past decisions, and domain knowledge. New team members can query what the AI has learned about your codebase.
+
+**Extends itself.** Ralph can write Python tools for tasks you do repeatedly. Ask it to build a tool for your specific workflow, and that tool is available in future sessions. The assistant adapts to your project's needs.
+
+**Works offline.** Point Ralph at a local model (LM Studio, Ollama) and you have private, offline AI assistance. Same binary, same interface, no data leaves your machine.
+
 ## What Ralph Does
 
 Ralph connects to LLM providers (OpenAI, Anthropic, or local models) and gives the AI access to tools for:
