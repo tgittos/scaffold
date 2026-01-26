@@ -143,6 +143,137 @@ void test_approval_gate_init_from_parent(void) {
     approval_gate_cleanup(&child);
 }
 
+void test_approval_gate_init_from_parent_inherits_static_allowlist(void) {
+    ApprovalGateConfig parent;
+    ApprovalGateConfig child;
+
+    int result = approval_gate_init(&parent);
+    TEST_ASSERT_EQUAL(0, result);
+
+    /* Add a static allowlist entry to parent (simulating config file load) */
+    result = approval_gate_add_allowlist(&parent, "write_file", "^/tmp/.*\\.txt$");
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_EQUAL(1, parent.allowlist_count);
+
+    /* Pretend this entry came from the config file by updating static count */
+    parent.static_allowlist_count = parent.allowlist_count;
+
+    result = approval_gate_init_from_parent(&child, &parent);
+    TEST_ASSERT_EQUAL(0, result);
+
+    /* Child should inherit the static allowlist entry */
+    TEST_ASSERT_EQUAL(1, child.allowlist_count);
+    TEST_ASSERT_EQUAL(1, child.static_allowlist_count);
+    TEST_ASSERT_NOT_NULL(child.allowlist);
+    TEST_ASSERT_NOT_NULL(child.allowlist[0].tool);
+    TEST_ASSERT_NOT_NULL(child.allowlist[0].pattern);
+    TEST_ASSERT_EQUAL_STRING("write_file", child.allowlist[0].tool);
+    TEST_ASSERT_EQUAL_STRING("^/tmp/.*\\.txt$", child.allowlist[0].pattern);
+    TEST_ASSERT_EQUAL(1, child.allowlist[0].valid);
+
+    approval_gate_cleanup(&parent);
+    approval_gate_cleanup(&child);
+}
+
+void test_approval_gate_init_from_parent_inherits_static_shell_allowlist(void) {
+    ApprovalGateConfig parent;
+    ApprovalGateConfig child;
+
+    int result = approval_gate_init(&parent);
+    TEST_ASSERT_EQUAL(0, result);
+
+    /* Add a static shell allowlist entry to parent */
+    const char *prefix[] = {"git", "status"};
+    result = approval_gate_add_shell_allowlist(&parent, prefix, 2, SHELL_TYPE_UNKNOWN);
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_EQUAL(1, parent.shell_allowlist_count);
+
+    /* Pretend this entry came from the config file by updating static count */
+    parent.static_shell_allowlist_count = parent.shell_allowlist_count;
+
+    result = approval_gate_init_from_parent(&child, &parent);
+    TEST_ASSERT_EQUAL(0, result);
+
+    /* Child should inherit the static shell allowlist entry */
+    TEST_ASSERT_EQUAL(1, child.shell_allowlist_count);
+    TEST_ASSERT_EQUAL(1, child.static_shell_allowlist_count);
+    TEST_ASSERT_NOT_NULL(child.shell_allowlist);
+    TEST_ASSERT_EQUAL(2, child.shell_allowlist[0].prefix_len);
+    TEST_ASSERT_NOT_NULL(child.shell_allowlist[0].command_prefix);
+    TEST_ASSERT_EQUAL_STRING("git", child.shell_allowlist[0].command_prefix[0]);
+    TEST_ASSERT_EQUAL_STRING("status", child.shell_allowlist[0].command_prefix[1]);
+
+    approval_gate_cleanup(&parent);
+    approval_gate_cleanup(&child);
+}
+
+void test_approval_gate_init_from_parent_excludes_session_allowlist(void) {
+    ApprovalGateConfig parent;
+    ApprovalGateConfig child;
+
+    int result = approval_gate_init(&parent);
+    TEST_ASSERT_EQUAL(0, result);
+
+    /* Add a static allowlist entry (simulating config file load) */
+    result = approval_gate_add_allowlist(&parent, "write_file", "^/tmp/.*\\.txt$");
+    TEST_ASSERT_EQUAL(0, result);
+
+    /* Mark this as static (from config file) */
+    parent.static_allowlist_count = parent.allowlist_count;
+
+    /* Add a session allowlist entry (simulating "allow always" at runtime) */
+    result = approval_gate_add_allowlist(&parent, "read_file", "^/var/log/.*$");
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_EQUAL(2, parent.allowlist_count);
+    /* static_allowlist_count remains 1 (not updated for session entries) */
+
+    result = approval_gate_init_from_parent(&child, &parent);
+    TEST_ASSERT_EQUAL(0, result);
+
+    /* Child should only inherit the static entry, NOT the session entry */
+    TEST_ASSERT_EQUAL(1, child.allowlist_count);
+    TEST_ASSERT_EQUAL(1, child.static_allowlist_count);
+    TEST_ASSERT_EQUAL_STRING("write_file", child.allowlist[0].tool);
+    /* Verify the session entry (read_file) was not inherited */
+
+    approval_gate_cleanup(&parent);
+    approval_gate_cleanup(&child);
+}
+
+void test_approval_gate_init_from_parent_excludes_session_shell_allowlist(void) {
+    ApprovalGateConfig parent;
+    ApprovalGateConfig child;
+
+    int result = approval_gate_init(&parent);
+    TEST_ASSERT_EQUAL(0, result);
+
+    /* Add a static shell allowlist entry */
+    const char *static_prefix[] = {"git", "status"};
+    result = approval_gate_add_shell_allowlist(&parent, static_prefix, 2, SHELL_TYPE_UNKNOWN);
+    TEST_ASSERT_EQUAL(0, result);
+
+    /* Mark this as static (from config file) */
+    parent.static_shell_allowlist_count = parent.shell_allowlist_count;
+
+    /* Add a session shell allowlist entry */
+    const char *session_prefix[] = {"npm", "install"};
+    result = approval_gate_add_shell_allowlist(&parent, session_prefix, 2, SHELL_TYPE_UNKNOWN);
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_EQUAL(2, parent.shell_allowlist_count);
+
+    result = approval_gate_init_from_parent(&child, &parent);
+    TEST_ASSERT_EQUAL(0, result);
+
+    /* Child should only inherit the static entry, NOT the session entry */
+    TEST_ASSERT_EQUAL(1, child.shell_allowlist_count);
+    TEST_ASSERT_EQUAL(1, child.static_shell_allowlist_count);
+    TEST_ASSERT_EQUAL_STRING("git", child.shell_allowlist[0].command_prefix[0]);
+    /* Verify the session entry (npm) was not inherited */
+
+    approval_gate_cleanup(&parent);
+    approval_gate_cleanup(&child);
+}
+
 /* =============================================================================
  * Category Mapping Tests
  * ========================================================================== */
@@ -1913,6 +2044,10 @@ int main(void) {
     RUN_TEST(test_approval_gate_init_null_returns_error);
     RUN_TEST(test_approval_gate_cleanup_handles_null);
     RUN_TEST(test_approval_gate_init_from_parent);
+    RUN_TEST(test_approval_gate_init_from_parent_inherits_static_allowlist);
+    RUN_TEST(test_approval_gate_init_from_parent_inherits_static_shell_allowlist);
+    RUN_TEST(test_approval_gate_init_from_parent_excludes_session_allowlist);
+    RUN_TEST(test_approval_gate_init_from_parent_excludes_session_shell_allowlist);
 
     /* Category mapping tests */
     RUN_TEST(test_get_tool_category_memory_tools);

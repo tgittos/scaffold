@@ -510,6 +510,47 @@ int approval_gate_init(ApprovalGateConfig *config) {
     return 0;
 }
 
+/**
+ * Helper function to clean up partially initialized config on failure.
+ * Used during approval_gate_init_from_parent() when allocation fails.
+ */
+static void cleanup_partial_child_config(ApprovalGateConfig *child) {
+    if (child == NULL) {
+        return;
+    }
+
+    /* Clean up shell allowlist */
+    if (child->shell_allowlist != NULL) {
+        for (int i = 0; i < child->shell_allowlist_count; i++) {
+            ShellAllowEntry *entry = &child->shell_allowlist[i];
+            if (entry->command_prefix != NULL) {
+                for (int j = 0; j < entry->prefix_len; j++) {
+                    free(entry->command_prefix[j]);
+                }
+                free(entry->command_prefix);
+            }
+        }
+        free(child->shell_allowlist);
+        child->shell_allowlist = NULL;
+    }
+
+    /* Clean up general allowlist */
+    if (child->allowlist != NULL) {
+        for (int i = 0; i < child->allowlist_count; i++) {
+            free(child->allowlist[i].tool);
+            free(child->allowlist[i].pattern);
+            if (child->allowlist[i].valid) {
+                regfree(&child->allowlist[i].compiled);
+            }
+        }
+        free(child->allowlist);
+        child->allowlist = NULL;
+    }
+
+    child->allowlist_count = 0;
+    child->shell_allowlist_count = 0;
+}
+
 int approval_gate_init_from_parent(ApprovalGateConfig *child,
                                    const ApprovalGateConfig *parent) {
     if (child == NULL || parent == NULL) {
@@ -527,8 +568,13 @@ int approval_gate_init_from_parent(ApprovalGateConfig *child,
 
     /* Allocate and copy static allowlist entries from parent.
      * Only static entries (from config file) are inherited, NOT session entries
-     * (runtime "allow always" entries). This is tracked by static_allowlist_count. */
+     * (runtime "allow always" entries). This is tracked by static_allowlist_count.
+     * Validate static_count to prevent issues with corrupted data. */
     int static_count = parent->static_allowlist_count;
+    if (static_count < 0) {
+        static_count = 0;
+    }
+
     if (static_count > 0) {
         child->allowlist = calloc(static_count, sizeof(AllowlistEntry));
         if (child->allowlist == NULL) {
@@ -537,20 +583,40 @@ int approval_gate_init_from_parent(ApprovalGateConfig *child,
         child->allowlist_capacity = static_count;
         child->allowlist_count = 0;
 
-        /* Deep copy each static allowlist entry */
+        /* Deep copy each static allowlist entry with strdup failure checks */
         for (int i = 0; i < static_count; i++) {
             AllowlistEntry *src = &parent->allowlist[i];
             AllowlistEntry *dst = &child->allowlist[i];
 
-            dst->tool = src->tool ? strdup(src->tool) : NULL;
-            dst->pattern = src->pattern ? strdup(src->pattern) : NULL;
             dst->valid = 0;
 
-            /* Recompile the regex for the child */
-            if (dst->pattern != NULL) {
+            /* Copy tool with strdup failure check */
+            if (src->tool != NULL) {
+                dst->tool = strdup(src->tool);
+                if (dst->tool == NULL) {
+                    cleanup_partial_child_config(child);
+                    return -1;
+                }
+            } else {
+                dst->tool = NULL;
+            }
+
+            /* Copy pattern with strdup failure check */
+            if (src->pattern != NULL) {
+                dst->pattern = strdup(src->pattern);
+                if (dst->pattern == NULL) {
+                    free(dst->tool);
+                    dst->tool = NULL;
+                    cleanup_partial_child_config(child);
+                    return -1;
+                }
+
+                /* Recompile the regex for the child */
                 if (regcomp(&dst->compiled, dst->pattern, REG_EXTENDED | REG_NOSUB) == 0) {
                     dst->valid = 1;
                 }
+            } else {
+                dst->pattern = NULL;
             }
 
             child->allowlist_count++;
@@ -566,44 +632,58 @@ int approval_gate_init_from_parent(ApprovalGateConfig *child,
     }
     child->static_allowlist_count = child->allowlist_count;
 
-    /* Allocate and copy static shell allowlist entries from parent */
+    /* Allocate and copy static shell allowlist entries from parent.
+     * Validate static_shell_count to prevent issues with corrupted data. */
     int static_shell_count = parent->static_shell_allowlist_count;
+    if (static_shell_count < 0) {
+        static_shell_count = 0;
+    }
+
     if (static_shell_count > 0) {
         child->shell_allowlist = calloc(static_shell_count, sizeof(ShellAllowEntry));
         if (child->shell_allowlist == NULL) {
-            /* Clean up allowlist on failure */
-            for (int i = 0; i < child->allowlist_count; i++) {
-                free(child->allowlist[i].tool);
-                free(child->allowlist[i].pattern);
-                if (child->allowlist[i].valid) {
-                    regfree(&child->allowlist[i].compiled);
-                }
-            }
-            free(child->allowlist);
-            child->allowlist = NULL;
+            cleanup_partial_child_config(child);
             return -1;
         }
         child->shell_allowlist_capacity = static_shell_count;
         child->shell_allowlist_count = 0;
 
-        /* Deep copy each static shell allowlist entry */
+        /* Deep copy each static shell allowlist entry with allocation failure checks */
         for (int i = 0; i < static_shell_count; i++) {
             ShellAllowEntry *src = &parent->shell_allowlist[i];
             ShellAllowEntry *dst = &child->shell_allowlist[i];
 
             dst->shell_type = src->shell_type;
             dst->prefix_len = src->prefix_len;
+            dst->command_prefix = NULL;
 
             if (src->prefix_len > 0 && src->command_prefix != NULL) {
                 dst->command_prefix = calloc(src->prefix_len, sizeof(char*));
-                if (dst->command_prefix != NULL) {
-                    for (int j = 0; j < src->prefix_len; j++) {
-                        dst->command_prefix[j] = src->command_prefix[j] ?
-                            strdup(src->command_prefix[j]) : NULL;
+                if (dst->command_prefix == NULL) {
+                    dst->prefix_len = 0;
+                    cleanup_partial_child_config(child);
+                    return -1;
+                }
+
+                /* Copy each command prefix token with strdup failure check */
+                for (int j = 0; j < src->prefix_len; j++) {
+                    if (src->command_prefix[j] != NULL) {
+                        dst->command_prefix[j] = strdup(src->command_prefix[j]);
+                        if (dst->command_prefix[j] == NULL) {
+                            /* Clean up already copied tokens */
+                            for (int k = 0; k < j; k++) {
+                                free(dst->command_prefix[k]);
+                            }
+                            free(dst->command_prefix);
+                            dst->command_prefix = NULL;
+                            dst->prefix_len = 0;
+                            cleanup_partial_child_config(child);
+                            return -1;
+                        }
+                    } else {
+                        dst->command_prefix[j] = NULL;
                     }
                 }
-            } else {
-                dst->command_prefix = NULL;
             }
 
             child->shell_allowlist_count++;
@@ -612,16 +692,7 @@ int approval_gate_init_from_parent(ApprovalGateConfig *child,
         /* No static entries - allocate minimal capacity */
         child->shell_allowlist = calloc(INITIAL_SHELL_ALLOWLIST_CAPACITY, sizeof(ShellAllowEntry));
         if (child->shell_allowlist == NULL) {
-            /* Clean up allowlist on failure */
-            for (int i = 0; i < child->allowlist_count; i++) {
-                free(child->allowlist[i].tool);
-                free(child->allowlist[i].pattern);
-                if (child->allowlist[i].valid) {
-                    regfree(&child->allowlist[i].compiled);
-                }
-            }
-            free(child->allowlist);
-            child->allowlist = NULL;
+            cleanup_partial_child_config(child);
             return -1;
         }
         child->shell_allowlist_capacity = INITIAL_SHELL_ALLOWLIST_CAPACITY;
@@ -632,28 +703,7 @@ int approval_gate_init_from_parent(ApprovalGateConfig *child,
     /* Initialize denial trackers - subagents start fresh */
     child->denial_trackers = calloc(INITIAL_DENIAL_TRACKER_CAPACITY, sizeof(DenialTracker));
     if (child->denial_trackers == NULL) {
-        /* Clean up on failure */
-        for (int i = 0; i < child->shell_allowlist_count; i++) {
-            ShellAllowEntry *entry = &child->shell_allowlist[i];
-            if (entry->command_prefix != NULL) {
-                for (int j = 0; j < entry->prefix_len; j++) {
-                    free(entry->command_prefix[j]);
-                }
-                free(entry->command_prefix);
-            }
-        }
-        free(child->shell_allowlist);
-        child->shell_allowlist = NULL;
-
-        for (int i = 0; i < child->allowlist_count; i++) {
-            free(child->allowlist[i].tool);
-            free(child->allowlist[i].pattern);
-            if (child->allowlist[i].valid) {
-                regfree(&child->allowlist[i].compiled);
-            }
-        }
-        free(child->allowlist);
-        child->allowlist = NULL;
+        cleanup_partial_child_config(child);
         return -1;
     }
     child->denial_tracker_capacity = INITIAL_DENIAL_TRACKER_CAPACITY;
