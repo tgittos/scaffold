@@ -40,14 +40,24 @@ $(eval $(call def_test,document_chunker,test_document_chunker,$(SRCDIR)/utils/do
 $(eval $(call def_test,streaming,network/test_streaming,$(SRCDIR)/network/streaming.c))
 $(eval $(call def_test,darray,test_darray,))
 $(eval $(call def_test,ptrarray,test_ptrarray,))
-$(eval $(call def_test,approval_gate,test_approval_gate,$(SRCDIR)/core/approval_gate.c))
+# Gate dependencies (used by multiple gate-related tests)
+GATE_DEPS := \
+    $(SRCDIR)/core/approval_gate.c \
+    $(SRCDIR)/core/atomic_file.c \
+    $(SRCDIR)/core/shell_parser.c \
+    $(SRCDIR)/core/shell_parser_cmd.c \
+    $(SRCDIR)/core/shell_parser_ps.c \
+    $(SRCDIR)/core/subagent_approval.c \
+    $(SRCDIR)/utils/debug_output.c
+
+$(eval $(call def_test,approval_gate,test_approval_gate,$(GATE_DEPS)))
 $(eval $(call def_test,atomic_file,test_atomic_file,$(SRCDIR)/core/atomic_file.c))
 $(eval $(call def_test,path_normalize,test_path_normalize,$(SRCDIR)/core/path_normalize.c))
 $(eval $(call def_test,protected_files,test_protected_files,$(SRCDIR)/core/protected_files.c $(SRCDIR)/core/path_normalize.c))
-$(eval $(call def_test,shell_parser,test_shell_parser,$(SRCDIR)/core/shell_parser.c))
-$(eval $(call def_test,shell_parser_cmd,test_shell_parser_cmd,$(SRCDIR)/core/shell_parser_cmd.c $(SRCDIR)/core/shell_parser.c))
-$(eval $(call def_test,shell_parser_ps,test_shell_parser_ps,$(SRCDIR)/core/shell_parser_ps.c $(SRCDIR)/core/shell_parser.c))
-$(eval $(call def_test,subagent_approval,test_subagent_approval,$(SRCDIR)/core/subagent_approval.c))
+$(eval $(call def_test,shell_parser,test_shell_parser,$(SRCDIR)/core/shell_parser.c $(SRCDIR)/core/shell_parser_cmd.c $(SRCDIR)/core/shell_parser_ps.c))
+$(eval $(call def_test,shell_parser_cmd,test_shell_parser_cmd,$(SRCDIR)/core/shell_parser_cmd.c $(SRCDIR)/core/shell_parser.c $(SRCDIR)/core/shell_parser_ps.c))
+$(eval $(call def_test,shell_parser_ps,test_shell_parser_ps,$(SRCDIR)/core/shell_parser_ps.c $(SRCDIR)/core/shell_parser.c $(SRCDIR)/core/shell_parser_cmd.c))
+$(eval $(call def_test,subagent_approval,test_subagent_approval,$(GATE_DEPS)))
 
 $(TEST_main_TARGET): $(TEST_main_OBJECTS)
 	$(CC) -o $@ $^
@@ -79,8 +89,8 @@ $(TEST_darray_TARGET): $(TEST_darray_OBJECTS)
 $(TEST_ptrarray_TARGET): $(TEST_ptrarray_OBJECTS)
 	$(CC) -o $@ $^
 
-$(TEST_approval_gate_TARGET): $(TEST_approval_gate_OBJECTS)
-	$(CC) -o $@ $^
+$(TEST_approval_gate_TARGET): $(TEST_approval_gate_OBJECTS) $(CJSON_LIB)
+	$(CC) -o $@ $(TEST_approval_gate_OBJECTS) $(CJSON_LIB)
 
 $(TEST_atomic_file_TARGET): $(TEST_atomic_file_OBJECTS)
 	$(CC) -o $@ $^
@@ -100,8 +110,8 @@ $(TEST_shell_parser_cmd_TARGET): $(TEST_shell_parser_cmd_OBJECTS)
 $(TEST_shell_parser_ps_TARGET): $(TEST_shell_parser_ps_OBJECTS)
 	$(CC) -o $@ $^
 
-$(TEST_subagent_approval_TARGET): $(TEST_subagent_approval_OBJECTS)
-	$(CC) -o $@ $^
+$(TEST_subagent_approval_TARGET): $(TEST_subagent_approval_OBJECTS) $(CJSON_LIB)
+	$(CC) -o $@ $(TEST_subagent_approval_OBJECTS) $(CJSON_LIB)
 
 # =============================================================================
 # CJSON TESTS
