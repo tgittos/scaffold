@@ -136,6 +136,12 @@ RALPH_CORE_DEPS := \
     $(SRCDIR)/core/streaming_handler.c \
     $(SRCDIR)/core/context_enhancement.c \
     $(SRCDIR)/core/recap.c \
+    $(SRCDIR)/core/approval_gate.c \
+    $(SRCDIR)/core/subagent_approval.c \
+    $(SRCDIR)/core/atomic_file.c \
+    $(SRCDIR)/core/shell_parser.c \
+    $(SRCDIR)/core/shell_parser_cmd.c \
+    $(SRCDIR)/core/shell_parser_ps.c \
     $(SRCDIR)/utils/env_loader.c \
     $(SRCDIR)/utils/prompt_loader.c \
     $(SRCDIR)/session/conversation_tracker.c \

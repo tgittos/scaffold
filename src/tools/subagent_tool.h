@@ -3,6 +3,7 @@
 
 #include "tools_system.h"
 #include "utils/darray.h"
+#include "core/approval_gate.h"
 #include <sys/types.h>
 #include <time.h>
 
@@ -42,6 +43,7 @@ typedef struct {
     pid_t pid;                         // Process ID of spawned process
     SubagentStatus status;             // Current execution status
     int stdout_pipe[2];                // Pipe for reading child output
+    ApprovalChannel approval_channel;  // IPC channel for approval proxying
     char *task;                        // Task description passed to subagent
     char *context;                     // Optional context information
     char *output;                      // Accumulated output from child
@@ -219,5 +221,47 @@ int read_subagent_output(Subagent *sub);
  * @param sub Pointer to the Subagent structure to cleanup
  */
 void cleanup_subagent(Subagent *sub);
+
+/**
+ * Poll all running subagents for pending approval requests.
+ * Returns the index of the first subagent with a pending request.
+ *
+ * @param manager Pointer to SubagentManager
+ * @param timeout_ms Maximum time to wait in milliseconds (0 for non-blocking)
+ * @return Index of subagent with pending request, or -1 if none
+ */
+int subagent_poll_approval_requests(SubagentManager *manager, int timeout_ms);
+
+/**
+ * Handle an approval request from a specific subagent.
+ * Prompts the user via TTY and sends the response back to the subagent.
+ *
+ * @param manager Pointer to SubagentManager
+ * @param subagent_index Index of the subagent in the manager's array
+ * @param gate_config Parent's approval gate configuration
+ * @return 0 on success, -1 on error
+ */
+int subagent_handle_approval_request(SubagentManager *manager,
+                                     int subagent_index,
+                                     ApprovalGateConfig *gate_config);
+
+/**
+ * Check and handle any pending approval requests from subagents.
+ * Non-blocking check that handles at most one request.
+ *
+ * @param manager Pointer to SubagentManager
+ * @param gate_config Parent's approval gate configuration
+ * @return 1 if a request was handled, 0 if none pending, -1 on error
+ */
+int subagent_check_and_handle_approvals(SubagentManager *manager,
+                                        ApprovalGateConfig *gate_config);
+
+/**
+ * Get the approval channel for this subagent process.
+ * Returns NULL if not running as a subagent.
+ *
+ * @return Pointer to approval channel, or NULL if not a subagent
+ */
+ApprovalChannel* subagent_get_approval_channel(void);
 
 #endif // SUBAGENT_TOOL_H

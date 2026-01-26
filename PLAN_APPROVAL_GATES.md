@@ -146,7 +146,7 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 - [x] **Implement `handle_subagent_approval_request()`** - Parent receives request, displays prompt (noting it's from subagent with PID), gets user response, sends back to subagent. If "Allow always", add pattern to parent's session allowlist. See spec section "Subagent Behavior > Subagent Deadlock Prevention > Parent Side".
 
-- [ ] **Modify `spawn_subagent_with_approval()` in subagent_tool.c** - Create request/response pipes before fork. Child closes parent ends, sets up `ApprovalChannel`. Parent closes child ends, adds channel to monitoring set. See spec section "Subagent Behavior > Subagent Deadlock Prevention > Spawn with Channels".
+- [x] **Modify `spawn_subagent_with_approval()` in subagent_tool.c** - Create request/response pipes before fork. Child closes parent ends, sets up `ApprovalChannel`. Parent closes child ends, adds channel to monitoring set. See spec section "Subagent Behavior > Subagent Deadlock Prevention > Spawn with Channels".
 
 - [ ] **Implement nested subagent approval forwarding** - When a subagent spawns its own subagent, requests are forwarded up the chain to root parent. Check `config->approval_channel` to determine if we're a subagent. See spec section "Subagent Behavior > Subagent Deadlock Prevention > Nested Subagents".
 
