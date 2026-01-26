@@ -53,12 +53,9 @@ static int check_tool_approval(RalphSession *session, const ToolCall *tool_call,
         return 0; // No session or tool call - allow execution
     }
 
-    // Skip gate checking if gates are disabled
-    if (!session->gate_config.enabled) {
-        return 0;
-    }
-
-    // Check protected files first (hard block, cannot be bypassed)
+    // Check protected files first (hard block, cannot be bypassed even with gates disabled)
+    // Per spec: "The following files are **hard-blocked** from modification by any tool,
+    // regardless of gate configuration or allowlist"
     if (is_file_write_tool(tool_call->name)) {
         char *path = tool_args_get_path(tool_call);
         if (path != NULL) {
@@ -73,15 +70,12 @@ static int check_tool_approval(RalphSession *session, const ToolCall *tool_call,
         }
     }
 
-    // Check rate limiting
-    if (is_rate_limited(&session->gate_config, tool_call)) {
-        result->tool_call_id = tool_call->id ? strdup(tool_call->id) : NULL;
-        result->result = format_rate_limit_error(&session->gate_config, tool_call);
-        result->success = 0;
-        return -1; // Blocked
+    // Skip remaining gate checking if gates are disabled
+    if (!session->gate_config.enabled) {
+        return 0;
     }
 
-    // Check approval gate
+    // Check approval gate (handles rate limiting internally)
     ApprovedPath approved_path;
     init_approved_path(&approved_path);
 
@@ -122,6 +116,8 @@ static int check_tool_approval(RalphSession *session, const ToolCall *tool_call,
             return -1; // Blocked
 
         case APPROVAL_NON_INTERACTIVE_DENIED:
+            // Non-interactive denials are environmental, not user denials,
+            // so we don't track them for rate limiting purposes
             result->tool_call_id = tool_call->id ? strdup(tool_call->id) : NULL;
             result->result = format_non_interactive_error(tool_call);
             result->success = 0;
@@ -134,6 +130,9 @@ static int check_tool_approval(RalphSession *session, const ToolCall *tool_call,
             return -2; // Special return code for abort
     }
 
+    // Should not reach here - all enum values are handled above.
+    // If new ApprovalResult values are added, this will catch them.
+    debug_printf("Warning: Unhandled approval result %d, defaulting to allow\n", approval);
     free_approved_path(&approved_path);
     return 0; // Default: allow
 }
@@ -604,6 +603,10 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
                 // User aborted (Ctrl+C) - stop processing remaining tools
                 loop_aborted = 1;
                 debug_printf("User aborted tool execution in loop iteration %d\n", loop_count);
+                // Populate result for the aborted tool (APPROVAL_ABORTED doesn't populate it)
+                results[executed_count].tool_call_id = tool_calls[i].id ? strdup(tool_calls[i].id) : NULL;
+                results[executed_count].result = strdup("{\"error\": \"aborted\", \"message\": \"Operation aborted by user\"}");
+                results[executed_count].success = 0;
                 executed_count++;
                 break;
             }
@@ -723,13 +726,16 @@ int tool_executor_run_workflow(RalphSession* session, ToolCall* tool_calls, int 
             // User aborted (Ctrl+C) - stop processing remaining tools
             aborted = 1;
             debug_printf("User aborted tool execution at tool %d of %d\n", i + 1, call_count);
-            // Still need to add placeholder results for unprocessed tools
-            for (int j = i; j < call_count; j++) {
-                if (results[j].result == NULL) {
-                    results[j].tool_call_id = tool_calls[j].id ? strdup(tool_calls[j].id) : NULL;
-                    results[j].result = strdup("{\"error\": \"aborted\", \"message\": \"Operation aborted by user\"}");
-                    results[j].success = 0;
-                }
+            // Populate result for current tool that was being approved (APPROVAL_ABORTED
+            // doesn't populate the result structure before returning)
+            results[i].tool_call_id = tool_calls[i].id ? strdup(tool_calls[i].id) : NULL;
+            results[i].result = strdup("{\"error\": \"aborted\", \"message\": \"Operation aborted by user\"}");
+            results[i].success = 0;
+            // Populate placeholder results for remaining unprocessed tools
+            for (int j = i + 1; j < call_count; j++) {
+                results[j].tool_call_id = tool_calls[j].id ? strdup(tool_calls[j].id) : NULL;
+                results[j].result = strdup("{\"error\": \"aborted\", \"message\": \"Operation aborted by user\"}");
+                results[j].success = 0;
             }
             break;
         }
