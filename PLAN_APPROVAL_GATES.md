@@ -182,13 +182,13 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 ## Error Messages
 
-- [ ] **Implement structured denial error** - Return JSON with `error: "operation_denied"`, `message`, `tool`, `suggestion` field advising LLM to ask user or explain need. See spec section "Error Messages".
+- [x] **Implement structured denial error** - Return JSON with `error: "operation_denied"`, `message`, `tool`, `suggestion` field advising LLM to ask user or explain need. See spec section "Error Messages". Implemented in `format_denial_error()` in approval_gate.c.
 
-- [ ] **Implement protected file error** - Return JSON with `error: "protected_file"`, `message: "Cannot modify protected configuration file"`, `path`. See spec section "Protected Files".
+- [x] **Implement protected file error** - Return JSON with `error: "protected_file"`, `message: "Cannot modify protected configuration file"`, `path`. See spec section "Protected Files". Implemented in `format_protected_file_error()` in approval_gate.c.
 
-- [ ] **Implement rate limit error** - Return JSON with `error: "rate_limited"`, `message`, `retry_after` seconds, `tool`. See spec section "Denial Rate Limiting > Behavior During Backoff".
+- [x] **Implement rate limit error** - Return JSON with `error: "rate_limited"`, `message`, `retry_after` seconds, `tool`. See spec section "Denial Rate Limiting > Behavior During Backoff". Implemented in `format_rate_limit_error()` in approval_gate.c.
 
-- [ ] **Implement path changed error** - Return JSON with `error: "path_changed"`, `message: "Path changed between approval and execution"` for TOCTOU violations.
+- [x] **Implement path changed error** - Return JSON with `error: "path_changed"`, `message: "Path changed between approval and execution"` for TOCTOU violations. Implemented in `format_verify_error()` in atomic_file.c.
 
 ---
 
