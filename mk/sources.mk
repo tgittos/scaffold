@@ -81,7 +81,9 @@ DB_CPP_SOURCES := $(SRCDIR)/db/hnswlib_wrapper.cpp
 PDF_SOURCES := $(SRCDIR)/pdf/pdf_extractor.c
 
 # Utilities
-UTILS_EXTRA_SOURCES := $(SRCDIR)/utils/uuid_utils.c
+UTILS_EXTRA_SOURCES := \
+    $(SRCDIR)/utils/uuid_utils.c \
+    $(SRCDIR)/utils/ralph_home.c
 
 # CLI
 CLI_SOURCES := $(SRCDIR)/cli/memory_commands.c
@@ -117,7 +119,8 @@ UTIL_DEPS := \
     $(SRCDIR)/utils/pdf_processor.c \
     $(SRCDIR)/utils/context_retriever.c \
     $(SRCDIR)/utils/config.c \
-    $(SRCDIR)/utils/uuid_utils.c
+    $(SRCDIR)/utils/uuid_utils.c \
+    $(SRCDIR)/utils/ralph_home.c
 
 RALPH_CORE_DEPS := \
     $(SRCDIR)/core/ralph.c \
@@ -157,4 +160,5 @@ CONV_DEPS := \
     $(SRCDIR)/utils/env_loader.c \
     $(SRCDIR)/utils/config.c \
     $(SRCDIR)/utils/debug_output.c \
-    $(SRCDIR)/utils/common_utils.c
+    $(SRCDIR)/utils/common_utils.c \
+    $(SRCDIR)/utils/ralph_home.c

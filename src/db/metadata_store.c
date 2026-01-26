@@ -7,6 +7,7 @@
 #include <cJSON.h>
 #include "../utils/common_utils.h"
 #include "../utils/ptrarray.h"
+#include "../utils/ralph_home.h"
 
 PTRARRAY_DEFINE(ChunkMetadataArray, ChunkMetadata)
 
@@ -44,22 +45,14 @@ static char* get_chunk_filename(const char* index_path, size_t chunk_id) {
 metadata_store_t* metadata_store_create(const char* base_path) {
     metadata_store_t* store = calloc(1, sizeof(metadata_store_t));
     if (store == NULL) return NULL;
-    
+
     if (base_path == NULL) {
-        // Use default path
-        const char* home = getenv("HOME");
-        if (home == NULL) {
-            free(store);
-            return NULL;
-        }
-        
-        size_t path_len = strlen(home) + 64;
-        store->base_path = malloc(path_len);
+        // Use default path under ralph home
+        store->base_path = ralph_home_path("metadata");
         if (store->base_path == NULL) {
             free(store);
             return NULL;
         }
-        snprintf(store->base_path, path_len, "%s/.local/ralph/metadata", home);
     } else {
         store->base_path = strdup(base_path);
         if (store->base_path == NULL) {
@@ -67,10 +60,10 @@ metadata_store_t* metadata_store_create(const char* base_path) {
             return NULL;
         }
     }
-    
+
     // Ensure base directory exists
     mkdir(store->base_path, 0755);
-    
+
     return store;
 }
 

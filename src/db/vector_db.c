@@ -1,6 +1,7 @@
 #include "vector_db.h"
 #include "hnswlib_wrapper.h"
 #include "../utils/ptrarray.h"
+#include "../utils/ralph_home.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -37,44 +38,17 @@ struct vector_db {
 static void* flush_thread_func(void* arg);
 
 char* vector_db_get_default_directory(void) {
-    const char* home = getenv("HOME");
-    if (!home) {
-        struct passwd* pw = getpwuid(getuid());
-        if (pw) {
-            home = pw->pw_dir;
-        }
-    }
-    
+    const char* home = ralph_home_get();
     if (!home) {
         return NULL;
     }
-    
-    char* path = malloc(strlen(home) + strlen("/.local/ralph") + 1);
-    if (!path) {
+
+    // Ensure directory exists
+    if (ralph_home_ensure_exists() != 0) {
         return NULL;
     }
-    
-    sprintf(path, "%s/.local/ralph", home);
-    
-    struct stat st;
-    if (stat(path, &st) != 0) {
-        char local_path[strlen(home) + strlen("/.local") + 1];
-        sprintf(local_path, "%s/.local", home);
-        
-        if (stat(local_path, &st) != 0) {
-            if (mkdir(local_path, 0755) != 0) {
-                free(path);
-                return NULL;
-            }
-        }
-        
-        if (mkdir(path, 0755) != 0) {
-            free(path);
-            return NULL;
-        }
-    }
-    
-    return path;
+
+    return strdup(home);
 }
 
 static index_entry_t* find_index(const vector_db_t* db, const char* index_name) {

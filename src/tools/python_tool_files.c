@@ -1,5 +1,6 @@
 #include "python_tool_files.h"
 #include "python_tool.h"
+#include "../utils/ralph_home.h"
 #include <Python.h>
 #include <cJSON.h>
 #include <stdio.h>
@@ -30,38 +31,9 @@ static const char *DEFAULT_TOOL_NAMES[] = {
     NULL
 };
 
-// Get home directory
-static char* get_home_dir(void) {
-    const char *home = getenv("HOME");
-    if (home != NULL) {
-        return strdup(home);
-    }
-
-    struct passwd *pw = getpwuid(getuid());
-    if (pw != NULL && pw->pw_dir != NULL) {
-        return strdup(pw->pw_dir);
-    }
-
-    return NULL;
-}
-
 // Get or create the tools directory path
 static char* get_tools_dir_path(void) {
-    char *home = get_home_dir();
-    if (home == NULL) {
-        return NULL;
-    }
-
-    size_t len = strlen(home) + strlen(PYTHON_TOOLS_BASE_DIR) + strlen(PYTHON_TOOLS_DIR_NAME) + 4;
-    char *path = malloc(len);
-    if (path == NULL) {
-        free(home);
-        return NULL;
-    }
-
-    snprintf(path, len, "%s/%s/%s", home, PYTHON_TOOLS_BASE_DIR, PYTHON_TOOLS_DIR_NAME);
-    free(home);
-    return path;
+    return ralph_home_path(PYTHON_TOOLS_DIR_NAME);
 }
 
 // Create directory recursively

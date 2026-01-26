@@ -1,4 +1,5 @@
 #include "config.h"
+#include "ralph_home.h"
 #include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -79,14 +80,10 @@ static int config_update_api_key_selection(ralph_config_t *config)
 
 static char* get_user_config_dir(void)
 {
-    const char *home = getenv("HOME");
+    const char *home = ralph_home_get();
     if (!home) return NULL;
-    
-    char *config_dir = malloc(strlen(home) + strlen("/.local/ralph") + 1);
-    if (!config_dir) return NULL;
-    
-    sprintf(config_dir, "%s/.local/ralph", home);
-    return config_dir;
+
+    return strdup(home);
 }
 
 static int ensure_directory_exists(const char *path)

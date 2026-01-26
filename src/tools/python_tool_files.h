@@ -4,10 +4,9 @@
 #include "tools_system.h"
 
 /**
- * Directory where Python tool files are stored
+ * Directory name where Python tool files are stored (relative to ralph home)
  */
 #define PYTHON_TOOLS_DIR_NAME "tools"
-#define PYTHON_TOOLS_BASE_DIR ".local/ralph"
 
 /**
  * Maximum number of Python tools that can be loaded

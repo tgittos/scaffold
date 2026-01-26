@@ -9,12 +9,29 @@
 #include "json_output.h"
 #include "../cli/memory_commands.h"
 #include "../tools/subagent_tool.h"
+#include "../utils/ralph_home.h"
 
 #define MAX_INPUT_SIZE 8192
 
 int main(int argc, char *argv[])
 {
-    // Parse command line arguments
+    // Parse --home flag FIRST, before any initialization
+    // This must be done early because other modules depend on ralph_home
+    char *home_override = NULL;
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--home") == 0 && i + 1 < argc) {
+            home_override = argv[++i];
+            break;
+        }
+    }
+
+    // Initialize ralph home directory before anything else
+    if (ralph_home_init(home_override) != 0) {
+        fprintf(stderr, "Error: Failed to initialize ralph home directory\n");
+        return EXIT_FAILURE;
+    }
+
+    // Parse remaining command line arguments
     bool debug_mode = false;
     bool no_stream = false;
     bool json_mode = false;
@@ -36,6 +53,9 @@ int main(int argc, char *argv[])
             subagent_task = argv[++i];
         } else if (strcmp(argv[i], "--context") == 0 && i + 1 < argc) {
             subagent_context = argv[++i];
+        } else if (strcmp(argv[i], "--home") == 0 && i + 1 < argc) {
+            // Already processed, skip the value
+            i++;
         } else if (message_arg_index == -1 && argv[i][0] != '-') {
             message_arg_index = i;
         }

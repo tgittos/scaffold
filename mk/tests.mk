@@ -33,6 +33,7 @@ endef
 $(eval $(call def_test,main,core/test_main,))
 $(eval $(call def_test,env,utils/test_env_loader,$(SRCDIR)/utils/env_loader.c))
 $(eval $(call def_test,prompt,utils/test_prompt_loader,$(SRCDIR)/utils/prompt_loader.c))
+$(eval $(call def_test,ralph_home,utils/test_ralph_home,$(SRCDIR)/utils/ralph_home.c))
 $(eval $(call def_test,todo_manager,tools/test_todo_manager,$(SRCDIR)/tools/todo_manager.c))
 $(eval $(call def_test,document_chunker,test_document_chunker,$(SRCDIR)/utils/document_chunker.c $(SRCDIR)/utils/common_utils.c))
 $(eval $(call def_test,streaming,network/test_streaming,$(SRCDIR)/network/streaming.c))
@@ -46,6 +47,9 @@ $(TEST_env_TARGET): $(TEST_env_OBJECTS)
 	$(CC) -o $@ $^
 
 $(TEST_prompt_TARGET): $(TEST_prompt_OBJECTS)
+	$(CC) -o $@ $^
+
+$(TEST_ralph_home_TARGET): $(TEST_ralph_home_OBJECTS)
 	$(CC) -o $@ $^
 
 $(TEST_todo_manager_TARGET): $(TEST_todo_manager_OBJECTS)
@@ -67,7 +71,7 @@ $(TEST_ptrarray_TARGET): $(TEST_ptrarray_OBJECTS)
 # CJSON TESTS
 # =============================================================================
 
-$(eval $(call def_test,config,utils/test_config,$(SRCDIR)/utils/config.c))
+$(eval $(call def_test,config,utils/test_config,$(SRCDIR)/utils/config.c $(SRCDIR)/utils/ralph_home.c))
 $(eval $(call def_test,debug_output,utils/test_debug_output,$(SRCDIR)/utils/debug_output.c))
 
 $(TEST_config_TARGET): $(TEST_config_OBJECTS) $(CJSON_LIB)
@@ -89,7 +93,7 @@ $(TEST_pdf_extractor_TARGET): $(TEST_pdf_extractor_OBJECTS) $(PDFIO_LIB) $(ZLIB_
 # HTTP RETRY TEST
 # =============================================================================
 
-$(eval $(call def_test,http_retry,network/test_http_retry,$(SRCDIR)/network/api_error.c $(SRCDIR)/utils/config.c))
+$(eval $(call def_test,http_retry,network/test_http_retry,$(SRCDIR)/network/api_error.c $(SRCDIR)/utils/config.c $(SRCDIR)/utils/ralph_home.c))
 
 $(TEST_http_retry_TARGET): $(TEST_http_retry_OBJECTS) $(CJSON_LIB) $(LIBS_MBEDTLS)
 	$(CC) -o $@ $(TEST_http_retry_OBJECTS) $(CJSON_LIB) $(LIBS_MBEDTLS) -lm
@@ -98,7 +102,7 @@ $(TEST_http_retry_TARGET): $(TEST_http_retry_OBJECTS) $(CJSON_LIB) $(LIBS_MBEDTL
 # SQLITE TEST
 # =============================================================================
 
-$(eval $(call def_test,task_store,db/test_task_store,$(SRCDIR)/db/task_store.c $(SRCDIR)/utils/uuid_utils.c))
+$(eval $(call def_test,task_store,db/test_task_store,$(SRCDIR)/db/task_store.c $(SRCDIR)/utils/uuid_utils.c $(SRCDIR)/utils/ralph_home.c))
 
 $(TEST_task_store_TARGET): $(TEST_task_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB)
 	$(CC) -o $@ $(TEST_task_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) -lpthread -lm
@@ -107,16 +111,20 @@ $(TEST_task_store_TARGET): $(TEST_task_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_
 # CONVERSATION TESTS (special linking)
 # =============================================================================
 
+# Extra objects needed by conversation test (not in test sources)
+CONV_EXTRA_OBJECTS := $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) \
+    $(SRCDIR)/llm/embeddings.o $(SRCDIR)/llm/embeddings_service.o $(SRCDIR)/llm/embedding_provider.o \
+    $(SRCDIR)/llm/providers/openai_embedding_provider.o $(SRCDIR)/llm/providers/local_embedding_provider.o \
+    $(SRCDIR)/network/http_client.o $(SRCDIR)/network/embedded_cacert.o $(SRCDIR)/network/api_error.o \
+    $(SRCDIR)/utils/env_loader.o $(SRCDIR)/utils/config.o $(SRCDIR)/utils/debug_output.o $(SRCDIR)/utils/common_utils.o \
+    $(SRCDIR)/utils/ralph_home.o
+
 $(eval $(call def_test,conversation,session/test_conversation_tracker,$(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/utils/json_escape.c))
 $(eval $(call def_test_mixed,conversation_vdb,session/test_conversation_vector_db,$(CONV_DEPS)))
 $(eval $(call def_test_mixed,tool_calls_not_stored,session/test_tool_calls_not_stored,$(CONV_DEPS)))
 
-$(TEST_conversation_TARGET): $(TEST_conversation_OBJECTS) $(ALL_LIBS)
-	$(CXX) -o $@ $(TEST_conversation_OBJECTS) $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) \
-		src/llm/embeddings.o src/llm/embeddings_service.o src/llm/embedding_provider.o \
-		src/llm/providers/openai_embedding_provider.o src/llm/providers/local_embedding_provider.o \
-		src/network/http_client.o src/network/embedded_cacert.o src/network/api_error.o \
-		src/utils/env_loader.o src/utils/config.o src/utils/debug_output.o src/utils/common_utils.o \
+$(TEST_conversation_TARGET): $(TEST_conversation_OBJECTS) $(CONV_EXTRA_OBJECTS) $(ALL_LIBS)
+	$(CXX) -o $@ $(TEST_conversation_OBJECTS) $(CONV_EXTRA_OBJECTS) \
 		$(LIBS_MBEDTLS) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
 
 $(TEST_conversation_vdb_TARGET): $(TEST_conversation_vdb_OBJECTS) $(ALL_LIBS)
@@ -135,7 +143,7 @@ $(eval $(call def_test_mixed,output,utils/test_output_formatter,$(COMPLEX_DEPS))
 $(eval $(call def_test_mixed,tools,tools/test_tools_system,$(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,vector_db_tool,tools/test_vector_db_tool,$(SRCDIR)/utils/env_loader.c $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,memory_tool,tools/test_memory_tool,$(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,memory_mgmt,test_memory_management,$(SRCDIR)/cli/memory_commands.c $(DB_C_SOURCES) $(EMBEDDING_DEPS) $(SRCDIR)/utils/config.c $(NETWORK_DEPS) $(SRCDIR)/utils/common_utils.c $(SRCDIR)/utils/debug_output.c))
+$(eval $(call def_test_mixed,memory_mgmt,test_memory_management,$(SRCDIR)/cli/memory_commands.c $(DB_C_SOURCES) $(EMBEDDING_DEPS) $(SRCDIR)/utils/config.c $(NETWORK_DEPS) $(SRCDIR)/utils/common_utils.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/utils/ralph_home.c))
 $(eval $(call def_test_mixed,token_manager,session/test_token_manager,$(SRCDIR)/session/token_manager.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,conversation_compactor,session/test_conversation_compactor,$(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/token_manager.c $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,model_tools,llm/test_model_tools,$(COMPLEX_DEPS)))
@@ -156,11 +164,11 @@ $$(TEST_$(t)_TARGET): $$(TEST_$(t)_OBJECTS) $$(ALL_LIBS) ; \
 	$$(CXX) -o $$@ $$(TEST_$(t)_OBJECTS) $$(LIBS_STANDARD)))
 
 # These two need extra objects
-$(TEST_output_TARGET): $(TEST_output_OBJECTS) $(ALL_LIBS)
-	$(CXX) -o $@ $(TEST_output_OBJECTS) src/session/conversation_tracker.o $(LIBS_STANDARD)
+$(TEST_output_TARGET): $(TEST_output_OBJECTS) $(SRCDIR)/session/conversation_tracker.o $(ALL_LIBS)
+	$(CXX) -o $@ $(TEST_output_OBJECTS) $(SRCDIR)/session/conversation_tracker.o $(LIBS_STANDARD)
 
-$(TEST_tools_TARGET): $(TEST_tools_OBJECTS) $(ALL_LIBS)
-	$(CXX) -o $@ $(TEST_tools_OBJECTS) src/session/conversation_tracker.o $(LIBS_STANDARD)
+$(TEST_tools_TARGET): $(TEST_tools_OBJECTS) $(SRCDIR)/session/conversation_tracker.o $(ALL_LIBS)
+	$(CXX) -o $@ $(TEST_tools_OBJECTS) $(SRCDIR)/session/conversation_tracker.o $(LIBS_STANDARD)
 
 # =============================================================================
 # PYTHON TESTS (need stdlib embedding)
@@ -212,8 +220,8 @@ $(TEST_recap_TARGET): $(TEST_recap_OBJECTS) $(ALL_LIBS)
 # =============================================================================
 
 # Vector DB test - minimal, just hnswlib
-TEST_vector_db_SOURCES := $(TESTDIR)/db/test_vector_db.c $(SRCDIR)/db/vector_db.c $(DB_CPP_SOURCES) $(UNITY)
-TEST_vector_db_OBJECTS := $(TESTDIR)/db/test_vector_db.o $(SRCDIR)/db/vector_db.o $(SRCDIR)/db/hnswlib_wrapper.o $(TESTDIR)/unity/unity.o
+TEST_vector_db_SOURCES := $(TESTDIR)/db/test_vector_db.c $(SRCDIR)/db/vector_db.c $(SRCDIR)/utils/ralph_home.c $(DB_CPP_SOURCES) $(UNITY)
+TEST_vector_db_OBJECTS := $(TESTDIR)/db/test_vector_db.o $(SRCDIR)/db/vector_db.o $(SRCDIR)/utils/ralph_home.o $(SRCDIR)/db/hnswlib_wrapper.o $(TESTDIR)/unity/unity.o
 TEST_vector_db_TARGET := $(TESTDIR)/test_vector_db
 ALL_TEST_TARGETS += $(TEST_vector_db_TARGET)
 
@@ -221,7 +229,7 @@ $(TEST_vector_db_TARGET): $(TEST_vector_db_OBJECTS) $(HNSWLIB_DIR)/hnswlib/hnswl
 	$(CXX) -o $@ $(TEST_vector_db_OBJECTS) -lpthread -lm
 
 # Document store test
-TEST_document_store_SOURCES := $(TESTDIR)/db/test_document_store.c $(DB_C_SOURCES) $(SRCDIR)/utils/common_utils.c $(SRCDIR)/utils/config.c $(SRCDIR)/utils/debug_output.c $(EMBEDDING_DEPS) $(NETWORK_DEPS) $(UNITY)
+TEST_document_store_SOURCES := $(TESTDIR)/db/test_document_store.c $(DB_C_SOURCES) $(SRCDIR)/utils/common_utils.c $(SRCDIR)/utils/config.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/utils/ralph_home.c $(EMBEDDING_DEPS) $(NETWORK_DEPS) $(UNITY)
 TEST_document_store_OBJECTS := $(TEST_document_store_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o)
 TEST_document_store_TARGET := $(TESTDIR)/test_document_store
 ALL_TEST_TARGETS += $(TEST_document_store_TARGET)
@@ -235,7 +243,7 @@ $(TEST_document_store_TARGET): $(TEST_document_store_OBJECTS) $(ALL_LIBS)
 
 TEST_EXECUTION_ORDER := \
     $(TEST_main_TARGET) $(TEST_darray_TARGET) $(TEST_ptrarray_TARGET) \
-    $(TEST_http_TARGET) $(TEST_http_retry_TARGET) \
+    $(TEST_ralph_home_TARGET) $(TEST_http_TARGET) $(TEST_http_retry_TARGET) \
     $(TEST_streaming_TARGET) $(TEST_openai_streaming_TARGET) $(TEST_anthropic_streaming_TARGET) \
     $(TEST_env_TARGET) $(TEST_output_TARGET) $(TEST_prompt_TARGET) $(TEST_debug_output_TARGET) \
     $(TEST_conversation_TARGET) $(TEST_conversation_vdb_TARGET) $(TEST_tools_TARGET) \
@@ -263,7 +271,7 @@ check: test
 # Excluded: HTTP (network), Python (embedded stdlib), subagent (fork/exec)
 VALGRIND_TESTS := \
     $(TEST_main_TARGET) $(TEST_darray_TARGET) $(TEST_ptrarray_TARGET) \
-    $(TEST_http_retry_TARGET) $(TEST_streaming_TARGET) \
+    $(TEST_ralph_home_TARGET) $(TEST_http_retry_TARGET) $(TEST_streaming_TARGET) \
     $(TEST_openai_streaming_TARGET) $(TEST_anthropic_streaming_TARGET) $(TEST_env_TARGET) \
     $(TEST_output_TARGET) $(TEST_prompt_TARGET) $(TEST_conversation_TARGET) \
     $(TEST_conversation_vdb_TARGET) $(TEST_tools_TARGET) $(TEST_ralph_TARGET) \

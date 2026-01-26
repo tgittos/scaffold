@@ -1,6 +1,7 @@
 #include "mcp_client.h"
 #include <cJSON.h>
 #include "../utils/debug_output.h"
+#include "../utils/ralph_home.h"
 #include "../network/http_client.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -82,7 +83,7 @@ int mcp_find_config_path(char* config_path, size_t path_size) {
     if (!config_path || path_size == 0) {
         return -1;
     }
-    
+
     // Try current directory first
     const char* local_config = "./ralph.config.json";
     if (access(local_config, R_OK) == 0) {
@@ -93,22 +94,23 @@ int mcp_find_config_path(char* config_path, size_t path_size) {
         debug_printf("Found MCP config at: %s\n\n", config_path);
         return 0;
     }
-    
-    // Try user directory
-    const char* home = getenv("HOME");
-    if (home) {
-        char user_config[512];
-        snprintf(user_config, sizeof(user_config), "%s/.local/ralph/ralph.config.json", home);
+
+    // Try ralph home directory
+    char* user_config = ralph_home_path("ralph.config.json");
+    if (user_config) {
         if (access(user_config, R_OK) == 0) {
             if (strlen(user_config) >= path_size) {
+                free(user_config);
                 return -1;
             }
             strcpy(config_path, user_config);
             debug_printf("Found MCP config at: %s\n\n", config_path);
+            free(user_config);
             return 0;
         }
+        free(user_config);
     }
-    
+
     debug_printf("No MCP configuration file found\n\n");
     return -1;
 }

@@ -3,6 +3,7 @@
 #include "metadata_store.h"
 #include "hnswlib_wrapper.h"
 #include "../utils/config.h"
+#include "../utils/ralph_home.h"
 #include "../llm/embeddings_service.h"
 #include "../utils/ptrarray.h"
 #include <stdio.h>
@@ -81,21 +82,18 @@ static char* get_document_filename(const char* index_path, size_t id) {
 document_store_t* document_store_create(const char* base_path) {
     document_store_t* store = calloc(1, sizeof(document_store_t));
     if (store == NULL) return NULL;
-    
+
     if (base_path == NULL) {
-        const char* home = getenv("HOME");
+        const char* home = ralph_home_get();
         if (home == NULL) {
             free(store);
             return NULL;
         }
-        
-        size_t path_len = strlen(home) + 64;
-        store->base_path = malloc(path_len);
+        store->base_path = strdup(home);
         if (store->base_path == NULL) {
             free(store);
             return NULL;
         }
-        snprintf(store->base_path, path_len, "%s/.local/ralph", home);
     } else {
         store->base_path = strdup(base_path);
         if (store->base_path == NULL) {
@@ -103,10 +101,10 @@ document_store_t* document_store_create(const char* base_path) {
             return NULL;
         }
     }
-    
+
     store->vector_db = vector_db_service_get_database();
     store->metadata = metadata_store_get_instance();
-    
+
     return store;
 }
 

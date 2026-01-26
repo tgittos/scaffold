@@ -38,13 +38,19 @@ python: $(PYTHON_LIB)
 # COMPILATION RULES
 # =============================================================================
 
-$(SRCDIR)/%.o: $(SRCDIR)/%.c $(HEADERS) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
+# Dependencies required for include paths to exist (order-only prerequisites)
+# These ensure deps are downloaded/built before compilation, without triggering
+# rebuilds when libs change
+COMPILE_DEPS := $(LIBS_MBEDTLS) $(CJSON_LIB) $(SQLITE_LIB) $(PDFIO_LIB) $(ZLIB_LIB) \
+    $(OSSP_UUID_LIB) $(READLINE_LIB) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
+
+$(SRCDIR)/%.o: $(SRCDIR)/%.c $(HEADERS) | $(COMPILE_DEPS)
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
-$(SRCDIR)/%.o: $(SRCDIR)/%.cpp $(HEADERS) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
+$(SRCDIR)/%.o: $(SRCDIR)/%.cpp $(HEADERS) | $(COMPILE_DEPS)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
-$(TESTDIR)/%.o: $(TESTDIR)/%.c $(HEADERS) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
+$(TESTDIR)/%.o: $(TESTDIR)/%.c $(HEADERS) | $(COMPILE_DEPS)
 	$(CC) $(CFLAGS) $(TEST_INCLUDES) -c $< -o $@
 
 $(TESTDIR)/unity/%.o: $(TESTDIR)/unity/%.c

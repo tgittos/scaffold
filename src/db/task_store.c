@@ -1,12 +1,14 @@
 #include "task_store.h"
 #include "../utils/uuid_utils.h"
 #include "../utils/ptrarray.h"
+#include "../utils/ralph_home.h"
 #include <sqlite3.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 PTRARRAY_DEFINE(TaskArray, Task)
 
@@ -143,36 +145,21 @@ void task_store_reset_instance(void) {
     g_store_once = (pthread_once_t)PTHREAD_ONCE_INIT;
 
     // Delete the database file to ensure clean state for tests
-    const char* home = getenv("HOME");
-    if (home != NULL) {
-        char db_path[512];
-        snprintf(db_path, sizeof(db_path), "%s/.local/ralph/tasks.db", home);
+    char *db_path = ralph_home_path("tasks.db");
+    if (db_path != NULL) {
         unlink(db_path);
+        free(db_path);
     }
 }
 
 // Helper functions
 static char* get_default_db_path(void) {
-    const char* home = getenv("HOME");
-    if (home == NULL) {
+    // Ensure ralph home directory exists
+    if (ralph_home_ensure_exists() != 0) {
         return NULL;
     }
 
-    // Create ~/.local/ralph directory if needed
-    char dir_path[512];
-    snprintf(dir_path, sizeof(dir_path), "%s/.local", home);
-    mkdir(dir_path, 0755);
-    snprintf(dir_path, sizeof(dir_path), "%s/.local/ralph", home);
-    mkdir(dir_path, 0755);
-
-    size_t path_len = strlen(home) + 32;
-    char* db_path = malloc(path_len);
-    if (db_path == NULL) {
-        return NULL;
-    }
-
-    snprintf(db_path, path_len, "%s/.local/ralph/tasks.db", home);
-    return db_path;
+    return ralph_home_path("tasks.db");
 }
 
 static int init_schema(sqlite3* db) {
