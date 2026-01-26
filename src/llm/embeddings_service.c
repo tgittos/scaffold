@@ -69,16 +69,16 @@ int embeddings_service_get_vector(const char *text, embedding_vector_t *embeddin
     if (text == NULL || embedding == NULL) {
         return -1;
     }
-    
+
     embeddings_service_t* service = embeddings_service_get_instance();
     if (service == NULL || !service->configured) {
         return -1;
     }
-    
+
     pthread_mutex_lock(&service->mutex);
     int result = embeddings_get_vector(&service->config, text, embedding);
     pthread_mutex_unlock(&service->mutex);
-    
+
     return result;
 }
 
@@ -181,7 +181,7 @@ void embeddings_service_cleanup(void) {
             g_embeddings_instance->configured = 0;
         }
         pthread_mutex_unlock(&g_embeddings_instance->mutex);
-        
+
         pthread_mutex_destroy(&g_embeddings_instance->mutex);
         free(g_embeddings_instance);
         g_embeddings_instance = NULL;

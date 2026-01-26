@@ -7,7 +7,7 @@
 #include "debug_output.h"
 #include "output_formatter.h"
 #include "json_output.h"
-#include "approval_gate.h"
+#include "../policy/approval_gate.h"
 #include "../cli/memory_commands.h"
 #include "../tools/subagent_tool.h"
 #include "../utils/ralph_home.h"

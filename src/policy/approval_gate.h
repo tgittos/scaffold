@@ -16,6 +16,12 @@
 #include "shell_parser.h"
 /* Include atomic_file.h for ApprovedPath and VerifyResult (TOCTOU protection) */
 #include "atomic_file.h"
+/* Include allowlist.h for opaque Allowlist type */
+#include "allowlist.h"
+/* Include pattern_generator.h for GeneratedPattern and related functions */
+#include "pattern_generator.h"
+/* Include rate_limiter.h for opaque RateLimiter type */
+#include "rate_limiter.h"
 
 /**
  * Approval Gates Module
@@ -98,17 +104,7 @@ typedef struct {
     int valid;              /* Whether regex compilation succeeded */
 } AllowlistEntry;
 
-/**
- * Denial tracking for rate limiting.
- * Implements exponential backoff on repeated denials.
- */
-typedef struct {
-    char *tool;             /* Tool name being tracked */
-    GateCategory category;  /* Category of the tool */
-    int denial_count;       /* Consecutive denials */
-    time_t last_denial;     /* Timestamp of most recent denial */
-    time_t backoff_until;   /* Don't prompt until after this time */
-} DenialTracker;
+/* DenialTracker is now internal to rate_limiter.c */
 
 /**
  * IPC channel for subagent approval proxying.
@@ -145,7 +141,7 @@ typedef struct {
  * Main approval gate configuration.
  * Holds all gate settings, allowlists, and runtime state.
  */
-typedef struct {
+typedef struct ApprovalGateConfig {
     int enabled;            /* Master switch for approval gates */
     int is_interactive;     /* Whether stdin is a TTY (can prompt user) */
 
@@ -164,10 +160,8 @@ typedef struct {
     int shell_allowlist_capacity;
     int static_shell_allowlist_count; /* Count of entries from config file (for inheritance) */
 
-    /* Denial rate limiting */
-    DenialTracker *denial_trackers;
-    int denial_tracker_count;
-    int denial_tracker_capacity;
+    /* Denial rate limiting (opaque type) */
+    RateLimiter *rate_limiter;
 
     /* Subagent approval channel (NULL for root process) */
     ApprovalChannel *approval_channel;
@@ -591,113 +585,6 @@ void approval_gate_detect_interactive(ApprovalGateConfig *config);
  */
 int approval_gate_is_interactive(const ApprovalGateConfig *config);
 
-/* ============================================================================
- * Allow Always Pattern Generation
- * ========================================================================== */
-
-/**
- * Result of pattern generation that may need user confirmation.
- */
-typedef struct {
-    char *pattern;              /* Generated regex pattern (for non-shell tools) */
-    char **command_prefix;      /* Generated command prefix (for shell tools) */
-    int prefix_len;             /* Number of tokens in command prefix */
-    int is_exact_match;         /* 1 if pattern is an exact match (no wildcards) */
-    int needs_confirmation;     /* 1 if pattern matches more than current operation */
-    char **example_matches;     /* Examples of what else the pattern would match */
-    int example_count;          /* Number of example matches */
-} GeneratedPattern;
-
-/**
- * Result of pattern confirmation dialog.
- */
-typedef enum {
-    PATTERN_CONFIRMED,          /* User confirmed the broad pattern */
-    PATTERN_EXACT_ONLY,         /* User wants exact match instead */
-    PATTERN_EDITED,             /* User edited the pattern (stored in out_pattern) */
-    PATTERN_CANCELLED           /* User cancelled the dialog */
-} PatternConfirmResult;
-
-/**
- * Generate an allowlist pattern for a file path operation.
- * Follows these rules:
- * - Root files (./README.md) get exact match
- * - /tmp paths get exact match (security)
- * - Other paths: match directory and similar extensions
- *
- * @param path The file path from the tool call
- * @param out_pattern Output: populated GeneratedPattern struct
- * @return 0 on success, -1 on failure
- */
-int generate_file_path_pattern(const char *path, GeneratedPattern *out_pattern);
-
-/**
- * Generate an allowlist entry for a shell command.
- * Extracts base command and first argument as prefix.
- * Commands with pipes, chains, or redirects return exact match only.
- *
- * @param command The shell command string
- * @param out_pattern Output: populated GeneratedPattern struct
- * @return 0 on success, -1 on failure
- */
-int generate_shell_command_pattern(const char *command, GeneratedPattern *out_pattern);
-
-/**
- * Generate an allowlist pattern for a network URL.
- * Extracts scheme + hostname, generates pattern requiring path separator
- * to prevent subdomain spoofing (e.g., api.example.com.evil.com).
- *
- * @param url The URL from the tool call
- * @param out_pattern Output: populated GeneratedPattern struct
- * @return 0 on success, -1 on failure
- */
-int generate_network_url_pattern(const char *url, GeneratedPattern *out_pattern);
-
-/**
- * Generate an allowlist pattern based on tool category.
- * Dispatches to the appropriate pattern generator based on category.
- *
- * @param tool_call The tool call to generate a pattern for
- * @param out_pattern Output: populated GeneratedPattern struct
- * @return 0 on success, -1 on failure
- */
-int generate_allowlist_pattern(const ToolCall *tool_call, GeneratedPattern *out_pattern);
-
-/**
- * Show pattern confirmation dialog when pattern is broader than exact match.
- * Displays examples of what the pattern would match and allows user to:
- * - [y] Confirm the broad pattern
- * - [x] Use exact match instead
- * - [e] Edit the pattern manually
- *
- * @param pattern The generated pattern to confirm
- * @param original_value The original value (path, command, URL) that triggered this
- * @param out_edited If result is PATTERN_EDITED, the user's edited pattern
- * @return User's choice
- */
-PatternConfirmResult confirm_pattern_scope(const GeneratedPattern *pattern,
-                                           const char *original_value,
-                                           char **out_edited);
-
-/**
- * Apply a generated pattern to the session allowlist.
- * For shell commands, adds to shell_allowlist.
- * For other tools, adds to regex allowlist.
- *
- * @param config Gate configuration to modify
- * @param tool_name Name of the tool
- * @param pattern The generated pattern to apply
- * @return 0 on success, -1 on failure
- */
-int apply_generated_pattern(ApprovalGateConfig *config,
-                            const char *tool_name,
-                            const GeneratedPattern *pattern);
-
-/**
- * Free resources held by a GeneratedPattern struct.
- *
- * @param pattern The pattern to clean up
- */
-void free_generated_pattern(GeneratedPattern *pattern);
+/* Pattern generation types and functions are in pattern_generator.h */
 
 #endif /* APPROVAL_GATE_H */

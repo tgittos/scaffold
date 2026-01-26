@@ -3,7 +3,7 @@
  */
 
 #include "../test/unity/unity.h"
-#include "../src/core/approval_gate.h"
+#include "../src/policy/approval_gate.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -91,7 +91,7 @@ void test_approval_gate_init_creates_valid_config(void) {
     TEST_ASSERT_EQUAL(1, test_config.enabled);
     TEST_ASSERT_NOT_NULL(test_config.allowlist);
     TEST_ASSERT_NOT_NULL(test_config.shell_allowlist);
-    TEST_ASSERT_NOT_NULL(test_config.denial_trackers);
+    TEST_ASSERT_NOT_NULL(test_config.rate_limiter);
     TEST_ASSERT_NULL(test_config.approval_channel);
 
     approval_gate_cleanup(&test_config);

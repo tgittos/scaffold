@@ -8,8 +8,11 @@
  */
 
 #include "approval_gate.h"
+#include "gate_prompter.h"
+#include "pattern_generator.h"
 #include "shell_parser.h"
 #include "subagent_approval.h"
+#include "tool_args.h"
 
 #include <cJSON.h>
 #include <ctype.h>
@@ -156,21 +159,9 @@ static const char *RESULT_NAMES[] = {
 
 /* Note: verify_result_message() and VerifyResult messages are in atomic_file.c */
 
-/* Rate limiting backoff schedule (in seconds) */
-static const int BACKOFF_SCHEDULE[] = {
-    0,    /* 1 denial - no backoff */
-    0,    /* 2 denials - no backoff */
-    5,    /* 3 denials - 5 seconds */
-    15,   /* 4 denials - 15 seconds */
-    60,   /* 5 denials - 60 seconds */
-    300   /* 6+ denials - 5 minutes */
-};
-#define BACKOFF_SCHEDULE_SIZE (sizeof(BACKOFF_SCHEDULE) / sizeof(BACKOFF_SCHEDULE[0]))
-
 /* Initial capacities for dynamic arrays */
 #define INITIAL_ALLOWLIST_CAPACITY 16
 #define INITIAL_SHELL_ALLOWLIST_CAPACITY 16
-#define INITIAL_DENIAL_TRACKER_CAPACITY 8
 
 /* Config file paths to search */
 static const char *CONFIG_FILE_PATHS[] = {
@@ -477,18 +468,15 @@ int approval_gate_init(ApprovalGateConfig *config) {
     config->shell_allowlist_capacity = INITIAL_SHELL_ALLOWLIST_CAPACITY;
     config->shell_allowlist_count = 0;
 
-    /* Initialize denial trackers with initial capacity */
-    config->denial_trackers = calloc(INITIAL_DENIAL_TRACKER_CAPACITY,
-                                     sizeof(DenialTracker));
-    if (config->denial_trackers == NULL) {
+    /* Initialize rate limiter (opaque type) */
+    config->rate_limiter = rate_limiter_create();
+    if (config->rate_limiter == NULL) {
         free(config->shell_allowlist);
         free(config->allowlist);
         config->shell_allowlist = NULL;
         config->allowlist = NULL;
         return -1;
     }
-    config->denial_tracker_capacity = INITIAL_DENIAL_TRACKER_CAPACITY;
-    config->denial_tracker_count = 0;
 
     /* No approval channel for root process */
     config->approval_channel = NULL;
@@ -704,14 +692,12 @@ int approval_gate_init_from_parent(ApprovalGateConfig *child,
     }
     child->static_shell_allowlist_count = child->shell_allowlist_count;
 
-    /* Initialize denial trackers - subagents start fresh */
-    child->denial_trackers = calloc(INITIAL_DENIAL_TRACKER_CAPACITY, sizeof(DenialTracker));
-    if (child->denial_trackers == NULL) {
+    /* Initialize rate limiter - subagents start fresh */
+    child->rate_limiter = rate_limiter_create();
+    if (child->rate_limiter == NULL) {
         cleanup_partial_child_config(child);
         return -1;
     }
-    child->denial_tracker_capacity = INITIAL_DENIAL_TRACKER_CAPACITY;
-    child->denial_tracker_count = 0;
 
     /* No approval channel set here - caller must set this */
     child->approval_channel = NULL;
@@ -747,13 +733,7 @@ static void free_shell_allow_entry(ShellAllowEntry *entry) {
     entry->prefix_len = 0;
 }
 
-static void free_denial_tracker(DenialTracker *tracker) {
-    if (tracker == NULL) {
-        return;
-    }
-    free(tracker->tool);
-    tracker->tool = NULL;
-}
+/* free_denial_tracker removed - rate limiting is now handled by opaque RateLimiter type */
 
 void approval_gate_cleanup(ApprovalGateConfig *config) {
     if (config == NULL) {
@@ -778,13 +758,10 @@ void approval_gate_cleanup(ApprovalGateConfig *config) {
         config->shell_allowlist = NULL;
     }
 
-    /* Free denial trackers */
-    if (config->denial_trackers != NULL) {
-        for (int i = 0; i < config->denial_tracker_count; i++) {
-            free_denial_tracker(&config->denial_trackers[i]);
-        }
-        free(config->denial_trackers);
-        config->denial_trackers = NULL;
+    /* Destroy rate limiter */
+    if (config->rate_limiter != NULL) {
+        rate_limiter_destroy(config->rate_limiter);
+        config->rate_limiter = NULL;
     }
 
     /* Clean up approval channel if present */
@@ -797,8 +774,6 @@ void approval_gate_cleanup(ApprovalGateConfig *config) {
     config->allowlist_capacity = 0;
     config->shell_allowlist_count = 0;
     config->shell_allowlist_capacity = 0;
-    config->denial_tracker_count = 0;
-    config->denial_tracker_capacity = 0;
 }
 
 /* =============================================================================
@@ -894,139 +869,37 @@ GateAction approval_gate_get_category_action(const ApprovalGateConfig *config,
 }
 
 /* =============================================================================
- * Rate Limiting
+ * Rate Limiting (delegate to opaque RateLimiter)
  * ========================================================================== */
-
-static DenialTracker *find_denial_tracker(const ApprovalGateConfig *config,
-                                          const char *tool_name) {
-    if (config == NULL || tool_name == NULL) {
-        return NULL;
-    }
-
-    for (int i = 0; i < config->denial_tracker_count; i++) {
-        if (config->denial_trackers[i].tool != NULL &&
-            strcmp(config->denial_trackers[i].tool, tool_name) == 0) {
-            return &config->denial_trackers[i];
-        }
-    }
-    return NULL;
-}
-
-static DenialTracker *get_or_create_denial_tracker(ApprovalGateConfig *config,
-                                                   const char *tool_name) {
-    if (config == NULL || tool_name == NULL) {
-        return NULL;
-    }
-
-    /* Check if tracker already exists */
-    DenialTracker *tracker = find_denial_tracker(config, tool_name);
-    if (tracker != NULL) {
-        return tracker;
-    }
-
-    /* Need to create a new tracker */
-    if (config->denial_tracker_count >= config->denial_tracker_capacity) {
-        /* Grow the array */
-        int new_capacity = config->denial_tracker_capacity * 2;
-        DenialTracker *new_trackers = realloc(config->denial_trackers,
-                                              new_capacity * sizeof(DenialTracker));
-        if (new_trackers == NULL) {
-            return NULL;
-        }
-        config->denial_trackers = new_trackers;
-        config->denial_tracker_capacity = new_capacity;
-    }
-
-    /* Initialize new tracker */
-    tracker = &config->denial_trackers[config->denial_tracker_count++];
-    memset(tracker, 0, sizeof(*tracker));
-    tracker->tool = strdup(tool_name);
-    if (tracker->tool == NULL) {
-        config->denial_tracker_count--;
-        return NULL;
-    }
-    tracker->category = get_tool_category(tool_name);
-
-    return tracker;
-}
 
 int is_rate_limited(const ApprovalGateConfig *config,
                     const ToolCall *tool_call) {
     if (config == NULL || tool_call == NULL || tool_call->name == NULL) {
         return 0;
     }
-
-    const DenialTracker *tracker = find_denial_tracker(config, tool_call->name);
-    if (tracker == NULL) {
-        return 0;
-    }
-
-    time_t now = time(NULL);
-    if (tracker->backoff_until > now) {
-        return 1; /* Still in backoff period */
-    }
-
-    return 0;
+    return rate_limiter_is_blocked(config->rate_limiter, tool_call->name);
 }
 
 void track_denial(ApprovalGateConfig *config, const ToolCall *tool_call) {
     if (config == NULL || tool_call == NULL || tool_call->name == NULL) {
         return;
     }
-
-    DenialTracker *tracker = get_or_create_denial_tracker(config, tool_call->name);
-    if (tracker == NULL) {
-        return;
-    }
-
-    time_t now = time(NULL);
-    tracker->denial_count++;
-    tracker->last_denial = now;
-
-    /* Calculate backoff based on denial count */
-    int schedule_index = tracker->denial_count - 1;
-    if (schedule_index < 0) {
-        schedule_index = 0;
-    }
-    if (schedule_index >= (int)BACKOFF_SCHEDULE_SIZE) {
-        schedule_index = BACKOFF_SCHEDULE_SIZE - 1;
-    }
-
-    int backoff_seconds = BACKOFF_SCHEDULE[schedule_index];
-    tracker->backoff_until = now + backoff_seconds;
+    rate_limiter_record_denial(config->rate_limiter, tool_call->name);
 }
 
 void reset_denial_tracker(ApprovalGateConfig *config, const char *tool) {
     if (config == NULL || tool == NULL) {
         return;
     }
-
-    DenialTracker *tracker = find_denial_tracker(config, tool);
-    if (tracker == NULL) {
-        return;
-    }
-
-    tracker->denial_count = 0;
-    tracker->last_denial = 0;
-    tracker->backoff_until = 0;
+    rate_limiter_reset(config->rate_limiter, tool);
 }
 
-int get_rate_limit_remaining(const ApprovalGateConfig *config, const char *tool) {
+int get_rate_limit_remaining(const ApprovalGateConfig *config,
+                             const char *tool) {
     if (config == NULL || tool == NULL) {
         return 0;
     }
-
-    const DenialTracker *tracker = find_denial_tracker(config, tool);
-    if (tracker == NULL) {
-        return 0;
-    }
-
-    time_t now = time(NULL);
-    if (tracker->backoff_until <= now) {
-        return 0;
-    }
-
-    return (int)(tracker->backoff_until - now);
+    return rate_limiter_get_remaining(config->rate_limiter, tool);
 }
 
 /* =============================================================================
@@ -1381,27 +1254,13 @@ static void prompt_sigint_handler(int sig) {
  * Returns allocated string or NULL if not a shell command.
  */
 static char *extract_shell_command(const ToolCall *tool_call) {
-    if (tool_call == NULL || tool_call->arguments == NULL) {
+    if (tool_call == NULL || tool_call->name == NULL) {
         return NULL;
     }
-
-    if (tool_call->name == NULL || strcmp(tool_call->name, "shell") != 0) {
+    if (strcmp(tool_call->name, "shell") != 0) {
         return NULL;
     }
-
-    cJSON *args = cJSON_Parse(tool_call->arguments);
-    if (args == NULL) {
-        return NULL;
-    }
-
-    cJSON *command_item = cJSON_GetObjectItem(args, "command");
-    char *result = NULL;
-    if (cJSON_IsString(command_item) && command_item->valuestring != NULL) {
-        result = strdup(command_item->valuestring);
-    }
-
-    cJSON_Delete(args);
-    return result;
+    return tool_args_get_command(tool_call);
 }
 
 /**
@@ -1409,29 +1268,7 @@ static char *extract_shell_command(const ToolCall *tool_call) {
  * Returns allocated string or NULL if not available.
  */
 static char *extract_file_path(const ToolCall *tool_call) {
-    if (tool_call == NULL || tool_call->arguments == NULL) {
-        return NULL;
-    }
-
-    cJSON *args = cJSON_Parse(tool_call->arguments);
-    if (args == NULL) {
-        return NULL;
-    }
-
-    /* Try common path argument names */
-    const char *path_keys[] = {"path", "file_path", "filepath", "filename", NULL};
-    char *result = NULL;
-
-    for (int i = 0; path_keys[i] != NULL; i++) {
-        cJSON *path_item = cJSON_GetObjectItem(args, path_keys[i]);
-        if (cJSON_IsString(path_item) && path_item->valuestring != NULL) {
-            result = strdup(path_item->valuestring);
-            break;
-        }
-    }
-
-    cJSON_Delete(args);
-    return result;
+    return tool_args_get_path(tool_call);
 }
 
 /**
@@ -2592,776 +2429,4 @@ int approval_gate_is_interactive(const ApprovalGateConfig *config) {
     return config->is_interactive;
 }
 
-/* =============================================================================
- * Allow Always Pattern Generation
- * ========================================================================== */
-
-/**
- * Escape a string for use in a regex pattern.
- * Returns an allocated string that must be freed by the caller.
- */
-static char *regex_escape(const char *str) {
-    if (str == NULL) {
-        return strdup("");
-    }
-
-    /* Characters that need escaping in POSIX extended regex */
-    const char *meta = "\\^$.|?*+()[]{}";
-
-    /* Calculate escaped length */
-    size_t escaped_len = 0;
-    for (const char *p = str; *p != '\0'; p++) {
-        if (strchr(meta, *p) != NULL) {
-            escaped_len += 2;  /* Backslash + char */
-        } else {
-            escaped_len += 1;
-        }
-    }
-
-    char *result = malloc(escaped_len + 1);
-    if (result == NULL) {
-        return NULL;
-    }
-
-    char *out = result;
-    for (const char *p = str; *p != '\0'; p++) {
-        if (strchr(meta, *p) != NULL) {
-            *out++ = '\\';
-        }
-        *out++ = *p;
-    }
-    *out = '\0';
-
-    return result;
-}
-
-/**
- * Check if a path is in the root directory (no directory component other than ./).
- */
-static int is_root_path(const char *path) {
-    if (path == NULL) {
-        return 0;
-    }
-
-    /* Skip leading ./ */
-    if (path[0] == '.' && path[1] == '/') {
-        path += 2;
-    }
-
-    /* If there's no remaining slash, it's a root file */
-    return strchr(path, '/') == NULL;
-}
-
-/**
- * Check if a path is in /tmp (security-sensitive, always exact match).
- */
-static int is_tmp_path(const char *path) {
-    if (path == NULL) {
-        return 0;
-    }
-    return strncmp(path, "/tmp/", 5) == 0 || strncmp(path, "/tmp", 4) == 0;
-}
-
-/**
- * Extract the directory component of a path.
- * Returns allocated string or NULL on failure.
- */
-static char *get_directory(const char *path) {
-    if (path == NULL) {
-        return NULL;
-    }
-
-    const char *last_slash = strrchr(path, '/');
-    if (last_slash == NULL) {
-        return strdup(".");
-    }
-
-    size_t dir_len = last_slash - path;
-    if (dir_len == 0) {
-        return strdup("/");
-    }
-
-    char *dir = malloc(dir_len + 1);
-    if (dir == NULL) {
-        return NULL;
-    }
-
-    memcpy(dir, path, dir_len);
-    dir[dir_len] = '\0';
-    return dir;
-}
-
-/**
- * Extract the file extension (including the dot).
- * Returns pointer to the extension within the input string, or NULL if none.
- */
-static const char *get_extension(const char *path) {
-    if (path == NULL) {
-        return NULL;
-    }
-
-    const char *last_slash = strrchr(path, '/');
-    const char *basename = last_slash ? last_slash + 1 : path;
-    const char *last_dot = strrchr(basename, '.');
-
-    /* No extension or hidden file (starts with dot) */
-    if (last_dot == NULL || last_dot == basename) {
-        return NULL;
-    }
-
-    return last_dot;
-}
-
-/**
- * Extract the basename of a path.
- * Returns pointer within the input string.
- */
-static const char *get_basename_simple(const char *path) {
-    if (path == NULL) {
-        return NULL;
-    }
-
-    const char *last_slash = strrchr(path, '/');
-    return last_slash ? last_slash + 1 : path;
-}
-
-void free_generated_pattern(GeneratedPattern *pattern) {
-    if (pattern == NULL) {
-        return;
-    }
-
-    free(pattern->pattern);
-    pattern->pattern = NULL;
-
-    if (pattern->command_prefix != NULL) {
-        for (int i = 0; i < pattern->prefix_len; i++) {
-            free(pattern->command_prefix[i]);
-        }
-        free(pattern->command_prefix);
-        pattern->command_prefix = NULL;
-    }
-    pattern->prefix_len = 0;
-
-    if (pattern->example_matches != NULL) {
-        for (int i = 0; i < pattern->example_count; i++) {
-            free(pattern->example_matches[i]);
-        }
-        free(pattern->example_matches);
-        pattern->example_matches = NULL;
-    }
-    pattern->example_count = 0;
-}
-
-int generate_file_path_pattern(const char *path, GeneratedPattern *out_pattern) {
-    if (path == NULL || out_pattern == NULL) {
-        return -1;
-    }
-
-    memset(out_pattern, 0, sizeof(*out_pattern));
-
-    /* Case 1: Root files get exact match */
-    if (is_root_path(path)) {
-        char *escaped = regex_escape(path);
-        if (escaped == NULL) {
-            return -1;
-        }
-
-        if (asprintf(&out_pattern->pattern, "^%s$", escaped) < 0) {
-            free(escaped);
-            return -1;
-        }
-        free(escaped);
-
-        out_pattern->is_exact_match = 1;
-        out_pattern->needs_confirmation = 0;
-        return 0;
-    }
-
-    /* Case 2: /tmp paths get exact match (security) */
-    if (is_tmp_path(path)) {
-        char *escaped = regex_escape(path);
-        if (escaped == NULL) {
-            return -1;
-        }
-
-        if (asprintf(&out_pattern->pattern, "^%s$", escaped) < 0) {
-            free(escaped);
-            return -1;
-        }
-        free(escaped);
-
-        out_pattern->is_exact_match = 1;
-        out_pattern->needs_confirmation = 0;
-        return 0;
-    }
-
-    /* Case 3: Regular paths - match directory and similar extensions */
-    char *dir = get_directory(path);
-    if (dir == NULL) {
-        return -1;
-    }
-
-    char *escaped_dir = regex_escape(dir);
-    free(dir);
-    if (escaped_dir == NULL) {
-        return -1;
-    }
-
-    const char *ext = get_extension(path);
-    const char *basename = get_basename_simple(path);
-
-    if (ext != NULL) {
-        /* Has extension - match directory + any file with same extension */
-        char *escaped_ext = regex_escape(ext);
-        if (escaped_ext == NULL) {
-            free(escaped_dir);
-            return -1;
-        }
-
-        /* Check if basename has a prefix pattern (e.g., test_*.c) */
-        const char *underscore = strchr(basename, '_');
-        if (underscore != NULL && underscore < ext) {
-            /* Has prefix pattern like "test_" - include it */
-            size_t prefix_len = underscore - basename + 1;
-            char *prefix = malloc(prefix_len + 1);
-            if (prefix == NULL) {
-                free(escaped_dir);
-                free(escaped_ext);
-                return -1;
-            }
-            memcpy(prefix, basename, prefix_len);
-            prefix[prefix_len] = '\0';
-
-            char *escaped_prefix = regex_escape(prefix);
-            free(prefix);
-            if (escaped_prefix == NULL) {
-                free(escaped_dir);
-                free(escaped_ext);
-                return -1;
-            }
-
-            if (asprintf(&out_pattern->pattern, "^%s/%s.*%s$",
-                         escaped_dir, escaped_prefix, escaped_ext) < 0) {
-                free(escaped_dir);
-                free(escaped_ext);
-                free(escaped_prefix);
-                return -1;
-            }
-            free(escaped_prefix);
-        } else {
-            /* No prefix pattern - match any file in directory with same extension */
-            if (asprintf(&out_pattern->pattern, "^%s/.*%s$",
-                         escaped_dir, escaped_ext) < 0) {
-                free(escaped_dir);
-                free(escaped_ext);
-                return -1;
-            }
-        }
-        free(escaped_ext);
-
-        out_pattern->is_exact_match = 0;
-        out_pattern->needs_confirmation = 1;
-
-        /* Generate example matches (failures here are non-fatal) */
-        out_pattern->example_matches = calloc(3, sizeof(char *));
-        if (out_pattern->example_matches != NULL) {
-            dir = get_directory(path);
-            if (dir != NULL) {
-                /* asprintf returns -1 on failure; glibc sets ptr to NULL but
-                 * POSIX doesn't guarantee this, so we explicitly set on failure */
-                if (asprintf(&out_pattern->example_matches[0], "%s/foo%s", dir, ext) < 0) {
-                    out_pattern->example_matches[0] = NULL;
-                }
-                if (asprintf(&out_pattern->example_matches[1], "%s/bar%s", dir, ext) < 0) {
-                    out_pattern->example_matches[1] = NULL;
-                }
-                if (asprintf(&out_pattern->example_matches[2], "%s/other%s", dir, ext) < 0) {
-                    out_pattern->example_matches[2] = NULL;
-                }
-                out_pattern->example_count = 3;
-                free(dir);
-            }
-        }
-    } else {
-        /* No extension - exact match only */
-        char *escaped = regex_escape(path);
-        free(escaped_dir);
-        if (escaped == NULL) {
-            return -1;
-        }
-
-        if (asprintf(&out_pattern->pattern, "^%s$", escaped) < 0) {
-            free(escaped);
-            return -1;
-        }
-        free(escaped);
-
-        out_pattern->is_exact_match = 1;
-        out_pattern->needs_confirmation = 0;
-        return 0;
-    }
-
-    free(escaped_dir);
-    return 0;
-}
-
-int generate_shell_command_pattern(const char *command, GeneratedPattern *out_pattern) {
-    if (command == NULL || out_pattern == NULL) {
-        return -1;
-    }
-
-    memset(out_pattern, 0, sizeof(*out_pattern));
-
-    /* Parse the shell command */
-    ParsedShellCommand *parsed = parse_shell_command(command);
-    if (parsed == NULL) {
-        return -1;
-    }
-
-    /* Commands with chain operators, pipes, subshells, redirects, or dangerous patterns
-     * cannot have patterns generated - they require exact approval each time */
-    if (!shell_command_is_safe_for_matching(parsed)) {
-        /* Return empty pattern - caller should handle this as "no pattern possible" */
-        free_parsed_shell_command(parsed);
-        out_pattern->is_exact_match = 1;  /* Can only approve this exact command */
-        out_pattern->needs_confirmation = 0;
-        return 0;
-    }
-
-    /* Generate command prefix: base command + first argument */
-    int prefix_len = parsed->token_count >= 2 ? 2 : parsed->token_count;
-    if (prefix_len <= 0) {
-        free_parsed_shell_command(parsed);
-        return -1;
-    }
-
-    out_pattern->command_prefix = calloc(prefix_len, sizeof(char *));
-    if (out_pattern->command_prefix == NULL) {
-        free_parsed_shell_command(parsed);
-        return -1;
-    }
-
-    for (int i = 0; i < prefix_len; i++) {
-        out_pattern->command_prefix[i] = strdup(parsed->tokens[i]);
-        if (out_pattern->command_prefix[i] == NULL) {
-            /* Cleanup on failure */
-            for (int j = 0; j < i; j++) {
-                free(out_pattern->command_prefix[j]);
-            }
-            free(out_pattern->command_prefix);
-            out_pattern->command_prefix = NULL;
-            free_parsed_shell_command(parsed);
-            return -1;
-        }
-    }
-    out_pattern->prefix_len = prefix_len;
-
-    /* If command has more than 2 tokens, pattern is broader than exact match */
-    if (parsed->token_count > prefix_len) {
-        out_pattern->is_exact_match = 0;
-        out_pattern->needs_confirmation = 1;
-
-        /* Generate example matches (failures here are non-fatal) */
-        out_pattern->example_matches = calloc(3, sizeof(char *));
-        if (out_pattern->example_matches != NULL) {
-            if (prefix_len == 1) {
-                if (asprintf(&out_pattern->example_matches[0], "%s --help", parsed->tokens[0]) < 0) {
-                    out_pattern->example_matches[0] = NULL;
-                }
-                if (asprintf(&out_pattern->example_matches[1], "%s -v", parsed->tokens[0]) < 0) {
-                    out_pattern->example_matches[1] = NULL;
-                }
-                if (asprintf(&out_pattern->example_matches[2], "%s <any args>", parsed->tokens[0]) < 0) {
-                    out_pattern->example_matches[2] = NULL;
-                }
-            } else {
-                if (asprintf(&out_pattern->example_matches[0], "%s %s <any args>",
-                             parsed->tokens[0], parsed->tokens[1]) < 0) {
-                    out_pattern->example_matches[0] = NULL;
-                }
-                if (asprintf(&out_pattern->example_matches[1], "%s %s -v",
-                             parsed->tokens[0], parsed->tokens[1]) < 0) {
-                    out_pattern->example_matches[1] = NULL;
-                }
-                if (asprintf(&out_pattern->example_matches[2], "%s %s --all",
-                             parsed->tokens[0], parsed->tokens[1]) < 0) {
-                    out_pattern->example_matches[2] = NULL;
-                }
-            }
-            out_pattern->example_count = 3;
-        }
-    } else {
-        out_pattern->is_exact_match = 1;
-        out_pattern->needs_confirmation = 0;
-    }
-
-    free_parsed_shell_command(parsed);
-    return 0;
-}
-
-int generate_network_url_pattern(const char *url, GeneratedPattern *out_pattern) {
-    if (url == NULL || out_pattern == NULL) {
-        return -1;
-    }
-
-    memset(out_pattern, 0, sizeof(*out_pattern));
-
-    /* Parse URL: extract scheme and hostname */
-    const char *scheme_end = strstr(url, "://");
-    if (scheme_end == NULL) {
-        /* Invalid URL format - return exact match */
-        char *escaped = regex_escape(url);
-        if (escaped == NULL) {
-            return -1;
-        }
-        if (asprintf(&out_pattern->pattern, "^%s$", escaped) < 0) {
-            free(escaped);
-            return -1;
-        }
-        free(escaped);
-        out_pattern->is_exact_match = 1;
-        out_pattern->needs_confirmation = 0;
-        return 0;
-    }
-
-    /* Extract scheme */
-    size_t scheme_len = scheme_end - url;
-    char *scheme = malloc(scheme_len + 1);
-    if (scheme == NULL) {
-        return -1;
-    }
-    memcpy(scheme, url, scheme_len);
-    scheme[scheme_len] = '\0';
-
-    /* Find hostname (ends at first / or : after ://) */
-    const char *host_start = scheme_end + 3;
-    const char *host_end = host_start;
-    while (*host_end != '\0' && *host_end != '/' && *host_end != ':' && *host_end != '?') {
-        host_end++;
-    }
-
-    size_t host_len = host_end - host_start;
-    if (host_len == 0) {
-        free(scheme);
-        return -1;
-    }
-
-    char *hostname = malloc(host_len + 1);
-    if (hostname == NULL) {
-        free(scheme);
-        return -1;
-    }
-    memcpy(hostname, host_start, host_len);
-    hostname[host_len] = '\0';
-
-    /* Escape scheme and hostname for regex */
-    char *escaped_scheme = regex_escape(scheme);
-    char *escaped_hostname = regex_escape(hostname);
-    free(scheme);
-    free(hostname);
-
-    if (escaped_scheme == NULL || escaped_hostname == NULL) {
-        free(escaped_scheme);
-        free(escaped_hostname);
-        return -1;
-    }
-
-    /* Generate pattern: ^scheme://hostname(/|$)
-     * This requires either a path separator or end-of-string after hostname,
-     * preventing subdomain spoofing like api.example.com.evil.com */
-    if (asprintf(&out_pattern->pattern, "^%s://%s(/|$)",
-                 escaped_scheme, escaped_hostname) < 0) {
-        free(escaped_scheme);
-        free(escaped_hostname);
-        return -1;
-    }
-
-    free(escaped_scheme);
-    free(escaped_hostname);
-
-    out_pattern->is_exact_match = 0;
-    out_pattern->needs_confirmation = 1;
-
-    /* Generate example matches (failures here are non-fatal) */
-    out_pattern->example_matches = calloc(3, sizeof(char *));
-    if (out_pattern->example_matches != NULL) {
-        /* Reconstruct base URL for examples */
-        const char *base_end = host_end;
-        size_t base_len = base_end - url;
-        char *base_url = malloc(base_len + 1);
-        if (base_url != NULL) {
-            memcpy(base_url, url, base_len);
-            base_url[base_len] = '\0';
-
-            if (asprintf(&out_pattern->example_matches[0], "%s/any/path", base_url) < 0) {
-                out_pattern->example_matches[0] = NULL;
-            }
-            if (asprintf(&out_pattern->example_matches[1], "%s/api/v1", base_url) < 0) {
-                out_pattern->example_matches[1] = NULL;
-            }
-            if (asprintf(&out_pattern->example_matches[2], "%s", base_url) < 0) {
-                out_pattern->example_matches[2] = NULL;
-            }
-            out_pattern->example_count = 3;
-            free(base_url);
-        }
-    }
-
-    return 0;
-}
-
-int generate_allowlist_pattern(const ToolCall *tool_call, GeneratedPattern *out_pattern) {
-    if (tool_call == NULL || tool_call->name == NULL || out_pattern == NULL) {
-        return -1;
-    }
-
-    memset(out_pattern, 0, sizeof(*out_pattern));
-
-    GateCategory category = get_tool_category(tool_call->name);
-
-    switch (category) {
-        case GATE_CATEGORY_SHELL: {
-            /* Extract command from arguments */
-            if (tool_call->arguments == NULL) {
-                return -1;
-            }
-            cJSON *args = cJSON_Parse(tool_call->arguments);
-            if (args == NULL) {
-                return -1;
-            }
-            cJSON *cmd_item = cJSON_GetObjectItem(args, "command");
-            if (!cJSON_IsString(cmd_item) || cmd_item->valuestring == NULL) {
-                cJSON_Delete(args);
-                return -1;
-            }
-            int result = generate_shell_command_pattern(cmd_item->valuestring, out_pattern);
-            cJSON_Delete(args);
-            return result;
-        }
-
-        case GATE_CATEGORY_NETWORK: {
-            /* Extract URL from arguments */
-            if (tool_call->arguments == NULL) {
-                return -1;
-            }
-            cJSON *args = cJSON_Parse(tool_call->arguments);
-            if (args == NULL) {
-                return -1;
-            }
-            cJSON *url_item = cJSON_GetObjectItem(args, "url");
-            if (!cJSON_IsString(url_item) || url_item->valuestring == NULL) {
-                cJSON_Delete(args);
-                return -1;
-            }
-            int result = generate_network_url_pattern(url_item->valuestring, out_pattern);
-            cJSON_Delete(args);
-            return result;
-        }
-
-        case GATE_CATEGORY_FILE_WRITE:
-        case GATE_CATEGORY_FILE_READ: {
-            /* Extract path from arguments */
-            if (tool_call->arguments == NULL) {
-                return -1;
-            }
-            cJSON *args = cJSON_Parse(tool_call->arguments);
-            if (args == NULL) {
-                return -1;
-            }
-            /* Try common path argument names */
-            cJSON *path_item = cJSON_GetObjectItem(args, "path");
-            if (!cJSON_IsString(path_item)) {
-                path_item = cJSON_GetObjectItem(args, "file_path");
-            }
-            if (!cJSON_IsString(path_item)) {
-                path_item = cJSON_GetObjectItem(args, "filepath");
-            }
-            if (!cJSON_IsString(path_item) || path_item->valuestring == NULL) {
-                cJSON_Delete(args);
-                return -1;
-            }
-            int result = generate_file_path_pattern(path_item->valuestring, out_pattern);
-            cJSON_Delete(args);
-            return result;
-        }
-
-        default:
-            /* For other categories, generate exact match on full arguments */
-            if (tool_call->arguments != NULL) {
-                char *escaped = regex_escape(tool_call->arguments);
-                if (escaped == NULL) {
-                    return -1;
-                }
-                if (asprintf(&out_pattern->pattern, "^%s$", escaped) < 0) {
-                    free(escaped);
-                    return -1;
-                }
-                free(escaped);
-            }
-            out_pattern->is_exact_match = 1;
-            out_pattern->needs_confirmation = 0;
-            return 0;
-    }
-}
-
-PatternConfirmResult confirm_pattern_scope(const GeneratedPattern *pattern,
-                                           const char *original_value,
-                                           char **out_edited) {
-    if (pattern == NULL || original_value == NULL) {
-        return PATTERN_CANCELLED;
-    }
-
-    /* If pattern doesn't need confirmation, just confirm it */
-    if (!pattern->needs_confirmation) {
-        return PATTERN_CONFIRMED;
-    }
-
-    /* Check if we have a TTY */
-    if (!isatty(STDIN_FILENO)) {
-        /* No TTY - can't get user input, use exact match */
-        return PATTERN_EXACT_ONLY;
-    }
-
-    /* Display confirmation dialog */
-    fprintf(stderr, "\n");
-    fprintf(stderr, "┌─ Pattern Confirmation ───────────────────────────────────────┐\n");
-    fprintf(stderr, "│                                                              │\n");
-    fprintf(stderr, "│  This will allow future operations matching:                 │\n");
-
-    if (pattern->pattern != NULL) {
-        /* Regex pattern - truncate if too long */
-        char pattern_display[52];
-        size_t pattern_len = strlen(pattern->pattern);
-        if (pattern_len <= 48) {
-            snprintf(pattern_display, sizeof(pattern_display), "%s", pattern->pattern);
-        } else {
-            snprintf(pattern_display, sizeof(pattern_display), "%.45s...", pattern->pattern);
-        }
-        fprintf(stderr, "│  Pattern: %-50s │\n", pattern_display);
-    } else if (pattern->command_prefix != NULL && pattern->prefix_len > 0) {
-        /* Shell command prefix */
-        char cmd_display[52];
-        int pos = 0;
-        for (int i = 0; i < pattern->prefix_len && pos < 48; i++) {
-            if (i > 0) {
-                cmd_display[pos++] = ' ';
-            }
-            size_t token_len = strlen(pattern->command_prefix[i]);
-            if (pos + token_len < 48) {
-                memcpy(cmd_display + pos, pattern->command_prefix[i], token_len);
-                pos += token_len;
-            }
-        }
-        cmd_display[pos] = '\0';
-        fprintf(stderr, "│  Command: %-50s │\n", cmd_display);
-    }
-
-    fprintf(stderr, "│                                                              │\n");
-
-    /* Show example matches */
-    if (pattern->example_matches != NULL && pattern->example_count > 0) {
-        fprintf(stderr, "│  Example matches:                                            │\n");
-        for (int i = 0; i < pattern->example_count && i < 3; i++) {
-            if (pattern->example_matches[i] != NULL) {
-                char example_display[54];
-                size_t ex_len = strlen(pattern->example_matches[i]);
-                if (ex_len <= 50) {
-                    snprintf(example_display, sizeof(example_display), "%s",
-                             pattern->example_matches[i]);
-                } else {
-                    snprintf(example_display, sizeof(example_display), "%.47s...",
-                             pattern->example_matches[i]);
-                }
-                fprintf(stderr, "│    %-54s │\n", example_display);
-            }
-        }
-        fprintf(stderr, "│                                                              │\n");
-    }
-
-    fprintf(stderr, "│  [y] Confirm  [e] Edit pattern  [x] Exact match only         │\n");
-    fprintf(stderr, "│                                                              │\n");
-    fprintf(stderr, "└──────────────────────────────────────────────────────────────┘\n");
-    fprintf(stderr, "> ");
-    fflush(stderr);
-
-    /* Read user response */
-    int response = read_single_keypress();
-    fprintf(stderr, "\n");
-
-    if (response < 0) {
-        return PATTERN_CANCELLED;
-    }
-
-    switch (tolower(response)) {
-        case 'y':
-            return PATTERN_CONFIRMED;
-
-        case 'x':
-            return PATTERN_EXACT_ONLY;
-
-        case 'e':
-            /* Read edited pattern from user */
-            fprintf(stderr, "Enter pattern (Ctrl+C to cancel): ");
-            fflush(stderr);
-
-            char buf[1024];
-            if (fgets(buf, sizeof(buf), stdin) == NULL) {
-                return PATTERN_CANCELLED;
-            }
-
-            /* Remove trailing newline */
-            size_t len = strlen(buf);
-            if (len > 0 && buf[len - 1] == '\n') {
-                buf[len - 1] = '\0';
-            }
-
-            if (out_edited != NULL) {
-                *out_edited = strdup(buf);
-            }
-            return PATTERN_EDITED;
-
-        case 3: /* Ctrl+C */
-        case 4: /* Ctrl+D */
-            return PATTERN_CANCELLED;
-
-        default:
-            /* Invalid input - default to exact match */
-            fprintf(stderr, "Invalid input. Using exact match.\n");
-            return PATTERN_EXACT_ONLY;
-    }
-}
-
-int apply_generated_pattern(ApprovalGateConfig *config,
-                            const char *tool_name,
-                            const GeneratedPattern *pattern) {
-    if (config == NULL || tool_name == NULL || pattern == NULL) {
-        return -1;
-    }
-
-    /* A GeneratedPattern should have either command_prefix (for shell) OR
-     * pattern (for other tools), but not both. If both are set, prefer
-     * command_prefix since that's more specific for shell commands. */
-    int has_prefix = (pattern->command_prefix != NULL && pattern->prefix_len > 0);
-    int has_regex = (pattern->pattern != NULL);
-
-    /* If neither is set, this is an invalid/empty pattern */
-    if (!has_prefix && !has_regex) {
-        return -1;
-    }
-
-    /* For shell commands, add to shell allowlist */
-    if (has_prefix) {
-        return approval_gate_add_shell_allowlist(
-            config,
-            (const char **)pattern->command_prefix,
-            pattern->prefix_len,
-            SHELL_TYPE_UNKNOWN);
-    }
-
-    /* For other tools, add regex pattern */
-    if (has_regex) {
-        return approval_gate_add_allowlist(config, tool_name, pattern->pattern);
-    }
-
-    return -1;
-}
+/* Pattern generation functions are implemented in pattern_generator.c */

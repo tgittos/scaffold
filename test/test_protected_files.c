@@ -3,8 +3,8 @@
  */
 
 #include "../test/unity/unity.h"
-#include "../src/core/protected_files.h"
-#include "../src/core/path_normalize.h"
+#include "../src/policy/protected_files.h"
+#include "../src/policy/path_normalize.h"
 
 #include <stdio.h>
 #include <stdlib.h>

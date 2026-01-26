@@ -40,25 +40,32 @@ $(eval $(call def_test,document_chunker,test_document_chunker,$(SRCDIR)/utils/do
 $(eval $(call def_test,streaming,network/test_streaming,$(SRCDIR)/network/streaming.c))
 $(eval $(call def_test,darray,test_darray,))
 $(eval $(call def_test,ptrarray,test_ptrarray,))
+$(eval $(call def_test,rate_limiter,test_rate_limiter,$(SRCDIR)/policy/rate_limiter.c))
+$(eval $(call def_test,allowlist,test_allowlist,$(SRCDIR)/policy/allowlist.c $(SRCDIR)/policy/shell_parser.c $(SRCDIR)/policy/shell_parser_cmd.c $(SRCDIR)/policy/shell_parser_ps.c))
 # Gate dependencies (used by multiple gate-related tests)
 GATE_DEPS := \
-    $(SRCDIR)/core/approval_gate.c \
-    $(SRCDIR)/core/atomic_file.c \
-    $(SRCDIR)/core/shell_parser.c \
-    $(SRCDIR)/core/shell_parser_cmd.c \
-    $(SRCDIR)/core/shell_parser_ps.c \
-    $(SRCDIR)/core/subagent_approval.c \
+    $(SRCDIR)/policy/allowlist.c \
+    $(SRCDIR)/policy/approval_gate.c \
+    $(SRCDIR)/policy/atomic_file.c \
+    $(SRCDIR)/policy/gate_prompter.c \
+    $(SRCDIR)/policy/pattern_generator.c \
+    $(SRCDIR)/policy/rate_limiter.c \
+    $(SRCDIR)/policy/shell_parser.c \
+    $(SRCDIR)/policy/shell_parser_cmd.c \
+    $(SRCDIR)/policy/shell_parser_ps.c \
+    $(SRCDIR)/policy/subagent_approval.c \
+    $(SRCDIR)/policy/tool_args.c \
     $(SRCDIR)/utils/debug_output.c \
     $(SRCDIR)/utils/ralph_home.c \
     $(TESTDIR)/stubs/subagent_stub.c
 
 $(eval $(call def_test,approval_gate,test_approval_gate,$(GATE_DEPS)))
-$(eval $(call def_test,atomic_file,test_atomic_file,$(SRCDIR)/core/atomic_file.c))
-$(eval $(call def_test,path_normalize,test_path_normalize,$(SRCDIR)/core/path_normalize.c))
-$(eval $(call def_test,protected_files,test_protected_files,$(SRCDIR)/core/protected_files.c $(SRCDIR)/core/path_normalize.c))
-$(eval $(call def_test,shell_parser,test_shell_parser,$(SRCDIR)/core/shell_parser.c $(SRCDIR)/core/shell_parser_cmd.c $(SRCDIR)/core/shell_parser_ps.c))
-$(eval $(call def_test,shell_parser_cmd,test_shell_parser_cmd,$(SRCDIR)/core/shell_parser_cmd.c $(SRCDIR)/core/shell_parser.c $(SRCDIR)/core/shell_parser_ps.c))
-$(eval $(call def_test,shell_parser_ps,test_shell_parser_ps,$(SRCDIR)/core/shell_parser_ps.c $(SRCDIR)/core/shell_parser.c $(SRCDIR)/core/shell_parser_cmd.c))
+$(eval $(call def_test,atomic_file,test_atomic_file,$(SRCDIR)/policy/atomic_file.c))
+$(eval $(call def_test,path_normalize,test_path_normalize,$(SRCDIR)/policy/path_normalize.c))
+$(eval $(call def_test,protected_files,test_protected_files,$(SRCDIR)/policy/protected_files.c $(SRCDIR)/policy/path_normalize.c))
+$(eval $(call def_test,shell_parser,test_shell_parser,$(SRCDIR)/policy/shell_parser.c $(SRCDIR)/policy/shell_parser_cmd.c $(SRCDIR)/policy/shell_parser_ps.c))
+$(eval $(call def_test,shell_parser_cmd,test_shell_parser_cmd,$(SRCDIR)/policy/shell_parser_cmd.c $(SRCDIR)/policy/shell_parser.c $(SRCDIR)/policy/shell_parser_ps.c))
+$(eval $(call def_test,shell_parser_ps,test_shell_parser_ps,$(SRCDIR)/policy/shell_parser_ps.c $(SRCDIR)/policy/shell_parser.c $(SRCDIR)/policy/shell_parser_cmd.c))
 $(eval $(call def_test,subagent_approval,test_subagent_approval,$(GATE_DEPS)))
 
 $(TEST_main_TARGET): $(TEST_main_OBJECTS)
@@ -89,6 +96,12 @@ $(TEST_darray_TARGET): $(TEST_darray_OBJECTS)
 	$(CC) -o $@ $^
 
 $(TEST_ptrarray_TARGET): $(TEST_ptrarray_OBJECTS)
+	$(CC) -o $@ $^
+
+$(TEST_rate_limiter_TARGET): $(TEST_rate_limiter_OBJECTS)
+	$(CC) -o $@ $^
+
+$(TEST_allowlist_TARGET): $(TEST_allowlist_OBJECTS)
 	$(CC) -o $@ $^
 
 $(TEST_approval_gate_TARGET): $(TEST_approval_gate_OBJECTS) $(CJSON_LIB)
@@ -295,7 +308,7 @@ $(TEST_document_store_TARGET): $(TEST_document_store_OBJECTS) $(ALL_LIBS)
 
 TEST_EXECUTION_ORDER := \
     $(TEST_main_TARGET) $(TEST_cli_flags_TARGET) $(TEST_darray_TARGET) $(TEST_ptrarray_TARGET) \
-    $(TEST_ralph_home_TARGET) $(TEST_http_TARGET) $(TEST_http_retry_TARGET) \
+    $(TEST_rate_limiter_TARGET) $(TEST_allowlist_TARGET) $(TEST_ralph_home_TARGET) $(TEST_http_TARGET) $(TEST_http_retry_TARGET) \
     $(TEST_streaming_TARGET) $(TEST_openai_streaming_TARGET) $(TEST_anthropic_streaming_TARGET) \
     $(TEST_env_TARGET) $(TEST_output_TARGET) $(TEST_prompt_TARGET) $(TEST_debug_output_TARGET) \
     $(TEST_conversation_TARGET) $(TEST_conversation_vdb_TARGET) $(TEST_tools_TARGET) \
@@ -326,7 +339,7 @@ check: test
 # Excluded: HTTP (network), Python (embedded stdlib), subagent (fork/exec)
 VALGRIND_TESTS := \
     $(TEST_main_TARGET) $(TEST_cli_flags_TARGET) $(TEST_darray_TARGET) $(TEST_ptrarray_TARGET) \
-    $(TEST_ralph_home_TARGET) $(TEST_http_retry_TARGET) $(TEST_streaming_TARGET) \
+    $(TEST_rate_limiter_TARGET) $(TEST_allowlist_TARGET) $(TEST_ralph_home_TARGET) $(TEST_http_retry_TARGET) $(TEST_streaming_TARGET) \
     $(TEST_openai_streaming_TARGET) $(TEST_anthropic_streaming_TARGET) $(TEST_env_TARGET) \
     $(TEST_output_TARGET) $(TEST_prompt_TARGET) $(TEST_conversation_TARGET) \
     $(TEST_conversation_vdb_TARGET) $(TEST_tools_TARGET) $(TEST_ralph_TARGET) \

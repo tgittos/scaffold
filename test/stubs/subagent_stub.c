@@ -4,7 +4,7 @@
  * running as a subagent.
  */
 
-#include "core/approval_gate.h"
+#include "policy/approval_gate.h"
 
 /**
  * Stub implementation of subagent_get_approval_channel().

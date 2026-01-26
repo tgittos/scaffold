@@ -3,7 +3,7 @@
  */
 
 #include "../test/unity/unity.h"
-#include "../src/core/path_normalize.h"
+#include "../src/policy/path_normalize.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

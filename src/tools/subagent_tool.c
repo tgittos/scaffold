@@ -1,7 +1,7 @@
 #include "subagent_tool.h"
 #include "../utils/config.h"
 #include "../core/ralph.h"
-#include "../core/subagent_approval.h"
+#include "../policy/subagent_approval.h"
 #include "../session/conversation_tracker.h"
 #include <cJSON.h>
 #include <errno.h>

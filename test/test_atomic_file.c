@@ -5,7 +5,7 @@
  */
 
 #include "../test/unity/unity.h"
-#include "../src/core/atomic_file.h"
+#include "../src/policy/atomic_file.h"
 
 #include <errno.h>
 #include <fcntl.h>

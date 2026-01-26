@@ -8,14 +8,6 @@ CORE_SOURCES := \
     $(SRCDIR)/core/streaming_handler.c \
     $(SRCDIR)/core/context_enhancement.c \
     $(SRCDIR)/core/recap.c \
-    $(SRCDIR)/core/approval_gate.c \
-    $(SRCDIR)/core/atomic_file.c \
-    $(SRCDIR)/core/path_normalize.c \
-    $(SRCDIR)/core/protected_files.c \
-    $(SRCDIR)/core/shell_parser.c \
-    $(SRCDIR)/core/shell_parser_cmd.c \
-    $(SRCDIR)/core/shell_parser_ps.c \
-    $(SRCDIR)/core/subagent_approval.c \
     $(SRCDIR)/network/http_client.c \
     $(SRCDIR)/network/embedded_cacert.c \
     $(SRCDIR)/network/streaming.c \
@@ -36,6 +28,22 @@ CORE_SOURCES := \
     $(SRCDIR)/session/session_manager.c \
     $(SRCDIR)/session/token_manager.c \
     $(SRCDIR)/llm/llm_provider.c
+
+# Policy module (approval gates, shell parsing, protected files)
+POLICY_SOURCES := \
+    $(SRCDIR)/policy/allowlist.c \
+    $(SRCDIR)/policy/approval_gate.c \
+    $(SRCDIR)/policy/atomic_file.c \
+    $(SRCDIR)/policy/gate_prompter.c \
+    $(SRCDIR)/policy/path_normalize.c \
+    $(SRCDIR)/policy/pattern_generator.c \
+    $(SRCDIR)/policy/protected_files.c \
+    $(SRCDIR)/policy/rate_limiter.c \
+    $(SRCDIR)/policy/shell_parser.c \
+    $(SRCDIR)/policy/shell_parser_cmd.c \
+    $(SRCDIR)/policy/shell_parser_ps.c \
+    $(SRCDIR)/policy/subagent_approval.c \
+    $(SRCDIR)/policy/tool_args.c
 
 # Tool system
 TOOL_SOURCES := \
@@ -97,7 +105,7 @@ UTILS_EXTRA_SOURCES := \
 CLI_SOURCES := $(SRCDIR)/cli/memory_commands.c
 
 # Combined sources
-C_SOURCES := $(CORE_SOURCES) $(TOOL_SOURCES) $(MCP_SOURCES) $(PROVIDER_SOURCES) \
+C_SOURCES := $(CORE_SOURCES) $(POLICY_SOURCES) $(TOOL_SOURCES) $(MCP_SOURCES) $(PROVIDER_SOURCES) \
     $(MODEL_SOURCES) $(DB_C_SOURCES) $(PDF_SOURCES) $(CLI_SOURCES) $(UTILS_EXTRA_SOURCES)
 CPP_SOURCES := $(DB_CPP_SOURCES)
 SOURCES := $(C_SOURCES) $(CPP_SOURCES)
@@ -136,12 +144,17 @@ RALPH_CORE_DEPS := \
     $(SRCDIR)/core/streaming_handler.c \
     $(SRCDIR)/core/context_enhancement.c \
     $(SRCDIR)/core/recap.c \
-    $(SRCDIR)/core/approval_gate.c \
-    $(SRCDIR)/core/subagent_approval.c \
-    $(SRCDIR)/core/atomic_file.c \
-    $(SRCDIR)/core/shell_parser.c \
-    $(SRCDIR)/core/shell_parser_cmd.c \
-    $(SRCDIR)/core/shell_parser_ps.c \
+    $(SRCDIR)/policy/allowlist.c \
+    $(SRCDIR)/policy/approval_gate.c \
+    $(SRCDIR)/policy/subagent_approval.c \
+    $(SRCDIR)/policy/atomic_file.c \
+    $(SRCDIR)/policy/gate_prompter.c \
+    $(SRCDIR)/policy/pattern_generator.c \
+    $(SRCDIR)/policy/rate_limiter.c \
+    $(SRCDIR)/policy/shell_parser.c \
+    $(SRCDIR)/policy/shell_parser_cmd.c \
+    $(SRCDIR)/policy/shell_parser_ps.c \
+    $(SRCDIR)/policy/tool_args.c \
     $(SRCDIR)/utils/env_loader.c \
     $(SRCDIR)/utils/prompt_loader.c \
     $(SRCDIR)/session/conversation_tracker.c \
