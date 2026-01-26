@@ -55,6 +55,10 @@ void test_help_long_flag(void) {
     TEST_ASSERT_NOT_NULL(strstr(output, "--no-stream"));
     TEST_ASSERT_NOT_NULL(strstr(output, "--json"));
     TEST_ASSERT_NOT_NULL(strstr(output, "--home"));
+    // Approval gate CLI flags
+    TEST_ASSERT_NOT_NULL(strstr(output, "--yolo"));
+    TEST_ASSERT_NOT_NULL(strstr(output, "--allow"));
+    TEST_ASSERT_NOT_NULL(strstr(output, "--allow-category"));
 }
 
 void test_help_short_flag(void) {
