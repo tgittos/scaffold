@@ -154,11 +154,13 @@ typedef struct {
     AllowlistEntry *allowlist;
     int allowlist_count;
     int allowlist_capacity;
+    int static_allowlist_count;     /* Count of entries from config file (for inheritance) */
 
     /* Shell-specific allowlist (command prefix matching) */
     ShellAllowEntry *shell_allowlist;
     int shell_allowlist_count;
     int shell_allowlist_capacity;
+    int static_shell_allowlist_count; /* Count of entries from config file (for inheritance) */
 
     /* Denial rate limiting */
     DenialTracker *denial_trackers;

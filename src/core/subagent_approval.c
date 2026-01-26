@@ -29,6 +29,7 @@
 #include <unistd.h>
 
 #include "../utils/debug_output.h"
+#include "../tools/subagent_tool.h"
 
 /* =============================================================================
  * Debug Macros
@@ -469,6 +470,11 @@ ApprovalResult subagent_request_approval(const ApprovalChannel *channel,
  * request pipe. It reads the request, prompts the user via TTY, and sends
  * the response back to the subagent.
  *
+ * For nested subagents: If this process is also a subagent (has its own
+ * approval channel to a grandparent), we forward the request up the chain
+ * instead of prompting the TTY directly. This ensures all approval prompts
+ * go to the root process which owns the TTY.
+ *
  * @param config Parent's gate configuration (may be modified if ALLOWED_ALWAYS)
  * @param channel IPC channel to subagent
  */
@@ -497,27 +503,39 @@ void handle_subagent_approval_request(ApprovalGateConfig *config,
     }
     free(request_str);
 
-    /* Display prompt to user (parent owns TTY) */
-    printf("\n");
-    printf("┌─ Subagent Approval Required ─────────────────────────────────┐\n");
-    printf("│  PID: %-55d│\n", channel->subagent_pid);
-    printf("│  Tool: %-54s│\n", req.tool_name ? req.tool_name : "[unknown]");
-    printf("│  %-61s│\n", req.display_summary ? req.display_summary : "");
-    printf("│                                                               │\n");
-    printf("│  [y] Allow  [n] Deny  [a] Allow always  [?] Details           │\n");
-    printf("└───────────────────────────────────────────────────────────────┘\n");
-    fflush(stdout);
-
-    /* Create a synthetic ToolCall for prompting */
+    /* Create a synthetic ToolCall for approval checking */
     ToolCall synthetic_call = {
         .name = req.tool_name,
         .arguments = req.arguments_json,
         .id = "subagent-synthetic"
     };
 
-    /* Get user response using the standard prompt mechanism */
     ApprovedPath approved_path = {0};
-    ApprovalResult result = approval_gate_prompt(config, &synthetic_call, &approved_path);
+    ApprovalResult result;
+
+    /* Check if we're a nested subagent - if so, forward to our parent */
+    ApprovalChannel *our_channel = subagent_get_approval_channel();
+    if (our_channel != NULL) {
+        /* We're a subagent ourselves - forward the request up the chain.
+         * The root process will prompt the TTY and send the response back.
+         * The response will propagate back down through each level. */
+        DEBUG_PRINT("Nested subagent: forwarding request to grandparent");
+        result = subagent_request_approval(our_channel, &synthetic_call, &approved_path);
+    } else {
+        /* We're the root process - display prompt and get user response */
+        printf("\n");
+        printf("┌─ Subagent Approval Required ─────────────────────────────────┐\n");
+        printf("│  PID: %-55d│\n", channel->subagent_pid);
+        printf("│  Tool: %-54s│\n", req.tool_name ? req.tool_name : "[unknown]");
+        printf("│  %-61s│\n", req.display_summary ? req.display_summary : "");
+        printf("│                                                               │\n");
+        printf("│  [y] Allow  [n] Deny  [a] Allow always  [?] Details           │\n");
+        printf("└───────────────────────────────────────────────────────────────┘\n");
+        fflush(stdout);
+
+        /* Get user response using the standard prompt mechanism */
+        result = approval_gate_prompt(config, &synthetic_call, &approved_path);
+    }
 
     /* Build the response */
     ApprovalResponse resp = {
@@ -532,7 +550,8 @@ void handle_subagent_approval_request(ApprovalGateConfig *config,
         if (generate_allowlist_pattern(&synthetic_call, &gen_pattern) == 0) {
             if (gen_pattern.pattern != NULL) {
                 resp.pattern = strdup(gen_pattern.pattern);
-                /* Pattern is already applied to config by approval_gate_prompt */
+                /* Pattern is already applied to config by approval_gate_prompt
+                 * (or was applied by root if we forwarded) */
             }
             free_generated_pattern(&gen_pattern);
         }

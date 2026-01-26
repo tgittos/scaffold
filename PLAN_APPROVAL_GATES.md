@@ -148,9 +148,9 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 - [x] **Modify `spawn_subagent_with_approval()` in subagent_tool.c** - Create request/response pipes before fork. Child closes parent ends, sets up `ApprovalChannel`. Parent closes child ends, adds channel to monitoring set. See spec section "Subagent Behavior > Subagent Deadlock Prevention > Spawn with Channels".
 
-- [ ] **Implement nested subagent approval forwarding** - When a subagent spawns its own subagent, requests are forwarded up the chain to root parent. Check `config->approval_channel` to determine if we're a subagent. See spec section "Subagent Behavior > Subagent Deadlock Prevention > Nested Subagents".
+- [x] **Implement nested subagent approval forwarding** - When a subagent spawns its own subagent, requests are forwarded up the chain to root parent. Check `config->approval_channel` to determine if we're a subagent. See spec section "Subagent Behavior > Subagent Deadlock Prevention > Nested Subagents".
 
-- [ ] **Implement gate inheritance for subagents** - Subagents inherit parent's category config and static allowlist, but NOT session allowlist. Implement `approval_gate_init_from_parent()`. See spec section "Subagent Behavior > Gate Inheritance".
+- [x] **Implement gate inheritance for subagents** - Subagents inherit parent's category config and static allowlist, but NOT session allowlist. Implement `approval_gate_init_from_parent()`. See spec section "Subagent Behavior > Gate Inheritance".
 
 ---
 
