@@ -15,49 +15,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-// Unescape JSON string in-place
-static void unescape_json_string(char *str) {
-    if (!str) return;
-    
-    char *src = str;
-    char *dst = str;
-    
-    while (*src) {
-        if (*src == '\\' && *(src + 1)) {
-            switch (*(src + 1)) {
-                case 'n':
-                    *dst++ = '\n';
-                    src += 2;
-                    break;
-                case 't':
-                    *dst++ = '\t';
-                    src += 2;
-                    break;
-                case 'r':
-                    *dst++ = '\r';
-                    src += 2;
-                    break;
-                case '\\':
-                    *dst++ = '\\';
-                    src += 2;
-                    break;
-                case '"':
-                    *dst++ = '"';
-                    src += 2;
-                    break;
-                default:
-                    // Unknown escape, keep both characters
-                    *dst++ = *src++;
-                    *dst++ = *src++;
-                    break;
-            }
-        } else {
-            *dst++ = *src++;
-        }
-    }
-    *dst = '\0';
-}
-
 void init_tool_registry(ToolRegistry *registry) {
     if (registry == NULL) {
         return;
@@ -629,10 +586,9 @@ int parse_tool_calls(const char *json_response, ToolCall **tool_calls, int *call
             call->arguments = extract_string_from_json(call_json, "arguments");
             if (call->arguments == NULL) {
                 call->arguments = strdup("{}");
-            } else {
-                // Unescape JSON string arguments
-                unescape_json_string(call->arguments);
             }
+            // Note: cJSON already handles JSON string unescaping during parsing,
+            // so we don't need to call unescape_json_string here
         }
         
         free(call_json);
@@ -755,10 +711,8 @@ int parse_tool_calls(const char *json_response, ToolCall **tool_calls, int *call
         if (function_obj != NULL) {
             call->name = extract_string_from_json(function_obj, "name");
             call->arguments = extract_string_from_json(function_obj, "arguments");
-            if (call->arguments != NULL) {
-                // Unescape JSON string arguments
-                unescape_json_string(call->arguments);
-            }
+            // Note: cJSON already handles JSON string unescaping during parsing,
+            // so we don't need to call unescape_json_string here
             free(function_obj);
         }
         
@@ -899,10 +853,9 @@ int parse_anthropic_tool_calls(const char *json_response, ToolCall **tool_calls,
             call->arguments = extract_string_from_json(tool_obj, "input");
             if (call->arguments == NULL) {
                 call->arguments = strdup("{}");
-            } else {
-                // Unescape JSON string arguments
-                unescape_json_string(call->arguments);
             }
+            // Note: cJSON already handles JSON string unescaping during parsing,
+            // so we don't need to call unescape_json_string here
         }
         
         free(tool_obj);

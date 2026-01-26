@@ -2,6 +2,7 @@
 #include "tools_system.h"
 #include "../src/policy/approval_gate.h"
 #include "../src/policy/protected_files.h"
+#include <cJSON.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -90,23 +91,70 @@ void test_parse_tool_calls_no_calls(void) {
 }
 
 void test_parse_tool_calls_with_call(void) {
-    const char *json_response = 
+    const char *json_response =
         "{\"choices\":[{\"message\":{\"tool_calls\":["
         "{\"id\":\"call_123\",\"function\":{\"name\":\"get_current_time\",\"arguments\":\"{}\"}}"
         "]}}]}";
-    
+
     ToolCall *tool_calls = NULL;
     int call_count = 0;
-    
+
     int result = parse_tool_calls(json_response, &tool_calls, &call_count);
-    
+
     TEST_ASSERT_EQUAL(0, result);
     TEST_ASSERT_EQUAL(1, call_count);
     TEST_ASSERT_NOT_NULL(tool_calls);
     TEST_ASSERT_EQUAL_STRING("call_123", tool_calls[0].id);
     TEST_ASSERT_EQUAL_STRING("get_current_time", tool_calls[0].name);
     TEST_ASSERT_EQUAL_STRING("{}", tool_calls[0].arguments);
-    
+
+    cleanup_tool_calls(tool_calls, call_count);
+}
+
+void test_parse_tool_calls_with_code_containing_quotes(void) {
+    /* Test that arguments containing code with escaped quotes are preserved correctly.
+     * This tests the fix for the double-unescaping bug where code like print("hello")
+     * in apply_delta operations would have its quotes corrupted. */
+    const char *json_response =
+        "{\"choices\":[{\"message\":{\"tool_calls\":["
+        "{\"id\":\"call_456\",\"function\":{\"name\":\"apply_delta\","
+        "\"arguments\":\"{\\\"path\\\": \\\"/tmp/test.py\\\", \\\"operations\\\": [{\\\"type\\\": \\\"insert\\\", \\\"start_line\\\": 1, \\\"lines\\\": [\\\"print(\\\\\\\"hello\\\\\\\")\\\"]}]}\""
+        "}}"
+        "]}}]}";
+
+    ToolCall *tool_calls = NULL;
+    int call_count = 0;
+
+    int result = parse_tool_calls(json_response, &tool_calls, &call_count);
+
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_EQUAL(1, call_count);
+    TEST_ASSERT_NOT_NULL(tool_calls);
+    TEST_ASSERT_EQUAL_STRING("call_456", tool_calls[0].id);
+    TEST_ASSERT_EQUAL_STRING("apply_delta", tool_calls[0].name);
+
+    /* Verify the arguments string is valid JSON that can be parsed */
+    cJSON *args = cJSON_Parse(tool_calls[0].arguments);
+    TEST_ASSERT_NOT_NULL_MESSAGE(args, "Arguments should be valid JSON");
+
+    /* Verify the code content preserved its escaped quotes */
+    cJSON *operations = cJSON_GetObjectItem(args, "operations");
+    TEST_ASSERT_NOT_NULL(operations);
+    TEST_ASSERT_TRUE(cJSON_IsArray(operations));
+
+    cJSON *first_op = cJSON_GetArrayItem(operations, 0);
+    TEST_ASSERT_NOT_NULL(first_op);
+
+    cJSON *lines = cJSON_GetObjectItem(first_op, "lines");
+    TEST_ASSERT_NOT_NULL(lines);
+    TEST_ASSERT_TRUE(cJSON_IsArray(lines));
+
+    cJSON *first_line = cJSON_GetArrayItem(lines, 0);
+    TEST_ASSERT_NOT_NULL(first_line);
+    TEST_ASSERT_TRUE(cJSON_IsString(first_line));
+    TEST_ASSERT_EQUAL_STRING("print(\"hello\")", cJSON_GetStringValue(first_line));
+
+    cJSON_Delete(args);
     cleanup_tool_calls(tool_calls, call_count);
 }
 
@@ -647,6 +695,7 @@ int main(void) {
     RUN_TEST(test_generate_tools_json_with_null_registry);
     RUN_TEST(test_parse_tool_calls_no_calls);
     RUN_TEST(test_parse_tool_calls_with_call);
+    RUN_TEST(test_parse_tool_calls_with_code_containing_quotes);
     RUN_TEST(test_parse_tool_calls_with_null_parameters);
     RUN_TEST(test_execute_tool_call_get_current_time);
     RUN_TEST(test_execute_tool_call_get_weather);

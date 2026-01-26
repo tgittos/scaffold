@@ -1,6 +1,7 @@
 #include "python_tool_files.h"
 #include "python_tool.h"
 #include "../utils/ralph_home.h"
+#include "../utils/debug_output.h"
 #include <Python.h>
 #include <cJSON.h>
 #include <stdio.h>
@@ -629,6 +630,14 @@ int execute_python_file_tool_call(const ToolCall *tool_call, ToolResult *result)
     // Parse the JSON arguments
     cJSON *args = cJSON_Parse(tool_call->arguments);
     if (args == NULL) {
+        // Debug: log what arguments were received
+        debug_printf("[DEBUG] Failed to parse arguments for %s\n", tool_call->name);
+        debug_printf("[DEBUG] Arguments string: '%s'\n",
+                     tool_call->arguments ? tool_call->arguments : "(NULL)");
+        const char *error_ptr = cJSON_GetErrorPtr();
+        debug_printf("[DEBUG] cJSON error near: '%s'\n",
+                     error_ptr ? error_ptr : "(unknown)");
+
         result->result = strdup("{\"error\": \"Failed to parse arguments\", \"success\": false}");
         result->success = 0;
         return 0;
