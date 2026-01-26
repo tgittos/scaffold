@@ -33,6 +33,10 @@ The container has a valid `.env` file that is configured to allow ralph to lever
 You may use apt to install missing tooling that you need, however do not use it to install libraries as dependencies of ralph, as that will break ralph's portability. Any ralph dependencies should be built locally using Cosmopolitan, with recipes in the Makefile.
 Run ralph with `--debug` to see all HTTP requests and data exchange from upstream LLM providers.
 
+### LLM Provider
+
+**The development environment uses OpenAI as the LLM provider, NOT Anthropic.** When debugging tool call parsing or response handling issues, investigate the OpenAI code paths (`parse_tool_calls` in `tools_system.c`, `openai_provider.c`) rather than the Anthropic paths.
+
 ### Approval Gate Flags
 
 Ralph has an approval gate system that prompts before executing certain tool categories. For development:
