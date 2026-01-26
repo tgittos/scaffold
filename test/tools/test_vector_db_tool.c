@@ -4,6 +4,9 @@
 #include "../../src/db/vector_db.h"
 #include "../../src/utils/config.h"
 #include "../../src/utils/ralph_home.h"
+#include "../mock_api_server.h"
+#include "../mock_embeddings.h"
+#include "../mock_embeddings_server.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,6 +14,8 @@
 #include <unistd.h>
 
 static char *saved_ralph_config_backup = NULL;
+static MockAPIServer mock_server;
+static MockAPIResponse mock_responses[1];
 
 void setUp(void) {
     // Initialize ralph home directory (required for document store)
@@ -32,8 +37,24 @@ void setUp(void) {
         remove("ralph.config.json");  // Remove temporarily
     }
 
-    // Initialize config system
+    // Initialize mock embeddings with semantic groups
+    mock_embeddings_init_test_groups();
+
+    // Set up mock embeddings server
+    memset(&mock_server, 0, sizeof(mock_server));
+    mock_server.port = 18890;
+    mock_responses[0] = mock_embeddings_server_response();
+    mock_server.responses = mock_responses;
+    mock_server.response_count = 1;
+
+    mock_api_server_start(&mock_server);
+    mock_api_server_wait_ready(&mock_server, 2000);
+
+    // Initialize config system first
     config_init();
+
+    // Set mock embedding API URL via config system
+    config_set("embedding_api_url", "http://127.0.0.1:18890/v1/embeddings");
 }
 
 void tearDown(void) {
@@ -51,6 +72,12 @@ void tearDown(void) {
         free(saved_ralph_config_backup);
         saved_ralph_config_backup = NULL;
     }
+
+    // Stop mock server
+    mock_api_server_stop(&mock_server);
+
+    // Cleanup mock embeddings
+    mock_embeddings_cleanup();
 
     // Cleanup ralph home
     ralph_home_cleanup();

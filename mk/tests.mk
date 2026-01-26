@@ -168,15 +168,15 @@ CONV_EXTRA_OBJECTS := $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) \
     $(SRCDIR)/utils/ralph_home.o
 
 $(eval $(call def_test,conversation,session/test_conversation_tracker,$(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/utils/json_escape.c))
-$(eval $(call def_test_mixed,conversation_vdb,session/test_conversation_vector_db,$(CONV_DEPS)))
+$(eval $(call def_test,conversation_vdb,session/test_conversation_vector_db,$(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/utils/json_escape.c $(TESTDIR)/mock_api_server.c $(TESTDIR)/mock_embeddings.c $(TESTDIR)/mock_embeddings_server.c))
 $(eval $(call def_test_mixed,tool_calls_not_stored,session/test_tool_calls_not_stored,$(CONV_DEPS)))
 
 $(TEST_conversation_TARGET): $(TEST_conversation_OBJECTS) $(CONV_EXTRA_OBJECTS) $(ALL_LIBS)
 	$(CXX) -o $@ $(TEST_conversation_OBJECTS) $(CONV_EXTRA_OBJECTS) \
 		$(LIBS_MBEDTLS) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
 
-$(TEST_conversation_vdb_TARGET): $(TEST_conversation_vdb_OBJECTS) $(ALL_LIBS)
-	$(CXX) -o $@ $(TEST_conversation_vdb_OBJECTS) $(LIBS_MBEDTLS) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
+$(TEST_conversation_vdb_TARGET): $(TEST_conversation_vdb_OBJECTS) $(CONV_EXTRA_OBJECTS) $(ALL_LIBS)
+	$(CXX) -o $@ $(TEST_conversation_vdb_OBJECTS) $(CONV_EXTRA_OBJECTS) $(LIBS_MBEDTLS) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
 
 $(TEST_tool_calls_not_stored_TARGET): $(TEST_tool_calls_not_stored_OBJECTS) $(ALL_LIBS)
 	$(CXX) -o $@ $(TEST_tool_calls_not_stored_OBJECTS) $(LIBS_MBEDTLS) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
@@ -189,7 +189,10 @@ $(eval $(call def_test_mixed,json_output,utils/test_json_output,$(SRCDIR)/networ
 $(eval $(call def_test_mixed,todo_tool,tools/test_todo_tool,$(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,output,utils/test_output_formatter,$(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,tools,tools/test_tools_system,$(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,vector_db_tool,tools/test_vector_db_tool,$(SRCDIR)/utils/env_loader.c $(COMPLEX_DEPS)))
+# Mock embeddings sources for tests that need mocked embedding API
+MOCK_EMBEDDINGS_SOURCES := $(TESTDIR)/mock_api_server.c $(TESTDIR)/mock_embeddings.c $(TESTDIR)/mock_embeddings_server.c
+
+$(eval $(call def_test_mixed,vector_db_tool,tools/test_vector_db_tool,$(SRCDIR)/utils/env_loader.c $(MOCK_EMBEDDINGS_SOURCES) $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,memory_tool,tools/test_memory_tool,$(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,memory_mgmt,test_memory_management,$(SRCDIR)/cli/memory_commands.c $(DB_C_SOURCES) $(EMBEDDING_DEPS) $(SRCDIR)/utils/config.c $(NETWORK_DEPS) $(SRCDIR)/utils/common_utils.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/utils/ralph_home.c))
 $(eval $(call def_test_mixed,token_manager,session/test_token_manager,$(SRCDIR)/session/token_manager.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))

@@ -4,22 +4,54 @@
 #include "../../src/db/vector_db_service.h"
 #include "../../src/utils/config.h"
 #include "../../src/utils/ralph_home.h"
+#include "../mock_api_server.h"
+#include "../mock_embeddings.h"
+#include "../mock_embeddings_server.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
+static MockAPIServer mock_server;
+static MockAPIResponse mock_responses[1];
+
 void setUp(void) {
     // Initialize ralph home directory (required for document store)
     ralph_home_init(NULL);
 
-    // Initialize config to load API key from environment
+    // Initialize mock embeddings
+    mock_embeddings_init_test_groups();
+
+    // Assign test texts to semantic groups for realistic search results
+    mock_embeddings_assign_to_group("Tell me about quantum physics", MOCK_GROUP_QUANTUM);
+    mock_embeddings_assign_to_group("Quantum physics is the study of matter at atomic scales", MOCK_GROUP_QUANTUM);
+    mock_embeddings_assign_to_group("quantum", MOCK_GROUP_QUANTUM);
+    mock_embeddings_assign_to_group("What about classical mechanics?", MOCK_GROUP_CLASSICAL);
+    mock_embeddings_assign_to_group("Classical mechanics deals with macroscopic objects", MOCK_GROUP_CLASSICAL);
+
+    // Start mock embeddings server
+    memset(&mock_server, 0, sizeof(mock_server));
+    mock_server.port = 18891;  // Different port from other tests
+    mock_responses[0] = mock_embeddings_server_response();
+    mock_server.responses = mock_responses;
+    mock_server.response_count = 1;
+    mock_api_server_start(&mock_server);
+    mock_api_server_wait_ready(&mock_server, 2000);
+
+    // Initialize config and override embedding API URL to use mock server
     config_init();
+    config_set("embedding_api_url", "http://127.0.0.1:18891/v1/embeddings");
 }
 
 void tearDown(void) {
     // Clear conversation data after each test to prevent interference
     document_store_clear_conversations();
+
+    // Stop mock server
+    mock_api_server_stop(&mock_server);
+
+    // Cleanup mock embeddings
+    mock_embeddings_cleanup();
 
     // Cleanup config
     config_cleanup();

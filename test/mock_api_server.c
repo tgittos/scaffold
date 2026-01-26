@@ -102,11 +102,31 @@ static void* server_thread_func(void* arg) {
             if (response->delay_ms > 0) {
                 usleep(response->delay_ms * 1000);
             }
-            
+
+            // Get response body - either from callback or static
+            const char* body = response->response_body;
+            char* dynamic_body = NULL;
+
+            if (response->callback != NULL) {
+                // Extract request body (after double CRLF)
+                const char* body_start = strstr(request, "\r\n\r\n");
+                if (body_start) {
+                    body_start += 4;  // Skip the \r\n\r\n
+                }
+                dynamic_body = response->callback(body_start, response->callback_data);
+                if (dynamic_body) {
+                    body = dynamic_body;
+                }
+            }
+
+            if (body == NULL) {
+                body = "{}";  // Empty JSON as fallback
+            }
+
             // Send mock response
             char http_response[RESPONSE_BUFFER_SIZE];
-            int content_length = strlen(response->response_body);
-            
+            int content_length = strlen(body);
+
             snprintf(http_response, sizeof(http_response),
                 "HTTP/1.1 %d OK\r\n"
                 "Content-Type: application/json\r\n"
@@ -116,9 +136,14 @@ static void* server_thread_func(void* arg) {
                 "%s",
                 response->response_code,
                 content_length,
-                response->response_body);
-            
+                body);
+
             write(client_fd, http_response, strlen(http_response));
+
+            // Free dynamic body if allocated
+            if (dynamic_body) {
+                free(dynamic_body);
+            }
         }
         
         close(client_fd);
@@ -302,5 +327,68 @@ MockAPIResponse mock_network_failure(void) {
     response.delay_ms = 0;
     response.should_fail = 1; // This causes connection drop
     response.response_body = NULL;
+    return response;
+}
+
+MockAPIResponse mock_openai_embeddings_response(const float* embedding, size_t dimension) {
+    MockAPIResponse response = {0};
+    response.endpoint = "/v1/embeddings";
+    response.method = "POST";
+    response.response_code = 200;
+    response.delay_ms = 0;
+    response.should_fail = 0;
+    response.callback = NULL;
+    response.callback_data = NULL;
+
+    // Build embedding array JSON
+    static char response_buffer[65536];  // Large buffer for embedding data
+    char* ptr = response_buffer;
+    size_t remaining = sizeof(response_buffer);
+    int written;
+
+    written = snprintf(ptr, remaining,
+        "{"
+        "\"object\":\"list\","
+        "\"data\":["
+        "{"
+        "\"object\":\"embedding\","
+        "\"index\":0,"
+        "\"embedding\":[");
+    ptr += written;
+    remaining -= written;
+
+    // Write embedding values
+    for (size_t i = 0; i < dimension && remaining > 50; i++) {
+        if (i > 0) {
+            written = snprintf(ptr, remaining, ",%.8f", embedding[i]);
+        } else {
+            written = snprintf(ptr, remaining, "%.8f", embedding[i]);
+        }
+        ptr += written;
+        remaining -= written;
+    }
+
+    snprintf(ptr, remaining,
+        "]"
+        "}"
+        "],"
+        "\"model\":\"text-embedding-3-small\","
+        "\"usage\":{\"prompt_tokens\":5,\"total_tokens\":5}"
+        "}");
+
+    response.response_body = response_buffer;
+    return response;
+}
+
+MockAPIResponse mock_openai_embeddings_dynamic(MockResponseCallback callback_func, void* user_data) {
+    MockAPIResponse response = {0};
+    response.endpoint = "/v1/embeddings";
+    response.method = "POST";
+    response.response_code = 200;
+    response.delay_ms = 0;
+    response.should_fail = 0;
+    response.response_body = NULL;  // Will use callback
+    response.callback = callback_func;
+    response.callback_data = user_data;
     return response;
 }
