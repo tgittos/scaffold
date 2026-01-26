@@ -5,6 +5,68 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/wait.h>
+
+/**
+ * Helper: Create a mock subagent that exits quickly without real LLM calls.
+ * Forks a child that writes mock output to a pipe and exits with given status.
+ * Returns 0 on success, -1 on failure.
+ */
+static int spawn_mock_subagent(SubagentManager *manager, const char *mock_output,
+                                int exit_code, int delay_ms, char *id_out) {
+    if (manager == NULL || id_out == NULL) return -1;
+    if (manager->subagents.count >= (size_t)manager->max_subagents) return -1;
+
+    // Create pipe for output
+    int pipefd[2];
+    if (pipe(pipefd) == -1) return -1;
+
+    // Generate a simple ID
+    snprintf(id_out, SUBAGENT_ID_LENGTH + 1, "%016lx", (unsigned long)time(NULL) ^ (unsigned long)getpid());
+
+    pid_t pid = fork();
+    if (pid == -1) {
+        close(pipefd[0]);
+        close(pipefd[1]);
+        return -1;
+    }
+
+    if (pid == 0) {
+        // Child process - mock subagent
+        close(pipefd[0]);  // Close read end
+
+        if (delay_ms > 0) {
+            usleep(delay_ms * 1000);
+        }
+
+        if (mock_output != NULL) {
+            write(pipefd[1], mock_output, strlen(mock_output));
+        }
+
+        close(pipefd[1]);
+        _exit(exit_code);
+    }
+
+    // Parent
+    close(pipefd[1]);  // Close write end
+
+    // Create subagent entry
+    Subagent sub;
+    memset(&sub, 0, sizeof(sub));
+    strncpy(sub.id, id_out, SUBAGENT_ID_LENGTH);
+    sub.id[SUBAGENT_ID_LENGTH] = '\0';
+    sub.pid = pid;
+    sub.status = SUBAGENT_STATUS_RUNNING;
+    sub.stdout_pipe[0] = pipefd[0];
+    sub.stdout_pipe[1] = -1;
+    sub.approval_channel.request_fd = -1;
+    sub.approval_channel.response_fd = -1;
+    sub.task = strdup("mock task");
+    sub.start_time = time(NULL);
+
+    SubagentArray_push(&manager->subagents, sub);
+    return 0;
+}
 
 void setUp(void) {
     // Initialize config for each test
@@ -542,8 +604,8 @@ void test_subagent_get_status_after_completion(void) {
     char *result_str = NULL;
     char *error_str = NULL;
 
-    // Spawn a subagent
-    int result = subagent_spawn(&manager, "test task", NULL, id);
+    // Spawn a mock subagent that exits quickly (no real LLM calls)
+    int result = spawn_mock_subagent(&manager, "mock output", 0, 50, id);
     TEST_ASSERT_EQUAL_INT(0, result);
 
     // First, wait for completion using blocking mode
@@ -573,8 +635,8 @@ void test_subagent_get_status_wait(void) {
     char *result_str = NULL;
     char *error_str = NULL;
 
-    // Spawn a subagent
-    int result = subagent_spawn(&manager, "test task", NULL, id);
+    // Spawn a mock subagent that exits quickly (no real LLM calls)
+    int result = spawn_mock_subagent(&manager, "mock output", 0, 100, id);
     TEST_ASSERT_EQUAL_INT(0, result);
 
     // Query with wait=1 - should block until completion
@@ -600,8 +662,8 @@ void test_subagent_get_status_cached_result(void) {
     char *result_str1 = NULL, *result_str2 = NULL;
     char *error_str1 = NULL, *error_str2 = NULL;
 
-    // Spawn a subagent
-    int result = subagent_spawn(&manager, "test task", NULL, id);
+    // Spawn a mock subagent that exits quickly (no real LLM calls)
+    int result = spawn_mock_subagent(&manager, "mock output", 0, 50, id);
     TEST_ASSERT_EQUAL_INT(0, result);
 
     // Wait for completion using blocking mode
@@ -629,8 +691,8 @@ void test_subagent_get_status_null_optional_params(void) {
     char id[SUBAGENT_ID_LENGTH + 1];
     SubagentStatus status;
 
-    // Spawn a subagent
-    int result = subagent_spawn(&manager, "test task", NULL, id);
+    // Spawn a mock subagent that exits quickly (no real LLM calls)
+    int result = spawn_mock_subagent(&manager, "mock output", 0, 50, id);
     TEST_ASSERT_EQUAL_INT(0, result);
 
     // Wait for completion using blocking mode with NULL optional params
