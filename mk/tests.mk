@@ -42,6 +42,9 @@ $(eval $(call def_test,darray,test_darray,))
 $(eval $(call def_test,ptrarray,test_ptrarray,))
 $(eval $(call def_test,rate_limiter,test_rate_limiter,$(SRCDIR)/policy/rate_limiter.c))
 $(eval $(call def_test,allowlist,test_allowlist,$(SRCDIR)/policy/allowlist.c $(SRCDIR)/policy/shell_parser.c $(SRCDIR)/policy/shell_parser_cmd.c $(SRCDIR)/policy/shell_parser_ps.c))
+$(eval $(call def_test,tool_args,test_tool_args,$(SRCDIR)/policy/tool_args.c))
+$(eval $(call def_test,gate_prompter,test_gate_prompter,$(SRCDIR)/policy/gate_prompter.c))
+
 # Gate dependencies (used by multiple gate-related tests)
 GATE_DEPS := \
     $(SRCDIR)/policy/allowlist.c \
@@ -102,6 +105,12 @@ $(TEST_rate_limiter_TARGET): $(TEST_rate_limiter_OBJECTS)
 	$(CC) -o $@ $^
 
 $(TEST_allowlist_TARGET): $(TEST_allowlist_OBJECTS)
+	$(CC) -o $@ $^
+
+$(TEST_tool_args_TARGET): $(TEST_tool_args_OBJECTS) $(CJSON_LIB)
+	$(CC) -o $@ $(TEST_tool_args_OBJECTS) $(CJSON_LIB)
+
+$(TEST_gate_prompter_TARGET): $(TEST_gate_prompter_OBJECTS)
 	$(CC) -o $@ $^
 
 $(TEST_approval_gate_TARGET): $(TEST_approval_gate_OBJECTS) $(CJSON_LIB)
@@ -308,7 +317,8 @@ $(TEST_document_store_TARGET): $(TEST_document_store_OBJECTS) $(ALL_LIBS)
 
 TEST_EXECUTION_ORDER := \
     $(TEST_main_TARGET) $(TEST_cli_flags_TARGET) $(TEST_darray_TARGET) $(TEST_ptrarray_TARGET) \
-    $(TEST_rate_limiter_TARGET) $(TEST_allowlist_TARGET) $(TEST_ralph_home_TARGET) $(TEST_http_TARGET) $(TEST_http_retry_TARGET) \
+    $(TEST_rate_limiter_TARGET) $(TEST_allowlist_TARGET) $(TEST_tool_args_TARGET) $(TEST_gate_prompter_TARGET) \
+    $(TEST_ralph_home_TARGET) $(TEST_http_TARGET) $(TEST_http_retry_TARGET) \
     $(TEST_streaming_TARGET) $(TEST_openai_streaming_TARGET) $(TEST_anthropic_streaming_TARGET) \
     $(TEST_env_TARGET) $(TEST_output_TARGET) $(TEST_prompt_TARGET) $(TEST_debug_output_TARGET) \
     $(TEST_conversation_TARGET) $(TEST_conversation_vdb_TARGET) $(TEST_tools_TARGET) \
@@ -339,7 +349,8 @@ check: test
 # Excluded: HTTP (network), Python (embedded stdlib), subagent (fork/exec)
 VALGRIND_TESTS := \
     $(TEST_main_TARGET) $(TEST_cli_flags_TARGET) $(TEST_darray_TARGET) $(TEST_ptrarray_TARGET) \
-    $(TEST_rate_limiter_TARGET) $(TEST_allowlist_TARGET) $(TEST_ralph_home_TARGET) $(TEST_http_retry_TARGET) $(TEST_streaming_TARGET) \
+    $(TEST_rate_limiter_TARGET) $(TEST_allowlist_TARGET) $(TEST_tool_args_TARGET) $(TEST_gate_prompter_TARGET) \
+    $(TEST_ralph_home_TARGET) $(TEST_http_retry_TARGET) $(TEST_streaming_TARGET) \
     $(TEST_openai_streaming_TARGET) $(TEST_anthropic_streaming_TARGET) $(TEST_env_TARGET) \
     $(TEST_output_TARGET) $(TEST_prompt_TARGET) $(TEST_conversation_TARGET) \
     $(TEST_conversation_vdb_TARGET) $(TEST_tools_TARGET) $(TEST_ralph_TARGET) \
