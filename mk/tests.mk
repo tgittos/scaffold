@@ -72,6 +72,7 @@ $(eval $(call def_test,shell_parser,test_shell_parser,$(SRCDIR)/policy/shell_par
 $(eval $(call def_test,shell_parser_cmd,test_shell_parser_cmd,$(SRCDIR)/policy/shell_parser_cmd.c $(SRCDIR)/policy/shell_parser.c $(SRCDIR)/policy/shell_parser_ps.c))
 $(eval $(call def_test,shell_parser_ps,test_shell_parser_ps,$(SRCDIR)/policy/shell_parser_ps.c $(SRCDIR)/policy/shell_parser.c $(SRCDIR)/policy/shell_parser_cmd.c))
 $(eval $(call def_test,subagent_approval,test_subagent_approval,$(GATE_DEPS)))
+$(eval $(call def_test,approval_gate_integration,test_approval_gate_integration,$(GATE_DEPS) $(TESTDIR)/stubs/python_tool_stub.c))
 
 $(TEST_main_TARGET): $(TEST_main_OBJECTS)
 	$(CC) -o $@ $^
@@ -141,6 +142,9 @@ $(TEST_shell_parser_ps_TARGET): $(TEST_shell_parser_ps_OBJECTS)
 
 $(TEST_subagent_approval_TARGET): $(TEST_subagent_approval_OBJECTS) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_subagent_approval_OBJECTS) $(CJSON_LIB)
+
+$(TEST_approval_gate_integration_TARGET): $(TEST_approval_gate_integration_OBJECTS) $(CJSON_LIB)
+	$(CC) -o $@ $(TEST_approval_gate_integration_OBJECTS) $(CJSON_LIB)
 
 # =============================================================================
 # CJSON TESTS
@@ -336,7 +340,8 @@ TEST_EXECUTION_ORDER := \
     $(TEST_document_chunker_TARGET) $(TEST_approval_gate_TARGET) $(TEST_atomic_file_TARGET) \
     $(TEST_path_normalize_TARGET) $(TEST_protected_files_TARGET) $(TEST_shell_parser_TARGET) \
     $(TEST_shell_parser_cmd_TARGET) $(TEST_shell_parser_ps_TARGET) $(TEST_subagent_approval_TARGET) \
-    $(TEST_subagent_tool_TARGET) $(TEST_json_output_TARGET) $(TEST_verified_file_context_TARGET)
+    $(TEST_subagent_tool_TARGET) $(TEST_json_output_TARGET) $(TEST_verified_file_context_TARGET) \
+    $(TEST_approval_gate_integration_TARGET)
 
 test: $(ALL_TEST_TARGETS)
 	@echo "Running all tests..."
@@ -365,7 +370,8 @@ VALGRIND_TESTS := \
     $(TEST_pdf_extractor_TARGET) $(TEST_document_chunker_TARGET) $(TEST_approval_gate_TARGET) \
     $(TEST_atomic_file_TARGET) $(TEST_path_normalize_TARGET) $(TEST_protected_files_TARGET) \
     $(TEST_shell_parser_TARGET) $(TEST_shell_parser_cmd_TARGET) $(TEST_shell_parser_ps_TARGET) \
-    $(TEST_subagent_approval_TARGET) $(TEST_json_output_TARGET) $(TEST_verified_file_context_TARGET)
+    $(TEST_subagent_approval_TARGET) $(TEST_json_output_TARGET) $(TEST_verified_file_context_TARGET) \
+    $(TEST_approval_gate_integration_TARGET)
 
 check-valgrind: $(ALL_TEST_TARGETS)
 	@echo "Running valgrind tests (excluding HTTP and Python tests)..."

@@ -228,7 +228,7 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 ## Integration Tests
 
-- [ ] **Create `test/test_approval_gate_integration.c`** - Test end-to-end approval flow with mock TTY input. Test batch approval, allow always with pattern generation, denial rate limiting across multiple calls.
+- [x] **Create `test/test_approval_gate_integration.c`** - Test end-to-end approval flow with mock TTY input. Test batch approval, allow always with pattern generation, denial rate limiting across multiple calls. 26 comprehensive tests covering: non-interactive mode, allowlist bypass, rate limiting, batch approval, category configuration, CLI allow entries, error formatting, pattern generation, and subagent inheritance.
 
 - [x] **Create `test/test_subagent_approval.c`** - Test pipe creation, channel setup, cleanup functions, poll functions, and null safety. Note: Full fork/exec tests are excluded from valgrind per CLAUDE.md subagent test guidelines.
 
