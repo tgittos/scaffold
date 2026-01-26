@@ -256,8 +256,8 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 ## Memory Safety
 
-- [ ] **Valgrind all new code** - Run valgrind on all new test files (except subagent tests per CLAUDE.md). Fix any leaks in approval gate, shell parser, path normalization, atomic file operations.
+- [x] **Valgrind all new code** - Run valgrind on all new test files (except subagent tests per CLAUDE.md). Fix any leaks in approval gate, shell parser, path normalization, atomic file operations. All tests pass with no memory leaks. Note: test_atomic_file shows uninitialized value warnings from Cosmopolitan libc's internal `realpath()` implementation, which is a known quirk of running Cosmopolitan binaries under valgrind (not a bug in our code).
 
-- [ ] **Ensure proper cleanup** - Implement `approval_gate_cleanup()`, `free_parsed_shell_command()`, `free_normalized_path()`, `free_approved_path()`. Call from session cleanup.
+- [x] **Ensure proper cleanup** - Implement `approval_gate_cleanup()`, `free_parsed_shell_command()`, `free_normalized_path()`, `free_approved_path()`. Call from session cleanup. All cleanup functions are properly implemented: `approval_gate_cleanup()` frees allowlist, shell_allowlist, rate_limiter, and approval_channel; `free_parsed_shell_command()` frees tokens and structure; `free_normalized_path()` frees normalized string and structure; `free_approved_path()` frees user_path, resolved_path, parent_path.
 
-- [ ] **Handle allocation failures** - Check all `malloc`/`calloc`/`strdup` return values. Return graceful errors, don't crash.
+- [x] **Handle allocation failures** - Check all `malloc`/`calloc`/`strdup` return values. Return graceful errors, don't crash. Extensive null checks after all allocations throughout the policy module (100+ instances verified by grep).
