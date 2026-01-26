@@ -33,9 +33,9 @@ static char* format_recent_messages_for_recap(const ConversationHistory* history
 
     // Calculate buffer size needed (estimate)
     size_t buffer_size = RECAP_INITIAL_BUFFER_SIZE;
-    for (int i = start_index; i < history->count; i++) {
-        if (history->messages[i].content != NULL) {
-            buffer_size += strlen(history->messages[i].content) + 64; // Extra for formatting
+    for (size_t i = (size_t)start_index; i < history->count; i++) {
+        if (history->data[i].content != NULL) {
+            buffer_size += strlen(history->data[i].content) + 64; // Extra for formatting
         }
     }
 
@@ -47,8 +47,8 @@ static char* format_recent_messages_for_recap(const ConversationHistory* history
 
     // Format messages
     size_t offset = 0;
-    for (int i = start_index; i < history->count; i++) {
-        const ConversationMessage* msg = &history->messages[i];
+    for (size_t i = (size_t)start_index; i < history->count; i++) {
+        const ConversationMessage* msg = &history->data[i];
 
         // Skip tool messages for cleaner recap
         if (msg->role != NULL && strcmp(msg->role, "tool") == 0) {

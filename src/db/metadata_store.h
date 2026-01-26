@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <time.h>
+#include "../utils/ptrarray.h"
 
 typedef struct {
     size_t chunk_id;
@@ -15,6 +16,8 @@ typedef struct {
     time_t timestamp;
     char* custom_metadata; // JSON string for additional metadata
 } ChunkMetadata;
+
+PTRARRAY_DECLARE(ChunkMetadataArray, ChunkMetadata)
 
 typedef struct metadata_store metadata_store_t;
 

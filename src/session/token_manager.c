@@ -114,8 +114,8 @@ int trim_conversation_for_tokens(ConversationHistory* conversation,
     int current_tokens = system_tokens;
     
     // Calculate current token usage
-    for (int i = 0; i < conversation->count; i++) {
-        current_tokens += estimate_token_count(conversation->messages[i].content, config);
+    for (size_t i = 0; i < conversation->count; i++) {
+        current_tokens += estimate_token_count(conversation->data[i].content, config);
         current_tokens += TOKEN_OVERHEAD_PER_MESSAGE;
     }
     
@@ -125,41 +125,38 @@ int trim_conversation_for_tokens(ConversationHistory* conversation,
     while (current_tokens > max_prompt_tokens && conversation->count > 0) {
         // Find the oldest non-tool message to remove
         int remove_index = -1;
-        
+
         // Look for old user/assistant pairs, but preserve recent tool interactions
-        for (int i = 0; i < conversation->count - 2; i++) { // Keep last 2 messages
-            if (conversation->messages[i].role != NULL &&
-                strcmp(conversation->messages[i].role, "tool") != 0) {
+        for (size_t i = 0; i < conversation->count - 2; i++) { // Keep last 2 messages
+            if (conversation->data[i].role != NULL &&
+                strcmp(conversation->data[i].role, "tool") != 0) {
                 remove_index = i;
                 break;
             }
         }
-        
+
         // If no non-tool message found, remove the oldest message
         if (remove_index == -1 && conversation->count > 1) {
             remove_index = 0;
         }
-        
+
         if (remove_index == -1) break; // Can't trim anymore
-        
+
         // Remove the message
-        int removed_tokens = estimate_token_count(conversation->messages[remove_index].content, config) + TOKEN_OVERHEAD_PER_MESSAGE;
+        int removed_tokens = estimate_token_count(conversation->data[remove_index].content, config) + TOKEN_OVERHEAD_PER_MESSAGE;
         current_tokens -= removed_tokens;
-        
-        // Free memory
-        free(conversation->messages[remove_index].role);
-        free(conversation->messages[remove_index].content);
-        free(conversation->messages[remove_index].tool_call_id);
-        free(conversation->messages[remove_index].tool_name);
-        
-        // Shift remaining messages
-        for (int j = remove_index; j < conversation->count - 1; j++) {
-            conversation->messages[j] = conversation->messages[j + 1];
-        }
-        
-        conversation->count--;
+
+        // Free memory for this message's fields
+        free(conversation->data[remove_index].role);
+        free(conversation->data[remove_index].content);
+        free(conversation->data[remove_index].tool_call_id);
+        free(conversation->data[remove_index].tool_name);
+
+        // Remove from array using darray API
+        ConversationHistory_remove(conversation, remove_index);
+
         trimmed_count++;
-        
+
         debug_printf("Trimmed message %d, remaining tokens: %d\n", remove_index, current_tokens);
     }
     
@@ -198,8 +195,8 @@ int calculate_token_allocation(const SessionData* session, const char* user_mess
     
     // Estimate tokens for conversation history
     int history_tokens = 0;
-    for (int i = 0; i < session->conversation.count; i++) {
-        history_tokens += estimate_token_count(session->conversation.messages[i].content, config);
+    for (size_t i = 0; i < session->conversation.count; i++) {
+        history_tokens += estimate_token_count(session->conversation.data[i].content, config);
         history_tokens += TOKEN_OVERHEAD_PER_MESSAGE;
     }
     

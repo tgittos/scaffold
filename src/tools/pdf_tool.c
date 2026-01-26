@@ -65,7 +65,7 @@ static void auto_process_pdf_for_vector_storage(const char *file_path, const cha
     chunking_config_t chunk_config = chunker_get_pdf_config();
     chunking_result_t *chunks = chunk_document(extracted_text, &chunk_config);
     
-    if (!chunks || chunks->error || chunks->chunk_count == 0) {
+    if (!chunks || chunks->error || chunks->chunks.count == 0) {
         free_chunking_result(chunks);
         return; // Skip if chunking failed
     }
@@ -79,8 +79,8 @@ static void auto_process_pdf_for_vector_storage(const char *file_path, const cha
     
     // Process each chunk
     size_t vectors_stored = 0;
-    for (size_t i = 0; i < chunks->chunk_count; i++) {
-        document_chunk_t *chunk = &chunks->chunks[i];
+    for (size_t i = 0; i < chunks->chunks.count; i++) {
+        document_chunk_t *chunk = &chunks->chunks.data[i];
         
         // Generate embedding for chunk
         embedding_vector_t embedding = {0};

@@ -2,6 +2,7 @@
 #define EMBEDDING_PROVIDER_H
 
 #include "embeddings.h"
+#include "utils/ptrarray.h"
 
 // Forward declarations
 struct EmbeddingProvider;
@@ -44,11 +45,7 @@ typedef struct EmbeddingProvider {
 } EmbeddingProvider;
 
 // Provider registry and factory
-typedef struct {
-    EmbeddingProvider** providers;
-    int count;
-    int capacity;
-} EmbeddingProviderRegistry;
+PTRARRAY_DECLARE(EmbeddingProviderRegistry, EmbeddingProvider)
 
 // Core provider management functions
 int init_embedding_provider_registry(EmbeddingProviderRegistry* registry);

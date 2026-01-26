@@ -1,5 +1,6 @@
 #include "vector_db.h"
 #include "hnswlib_wrapper.h"
+#include "../utils/ptrarray.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -280,45 +281,46 @@ bool vector_db_has_index(const vector_db_t* db, const char* index_name) {
 
 char** vector_db_list_indices(const vector_db_t* db, size_t* count) {
     if (!db || !count) return NULL;
-    
+
     pthread_mutex_lock((pthread_mutex_t*)&db->mutex);
-    
-    *count = 0;
-    index_entry_t* entry = db->indices;
-    while (entry) {
-        (*count)++;
-        entry = entry->next;
-    }
-    
-    if (*count == 0) {
-        pthread_mutex_unlock((pthread_mutex_t*)&db->mutex);
-        return NULL;
-    }
-    
-    char** names = calloc(*count, sizeof(char*));
-    if (!names) {
+
+    StringArray arr;
+    if (StringArray_init(&arr, NULL) != 0) {
         pthread_mutex_unlock((pthread_mutex_t*)&db->mutex);
         *count = 0;
         return NULL;
     }
-    
-    entry = db->indices;
-    for (size_t i = 0; i < *count && entry; i++) {
-        names[i] = strdup(entry->name);
-        if (!names[i]) {
-            for (size_t j = 0; j < i; j++) {
-                free(names[j]);
+
+    index_entry_t* entry = db->indices;
+    while (entry) {
+        char* name = strdup(entry->name);
+        if (name != NULL) {
+            if (StringArray_push(&arr, name) != 0) {
+                free(name);
+                StringArray_destroy(&arr);
+                pthread_mutex_unlock((pthread_mutex_t*)&db->mutex);
+                *count = 0;
+                return NULL;
             }
-            free(names);
-            pthread_mutex_unlock((pthread_mutex_t*)&db->mutex);
-            *count = 0;
-            return NULL;
         }
         entry = entry->next;
     }
-    
+
     pthread_mutex_unlock((pthread_mutex_t*)&db->mutex);
-    return names;
+
+    if (arr.count == 0) {
+        StringArray_destroy(&arr);
+        *count = 0;
+        return NULL;
+    }
+
+    *count = arr.count;
+    char** result = arr.data;
+    arr.data = NULL;
+    arr.count = 0;
+    arr.capacity = 0;
+
+    return result;
 }
 
 vector_db_error_t vector_db_add_vector(vector_db_t* db, const char* index_name,

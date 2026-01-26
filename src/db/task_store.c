@@ -1,11 +1,14 @@
 #include "task_store.h"
 #include "../utils/uuid_utils.h"
+#include "../utils/ptrarray.h"
 #include <sqlite3.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
 #include <sys/stat.h>
+
+PTRARRAY_DEFINE(TaskArray, Task)
 
 struct task_store {
     sqlite3* db;
@@ -426,40 +429,38 @@ Task** task_store_get_children(task_store_t* store, const char* parent_id, size_
 
     sqlite3_bind_text(stmt, 1, parent_id, -1, SQLITE_STATIC);
 
-    // First pass: count results
-    size_t capacity = 0;
+    TaskArray arr;
+    if (TaskArray_init(&arr, NULL) != 0) {
+        sqlite3_finalize(stmt);
+        pthread_mutex_unlock(&store->mutex);
+        return NULL;
+    }
+
     while (sqlite3_step(stmt) == SQLITE_ROW) {
-        capacity++;
-    }
-
-    if (capacity == 0) {
-        sqlite3_finalize(stmt);
-        pthread_mutex_unlock(&store->mutex);
-        return NULL;
-    }
-
-    // Reset and collect results
-    sqlite3_reset(stmt);
-    Task** tasks = calloc(capacity, sizeof(Task*));
-    if (tasks == NULL) {
-        sqlite3_finalize(stmt);
-        pthread_mutex_unlock(&store->mutex);
-        return NULL;
-    }
-
-    size_t idx = 0;
-    while (sqlite3_step(stmt) == SQLITE_ROW && idx < capacity) {
-        tasks[idx] = row_to_task(stmt);
-        if (tasks[idx] != NULL) {
-            idx++;
+        Task* task = row_to_task(stmt);
+        if (task != NULL) {
+            if (TaskArray_push(&arr, task) != 0) {
+                task_free(task);
+                break;
+            }
         }
     }
 
     sqlite3_finalize(stmt);
     pthread_mutex_unlock(&store->mutex);
 
-    *count = idx;
-    return tasks;
+    if (arr.count == 0) {
+        TaskArray_destroy_shallow(&arr);
+        return NULL;
+    }
+
+    *count = arr.count;
+    Task** result = arr.data;
+    arr.data = NULL;
+    arr.count = 0;
+    arr.capacity = 0;
+
+    return result;
 }
 
 Task** task_store_get_subtree(task_store_t* store, const char* root_id, size_t* count) {
@@ -470,7 +471,6 @@ Task** task_store_get_subtree(task_store_t* store, const char* root_id, size_t* 
     *count = 0;
     pthread_mutex_lock(&store->mutex);
 
-    // Recursive CTE to get all descendants
     const char* sql =
         "WITH RECURSIVE subtree(id) AS ("
         "    SELECT id FROM tasks WHERE parent_id = ?"
@@ -489,43 +489,41 @@ Task** task_store_get_subtree(task_store_t* store, const char* root_id, size_t* 
 
     sqlite3_bind_text(stmt, 1, root_id, -1, SQLITE_STATIC);
 
-    // Collect results
-    size_t capacity = 16;
-    Task** tasks = calloc(capacity, sizeof(Task*));
-    if (tasks == NULL) {
+    TaskArray arr;
+    if (TaskArray_init(&arr, NULL) != 0) {
         sqlite3_finalize(stmt);
         pthread_mutex_unlock(&store->mutex);
         return NULL;
     }
 
-    size_t idx = 0;
     while (sqlite3_step(stmt) == SQLITE_ROW) {
-        if (idx >= capacity) {
-            capacity *= 2;
-            Task** new_tasks = realloc(tasks, capacity * sizeof(Task*));
-            if (new_tasks == NULL) {
-                task_free_list(tasks, idx);
+        Task* task = row_to_task(stmt);
+        if (task != NULL) {
+            if (TaskArray_push(&arr, task) != 0) {
+                task_free(task);
+                TaskArray_destroy(&arr);
                 sqlite3_finalize(stmt);
                 pthread_mutex_unlock(&store->mutex);
                 return NULL;
             }
-            tasks = new_tasks;
-        }
-        tasks[idx] = row_to_task(stmt);
-        if (tasks[idx] != NULL) {
-            idx++;
         }
     }
 
     sqlite3_finalize(stmt);
     pthread_mutex_unlock(&store->mutex);
 
-    *count = idx;
-    if (idx == 0) {
-        free(tasks);
+    if (arr.count == 0) {
+        TaskArray_destroy_shallow(&arr);
         return NULL;
     }
-    return tasks;
+
+    *count = arr.count;
+    Task** result = arr.data;
+    arr.data = NULL;
+    arr.count = 0;
+    arr.capacity = 0;
+
+    return result;
 }
 
 int task_store_set_parent(task_store_t* store, const char* task_id, const char* parent_id) {
@@ -667,33 +665,22 @@ char** task_store_get_blockers(task_store_t* store, const char* task_id, size_t*
 
     sqlite3_bind_text(stmt, 1, task_id, -1, SQLITE_STATIC);
 
-    // Count first
-    size_t capacity = 0;
+    StringArray arr;
+    if (StringArray_init(&arr, free) != 0) {
+        sqlite3_finalize(stmt);
+        pthread_mutex_unlock(&store->mutex);
+        return NULL;
+    }
+
     while (sqlite3_step(stmt) == SQLITE_ROW) {
-        capacity++;
-    }
-
-    if (capacity == 0) {
-        sqlite3_finalize(stmt);
-        pthread_mutex_unlock(&store->mutex);
-        return NULL;
-    }
-
-    sqlite3_reset(stmt);
-    char** ids = calloc(capacity, sizeof(char*));
-    if (ids == NULL) {
-        sqlite3_finalize(stmt);
-        pthread_mutex_unlock(&store->mutex);
-        return NULL;
-    }
-
-    size_t idx = 0;
-    while (sqlite3_step(stmt) == SQLITE_ROW && idx < capacity) {
         const char* id = (const char*)sqlite3_column_text(stmt, 0);
         if (id != NULL) {
-            ids[idx] = strdup(id);
-            if (ids[idx] != NULL) {
-                idx++;
+            char* id_copy = strdup(id);
+            if (id_copy != NULL) {
+                if (StringArray_push(&arr, id_copy) != 0) {
+                    free(id_copy);
+                    break;
+                }
             }
         }
     }
@@ -701,8 +688,19 @@ char** task_store_get_blockers(task_store_t* store, const char* task_id, size_t*
     sqlite3_finalize(stmt);
     pthread_mutex_unlock(&store->mutex);
 
-    *count = idx;
-    return ids;
+    if (arr.count == 0) {
+        StringArray_destroy(&arr);
+        return NULL;
+    }
+
+    *count = arr.count;
+    char** result = arr.data;
+    arr.data = NULL;  // Transfer ownership; destructor won't free NULL
+    arr.count = 0;
+    arr.capacity = 0;
+    StringArray_destroy(&arr);  // Safe: data is NULL, just frees the array structure
+
+    return result;
 }
 
 char** task_store_get_blocking(task_store_t* store, const char* task_id, size_t* count) {
@@ -723,33 +721,22 @@ char** task_store_get_blocking(task_store_t* store, const char* task_id, size_t*
 
     sqlite3_bind_text(stmt, 1, task_id, -1, SQLITE_STATIC);
 
-    // Count first
-    size_t capacity = 0;
+    StringArray arr;
+    if (StringArray_init(&arr, free) != 0) {
+        sqlite3_finalize(stmt);
+        pthread_mutex_unlock(&store->mutex);
+        return NULL;
+    }
+
     while (sqlite3_step(stmt) == SQLITE_ROW) {
-        capacity++;
-    }
-
-    if (capacity == 0) {
-        sqlite3_finalize(stmt);
-        pthread_mutex_unlock(&store->mutex);
-        return NULL;
-    }
-
-    sqlite3_reset(stmt);
-    char** ids = calloc(capacity, sizeof(char*));
-    if (ids == NULL) {
-        sqlite3_finalize(stmt);
-        pthread_mutex_unlock(&store->mutex);
-        return NULL;
-    }
-
-    size_t idx = 0;
-    while (sqlite3_step(stmt) == SQLITE_ROW && idx < capacity) {
         const char* id = (const char*)sqlite3_column_text(stmt, 0);
         if (id != NULL) {
-            ids[idx] = strdup(id);
-            if (ids[idx] != NULL) {
-                idx++;
+            char* id_copy = strdup(id);
+            if (id_copy != NULL) {
+                if (StringArray_push(&arr, id_copy) != 0) {
+                    free(id_copy);
+                    break;
+                }
             }
         }
     }
@@ -757,8 +744,19 @@ char** task_store_get_blocking(task_store_t* store, const char* task_id, size_t*
     sqlite3_finalize(stmt);
     pthread_mutex_unlock(&store->mutex);
 
-    *count = idx;
-    return ids;
+    if (arr.count == 0) {
+        StringArray_destroy(&arr);
+        return NULL;
+    }
+
+    *count = arr.count;
+    char** result = arr.data;
+    arr.data = NULL;  // Transfer ownership; destructor won't free NULL
+    arr.count = 0;
+    arr.capacity = 0;
+    StringArray_destroy(&arr);  // Safe: data is NULL, just frees the array structure
+
+    return result;
 }
 
 int task_store_is_blocked(task_store_t* store, const char* task_id) {
@@ -819,43 +817,41 @@ Task** task_store_list_by_session(task_store_t* store, const char* session_id,
         sqlite3_bind_int(stmt, 2, status_filter);
     }
 
-    // Collect results
-    size_t capacity = 16;
-    Task** tasks = calloc(capacity, sizeof(Task*));
-    if (tasks == NULL) {
+    TaskArray arr;
+    if (TaskArray_init(&arr, NULL) != 0) {
         sqlite3_finalize(stmt);
         pthread_mutex_unlock(&store->mutex);
         return NULL;
     }
 
-    size_t idx = 0;
     while (sqlite3_step(stmt) == SQLITE_ROW) {
-        if (idx >= capacity) {
-            capacity *= 2;
-            Task** new_tasks = realloc(tasks, capacity * sizeof(Task*));
-            if (new_tasks == NULL) {
-                task_free_list(tasks, idx);
+        Task* task = row_to_task(stmt);
+        if (task != NULL) {
+            if (TaskArray_push(&arr, task) != 0) {
+                task_free(task);
+                TaskArray_destroy(&arr);
                 sqlite3_finalize(stmt);
                 pthread_mutex_unlock(&store->mutex);
                 return NULL;
             }
-            tasks = new_tasks;
-        }
-        tasks[idx] = row_to_task(stmt);
-        if (tasks[idx] != NULL) {
-            idx++;
         }
     }
 
     sqlite3_finalize(stmt);
     pthread_mutex_unlock(&store->mutex);
 
-    *count = idx;
-    if (idx == 0) {
-        free(tasks);
+    if (arr.count == 0) {
+        TaskArray_destroy_shallow(&arr);
         return NULL;
     }
-    return tasks;
+
+    *count = arr.count;
+    Task** result = arr.data;
+    arr.data = NULL;
+    arr.count = 0;
+    arr.capacity = 0;
+
+    return result;
 }
 
 Task** task_store_list_roots(task_store_t* store, const char* session_id, size_t* count) {
@@ -878,43 +874,41 @@ Task** task_store_list_roots(task_store_t* store, const char* session_id, size_t
 
     sqlite3_bind_text(stmt, 1, session_id, -1, SQLITE_STATIC);
 
-    // Collect results
-    size_t capacity = 16;
-    Task** tasks = calloc(capacity, sizeof(Task*));
-    if (tasks == NULL) {
+    TaskArray arr;
+    if (TaskArray_init(&arr, NULL) != 0) {
         sqlite3_finalize(stmt);
         pthread_mutex_unlock(&store->mutex);
         return NULL;
     }
 
-    size_t idx = 0;
     while (sqlite3_step(stmt) == SQLITE_ROW) {
-        if (idx >= capacity) {
-            capacity *= 2;
-            Task** new_tasks = realloc(tasks, capacity * sizeof(Task*));
-            if (new_tasks == NULL) {
-                task_free_list(tasks, idx);
+        Task* task = row_to_task(stmt);
+        if (task != NULL) {
+            if (TaskArray_push(&arr, task) != 0) {
+                task_free(task);
+                TaskArray_destroy(&arr);
                 sqlite3_finalize(stmt);
                 pthread_mutex_unlock(&store->mutex);
                 return NULL;
             }
-            tasks = new_tasks;
-        }
-        tasks[idx] = row_to_task(stmt);
-        if (tasks[idx] != NULL) {
-            idx++;
         }
     }
 
     sqlite3_finalize(stmt);
     pthread_mutex_unlock(&store->mutex);
 
-    *count = idx;
-    if (idx == 0) {
-        free(tasks);
+    if (arr.count == 0) {
+        TaskArray_destroy_shallow(&arr);
         return NULL;
     }
-    return tasks;
+
+    *count = arr.count;
+    Task** result = arr.data;
+    arr.data = NULL;
+    arr.count = 0;
+    arr.capacity = 0;
+
+    return result;
 }
 
 Task** task_store_list_ready(task_store_t* store, const char* session_id, size_t* count) {
@@ -925,7 +919,6 @@ Task** task_store_list_ready(task_store_t* store, const char* session_id, size_t
     *count = 0;
     pthread_mutex_lock(&store->mutex);
 
-    // Get pending tasks that have no incomplete blockers
     const char* sql =
         "SELECT id, session_id, parent_id, content, status, priority, created_at, updated_at "
         "FROM tasks "
@@ -946,43 +939,41 @@ Task** task_store_list_ready(task_store_t* store, const char* session_id, size_t
 
     sqlite3_bind_text(stmt, 1, session_id, -1, SQLITE_STATIC);
 
-    // Collect results
-    size_t capacity = 16;
-    Task** tasks = calloc(capacity, sizeof(Task*));
-    if (tasks == NULL) {
+    TaskArray arr;
+    if (TaskArray_init(&arr, NULL) != 0) {
         sqlite3_finalize(stmt);
         pthread_mutex_unlock(&store->mutex);
         return NULL;
     }
 
-    size_t idx = 0;
     while (sqlite3_step(stmt) == SQLITE_ROW) {
-        if (idx >= capacity) {
-            capacity *= 2;
-            Task** new_tasks = realloc(tasks, capacity * sizeof(Task*));
-            if (new_tasks == NULL) {
-                task_free_list(tasks, idx);
+        Task* task = row_to_task(stmt);
+        if (task != NULL) {
+            if (TaskArray_push(&arr, task) != 0) {
+                task_free(task);
+                TaskArray_destroy(&arr);
                 sqlite3_finalize(stmt);
                 pthread_mutex_unlock(&store->mutex);
                 return NULL;
             }
-            tasks = new_tasks;
-        }
-        tasks[idx] = row_to_task(stmt);
-        if (tasks[idx] != NULL) {
-            idx++;
         }
     }
 
     sqlite3_finalize(stmt);
     pthread_mutex_unlock(&store->mutex);
 
-    *count = idx;
-    if (idx == 0) {
-        free(tasks);
+    if (arr.count == 0) {
+        TaskArray_destroy_shallow(&arr);
         return NULL;
     }
-    return tasks;
+
+    *count = arr.count;
+    Task** result = arr.data;
+    arr.data = NULL;
+    arr.count = 0;
+    arr.capacity = 0;
+
+    return result;
 }
 
 int task_store_has_pending(task_store_t* store, const char* session_id) {

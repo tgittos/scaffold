@@ -215,39 +215,30 @@ static void sync_todolist_from_store(void) {
     }
 
     // Clear in-memory list
-    g_todo_list->count = 0;
+    TodoList_clear(g_todo_list);
 
     // Copy tasks from store to in-memory list
     for (size_t i = 0; i < count; i++) {
         Task* task = tasks[i];
         if (task == NULL || task->content == NULL) continue;
 
-        // Ensure list has capacity
-        if (g_todo_list->count >= g_todo_list->capacity) {
-            size_t new_capacity = g_todo_list->capacity * 2;
-            if (new_capacity > TODO_MAX_COUNT) new_capacity = TODO_MAX_COUNT;
-            if (new_capacity <= g_todo_list->capacity) break;  // At max
+        // Check capacity limit
+        if (g_todo_list->count >= TODO_MAX_COUNT) break;
 
-            Todo* new_todos = realloc(g_todo_list->todos, sizeof(Todo) * new_capacity);
-            if (!new_todos) break;
-            g_todo_list->todos = new_todos;
-            g_todo_list->capacity = new_capacity;
-        }
+        // Create new todo
+        Todo new_todo;
+        strncpy(new_todo.id, task->id, TODO_MAX_ID_LENGTH - 1);
+        new_todo.id[TODO_MAX_ID_LENGTH - 1] = '\0';
 
-        // Copy task to todo
-        Todo* todo = &g_todo_list->todos[g_todo_list->count];
-        strncpy(todo->id, task->id, TODO_MAX_ID_LENGTH - 1);
-        todo->id[TODO_MAX_ID_LENGTH - 1] = '\0';
+        strncpy(new_todo.content, task->content, TODO_MAX_CONTENT_LENGTH - 1);
+        new_todo.content[TODO_MAX_CONTENT_LENGTH - 1] = '\0';
 
-        strncpy(todo->content, task->content, TODO_MAX_CONTENT_LENGTH - 1);
-        todo->content[TODO_MAX_CONTENT_LENGTH - 1] = '\0';
+        new_todo.status = (TodoStatus)task->status;
+        new_todo.priority = (TodoPriority)task->priority;
+        new_todo.created_at = task->created_at;
+        new_todo.updated_at = task->updated_at;
 
-        todo->status = (TodoStatus)task->status;
-        todo->priority = (TodoPriority)task->priority;
-        todo->created_at = task->created_at;
-        todo->updated_at = task->updated_at;
-
-        g_todo_list->count++;
+        if (TodoList_push(g_todo_list, new_todo) != 0) break;
     }
 
     task_free_list(tasks, count);
@@ -331,7 +322,7 @@ int execute_todo_tool_call(const ToolCall *tool_call, ToolResult *result) {
         if (response) {
             strcpy(response, "{\"tasks\":[");
             for (size_t i = 0; i < g_todo_list->count; i++) {
-                Todo* todo = &g_todo_list->todos[i];
+                Todo* todo = &g_todo_list->data[i];
                 char task_json[512] = {0};
                 snprintf(task_json, sizeof(task_json),
                     "%s{\"id\":\"%s\",\"content\":\"%.256s\",\"status\":\"%s\",\"priority\":\"%s\"}",
@@ -367,7 +358,7 @@ int execute_todo_tool_call(const ToolCall *tool_call, ToolResult *result) {
                 }
 
                 // Clear in-memory list (will be repopulated from SQLite or directly)
-                g_todo_list->count = 0;
+                TodoList_clear(g_todo_list);
 
                 // Parse each todo item from the JSON array
                 const char *current = todos_json + 1; // Skip opening '['

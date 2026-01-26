@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <time.h>
+#include "../utils/ptrarray.h"
 
 // Task status values (matches TodoStatus for compatibility)
 typedef enum {
@@ -34,6 +35,8 @@ typedef struct {
     char** blocks_ids;        // Array of task IDs blocked by this
     size_t blocks_count;
 } Task;
+
+PTRARRAY_DECLARE(TaskArray, Task)
 
 // Opaque task store type
 typedef struct task_store task_store_t;

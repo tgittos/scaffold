@@ -1,6 +1,8 @@
 #ifndef CONVERSATION_TRACKER_H
 #define CONVERSATION_TRACKER_H
 
+#include "../utils/darray.h"
+
 /**
  * Structure representing a single message in the conversation
  */
@@ -14,11 +16,7 @@ typedef struct {
 /**
  * Structure representing the entire conversation history
  */
-typedef struct {
-    ConversationMessage *messages;
-    int count;
-    int capacity;
-} ConversationHistory;
+DARRAY_DECLARE(ConversationHistory, ConversationMessage)
 
 /**
  * Load conversation history from CONVERSATION.md file

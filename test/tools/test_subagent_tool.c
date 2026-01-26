@@ -23,8 +23,8 @@ void test_subagent_manager_init_defaults(void) {
     int result = subagent_manager_init(&manager);
 
     TEST_ASSERT_EQUAL_INT(0, result);
-    TEST_ASSERT_NULL(manager.subagents);
-    TEST_ASSERT_EQUAL_INT(0, manager.count);
+    TEST_ASSERT_EQUAL_INT(0, (int)manager.subagents.count);
+    TEST_ASSERT_EQUAL_INT(0, manager.subagents.count);
     TEST_ASSERT_EQUAL_INT(5, manager.max_subagents);  // Default
     TEST_ASSERT_EQUAL_INT(300, manager.timeout_seconds);  // Default
     TEST_ASSERT_EQUAL_INT(0, manager.is_subagent_process);
@@ -38,8 +38,8 @@ void test_subagent_manager_init_with_config(void) {
     int result = subagent_manager_init_with_config(&manager, 10, 600);
 
     TEST_ASSERT_EQUAL_INT(0, result);
-    TEST_ASSERT_NULL(manager.subagents);
-    TEST_ASSERT_EQUAL_INT(0, manager.count);
+    TEST_ASSERT_EQUAL_INT(0, (int)manager.subagents.count);
+    TEST_ASSERT_EQUAL_INT(0, manager.subagents.count);
     TEST_ASSERT_EQUAL_INT(10, manager.max_subagents);
     TEST_ASSERT_EQUAL_INT(600, manager.timeout_seconds);
     TEST_ASSERT_EQUAL_INT(0, manager.is_subagent_process);
@@ -95,8 +95,8 @@ void test_subagent_manager_cleanup_empty(void) {
     // Should handle empty manager gracefully
     subagent_manager_cleanup(&manager);
 
-    TEST_ASSERT_NULL(manager.subagents);
-    TEST_ASSERT_EQUAL_INT(0, manager.count);
+    TEST_ASSERT_EQUAL_INT(0, (int)manager.subagents.count);
+    TEST_ASSERT_EQUAL_INT(0, manager.subagents.count);
 }
 
 void test_generate_subagent_id(void) {
@@ -306,7 +306,7 @@ void test_subagent_spawn_prevents_nesting(void) {
     // Should fail because we're already in a subagent
     int result = subagent_spawn(&manager, "test task", NULL, id);
     TEST_ASSERT_EQUAL_INT(-1, result);
-    TEST_ASSERT_EQUAL_INT(0, manager.count);
+    TEST_ASSERT_EQUAL_INT(0, manager.subagents.count);
 
     subagent_manager_cleanup(&manager);
 }
@@ -317,20 +317,18 @@ void test_subagent_spawn_respects_max_limit(void) {
     char id[SUBAGENT_ID_LENGTH + 1];
 
     // Manually create two "subagents" in the array to simulate being at limit
-    manager.subagents = malloc(2 * sizeof(Subagent));
-    TEST_ASSERT_NOT_NULL(manager.subagents);
-    memset(manager.subagents, 0, 2 * sizeof(Subagent));
-    manager.count = 2;
+    Subagent dummy1 = {0};
+    Subagent dummy2 = {0};
+    SubagentArray_push(&manager.subagents, dummy1);
+    SubagentArray_push(&manager.subagents, dummy2);
 
     // Try to spawn - should fail
     int result = subagent_spawn(&manager, "test task", NULL, id);
     TEST_ASSERT_EQUAL_INT(-1, result);
-    TEST_ASSERT_EQUAL_INT(2, manager.count);  // Count unchanged
+    TEST_ASSERT_EQUAL_INT(2, (int)manager.subagents.count);  // Count unchanged
 
-    // Clean up (manually since we didn't use real spawning)
-    free(manager.subagents);
-    manager.subagents = NULL;
-    manager.count = 0;
+    // Clean up
+    SubagentArray_destroy(&manager.subagents);
 }
 
 void test_subagent_spawn_basic(void) {
@@ -346,14 +344,14 @@ void test_subagent_spawn_basic(void) {
     TEST_ASSERT_EQUAL_INT(0, result);
 
     // Verify the subagent was created
-    TEST_ASSERT_EQUAL_INT(1, manager.count);
-    TEST_ASSERT_NOT_NULL(manager.subagents);
+    TEST_ASSERT_EQUAL_INT(1, manager.subagents.count);
+    TEST_ASSERT_NOT_NULL(manager.subagents.data);
 
     // Verify the ID was returned
     TEST_ASSERT_EQUAL_INT(SUBAGENT_ID_LENGTH, strlen(id));
 
     // Verify subagent fields
-    Subagent *sub = &manager.subagents[0];
+    Subagent *sub = &manager.subagents.data[0];
     TEST_ASSERT_EQUAL_STRING(id, sub->id);
     TEST_ASSERT_TRUE(sub->pid > 0);
     TEST_ASSERT_EQUAL_INT(SUBAGENT_STATUS_RUNNING, sub->status);
@@ -379,8 +377,8 @@ void test_subagent_spawn_with_context(void) {
     TEST_ASSERT_EQUAL_INT(0, result);
 
     // Verify the subagent was created with context
-    TEST_ASSERT_EQUAL_INT(1, manager.count);
-    Subagent *sub = &manager.subagents[0];
+    TEST_ASSERT_EQUAL_INT(1, manager.subagents.count);
+    Subagent *sub = &manager.subagents.data[0];
     TEST_ASSERT_EQUAL_STRING("test task", sub->task);
     TEST_ASSERT_EQUAL_STRING("some context", sub->context);
 
@@ -398,7 +396,7 @@ void test_subagent_spawn_empty_context_treated_as_null(void) {
     int result = subagent_spawn(&manager, "test task", "", id);
     TEST_ASSERT_EQUAL_INT(0, result);
 
-    Subagent *sub = &manager.subagents[0];
+    Subagent *sub = &manager.subagents.data[0];
     TEST_ASSERT_NULL(sub->context);  // Empty string treated as NULL
 
     usleep(100000);  // 100ms
@@ -417,7 +415,7 @@ void test_subagent_spawn_multiple(void) {
     TEST_ASSERT_EQUAL_INT(0, subagent_spawn(&manager, "task 2", "ctx 2", id2));
     TEST_ASSERT_EQUAL_INT(0, subagent_spawn(&manager, "task 3", NULL, id3));
 
-    TEST_ASSERT_EQUAL_INT(3, manager.count);
+    TEST_ASSERT_EQUAL_INT(3, manager.subagents.count);
 
     // Verify all IDs are different
     TEST_ASSERT_TRUE(strcmp(id1, id2) != 0);

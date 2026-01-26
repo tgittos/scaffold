@@ -121,39 +121,39 @@ static int anthropic_validate_conversation(const LLMProvider* provider,
     (void)provider; // Suppress unused parameter warning
     // Anthropic-specific validation: tool_result must have corresponding tool_use
     // This logic was moved here from api_common.c
-    
-    for (int i = 0; i < conversation->count; i++) {
-        const ConversationMessage* msg = &conversation->messages[i];
-        
+
+    for (size_t i = 0; i < conversation->count; i++) {
+        const ConversationMessage* msg = &conversation->data[i];
+
         // For tool results, verify the previous assistant message contains the tool_use_id
         if (strcmp(msg->role, "tool") == 0 && msg->tool_call_id != NULL) {
             // Look backwards for the most recent assistant message
             int found_tool_use = 0;
-            
-            for (int j = i - 1; j >= 0; j--) {
-                const ConversationMessage* prev_msg = &conversation->messages[j];
-                
+
+            for (int j = (int)i - 1; j >= 0; j--) {
+                const ConversationMessage* prev_msg = &conversation->data[j];
+
                 if (strcmp(prev_msg->role, "assistant") == 0) {
                     if (message_contains_tool_use_id(prev_msg, msg->tool_call_id)) {
                         found_tool_use = 1;
                     }
                     break; // Stop at first assistant message found
                 }
-                
+
                 // If we hit another role that breaks the sequence, stop looking
                 if (strcmp(prev_msg->role, "user") == 0) {
                     break;
                 }
             }
-            
+
             // Report orphaned tool results (but don't fail - they'll be filtered)
             if (!found_tool_use) {
-                fprintf(stderr, "Warning: Orphaned tool result with ID %s will be filtered\n", 
+                fprintf(stderr, "Warning: Orphaned tool result with ID %s will be filtered\n",
                        msg->tool_call_id);
             }
         }
     }
-    
+
     return 0; // Always succeed - orphaned results are handled by message builder
 }
 

@@ -16,7 +16,7 @@ void tearDown(void) {
 void test_todo_list_init(void) {
     TodoList list = {0};
     TEST_ASSERT_EQUAL_INT(0, todo_list_init(&list));
-    TEST_ASSERT_NOT_NULL(list.todos);
+    TEST_ASSERT_NOT_NULL(list.data);
     TEST_ASSERT_EQUAL_UINT(0, list.count);
     TEST_ASSERT_GREATER_THAN_UINT(0, list.capacity);
     todo_list_destroy(&list);

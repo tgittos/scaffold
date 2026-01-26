@@ -24,14 +24,14 @@ size_t calculate_json_payload_size(const char* model, const char* system_prompt,
     size_t history_len = 0;
 
     // Calculate space needed for conversation history
-    for (int i = 0; i < conversation->count; i++) {
+    for (size_t i = 0; i < conversation->count; i++) {
         // Validate message fields before dereferencing
-        if (conversation->messages[i].role == NULL ||
-            conversation->messages[i].content == NULL) {
+        if (conversation->data[i].role == NULL ||
+            conversation->data[i].content == NULL) {
             continue; // Skip invalid messages
         }
-        size_t msg_size = strlen(conversation->messages[i].role) +
-                         strlen(conversation->messages[i].content) * 2 + 100; // Extra space for tool metadata
+        size_t msg_size = strlen(conversation->data[i].role) +
+                         strlen(conversation->data[i].content) * 2 + 100; // Extra space for tool metadata
 
         // Overflow protection: check before adding
         if (history_len > SIZE_MAX - msg_size) {
@@ -259,13 +259,13 @@ int build_messages_json(char* buffer, size_t buffer_size,
     }
     
     // Add conversation history
-    for (int i = 0; i < conversation->count; i++) {
+    for (size_t i = 0; i < conversation->count; i++) {
         // Skip system messages if requested
-        if (skip_system_in_history && strcmp(conversation->messages[i].role, "system") == 0) {
+        if (skip_system_in_history && strcmp(conversation->data[i].role, "system") == 0) {
             continue;
         }
         
-        int written = formatter(current, remaining, &conversation->messages[i], message_count == 0);
+        int written = formatter(current, remaining, &conversation->data[i], message_count == 0);
         if (written < 0) return -1;
         
         current += written;
@@ -325,8 +325,8 @@ int build_anthropic_messages_json(char* buffer, size_t buffer_size,
     }
     
     // Add conversation history with Anthropic tool call validation
-    for (int i = 0; i < conversation->count; i++) {
-        const ConversationMessage* msg = &conversation->messages[i];
+    for (size_t i = 0; i < conversation->count; i++) {
+        const ConversationMessage* msg = &conversation->data[i];
         
         // Skip system messages if requested
         if (skip_system_in_history && strcmp(msg->role, "system") == 0) {

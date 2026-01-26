@@ -6,6 +6,8 @@
 #include <string.h>
 #include <ctype.h>
 
+PTRARRAY_DEFINE(ModelRegistry, ModelCapabilities)
+
 // Helper function to perform case-insensitive pattern matching
 static int model_pattern_match(const char* model_name, const char* pattern) {
     if (!model_name || !pattern) {
@@ -42,77 +44,38 @@ static int model_pattern_match(const char* model_name, const char* pattern) {
 }
 
 int init_model_registry(ModelRegistry* registry) {
-    if (!registry) {
-        return -1;
-    }
-    
-    registry->capacity = 16;
-    registry->count = 0;
-    registry->models = calloc(registry->capacity, sizeof(ModelCapabilities*));
-    
-    if (!registry->models) {
-        return -1;
-    }
-    
-    return 0;
+    // Models are static, so we don't own them - pass NULL destructor
+    return ModelRegistry_init_capacity(registry, 16, NULL);
 }
 
 int register_model_capabilities(ModelRegistry* registry, ModelCapabilities* model) {
-    if (!registry || !model) {
-        return -1;
-    }
-    
-    // Expand capacity if needed
-    if (registry->count >= registry->capacity) {
-        int new_capacity = registry->capacity * 2;
-        ModelCapabilities** new_models = realloc(registry->models, 
-                                                new_capacity * sizeof(ModelCapabilities*));
-        if (!new_models) {
-            return -1;
-        }
-        registry->models = new_models;
-        registry->capacity = new_capacity;
-    }
-    
-    registry->models[registry->count++] = model;
-    return 0;
+    return ModelRegistry_push(registry, model);
 }
 
 ModelCapabilities* detect_model_capabilities(ModelRegistry* registry, const char* model_name) {
     if (!registry || !model_name) {
         return NULL;
     }
-    
+
     // Search for matching model
-    for (int i = 0; i < registry->count; i++) {
-        if (model_pattern_match(model_name, registry->models[i]->model_pattern)) {
-            return registry->models[i];
+    for (size_t i = 0; i < registry->count; i++) {
+        if (model_pattern_match(model_name, registry->data[i]->model_pattern)) {
+            return registry->data[i];
         }
     }
-    
+
     // Return default model if no match found
-    for (int i = 0; i < registry->count; i++) {
-        if (strcmp(registry->models[i]->model_pattern, "default") == 0) {
-            return registry->models[i];
+    for (size_t i = 0; i < registry->count; i++) {
+        if (strcmp(registry->data[i]->model_pattern, "default") == 0) {
+            return registry->data[i];
         }
     }
-    
+
     return NULL;
 }
 
 void cleanup_model_registry(ModelRegistry* registry) {
-    if (!registry) {
-        return;
-    }
-    
-    if (registry->models) {
-        // Note: We don't free individual models as they're typically static
-        free(registry->models);
-        registry->models = NULL;
-    }
-    
-    registry->count = 0;
-    registry->capacity = 0;
+    ModelRegistry_destroy(registry);
 }
 
 int process_model_response(ModelRegistry* registry, const char* model_name, 

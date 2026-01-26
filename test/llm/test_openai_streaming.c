@@ -106,9 +106,9 @@ void test_parse_tool_call_start(void) {
 
     int result = openai_provider->parse_stream_event(openai_provider, test_ctx, json, strlen(json));
     TEST_ASSERT_EQUAL_INT(0, result);
-    TEST_ASSERT_EQUAL_INT(1, test_ctx->tool_use_count);
-    TEST_ASSERT_EQUAL_STRING("call_abc123", test_ctx->tool_uses[0].id);
-    TEST_ASSERT_EQUAL_STRING("get_weather", test_ctx->tool_uses[0].name);
+    TEST_ASSERT_EQUAL_INT(1, test_ctx->tool_uses.count);
+    TEST_ASSERT_EQUAL_STRING("call_abc123", test_ctx->tool_uses.data[0].id);
+    TEST_ASSERT_EQUAL_STRING("get_weather", test_ctx->tool_uses.data[0].name);
 }
 
 void test_parse_tool_call_arguments_delta(void) {
@@ -139,7 +139,7 @@ void test_parse_tool_call_arguments_delta(void) {
     openai_provider->parse_stream_event(openai_provider, test_ctx, json_delta1, strlen(json_delta1));
     openai_provider->parse_stream_event(openai_provider, test_ctx, json_delta2, strlen(json_delta2));
 
-    TEST_ASSERT_EQUAL_STRING("{\"cmd\":\"ls\"}", test_ctx->tool_uses[0].arguments_json);
+    TEST_ASSERT_EQUAL_STRING("{\"cmd\":\"ls\"}", test_ctx->tool_uses.data[0].arguments_json);
 }
 
 void test_parse_multiple_tool_calls(void) {
@@ -160,9 +160,9 @@ void test_parse_multiple_tool_calls(void) {
     openai_provider->parse_stream_event(openai_provider, test_ctx, json1, strlen(json1));
     openai_provider->parse_stream_event(openai_provider, test_ctx, json2, strlen(json2));
 
-    TEST_ASSERT_EQUAL_INT(2, test_ctx->tool_use_count);
-    TEST_ASSERT_EQUAL_STRING("call_1", test_ctx->tool_uses[0].id);
-    TEST_ASSERT_EQUAL_STRING("call_2", test_ctx->tool_uses[1].id);
+    TEST_ASSERT_EQUAL_INT(2, test_ctx->tool_uses.count);
+    TEST_ASSERT_EQUAL_STRING("call_1", test_ctx->tool_uses.data[0].id);
+    TEST_ASSERT_EQUAL_STRING("call_2", test_ctx->tool_uses.data[1].id);
 }
 
 // =============================================================================

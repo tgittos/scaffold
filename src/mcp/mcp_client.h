@@ -3,6 +3,8 @@
 
 #include <stddef.h>
 #include "../tools/tools_system.h"
+#include "../utils/ptrarray.h"
+#include "../utils/darray.h"
 
 /**
  * MCP Server Types
@@ -14,55 +16,65 @@ typedef enum {
 } MCPServerType;
 
 /**
- * MCP Server Configuration
+ * Key-value pair for environment variables and HTTP headers
  */
 typedef struct {
+    char* key;
+    char* value;
+} KeyValue;
+
+/**
+ * Dynamic array declarations
+ */
+DARRAY_DECLARE(ToolFunctionArray, ToolFunction)
+DARRAY_DECLARE(KeyValueArray, KeyValue)
+
+/**
+ * MCP Server Configuration
+ */
+typedef struct MCPServerConfig {
     char* name;                  // Server name (key in config)
     MCPServerType type;          // Server type
     char* command;               // Command path (for stdio)
     char* url;                   // URL (for SSE/HTTP)
-    char** args;                 // Command arguments (for stdio)
-    int arg_count;               // Number of arguments
-    char** env_keys;             // Environment variable keys
-    char** env_values;           // Environment variable values
-    int env_count;               // Number of environment variables
-    char** header_keys;          // HTTP header keys (for SSE/HTTP)
-    char** header_values;        // HTTP header values (for SSE/HTTP)
-    int header_count;            // Number of headers
+    StringArray args;            // Command arguments (for stdio)
+    KeyValueArray env_vars;      // Environment variables (for stdio)
+    KeyValueArray headers;       // HTTP headers (for SSE/HTTP)
     int enabled;                 // Whether server is enabled
 } MCPServerConfig;
+
+DARRAY_DECLARE(MCPServerConfigArray, MCPServerConfig)
 
 /**
  * MCP Server Runtime State
  */
-typedef struct {
+typedef struct MCPServerState {
     MCPServerConfig* config;     // Pointer to server configuration (borrowed, not owned)
     int process_id;              // Process ID (for stdio servers)
     int stdin_fd;                // stdin file descriptor (for stdio)
     int stdout_fd;               // stdout file descriptor (for stdio)
     int initialized;             // Whether server is initialized
     char* session_id;            // Session identifier
-    ToolFunction* tools;         // Available tools from this server
-    int tool_count;              // Number of tools
+    ToolFunctionArray tools;     // Available tools from this server
 } MCPServerState;
+
+DARRAY_DECLARE(MCPServerStateArray, MCPServerState)
 
 /**
  * MCP Client Configuration
  */
 typedef struct {
-    MCPServerConfig* servers;    // Array of server configurations
-    int server_count;            // Number of configured servers
-    char* config_path;           // Path to configuration file
+    MCPServerConfigArray servers;  // Array of server configurations
+    char* config_path;              // Path to configuration file
 } MCPClientConfig;
 
 /**
  * MCP Client State
  */
 typedef struct {
-    MCPClientConfig config;      // Client configuration
-    MCPServerState* servers;     // Array of server runtime states
-    int active_server_count;     // Number of active servers
-    int initialized;             // Whether client is initialized
+    MCPClientConfig config;        // Client configuration
+    MCPServerStateArray servers;   // Array of server runtime states
+    int initialized;               // Whether client is initialized
 } MCPClient;
 
 /**

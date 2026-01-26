@@ -99,7 +99,7 @@ void test_ralph_init_and_cleanup_session(void) {
     
     // Verify session was initialized
     // Note: conversation.count may be > 0 due to loaded conversation history
-    TEST_ASSERT_TRUE(session.session_data.conversation.count >= 0);
+    // (count is size_t, always >= 0, so just verify tools loaded)
     TEST_ASSERT_TRUE(session.tools.function_count > 0); // Should have built-in tools
     
     // Cleanup should work without errors
@@ -269,13 +269,13 @@ void test_ralph_execute_tool_workflow_api_failure_resilience(void) {
 
     // Look for tool result message in conversation history
     int found_tool_result = 0;
-    for (int i = 0; i < session.session_data.conversation.count; i++) {
-        if (strcmp(session.session_data.conversation.messages[i].role, "tool") == 0) {
+    for (size_t i = 0; i < session.session_data.conversation.count; i++) {
+        if (strcmp(session.session_data.conversation.data[i].role, "tool") == 0) {
             found_tool_result = 1;
-            TEST_ASSERT_EQUAL_STRING("test_tool_id_123", session.session_data.conversation.messages[i].tool_call_id);
-            TEST_ASSERT_EQUAL_STRING("vector_db_list_indices", session.session_data.conversation.messages[i].tool_name);
+            TEST_ASSERT_EQUAL_STRING("test_tool_id_123", session.session_data.conversation.data[i].tool_call_id);
+            TEST_ASSERT_EQUAL_STRING("vector_db_list_indices", session.session_data.conversation.data[i].tool_name);
             // vector_db_list_indices returns JSON with indices array (may be empty)
-            TEST_ASSERT_TRUE(strstr(session.session_data.conversation.messages[i].content, "indices") != NULL);
+            TEST_ASSERT_TRUE(strstr(session.session_data.conversation.data[i].content, "indices") != NULL);
             break;
         }
     }
@@ -376,11 +376,11 @@ void test_tool_execution_without_api_server(void) {
 
     // Find and verify tool result
     int found_tool_result = 0;
-    for (int i = 0; i < session.session_data.conversation.count; i++) {
-        if (strcmp(session.session_data.conversation.messages[i].role, "tool") == 0) {
+    for (size_t i = 0; i < session.session_data.conversation.count; i++) {
+        if (strcmp(session.session_data.conversation.data[i].role, "tool") == 0) {
             found_tool_result = 1;
             // vector_db_list_indices returns JSON with indices array
-            TEST_ASSERT_TRUE(strstr(session.session_data.conversation.messages[i].content, "indices") != NULL);
+            TEST_ASSERT_TRUE(strstr(session.session_data.conversation.data[i].content, "indices") != NULL);
             break;
         }
     }
@@ -542,11 +542,11 @@ void test_graceful_degradation_on_api_errors(void) {
 
     // Verify tool result exists
     int found_tool_result = 0;
-    for (int i = 0; i < session.session_data.conversation.count; i++) {
-        if (strcmp(session.session_data.conversation.messages[i].role, "tool") == 0) {
+    for (size_t i = 0; i < session.session_data.conversation.count; i++) {
+        if (strcmp(session.session_data.conversation.data[i].role, "tool") == 0) {
             found_tool_result = 1;
             // vector_db_list_indices returns JSON with indices array
-            TEST_ASSERT_TRUE(strstr(session.session_data.conversation.messages[i].content, "indices") != NULL);
+            TEST_ASSERT_TRUE(strstr(session.session_data.conversation.data[i].content, "indices") != NULL);
             break;
         }
     }
@@ -626,16 +626,16 @@ void test_sequential_tool_execution(void) {
 
     // Verify both tools executed
     int found_first = 0, found_second = 0;
-    for (int i = 0; i < session.session_data.conversation.count; i++) {
-        if (strcmp(session.session_data.conversation.messages[i].role, "tool") == 0) {
-            if (strcmp(session.session_data.conversation.messages[i].tool_call_id, "seq_test_1") == 0) {
+    for (size_t i = 0; i < session.session_data.conversation.count; i++) {
+        if (strcmp(session.session_data.conversation.data[i].role, "tool") == 0) {
+            if (strcmp(session.session_data.conversation.data[i].tool_call_id, "seq_test_1") == 0) {
                 found_first = 1;
                 // vector_db_list_indices returns JSON with indices array
-                TEST_ASSERT_TRUE(strstr(session.session_data.conversation.messages[i].content, "indices") != NULL);
+                TEST_ASSERT_TRUE(strstr(session.session_data.conversation.data[i].content, "indices") != NULL);
             }
-            if (strcmp(session.session_data.conversation.messages[i].tool_call_id, "seq_test_2") == 0) {
+            if (strcmp(session.session_data.conversation.data[i].tool_call_id, "seq_test_2") == 0) {
                 found_second = 1;
-                TEST_ASSERT_TRUE(strstr(session.session_data.conversation.messages[i].content, "indices") != NULL);
+                TEST_ASSERT_TRUE(strstr(session.session_data.conversation.data[i].content, "indices") != NULL);
             }
         }
     }
@@ -703,17 +703,17 @@ void test_tool_name_hardcoded_bug_fixed(void) {
 
     // Find the tool result message and verify the tool_name is now correct
     int found_tool_result = 0;
-    for (int i = 0; i < session.session_data.conversation.count; i++) {
-        if (strcmp(session.session_data.conversation.messages[i].role, "tool") == 0) {
+    for (size_t i = 0; i < session.session_data.conversation.count; i++) {
+        if (strcmp(session.session_data.conversation.data[i].role, "tool") == 0) {
             found_tool_result = 1;
-            printf("DEBUG: Fixed tool message has tool_name: '%s'\n", session.session_data.conversation.messages[i].tool_name);
+            printf("DEBUG: Fixed tool message has tool_name: '%s'\n", session.session_data.conversation.data[i].tool_name);
 
             // BUG FIX VERIFICATION: tool_name should now be "vector_db_list_indices", NOT "tool_name"
-            TEST_ASSERT_EQUAL_STRING("vector_db_list_indices", session.session_data.conversation.messages[i].tool_name);
-            TEST_ASSERT_EQUAL_STRING("toolu_01DdpdffBNXNqfWFDUCtY7Jc", session.session_data.conversation.messages[i].tool_call_id);
+            TEST_ASSERT_EQUAL_STRING("vector_db_list_indices", session.session_data.conversation.data[i].tool_name);
+            TEST_ASSERT_EQUAL_STRING("toolu_01DdpdffBNXNqfWFDUCtY7Jc", session.session_data.conversation.data[i].tool_call_id);
 
             // Verify it's NOT the hardcoded bug value anymore
-            TEST_ASSERT_NOT_EQUAL(0, strcmp("tool_name", session.session_data.conversation.messages[i].tool_name));
+            TEST_ASSERT_NOT_EQUAL(0, strcmp("tool_name", session.session_data.conversation.data[i].tool_name));
             break;
         }
     }

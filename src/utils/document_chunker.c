@@ -5,14 +5,15 @@
 #include <string.h>
 #include <ctype.h>
 
+DARRAY_DEFINE(ChunkArray, document_chunk_t)
+
 static chunking_result_t* create_error_result(const char *error_msg) {
     chunking_result_t *result = malloc(sizeof(chunking_result_t));
     if (!result) return NULL;
-    
-    result->chunks = NULL;
-    result->chunk_count = 0;
+
+    ChunkArray_init(&result->chunks);
     result->error = safe_strdup(error_msg);
-    
+
     return result;
 }
 
@@ -177,50 +178,46 @@ chunking_result_t* chunk_document(const char *text, const chunking_config_t *con
         if (!result) {
             return create_error_result("Memory allocation failed");
         }
-        
-        result->chunk_count = 1;
-        result->chunks = malloc(sizeof(document_chunk_t));
+
+        ChunkArray_init_capacity(&result->chunks, 1);
         result->error = NULL;
-        
-        if (!result->chunks) {
+
+        document_chunk_t chunk;
+        chunk.text = safe_strdup(text);
+        chunk.length = text_len;
+        chunk.start_offset = 0;
+        chunk.end_offset = text_len;
+        chunk.chunk_index = 0;
+
+        if (!chunk.text) {
+            ChunkArray_destroy(&result->chunks);
             free(result);
             return create_error_result("Memory allocation failed");
         }
-        
-        result->chunks[0].text = safe_strdup(text);
-        result->chunks[0].length = text_len;
-        result->chunks[0].start_offset = 0;
-        result->chunks[0].end_offset = text_len;
-        result->chunks[0].chunk_index = 0;
-        
-        if (!result->chunks[0].text) {
-            free(result->chunks);
-            free(result);
-            return create_error_result("Memory allocation failed");
-        }
-        
+
         // Apply whitespace trimming to single chunk as well
-        trim_whitespace(result->chunks[0].text, &result->chunks[0].length);
-        
+        trim_whitespace(chunk.text, &chunk.length);
+
+        if (ChunkArray_push(&result->chunks, chunk) != 0) {
+            free(chunk.text);
+            ChunkArray_destroy(&result->chunks);
+            free(result);
+            return create_error_result("Memory allocation failed");
+        }
+
         return result;
     }
     
     // Estimate number of chunks needed
     size_t estimated_chunks = (text_len / (config->max_chunk_size - config->overlap_size)) + 2;
-    
+
     chunking_result_t *result = malloc(sizeof(chunking_result_t));
     if (!result) {
         return create_error_result("Memory allocation failed");
     }
-    
-    result->chunks = malloc(estimated_chunks * sizeof(document_chunk_t));
-    result->chunk_count = 0;
+
+    ChunkArray_init_capacity(&result->chunks, estimated_chunks);
     result->error = NULL;
-    
-    if (!result->chunks) {
-        free(result);
-        return create_error_result("Memory allocation failed");
-    }
     
     size_t current_pos = 0;
     int chunk_index = 0;
@@ -241,49 +238,44 @@ chunking_result_t* chunk_document(const char *text, const chunking_config_t *con
         
         // Create the chunk
         size_t chunk_length = chunk_end - current_pos;
-        
-        // Reallocate chunks array if needed
-        if (result->chunk_count >= estimated_chunks) {
-            estimated_chunks *= 2;
-            document_chunk_t *new_chunks = realloc(result->chunks, 
-                                                  estimated_chunks * sizeof(document_chunk_t));
-            if (!new_chunks) {
-                // Cleanup and return error
-                for (size_t i = 0; i < result->chunk_count; i++) {
-                    free(result->chunks[i].text);
-                }
-                free(result->chunks);
-                free(result);
-                return create_error_result("Memory allocation failed during chunking");
-            }
-            result->chunks = new_chunks;
-        }
-        
+
+        document_chunk_t chunk;
+
         // Allocate and copy chunk text
-        result->chunks[result->chunk_count].text = malloc(chunk_length + 1);
-        if (!result->chunks[result->chunk_count].text) {
+        chunk.text = malloc(chunk_length + 1);
+        if (!chunk.text) {
             // Cleanup and return error
-            for (size_t i = 0; i < result->chunk_count; i++) {
-                free(result->chunks[i].text);
+            for (size_t i = 0; i < result->chunks.count; i++) {
+                free(result->chunks.data[i].text);
             }
-            free(result->chunks);
+            ChunkArray_destroy(&result->chunks);
             free(result);
             return create_error_result("Memory allocation failed for chunk text");
         }
-        
-        memcpy(result->chunks[result->chunk_count].text, text + current_pos, chunk_length);
-        result->chunks[result->chunk_count].text[chunk_length] = '\0';
-        
+
+        memcpy(chunk.text, text + current_pos, chunk_length);
+        chunk.text[chunk_length] = '\0';
+
         // Trim whitespace from chunk
-        trim_whitespace(result->chunks[result->chunk_count].text, &chunk_length);
-        
+        trim_whitespace(chunk.text, &chunk_length);
+
         // Set chunk metadata
-        result->chunks[result->chunk_count].length = chunk_length;
-        result->chunks[result->chunk_count].start_offset = current_pos;
-        result->chunks[result->chunk_count].end_offset = chunk_end;
-        result->chunks[result->chunk_count].chunk_index = chunk_index;
-        
-        result->chunk_count++;
+        chunk.length = chunk_length;
+        chunk.start_offset = current_pos;
+        chunk.end_offset = chunk_end;
+        chunk.chunk_index = chunk_index;
+
+        if (ChunkArray_push(&result->chunks, chunk) != 0) {
+            // Cleanup and return error
+            free(chunk.text);
+            for (size_t i = 0; i < result->chunks.count; i++) {
+                free(result->chunks.data[i].text);
+            }
+            ChunkArray_destroy(&result->chunks);
+            free(result);
+            return create_error_result("Memory allocation failed during chunking");
+        }
+
         chunk_index++;
         
         // Move to next chunk position with overlap
@@ -310,14 +302,12 @@ chunking_result_t* chunk_document(const char *text, const chunking_config_t *con
 
 void free_chunking_result(chunking_result_t *result) {
     if (!result) return;
-    
-    if (result->chunks) {
-        for (size_t i = 0; i < result->chunk_count; i++) {
-            free(result->chunks[i].text);
-        }
-        free(result->chunks);
+
+    for (size_t i = 0; i < result->chunks.count; i++) {
+        free(result->chunks.data[i].text);
     }
-    
+    ChunkArray_destroy(&result->chunks);
+
     free(result->error);
     free(result);
 }

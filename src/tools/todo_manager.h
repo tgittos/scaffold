@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <time.h>
+#include "utils/darray.h"
 
 #define TODO_MAX_CONTENT_LENGTH 512
 #define TODO_MAX_ID_LENGTH 64
@@ -29,11 +30,7 @@ typedef struct {
     time_t updated_at;
 } Todo;
 
-typedef struct {
-    Todo* todos;
-    size_t count;
-    size_t capacity;
-} TodoList;
+DARRAY_DECLARE(TodoList, Todo)
 
 int todo_list_init(TodoList* list);
 void todo_list_destroy(TodoList* list);

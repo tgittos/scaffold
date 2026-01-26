@@ -6,15 +6,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+DARRAY_DEFINE(ContextItemArray, context_item_t)
+
 
 static context_result_t* create_error_result(const char *error_msg) {
     context_result_t *result = malloc(sizeof(context_result_t));
     if (!result) return NULL;
-    
-    result->items = NULL;
-    result->item_count = 0;
+
+    ContextItemArray_init(&result->items);
     result->error = safe_strdup(error_msg);
-    
+
     return result;
 }
 
@@ -24,9 +25,8 @@ context_result_t* retrieve_relevant_context(const char *user_message, size_t max
         // Return empty result for empty messages (not an error)
         context_result_t *result = malloc(sizeof(context_result_t));
         if (!result) return create_error_result("Memory allocation failed");
-        
-        result->items = NULL;
-        result->item_count = 0;
+
+        ContextItemArray_init(&result->items);
         result->error = NULL;
         return result;
     }
@@ -42,9 +42,8 @@ context_result_t* retrieve_relevant_context(const char *user_message, size_t max
         // No documents index, return empty result (not an error)
         context_result_t *result = malloc(sizeof(context_result_t));
         if (!result) return create_error_result("Memory allocation failed");
-        
-        result->items = NULL;
-        result->item_count = 0;
+
+        ContextItemArray_init(&result->items);
         result->error = NULL;
         return result;
     }
@@ -75,35 +74,41 @@ context_result_t* retrieve_relevant_context(const char *user_message, size_t max
         embeddings_service_free_vector(query_vector);
         return create_error_result("Memory allocation failed");
     }
-    
-    result->item_count = search_results->count;
+
+    ContextItemArray_init_capacity(&result->items, search_results->count);
     result->error = NULL;
-    
-    if (result->item_count == 0) {
-        result->items = NULL;
+
+    if (search_results->count == 0) {
         vector_db_free_search_results(search_results);
+        embeddings_service_free_vector(query_vector);
         return result;
     }
-    
-    // Allocate context items
-    result->items = malloc(result->item_count * sizeof(context_item_t));
-    if (!result->items) {
-        vector_db_free_search_results(search_results);
-        free(result);
-        return create_error_result("Memory allocation failed");
-    }
-    
+
     // Fill context items
-    for (size_t i = 0; i < result->item_count; i++) {
-        context_item_t *item = &result->items[i];
+    for (size_t i = 0; i < search_results->count; i++) {
         search_result_t *search_item = &search_results->results[i];
-        
+
+        context_item_t item;
         // For now, we don't have a way to retrieve the original text from labels
         // This would require storing chunk text alongside vectors
         // For MVP, we'll create a placeholder
-        item->content = safe_strdup("Relevant document chunk (text retrieval not implemented yet)");
-        item->relevance_score = 1.0 - search_item->distance; // Convert distance to relevance
-        item->source = safe_strdup("Vector database");
+        item.content = safe_strdup("Relevant document chunk (text retrieval not implemented yet)");
+        item.relevance_score = 1.0 - search_item->distance; // Convert distance to relevance
+        item.source = safe_strdup("Vector database");
+
+        if (ContextItemArray_push(&result->items, item) != 0) {
+            free(item.content);
+            free(item.source);
+            for (size_t j = 0; j < result->items.count; j++) {
+                free(result->items.data[j].content);
+                free(result->items.data[j].source);
+            }
+            ContextItemArray_destroy(&result->items);
+            vector_db_free_search_results(search_results);
+            embeddings_service_free_vector(query_vector);
+            free(result);
+            return create_error_result("Memory allocation failed");
+        }
     }
     
     vector_db_free_search_results(search_results);
@@ -112,7 +117,7 @@ context_result_t* retrieve_relevant_context(const char *user_message, size_t max
 }
 
 char* format_context_for_prompt(const context_result_t *context_result) {
-    if (!context_result || context_result->item_count == 0) {
+    if (!context_result || context_result->items.count == 0) {
         return NULL;
     }
 
@@ -124,10 +129,10 @@ char* format_context_for_prompt(const context_result_t *context_result) {
     // - Header + footer overhead
     // - Per item: "- " (2) + content + " (relevance: X.XX)\n" (20 max) + safety margin
     size_t total_size = strlen(header) + strlen(footer) + 1;
-    for (size_t i = 0; i < context_result->item_count; i++) {
-        if (context_result->items[i].content) {
+    for (size_t i = 0; i < context_result->items.count; i++) {
+        if (context_result->items.data[i].content) {
             // "- " (2) + content + " (relevance: X.XX)\n" (~22) + safety margin (~10)
-            total_size += strlen(context_result->items[i].content) + 32;
+            total_size += strlen(context_result->items.data[i].content) + 32;
         }
     }
 
@@ -137,8 +142,8 @@ char* format_context_for_prompt(const context_result_t *context_result) {
     strcpy(formatted, header);
     size_t current_len = strlen(formatted);
 
-    for (size_t i = 0; i < context_result->item_count; i++) {
-        context_item_t *item = &context_result->items[i];
+    for (size_t i = 0; i < context_result->items.count; i++) {
+        context_item_t *item = &context_result->items.data[i];
         if (item->content) {
             // Use snprintf directly into the buffer at the right offset
             int written = snprintf(formatted + current_len, total_size - current_len,
@@ -160,15 +165,13 @@ char* format_context_for_prompt(const context_result_t *context_result) {
 
 void free_context_result(context_result_t *result) {
     if (!result) return;
-    
-    if (result->items) {
-        for (size_t i = 0; i < result->item_count; i++) {
-            free(result->items[i].content);
-            free(result->items[i].source);
-        }
-        free(result->items);
+
+    for (size_t i = 0; i < result->items.count; i++) {
+        free(result->items.data[i].content);
+        free(result->items.data[i].source);
     }
-    
+    ContextItemArray_destroy(&result->items);
+
     free(result->error);
     free(result);
 }

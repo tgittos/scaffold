@@ -6,6 +6,7 @@
 // Forward declaration - include the actual header instead
 #include "output_formatter.h"
 #include "tools_system.h"
+#include "utils/ptrarray.h"
 
 // Model-specific capabilities
 typedef struct {
@@ -31,11 +32,7 @@ typedef struct {
 } ModelCapabilities;
 
 // Model registry
-typedef struct {
-    ModelCapabilities** models;
-    int count;
-    int capacity;
-} ModelRegistry;
+PTRARRAY_DECLARE(ModelRegistry, ModelCapabilities)
 
 // Core model management functions
 int init_model_registry(ModelRegistry* registry);

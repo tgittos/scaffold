@@ -4,6 +4,7 @@
 #include "hnswlib_wrapper.h"
 #include "../utils/config.h"
 #include "../llm/embeddings_service.h"
+#include "../utils/ptrarray.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,6 +12,9 @@
 #include <dirent.h>
 #include <unistd.h>
 #include <cJSON.h>
+
+PTRARRAY_DEFINE(DocumentArray, document_t)
+DARRAY_DEFINE(DocumentResultArray, document_result_t)
 
 struct document_store {
     char* base_path;
@@ -406,38 +410,38 @@ document_search_results_t* document_store_search(document_store_t* store,
         vector_db_free_search_results(vector_results);
         return NULL;
     }
-    
-    results->count = vector_results->count;
-    results->documents = calloc(results->count, sizeof(document_t*));
-    results->distances = calloc(results->count, sizeof(float));
-    
-    if (results->documents == NULL || results->distances == NULL) {
-        free(results->documents);
-        free(results->distances);
+
+    if (DocumentResultArray_init_capacity(&results->results, vector_results->count) != 0) {
         free(results);
         vector_db_free_search_results(vector_results);
         return NULL;
     }
-    
-    for (size_t i = 0; i < results->count; i++) {
-        results->documents[i] = load_document(store, index_name, vector_results->results[i].label);
-        results->distances[i] = vector_results->results[i].distance;
-        
-        if (results->documents[i]) {
+
+    for (size_t i = 0; i < vector_results->count; i++) {
+        document_result_t result;
+        result.document = load_document(store, index_name, vector_results->results[i].label);
+        result.distance = vector_results->results[i].distance;
+
+        if (result.document) {
             vector_t vec;
             vec.data = malloc(embedding_dim * sizeof(float));
             vec.dimension = embedding_dim;
-            
-            if (vec.data && vector_db_get_vector(store->vector_db, index_name, 
+
+            if (vec.data && vector_db_get_vector(store->vector_db, index_name,
                                                 vector_results->results[i].label, &vec) == VECTOR_DB_OK) {
-                results->documents[i]->embedding = vec.data;
-                results->documents[i]->embedding_dim = vec.dimension;
+                result.document->embedding = vec.data;
+                result.document->embedding_dim = vec.dimension;
             } else {
                 free(vec.data);
             }
         }
+
+        if (DocumentResultArray_push(&results->results, result) != 0) {
+            document_store_free_document(result.document);
+            // Continue with remaining results
+        }
     }
-    
+
     vector_db_free_search_results(vector_results);
     return results;
 }
@@ -566,70 +570,76 @@ document_search_results_t* document_store_search_by_time(document_store_t* store
                                                         time_t end_time,
                                                         size_t limit) {
     if (store == NULL || index_name == NULL) return NULL;
-    
+
     char* index_path = get_document_path(store, index_name);
     if (index_path == NULL) return NULL;
-    
+
     DIR* dir = opendir(index_path);
     if (dir == NULL) {
         free(index_path);
         return NULL;
     }
-    
-    document_search_results_t* results = calloc(1, sizeof(document_search_results_t));
-    if (results == NULL) {
+
+    DocumentArray doc_arr;
+    size_t initial_capacity = limit > 0 ? limit : 100;
+    if (DocumentArray_init_capacity(&doc_arr, initial_capacity, NULL) != 0) {
         closedir(dir);
         free(index_path);
         return NULL;
     }
-    
-    size_t capacity = limit > 0 ? limit : 100;
-    results->documents = calloc(capacity, sizeof(document_t*));
-    if (results->documents == NULL) {
-        free(results);
-        closedir(dir);
-        free(index_path);
-        return NULL;
-    }
-    
+
     struct dirent* entry;
-    while ((entry = readdir(dir)) != NULL && (limit == 0 || results->count < limit)) {
+    while ((entry = readdir(dir)) != NULL && (limit == 0 || doc_arr.count < limit)) {
         if (strncmp(entry->d_name, "doc_", 4) == 0) {
             size_t id;
             if (sscanf(entry->d_name, "doc_%zu.json", &id) == 1) {
                 document_t* doc = load_document(store, index_name, id);
                 if (doc && doc->timestamp >= start_time && doc->timestamp <= end_time) {
-                    if (results->count >= capacity) {
-                        capacity *= 2;
-                        document_t** new_docs = realloc(results->documents, capacity * sizeof(document_t*));
-                        if (new_docs == NULL) {
-                            document_store_free_document(doc);
-                            break;
-                        }
-                        results->documents = new_docs;
+                    if (DocumentArray_push(&doc_arr, doc) != 0) {
+                        document_store_free_document(doc);
+                        break;
                     }
-                    results->documents[results->count++] = doc;
                 } else if (doc) {
                     document_store_free_document(doc);
                 }
             }
         }
     }
-    
+
     closedir(dir);
     free(index_path);
-    
-    if (results->count == 0) {
-        free(results->documents);
+
+    if (doc_arr.count == 0) {
+        DocumentArray_destroy_shallow(&doc_arr);
+        return NULL;
+    }
+
+    document_search_results_t* results = calloc(1, sizeof(document_search_results_t));
+    if (results == NULL) {
+        DocumentArray_destroy(&doc_arr);
+        return NULL;
+    }
+
+    if (DocumentResultArray_init_capacity(&results->results, doc_arr.count) != 0) {
+        DocumentArray_destroy(&doc_arr);
         free(results);
         return NULL;
     }
-    
-    document_t** trimmed = realloc(results->documents, results->count * sizeof(document_t*));
-    if (trimmed) {
-        results->documents = trimmed;
+
+    // Transfer documents to result array (time-based search has no distances)
+    for (size_t i = 0; i < doc_arr.count; i++) {
+        document_result_t result = {
+            .document = doc_arr.data[i],
+            .distance = 0.0f  // No distance for time-based search
+        };
+        if (DocumentResultArray_push(&results->results, result) != 0) {
+            document_store_free_document(doc_arr.data[i]);
+        }
     }
-    
+
+    // Free the temporary array container (documents are now owned by results)
+    DocumentArray_destroy_shallow(&doc_arr);
+
     return results;
 }
 
@@ -646,13 +656,12 @@ void document_store_free_document(document_t* doc) {
 
 void document_store_free_results(document_search_results_t* results) {
     if (results == NULL) return;
-    
-    for (size_t i = 0; i < results->count; i++) {
-        document_store_free_document(results->documents[i]);
+
+    for (size_t i = 0; i < results->results.count; i++) {
+        document_store_free_document(results->results.data[i].document);
     }
-    
-    free(results->documents);
-    free(results->distances);
+
+    DocumentResultArray_destroy(&results->results);
     free(results);
 }
 

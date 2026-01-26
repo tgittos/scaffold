@@ -1,4 +1,5 @@
 #include "pdf_extractor.h"
+#include "utils/darray.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,6 +8,9 @@
 
 // PDFio headers
 #include <pdfio.h>
+
+// Define a dynamic character buffer for growing text extraction
+DARRAY_IMPL(CharBuffer, char)
 
 // Buffer size constants
 #define PDF_INITIAL_BUFFER_SIZE 1024
@@ -64,19 +68,20 @@ static char* extract_text_from_page(pdfio_file_t *pdf, size_t page_num) {
     if (!page) {
         return NULL;
     }
-    
+
     size_t num_streams = pdfioPageGetNumStreams(page);
-    char *full_text = NULL;
-    size_t full_text_len = 0;
-    size_t full_text_cap = 0;
-    
+    CharBuffer text_buffer;
+    if (CharBuffer_init_capacity(&text_buffer, PDF_INITIAL_BUFFER_SIZE) != 0) {
+        return NULL;
+    }
+
     // Process all streams on the page
     for (size_t j = 0; j < num_streams; j++) {
         pdfio_stream_t *st = pdfioPageOpenStream(page, j, true);
         if (!st) {
             continue;
         }
-        
+
         // Extract text tokens from the stream, based on pdfiototext.c
         char buffer[PDF_TOKEN_BUFFER_SIZE];
         bool first = true;
@@ -87,79 +92,63 @@ static char* extract_text_from_page(pdfio_file_t *pdf, size_t page_num) {
                 if (token_len > 0) {
                     // Add space before token if not first
                     if (!first) {
-                        if (full_text_len >= full_text_cap) {
-                            full_text_cap = full_text_cap ? full_text_cap * 2 : PDF_INITIAL_BUFFER_SIZE;
-                            char *new_text = realloc(full_text, full_text_cap + 1);
-                            if (!new_text) {
-                                free(full_text);
-                                pdfioStreamClose(st);
-                                return NULL;
-                            }
-                            full_text = new_text;
+                        if (CharBuffer_push(&text_buffer, ' ') != 0) {
+                            CharBuffer_destroy(&text_buffer);
+                            pdfioStreamClose(st);
+                            return NULL;
                         }
-                        full_text[full_text_len++] = ' ';
                     } else {
                         first = false;
                     }
 
-                    // Ensure we have enough space
-                    while (full_text_len + token_len >= full_text_cap) {
-                        full_text_cap = full_text_cap ? full_text_cap * 2 : PDF_INITIAL_BUFFER_SIZE;
-                        char *new_text = realloc(full_text, full_text_cap + 1);
-                        if (!new_text) {
-                            free(full_text);
-                            pdfioStreamClose(st);
-                            return NULL;
-                        }
-                        full_text = new_text;
+                    // Reserve space for the token
+                    if (CharBuffer_reserve(&text_buffer, text_buffer.count + token_len) != 0) {
+                        CharBuffer_destroy(&text_buffer);
+                        pdfioStreamClose(st);
+                        return NULL;
                     }
 
                     // Copy the token
-                    memcpy(full_text + full_text_len, buffer + 1, token_len);
-                    full_text_len += token_len;
+                    memcpy(text_buffer.data + text_buffer.count, buffer + 1, token_len);
+                    text_buffer.count += token_len;
                 }
             } else if (!strcmp(buffer, "Td") || !strcmp(buffer, "TD") || !strcmp(buffer, "T*") ||
                        !strcmp(buffer, "'") || !strcmp(buffer, "\"")) {
                 // Text positioning commands - add newline
                 if (!first) {
-                    if (full_text_len >= full_text_cap) {
-                        full_text_cap = full_text_cap ? full_text_cap * 2 : PDF_INITIAL_BUFFER_SIZE;
-                        char *new_text = realloc(full_text, full_text_cap + 1);
-                        if (!new_text) {
-                            free(full_text);
-                            pdfioStreamClose(st);
-                            return NULL;
-                        }
-                        full_text = new_text;
+                    if (CharBuffer_push(&text_buffer, '\n') != 0) {
+                        CharBuffer_destroy(&text_buffer);
+                        pdfioStreamClose(st);
+                        return NULL;
                     }
-                    full_text[full_text_len++] = '\n';
                     first = true;
                 }
             }
         }
 
-        if (!first && full_text_len > 0 && full_text[full_text_len - 1] != '\n') {
-            if (full_text_len >= full_text_cap) {
-                full_text_cap = full_text_cap ? full_text_cap * 2 : PDF_INITIAL_BUFFER_SIZE;
-                char *new_text = realloc(full_text, full_text_cap + 1);
-                if (!new_text) {
-                    free(full_text);
-                    pdfioStreamClose(st);
-                    return NULL;
-                }
-                full_text = new_text;
+        if (!first && text_buffer.count > 0 && text_buffer.data[text_buffer.count - 1] != '\n') {
+            if (CharBuffer_push(&text_buffer, '\n') != 0) {
+                CharBuffer_destroy(&text_buffer);
+                pdfioStreamClose(st);
+                return NULL;
             }
-            full_text[full_text_len++] = '\n';
         }
-        
+
         pdfioStreamClose(st);
     }
-    
-    if (full_text) {
-        full_text[full_text_len] = '\0';
+
+    // Add null terminator
+    if (CharBuffer_push(&text_buffer, '\0') != 0) {
+        CharBuffer_destroy(&text_buffer);
+        return NULL;
     }
-    
-    return full_text;
+
+    // Return the buffer, transferring ownership to caller
+    char* result = text_buffer.data;
+    text_buffer.data = NULL;  // Don't free the data
+    CharBuffer_destroy(&text_buffer);
+
+    return result;
 }
 
 static pdf_extraction_result_t* pdf_extract_text_internal(const char* pdf_path,

@@ -6,6 +6,9 @@
 #include <dirent.h>
 #include <cJSON.h>
 #include "../utils/common_utils.h"
+#include "../utils/ptrarray.h"
+
+PTRARRAY_DEFINE(ChunkMetadataArray, ChunkMetadata)
 
 struct metadata_store {
     char* base_path;
@@ -287,91 +290,80 @@ int metadata_store_delete(metadata_store_t* store, const char* index_name, size_
 
 ChunkMetadata** metadata_store_list(metadata_store_t* store, const char* index_name, size_t* count) {
     if (store == NULL || index_name == NULL || count == NULL) return NULL;
-    
+
     *count = 0;
-    
+
     char* index_path = get_metadata_path(store, index_name);
     if (index_path == NULL) return NULL;
-    
+
     DIR* dir = opendir(index_path);
     if (dir == NULL) {
         free(index_path);
         return NULL;
     }
-    
-    // Count files
+
+    ChunkMetadataArray arr;
+    if (ChunkMetadataArray_init(&arr, NULL) != 0) {
+        closedir(dir);
+        free(index_path);
+        return NULL;
+    }
+
     struct dirent* entry;
-    size_t file_count = 0;
     while ((entry = readdir(dir)) != NULL) {
         if (strstr(entry->d_name, "chunk_") == entry->d_name &&
             strstr(entry->d_name, ".json") != NULL) {
-            file_count++;
-        }
-    }
-    
-    if (file_count == 0) {
-        closedir(dir);
-        free(index_path);
-        return NULL;
-    }
-    
-    // Allocate array
-    ChunkMetadata** chunks = calloc(file_count, sizeof(ChunkMetadata*));
-    if (chunks == NULL) {
-        closedir(dir);
-        free(index_path);
-        return NULL;
-    }
-    
-    // Read metadata
-    rewinddir(dir);
-    size_t index = 0;
-    while ((entry = readdir(dir)) != NULL && index < file_count) {
-        if (strstr(entry->d_name, "chunk_") == entry->d_name &&
-            strstr(entry->d_name, ".json") != NULL) {
-            
-            // Extract chunk_id from filename
+
             size_t chunk_id = 0;
             sscanf(entry->d_name, "chunk_%zu.json", &chunk_id);
-            
-            chunks[index] = metadata_store_get(store, index_name, chunk_id);
-            if (chunks[index] != NULL) {
-                index++;
+
+            ChunkMetadata* metadata = metadata_store_get(store, index_name, chunk_id);
+            if (metadata != NULL) {
+                if (ChunkMetadataArray_push(&arr, metadata) != 0) {
+                    metadata_store_free_chunk(metadata);
+                    break;
+                }
             }
         }
     }
-    
+
     closedir(dir);
     free(index_path);
-    
-    *count = index;
-    return chunks;
+
+    if (arr.count == 0) {
+        ChunkMetadataArray_destroy_shallow(&arr);
+        return NULL;
+    }
+
+    *count = arr.count;
+    ChunkMetadata** result = arr.data;
+    arr.data = NULL;
+    arr.count = 0;
+    arr.capacity = 0;
+
+    return result;
 }
 
-ChunkMetadata** metadata_store_search(metadata_store_t* store, const char* index_name, 
+ChunkMetadata** metadata_store_search(metadata_store_t* store, const char* index_name,
                                      const char* query, size_t* count) {
     if (store == NULL || index_name == NULL || query == NULL || count == NULL) return NULL;
-    
-    // Get all chunks
+
     size_t total_count = 0;
     ChunkMetadata** all_chunks = metadata_store_list(store, index_name, &total_count);
     if (all_chunks == NULL || total_count == 0) return NULL;
-    
-    // Filter chunks matching query
-    ChunkMetadata** matched = calloc(total_count, sizeof(ChunkMetadata*));
-    if (matched == NULL) {
+
+    ChunkMetadataArray matched;
+    if (ChunkMetadataArray_init_capacity(&matched, total_count, NULL) != 0) {
         metadata_store_free_chunks(all_chunks, total_count);
         return NULL;
     }
-    
-    size_t matched_count = 0;
+
     for (size_t i = 0; i < total_count; i++) {
         ChunkMetadata* chunk = all_chunks[i];
         if (chunk == NULL) continue;
-        
-        // Search in content, type, source, and custom metadata
+
         bool matches = false;
-        
+
         if (chunk->content && strstr(chunk->content, query) != NULL) {
             matches = true;
         } else if (chunk->type && strstr(chunk->type, query) != NULL) {
@@ -381,36 +373,32 @@ ChunkMetadata** metadata_store_search(metadata_store_t* store, const char* index
         } else if (chunk->custom_metadata && strstr(chunk->custom_metadata, query) != NULL) {
             matches = true;
         }
-        
+
         if (matches) {
-            matched[matched_count++] = chunk;
-            all_chunks[i] = NULL; // Transfer ownership
+            ChunkMetadataArray_push(&matched, chunk);
+            all_chunks[i] = NULL;
         }
     }
-    
-    // Clean up non-matched chunks
+
     for (size_t i = 0; i < total_count; i++) {
         if (all_chunks[i] != NULL) {
             metadata_store_free_chunk(all_chunks[i]);
         }
     }
     free(all_chunks);
-    
-    if (matched_count == 0) {
-        free(matched);
+
+    if (matched.count == 0) {
+        ChunkMetadataArray_destroy_shallow(&matched);
         *count = 0;
         return NULL;
     }
-    
-    // Resize array
-    ChunkMetadata** result = realloc(matched, matched_count * sizeof(ChunkMetadata*));
-    if (result == NULL) {
-        metadata_store_free_chunks(matched, matched_count);
-        *count = 0;
-        return NULL;
-    }
-    
-    *count = matched_count;
+
+    *count = matched.count;
+    ChunkMetadata** result = matched.data;
+    matched.data = NULL;
+    matched.count = 0;
+    matched.capacity = 0;
+
     return result;
 }
 

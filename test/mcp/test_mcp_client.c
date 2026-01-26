@@ -48,13 +48,13 @@ void tearDown(void) {
 
 void test_mcp_client_initialization(void) {
     MCPClient client;
-    
+
     int result = mcp_client_init(&client);
     TEST_ASSERT_EQUAL(0, result);
     TEST_ASSERT_EQUAL(1, client.initialized);
-    TEST_ASSERT_EQUAL(0, client.config.server_count);
-    TEST_ASSERT_NULL(client.config.servers);
-    
+    TEST_ASSERT_EQUAL(0, client.config.servers.count);
+    TEST_ASSERT_NOT_NULL(client.config.servers.data);  // Array is initialized, just empty
+
     mcp_client_cleanup(&client);
 }
 
@@ -88,15 +88,17 @@ void test_mcp_client_loads_hosted_server_config(void) {
     TEST_ASSERT_EQUAL(0, result);
     
     // Verify config was parsed correctly
-    TEST_ASSERT_EQUAL(1, client.config.server_count);
-    TEST_ASSERT_NOT_NULL(client.config.servers);
-    TEST_ASSERT_EQUAL_STRING("fetch_server", client.config.servers[0].name);
-    TEST_ASSERT_EQUAL(MCP_SERVER_SSE, client.config.servers[0].type);
-    TEST_ASSERT_EQUAL_STRING("https://remote.mcpservers.org/fetch/mcp", client.config.servers[0].url);
-    TEST_ASSERT_NOT_NULL(client.config.servers[0].header_keys);
-    TEST_ASSERT_NOT_NULL(client.config.servers[0].header_values);
-    TEST_ASSERT_EQUAL(2, client.config.servers[0].header_count);
-    
+    TEST_ASSERT_EQUAL(1, client.config.servers.count);
+    TEST_ASSERT_NOT_NULL(client.config.servers.data);
+    TEST_ASSERT_EQUAL_STRING("fetch_server", client.config.servers.data[0].name);
+    TEST_ASSERT_EQUAL(MCP_SERVER_SSE, client.config.servers.data[0].type);
+    TEST_ASSERT_EQUAL_STRING("https://remote.mcpservers.org/fetch/mcp", client.config.servers.data[0].url);
+    TEST_ASSERT_NOT_NULL(client.config.servers.data[0].headers.data);
+    TEST_ASSERT_EQUAL(2, client.config.servers.data[0].headers.count);
+    // Verify key-value pairs are correctly stored
+    TEST_ASSERT_NOT_NULL(client.config.servers.data[0].headers.data[0].key);
+    TEST_ASSERT_NOT_NULL(client.config.servers.data[0].headers.data[0].value);
+
     mcp_client_cleanup(&client);
 }
 
@@ -129,14 +131,14 @@ void test_ralph_initializes_with_hosted_mcp_server(void) {
     
     // Verify MCP client was initialized
     TEST_ASSERT_EQUAL(1, session.mcp_client.initialized);
-    
+
     // Verify hosted server config was loaded
-    TEST_ASSERT_EQUAL(1, session.mcp_client.config.server_count);
-    TEST_ASSERT_NOT_NULL(session.mcp_client.config.servers);
-    TEST_ASSERT_EQUAL_STRING("coingecko_server", session.mcp_client.config.servers[0].name);
-    TEST_ASSERT_EQUAL(MCP_SERVER_SSE, session.mcp_client.config.servers[0].type);
-    TEST_ASSERT_EQUAL_STRING("https://mcp.api.coingecko.com/sse", session.mcp_client.config.servers[0].url);
-    
+    TEST_ASSERT_EQUAL(1, session.mcp_client.config.servers.count);
+    TEST_ASSERT_NOT_NULL(session.mcp_client.config.servers.data);
+    TEST_ASSERT_EQUAL_STRING("coingecko_server", session.mcp_client.config.servers.data[0].name);
+    TEST_ASSERT_EQUAL(MCP_SERVER_SSE, session.mcp_client.config.servers.data[0].type);
+    TEST_ASSERT_EQUAL_STRING("https://mcp.api.coingecko.com/sse", session.mcp_client.config.servers.data[0].url);
+
     ralph_cleanup_session(&session);
 }
 
@@ -173,9 +175,9 @@ void test_mcp_client_handles_connection_to_hosted_server(void) {
     
     // If connection succeeded, we should have at least one active server
     if (connect_result == 0) {
-        TEST_ASSERT_GREATER_THAN(0, client.active_server_count);
+        TEST_ASSERT_GREATER_THAN(0, client.servers.count);
     }
-    
+
     mcp_client_cleanup(&client);
 }
 

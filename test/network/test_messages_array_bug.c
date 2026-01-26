@@ -58,8 +58,8 @@ void test_conversation_with_corrupted_messages(void) {
     
     // Now manually corrupt the history by setting a message role to NULL
     if (history.count > 0) {
-        free(history.messages[0].role);
-        history.messages[0].role = NULL;  // This creates the undefined/null role condition
+        free(history.data[0].role);
+        history.data[0].role = NULL;  // This creates the undefined/null role condition
     }
     
     // Try to build JSON using the actual API function

@@ -65,7 +65,7 @@ void todo_display_print_compact(const TodoList* todo_list) {
     int completed_count = 0;
     
     for (size_t i = 0; i < todo_list->count; i++) {
-        if (todo_list->todos[i].status == TODO_STATUS_COMPLETED) {
+        if (todo_list->data[i].status == TODO_STATUS_COMPLETED) {
             completed_count++;
         } else {
             active_count++;
@@ -89,7 +89,7 @@ void todo_display_print_compact(const TodoList* todo_list) {
                     g_display_config.max_display_items : (int)todo_list->count;
     
     for (size_t i = 0; i < todo_list->count && displayed < max_items; i++) {
-        const Todo* todo = &todo_list->todos[i];
+        const Todo* todo = &todo_list->data[i];
         
         // Skip completed todos unless configured to show them
         if (todo->status == TODO_STATUS_COMPLETED && !g_display_config.show_completed) {
@@ -101,7 +101,7 @@ void todo_display_print_compact(const TodoList* todo_list) {
             // Check if there are any in_progress items still to show
             bool has_in_progress = false;
             for (size_t j = i + 1; j < todo_list->count; j++) {
-                if (todo_list->todos[j].status == TODO_STATUS_IN_PROGRESS) {
+                if (todo_list->data[j].status == TODO_STATUS_IN_PROGRESS) {
                     has_in_progress = true;
                     break;
                 }

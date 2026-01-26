@@ -185,7 +185,7 @@ pdf_processing_result_t* process_pdf_data(const unsigned char *pdf_data, size_t 
         return create_error_result(error_msg);
     }
     
-    result->chunks_processed = chunks->chunk_count;
+    result->chunks_processed = chunks->chunks.count;
     
     // Get embeddings configuration
     embeddings_config_t *embed_config = get_embeddings_config();
@@ -197,8 +197,8 @@ pdf_processing_result_t* process_pdf_data(const unsigned char *pdf_data, size_t 
     }
     
     // Process each chunk
-    for (size_t i = 0; i < chunks->chunk_count; i++) {
-        document_chunk_t *chunk = &chunks->chunks[i];
+    for (size_t i = 0; i < chunks->chunks.count; i++) {
+        document_chunk_t *chunk = &chunks->chunks.data[i];
         
         // Generate embedding for chunk
         embedding_vector_t embedding = {0};

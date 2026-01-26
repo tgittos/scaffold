@@ -17,12 +17,15 @@ void tearDown(void) {
 
 void test_init_conversation_history(void) {
     ConversationHistory history;
-    
+
     init_conversation_history(&history);
-    
-    TEST_ASSERT_NULL(history.messages);
+
+    // After init, the array should be empty but with default capacity allocated
     TEST_ASSERT_EQUAL(0, history.count);
-    TEST_ASSERT_EQUAL(0, history.capacity);
+    TEST_ASSERT_TRUE(history.capacity > 0);  // Default capacity is allocated
+    TEST_ASSERT_NOT_NULL(history.data);
+
+    cleanup_conversation_history(&history);
 }
 
 void test_init_conversation_history_with_null(void) {
@@ -56,9 +59,9 @@ void test_append_conversation_message_first_message(void) {
     
     TEST_ASSERT_EQUAL(0, result);
     TEST_ASSERT_EQUAL(1, history.count);
-    TEST_ASSERT_NOT_NULL(history.messages);
-    TEST_ASSERT_EQUAL_STRING("user", history.messages[0].role);
-    TEST_ASSERT_EQUAL_STRING("Hello, how are you?", history.messages[0].content);
+    TEST_ASSERT_NOT_NULL(history.data);
+    TEST_ASSERT_EQUAL_STRING("user", history.data[0].role);
+    TEST_ASSERT_EQUAL_STRING("Hello, how are you?", history.data[0].content);
     
     cleanup_conversation_history(&history);
 }
@@ -76,14 +79,14 @@ void test_append_conversation_message_multiple_messages(void) {
     TEST_ASSERT_EQUAL(0, result3);
     TEST_ASSERT_EQUAL(3, history.count);
     
-    TEST_ASSERT_EQUAL_STRING("user", history.messages[0].role);
-    TEST_ASSERT_EQUAL_STRING("What is 2+2?", history.messages[0].content);
+    TEST_ASSERT_EQUAL_STRING("user", history.data[0].role);
+    TEST_ASSERT_EQUAL_STRING("What is 2+2?", history.data[0].content);
     
-    TEST_ASSERT_EQUAL_STRING("assistant", history.messages[1].role);
-    TEST_ASSERT_EQUAL_STRING("2+2 equals 4.", history.messages[1].content);
+    TEST_ASSERT_EQUAL_STRING("assistant", history.data[1].role);
+    TEST_ASSERT_EQUAL_STRING("2+2 equals 4.", history.data[1].content);
     
-    TEST_ASSERT_EQUAL_STRING("user", history.messages[2].role);
-    TEST_ASSERT_EQUAL_STRING("Thank you!", history.messages[2].content);
+    TEST_ASSERT_EQUAL_STRING("user", history.data[2].role);
+    TEST_ASSERT_EQUAL_STRING("Thank you!", history.data[2].content);
     
     cleanup_conversation_history(&history);
 }
@@ -114,8 +117,8 @@ void test_append_conversation_message_with_multiline_content(void) {
     
     TEST_ASSERT_EQUAL(0, result);
     TEST_ASSERT_EQUAL(1, history.count);
-    TEST_ASSERT_EQUAL_STRING("user", history.messages[0].role);
-    TEST_ASSERT_EQUAL_STRING(multiline_content, history.messages[0].content);
+    TEST_ASSERT_EQUAL_STRING("user", history.data[0].role);
+    TEST_ASSERT_EQUAL_STRING(multiline_content, history.data[0].content);
     
     cleanup_conversation_history(&history);
 }
@@ -132,13 +135,13 @@ void test_cleanup_conversation_history(void) {
     append_conversation_message(&history, "assistant", "Test response 1");
     
     TEST_ASSERT_EQUAL(2, history.count);
-    TEST_ASSERT_NOT_NULL(history.messages);
+    TEST_ASSERT_NOT_NULL(history.data);
     
     cleanup_conversation_history(&history);
     
     TEST_ASSERT_EQUAL(0, history.count);
     TEST_ASSERT_EQUAL(0, history.capacity);
-    TEST_ASSERT_NULL(history.messages);
+    TEST_ASSERT_NULL(history.data);
 }
 
 void test_cleanup_conversation_history_with_null(void) {
@@ -195,11 +198,11 @@ void test_large_conversation_handling(void) {
     TEST_ASSERT_GREATER_OR_EQUAL(100, history.capacity);
     
     // Verify some messages
-    TEST_ASSERT_EQUAL_STRING("user", history.messages[0].role);
-    TEST_ASSERT_EQUAL_STRING("User message 0", history.messages[0].content);
+    TEST_ASSERT_EQUAL_STRING("user", history.data[0].role);
+    TEST_ASSERT_EQUAL_STRING("User message 0", history.data[0].content);
     
-    TEST_ASSERT_EQUAL_STRING("assistant", history.messages[99].role);
-    TEST_ASSERT_EQUAL_STRING("Assistant response 49", history.messages[99].content);
+    TEST_ASSERT_EQUAL_STRING("assistant", history.data[99].role);
+    TEST_ASSERT_EQUAL_STRING("Assistant response 49", history.data[99].content);
     
     cleanup_conversation_history(&history);
 }
@@ -212,11 +215,11 @@ void test_append_tool_message(void) {
     
     TEST_ASSERT_EQUAL(0, result);
     TEST_ASSERT_EQUAL(1, history.count);
-    TEST_ASSERT_NOT_NULL(history.messages);
-    TEST_ASSERT_EQUAL_STRING("tool", history.messages[0].role);
-    TEST_ASSERT_EQUAL_STRING("File written successfully", history.messages[0].content);
-    TEST_ASSERT_EQUAL_STRING("call_123", history.messages[0].tool_call_id);
-    TEST_ASSERT_EQUAL_STRING("write_file", history.messages[0].tool_name);
+    TEST_ASSERT_NOT_NULL(history.data);
+    TEST_ASSERT_EQUAL_STRING("tool", history.data[0].role);
+    TEST_ASSERT_EQUAL_STRING("File written successfully", history.data[0].content);
+    TEST_ASSERT_EQUAL_STRING("call_123", history.data[0].tool_call_id);
+    TEST_ASSERT_EQUAL_STRING("write_file", history.data[0].tool_name);
     
     cleanup_conversation_history(&history);
 }

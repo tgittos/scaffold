@@ -29,7 +29,7 @@ int should_background_compact(const ConversationHistory* conversation,
     }
     
     // Don't trim if we don't have many messages
-    if (conversation->count <= config->preserve_recent_messages + 5) {
+    if (conversation->count <= (size_t)config->preserve_recent_messages + 5) {
         return 0;
     }
     
@@ -58,8 +58,8 @@ int background_compact_conversation(SessionData* session,
     token_config_init(&token_config, session->config.context_window);
 
     int current_tokens = 0;
-    for (int i = 0; i < session->conversation.count; i++) {
-        current_tokens += estimate_token_count(session->conversation.messages[i].content, &token_config);
+    for (size_t i = 0; i < session->conversation.count; i++) {
+        current_tokens += estimate_token_count(session->conversation.data[i].content, &token_config);
     }
 
     // Check if background trimming is needed
@@ -113,8 +113,8 @@ int compact_conversation(SessionData* session,
     token_config_init(&token_config, session->config.context_window);
 
     int current_tokens = 0;
-    for (int i = 0; i < session->conversation.count; i++) {
-        current_tokens += estimate_token_count(session->conversation.messages[i].content, &token_config);
+    for (size_t i = 0; i < session->conversation.count; i++) {
+        current_tokens += estimate_token_count(session->conversation.data[i].content, &token_config);
     }
 
     // Check if we need trimming

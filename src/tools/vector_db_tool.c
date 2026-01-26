@@ -1168,10 +1168,10 @@ int execute_vector_db_add_chunked_text_tool_call(const ToolCall *tool_call, Tool
     size_t failed_chunks = 0;
     
     // Process each chunk
-    for (size_t i = 0; i < chunks->chunk_count; i++) {
+    for (size_t i = 0; i < chunks->chunks.count; i++) {
         // Add chunk text to document store (it will handle embedding internally)
         int add_result = document_store_add_text(doc_store, index_name, 
-                                                chunks->chunks[i].text, 
+                                                chunks->chunks.data[i].text, 
                                                 "chunk", "api", metadata);
         
         if (add_result == 0) {
@@ -1186,12 +1186,12 @@ int execute_vector_db_add_chunked_text_tool_call(const ToolCall *tool_call, Tool
     if (successful_chunks > 0) {
         snprintf(response, sizeof(response),
                 "{\"success\": true, \"message\": \"Added %zu chunks successfully\", \"successful_chunks\": %zu, \"failed_chunks\": %zu, \"total_chunks\": %zu}",
-                successful_chunks, successful_chunks, failed_chunks, chunks->chunk_count);
+                successful_chunks, successful_chunks, failed_chunks, chunks->chunks.count);
         result->success = 1;
     } else {
         snprintf(response, sizeof(response),
                 "{\"success\": false, \"error\": \"No chunks were successfully added\", \"failed_chunks\": %zu, \"total_chunks\": %zu}",
-                failed_chunks, chunks->chunk_count);
+                failed_chunks, chunks->chunks.count);
         result->success = 0;
     }
     
@@ -1288,7 +1288,7 @@ int execute_vector_db_add_pdf_document_tool_call(const ToolCall *tool_call, Tool
     size_t failed_chunks = 0;
     
     // Process each chunk
-    for (size_t i = 0; i < chunks->chunk_count; i++) {
+    for (size_t i = 0; i < chunks->chunks.count; i++) {
         // Build metadata with PDF info
         char metadata_json[512];
         snprintf(metadata_json, sizeof(metadata_json), 
@@ -1297,7 +1297,7 @@ int execute_vector_db_add_pdf_document_tool_call(const ToolCall *tool_call, Tool
         
         // Add chunk text to document store (it will handle embedding internally)
         int add_result = document_store_add_text(doc_store, index_name, 
-                                                chunks->chunks[i].text, 
+                                                chunks->chunks.data[i].text, 
                                                 "pdf_chunk", "pdf", metadata_json);
         
         if (add_result == 0) {
@@ -1312,12 +1312,12 @@ int execute_vector_db_add_pdf_document_tool_call(const ToolCall *tool_call, Tool
     if (successful_chunks > 0) {
         snprintf(response, sizeof(response),
                 "{\"success\": true, \"message\": \"Processed PDF and added %zu chunks successfully\", \"successful_chunks\": %zu, \"failed_chunks\": %zu, \"total_chunks\": %zu, \"pdf_pages\": %d}",
-                successful_chunks, successful_chunks, failed_chunks, chunks->chunk_count, pdf_result->page_count);
+                successful_chunks, successful_chunks, failed_chunks, chunks->chunks.count, pdf_result->page_count);
         result->success = 1;
     } else {
         snprintf(response, sizeof(response),
                 "{\"success\": false, \"error\": \"No chunks were successfully added from PDF\", \"failed_chunks\": %zu, \"total_chunks\": %zu, \"pdf_pages\": %d}",
-                failed_chunks, chunks->chunk_count, pdf_result->page_count);
+                failed_chunks, chunks->chunks.count, pdf_result->page_count);
         result->success = 0;
     }
     
@@ -1357,37 +1357,36 @@ int execute_vector_db_search_text_tool_call(const ToolCall *tool_call, ToolResul
         cJSON* json = cJSON_CreateObject();
         if (json) {
             cJSON_AddBoolToObject(json, "success", cJSON_True);
-            cJSON_AddNumberToObject(json, "count", search_results->count);
-            
+            cJSON_AddNumberToObject(json, "count", search_results->results.count);
+
             cJSON* results_array = cJSON_CreateArray();
             if (results_array) {
-                for (size_t i = 0; i < search_results->count; i++) {
-                    if (search_results->documents[i]) {
+                for (size_t i = 0; i < search_results->results.count; i++) {
+                    document_result_t* res = &search_results->results.data[i];
+                    if (res->document) {
                         cJSON* result_item = cJSON_CreateObject();
                         if (result_item) {
-                            cJSON_AddNumberToObject(result_item, "id", search_results->documents[i]->id);
-                            cJSON_AddStringToObject(result_item, "content", search_results->documents[i]->content ? search_results->documents[i]->content : "");
-                            cJSON_AddStringToObject(result_item, "type", search_results->documents[i]->type ? search_results->documents[i]->type : "text");
-                            cJSON_AddStringToObject(result_item, "source", search_results->documents[i]->source ? search_results->documents[i]->source : "unknown");
-                            if (search_results->distances) {
-                                cJSON_AddNumberToObject(result_item, "distance", search_results->distances[i]);
-                            }
-                            cJSON_AddNumberToObject(result_item, "timestamp", search_results->documents[i]->timestamp);
-                            
-                            if (search_results->documents[i]->metadata_json) {
-                                cJSON* metadata = cJSON_Parse(search_results->documents[i]->metadata_json);
+                            cJSON_AddNumberToObject(result_item, "id", res->document->id);
+                            cJSON_AddStringToObject(result_item, "content", res->document->content ? res->document->content : "");
+                            cJSON_AddStringToObject(result_item, "type", res->document->type ? res->document->type : "text");
+                            cJSON_AddStringToObject(result_item, "source", res->document->source ? res->document->source : "unknown");
+                            cJSON_AddNumberToObject(result_item, "distance", res->distance);
+                            cJSON_AddNumberToObject(result_item, "timestamp", res->document->timestamp);
+
+                            if (res->document->metadata_json) {
+                                cJSON* metadata = cJSON_Parse(res->document->metadata_json);
                                 if (metadata) {
                                     cJSON_AddItemToObject(result_item, "metadata", metadata);
                                 }
                             }
-                            
+
                             cJSON_AddItemToArray(results_array, result_item);
                         }
                     }
                 }
                 cJSON_AddItemToObject(json, "results", results_array);
             }
-            
+
             result->result = cJSON_PrintUnformatted(json);
             cJSON_Delete(json);
             result->success = 1;
@@ -1395,13 +1394,13 @@ int execute_vector_db_search_text_tool_call(const ToolCall *tool_call, ToolResul
             result->result = safe_strdup("{\"success\": false, \"error\": \"Memory allocation failed\"}");
             result->success = 0;
         }
-        
+
         document_store_free_results(search_results);
     } else {
         result->result = safe_strdup("{\"success\": false, \"error\": \"Search failed or no results found\"}");
         result->success = 0;
     }
-    
+
     free(index_name);
     free(query_text);
     return 0;
@@ -1409,58 +1408,59 @@ int execute_vector_db_search_text_tool_call(const ToolCall *tool_call, ToolResul
 
 int execute_vector_db_search_by_time_tool_call(const ToolCall *tool_call, ToolResult *result) {
     if (tool_call == NULL || result == NULL) return -1;
-    
+
     result->tool_call_id = safe_strdup(tool_call->id);
     if (result->tool_call_id == NULL) return -1;
-    
+
     char *index_name = extract_string_param(tool_call->arguments, "index_name");
     double start_time = extract_number_param(tool_call->arguments, "start_time", 0);
     double end_time = extract_number_param(tool_call->arguments, "end_time", time(NULL));
     double limit = extract_number_param(tool_call->arguments, "limit", 100);
-    
+
     if (index_name == NULL) {
         result->result = safe_strdup("{\"success\": false, \"error\": \"Missing required index_name\"}");
         result->success = 0;
         free(index_name);
         return 0;
     }
-    
+
     document_store_t *doc_store = document_store_get_instance();
-    document_search_results_t *search_results = document_store_search_by_time(doc_store, index_name, 
+    document_search_results_t *search_results = document_store_search_by_time(doc_store, index_name,
                                                                              (time_t)start_time, (time_t)end_time, (size_t)limit);
-    
+
     if (search_results != NULL) {
         cJSON* json = cJSON_CreateObject();
         if (json) {
             cJSON_AddBoolToObject(json, "success", cJSON_True);
-            cJSON_AddNumberToObject(json, "count", search_results->count);
-            
+            cJSON_AddNumberToObject(json, "count", search_results->results.count);
+
             cJSON* results_array = cJSON_CreateArray();
             if (results_array) {
-                for (size_t i = 0; i < search_results->count; i++) {
-                    if (search_results->documents[i]) {
+                for (size_t i = 0; i < search_results->results.count; i++) {
+                    document_result_t* res = &search_results->results.data[i];
+                    if (res->document) {
                         cJSON* result_item = cJSON_CreateObject();
                         if (result_item) {
-                            cJSON_AddNumberToObject(result_item, "id", search_results->documents[i]->id);
-                            cJSON_AddStringToObject(result_item, "content", search_results->documents[i]->content ? search_results->documents[i]->content : "");
-                            cJSON_AddStringToObject(result_item, "type", search_results->documents[i]->type ? search_results->documents[i]->type : "text");
-                            cJSON_AddStringToObject(result_item, "source", search_results->documents[i]->source ? search_results->documents[i]->source : "unknown");
-                            cJSON_AddNumberToObject(result_item, "timestamp", search_results->documents[i]->timestamp);
-                            
-                            if (search_results->documents[i]->metadata_json) {
-                                cJSON* metadata = cJSON_Parse(search_results->documents[i]->metadata_json);
+                            cJSON_AddNumberToObject(result_item, "id", res->document->id);
+                            cJSON_AddStringToObject(result_item, "content", res->document->content ? res->document->content : "");
+                            cJSON_AddStringToObject(result_item, "type", res->document->type ? res->document->type : "text");
+                            cJSON_AddStringToObject(result_item, "source", res->document->source ? res->document->source : "unknown");
+                            cJSON_AddNumberToObject(result_item, "timestamp", res->document->timestamp);
+
+                            if (res->document->metadata_json) {
+                                cJSON* metadata = cJSON_Parse(res->document->metadata_json);
                                 if (metadata) {
                                     cJSON_AddItemToObject(result_item, "metadata", metadata);
                                 }
                             }
-                            
+
                             cJSON_AddItemToArray(results_array, result_item);
                         }
                     }
                 }
                 cJSON_AddItemToObject(json, "results", results_array);
             }
-            
+
             result->result = cJSON_PrintUnformatted(json);
             cJSON_Delete(json);
             result->success = 1;

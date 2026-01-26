@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 
 // =============================================================================
 // Provider Registry Management
@@ -229,20 +230,28 @@ int streaming_process_message(RalphSession* session, const char* user_message,
     }
 
     // Handle tool calls if any
-    if (ctx->tool_use_count > 0) {
+    if (ctx->tool_uses.count > 0) {
+        // Ensure count fits in int (required by downstream APIs)
+        if (ctx->tool_uses.count > INT_MAX) {
+            fprintf(stderr, "Error: Too many tool calls (%zu exceeds INT_MAX)\n", ctx->tool_uses.count);
+            streaming_context_free(ctx);
+            return -1;
+        }
+        int call_count = (int)ctx->tool_uses.count;
+
         // Convert streaming tool uses to ToolCall array
-        ToolCall* tool_calls = malloc(ctx->tool_use_count * sizeof(ToolCall));
+        ToolCall* tool_calls = malloc(ctx->tool_uses.count * sizeof(ToolCall));
         if (tool_calls != NULL) {
-            for (int i = 0; i < ctx->tool_use_count; i++) {
-                tool_calls[i].id = ctx->tool_uses[i].id ? strdup(ctx->tool_uses[i].id) : NULL;
-                tool_calls[i].name = ctx->tool_uses[i].name ? strdup(ctx->tool_uses[i].name) : NULL;
-                tool_calls[i].arguments = ctx->tool_uses[i].arguments_json ? strdup(ctx->tool_uses[i].arguments_json) : NULL;
+            for (size_t i = 0; i < ctx->tool_uses.count; i++) {
+                tool_calls[i].id = ctx->tool_uses.data[i].id ? strdup(ctx->tool_uses.data[i].id) : NULL;
+                tool_calls[i].name = ctx->tool_uses.data[i].name ? strdup(ctx->tool_uses.data[i].name) : NULL;
+                tool_calls[i].arguments = ctx->tool_uses.data[i].arguments_json ? strdup(ctx->tool_uses.data[i].arguments_json) : NULL;
             }
 
             // For OpenAI, construct assistant message with tool_calls array
             // This is required for the conversation format to be valid
             char* constructed_message = construct_openai_assistant_message_with_tools(
-                ctx->text_content, tool_calls, ctx->tool_use_count);
+                ctx->text_content, tool_calls, call_count);
             if (constructed_message != NULL) {
                 if (append_conversation_message(&session->session_data.conversation, "assistant", constructed_message) != 0) {
                     fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
@@ -256,14 +265,14 @@ int streaming_process_message(RalphSession* session, const char* user_message,
                 if (ctx->text_content != NULL && ctx->text_len > 0) {
                     json_output_assistant_text(ctx->text_content, input_tokens, output_tokens);
                 }
-                json_output_assistant_tool_calls(ctx->tool_uses, ctx->tool_use_count, input_tokens, output_tokens);
+                json_output_assistant_tool_calls(ctx->tool_uses.data, call_count, input_tokens, output_tokens);
             }
 
             // Execute tool workflow
-            result = ralph_execute_tool_workflow(session, tool_calls, ctx->tool_use_count,
+            result = ralph_execute_tool_workflow(session, tool_calls, call_count,
                                                  user_message, max_tokens, headers);
 
-            cleanup_tool_calls(tool_calls, ctx->tool_use_count);
+            cleanup_tool_calls(tool_calls, call_count);
         } else {
             result = -1;
         }

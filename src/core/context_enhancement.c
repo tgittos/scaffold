@@ -126,7 +126,7 @@ char* build_enhanced_prompt_with_context(const RalphSession* session,
     // Retrieve relevant context from vector database
     context_result_t* context = retrieve_relevant_context(user_message, CONTEXT_RETRIEVAL_LIMIT);
     char* formatted_context = NULL;
-    if (context && !context->error && context->item_count > 0) {
+    if (context && !context->error && context->items.count > 0) {
         formatted_context = format_context_for_prompt(context);
     }
 

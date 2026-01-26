@@ -13,6 +13,8 @@
 #include <errno.h>
 #include <signal.h>
 
+DARRAY_DEFINE(SubagentArray, Subagent)
+
 /**
  * Static pointer to the SubagentManager for use by execute functions.
  * Set during tool registration, used by execute_subagent_tool_call and
@@ -171,8 +173,9 @@ int subagent_manager_init_with_config(SubagentManager *manager, int max_subagent
         timeout_seconds = SUBAGENT_MAX_TIMEOUT_SEC;
     }
 
-    manager->subagents = NULL;
-    manager->count = 0;
+    if (SubagentArray_init(&manager->subagents) != 0) {
+        return -1;
+    }
     manager->max_subagents = max_subagents;
     manager->timeout_seconds = timeout_seconds;
     manager->is_subagent_process = 0;
@@ -190,8 +193,8 @@ void subagent_manager_cleanup(SubagentManager *manager) {
     }
 
     // Kill and clean up all subagents
-    for (int i = 0; i < manager->count; i++) {
-        Subagent *sub = &manager->subagents[i];
+    for (size_t i = 0; i < manager->subagents.count; i++) {
+        Subagent *sub = &manager->subagents.data[i];
 
         // Kill running processes
         if (sub->status == SUBAGENT_STATUS_RUNNING && sub->pid > 0) {
@@ -214,12 +217,7 @@ void subagent_manager_cleanup(SubagentManager *manager) {
     }
 
     // Free the subagents array
-    if (manager->subagents) {
-        free(manager->subagents);
-        manager->subagents = NULL;
-    }
-
-    manager->count = 0;
+    SubagentArray_destroy(&manager->subagents);
 }
 
 /**
@@ -230,9 +228,9 @@ Subagent* subagent_find_by_id(SubagentManager *manager, const char *subagent_id)
         return NULL;
     }
 
-    for (int i = 0; i < manager->count; i++) {
-        if (strcmp(manager->subagents[i].id, subagent_id) == 0) {
-            return &manager->subagents[i];
+    for (size_t i = 0; i < manager->subagents.count; i++) {
+        if (strcmp(manager->subagents.data[i].id, subagent_id) == 0) {
+            return &manager->subagents.data[i];
         }
     }
 
@@ -425,8 +423,8 @@ int subagent_poll_all(SubagentManager *manager) {
     int changed = 0;
     time_t now = time(NULL);
 
-    for (int i = 0; i < manager->count; i++) {
-        Subagent *sub = &manager->subagents[i];
+    for (size_t i = 0; i < manager->subagents.count; i++) {
+        Subagent *sub = &manager->subagents.data[i];
 
         // Skip non-running subagents
         if (sub->status != SUBAGENT_STATUS_RUNNING) {
@@ -523,8 +521,8 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
         return -1;
     }
 
-    // Check max limit
-    if (manager->count >= manager->max_subagents) {
+    // Check max limit (compare as size_t to avoid overflow on cast)
+    if (manager->max_subagents <= 0 || manager->subagents.count >= (size_t)manager->max_subagents) {
         return -1;
     }
 
@@ -599,48 +597,45 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
     free(ralph_path);
     close(pipefd[1]);  // Close write end
 
-    // Expand the subagents array
-    Subagent *new_subagents = realloc(manager->subagents,
-                                       (size_t)(manager->count + 1) * sizeof(Subagent));
-    if (new_subagents == NULL) {
-        // Memory allocation failed - kill the child and clean up
-        kill(pid, SIGKILL);
-        waitpid(pid, NULL, 0);
-        close(pipefd[0]);
-        return -1;
-    }
-    manager->subagents = new_subagents;
-
     // Initialize the new subagent entry
-    Subagent *sub = &manager->subagents[manager->count];
-    memset(sub, 0, sizeof(Subagent));
+    Subagent new_sub;
+    memset(&new_sub, 0, sizeof(Subagent));
 
-    memcpy(sub->id, id, SUBAGENT_ID_LENGTH);
-    sub->id[SUBAGENT_ID_LENGTH] = '\0';
-    sub->pid = pid;
-    sub->status = SUBAGENT_STATUS_RUNNING;
-    sub->stdout_pipe[0] = pipefd[0];
-    sub->stdout_pipe[1] = -1;  // Write end closed in parent
-    sub->task = strdup(task);
-    sub->context = (context != NULL && strlen(context) > 0) ? strdup(context) : NULL;
-    sub->output = NULL;
-    sub->output_len = 0;
-    sub->result = NULL;
-    sub->error = NULL;
-    sub->start_time = time(NULL);
+    memcpy(new_sub.id, id, SUBAGENT_ID_LENGTH);
+    new_sub.id[SUBAGENT_ID_LENGTH] = '\0';
+    new_sub.pid = pid;
+    new_sub.status = SUBAGENT_STATUS_RUNNING;
+    new_sub.stdout_pipe[0] = pipefd[0];
+    new_sub.stdout_pipe[1] = -1;  // Write end closed in parent
+    new_sub.task = strdup(task);
+    new_sub.context = (context != NULL && strlen(context) > 0) ? strdup(context) : NULL;
+    new_sub.output = NULL;
+    new_sub.output_len = 0;
+    new_sub.result = NULL;
+    new_sub.error = NULL;
+    new_sub.start_time = time(NULL);
 
     // Check if strdup failed
-    if (sub->task == NULL || (context != NULL && strlen(context) > 0 && sub->context == NULL)) {
+    if (new_sub.task == NULL || (context != NULL && strlen(context) > 0 && new_sub.context == NULL)) {
         // Cleanup on allocation failure
-        if (sub->task) free(sub->task);
-        if (sub->context) free(sub->context);
+        if (new_sub.task) free(new_sub.task);
+        if (new_sub.context) free(new_sub.context);
         kill(pid, SIGKILL);
         waitpid(pid, NULL, 0);
         close(pipefd[0]);
         return -1;
     }
 
-    manager->count++;
+    // Add to array
+    if (SubagentArray_push(&manager->subagents, new_sub) != 0) {
+        // Array push failed - kill the child and clean up
+        if (new_sub.task) free(new_sub.task);
+        if (new_sub.context) free(new_sub.context);
+        kill(pid, SIGKILL);
+        waitpid(pid, NULL, 0);
+        close(pipefd[0]);
+        return -1;
+    }
 
     // Copy ID to output
     strcpy(subagent_id_out, id);
@@ -1105,7 +1100,7 @@ int execute_subagent_tool_call(const ToolCall *tool_call, ToolResult *result) {
 
     if (spawn_result != 0) {
         // Check if we hit the max limit
-        if (g_subagent_manager->count >= g_subagent_manager->max_subagents) {
+        if ((int)g_subagent_manager->subagents.count >= g_subagent_manager->max_subagents) {
             char error_msg[256];
             snprintf(error_msg, sizeof(error_msg),
                      "{\"error\": \"Maximum number of concurrent subagents (%d) reached\"}",

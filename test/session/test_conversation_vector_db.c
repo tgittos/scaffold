@@ -52,13 +52,13 @@ void test_conversation_stored_in_vector_db(void) {
     int found_user_msg = 0;
     int found_assistant_msg = 0;
     
-    for (int i = 0; i < loaded_history.count; i++) {
-        if (strcmp(loaded_history.messages[i].role, "user") == 0 &&
-            strstr(loaded_history.messages[i].content, "Hello from vector DB test") != NULL) {
+    for (size_t i = 0; i < loaded_history.count; i++) {
+        if (strcmp(loaded_history.data[i].role, "user") == 0 &&
+            strstr(loaded_history.data[i].content, "Hello from vector DB test") != NULL) {
             found_user_msg = 1;
         }
-        if (strcmp(loaded_history.messages[i].role, "assistant") == 0 &&
-            strstr(loaded_history.messages[i].content, "stored in vector DB") != NULL) {
+        if (strcmp(loaded_history.data[i].role, "assistant") == 0 &&
+            strstr(loaded_history.data[i].content, "stored in vector DB") != NULL) {
             found_assistant_msg = 1;
         }
     }
@@ -121,9 +121,9 @@ void test_search_conversation_history(void) {
         
         // Check that results contain quantum
         int found_quantum = 0;
-        for (int i = 0; i < search_results->count; i++) {
-            if (strstr(search_results->messages[i].content, "quantum") != NULL ||
-                strstr(search_results->messages[i].content, "Quantum") != NULL) {
+        for (size_t i = 0; i < search_results->count; i++) {
+            if (strstr(search_results->data[i].content, "quantum") != NULL ||
+                strstr(search_results->data[i].content, "Quantum") != NULL) {
                 found_quantum = 1;
                 break;
             }

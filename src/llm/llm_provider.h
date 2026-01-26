@@ -6,6 +6,7 @@
 #include "http_client.h"
 #include "output_formatter.h"
 #include "streaming.h"
+#include "utils/ptrarray.h"
 
 // Forward declarations
 struct LLMProvider;
@@ -78,11 +79,7 @@ typedef struct LLMProvider {
 } LLMProvider;
 
 // Provider registry and factory
-typedef struct {
-    LLMProvider** providers;
-    int count;
-    int capacity;
-} ProviderRegistry;
+PTRARRAY_DECLARE(ProviderRegistry, LLMProvider)
 
 // Core provider management functions
 int init_provider_registry(ProviderRegistry* registry);

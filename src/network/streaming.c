@@ -4,6 +4,9 @@
 #include <stdio.h>
 #include <stdint.h>
 
+// Define the StreamingToolUseArray implementation
+DARRAY_DEFINE(StreamingToolUseArray, StreamingToolUse)
+
 // Initial buffer capacities
 #define INITIAL_LINE_BUFFER_CAPACITY 1024
 #define INITIAL_TEXT_CAPACITY 4096
@@ -134,14 +137,11 @@ StreamingContext* streaming_context_create(void) {
     ctx->thinking_len = 0;
     ctx->thinking_capacity = INITIAL_THINKING_CAPACITY;
 
-    // Allocate tool uses array
-    ctx->tool_uses = calloc(INITIAL_TOOL_CAPACITY, sizeof(StreamingToolUse));
-    if (ctx->tool_uses == NULL) {
+    // Initialize tool uses array
+    if (StreamingToolUseArray_init_capacity(&ctx->tool_uses, INITIAL_TOOL_CAPACITY) != 0) {
         streaming_context_free(ctx);
         return NULL;
     }
-    ctx->tool_use_count = 0;
-    ctx->tool_use_capacity = INITIAL_TOOL_CAPACITY;
 
     // Initialize metadata
     ctx->input_tokens = 0;
@@ -183,13 +183,10 @@ void streaming_context_free(StreamingContext* ctx) {
     ctx->thinking_content = NULL;
 
     // Free tool uses
-    if (ctx->tool_uses != NULL) {
-        for (int i = 0; i < ctx->tool_use_count; i++) {
-            free_tool_use(&ctx->tool_uses[i]);
-        }
-        free(ctx->tool_uses);
-        ctx->tool_uses = NULL;
+    for (size_t i = 0; i < ctx->tool_uses.count; i++) {
+        free_tool_use(&ctx->tool_uses.data[i]);
     }
+    StreamingToolUseArray_destroy(&ctx->tool_uses);
 
     // Free metadata strings
     free(ctx->stop_reason);
@@ -232,12 +229,10 @@ void streaming_context_reset(StreamingContext* ctx) {
     }
 
     // Free and reset tool uses (preserve the array allocation)
-    if (ctx->tool_uses != NULL) {
-        for (int i = 0; i < ctx->tool_use_count; i++) {
-            free_tool_use(&ctx->tool_uses[i]);
-        }
+    for (size_t i = 0; i < ctx->tool_uses.count; i++) {
+        free_tool_use(&ctx->tool_uses.data[i]);
     }
-    ctx->tool_use_count = 0;
+    StreamingToolUseArray_clear(&ctx->tool_uses);
 
     // Reset metadata
     ctx->input_tokens = 0;
@@ -414,52 +409,35 @@ void streaming_emit_tool_start(StreamingContext* ctx, const char* id, const char
         return;
     }
 
-    // Ensure capacity for new tool
-    if (ctx->tool_use_count >= ctx->tool_use_capacity) {
-        // Check for overflow before multiplication
-        if (ctx->tool_use_capacity > INT_MAX / BUFFER_GROWTH_FACTOR) {
-            return;  // Would overflow
-        }
-        int new_capacity = ctx->tool_use_capacity * BUFFER_GROWTH_FACTOR;
-        // Check for overflow in size calculation
-        if ((size_t)new_capacity > SIZE_MAX / sizeof(StreamingToolUse)) {
-            return;  // Would overflow
-        }
-        StreamingToolUse* new_tools = realloc(ctx->tool_uses,
-                                               (size_t)new_capacity * sizeof(StreamingToolUse));
-        if (new_tools == NULL) {
-            return;  // Allocation failed
-        }
-        // Zero out new entries
-        memset(new_tools + ctx->tool_use_capacity, 0,
-               (size_t)(new_capacity - ctx->tool_use_capacity) * sizeof(StreamingToolUse));
-        ctx->tool_uses = new_tools;
-        ctx->tool_use_capacity = new_capacity;
-    }
-
     // Initialize new tool use
-    int idx = ctx->tool_use_count;
-    ctx->tool_uses[idx].id = strdup(id);
-    ctx->tool_uses[idx].name = strdup(name);
-    ctx->tool_uses[idx].arguments_json = malloc(INITIAL_TOOL_ARGS_CAPACITY);
+    StreamingToolUse new_tool = {0};
+    new_tool.id = strdup(id);
+    new_tool.name = strdup(name);
+    new_tool.arguments_json = malloc(INITIAL_TOOL_ARGS_CAPACITY);
 
-    if (ctx->tool_uses[idx].id == NULL ||
-        ctx->tool_uses[idx].name == NULL ||
-        ctx->tool_uses[idx].arguments_json == NULL) {
+    if (new_tool.id == NULL ||
+        new_tool.name == NULL ||
+        new_tool.arguments_json == NULL) {
         // Allocation failed, clean up
-        free(ctx->tool_uses[idx].id);
-        free(ctx->tool_uses[idx].name);
-        free(ctx->tool_uses[idx].arguments_json);
-        ctx->tool_uses[idx].id = NULL;
-        ctx->tool_uses[idx].name = NULL;
-        ctx->tool_uses[idx].arguments_json = NULL;
+        free(new_tool.id);
+        free(new_tool.name);
+        free(new_tool.arguments_json);
         return;
     }
 
-    ctx->tool_uses[idx].arguments_json[0] = '\0';
-    ctx->tool_uses[idx].arguments_capacity = INITIAL_TOOL_ARGS_CAPACITY;
-    ctx->tool_use_count++;
-    ctx->current_tool_index = idx;
+    new_tool.arguments_json[0] = '\0';
+    new_tool.arguments_capacity = INITIAL_TOOL_ARGS_CAPACITY;
+
+    // Add to array
+    if (StreamingToolUseArray_push(&ctx->tool_uses, new_tool) != 0) {
+        // Push failed, clean up
+        free(new_tool.id);
+        free(new_tool.name);
+        free(new_tool.arguments_json);
+        return;
+    }
+
+    ctx->current_tool_index = (ssize_t)(ctx->tool_uses.count - 1);
 
     // Invoke callback if set
     if (ctx->on_tool_use_start != NULL) {
@@ -473,23 +451,23 @@ void streaming_emit_tool_delta(StreamingContext* ctx, const char* id, const char
     }
 
     // Find the tool with matching ID
-    int idx = ctx->current_tool_index;
-    if (idx < 0 || idx >= ctx->tool_use_count) {
+    ssize_t idx = ctx->current_tool_index;
+    if (idx < 0 || (size_t)idx >= ctx->tool_uses.count) {
         // Search for matching tool
-        for (int i = 0; i < ctx->tool_use_count; i++) {
-            if (ctx->tool_uses[i].id != NULL && strcmp(ctx->tool_uses[i].id, id) == 0) {
-                idx = i;
-                ctx->current_tool_index = i;
+        for (size_t i = 0; i < ctx->tool_uses.count; i++) {
+            if (ctx->tool_uses.data[i].id != NULL && strcmp(ctx->tool_uses.data[i].id, id) == 0) {
+                idx = (ssize_t)i;
+                ctx->current_tool_index = (ssize_t)i;
                 break;
             }
         }
     }
 
-    if (idx < 0 || idx >= ctx->tool_use_count) {
+    if (idx < 0 || (size_t)idx >= ctx->tool_uses.count) {
         return;  // Tool not found
     }
 
-    StreamingToolUse* tool = &ctx->tool_uses[idx];
+    StreamingToolUse* tool = &ctx->tool_uses.data[idx];
 
     // Verify ID matches
     if (tool->id == NULL || strcmp(tool->id, id) != 0) {

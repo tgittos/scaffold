@@ -14,12 +14,11 @@ include mk/tests.mk
 # PRIMARY TARGETS
 # =============================================================================
 
-# Default target builds the complete ralph binary with embedded Python
-all: ralph
+# Set default goal explicitly (included makefiles define targets before this)
+.DEFAULT_GOAL := all
 
-# The complete ralph binary - links code and embeds Python stdlib
-# This is what users expect when they run "make ralph"
-ralph: $(BUILDDIR)/.ralph-linked embed-python
+# Default target builds the complete ralph binary with embedded Python
+all: $(BUILDDIR)/.ralph-linked embed-python
 
 # Linking step - produces the base binary and saves it for embedding
 $(BUILDDIR)/.ralph-linked: $(OBJECTS) $(ALL_LIBS) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
@@ -81,4 +80,4 @@ distclean: clean
 # PHONY TARGETS
 # =============================================================================
 
-.PHONY: all ralph test check check-valgrind clean clean-python distclean python embed-python update-cacert
+.PHONY: all test check check-valgrind clean clean-python distclean python embed-python update-cacert

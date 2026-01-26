@@ -2,6 +2,7 @@
 #define SUBAGENT_TOOL_H
 
 #include "tools_system.h"
+#include "utils/darray.h"
 #include <sys/types.h>
 #include <time.h>
 
@@ -50,12 +51,13 @@ typedef struct {
     time_t start_time;                 // Unix timestamp when spawned
 } Subagent;
 
+DARRAY_DECLARE(SubagentArray, Subagent)
+
 /**
  * Manager structure for tracking all subagents
  */
 typedef struct {
-    Subagent *subagents;              // Dynamic array of subagents
-    int count;                         // Current number of subagents
+    SubagentArray subagents;           // Dynamic array of subagents
     int max_subagents;                 // Maximum allowed concurrent subagents
     int timeout_seconds;               // Timeout for each subagent execution
     int is_subagent_process;           // Flag: 1 if running as subagent (prevents nesting)

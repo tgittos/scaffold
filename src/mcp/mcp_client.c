@@ -12,18 +12,68 @@
 #include <fcntl.h>
 #include <signal.h>
 
+// Define dynamic array implementations
+DARRAY_DEFINE(ToolFunctionArray, ToolFunction)
+DARRAY_DEFINE(KeyValueArray, KeyValue)
+DARRAY_DEFINE(MCPServerConfigArray, MCPServerConfig)
+DARRAY_DEFINE(MCPServerStateArray, MCPServerState)
+
 // JSON-RPC message ID counter
 static int g_request_id = 1;
+
+/**
+ * Add a key-value pair to an array, taking ownership of both strings.
+ * On failure, both key and value are freed.
+ */
+static int keyvalue_array_add(KeyValueArray* arr, char* key, char* value) {
+    if (!arr || !key || !value) {
+        free(key);
+        free(value);
+        return -1;
+    }
+
+    KeyValue kv = { .key = key, .value = value };
+    if (KeyValueArray_push(arr, kv) != 0) {
+        free(key);
+        free(value);
+        return -1;
+    }
+    return 0;
+}
+
+/**
+ * Free all key-value pairs in an array and destroy the array.
+ */
+static void keyvalue_array_cleanup(KeyValueArray* arr) {
+    if (!arr) return;
+    for (size_t i = 0; i < arr->count; i++) {
+        free(arr->data[i].key);
+        free(arr->data[i].value);
+    }
+    KeyValueArray_destroy(arr);
+}
 
 int mcp_client_init(MCPClient* client) {
     if (!client) {
         debug_printf("MCP client is NULL\n\n");
         return -1;
     }
-    
+
     memset(client, 0, sizeof(MCPClient));
+
+    if (MCPServerConfigArray_init(&client->config.servers) != 0) {
+        debug_printf("Failed to initialize server config array\n\n");
+        return -1;
+    }
+
+    if (MCPServerStateArray_init(&client->servers) != 0) {
+        debug_printf("Failed to initialize server state array\n\n");
+        MCPServerConfigArray_destroy(&client->config.servers);
+        return -1;
+    }
+
     client->initialized = 1;
-    
+
     debug_printf("MCP client initialized\n\n");
     return 0;
 }
@@ -230,22 +280,12 @@ int mcp_client_load_config(MCPClient* client, const char* config_path) {
         }
         count_item = count_item->next;
     }
-    
+
     if (server_count == 0) {
         cJSON_Delete(root);
         debug_printf("No MCP servers configured\n");
         return 0;  // Not an error, just no servers
     }
-    
-    // Allocate server configurations
-    client->config.servers = malloc(server_count * sizeof(MCPServerConfig));
-    if (!client->config.servers) {
-        cJSON_Delete(root);
-        debug_printf("Failed to allocate memory for MCP server configs\n");
-        return -1;
-    }
-    
-    client->config.server_count = 0;
     
     // Parse each server configuration
     cJSON* server_item = NULL;
@@ -253,67 +293,74 @@ int mcp_client_load_config(MCPClient* client, const char* config_path) {
         if (!cJSON_IsObject(server_item)) {
             continue;
         }
-        
-        MCPServerConfig* config = &client->config.servers[client->config.server_count];
-        memset(config, 0, sizeof(MCPServerConfig));
-        
-        // Server name (key)
-        config->name = strdup(server_item->string);
-        if (!config->name) {
+
+        MCPServerConfig config;
+        memset(&config, 0, sizeof(MCPServerConfig));
+
+        // Initialize arrays
+        if (StringArray_init(&config.args, free) != 0 ||
+            KeyValueArray_init(&config.env_vars) != 0 ||
+            KeyValueArray_init(&config.headers) != 0) {
+            debug_printf("Failed to initialize arrays for server config\n");
+            StringArray_destroy(&config.args);
+            keyvalue_array_cleanup(&config.env_vars);
+            keyvalue_array_cleanup(&config.headers);
             continue;
         }
-        
+
+        // Server name (key)
+        config.name = strdup(server_item->string);
+        if (!config.name) {
+            mcp_cleanup_server_config(&config);
+            continue;
+        }
+
         // Server type
         cJSON* type_item = cJSON_GetObjectItem(server_item, "type");
         if (!type_item || !cJSON_IsString(type_item)) {
-            debug_printf("Missing or invalid type for server %s\n", config->name);
-            free(config->name);
+            debug_printf("Missing or invalid type for server %s\n", config.name);
+            mcp_cleanup_server_config(&config);
             continue;
         }
-        
+
         const char* type_str = cJSON_GetStringValue(type_item);
         if (strcmp(type_str, "stdio") == 0) {
-            config->type = MCP_SERVER_STDIO;
+            config.type = MCP_SERVER_STDIO;
         } else if (strcmp(type_str, "sse") == 0) {
-            config->type = MCP_SERVER_SSE;
+            config.type = MCP_SERVER_SSE;
         } else if (strcmp(type_str, "http") == 0) {
-            config->type = MCP_SERVER_HTTP;
+            config.type = MCP_SERVER_HTTP;
         } else {
-            debug_printf("Unknown server type '%s' for server %s\n", type_str, config->name);
-            free(config->name);
+            debug_printf("Unknown server type '%s' for server %s\n", type_str, config.name);
+            mcp_cleanup_server_config(&config);
             continue;
         }
-        
+
         // Command (for stdio servers)
         cJSON* command_item = cJSON_GetObjectItem(server_item, "command");
         if (command_item && cJSON_IsString(command_item)) {
             const char* command_str = cJSON_GetStringValue(command_item);
-            config->command = mcp_expand_env_vars(command_str);
+            config.command = mcp_expand_env_vars(command_str);
         }
-        
+
         // URL (for SSE/HTTP servers)
         cJSON* url_item = cJSON_GetObjectItem(server_item, "url");
         if (url_item && cJSON_IsString(url_item)) {
             const char* url_str = cJSON_GetStringValue(url_item);
-            config->url = mcp_expand_env_vars(url_str);
+            config.url = mcp_expand_env_vars(url_str);
         }
         
         // Arguments (for stdio servers)
         cJSON* args_item = cJSON_GetObjectItem(server_item, "args");
         if (args_item && cJSON_IsArray(args_item)) {
-            int arg_count = cJSON_GetArraySize(args_item);
-            if (arg_count > 0) {
-                config->args = malloc(arg_count * sizeof(char*));
-                if (config->args) {
-                    config->arg_count = 0;
-                    cJSON* arg_item = NULL;
-                    cJSON_ArrayForEach(arg_item, args_item) {
-                        if (cJSON_IsString(arg_item)) {
-                            const char* arg_str = cJSON_GetStringValue(arg_item);
-                            config->args[config->arg_count] = mcp_expand_env_vars(arg_str);
-                            if (config->args[config->arg_count]) {
-                                config->arg_count++;
-                            }
+            cJSON* arg_item = NULL;
+            cJSON_ArrayForEach(arg_item, args_item) {
+                if (cJSON_IsString(arg_item)) {
+                    const char* arg_str = cJSON_GetStringValue(arg_item);
+                    char* expanded = mcp_expand_env_vars(arg_str);
+                    if (expanded) {
+                        if (StringArray_push(&config.args, expanded) != 0) {
+                            free(expanded);
                         }
                     }
                 }
@@ -323,33 +370,13 @@ int mcp_client_load_config(MCPClient* client, const char* config_path) {
         // Environment variables (for stdio servers)
         cJSON* env_item = cJSON_GetObjectItem(server_item, "env");
         if (env_item && cJSON_IsObject(env_item)) {
-            int env_count = cJSON_GetArraySize(env_item);
-            if (env_count > 0) {
-                config->env_keys = malloc(env_count * sizeof(char*));
-                config->env_values = malloc(env_count * sizeof(char*));
-                if (config->env_keys && config->env_values) {
-                    config->env_count = 0;
-                    cJSON* env_entry = NULL;
-                    cJSON_ArrayForEach(env_entry, env_item) {
-                        if (cJSON_IsString(env_entry)) {
-                            const char* env_value = cJSON_GetStringValue(env_entry);
-                            config->env_keys[config->env_count] = strdup(env_entry->string);
-                            config->env_values[config->env_count] = mcp_expand_env_vars(env_value);
-                            if (config->env_keys[config->env_count] && config->env_values[config->env_count]) {
-                                config->env_count++;
-                            } else {
-                                // Clean up partial allocation
-                                free(config->env_keys[config->env_count]);
-                                free(config->env_values[config->env_count]);
-                            }
-                        }
-                    }
-                } else {
-                    // Clean up partial allocation if only one succeeded
-                    free(config->env_keys);
-                    free(config->env_values);
-                    config->env_keys = NULL;
-                    config->env_values = NULL;
+            cJSON* env_entry = NULL;
+            cJSON_ArrayForEach(env_entry, env_item) {
+                if (cJSON_IsString(env_entry)) {
+                    const char* env_value = cJSON_GetStringValue(env_entry);
+                    char* key = strdup(env_entry->string);
+                    char* value = mcp_expand_env_vars(env_value);
+                    keyvalue_array_add(&config.env_vars, key, value);
                 }
             }
         }
@@ -357,41 +384,27 @@ int mcp_client_load_config(MCPClient* client, const char* config_path) {
         // Headers (for SSE/HTTP servers)
         cJSON* headers_item = cJSON_GetObjectItem(server_item, "headers");
         if (headers_item && cJSON_IsObject(headers_item)) {
-            int header_count = cJSON_GetArraySize(headers_item);
-            if (header_count > 0) {
-                config->header_keys = malloc(header_count * sizeof(char*));
-                config->header_values = malloc(header_count * sizeof(char*));
-                if (config->header_keys && config->header_values) {
-                    config->header_count = 0;
-                    cJSON* header_entry = NULL;
-                    cJSON_ArrayForEach(header_entry, headers_item) {
-                        if (cJSON_IsString(header_entry)) {
-                            const char* header_value = cJSON_GetStringValue(header_entry);
-                            config->header_keys[config->header_count] = strdup(header_entry->string);
-                            config->header_values[config->header_count] = mcp_expand_env_vars(header_value);
-                            if (config->header_keys[config->header_count] && config->header_values[config->header_count]) {
-                                config->header_count++;
-                            } else {
-                                // Clean up partial allocation
-                                free(config->header_keys[config->header_count]);
-                                free(config->header_values[config->header_count]);
-                            }
-                        }
-                    }
-                } else {
-                    // Clean up partial allocation if only one succeeded
-                    free(config->header_keys);
-                    free(config->header_values);
-                    config->header_keys = NULL;
-                    config->header_values = NULL;
+            cJSON* header_entry = NULL;
+            cJSON_ArrayForEach(header_entry, headers_item) {
+                if (cJSON_IsString(header_entry)) {
+                    const char* header_value = cJSON_GetStringValue(header_entry);
+                    char* key = strdup(header_entry->string);
+                    char* value = mcp_expand_env_vars(header_value);
+                    keyvalue_array_add(&config.headers, key, value);
                 }
             }
         }
-        
-        config->enabled = 1;  // Enable by default
-        client->config.server_count++;
-        
-        debug_printf("Configured MCP server: %s (type: %s)\n", config->name, type_str);
+
+        config.enabled = 1;  // Enable by default
+
+        // Add config to array
+        if (MCPServerConfigArray_push(&client->config.servers, config) != 0) {
+            debug_printf("Failed to add server config to array\n");
+            mcp_cleanup_server_config(&config);
+            continue;
+        }
+
+        debug_printf("Configured MCP server: %s (type: %s)\n", config.name, type_str);
     }
     
     cJSON_Delete(root);
@@ -402,7 +415,7 @@ int mcp_client_load_config(MCPClient* client, const char* config_path) {
         debug_printf("Warning: Failed to allocate memory for config path\n");
     }
 
-    debug_printf("Loaded %d MCP servers from config\n", client->config.server_count);
+    debug_printf("Loaded %zu MCP servers from config\n", client->config.servers.count);
     return 0;
 }
 
@@ -455,21 +468,22 @@ int mcp_connect_server(MCPServerState* server) {
             close(stdout_pipe[1]);
             
             // Set environment variables
-            for (int i = 0; i < server->config->env_count; i++) {
-                setenv(server->config->env_keys[i], server->config->env_values[i], 1);
+            for (size_t i = 0; i < server->config->env_vars.count; i++) {
+                setenv(server->config->env_vars.data[i].key,
+                       server->config->env_vars.data[i].value, 1);
             }
-            
+
             // Prepare arguments
-            char** argv = malloc((server->config->arg_count + 2) * sizeof(char*));
+            char** argv = malloc((server->config->args.count + 2) * sizeof(char*));
             if (!argv) {
                 exit(1);
             }
-            
+
             argv[0] = server->config->command;
-            for (int i = 0; i < server->config->arg_count; i++) {
-                argv[i + 1] = server->config->args[i];
+            for (size_t i = 0; i < server->config->args.count; i++) {
+                argv[i + 1] = server->config->args.data[i];
             }
-            argv[server->config->arg_count + 1] = NULL;
+            argv[server->config->args.count + 1] = NULL;
             
             // Execute server command
             execv(server->config->command, argv);
@@ -595,21 +609,22 @@ int mcp_send_request(MCPServerState* server, const char* method, const char* par
     } else if (server->config->type == MCP_SERVER_HTTP || server->config->type == MCP_SERVER_SSE) {
         // Send HTTP request
         char** headers = NULL;
-        int header_count = server->config->header_count;
-        
+        size_t header_count = server->config->headers.count;
+
         if (header_count > 0) {
             headers = malloc(header_count * sizeof(char*));
             if (headers) {
-                for (int i = 0; i < header_count; i++) {
-                    size_t header_len = strlen(server->config->header_keys[i]) + strlen(server->config->header_values[i]) + 3;
+                for (size_t i = 0; i < header_count; i++) {
+                    KeyValue* kv = &server->config->headers.data[i];
+                    size_t header_len = strlen(kv->key) + strlen(kv->value) + 3;
                     headers[i] = malloc(header_len);
                     if (headers[i]) {
-                        snprintf(headers[i], header_len, "%s: %s", server->config->header_keys[i], server->config->header_values[i]);
+                        snprintf(headers[i], header_len, "%s: %s", kv->key, kv->value);
                     }
                 }
             }
         }
-        
+
         struct HTTPResponse http_response = {0};
         if (http_post_with_headers(server->config->url, request_str, (const char**)headers, &http_response) == 0) {
             if (http_response.data && http_response.size > 0) {
@@ -619,15 +634,15 @@ int mcp_send_request(MCPServerState* server, const char* method, const char* par
         } else {
             debug_printf("Failed to send HTTP request to MCP server %s\n", server->config->name);
         }
-        
+
         // Clean up HTTP response
         if (http_response.data) {
             free(http_response.data);
         }
-        
+
         // Clean up headers
         if (headers) {
-            for (int i = 0; i < header_count; i++) {
+            for (size_t i = 0; i < header_count; i++) {
                 free(headers[i]);
             }
             free(headers);
@@ -648,56 +663,56 @@ int mcp_client_connect_servers(MCPClient* client) {
         debug_printf("MCP client not initialized\n");
         return -1;
     }
-    
-    if (client->config.server_count == 0) {
+
+    if (client->config.servers.count == 0) {
         debug_printf("No MCP servers to connect\n");
         return 0;
     }
-    
-    // Allocate server states
-    client->servers = malloc(client->config.server_count * sizeof(MCPServerState));
-    if (!client->servers) {
-        debug_printf("Failed to allocate memory for MCP server states\n");
-        return -1;
-    }
-    
-    client->active_server_count = 0;
-    
+
     // Connect to each server
-    for (int i = 0; i < client->config.server_count; i++) {
-        MCPServerState* server = &client->servers[client->active_server_count];
-        memset(server, 0, sizeof(MCPServerState));
-        
+    for (size_t i = 0; i < client->config.servers.count; i++) {
+        MCPServerState server;
+        memset(&server, 0, sizeof(MCPServerState));
+
+        // Initialize tools array
+        if (ToolFunctionArray_init(&server.tools) != 0) {
+            debug_printf("Failed to initialize tools array\n");
+            continue;
+        }
+
         // Point to original configuration (not copied - config is owned by client->config.servers)
-        server->config = &client->config.servers[i];
-        
+        server.config = &client->config.servers.data[i];
+
         // Connect to server
-        if (mcp_connect_server(server) == 0) {
-            client->active_server_count++;
-            debug_printf("Successfully connected to MCP server: %s\n", server->config->name);
+        if (mcp_connect_server(&server) == 0) {
+            if (MCPServerStateArray_push(&client->servers, server) != 0) {
+                debug_printf("Failed to add server state to array\n");
+                mcp_cleanup_server_state(&server);
+            } else {
+                debug_printf("Successfully connected to MCP server: %s\n", server.config->name);
+            }
         } else {
-            debug_printf("Failed to connect to MCP server: %s\n", server->config->name);
+            debug_printf("Failed to connect to MCP server: %s\n", server.config->name);
+            mcp_cleanup_server_state(&server);
         }
     }
-    
-    debug_printf("Connected to %d/%d MCP servers\n", client->active_server_count, client->config.server_count);
+
+    debug_printf("Connected to %zu/%zu MCP servers\n", client->servers.count, client->config.servers.count);
     return 0;
 }
 
 int mcp_client_disconnect_servers(MCPClient* client) {
-    if (!client || !client->servers) {
+    if (!client) {
         return 0;
     }
 
-    debug_printf("Disconnecting from %d MCP servers\n", client->active_server_count);
+    debug_printf("Disconnecting from %zu MCP servers\n", client->servers.count);
 
-    for (int i = 0; i < client->active_server_count; i++) {
-        mcp_cleanup_server_state(&client->servers[i]);
+    for (size_t i = 0; i < client->servers.count; i++) {
+        mcp_cleanup_server_state(&client->servers.data[i]);
     }
 
-    free(client->servers);
-    client->servers = NULL;
-    client->active_server_count = 0;
+    MCPServerStateArray_destroy(&client->servers);
 
     debug_printf("Disconnected from all MCP servers\n");
     return 0;
@@ -708,43 +723,44 @@ int mcp_parse_tools(const char* response, ToolFunction** tools, int* tool_count)
         debug_printf("Invalid parameters for MCP tool parsing\n");
         return -1;
     }
-    
+
     *tools = NULL;
     *tool_count = 0;
-    
+
     cJSON* json = cJSON_Parse(response);
     if (!json) {
         debug_printf("Failed to parse MCP tools response JSON\n");
         return -1;
     }
-    
+
     cJSON* result = cJSON_GetObjectItem(json, "result");
     if (!result) {
         debug_printf("No result field in MCP tools response\n");
         cJSON_Delete(json);
         return -1;
     }
-    
+
     cJSON* tools_array = cJSON_GetObjectItem(result, "tools");
     if (!tools_array || !cJSON_IsArray(tools_array)) {
         debug_printf("No tools array in MCP response\n");
         cJSON_Delete(json);
         return -1;
     }
-    
+
     int count = cJSON_GetArraySize(tools_array);
     if (count == 0) {
         cJSON_Delete(json);
         return 0;  // No tools, not an error
     }
-    
+
+    // Allocate temporary array for parsing
     ToolFunction* tool_functions = malloc(count * sizeof(ToolFunction));
     if (!tool_functions) {
         debug_printf("Failed to allocate memory for MCP tools\n");
         cJSON_Delete(json);
         return -1;
     }
-    
+
     int parsed_count = 0;
     cJSON* tool_item = NULL;
     cJSON_ArrayForEach(tool_item, tools_array) {
@@ -847,31 +863,44 @@ int mcp_client_register_tools(MCPClient* client, ToolRegistry* registry) {
         debug_printf("Invalid parameters for MCP tool registration\n");
         return -1;
     }
-    
-    if (client->active_server_count == 0) {
+
+    if (client->servers.count == 0) {
         debug_printf("No active MCP servers to register tools from\n");
         return 0;
     }
-    
+
     // Get tools from each server
-    for (int i = 0; i < client->active_server_count; i++) {
-        MCPServerState* server = &client->servers[i];
-        
+    for (size_t i = 0; i < client->servers.count; i++) {
+        MCPServerState* server = &client->servers.data[i];
+
         char* response = NULL;
         if (mcp_send_request(server, "tools/list", NULL, &response) == 0 && response) {
             ToolFunction* tools = NULL;
             int tool_count = 0;
-            
+
             if (mcp_parse_tools(response, &tools, &tool_count) == 0 && tool_count > 0) {
-                // Store tools in server state
-                server->tools = tools;
-                server->tool_count = tool_count;
-                
-                debug_printf("Server %s provides %d tools\n", server->config->name, tool_count);
-                
-                // Register tools with registry
+                // Store tools in server state - move them into the array
                 for (int j = 0; j < tool_count; j++) {
-                    ToolFunction* tool = &tools[j];
+                    if (ToolFunctionArray_push(&server->tools, tools[j]) != 0) {
+                        debug_printf("Failed to add tool to array\n");
+                        // Clean up the tool that failed to add
+                        free(tools[j].name);
+                        free(tools[j].description);
+                        for (int k = 0; k < tools[j].parameter_count; k++) {
+                            free(tools[j].parameters[k].name);
+                            free(tools[j].parameters[k].type);
+                            free(tools[j].parameters[k].description);
+                        }
+                        free(tools[j].parameters);
+                    }
+                }
+                free(tools); // Free the temporary array
+
+                debug_printf("Server %s provides %zu tools\n", server->config->name, server->tools.count);
+
+                // Register tools with registry
+                for (size_t j = 0; j < server->tools.count; j++) {
+                    ToolFunction* tool = &server->tools.data[j];
                     
                     // Create prefixed name to avoid conflicts
                     char prefixed_name[256];
@@ -944,9 +973,9 @@ int mcp_client_execute_tool(MCPClient* client, const ToolCall* tool_call, ToolRe
     
     // Find the server
     MCPServerState* server = NULL;
-    for (int i = 0; i < client->active_server_count; i++) {
-        if (strcmp(client->servers[i].config->name, server_name) == 0) {
-            server = &client->servers[i];
+    for (size_t i = 0; i < client->servers.count; i++) {
+        if (strcmp(client->servers.data[i].config->name, server_name) == 0) {
+            server = &client->servers.data[i];
             break;
         }
     }
@@ -1051,30 +1080,15 @@ void mcp_cleanup_server_config(MCPServerConfig* config) {
     if (!config) {
         return;
     }
-    
+
     free(config->name);
     free(config->command);
     free(config->url);
-    
-    for (int i = 0; i < config->arg_count; i++) {
-        free(config->args[i]);
-    }
-    free(config->args);
-    
-    for (int i = 0; i < config->env_count; i++) {
-        free(config->env_keys[i]);
-        free(config->env_values[i]);
-    }
-    free(config->env_keys);
-    free(config->env_values);
-    
-    for (int i = 0; i < config->header_count; i++) {
-        free(config->header_keys[i]);
-        free(config->header_values[i]);
-    }
-    free(config->header_keys);
-    free(config->header_values);
-    
+
+    StringArray_destroy(&config->args);
+    keyvalue_array_cleanup(&config->env_vars);
+    keyvalue_array_cleanup(&config->headers);
+
     memset(config, 0, sizeof(MCPServerConfig));
 }
 
@@ -1082,15 +1096,15 @@ void mcp_cleanup_server_state(MCPServerState* server) {
     if (!server) {
         return;
     }
-    
+
     mcp_disconnect_server(server);
-    
+
     // Clean up tools
-    for (int i = 0; i < server->tool_count; i++) {
-        ToolFunction* tool = &server->tools[i];
+    for (size_t i = 0; i < server->tools.count; i++) {
+        ToolFunction* tool = &server->tools.data[i];
         free(tool->name);
         free(tool->description);
-        
+
         for (int j = 0; j < tool->parameter_count; j++) {
             free(tool->parameters[j].name);
             free(tool->parameters[j].type);
@@ -1098,10 +1112,10 @@ void mcp_cleanup_server_state(MCPServerState* server) {
         }
         free(tool->parameters);
     }
-    free(server->tools);
-    
+    ToolFunctionArray_destroy(&server->tools);
+
     free(server->session_id);
-    
+
     memset(server, 0, sizeof(MCPServerState));
 }
 
@@ -1109,21 +1123,21 @@ void mcp_client_cleanup(MCPClient* client) {
     if (!client) {
         return;
     }
-    
+
     debug_printf("Cleaning up MCP client\n");
-    
-    // Disconnect servers
+
+    // Disconnect servers (this also destroys the server state array)
     mcp_client_disconnect_servers(client);
-    
+
     // Clean up configurations
-    for (int i = 0; i < client->config.server_count; i++) {
-        mcp_cleanup_server_config(&client->config.servers[i]);
+    for (size_t i = 0; i < client->config.servers.count; i++) {
+        mcp_cleanup_server_config(&client->config.servers.data[i]);
     }
-    free(client->config.servers);
-    
+    MCPServerConfigArray_destroy(&client->config.servers);
+
     free(client->config.config_path);
-    
+
     memset(client, 0, sizeof(MCPClient));
-    
+
     debug_printf("MCP client cleanup complete\n");
 }

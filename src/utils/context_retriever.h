@@ -2,6 +2,7 @@
 #define CONTEXT_RETRIEVER_H
 
 #include <stddef.h>
+#include "darray.h"
 
 typedef struct {
     char *content;
@@ -9,9 +10,10 @@ typedef struct {
     char *source;
 } context_item_t;
 
+DARRAY_DECLARE(ContextItemArray, context_item_t)
+
 typedef struct {
-    context_item_t *items;
-    size_t item_count;
+    ContextItemArray items;
     char *error;
 } context_result_t;
 

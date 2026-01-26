@@ -2,6 +2,7 @@
 #define DOCUMENT_CHUNKER_H
 
 #include <stddef.h>
+#include "darray.h"
 
 typedef struct {
     char *text;           // Chunk text content
@@ -11,9 +12,10 @@ typedef struct {
     int chunk_index;      // Index of this chunk in the document
 } document_chunk_t;
 
+DARRAY_DECLARE(ChunkArray, document_chunk_t)
+
 typedef struct {
-    document_chunk_t *chunks;  // Array of chunks
-    size_t chunk_count;        // Number of chunks
+    ChunkArray chunks;         // Array of chunks
     char *error;               // Error message if chunking failed
 } chunking_result_t;
 

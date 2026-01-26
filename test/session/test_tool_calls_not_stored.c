@@ -61,14 +61,14 @@ void test_assistant_tool_calls_not_stored_in_vector_db(void) {
     int result = load_conversation_history(&loaded);
     TEST_ASSERT_EQUAL_INT(0, result);
 
-    printf("Loaded %d messages from conversation history\n", loaded.count);
+    printf("Loaded %zu messages from conversation history\n", loaded.count);
 
     // Check each assistant message - none should contain tool_calls
-    for (int i = 0; i < loaded.count; i++) {
-        printf("Message %d: role=%s\n", i, loaded.messages[i].role);
+    for (size_t i = 0; i < loaded.count; i++) {
+        printf("Message %zu: role=%s\n", i, loaded.data[i].role);
 
-        if (strcmp(loaded.messages[i].role, "assistant") == 0) {
-            const char* content = loaded.messages[i].content;
+        if (strcmp(loaded.data[i].role, "assistant") == 0) {
+            const char* content = loaded.data[i].content;
             printf("  content: %s\n", content);
 
             // The stored content should NOT contain "tool_calls"
@@ -123,14 +123,14 @@ void test_assistant_content_with_tool_calls_stores_only_content(void) {
     int result = load_conversation_history(&loaded);
     TEST_ASSERT_EQUAL_INT(0, result);
 
-    printf("Loaded %d messages\n", loaded.count);
+    printf("Loaded %zu messages\n", loaded.count);
 
     // Find the assistant message and verify only content is stored
     int found_assistant = 0;
-    for (int i = 0; i < loaded.count; i++) {
-        if (strcmp(loaded.messages[i].role, "assistant") == 0) {
+    for (size_t i = 0; i < loaded.count; i++) {
+        if (strcmp(loaded.data[i].role, "assistant") == 0) {
             found_assistant = 1;
-            const char* content = loaded.messages[i].content;
+            const char* content = loaded.data[i].content;
             printf("Assistant content: %s\n", content);
 
             // Should NOT contain tool_calls
@@ -188,13 +188,13 @@ void test_assistant_with_only_tool_calls_not_stored(void) {
     int result = load_conversation_history(&loaded);
     TEST_ASSERT_EQUAL_INT(0, result);
 
-    printf("Loaded %d messages\n", loaded.count);
+    printf("Loaded %zu messages\n", loaded.count);
 
     // Count meaningful assistant messages (should only be the final one)
     int meaningful_assistant_count = 0;
-    for (int i = 0; i < loaded.count; i++) {
-        if (strcmp(loaded.messages[i].role, "assistant") == 0) {
-            const char* content = loaded.messages[i].content;
+    for (size_t i = 0; i < loaded.count; i++) {
+        if (strcmp(loaded.data[i].role, "assistant") == 0) {
+            const char* content = loaded.data[i].content;
             printf("Assistant message: %s\n", content);
 
             // Should not be a tool-only message

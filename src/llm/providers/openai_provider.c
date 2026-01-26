@@ -135,10 +135,10 @@ static void openai_parse_tool_call_delta(StreamingContext* ctx, cJSON* tool_call
             if (arguments != NULL && cJSON_IsString(arguments) && strlen(arguments->valuestring) > 0) {
                 // Find the tool by index
                 const char* tool_id = NULL;
-                if (index < ctx->tool_use_count && ctx->tool_uses[index].id != NULL) {
-                    tool_id = ctx->tool_uses[index].id;
-                } else if (ctx->current_tool_index >= 0 && ctx->current_tool_index < ctx->tool_use_count) {
-                    tool_id = ctx->tool_uses[ctx->current_tool_index].id;
+                if ((size_t)index < ctx->tool_uses.count && ctx->tool_uses.data[index].id != NULL) {
+                    tool_id = ctx->tool_uses.data[index].id;
+                } else if (ctx->current_tool_index >= 0 && (size_t)ctx->current_tool_index < ctx->tool_uses.count) {
+                    tool_id = ctx->tool_uses.data[ctx->current_tool_index].id;
                 }
 
                 if (tool_id != NULL) {

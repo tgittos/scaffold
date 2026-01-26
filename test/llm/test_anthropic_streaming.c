@@ -101,9 +101,9 @@ void test_parse_content_block_start_tool_use(void) {
 
     int result = anthropic_provider->parse_stream_event(anthropic_provider, test_ctx, json, strlen(json));
     TEST_ASSERT_EQUAL_INT(0, result);
-    TEST_ASSERT_EQUAL_INT(1, test_ctx->tool_use_count);
-    TEST_ASSERT_EQUAL_STRING("toolu_123", test_ctx->tool_uses[0].id);
-    TEST_ASSERT_EQUAL_STRING("get_weather", test_ctx->tool_uses[0].name);
+    TEST_ASSERT_EQUAL_INT(1, test_ctx->tool_uses.count);
+    TEST_ASSERT_EQUAL_STRING("toolu_123", test_ctx->tool_uses.data[0].id);
+    TEST_ASSERT_EQUAL_STRING("get_weather", test_ctx->tool_uses.data[0].name);
 }
 
 // =============================================================================
@@ -176,7 +176,7 @@ void test_parse_tool_input_json_delta(void) {
     anthropic_provider->parse_stream_event(anthropic_provider, test_ctx, json1, strlen(json1));
     anthropic_provider->parse_stream_event(anthropic_provider, test_ctx, json2, strlen(json2));
 
-    TEST_ASSERT_EQUAL_STRING("{\"cmd\":\"ls\"}", test_ctx->tool_uses[0].arguments_json);
+    TEST_ASSERT_EQUAL_STRING("{\"cmd\":\"ls\"}", test_ctx->tool_uses.data[0].arguments_json);
 }
 
 // =============================================================================
@@ -368,13 +368,13 @@ void test_parse_multiple_tool_calls(void) {
     anthropic_provider->parse_stream_event(anthropic_provider, test_ctx, tool2_start, strlen(tool2_start));
     anthropic_provider->parse_stream_event(anthropic_provider, test_ctx, tool2_delta, strlen(tool2_delta));
 
-    TEST_ASSERT_EQUAL_INT(2, test_ctx->tool_use_count);
-    TEST_ASSERT_EQUAL_STRING("tool_1", test_ctx->tool_uses[0].id);
-    TEST_ASSERT_EQUAL_STRING("tool_a", test_ctx->tool_uses[0].name);
-    TEST_ASSERT_EQUAL_STRING("{\"a\":1}", test_ctx->tool_uses[0].arguments_json);
-    TEST_ASSERT_EQUAL_STRING("tool_2", test_ctx->tool_uses[1].id);
-    TEST_ASSERT_EQUAL_STRING("tool_b", test_ctx->tool_uses[1].name);
-    TEST_ASSERT_EQUAL_STRING("{\"b\":2}", test_ctx->tool_uses[1].arguments_json);
+    TEST_ASSERT_EQUAL_INT(2, test_ctx->tool_uses.count);
+    TEST_ASSERT_EQUAL_STRING("tool_1", test_ctx->tool_uses.data[0].id);
+    TEST_ASSERT_EQUAL_STRING("tool_a", test_ctx->tool_uses.data[0].name);
+    TEST_ASSERT_EQUAL_STRING("{\"a\":1}", test_ctx->tool_uses.data[0].arguments_json);
+    TEST_ASSERT_EQUAL_STRING("tool_2", test_ctx->tool_uses.data[1].id);
+    TEST_ASSERT_EQUAL_STRING("tool_b", test_ctx->tool_uses.data[1].name);
+    TEST_ASSERT_EQUAL_STRING("{\"b\":2}", test_ctx->tool_uses.data[1].arguments_json);
 }
 
 // =============================================================================

@@ -2,6 +2,8 @@
 #define STREAMING_H
 
 #include <stddef.h>
+#include <sys/types.h>  // For ssize_t
+#include "../utils/darray.h"
 
 /**
  * Streaming SSE Parser and Context Management
@@ -28,6 +30,11 @@ typedef struct {
     char* arguments_json;      // Accumulated from partial deltas
     size_t arguments_capacity;
 } StreamingToolUse;
+
+/**
+ * Dynamic array of StreamingToolUse
+ */
+DARRAY_DECLARE(StreamingToolUseArray, StreamingToolUse)
 
 /**
  * Context for an active streaming response
@@ -58,12 +65,10 @@ typedef struct {
     size_t thinking_capacity;
 
     // Tool calls accumulated from stream
-    StreamingToolUse* tool_uses;
-    int tool_use_count;
-    int tool_use_capacity;
+    StreamingToolUseArray tool_uses;
 
-    // Current tool index for delta accumulation
-    int current_tool_index;
+    // Current tool index for delta accumulation (-1 when not set)
+    ssize_t current_tool_index;
 
     // Response metadata
     int input_tokens;

@@ -95,16 +95,16 @@ void test_document_store_search(void) {
     document_search_results_t* results = document_store_search(store, index_name,
                                                               query_embedding, 128, 2);
     TEST_ASSERT_NOT_NULL(results);
-    TEST_ASSERT_TRUE(results->count > 0);
-    TEST_ASSERT_TRUE(results->count <= 2);
-    
+    TEST_ASSERT_TRUE(results->results.count > 0);
+    TEST_ASSERT_TRUE(results->results.count <= 2);
+
     // Check that we got documents back
-    for (size_t i = 0; i < results->count; i++) {
-        TEST_ASSERT_NOT_NULL(results->documents[i]);
-        TEST_ASSERT_NOT_NULL(results->documents[i]->content);
-        TEST_ASSERT_TRUE(strstr(results->documents[i]->content, "Document") != NULL);
+    for (size_t i = 0; i < results->results.count; i++) {
+        TEST_ASSERT_NOT_NULL(results->results.data[i].document);
+        TEST_ASSERT_NOT_NULL(results->results.data[i].document->content);
+        TEST_ASSERT_TRUE(strstr(results->results.data[i].document->content, "Document") != NULL);
     }
-    
+
     document_store_free_results(results);
     document_store_destroy(store);
 }
@@ -143,14 +143,14 @@ void test_document_store_search_by_time(void) {
     document_search_results_t* results = document_store_search_by_time(store, index_name,
                                                                       start_time, end_time, 10);
     TEST_ASSERT_NOT_NULL(results);
-    TEST_ASSERT_EQUAL_INT(3, results->count);
-    
-    for (size_t i = 0; i < results->count; i++) {
-        TEST_ASSERT_NOT_NULL(results->documents[i]);
-        TEST_ASSERT_TRUE(results->documents[i]->timestamp >= start_time);
-        TEST_ASSERT_TRUE(results->documents[i]->timestamp <= end_time);
+    TEST_ASSERT_EQUAL_INT(3, results->results.count);
+
+    for (size_t i = 0; i < results->results.count; i++) {
+        TEST_ASSERT_NOT_NULL(results->results.data[i].document);
+        TEST_ASSERT_TRUE(results->results.data[i].document->timestamp >= start_time);
+        TEST_ASSERT_TRUE(results->results.data[i].document->timestamp <= end_time);
     }
-    
+
     document_store_free_results(results);
     document_store_destroy(store);
 }

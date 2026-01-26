@@ -5,6 +5,8 @@
 #include <stdbool.h>
 #include <time.h>
 #include "vector_db.h"
+#include "../utils/ptrarray.h"
+#include "../utils/darray.h"
 
 typedef struct {
     size_t id;
@@ -17,10 +19,20 @@ typedef struct {
     char* metadata_json;
 } document_t;
 
+PTRARRAY_DECLARE(DocumentArray, document_t)
+
+/**
+ * Single search result combining document with its distance score
+ */
 typedef struct {
-    document_t** documents;
-    size_t count;
-    float* distances;
+    document_t* document;
+    float distance;
+} document_result_t;
+
+DARRAY_DECLARE(DocumentResultArray, document_result_t)
+
+typedef struct {
+    DocumentResultArray results;
 } document_search_results_t;
 
 typedef struct document_store document_store_t;

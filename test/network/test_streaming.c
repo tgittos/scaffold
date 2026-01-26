@@ -127,8 +127,8 @@ void test_streaming_context_create(void)
     TEST_ASSERT_NOT_NULL(ctx->line_buffer);
     TEST_ASSERT_NOT_NULL(ctx->text_content);
     TEST_ASSERT_NOT_NULL(ctx->thinking_content);
-    TEST_ASSERT_NOT_NULL(ctx->tool_uses);
-    TEST_ASSERT_EQUAL_INT(0, ctx->tool_use_count);
+    TEST_ASSERT_NOT_NULL(ctx->tool_uses.data);
+    TEST_ASSERT_EQUAL_INT(0, ctx->tool_uses.count);
     streaming_context_free(ctx);
 }
 
@@ -159,7 +159,7 @@ void test_streaming_context_reset(void)
     TEST_ASSERT_EQUAL(STREAM_STATE_IDLE, ctx->state);
     TEST_ASSERT_EQUAL_STRING("", ctx->text_content);
     TEST_ASSERT_EQUAL_STRING("", ctx->thinking_content);
-    TEST_ASSERT_EQUAL_INT(0, ctx->tool_use_count);
+    TEST_ASSERT_EQUAL_INT(0, ctx->tool_uses.count);
     TEST_ASSERT_EQUAL_INT(0, ctx->input_tokens);
     TEST_ASSERT_EQUAL_INT(0, ctx->output_tokens);
 
@@ -395,9 +395,9 @@ void test_emit_tool_start(void)
 
     streaming_emit_tool_start(ctx, "tool_abc123", "shell_command");
 
-    TEST_ASSERT_EQUAL_INT(1, ctx->tool_use_count);
-    TEST_ASSERT_EQUAL_STRING("tool_abc123", ctx->tool_uses[0].id);
-    TEST_ASSERT_EQUAL_STRING("shell_command", ctx->tool_uses[0].name);
+    TEST_ASSERT_EQUAL_INT(1, ctx->tool_uses.count);
+    TEST_ASSERT_EQUAL_STRING("tool_abc123", ctx->tool_uses.data[0].id);
+    TEST_ASSERT_EQUAL_STRING("shell_command", ctx->tool_uses.data[0].name);
     TEST_ASSERT_EQUAL_INT(0, ctx->current_tool_index);
 
     streaming_context_free(ctx);
@@ -413,7 +413,7 @@ void test_emit_tool_start_with_callback(void)
     streaming_emit_tool_start(ctx, "tool_2", "another_tool");
 
     TEST_ASSERT_EQUAL_INT(2, tool_start_count);
-    TEST_ASSERT_EQUAL_INT(2, ctx->tool_use_count);
+    TEST_ASSERT_EQUAL_INT(2, ctx->tool_uses.count);
 
     streaming_context_free(ctx);
 }
@@ -427,7 +427,7 @@ void test_emit_tool_delta(void)
     streaming_emit_tool_delta(ctx, "tool_xyz", "{\"path\":", 8);
     streaming_emit_tool_delta(ctx, "tool_xyz", "\"/test\"}", 8);
 
-    TEST_ASSERT_EQUAL_STRING("{\"path\":\"/test\"}", ctx->tool_uses[0].arguments_json);
+    TEST_ASSERT_EQUAL_STRING("{\"path\":\"/test\"}", ctx->tool_uses.data[0].arguments_json);
 
     streaming_context_free(ctx);
 }
@@ -456,7 +456,7 @@ void test_emit_tool_delta_wrong_id(void)
     // Delta with wrong ID should be ignored
     streaming_emit_tool_delta(ctx, "wrong_id", "{\"data\":1}", 10);
 
-    TEST_ASSERT_EQUAL_STRING("", ctx->tool_uses[0].arguments_json);
+    TEST_ASSERT_EQUAL_STRING("", ctx->tool_uses.data[0].arguments_json);
 
     streaming_context_free(ctx);
 }
@@ -473,9 +473,9 @@ void test_multiple_tools(void)
     streaming_emit_tool_start(ctx, "tool_2", "file_read");
     streaming_emit_tool_delta(ctx, "tool_2", "{\"path\":\"/\"}", 12);
 
-    TEST_ASSERT_EQUAL_INT(2, ctx->tool_use_count);
-    TEST_ASSERT_EQUAL_STRING("{\"cmd\":\"ls\"}", ctx->tool_uses[0].arguments_json);
-    TEST_ASSERT_EQUAL_STRING("{\"path\":\"/\"}", ctx->tool_uses[1].arguments_json);
+    TEST_ASSERT_EQUAL_INT(2, ctx->tool_uses.count);
+    TEST_ASSERT_EQUAL_STRING("{\"cmd\":\"ls\"}", ctx->tool_uses.data[0].arguments_json);
+    TEST_ASSERT_EQUAL_STRING("{\"path\":\"/\"}", ctx->tool_uses.data[1].arguments_json);
 
     streaming_context_free(ctx);
 }
@@ -494,8 +494,8 @@ void test_tool_capacity_growth(void)
         streaming_emit_tool_start(ctx, id, name);
     }
 
-    TEST_ASSERT_EQUAL_INT(10, ctx->tool_use_count);
-    TEST_ASSERT_TRUE(ctx->tool_use_capacity >= 10);
+    TEST_ASSERT_EQUAL_INT(10, ctx->tool_uses.count);
+    TEST_ASSERT_TRUE(ctx->tool_uses.capacity >= 10);
 
     streaming_context_free(ctx);
 }

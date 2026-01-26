@@ -18,13 +18,13 @@ void test_chunk_small_document_single_chunk(void) {
     
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_NULL(result->error);
-    TEST_ASSERT_EQUAL_INT(1, result->chunk_count);
-    TEST_ASSERT_NOT_NULL(result->chunks);
-    TEST_ASSERT_EQUAL_STRING(text, result->chunks[0].text);
-    TEST_ASSERT_EQUAL_INT(strlen(text), result->chunks[0].length);
-    TEST_ASSERT_EQUAL_INT(0, result->chunks[0].start_offset);
-    TEST_ASSERT_EQUAL_INT(strlen(text), result->chunks[0].end_offset);
-    TEST_ASSERT_EQUAL_INT(0, result->chunks[0].chunk_index);
+    TEST_ASSERT_EQUAL_INT(1, result->chunks.count);
+    TEST_ASSERT_NOT_NULL(result->chunks.data);
+    TEST_ASSERT_EQUAL_STRING(text, result->chunks.data[0].text);
+    TEST_ASSERT_EQUAL_INT(strlen(text), result->chunks.data[0].length);
+    TEST_ASSERT_EQUAL_INT(0, result->chunks.data[0].start_offset);
+    TEST_ASSERT_EQUAL_INT(strlen(text), result->chunks.data[0].end_offset);
+    TEST_ASSERT_EQUAL_INT(0, result->chunks.data[0].chunk_index);
     
     free_chunking_result(result);
 }
@@ -36,7 +36,7 @@ void test_chunk_empty_document(void) {
     
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_NOT_NULL(result->error);
-    TEST_ASSERT_EQUAL_INT(0, result->chunk_count);
+    TEST_ASSERT_EQUAL_INT(0, result->chunks.count);
     
     free_chunking_result(result);
 }
@@ -46,7 +46,7 @@ void test_chunk_null_document(void) {
     
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_NOT_NULL(result->error);
-    TEST_ASSERT_EQUAL_INT(0, result->chunk_count);
+    TEST_ASSERT_EQUAL_INT(0, result->chunks.count);
     
     free_chunking_result(result);
 }
@@ -61,13 +61,13 @@ void test_chunk_large_document_multiple_chunks(void) {
     
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_NULL(result->error);
-    TEST_ASSERT_GREATER_THAN(1, result->chunk_count);
+    TEST_ASSERT_GREATER_THAN(1, result->chunks.count);
     
     // Verify all chunks are properly formed
-    for (size_t i = 0; i < result->chunk_count; i++) {
-        TEST_ASSERT_NOT_NULL(result->chunks[i].text);
-        TEST_ASSERT_GREATER_THAN(0, result->chunks[i].length);
-        TEST_ASSERT_EQUAL_INT(i, result->chunks[i].chunk_index);
+    for (size_t i = 0; i < result->chunks.count; i++) {
+        TEST_ASSERT_NOT_NULL(result->chunks.data[i].text);
+        TEST_ASSERT_GREATER_THAN(0, result->chunks.data[i].length);
+        TEST_ASSERT_EQUAL_INT(i, result->chunks.data[i].chunk_index);
     }
     
     free_chunking_result(result);
@@ -87,12 +87,12 @@ void test_chunk_with_sentences(void) {
     
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_NULL(result->error);
-    TEST_ASSERT_GREATER_THAN(1, result->chunk_count);
+    TEST_ASSERT_GREATER_THAN(1, result->chunks.count);
     
     // Check that sentence boundaries are preserved
-    for (size_t i = 0; i < result->chunk_count; i++) {
-        char *chunk_text = result->chunks[i].text;
-        size_t len = result->chunks[i].length;
+    for (size_t i = 0; i < result->chunks.count; i++) {
+        char *chunk_text = result->chunks.data[i].text;
+        size_t len = result->chunks.data[i].length;
         
         // If chunk ends with a sentence ending, it should be at a sentence boundary
         if (len > 0 && (chunk_text[len-1] == '.' || chunk_text[len-1] == '!' || chunk_text[len-1] == '?')) {
@@ -166,13 +166,13 @@ void test_chunk_with_overlap(void) {
     
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_NULL(result->error);
-    TEST_ASSERT_GREATER_THAN(1, result->chunk_count);
+    TEST_ASSERT_GREATER_THAN(1, result->chunks.count);
     
     // Verify overlaps exist between consecutive chunks
-    if (result->chunk_count > 1) {
-        for (size_t i = 1; i < result->chunk_count; i++) {
+    if (result->chunks.count > 1) {
+        for (size_t i = 1; i < result->chunks.count; i++) {
             // Check that there's some overlap: the start of chunk i should be before the end of chunk i-1
-            TEST_ASSERT_LESS_THAN(result->chunks[i-1].end_offset, result->chunks[i].start_offset);
+            TEST_ASSERT_LESS_THAN(result->chunks.data[i-1].end_offset, result->chunks.data[i].start_offset);
         }
     }
     
@@ -190,7 +190,7 @@ void test_invalid_config(void) {
     
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_NOT_NULL(result->error);
-    TEST_ASSERT_EQUAL_INT(0, result->chunk_count);
+    TEST_ASSERT_EQUAL_INT(0, result->chunks.count);
     
     free_chunking_result(result);
 }
@@ -202,13 +202,13 @@ void test_whitespace_trimming(void) {
     
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_NULL(result->error);
-    TEST_ASSERT_EQUAL_INT(1, result->chunk_count);
+    TEST_ASSERT_EQUAL_INT(1, result->chunks.count);
     
     // Check that whitespace was trimmed
-    char *chunk_text = result->chunks[0].text;
+    char *chunk_text = result->chunks.data[0].text;
     TEST_ASSERT_EQUAL_CHAR('T', chunk_text[0]);  // Should start with 'T', not space
     
-    size_t len = result->chunks[0].length;
+    size_t len = result->chunks.data[0].length;
     TEST_ASSERT_NOT_EQUAL(' ', chunk_text[len-1]);  // Should not end with space
     
     free_chunking_result(result);

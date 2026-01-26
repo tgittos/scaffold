@@ -15,6 +15,7 @@
 #include "token_manager.h"
 #include "model_capabilities.h"
 #include "../mcp/mcp_client.h"
+#include "../utils/ptrarray.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -132,17 +133,10 @@ char* construct_openai_assistant_message_with_tools(const char* content,
 // Executed Tool Tracker
 // =============================================================================
 
-// Simple tracking structure for executed tool calls
-typedef struct {
-    char** tool_call_ids;
-    int count;
-    int capacity;
-} ExecutedToolTracker;
-
 // Check if a tool call ID was already executed
-static int is_tool_already_executed(ExecutedToolTracker* tracker, const char* tool_call_id) {
-    for (int i = 0; i < tracker->count; i++) {
-        if (strcmp(tracker->tool_call_ids[i], tool_call_id) == 0) {
+static int is_tool_already_executed(const StringArray* tracker, const char* tool_call_id) {
+    for (size_t i = 0; i < tracker->count; i++) {
+        if (strcmp(tracker->data[i], tool_call_id) == 0) {
             return 1;
         }
     }
@@ -151,19 +145,9 @@ static int is_tool_already_executed(ExecutedToolTracker* tracker, const char* to
 
 // Add a tool call ID to the executed tracker
 // Returns 0 on success, -1 on failure
-static int add_executed_tool(ExecutedToolTracker* tracker, const char* tool_call_id) {
+static int add_executed_tool(StringArray* tracker, const char* tool_call_id) {
     if (tracker == NULL || tool_call_id == NULL) {
         return -1;
-    }
-
-    if (tracker->count >= tracker->capacity) {
-        int new_capacity = tracker->capacity == 0 ? 10 : tracker->capacity * 2;
-        char** new_array = realloc(tracker->tool_call_ids, new_capacity * sizeof(char*));
-        if (new_array == NULL) {
-            return -1;
-        }
-        tracker->tool_call_ids = new_array;
-        tracker->capacity = new_capacity;
     }
 
     char* dup = strdup(tool_call_id);
@@ -171,19 +155,12 @@ static int add_executed_tool(ExecutedToolTracker* tracker, const char* tool_call
         return -1;
     }
 
-    tracker->tool_call_ids[tracker->count++] = dup;
-    return 0;
-}
-
-// Cleanup executed tool tracker
-static void cleanup_executed_tool_tracker(ExecutedToolTracker* tracker) {
-    for (int i = 0; i < tracker->count; i++) {
-        free(tracker->tool_call_ids[i]);
+    if (StringArray_push(tracker, dup) != 0) {
+        free(dup);
+        return -1;
     }
-    free(tracker->tool_call_ids);
-    tracker->tool_call_ids = NULL;
-    tracker->count = 0;
-    tracker->capacity = 0;
+
+    return 0;
 }
 
 // =============================================================================
@@ -202,7 +179,10 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
     (void)max_tokens;
 
     int loop_count = 0;
-    ExecutedToolTracker tracker = {0};
+    StringArray tracker;
+    if (StringArray_init(&tracker, free) != 0) {
+        return -1;
+    }
 
     debug_printf("Starting iterative tool calling loop\n");
 
@@ -216,7 +196,7 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
         TokenUsage token_usage;
         if (manage_conversation_tokens(session, "", &token_config, &token_usage) != 0) {
             fprintf(stderr, "Error: Failed to calculate token allocation for tool loop iteration %d\n", loop_count);
-            cleanup_executed_tool_tracker(&tracker);
+            StringArray_destroy(&tracker);
             return -1;
         }
 
@@ -233,7 +213,7 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
 
         if (post_data == NULL) {
             fprintf(stderr, "Error: Failed to build JSON payload for tool loop iteration %d\n", loop_count);
-            cleanup_executed_tool_tracker(&tracker);
+            StringArray_destroy(&tracker);
             return -1;
         }
 
@@ -267,7 +247,7 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
                         err.http_status, err.error_message);
 
             free(post_data);
-            cleanup_executed_tool_tracker(&tracker);
+            StringArray_destroy(&tracker);
             return -1;
         }
 
@@ -281,7 +261,7 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
             fprintf(stderr, "Error: Empty response from API in tool loop iteration %d\n", loop_count);
             cleanup_response(&response);
             free(post_data);
-            cleanup_executed_tool_tracker(&tracker);
+            StringArray_destroy(&tracker);
             return -1;
         }
 
@@ -318,7 +298,7 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
             }
             cleanup_response(&response);
             free(post_data);
-            cleanup_executed_tool_tracker(&tracker);
+            StringArray_destroy(&tracker);
             return -1;
         }
 
@@ -435,7 +415,7 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
             debug_printf("No more tool calls found - ending tool loop after %d iterations\n", loop_count);
             print_formatted_response_improved(&parsed_response);
             cleanup_parsed_response(&parsed_response);
-            cleanup_executed_tool_tracker(&tracker);
+            StringArray_destroy(&tracker);
             return 0;
         }
 
@@ -453,7 +433,7 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
         if (new_tool_calls == 0) {
             debug_printf("All %d tool calls already executed - ending loop to prevent infinite iteration\n", call_count);
             cleanup_tool_calls(tool_calls, call_count);
-            cleanup_executed_tool_tracker(&tracker);
+            StringArray_destroy(&tracker);
             return 0;
         }
 
@@ -464,7 +444,7 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
         ToolResult *results = calloc(call_count, sizeof(ToolResult));
         if (results == NULL) {
             cleanup_tool_calls(tool_calls, call_count);
-            cleanup_executed_tool_tracker(&tracker);
+            StringArray_destroy(&tracker);
             return -1;
         }
 
@@ -474,7 +454,7 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
             free(results);
             cleanup_tool_calls(tool_calls, call_count);
             // Note: Group is closed by caller (tool_executor_run_workflow)
-            cleanup_executed_tool_tracker(&tracker);
+            StringArray_destroy(&tracker);
             return -1;
         }
 
