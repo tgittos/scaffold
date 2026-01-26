@@ -25,12 +25,15 @@ static void print_help(const char *program_name) {
     printf("ralph %s - AI Assistant\n\n", RALPH_VERSION);
     printf("Usage: %s [OPTIONS] [MESSAGE]\n\n", program_name);
     printf("Options:\n");
-    printf("  -h, --help        Show this help message and exit\n");
-    printf("  -v, --version     Show version information and exit\n");
-    printf("  --debug           Enable debug output (shows HTTP requests and data exchange)\n");
-    printf("  --no-stream       Disable response streaming\n");
-    printf("  --json            Enable JSON output mode\n");
-    printf("  --home <path>     Override Ralph home directory (default: ~/.local/ralph)\n");
+    printf("  -h, --help                Show this help message and exit\n");
+    printf("  -v, --version             Show version information and exit\n");
+    printf("  --debug                   Enable debug output (shows HTTP requests and data exchange)\n");
+    printf("  --no-stream               Disable response streaming\n");
+    printf("  --json                    Enable JSON output mode\n");
+    printf("  --home <path>             Override Ralph home directory (default: ~/.local/ralph)\n");
+    printf("  --yolo                    Disable all approval gates for this session\n");
+    printf("  --allow <spec>            Add allowlist entry (e.g., 'shell:git,status' or 'file_write:.*\\.txt$')\n");
+    printf("  --allow-category=<cat>    Allow all operations in category (file_write, shell, network, etc.)\n");
     printf("\n");
     printf("Arguments:\n");
     printf("  MESSAGE           Process a single message and exit\n");
@@ -40,6 +43,40 @@ static void print_help(const char *program_name) {
     printf("  quit, exit        Exit the program\n");
     printf("  /memory           Memory management commands (use /memory help for details)\n");
     printf("  Ctrl+D            End session\n");
+}
+
+/**
+ * Apply CLI overrides to the session's gate configuration.
+ * This applies --yolo, --allow-category, and --allow flags.
+ */
+static void apply_gate_cli_overrides(RalphSession *session, bool yolo_mode,
+                                     const char **cli_allow_categories, int cli_allow_category_count,
+                                     const char **cli_allow_entries, int cli_allow_count) {
+    // Apply --yolo flag (disable all gates)
+    if (yolo_mode) {
+        approval_gate_enable_yolo(&session->gate_config);
+        debug_printf("Approval gates disabled (--yolo mode)\n");
+    }
+
+    // Apply --allow-category flags (override categories to allow)
+    for (int i = 0; i < cli_allow_category_count; i++) {
+        if (approval_gate_set_category_action(&session->gate_config, cli_allow_categories[i],
+                                              GATE_ACTION_ALLOW) != 0) {
+            fprintf(stderr, "Warning: Unknown category '%s' for --allow-category\n",
+                    cli_allow_categories[i]);
+        } else {
+            debug_printf("Category '%s' set to allow via CLI\n", cli_allow_categories[i]);
+        }
+    }
+
+    // Apply --allow flags (add to session allowlist)
+    for (int i = 0; i < cli_allow_count; i++) {
+        if (approval_gate_add_cli_allow(&session->gate_config, cli_allow_entries[i]) != 0) {
+            fprintf(stderr, "Warning: Invalid format '%s' for --allow\n", cli_allow_entries[i]);
+        } else {
+            debug_printf("Added allow entry '%s' via CLI\n", cli_allow_entries[i]);
+        }
+    }
 }
 
 int main(int argc, char *argv[])
@@ -140,51 +177,6 @@ int main(int argc, char *argv[])
     // Initialize debug system
     debug_init(debug_mode);
 
-    // Initialize approval gate configuration with CLI overrides
-    ApprovalGateConfig gate_config;
-    if (approval_gate_init(&gate_config) != 0) {
-        fprintf(stderr, "Error: Failed to initialize approval gate configuration\n");
-        return EXIT_FAILURE;
-    }
-
-    // Detect interactive mode (whether stdin is a TTY)
-    approval_gate_detect_interactive(&gate_config);
-    if (!gate_config.is_interactive) {
-        debug_printf("Non-interactive mode detected (stdin is not a TTY)\n");
-    }
-
-    // Apply --yolo flag (disable all gates)
-    if (yolo_mode) {
-        approval_gate_enable_yolo(&gate_config);
-        debug_printf("Approval gates disabled (--yolo mode)\n");
-    }
-
-    // Apply --allow-category flags (override categories to allow)
-    for (int i = 0; i < cli_allow_category_count; i++) {
-        if (approval_gate_set_category_action(&gate_config, cli_allow_categories[i],
-                                              GATE_ACTION_ALLOW) != 0) {
-            fprintf(stderr, "Warning: Unknown category '%s' for --allow-category\n",
-                    cli_allow_categories[i]);
-        } else {
-            debug_printf("Category '%s' set to allow via CLI\n", cli_allow_categories[i]);
-        }
-    }
-
-    // Apply --allow flags (add to session allowlist)
-    for (int i = 0; i < cli_allow_count; i++) {
-        if (approval_gate_add_cli_allow(&gate_config, cli_allow_entries[i]) != 0) {
-            fprintf(stderr, "Warning: Invalid format '%s' for --allow\n", cli_allow_entries[i]);
-        } else {
-            debug_printf("Added allow entry '%s' via CLI\n", cli_allow_entries[i]);
-        }
-    }
-
-    // NOTE: gate_config is currently initialized and configured with CLI overrides,
-    // but not yet wired to RalphSession or tool_executor. This integration will be
-    // done as part of the "Modify tool_executor.c to check gates" task in the plan.
-    // For now, we suppress the unused variable warning until integration.
-    (void)gate_config;
-
     // Check if single message mode or interactive mode
     if (message_arg_index != -1) {
         // Single message mode (original behavior)
@@ -194,7 +186,6 @@ int main(int argc, char *argv[])
         RalphSession session;
         if (ralph_init_session(&session) != 0) {
             fprintf(stderr, "Error: Failed to initialize Ralph session\n");
-            approval_gate_cleanup(&gate_config);
             return EXIT_FAILURE;
         }
 
@@ -202,9 +193,12 @@ int main(int argc, char *argv[])
         if (ralph_load_config(&session) != 0) {
             fprintf(stderr, "Error: Failed to load Ralph configuration\n");
             ralph_cleanup_session(&session);
-            approval_gate_cleanup(&gate_config);
             return EXIT_FAILURE;
         }
+
+        // Apply CLI overrides to the session's gate configuration
+        apply_gate_cli_overrides(&session, yolo_mode, cli_allow_categories,
+                                 cli_allow_category_count, cli_allow_entries, cli_allow_count);
 
         // Override streaming if --no-stream flag was passed
         if (no_stream) {
@@ -223,7 +217,6 @@ int main(int argc, char *argv[])
 
         // Cleanup and return result
         ralph_cleanup_session(&session);
-        approval_gate_cleanup(&gate_config);
         return (result == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
     } else {
         // Interactive mode (no message argument provided)
@@ -236,7 +229,6 @@ int main(int argc, char *argv[])
         RalphSession session;
         if (ralph_init_session(&session) != 0) {
             fprintf(stderr, "Error: Failed to initialize Ralph session\n");
-            approval_gate_cleanup(&gate_config);
             return EXIT_FAILURE;
         }
 
@@ -244,9 +236,12 @@ int main(int argc, char *argv[])
         if (ralph_load_config(&session) != 0) {
             fprintf(stderr, "Error: Failed to load Ralph configuration\n");
             ralph_cleanup_session(&session);
-            approval_gate_cleanup(&gate_config);
             return EXIT_FAILURE;
         }
+
+        // Apply CLI overrides to the session's gate configuration
+        apply_gate_cli_overrides(&session, yolo_mode, cli_allow_categories,
+                                 cli_allow_category_count, cli_allow_entries, cli_allow_count);
 
         // Override streaming if --no-stream flag was passed
         if (no_stream) {
@@ -354,7 +349,6 @@ int main(int argc, char *argv[])
         // Cleanup
         memory_commands_cleanup();
         ralph_cleanup_session(&session);
-        approval_gate_cleanup(&gate_config);
         return EXIT_SUCCESS;
     }
 }

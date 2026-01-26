@@ -198,9 +198,9 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 - [x] **Pass `ApprovedPath` to file tools** - When approval includes path verification, pass the `ApprovedPath` struct to file tools so they use `verify_and_open_approved_path()` instead of direct `open()`. Implemented via `verified_file_context` module (thread-local storage for approved path context) and `verified_file_python` module (Python extension `_ralph_verified_io` for TOCTOU-safe file operations). Tool executor sets context before execution; Python file tools use verified FDs when context is available.
 
-- [ ] **Add gate config to `RalphSession`** - Store `ApprovalGateConfig` in session structure. Initialize from config + CLI flags at session start.
+- [x] **Add gate config to `RalphSession`** - Store `ApprovalGateConfig` in session structure. Initialize from config + CLI flags at session start. Implemented: `gate_config` field added to `RalphSession` in ralph.h, initialized in `ralph_init_session()`, cleaned up in `ralph_cleanup_session()`. CLI overrides (--yolo, --allow, --allow-category) applied via `apply_gate_cli_overrides()` helper function in main.c after session initialization.
 
-- [ ] **Handle `APPROVAL_ABORTED`** - When user presses Ctrl+C during prompt, return from tool executor with abort status, don't process remaining tool calls.
+- [x] **Handle `APPROVAL_ABORTED`** - When user presses Ctrl+C during prompt, return from tool executor with abort status, don't process remaining tool calls. Implemented: `check_tool_approval()` returns -2 for APPROVAL_ABORTED; `tool_executor_run_workflow()` and `tool_executor_run_loop()` handle -2 by setting abort flag, populating error results, and returning early without processing remaining tool calls.
 
 ---
 
