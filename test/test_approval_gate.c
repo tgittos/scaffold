@@ -645,6 +645,7 @@ void test_approval_result_name(void) {
     TEST_ASSERT_EQUAL_STRING("allowed_always", approval_result_name(APPROVAL_ALLOWED_ALWAYS));
     TEST_ASSERT_EQUAL_STRING("aborted", approval_result_name(APPROVAL_ABORTED));
     TEST_ASSERT_EQUAL_STRING("rate_limited", approval_result_name(APPROVAL_RATE_LIMITED));
+    TEST_ASSERT_EQUAL_STRING("non_interactive_denied", approval_result_name(APPROVAL_NON_INTERACTIVE_DENIED));
     TEST_ASSERT_EQUAL_STRING("unknown", approval_result_name(-1));
 }
 
@@ -2032,6 +2033,141 @@ void test_apply_generated_pattern_null_params(void) {
 }
 
 /* =============================================================================
+ * Non-Interactive Mode Tests
+ * ========================================================================== */
+
+void test_approval_gate_detect_interactive_null_safe(void) {
+    /* Should handle NULL gracefully */
+    approval_gate_detect_interactive(NULL);
+    /* No crash is success */
+}
+
+void test_approval_gate_is_interactive_null_safe(void) {
+    TEST_ASSERT_EQUAL(0, approval_gate_is_interactive(NULL));
+}
+
+void test_approval_gate_is_interactive_default_value(void) {
+    /* After init, is_interactive should be 0 (not yet detected) */
+    TEST_ASSERT_EQUAL(0, config.is_interactive);
+}
+
+void test_approval_gate_is_interactive_getter(void) {
+    /* Test getter returns correct value */
+    config.is_interactive = 1;
+    TEST_ASSERT_EQUAL(1, approval_gate_is_interactive(&config));
+    config.is_interactive = 0;
+    TEST_ASSERT_EQUAL(0, approval_gate_is_interactive(&config));
+}
+
+void test_format_non_interactive_error(void) {
+    ToolCall call = {
+        .id = "call_1",
+        .name = "shell",
+        .arguments = "{\"command\": \"ls\"}"
+    };
+
+    char *error = format_non_interactive_error(&call);
+    TEST_ASSERT_NOT_NULL(error);
+    TEST_ASSERT_NOT_NULL(strstr(error, "\"error\": \"non_interactive_gate\""));
+    TEST_ASSERT_NOT_NULL(strstr(error, "\"tool\": \"shell\""));
+    TEST_ASSERT_NOT_NULL(strstr(error, "\"category\": \"shell\""));
+    TEST_ASSERT_NOT_NULL(strstr(error, "--allow-category=shell"));
+    free(error);
+}
+
+void test_format_non_interactive_error_null_safe(void) {
+    char *error = format_non_interactive_error(NULL);
+    TEST_ASSERT_NULL(error);
+}
+
+void test_format_non_interactive_error_file_write(void) {
+    ToolCall call = {
+        .id = "call_1",
+        .name = "write_file",
+        .arguments = "{\"path\": \"/tmp/test.txt\"}"
+    };
+
+    char *error = format_non_interactive_error(&call);
+    TEST_ASSERT_NOT_NULL(error);
+    TEST_ASSERT_NOT_NULL(strstr(error, "\"category\": \"file_write\""));
+    TEST_ASSERT_NOT_NULL(strstr(error, "--allow-category=file_write"));
+    free(error);
+}
+
+void test_check_approval_gate_non_interactive_gated_category(void) {
+    /* Set non-interactive mode */
+    config.is_interactive = 0;
+
+    /* Shell is gated by default */
+    ToolCall call = {
+        .id = "call_1",
+        .name = "shell",
+        .arguments = "{\"command\": \"ls\"}"
+    };
+
+    ApprovedPath path;
+    ApprovalResult result = check_approval_gate(&config, &call, &path);
+    TEST_ASSERT_EQUAL(APPROVAL_NON_INTERACTIVE_DENIED, result);
+}
+
+void test_check_approval_gate_non_interactive_allowed_category(void) {
+    /* Set non-interactive mode */
+    config.is_interactive = 0;
+
+    /* Memory tools are allowed by default */
+    ToolCall call = {
+        .id = "call_1",
+        .name = "remember",
+        .arguments = "{\"key\": \"test\"}"
+    };
+
+    ApprovedPath path;
+    ApprovalResult result = check_approval_gate(&config, &call, &path);
+    TEST_ASSERT_EQUAL(APPROVAL_ALLOWED, result);
+}
+
+void test_check_approval_gate_non_interactive_allow_category_override(void) {
+    /* Set non-interactive mode */
+    config.is_interactive = 0;
+
+    /* Override shell to be allowed */
+    config.categories[GATE_CATEGORY_SHELL] = GATE_ACTION_ALLOW;
+
+    ToolCall call = {
+        .id = "call_1",
+        .name = "shell",
+        .arguments = "{\"command\": \"ls\"}"
+    };
+
+    ApprovedPath path;
+    ApprovalResult result = check_approval_gate(&config, &call, &path);
+    TEST_ASSERT_EQUAL(APPROVAL_ALLOWED, result);
+}
+
+void test_check_approval_gate_batch_non_interactive(void) {
+    /* Set non-interactive mode */
+    config.is_interactive = 0;
+
+    /* Create batch with mix of allowed and gated tools */
+    ToolCall calls[3] = {
+        { .id = "call_1", .name = "remember", .arguments = "{}" },  /* allowed */
+        { .id = "call_2", .name = "shell", .arguments = "{\"command\": \"ls\"}" },  /* gated */
+        { .id = "call_3", .name = "read_file", .arguments = "{}" }  /* allowed */
+    };
+
+    ApprovalBatchResult batch;
+    ApprovalResult result = check_approval_gate_batch(&config, calls, 3, &batch);
+    TEST_ASSERT_EQUAL(APPROVAL_NON_INTERACTIVE_DENIED, result);
+
+    /* Check individual results */
+    TEST_ASSERT_EQUAL(APPROVAL_ALLOWED, batch.results[0]);
+    TEST_ASSERT_EQUAL(APPROVAL_NON_INTERACTIVE_DENIED, batch.results[1]);
+    TEST_ASSERT_EQUAL(APPROVAL_ALLOWED, batch.results[2]);
+
+    free_batch_result(&batch);
+}
+
+/* =============================================================================
  * Main
  * ========================================================================== */
 
@@ -2185,6 +2321,19 @@ int main(void) {
     RUN_TEST(test_apply_generated_pattern_shell_command);
     RUN_TEST(test_apply_generated_pattern_regex_pattern);
     RUN_TEST(test_apply_generated_pattern_null_params);
+
+    /* Non-interactive mode tests */
+    RUN_TEST(test_approval_gate_detect_interactive_null_safe);
+    RUN_TEST(test_approval_gate_is_interactive_null_safe);
+    RUN_TEST(test_approval_gate_is_interactive_default_value);
+    RUN_TEST(test_approval_gate_is_interactive_getter);
+    RUN_TEST(test_format_non_interactive_error);
+    RUN_TEST(test_format_non_interactive_error_null_safe);
+    RUN_TEST(test_format_non_interactive_error_file_write);
+    RUN_TEST(test_check_approval_gate_non_interactive_gated_category);
+    RUN_TEST(test_check_approval_gate_non_interactive_allowed_category);
+    RUN_TEST(test_check_approval_gate_non_interactive_allow_category_override);
+    RUN_TEST(test_check_approval_gate_batch_non_interactive);
 
     return UNITY_END();
 }

@@ -147,6 +147,12 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
+    // Detect interactive mode (whether stdin is a TTY)
+    approval_gate_detect_interactive(&gate_config);
+    if (!gate_config.is_interactive) {
+        debug_printf("Non-interactive mode detected (stdin is not a TTY)\n");
+    }
+
     // Apply --yolo flag (disable all gates)
     if (yolo_mode) {
         approval_gate_enable_yolo(&gate_config);

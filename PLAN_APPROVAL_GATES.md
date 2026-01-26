@@ -156,11 +156,11 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 ## Non-Interactive Mode
 
-- [ ] **Detect non-TTY stdin** - Check `isatty(STDIN_FILENO)` at startup. If false, set non-interactive mode.
+- [x] **Detect non-TTY stdin** - Check `isatty(STDIN_FILENO)` at startup. If false, set non-interactive mode. Implemented `approval_gate_detect_interactive()` and `approval_gate_is_interactive()` functions, called from main.c after `approval_gate_init()`.
 
-- [ ] **Implement non-interactive gate behavior** - Gated categories default to `deny` when no TTY available. Allowed categories proceed normally. Return structured error to LLM. See spec section "Non-Interactive Mode > Non-TTY Behavior".
+- [x] **Implement non-interactive gate behavior** - Gated categories default to `deny` when no TTY available. Allowed categories proceed normally. Return structured error to LLM. See spec section "Non-Interactive Mode > Non-TTY Behavior". Added `APPROVAL_NON_INTERACTIVE_DENIED` result type and `format_non_interactive_error()` function. Modified `check_approval_gate()` and `check_approval_gate_batch()` to check `is_interactive` before prompting.
 
-- [ ] **Support partial trust flags** - `--allow-category=<category>` allows specific categories without prompting in non-interactive mode. `--allow="tool:args"` allows specific patterns. See spec section "Non-Interactive Mode > Partial Trust".
+- [x] **Support partial trust flags** - `--allow-category=<category>` allows specific categories without prompting in non-interactive mode. `--allow="tool:args"` allows specific patterns. See spec section "Non-Interactive Mode > Partial Trust". Already implemented via existing CLI flag handling - setting a category to `GATE_ACTION_ALLOW` bypasses the gate check entirely, working in both interactive and non-interactive modes.
 
 ---
 

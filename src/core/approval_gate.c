@@ -148,6 +148,7 @@ static const char *ACTION_NAMES[] = {
 static const char *RESULT_NAMES[] = {
     [APPROVAL_ALLOWED]        = "allowed",
     [APPROVAL_DENIED]         = "denied",
+    [APPROVAL_NON_INTERACTIVE_DENIED] = "non_interactive_denied",
     [APPROVAL_ALLOWED_ALWAYS] = "allowed_always",
     [APPROVAL_ABORTED]        = "aborted",
     [APPROVAL_RATE_LIMITED]   = "rate_limited"
@@ -426,7 +427,7 @@ const char *gate_action_name(GateAction action) {
 }
 
 const char *approval_result_name(ApprovalResult result) {
-    if (result >= APPROVAL_ALLOWED && result <= APPROVAL_RATE_LIMITED) {
+    if (result >= APPROVAL_ALLOWED && result <= APPROVAL_NON_INTERACTIVE_DENIED) {
         return RESULT_NAMES[result];
     }
     return "unknown";
@@ -448,6 +449,9 @@ int approval_gate_init(ApprovalGateConfig *config) {
 
     /* Enable gates by default */
     config->enabled = 1;
+
+    /* Default to non-interactive; call approval_gate_detect_interactive() to update */
+    config->is_interactive = 0;
 
     /* Set default category actions */
     for (int i = 0; i < GATE_CATEGORY_COUNT; i++) {
@@ -1578,10 +1582,10 @@ ApprovalResult approval_gate_prompt(ApprovalGateConfig *config,
         return APPROVAL_DENIED;
     }
 
-    /* Check if we have a TTY available */
+    /* Check if we have a TTY available (safety net - should be checked earlier) */
     if (!isatty(STDIN_FILENO)) {
-        /* No TTY, default to deny for gated operations */
-        return APPROVAL_DENIED;
+        /* No TTY, return non-interactive denial */
+        return APPROVAL_NON_INTERACTIVE_DENIED;
     }
 
     /* Initialize out_path if provided */
@@ -1732,7 +1736,14 @@ ApprovalResult check_approval_gate(ApprovalGateConfig *config,
                     /* We're a subagent - route through IPC to parent */
                     return subagent_request_approval(channel, tool_call, out_path);
                 }
-                /* Not a subagent - prompt user directly via TTY */
+
+                /* Not a subagent - check if we're in interactive mode */
+                if (!config->is_interactive) {
+                    /* Non-interactive mode: can't prompt, so deny with specific error */
+                    return APPROVAL_NON_INTERACTIVE_DENIED;
+                }
+
+                /* Interactive mode - prompt user directly via TTY */
                 return approval_gate_prompt(config, tool_call, out_path);
             }
 
@@ -1992,10 +2003,10 @@ ApprovalResult approval_gate_prompt_batch(ApprovalGateConfig *config,
         return APPROVAL_DENIED;
     }
 
-    /* Check if we have a TTY available */
+    /* Check if we have a TTY available (safety net - should be checked earlier) */
     if (!isatty(STDIN_FILENO)) {
-        /* No TTY, default to deny for gated operations */
-        return APPROVAL_DENIED;
+        /* No TTY, return non-interactive denial */
+        return APPROVAL_NON_INTERACTIVE_DENIED;
     }
 
     /* Initialize batch result */
@@ -2201,6 +2212,18 @@ ApprovalResult check_approval_gate_batch(ApprovalGateConfig *config,
         return APPROVAL_ALLOWED;
     }
 
+    /* Check for non-interactive mode before prompting */
+    if (!config->is_interactive) {
+        /* Non-interactive mode: can't prompt, so deny all pending approvals */
+        for (int i = 0; i < approval_count; i++) {
+            int idx = needs_approval_indices[i];
+            out_batch->results[idx] = APPROVAL_NON_INTERACTIVE_DENIED;
+        }
+        free(needs_approval);
+        free(needs_approval_indices);
+        return APPROVAL_NON_INTERACTIVE_DENIED;
+    }
+
     /* If only one approval needed, use single prompt */
     if (approval_count == 1) {
         int idx = needs_approval_indices[0];
@@ -2373,6 +2396,43 @@ char *format_protected_file_error(const char *path) {
     return error;
 }
 
+char *format_non_interactive_error(const ToolCall *tool_call) {
+    if (tool_call == NULL) {
+        return NULL;
+    }
+
+    const char *tool_name = tool_call->name ? tool_call->name : "unknown";
+    GateCategory category = get_tool_category(tool_name);
+    const char *category_name = gate_category_name(category);
+
+    /* Escape tool name and category for JSON */
+    char *escaped_tool = json_escape_string_simple(tool_name);
+    char *escaped_category = json_escape_string_simple(category_name);
+    if (escaped_tool == NULL || escaped_category == NULL) {
+        free(escaped_tool);
+        free(escaped_category);
+        return NULL;
+    }
+
+    char *error = NULL;
+    int ret = asprintf(&error,
+                       "{\"error\": \"non_interactive_gate\", "
+                       "\"message\": \"Cannot execute %s operation without TTY for approval\", "
+                       "\"tool\": \"%s\", "
+                       "\"category\": \"%s\", "
+                       "\"suggestion\": \"Use --yolo to bypass gates, or "
+                       "--allow-category=%s to allow this category in non-interactive mode\"}",
+                       escaped_category, escaped_tool, escaped_category, escaped_category);
+
+    free(escaped_tool);
+    free(escaped_category);
+
+    if (ret < 0) {
+        return NULL;
+    }
+    return error;
+}
+
 /* format_verify_error() is implemented in atomic_file.c */
 
 /* =============================================================================
@@ -2510,6 +2570,26 @@ int approval_gate_add_cli_allow(ApprovalGateConfig *config,
 
     free(tool_name);
     return result;
+}
+
+/* =============================================================================
+ * Non-Interactive Mode Detection
+ * ========================================================================== */
+
+void approval_gate_detect_interactive(ApprovalGateConfig *config) {
+    if (config == NULL) {
+        return;
+    }
+
+    /* Check if stdin is a TTY */
+    config->is_interactive = isatty(STDIN_FILENO) ? 1 : 0;
+}
+
+int approval_gate_is_interactive(const ApprovalGateConfig *config) {
+    if (config == NULL) {
+        return 0;
+    }
+    return config->is_interactive;
 }
 
 /* =============================================================================

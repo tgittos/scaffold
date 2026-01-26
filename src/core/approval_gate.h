@@ -70,7 +70,8 @@ typedef enum {
     APPROVAL_DENIED,            /* User denied the operation */
     APPROVAL_ALLOWED_ALWAYS,    /* User approved and added pattern to session allowlist */
     APPROVAL_ABORTED,           /* User pressed Ctrl+C, abort workflow */
-    APPROVAL_RATE_LIMITED       /* Tool is in backoff period from previous denials */
+    APPROVAL_RATE_LIMITED,      /* Tool is in backoff period from previous denials */
+    APPROVAL_NON_INTERACTIVE_DENIED  /* No TTY available for gated operation */
 } ApprovalResult;
 
 /* ShellType is defined in shell_parser.h */
@@ -146,6 +147,7 @@ typedef struct {
  */
 typedef struct {
     int enabled;            /* Master switch for approval gates */
+    int is_interactive;     /* Whether stdin is a TTY (can prompt user) */
 
     /* Category configuration */
     GateAction categories[GATE_CATEGORY_COUNT];
@@ -482,6 +484,15 @@ char *format_denial_error(const ToolCall *tool_call);
  */
 char *format_protected_file_error(const char *path);
 
+/**
+ * Format a non-interactive gate error message as JSON.
+ * Used when a gated operation cannot proceed because stdin is not a TTY.
+ *
+ * @param tool_call The tool call that couldn't be prompted for
+ * @return Allocated JSON error string. Caller must free.
+ */
+char *format_non_interactive_error(const ToolCall *tool_call);
+
 /* format_verify_error is defined in atomic_file.h */
 
 /* ============================================================================
@@ -562,6 +573,23 @@ int approval_gate_add_cli_allow(ApprovalGateConfig *config,
  * @return 0 on success, -1 if name is not recognized
  */
 int approval_gate_parse_category(const char *name, GateCategory *out_category);
+
+/**
+ * Detect whether we're running in interactive mode.
+ * Checks if stdin is a TTY and updates config->is_interactive accordingly.
+ * Call this after approval_gate_init() and before processing any tool calls.
+ *
+ * @param config Gate configuration to update
+ */
+void approval_gate_detect_interactive(ApprovalGateConfig *config);
+
+/**
+ * Check if the gate configuration is in interactive mode.
+ *
+ * @param config Gate configuration
+ * @return 1 if interactive (has TTY), 0 if non-interactive
+ */
+int approval_gate_is_interactive(const ApprovalGateConfig *config);
 
 /* ============================================================================
  * Allow Always Pattern Generation
