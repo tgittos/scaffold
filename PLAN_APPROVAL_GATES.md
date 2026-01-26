@@ -188,7 +188,7 @@ Reference: `./SPEC_APPROVAL_GATES.md`
 
 - [x] **Implement rate limit error** - Return JSON with `error: "rate_limited"`, `message`, `retry_after` seconds, `tool`. See spec section "Denial Rate Limiting > Behavior During Backoff". Implemented in `format_rate_limit_error()` in approval_gate.c.
 
-- [x] **Implement path changed error** - Return JSON with `error: "path_changed"`, `message: "Path changed between approval and execution"` for TOCTOU violations. Implemented in `format_verify_error()` in atomic_file.c.
+- [x] **Implement path changed error** - Return JSON with `error: "path_changed"`, `message: "Path changed between approval and execution"` for TOCTOU violations (inode mismatch, parent changed). Also handles symlink rejection and other verification errors. Implemented in `format_verify_error()` in atomic_file.c.
 
 ---
 
