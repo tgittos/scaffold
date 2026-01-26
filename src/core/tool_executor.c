@@ -116,8 +116,9 @@ static int check_tool_approval(RalphSession *session, const ToolCall *tool_call,
                         return -1; // Blocked
                     }
                 }
-                // Note: We don't free approved_path here when context is set successfully
-                // The context owns a copy, and we free the original after setting
+                // verified_file_context_set() deep-copies the ApprovedPath, so we still
+                // free our local copy below. The context's copy is freed via
+                // verified_file_context_clear() after tool execution.
             }
             free_approved_path(&approved_path);
             return 0; // Proceed with execution

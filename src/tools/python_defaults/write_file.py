@@ -31,6 +31,40 @@ def write_file(path: str, content: str, backup: bool = False) -> dict:
     if len(content_bytes) > MAX_WRITE_SIZE:
         raise ValueError(f"Content too large: {len(content_bytes)} bytes (max {MAX_WRITE_SIZE})")
 
+    # Try to use verified file I/O for TOCTOU-safe writes
+    # This is available when approval gates have verified the path
+    try:
+        import _ralph_verified_io
+        if _ralph_verified_io.has_verified_context():
+            # Use the resolved path from the verified context (not re-resolving)
+            verified_path = _ralph_verified_io.get_resolved_path()
+            if verified_path and _ralph_verified_io.path_matches(path):
+                p = Path(verified_path)
+                # Create backup if requested and file exists
+                if backup and p.exists():
+                    timestamp = datetime.now().strftime('%Y%m%d%H%M%S%f')
+                    backup_path = f"{p}.{timestamp}.bak"
+                    shutil.copy2(p, backup_path)
+                # Create parent directories if needed
+                p.parent.mkdir(parents=True, exist_ok=True)
+                # Use the verified file context for atomic open
+                fd = _ralph_verified_io.open_verified(str(p), 'w')
+                with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                    f.write(content)
+                return {
+                    "success": True,
+                    "path": str(p),
+                    "bytes_written": len(content_bytes),
+                    "verified": True
+                }
+    except ImportError:
+        # Module not available - fall through to standard I/O
+        pass
+    except OSError as e:
+        # Verification failed - report the error
+        raise OSError(f"File verification failed: {e}")
+
+    # Standard path resolution when verified context not available
     p = Path(path).resolve()
 
     # Create backup if requested and file exists (use unique timestamp-based name)
@@ -41,28 +75,6 @@ def write_file(path: str, content: str, backup: bool = False) -> dict:
 
     # Create parent directories if needed
     p.parent.mkdir(parents=True, exist_ok=True)
-
-    # Try to use verified file I/O for TOCTOU-safe writes
-    # This is available when approval gates have verified the path
-    try:
-        import _ralph_verified_io
-        if _ralph_verified_io.has_verified_context():
-            # Use the verified file context for atomic open
-            fd = _ralph_verified_io.open_verified(str(p), 'w')
-            with os.fdopen(fd, 'w', encoding='utf-8') as f:
-                f.write(content)
-            return {
-                "success": True,
-                "path": str(p),
-                "bytes_written": len(content_bytes),
-                "verified": True
-            }
-    except ImportError:
-        # Module not available - fall through to standard I/O
-        pass
-    except OSError as e:
-        # Verification failed - report the error
-        raise ValueError(f"File verification failed: {e}")
 
     # Fall back to standard file I/O (when gates disabled or no context)
     p.write_text(content, encoding='utf-8')

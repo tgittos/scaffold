@@ -62,11 +62,13 @@ static PyObject *py_open_verified(PyObject *self, PyObject *args) {
         file_mode = VERIFIED_MODE_APPEND;
     } else if (strcmp(mode, "r+") == 0 || strcmp(mode, "rb+") == 0 ||
                strcmp(mode, "r+b") == 0 || strcmp(mode, "w+") == 0 ||
-               strcmp(mode, "wb+") == 0 || strcmp(mode, "w+b") == 0) {
+               strcmp(mode, "wb+") == 0 || strcmp(mode, "w+b") == 0 ||
+               strcmp(mode, "a+") == 0 || strcmp(mode, "ab+") == 0 ||
+               strcmp(mode, "a+b") == 0) {
         file_mode = VERIFIED_MODE_READWRITE;
     } else {
         PyErr_Format(PyExc_ValueError, "Invalid mode: '%s'. "
-                     "Supported modes: r, w, a, r+, rb, wb, ab, r+b, rb+, w+, wb+, w+b",
+                     "Supported modes: r, w, a, r+, a+, rb, wb, ab, r+b, rb+, w+, wb+, w+b, a+b, ab+",
                      mode);
         return NULL;
     }
