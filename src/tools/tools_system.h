@@ -58,31 +58,22 @@ typedef struct {
 
 /**
  * Initialize an empty tool registry
- * 
+ *
  * @param registry Pointer to ToolRegistry structure to initialize
  */
 void init_tool_registry(ToolRegistry *registry);
 
 /**
  * Register all built-in tools that are compiled into the binary
- * 
+ *
  * @param registry Pointer to ToolRegistry structure to populate
  * @return 0 on success, -1 on failure
  */
 int register_builtin_tools(ToolRegistry *registry);
 
 /**
- * Load custom tool definitions from a configuration file (optional)
- * 
- * @param registry Pointer to ToolRegistry structure to populate
- * @param config_file Path to tool configuration file
- * @return 0 on success, -1 on failure
- */
-int load_tools_config(ToolRegistry *registry, const char *config_file);
-
-/**
  * Register a tool with the registry
- * 
+ *
  * @param registry Pointer to ToolRegistry structure
  * @param name Tool name
  * @param description Tool description
@@ -91,12 +82,12 @@ int load_tools_config(ToolRegistry *registry, const char *config_file);
  * @param execute_func Function pointer for tool execution
  * @return 0 on success, -1 on failure
  */
-int register_tool(ToolRegistry *registry, const char *name, const char *description, 
+int register_tool(ToolRegistry *registry, const char *name, const char *description,
                   ToolParameter *parameters, int param_count, tool_execute_func_t execute_func);
 
 /**
  * Generate JSON tools array for API request (OpenAI format)
- * 
+ *
  * @param registry Pointer to ToolRegistry structure
  * @return Dynamically allocated JSON string, caller must free
  */
@@ -104,7 +95,7 @@ char* generate_tools_json(const ToolRegistry *registry);
 
 /**
  * Generate JSON tools array for Anthropic API request
- * 
+ *
  * @param registry Pointer to ToolRegistry structure
  * @return Dynamically allocated JSON string, caller must free
  */
@@ -112,7 +103,7 @@ char* generate_anthropic_tools_json(const ToolRegistry *registry);
 
 /**
  * Parse tool calls from API response JSON
- * 
+ *
  * @param json_response Raw JSON response from API
  * @param tool_calls Output array of tool calls, caller must free
  * @param call_count Output number of tool calls found
@@ -122,7 +113,7 @@ int parse_tool_calls(const char *json_response, ToolCall **tool_calls, int *call
 
 /**
  * Parse tool calls from Anthropic API response JSON
- * 
+ *
  * @param json_response Raw JSON response from Anthropic API
  * @param tool_calls Output array of tool calls, caller must free
  * @param call_count Output number of tool calls found
@@ -132,7 +123,7 @@ int parse_anthropic_tool_calls(const char *json_response, ToolCall **tool_calls,
 
 /**
  * Execute a tool call and return result
- * 
+ *
  * @param registry Pointer to ToolRegistry structure
  * @param tool_call Tool call to execute
  * @param result Output tool result, caller must free result->result
@@ -142,7 +133,7 @@ int execute_tool_call(const ToolRegistry *registry, const ToolCall *tool_call, T
 
 /**
  * Generate JSON message for tool results to send back to model
- * 
+ *
  * @param results Array of tool results
  * @param result_count Number of results
  * @return Dynamically allocated JSON string, caller must free
@@ -151,7 +142,7 @@ char* generate_tool_results_json(const ToolResult *results, int result_count);
 
 /**
  * Generate a single tool result message for conversation history
- * 
+ *
  * @param result Tool result to format as message
  * @return Dynamically allocated message string, caller must free
  */
@@ -159,14 +150,14 @@ char* generate_single_tool_message(const ToolResult *result);
 
 /**
  * Clean up memory allocated for tool registry
- * 
+ *
  * @param registry Pointer to ToolRegistry structure to cleanup
  */
 void cleanup_tool_registry(ToolRegistry *registry);
 
 /**
  * Clean up memory allocated for tool calls
- * 
+ *
  * @param tool_calls Array of tool calls to cleanup
  * @param call_count Number of tool calls
  */
@@ -174,7 +165,7 @@ void cleanup_tool_calls(ToolCall *tool_calls, int call_count);
 
 /**
  * Clean up memory allocated for tool results
- * 
+ *
  * @param results Array of tool results to cleanup
  * @param result_count Number of results
  */

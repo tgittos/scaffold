@@ -306,18 +306,6 @@ void test_generate_tool_results_json_with_null_parameters(void) {
     TEST_ASSERT_NULL(json);
 }
 
-void test_load_tools_config(void) {
-    ToolRegistry registry;
-    init_tool_registry(&registry);
-    
-    int result = load_tools_config(&registry, "nonexistent_config.json");
-    
-    TEST_ASSERT_EQUAL(0, result);
-    TEST_ASSERT_EQUAL(0, registry.function_count); // Should have no tools loaded
-    
-    cleanup_tool_registry(&registry);
-}
-
 void test_cleanup_tool_registry(void) {
     ToolRegistry registry;
     init_tool_registry(&registry);
@@ -703,7 +691,6 @@ int main(void) {
     RUN_TEST(test_execute_tool_call_with_null_parameters);
     RUN_TEST(test_generate_tool_results_json);
     RUN_TEST(test_generate_tool_results_json_with_null_parameters);
-    RUN_TEST(test_load_tools_config);
     RUN_TEST(test_cleanup_tool_registry);
     RUN_TEST(test_cleanup_tool_registry_with_null);
     

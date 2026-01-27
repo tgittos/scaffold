@@ -210,22 +210,18 @@ int shell_command_matches_prefix(const ParsedShellCommand *parsed,
  * - cat <-> type <-> Get-Content <-> gc
  * - rm <-> del <-> Remove-Item <-> ri
  *
- * Shell types are used to ensure equivalence is appropriate for the context.
- * For example, 'ls' on POSIX is equivalent to 'dir' on cmd.exe.
+ * Equivalence is broad and shell-agnostic: any command in a group is
+ * considered equivalent to any other command in the same group.
  *
  * @param allowed_cmd Command name from allowlist entry
  * @param actual_cmd Command name from parsed command
- * @param allowed_shell Shell type of the allowlist entry (or UNKNOWN for any)
- * @param actual_shell Shell type of the actual command
  * @return 1 if equivalent, 0 if not
  */
 int commands_are_equivalent(const char *allowed_cmd,
-                            const char *actual_cmd,
-                            ShellType allowed_shell,
-                            ShellType actual_shell);
+                            const char *actual_cmd);
 
 /* ============================================================================
- * POSIX Shell Parsing (to be implemented in shell_parser.c)
+ * POSIX Shell Parsing (implemented in shell_parser.c)
  * ========================================================================== */
 
 /**
@@ -244,7 +240,7 @@ int commands_are_equivalent(const char *allowed_cmd,
 int parse_posix_shell(const char *command, ParsedShellCommand *result);
 
 /* ============================================================================
- * cmd.exe Parsing (to be implemented in shell_parser.c)
+ * cmd.exe Parsing (implemented in shell_parser_cmd.c)
  * ========================================================================== */
 
 /**
@@ -264,7 +260,7 @@ int parse_posix_shell(const char *command, ParsedShellCommand *result);
 int parse_cmd_shell(const char *command, ParsedShellCommand *result);
 
 /* ============================================================================
- * PowerShell Parsing (to be implemented in shell_parser.c)
+ * PowerShell Parsing (implemented in shell_parser_ps.c)
  * ========================================================================== */
 
 /**

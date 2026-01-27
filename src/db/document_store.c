@@ -369,12 +369,6 @@ int document_store_add_text(document_store_t* store, const char* index_name,
         // access can still persist conversation history. This avoids hard
         // failures in CI where embedding services aren't available.
         size_t fallback_dim = 1536;
-        // Try to use embeddings service reported dimension if available
-        size_t svc_dim = 0;
-        // weak-link to avoid including embeddings_service header here
-        // We'll default to 1536 when unsure
-        svc_dim = 1536;
-        if (svc_dim > 0) fallback_dim = svc_dim;
 
         float *zero_embedding = calloc(fallback_dim, sizeof(float));
         if (zero_embedding == NULL) {
@@ -509,10 +503,10 @@ document_t* document_store_get(document_store_t* store, const char* index_name, 
     if (doc == NULL) return NULL;
     
     vector_t vec;
-    vec.data = malloc(1536 * sizeof(float));
-    vec.dimension = 1536;
-    
-    if (vec.data && vector_db_get_vector(store->vector_db, index_name, id, &vec) == VECTOR_DB_OK) {
+    vec.data = NULL;
+    vec.dimension = 0;
+
+    if (vector_db_get_vector(store->vector_db, index_name, id, &vec) == VECTOR_DB_OK) {
         doc->embedding = vec.data;
         doc->embedding_dim = vec.dimension;
     } else {

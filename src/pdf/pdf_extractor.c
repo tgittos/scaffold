@@ -148,29 +148,26 @@ static char* extract_text_from_page(pdfio_file_t *pdf, size_t page_num) {
     return result;
 }
 
-static pdf_extraction_result_t* pdf_extract_text_internal(const char* pdf_path,
-                                                         const unsigned char* pdf_data,
-                                                         size_t data_size,
-                                                         const pdf_extraction_config_t* config) {
+// Extract text from a PDF file opened at the given path.
+// The config parameter controls page range; if NULL, all pages are extracted.
+static pdf_extraction_result_t* pdf_extract_from_path(const char* pdf_path,
+                                                      const pdf_extraction_config_t* config) {
     if (!pdf_extractor_initialized) {
         return create_error_result("PDF extractor not initialized");
     }
 
-    // Declare default_config at function scope to avoid dangling pointer
-    // when config is NULL and we assign config = &default_config
+    if (!pdf_path) {
+        return create_error_result("No PDF path provided");
+    }
+
+    // Use default config when caller passes NULL
     pdf_extraction_config_t default_config;
     if (!config) {
         default_config = pdf_get_default_config();
         config = &default_config;
     }
 
-    pdfio_file_t *pdf = NULL;
-    pdf_extraction_result_t *result = NULL;
-    char *full_text = NULL;
-    size_t total_length = 0;
-    int page_count = 0;
-
-    result = malloc(sizeof(pdf_extraction_result_t));
+    pdf_extraction_result_t *result = malloc(sizeof(pdf_extraction_result_t));
     if (!result) {
         return NULL;  // Cannot allocate even for error result
     }
@@ -180,24 +177,19 @@ static pdf_extraction_result_t* pdf_extract_text_internal(const char* pdf_path,
     result->page_count = 0;
     result->error = NULL;
 
-    // Open document
-    if (pdf_path) {
-        pdf = pdfioFileOpen(pdf_path, NULL, NULL, NULL, NULL);
-    } else if (pdf_data && data_size > 0) {
-        // PDFio doesn't support direct memory input - return error for now
-        result->error = strdup("Memory-based PDF reading not supported with PDFio");
-        return result;
-    } else {
-        result->error = strdup("No PDF source provided");
-        return result;
-    }
-
+    pdfio_file_t *pdf = pdfioFileOpen(pdf_path, NULL, NULL, NULL, NULL);
     if (!pdf) {
         result->error = strdup("Failed to open PDF document");
         return result;
     }
 
     size_t total_pages = pdfioFileGetNumPages(pdf);
+    if (total_pages == 0) {
+        pdfioFileClose(pdf);
+        result->error = strdup("PDF document has no pages");
+        return result;
+    }
+
     size_t start_page = (config->start_page >= 0) ? (size_t)config->start_page : 0;
     size_t end_page = (config->end_page >= 0) ? (size_t)config->end_page : total_pages - 1;
 
@@ -205,6 +197,10 @@ static pdf_extraction_result_t* pdf_extract_text_internal(const char* pdf_path,
     if (start_page >= total_pages) start_page = total_pages - 1;
     if (end_page >= total_pages) end_page = total_pages - 1;
     if (start_page > end_page) start_page = end_page;
+
+    char *full_text = NULL;
+    size_t total_length = 0;
+    int page_count = 0;
 
     // Extract text from each page
     for (size_t page_num = start_page; page_num <= end_page; page_num++) {
@@ -268,7 +264,7 @@ pdf_extraction_result_t* pdf_extract_text(const char* pdf_path) {
     }
     
     pdf_extraction_config_t config = pdf_get_default_config();
-    return pdf_extract_text_internal(pdf_path, NULL, 0, &config);
+    return pdf_extract_from_path(pdf_path, &config);
 }
 
 pdf_extraction_result_t* pdf_extract_text_with_config(const char* pdf_path, const pdf_extraction_config_t* config) {
@@ -276,7 +272,7 @@ pdf_extraction_result_t* pdf_extract_text_with_config(const char* pdf_path, cons
         return create_error_result("PDF path is NULL");
     }
     
-    return pdf_extract_text_internal(pdf_path, NULL, 0, config);
+    return pdf_extract_from_path(pdf_path, config);
 }
 
 void pdf_free_extraction_result(pdf_extraction_result_t* result) {

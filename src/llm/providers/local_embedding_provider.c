@@ -180,7 +180,8 @@ static EmbeddingProvider local_embedding_provider = {
         .name = "Local Embeddings",
         .auth_header_format = "Authorization: Bearer %s",
         .requires_auth = 0, // Most local services don't require auth
-        .default_model = "Qwen3-Embedding-0.6B-Q8_0.gguf"
+        .default_model = "Qwen3-Embedding-0.6B-Q8_0.gguf",
+        .default_dimension = 1024
     },
     .detect_provider = local_embedding_detect_provider,
     .build_request_json = local_embedding_build_request_json,

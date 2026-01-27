@@ -143,9 +143,6 @@ int register_tool(ToolRegistry *registry, const char *name, const char *descript
     return 0;
 }
 
-// register_demo_tool function removed - users should implement their own tool registration
-// Users can extend this file with their own register_tool function to add custom tools
-
 char* generate_tools_json(const ToolRegistry *registry) {
     if (registry == NULL || registry->function_count == 0) {
         return NULL;
@@ -888,14 +885,6 @@ int parse_anthropic_tool_calls(const char *json_response, ToolCall **tool_calls,
     return 0;
 }
 
-// Demo tool implementations (removed - users should implement their own tools)
-// These were placeholder implementations for testing
-// Users should implement their own tool execution logic in execute_tool_call
-
-
-// Truncate a string for display, adding "..." if truncated
-
-
 int execute_tool_call(const ToolRegistry *registry, const ToolCall *tool_call, ToolResult *result) {
     if (registry == NULL || tool_call == NULL || result == NULL) {
         return -1;
@@ -1050,27 +1039,6 @@ int register_builtin_tools(ToolRegistry *registry) {
         // Continue anyway - core tools are still available
     }
 
-    return 0;
-}
-
-int load_tools_config(ToolRegistry *registry, const char *config_file) {
-    if (registry == NULL) {
-        return -1;
-    }
-    
-    // Try to load from configuration file for user-defined custom tools
-    FILE *file = fopen(config_file, "r");
-    if (file == NULL) {
-        // Configuration file doesn't exist - this is OK, no custom tools
-        return 0;
-    }
-    
-    fclose(file);
-    
-    // For now, return 0 (no custom tools loaded) since config file parsing is not implemented
-    // Users can extend this function to parse JSON/YAML configuration files
-    // and register their own custom tools using register_tool() or similar functions
-    
     return 0;
 }
 

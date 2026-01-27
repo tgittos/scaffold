@@ -1126,8 +1126,7 @@ static int match_shell_command_allowlist(const ApprovalGateConfig *config,
         /* If entry has SHELL_TYPE_UNKNOWN (any shell), try command equivalence
          * for the base command only */
         if (entry->shell_type == SHELL_TYPE_UNKNOWN && entry->prefix_len >= 1) {
-            if (commands_are_equivalent(entry->command_prefix[0], base_cmd,
-                                        entry->shell_type, parsed->shell_type)) {
+            if (commands_are_equivalent(entry->command_prefix[0], base_cmd)) {
                 /* Base command is equivalent - check if rest of prefix matches */
                 if (entry->prefix_len == 1) {
                     /* Single-token entry, base command equivalence is enough */

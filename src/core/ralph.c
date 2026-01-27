@@ -131,11 +131,6 @@ int ralph_init_session(RalphSession* session) {
         fprintf(stderr, "Warning: Failed to initialize todo display\n");
     }
     
-    // Optionally load custom tools from configuration file (non-critical)
-    if (load_tools_config(&session->tools, "tools.json") != 0) {
-        fprintf(stderr, "Warning: Failed to load custom tools configuration\n");
-    }
-    
     // Initialize MCP client
     if (mcp_client_init(&session->mcp_client) != 0) {
         fprintf(stderr, "Warning: Failed to initialize MCP client\n");

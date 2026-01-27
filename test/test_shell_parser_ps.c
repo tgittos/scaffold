@@ -744,26 +744,22 @@ void test_ps_nested_quotes_single_double(void) {
 
 void test_ps_command_equivalence_ls_gci(void) {
     /* ls (POSIX) should be equivalent to Get-ChildItem (PowerShell) */
-    TEST_ASSERT_EQUAL_INT(1, commands_are_equivalent("ls", "Get-ChildItem",
-                          SHELL_TYPE_POSIX, SHELL_TYPE_POWERSHELL));
+    TEST_ASSERT_EQUAL_INT(1, commands_are_equivalent("ls", "Get-ChildItem"));
 }
 
 void test_ps_command_equivalence_cat_gc(void) {
     /* cat (POSIX) should be equivalent to Get-Content (PowerShell) */
-    TEST_ASSERT_EQUAL_INT(1, commands_are_equivalent("cat", "Get-Content",
-                          SHELL_TYPE_POSIX, SHELL_TYPE_POWERSHELL));
+    TEST_ASSERT_EQUAL_INT(1, commands_are_equivalent("cat", "Get-Content"));
 }
 
 void test_ps_command_equivalence_gci_alias(void) {
     /* gci is alias for Get-ChildItem */
-    TEST_ASSERT_EQUAL_INT(1, commands_are_equivalent("gci", "Get-ChildItem",
-                          SHELL_TYPE_POWERSHELL, SHELL_TYPE_POWERSHELL));
+    TEST_ASSERT_EQUAL_INT(1, commands_are_equivalent("gci", "Get-ChildItem"));
 }
 
 void test_ps_command_equivalence_gc_alias(void) {
     /* gc is alias for Get-Content */
-    TEST_ASSERT_EQUAL_INT(1, commands_are_equivalent("gc", "Get-Content",
-                          SHELL_TYPE_POWERSHELL, SHELL_TYPE_POWERSHELL));
+    TEST_ASSERT_EQUAL_INT(1, commands_are_equivalent("gc", "Get-Content"));
 }
 
 /* ============================================================================

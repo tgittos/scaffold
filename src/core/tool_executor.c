@@ -768,7 +768,7 @@ int tool_executor_run_workflow(RalphSession* session, ToolCall* tool_calls, int 
             results[i].tool_call_id = tool_calls[i].id ? strdup(tool_calls[i].id) : NULL;
             results[i].result = strdup("{\"error\": \"aborted\", \"message\": \"Operation aborted by user\"}");
             results[i].success = 0;
-            // Populate placeholder results for remaining unprocessed tools
+            // Populate abort-error results for remaining unprocessed tools
             for (int j = i + 1; j < call_count; j++) {
                 results[j].tool_call_id = tool_calls[j].id ? strdup(tool_calls[j].id) : NULL;
                 results[j].result = strdup("{\"error\": \"aborted\", \"message\": \"Operation aborted by user\"}");

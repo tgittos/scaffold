@@ -155,7 +155,8 @@ static EmbeddingProvider openai_embedding_provider = {
         .name = "OpenAI Embeddings",
         .auth_header_format = "Authorization: Bearer %s",
         .requires_auth = 1,
-        .default_model = "text-embedding-3-small"
+        .default_model = "text-embedding-3-small",
+        .default_dimension = 1536
     },
     .detect_provider = openai_embedding_detect_provider,
     .build_request_json = openai_embedding_build_request_json,

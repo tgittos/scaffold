@@ -1,5 +1,6 @@
 #include "context_retriever.h"
 #include "../db/vector_db_service.h"
+#include "../db/metadata_store.h"
 #include "../llm/embeddings_service.h"
 #include "common_utils.h"
 #include <stdio.h>
@@ -20,32 +21,29 @@ static context_result_t* create_error_result(const char *error_msg) {
 }
 
 
+static context_result_t* create_empty_result(void) {
+    context_result_t *result = malloc(sizeof(context_result_t));
+    if (!result) return create_error_result("Memory allocation failed");
+
+    ContextItemArray_init(&result->items);
+    result->error = NULL;
+    return result;
+}
+
 context_result_t* retrieve_relevant_context(const char *user_message, size_t max_results) {
     if (!user_message || max_results == 0 || strlen(user_message) == 0) {
-        // Return empty result for empty messages (not an error)
-        context_result_t *result = malloc(sizeof(context_result_t));
-        if (!result) return create_error_result("Memory allocation failed");
-
-        ContextItemArray_init(&result->items);
-        result->error = NULL;
-        return result;
+        return create_empty_result();
     }
-    
+
     // Get vector database
     vector_db_t *vector_db = vector_db_service_get_database();
     if (!vector_db) {
         return create_error_result("Vector database not available");
     }
-    
+
     // Check if documents index exists
     if (!vector_db_has_index(vector_db, "documents")) {
-        // No documents index, return empty result (not an error)
-        context_result_t *result = malloc(sizeof(context_result_t));
-        if (!result) return create_error_result("Memory allocation failed");
-
-        ContextItemArray_init(&result->items);
-        result->error = NULL;
-        return result;
+        return create_empty_result();
     }
     
     // Check embeddings service
@@ -84,17 +82,38 @@ context_result_t* retrieve_relevant_context(const char *user_message, size_t max
         return result;
     }
 
-    // Fill context items
+    // Get metadata store to retrieve actual chunk content
+    metadata_store_t *meta_store = metadata_store_get_instance();
+
+    // Fill context items by looking up content from the metadata store
     for (size_t i = 0; i < search_results->count; i++) {
         search_result_t *search_item = &search_results->results[i];
 
+        // Retrieve chunk metadata which contains the actual text content
+        ChunkMetadata *chunk_meta = NULL;
+        if (meta_store) {
+            chunk_meta = metadata_store_get(meta_store, "documents", search_item->label);
+        }
+
+        // Skip results where content cannot be retrieved
+        if (!chunk_meta || !chunk_meta->content || strlen(chunk_meta->content) == 0) {
+            if (chunk_meta) {
+                metadata_store_free_chunk(chunk_meta);
+            }
+            continue;
+        }
+
         context_item_t item;
-        // For now, we don't have a way to retrieve the original text from labels
-        // This would require storing chunk text alongside vectors
-        // For MVP, we'll create a placeholder
-        item.content = safe_strdup("Relevant document chunk (text retrieval not implemented yet)");
-        item.relevance_score = 1.0 - search_item->distance; // Convert distance to relevance
-        item.source = safe_strdup("Vector database");
+        item.content = safe_strdup(chunk_meta->content);
+        item.relevance_score = 1.0 - search_item->distance;
+        item.source = safe_strdup(chunk_meta->source ? chunk_meta->source : "Vector database");
+
+        metadata_store_free_chunk(chunk_meta);
+
+        if (!item.content) {
+            free(item.source);
+            continue;
+        }
 
         if (ContextItemArray_push(&result->items, item) != 0) {
             free(item.content);

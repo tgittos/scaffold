@@ -198,8 +198,7 @@ static ToolCallFields get_buffered_tool_fields(void* tools, int index) {
 // =============================================================================
 
 void json_output_init(void) {
-    // No initialization currently needed.
-    // This function exists for future extensibility (e.g., buffering setup).
+    // Intentional no-op: provides a consistent init/cleanup lifecycle pattern.
 }
 
 void json_output_assistant_text(const char* text, int input_tokens, int output_tokens) {

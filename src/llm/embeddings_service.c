@@ -1,4 +1,5 @@
 #include "embeddings_service.h"
+#include "embedding_provider.h"
 #include "../utils/common_utils.h"
 #include "../utils/config.h"
 #include <stdlib.h>
@@ -110,8 +111,11 @@ size_t embeddings_service_get_dimension(void) {
         return 0;
     }
 
-    // For text-embedding-3-small, dimension is 1536
-    // This could be made configurable or queried from the service
+    if (service->config.provider != NULL &&
+        service->config.provider->capabilities.default_dimension > 0) {
+        return service->config.provider->capabilities.default_dimension;
+    }
+
     return 1536;
 }
 

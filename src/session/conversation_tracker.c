@@ -222,12 +222,24 @@ static int load_complete_conversation_turns(ConversationHistory* history, time_t
 
         for (size_t m = 0; m < turn->count; m++) {
             if (ConversationHistory_push(history, turn->data[m]) != 0) {
+                // Null out already-transferred messages to prevent double-free
+                for (size_t j = 0; j < m; j++) {
+                    turn->data[j].role = NULL;
+                    turn->data[j].content = NULL;
+                    turn->data[j].tool_call_id = NULL;
+                    turn->data[j].tool_name = NULL;
+                }
                 goto cleanup;
             }
-            // Don't free the message data since we're transferring ownership
         }
-        // Clear the messages array but don't free individual messages
-        turn->count = 0;
+        // Ownership transferred -- null out pointers so ConversationTurn_destroy
+        // won't free memory now owned by history
+        for (size_t m = 0; m < turn->count; m++) {
+            turn->data[m].role = NULL;
+            turn->data[m].content = NULL;
+            turn->data[m].tool_call_id = NULL;
+            turn->data[m].tool_name = NULL;
+        }
     }
 
 cleanup:
@@ -248,8 +260,6 @@ void init_conversation_history(ConversationHistory *history) {
 
     ConversationHistory_init(history);
 }
-
-// Use unified JSON escaping from json_utils.h
 
 static int add_message_to_history(ConversationHistory *history, const char *role, const char *content, const char *tool_call_id, const char *tool_name) {
     if (history == NULL || role == NULL || content == NULL) {

@@ -13,6 +13,7 @@ typedef struct {
     const char* auth_header_format;  // "Authorization: Bearer %s" or "x-api-key: %s"
     int requires_auth;
     const char* default_model;
+    size_t default_dimension;
 } EmbeddingProviderCapabilities;
 
 // Provider interface - all embedding providers must implement these functions

@@ -5,7 +5,7 @@
  * and to enable secure allowlist matching.
  *
  * This implementation focuses on POSIX shell parsing. Windows cmd.exe and
- * PowerShell parsing will be implemented in separate files.
+ * PowerShell parsing are implemented in separate files.
  */
 
 #include "shell_parser.h"
@@ -643,9 +643,7 @@ int shell_command_matches_prefix(const ParsedShellCommand *parsed,
 }
 
 int commands_are_equivalent(const char *allowed_cmd,
-                            const char *actual_cmd,
-                            ShellType allowed_shell,
-                            ShellType actual_shell) {
+                            const char *actual_cmd) {
     if (!allowed_cmd || !actual_cmd) {
         return 0;
     }
@@ -658,14 +656,9 @@ int commands_are_equivalent(const char *allowed_cmd,
     /*
      * Cross-platform equivalents.
      *
-     * Note: We only include commands with truly equivalent behavior:
+     * Only commands with truly equivalent behavior are included:
      * - Get-Item is NOT equivalent to ls/dir (it gets a single item, not a listing)
      * - cd is NOT equivalent to pwd (cd with arguments changes directory)
-     *
-     * The shell type parameters are currently unused. A future enhancement
-     * could use them to restrict equivalence to appropriate contexts (e.g.,
-     * only match 'dir' on cmd.exe, not on POSIX). For now, we allow broad
-     * equivalence which is more permissive but simpler.
      */
     static const char *equivalents[][6] = {
         {"ls", "dir", "Get-ChildItem", "gci", NULL, NULL},
@@ -678,10 +671,6 @@ int commands_are_equivalent(const char *allowed_cmd,
         {"clear", "cls", "Clear-Host", NULL, NULL, NULL},
         {NULL, NULL, NULL, NULL, NULL, NULL}
     };
-
-    /* Shell types reserved for future shell-context-aware equivalence */
-    (void)allowed_shell;
-    (void)actual_shell;
 
     for (int i = 0; equivalents[i][0]; i++) {
         int allowed_found = 0;
