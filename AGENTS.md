@@ -118,6 +118,15 @@ Approval gate tests that require user prompting use mock inputs or test non-inte
 You can use all normal C/C++ debug tooling on Cosmopolitan C projects. You must only remember that you need to check it against
 platform specific binaries, such as .aarch64.elf (aarch64) and .com.dbg (amd64)
 
+### Function and System Call Tracing
+
+Cosmopolitan binaries support built-in tracing via CLI flags passed to the fat binary:
+
+- `--ftrace`: Log every function call entry/exit at runtime. Useful for understanding control flow without a debugger.
+- `--strace`: Log every system call made by the program. Useful for diagnosing I/O, networking, and OS-level issues.
+
+Note that `--ftrace` output may be incomplete due to inlining under optimized builds; compile with the `-mdbg` cosmocc flag for more complete traces.
+
 ### Valgrind and Architecture
 
 **IMPORTANT: Before running valgrind, check the host architecture and use the correct binary:**
