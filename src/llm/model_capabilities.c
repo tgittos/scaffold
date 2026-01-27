@@ -8,13 +8,11 @@
 
 PTRARRAY_DEFINE(ModelRegistry, ModelCapabilities)
 
-// Helper function to perform case-insensitive pattern matching
 static int model_pattern_match(const char* model_name, const char* pattern) {
     if (!model_name || !pattern) {
         return 0;
     }
     
-    // Convert both to lowercase for comparison
     size_t model_len = strlen(model_name);
     size_t pattern_len = strlen(pattern);
     
@@ -57,14 +55,12 @@ ModelCapabilities* detect_model_capabilities(ModelRegistry* registry, const char
         return NULL;
     }
 
-    // Search for matching model
     for (size_t i = 0; i < registry->count; i++) {
         if (model_pattern_match(model_name, registry->data[i]->model_pattern)) {
             return registry->data[i];
         }
     }
 
-    // Return default model if no match found
     for (size_t i = 0; i < registry->count; i++) {
         if (strcmp(registry->data[i]->model_pattern, "default") == 0) {
             return registry->data[i];
@@ -85,7 +81,6 @@ char* generate_model_tools_json(ModelRegistry* registry, const char* model_name,
     
     ModelCapabilities* model = detect_model_capabilities(registry, model_name);
     if (!model || !model->generate_tools_json) {
-        // Fall back to default implementation
         return NULL;
     }
     

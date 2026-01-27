@@ -25,10 +25,9 @@ struct document_store {
 
 static document_store_t* singleton_instance = NULL;
 
-// Helper function to recursively remove a directory
 static int rmdir_recursive(const char* path) {
     DIR* dir = opendir(path);
-    if (dir == NULL) return 0; // Directory doesn't exist, nothing to remove
+    if (dir == NULL) return 0;
     
     struct dirent* entry;
     while ((entry = readdir(dir)) != NULL) {
@@ -127,18 +126,15 @@ document_store_t* document_store_get_instance(void) {
 }
 
 void document_store_reset_instance(void) {
-    // Clear persistent data before destroying the instance
     if (singleton_instance != NULL && singleton_instance->base_path != NULL) {
         char docs_path[512];
         snprintf(docs_path, sizeof(docs_path), "%s/documents", singleton_instance->base_path);
         rmdir_recursive(docs_path);
         
-        // Also clear any metadata files
         char metadata_path[512];
         snprintf(metadata_path, sizeof(metadata_path), "%s/metadata", singleton_instance->base_path);
         rmdir_recursive(metadata_path);
         
-        // Clear vector index files
         char index_path[512];
         snprintf(index_path, sizeof(index_path), "%s/indexes", singleton_instance->base_path);
         rmdir_recursive(index_path);
@@ -149,21 +145,18 @@ void document_store_reset_instance(void) {
         singleton_instance = NULL;
     }
     
-    // Also clear the vector database
     hnswlib_clear_all();
 }
 
 void document_store_clear_conversations(void) {
     if (singleton_instance == NULL) return;
     
-    // Clear only conversation-related data
     char conv_path[512];
     if (singleton_instance->base_path != NULL) {
         snprintf(conv_path, sizeof(conv_path), "%s/documents/conversations", singleton_instance->base_path);
         rmdir_recursive(conv_path);
     }
     
-    // Clear conversation index from vector DB
     if (singleton_instance->vector_db != NULL) {
         vector_db_delete_index(singleton_instance->vector_db, "conversations");
     }
@@ -355,19 +348,16 @@ int document_store_add_text(document_store_t* store, const char* index_name,
                            const char* source, const char* metadata_json) {
     if (store == NULL || index_name == NULL || text == NULL) return -1;
     
-    // Try to get API key from config
     ralph_config_t* config = config_get();
     const char* api_key = NULL;
-    
+
     if (config && config->openai_api_key) {
         api_key = config->openai_api_key;
     }
-    
+
     if (!api_key) {
-        // No API key configured. Fall back to storing the document with a
-        // zero-vector embedding so tests and environments without network
-        // access can still persist conversation history. This avoids hard
-        // failures in CI where embedding services aren't available.
+        // Fall back to a zero-vector so environments without network access
+        // (CI, tests) can still persist documents without embedding services.
         size_t fallback_dim = 1536;
 
         float *zero_embedding = calloc(fallback_dim, sizeof(float));
@@ -449,7 +439,6 @@ document_search_results_t* document_store_search(document_store_t* store,
 
         if (DocumentResultArray_push(&results->results, result) != 0) {
             document_store_free_document(result.document);
-            // Continue with remaining results
         }
     }
 
@@ -463,16 +452,14 @@ document_search_results_t* document_store_search_text(document_store_t* store,
                                                      size_t k) {
     if (store == NULL || index_name == NULL || query_text == NULL) return NULL;
     
-    // Try to get API key from config
     ralph_config_t* config = config_get();
     const char* api_key = NULL;
-    
+
     if (config && config->openai_api_key) {
         api_key = config->openai_api_key;
     }
-    
+
     if (!api_key) {
-        // No API key configured - cannot generate embeddings
         return NULL;
     }
     
@@ -637,18 +624,17 @@ document_search_results_t* document_store_search_by_time(document_store_t* store
         return NULL;
     }
 
-    // Transfer documents to result array (time-based search has no distances)
     for (size_t i = 0; i < doc_arr.count; i++) {
+        // Distance is meaningless for time-based searches, so zero is used as a sentinel.
         document_result_t result = {
             .document = doc_arr.data[i],
-            .distance = 0.0f  // No distance for time-based search
+            .distance = 0.0f
         };
         if (DocumentResultArray_push(&results->results, result) != 0) {
             document_store_free_document(doc_arr.data[i]);
         }
     }
 
-    // Free the temporary array container (documents are now owned by results)
     DocumentArray_destroy_shallow(&doc_arr);
 
     return results;

@@ -2,7 +2,7 @@
 #include <string.h>
 #include <stdio.h>
 
-// Thread-local storage for the last API error
+// Not actually thread-local; safe only because ralph is single-threaded
 static APIError g_last_api_error = {0};
 
 void api_error_init(APIError *err)
@@ -17,7 +17,6 @@ void api_error_init(APIError *err)
 
 int api_error_is_retryable(long http_status, CURLcode curl_code)
 {
-    // Retry on network errors
     if (curl_code == CURLE_COULDNT_CONNECT ||
         curl_code == CURLE_OPERATION_TIMEDOUT ||
         curl_code == CURLE_GOT_NOTHING ||
@@ -26,11 +25,10 @@ int api_error_is_retryable(long http_status, CURLcode curl_code)
         return 1;
     }
 
-    // Retry on transient HTTP errors
-    if (http_status == 429 ||  // Rate limited
-        http_status == 502 ||  // Bad gateway
-        http_status == 503 ||  // Service unavailable
-        http_status == 504) {  // Gateway timeout
+    if (http_status == 429 ||
+        http_status == 502 ||
+        http_status == 503 ||
+        http_status == 504) {
         return 1;
     }
 
@@ -46,7 +44,6 @@ void api_error_set(APIError *err, long http_status, CURLcode curl_code, int atte
     err->attempts_made = attempts;
     err->is_retryable = api_error_is_retryable(http_status, curl_code);
 
-    // Set detailed error message
     if (curl_code != CURLE_OK) {
         snprintf(err->error_message, sizeof(err->error_message),
                  "CURL error: %s", curl_easy_strerror(curl_code));
@@ -62,7 +59,6 @@ const char* api_error_user_message(const APIError *err)
 {
     if (!err) return "Unknown error occurred.";
 
-    // Check for CURL/network errors first
     if (err->curl_code != CURLE_OK) {
         switch (err->curl_code) {
             case CURLE_COULDNT_CONNECT:
@@ -85,7 +81,6 @@ const char* api_error_user_message(const APIError *err)
         }
     }
 
-    // Check HTTP status codes
     switch (err->http_status) {
         case 429:
             return "Rate limited by API. Wait a moment and try again.";

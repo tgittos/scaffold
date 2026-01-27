@@ -1,23 +1,9 @@
-/**
- * Rate Limiter Implementation
- *
- * Implements denial rate limiting with exponential backoff.
- * This is an opaque type that owns its own data structure.
- */
-
 #include "rate_limiter.h"
 
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
-/* =============================================================================
- * Internal Data Structures
- * ========================================================================== */
-
-/**
- * Entry in the rate limiter tracking table.
- */
 typedef struct {
     char *key;              /* Tracked key (typically tool name) */
     int denial_count;       /* Consecutive denials */
@@ -25,23 +11,14 @@ typedef struct {
     time_t backoff_until;   /* Don't prompt until after this time */
 } RateLimitEntry;
 
-/**
- * Rate limiter internal structure.
- */
 struct RateLimiter {
     RateLimitEntry *entries;
     int count;
     int capacity;
 };
 
-/* =============================================================================
- * Constants
- * ========================================================================== */
-
-/* Initial capacity for entries array */
 #define INITIAL_CAPACITY 8
 
-/* Rate limiting backoff schedule (in seconds) */
 static const int BACKOFF_SCHEDULE[] = {
     0,    /* 1 denial - no backoff */
     0,    /* 2 denials - no backoff */
@@ -52,14 +29,6 @@ static const int BACKOFF_SCHEDULE[] = {
 };
 #define BACKOFF_SCHEDULE_SIZE (sizeof(BACKOFF_SCHEDULE) / sizeof(BACKOFF_SCHEDULE[0]))
 
-/* =============================================================================
- * Internal Helper Functions
- * ========================================================================== */
-
-/**
- * Find an existing entry by key.
- * Returns NULL if not found.
- */
 static RateLimitEntry *find_entry(const RateLimiter *rl, const char *key) {
     if (rl == NULL || key == NULL) {
         return NULL;
@@ -74,24 +43,17 @@ static RateLimitEntry *find_entry(const RateLimiter *rl, const char *key) {
     return NULL;
 }
 
-/**
- * Get or create an entry for a key.
- * Returns NULL on allocation failure.
- */
 static RateLimitEntry *get_or_create_entry(RateLimiter *rl, const char *key) {
     if (rl == NULL || key == NULL) {
         return NULL;
     }
 
-    /* Check if entry already exists */
     RateLimitEntry *entry = find_entry(rl, key);
     if (entry != NULL) {
         return entry;
     }
 
-    /* Need to create a new entry */
     if (rl->count >= rl->capacity) {
-        /* Grow the array */
         int new_capacity = rl->capacity * 2;
         RateLimitEntry *new_entries = realloc(rl->entries,
                                               new_capacity * sizeof(RateLimitEntry));
@@ -102,7 +64,6 @@ static RateLimitEntry *get_or_create_entry(RateLimiter *rl, const char *key) {
         rl->capacity = new_capacity;
     }
 
-    /* Initialize new entry */
     entry = &rl->entries[rl->count++];
     memset(entry, 0, sizeof(*entry));
     entry->key = strdup(key);
@@ -113,10 +74,6 @@ static RateLimitEntry *get_or_create_entry(RateLimiter *rl, const char *key) {
 
     return entry;
 }
-
-/* =============================================================================
- * Public API
- * ========================================================================== */
 
 RateLimiter *rate_limiter_create(void) {
     RateLimiter *rl = calloc(1, sizeof(RateLimiter));
@@ -140,7 +97,6 @@ void rate_limiter_destroy(RateLimiter *rl) {
         return;
     }
 
-    /* Free all entries */
     if (rl->entries != NULL) {
         for (int i = 0; i < rl->count; i++) {
             free(rl->entries[i].key);
@@ -183,7 +139,6 @@ void rate_limiter_record_denial(RateLimiter *rl, const char *key) {
     entry->denial_count++;
     entry->last_denial = now;
 
-    /* Calculate backoff based on denial count */
     int schedule_index = entry->denial_count - 1;
     if (schedule_index < 0) {
         schedule_index = 0;

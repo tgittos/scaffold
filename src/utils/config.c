@@ -15,7 +15,6 @@ static int config_set_defaults(ralph_config_t *config)
 {
     if (!config) return -1;
 
-    // Initialize all pointers to NULL first for safe cleanup on failure
     config->api_url = NULL;
     config->model = NULL;
     config->api_key = NULL;
@@ -28,7 +27,6 @@ static int config_set_defaults(ralph_config_t *config)
     config->config_file_path = NULL;
     config->config_loaded = false;
 
-    // Set default values with allocation checks
     config->api_url = strdup("https://api.openai.com/v1/chat/completions");
     if (!config->api_url) return -1;
 
@@ -38,19 +36,14 @@ static int config_set_defaults(ralph_config_t *config)
     config->context_window = 8192;
     config->max_tokens = -1;
 
-    // Set retry configuration defaults
     config->api_max_retries = 3;
     config->api_retry_delay_ms = 1000;
     config->api_backoff_factor = 2.0f;
 
-    // Set subagent configuration defaults
     config->max_subagents = 5;
     config->subagent_timeout = 300;
 
-    // Set streaming configuration default
     config->enable_streaming = true;
-
-    // Set JSON output configuration default
     config->json_output_mode = false;
 
     return 0;
@@ -61,7 +54,7 @@ static int config_update_api_key_selection(ralph_config_t *config)
 {
     if (!config) return -1;
 
-    // Set main API key based on URL
+    // Select the appropriate API key based on which provider the URL points to
     if (config->api_url && strstr(config->api_url, "api.anthropic.com") != NULL) {
         if (config->anthropic_api_key) {
             free(config->api_key);
@@ -116,27 +109,21 @@ static void config_generate_default_file(void)
 {
     if (!g_config) return;
 
-    // Pre-fill API keys from environment
     const char *env_openai_key = getenv("OPENAI_API_KEY");
     const char *env_anthropic_key = getenv("ANTHROPIC_API_KEY");
 
-    // Always set OpenAI key (empty string if not in env)
     free(g_config->openai_api_key);
     g_config->openai_api_key = strdup(env_openai_key ? env_openai_key : "");
     if (!g_config->openai_api_key) return;
 
-    // Always set Anthropic key (empty string if not in env)
     free(g_config->anthropic_api_key);
     g_config->anthropic_api_key = strdup(env_anthropic_key ? env_anthropic_key : "");
     if (!g_config->anthropic_api_key) return;
 
-    // Update API selection based on which keys are available
     (void)config_update_api_key_selection(g_config);
-    
-    // Try to generate in current directory first
+
     const char *local_path = "./ralph.config.json";
-    
-    // Check if we can write to current directory
+
     if (access(".", W_OK) == 0) {
         if (config_save_to_file(local_path) == 0) {
             fprintf(stderr, "[Config] Created %s with API keys from environment\n\n", local_path);
@@ -169,10 +156,9 @@ int config_load_from_file(const char *filepath)
     
     FILE *file = fopen(filepath, "r");
     if (!file) {
-        return -1; // File doesn't exist or can't be opened
+        return -1;
     }
-    
-    // Read file content
+
     fseek(file, 0, SEEK_END);
     long file_size = ftell(file);
     fseek(file, 0, SEEK_SET);
@@ -192,7 +178,6 @@ int config_load_from_file(const char *filepath)
     json_content[bytes_read] = '\0';
     fclose(file);
     
-    // Parse JSON and update configuration
     cJSON *json = cJSON_Parse(json_content);
     free(json_content);
     
@@ -201,8 +186,7 @@ int config_load_from_file(const char *filepath)
         return -1;
     }
     
-    // Update configuration from JSON
-    // Note: strdup failures are non-fatal - we keep previous value or NULL
+    // strdup failures are non-fatal -- we keep the previous value
     cJSON *item;
     char *new_val;
 
@@ -288,7 +272,6 @@ int config_load_from_file(const char *filepath)
         g_config->max_tokens = item->valueint;
     }
 
-    // Load retry configuration
     item = cJSON_GetObjectItem(json, "api_max_retries");
     if (cJSON_IsNumber(item) && item->valueint >= 0) {
         g_config->api_max_retries = item->valueint;
@@ -304,7 +287,6 @@ int config_load_from_file(const char *filepath)
         g_config->api_backoff_factor = (float)item->valuedouble;
     }
 
-    // Load subagent configuration
     item = cJSON_GetObjectItem(json, "max_subagents");
     if (cJSON_IsNumber(item) && item->valueint > 0) {
         g_config->max_subagents = item->valueint;
@@ -315,19 +297,16 @@ int config_load_from_file(const char *filepath)
         g_config->subagent_timeout = item->valueint;
     }
 
-    // Load streaming configuration
     item = cJSON_GetObjectItem(json, "enable_streaming");
     if (cJSON_IsBool(item)) {
         g_config->enable_streaming = cJSON_IsTrue(item);
     }
 
-    // Update main API key based on URL
     (void)config_update_api_key_selection(g_config);
 
     cJSON_Delete(json);
     g_config->config_loaded = true;
 
-    // Store the config file path
     new_val = strdup(filepath);
     if (new_val) {
         free(g_config->config_file_path);
@@ -344,13 +323,12 @@ int config_save_to_file(const char *filepath)
     cJSON *json = cJSON_CreateObject();
     if (!json) return -1;
     
-    // Add configuration values to JSON
     if (g_config->api_url)
         cJSON_AddStringToObject(json, "api_url", g_config->api_url);
     if (g_config->model)
         cJSON_AddStringToObject(json, "model", g_config->model);
     
-    // Always include both API key fields, even if empty
+    // Both key fields are always written so users see them in the config file
     cJSON_AddStringToObject(json, "anthropic_api_key", g_config->anthropic_api_key ? g_config->anthropic_api_key : "");
     cJSON_AddStringToObject(json, "openai_api_key", g_config->openai_api_key ? g_config->openai_api_key : "");
     
@@ -366,25 +344,20 @@ int config_save_to_file(const char *filepath)
     cJSON_AddNumberToObject(json, "context_window", g_config->context_window);
     cJSON_AddNumberToObject(json, "max_tokens", g_config->max_tokens);
 
-    // Add retry configuration
     cJSON_AddNumberToObject(json, "api_max_retries", g_config->api_max_retries);
     cJSON_AddNumberToObject(json, "api_retry_delay_ms", g_config->api_retry_delay_ms);
     cJSON_AddNumberToObject(json, "api_backoff_factor", (double)g_config->api_backoff_factor);
 
-    // Add subagent configuration
     cJSON_AddNumberToObject(json, "max_subagents", g_config->max_subagents);
     cJSON_AddNumberToObject(json, "subagent_timeout", g_config->subagent_timeout);
 
-    // Add streaming configuration
     cJSON_AddBoolToObject(json, "enable_streaming", g_config->enable_streaming);
 
-    // Convert to string
     char *json_string = cJSON_Print(json);
     cJSON_Delete(json);
     
     if (!json_string) return -1;
     
-    // Write to file
     FILE *file = fopen(filepath, "w");
     if (!file) {
         free(json_string);
@@ -401,7 +374,6 @@ int config_save_to_file(const char *filepath)
 int config_init(void)
 {
     if (g_config) {
-        // Already initialized
         return 0;
     }
 
@@ -410,26 +382,20 @@ int config_init(void)
 
     memset(g_config, 0, sizeof(ralph_config_t));
 
-    // Set defaults
     if (config_set_defaults(g_config) != 0) {
         config_cleanup();
         return -1;
     }
 
-    // Try to load configuration in priority order:
-    // 1. ./ralph.config.json (local override)
-    // 2. ~/.local/ralph/config.json (user config)
-
+    // Priority: local override > user config > generated defaults
     bool config_loaded = false;
 
-    // Try local config file first
     if (access("./ralph.config.json", R_OK) == 0) {
         if (config_load_from_file("./ralph.config.json") == 0) {
             config_loaded = true;
         }
     }
 
-    // Try user config directory if local config not found
     if (!config_loaded) {
         char *user_config_dir = get_user_config_dir();
         if (user_config_dir) {
@@ -447,12 +413,11 @@ int config_init(void)
         }
     }
 
-    // If no config was loaded, generate a default config file
     if (!config_loaded) {
         config_generate_default_file();
     }
 
-    // Always override with environment variables if they exist
+    // Environment variables take precedence over config file values
     const char *env_openai_key = getenv("OPENAI_API_KEY");
     const char *env_anthropic_key = getenv("ANTHROPIC_API_KEY");
 
@@ -472,7 +437,6 @@ int config_init(void)
         }
     }
 
-    // Update API selection based on available keys
     (void)config_update_api_key_selection(g_config);
 
     return 0;
@@ -509,7 +473,6 @@ int config_set(const char *key, const char *value)
     bool need_api_key_update = false;
     char *new_val = NULL;
 
-    // Helper: duplicate value if non-NULL, check allocation
     if (value) {
         new_val = strdup(value);
         if (!new_val) return -1;
@@ -543,23 +506,22 @@ int config_set(const char *key, const char *value)
         free(g_config->system_prompt);
         g_config->system_prompt = new_val;
     } else if (strcmp(key, "context_window") == 0) {
-        free(new_val); // Not used for this key
+        free(new_val);
         if (value) {
             int parsed = atoi(value);
             if (parsed > 0) g_config->context_window = parsed;
         }
     } else if (strcmp(key, "max_tokens") == 0) {
-        free(new_val); // Not used for this key
+        free(new_val);
         if (value) {
             int parsed = atoi(value);
             g_config->max_tokens = parsed;
         }
     } else {
-        free(new_val); // Unknown key - free the allocation
+        free(new_val);
         return -1;
     }
 
-    // Update API key selection if needed
     if (need_api_key_update) {
         (void)config_update_api_key_selection(g_config);
     }

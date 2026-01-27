@@ -50,7 +50,6 @@ TodoStatus todo_status_from_string(const char* status_str);
 const char* todo_priority_to_string(TodoPriority priority);
 TodoPriority todo_priority_from_string(const char* priority_str);
 
-// Check if there are any pending or in-progress todos
 int todo_has_pending_tasks(TodoList* list);
 
 #endif

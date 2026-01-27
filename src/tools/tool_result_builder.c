@@ -43,21 +43,17 @@ int tool_result_builder_set_success(tool_result_builder_t* builder, const char* 
     va_list args;
     va_start(args, format);
     
-    // Calculate needed size
     va_list args_copy;
     va_copy(args_copy, args);
     int needed = vsnprintf(NULL, 0, format, args_copy);
     va_end(args_copy);
-    
+
     if (needed < 0) {
         va_end(args);
         return -1;
     }
-    
-    // Free existing content
+
     free(builder->result_content);
-    
-    // Allocate and format
     builder->result_content = malloc(needed + 1);
     if (builder->result_content == NULL) {
         va_end(args);
@@ -79,18 +75,16 @@ int tool_result_builder_set_error(tool_result_builder_t* builder, const char* fo
     va_list args;
     va_start(args, format);
     
-    // Calculate needed size for error JSON
     va_list args_copy;
     va_copy(args_copy, args);
     int needed = vsnprintf(NULL, 0, format, args_copy);
     va_end(args_copy);
-    
+
     if (needed < 0) {
         va_end(args);
         return -1;
     }
-    
-    // Create error message
+
     char* error_msg = malloc(needed + 1);
     if (error_msg == NULL) {
         va_end(args);
@@ -100,10 +94,7 @@ int tool_result_builder_set_error(tool_result_builder_t* builder, const char* fo
     vsnprintf(error_msg, needed + 1, format, args);
     va_end(args);
     
-    // Free existing content
     free(builder->result_content);
-    
-    // Create JSON error format
     builder->result_content = create_error_message("{\"success\": false, \"error\": \"%s\"}", error_msg);
     free(error_msg);
     
@@ -162,7 +153,6 @@ ToolResult* tool_result_builder_finalize(tool_result_builder_t* builder) {
     result->result = builder->result_content;
     result->success = builder->success;
     
-    // Transfer ownership
     builder->tool_call_id = NULL;
     builder->result_content = NULL;
     builder->finalized = 1;

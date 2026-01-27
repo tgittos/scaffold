@@ -5,44 +5,29 @@
 
 #include "session_manager.h"
 
-// Token calculation configuration
 typedef struct {
-    int context_window;           // Current model context window
-    int min_response_tokens;      // Minimum tokens reserved for response
-    int safety_buffer_base;       // Base safety buffer tokens
-    float safety_buffer_ratio;    // Additional buffer as ratio of context
-    float chars_per_token;        // Character to token conversion ratio
+    int context_window;
+    int min_response_tokens;
+    int safety_buffer_base;
+    float safety_buffer_ratio;    // Additional buffer as fraction of context window
+    float chars_per_token;        // Heuristic for char-to-token estimation
 } TokenConfig;
 
-// Token usage breakdown
 typedef struct {
-    int total_prompt_tokens;      // Total tokens in prompt
-    int available_response_tokens; // Tokens available for response
-    int safety_buffer_used;       // Actual safety buffer applied
-    int context_window_used;      // Context window being used
+    int total_prompt_tokens;
+    int available_response_tokens;
+    int safety_buffer_used;
+    int context_window_used;
 } TokenUsage;
 
-// Initialize token configuration with sensible defaults
 void token_config_init(TokenConfig* config, int context_window);
-
-// Estimate token count from text
 int estimate_token_count(const char* text, const TokenConfig* config);
-
-// Calculate optimal token allocation for a request
 int calculate_token_allocation(const SessionData* session, const char* user_message,
                               TokenConfig* config, TokenUsage* usage);
-
-// Trim conversation history to fit within token limits
-int trim_conversation_for_tokens(ConversationHistory* conversation, 
+int trim_conversation_for_tokens(ConversationHistory* conversation,
                                 const TokenConfig* config, int max_prompt_tokens,
                                 const char* system_prompt);
-
-// Get dynamic safety buffer based on context complexity
 int get_dynamic_safety_buffer(const TokenConfig* config, int estimated_prompt_tokens);
-
-// Validate token configuration  
 int validate_token_config(const TokenConfig* config);
-
-// Note: manage_conversation_tokens moved to ralph.c to avoid circular dependencies
 
 #endif // TOKEN_MANAGER_H

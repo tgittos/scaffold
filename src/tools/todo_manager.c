@@ -59,7 +59,6 @@ int todo_create(TodoList* list, const char* content, TodoPriority priority, char
     if (!list || !content || !out_id) return -1;
     if (strlen(content) >= TODO_MAX_CONTENT_LENGTH) return -1;
 
-    // Check capacity limit before attempting to add
     if (list->count >= TODO_MAX_COUNT) return -1;
 
     Todo new_todo;

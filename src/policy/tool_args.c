@@ -1,20 +1,10 @@
-/**
- * Tool Arguments Implementation
- *
- * Centralized cJSON argument extraction from ToolCall structures.
- */
-
 #include "tool_args.h"
 
 #include <cJSON.h>
 #include <stdlib.h>
 #include <string.h>
 
-/**
- * Parse arguments JSON from a tool call.
- * Returns parsed cJSON object or NULL on failure.
- * Caller must call cJSON_Delete() on the returned object.
- */
+/* Caller must call cJSON_Delete() on the returned object. */
 static cJSON *parse_args(const ToolCall *tool_call) {
     if (tool_call == NULL || tool_call->arguments == NULL) {
         return NULL;

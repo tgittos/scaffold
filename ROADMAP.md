@@ -2,10 +2,6 @@
 
 Future features under consideration, ordered roughly by implementation dependency and complexity.
 
-## Approval Gates
-
-Require user confirmation before executing potentially destructive operations. Intercept tool execution for configurable categories (file writes, shell commands, etc.) and prompt for approval. Support allowlists for trusted patterns.
-
 ## Tool Call Interruption
 
 Graceful cancellation of long-running tool executions via Ctrl+C. Rather than killing the session, catch the signal, terminate the current operation, and return control to the conversation. Allow the user to redirect or retry.

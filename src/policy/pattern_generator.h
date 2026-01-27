@@ -83,8 +83,6 @@ int generate_network_url_pattern(const char *url, GeneratedPattern *out_pattern)
  */
 int generate_allowlist_pattern(const ToolCall *tool_call, GeneratedPattern *out_pattern);
 
-/* confirm_pattern_scope moved to gate_prompter module */
-
 /**
  * Apply a generated pattern to the session allowlist.
  * For shell commands, adds to shell_allowlist.

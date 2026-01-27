@@ -9,39 +9,32 @@
 #include <unistd.h>
 #include <limits.h>
 
-// Get platform information string (caller must free)
 static char *get_platform_info(void) {
     struct utsname uname_info;
     char cwd[PATH_MAX];
 
-    // Zero-initialize to satisfy valgrind
-    memset(&uname_info, 0, sizeof(uname_info));
+    memset(&uname_info, 0, sizeof(uname_info));  // Zero-initialize for valgrind
     memset(cwd, 0, sizeof(cwd));
 
-    // Initialize with defaults
     const char *arch = "unknown";
     const char *os_name = "unknown";
     const char *cwd_str = ".";
 
-    // Get system information
     if (uname(&uname_info) == 0) {
         arch = uname_info.machine;
         os_name = uname_info.sysname;
     }
 
-    // Get current working directory
     if (getcwd(cwd, sizeof(cwd)) != NULL) {
         cwd_str = cwd;
     }
 
-    // Format the platform info section
     const char *format =
         "\n## Platform Information:\n"
         "- Architecture: %s\n"
         "- Operating System: %s\n"
         "- Working Directory: %s\n";
 
-    // Calculate required size
     int size = snprintf(NULL, 0, format, arch, os_name, cwd_str);
     if (size < 0) {
         return NULL;
@@ -56,7 +49,6 @@ static char *get_platform_info(void) {
     return result;
 }
 
-// Core system prompt PART 1 - up to where dynamic tools list goes
 static const char* SYSTEM_PROMPT_PART1 =
     "You are an advanced AI programming agent with access to powerful tools. Use them thoughtfully to maximize user value.\n"
     "\n# Proactive Execution Principle\n"
@@ -128,23 +120,19 @@ static const char* SYSTEM_PROMPT_PART1 =
     "These files are loaded into the persistent Python REPL at startup, making their "
     "functions available in global scope.\n\n";
 
-// Core system prompt PART 2 - after the dynamic tools list
 static const char* SYSTEM_PROMPT_PART2 =
     "\nThese tools can be extended or modified by editing the Python files directly.\n"
     "\nFollowing describes how the user wants you to behave. Follow these instructions within the above framework.\n"
     "User customization:\n\n";
 
 
-// Check if character is valid in a filename reference
 static bool is_valid_filename_char(char c) {
     return isalnum((unsigned char)c) || c == '_' || c == '-' || c == '.' || c == '/';
 }
 
-// Check if the extracted string looks like a file path (must contain a dot for extension)
 static bool looks_like_file_path(const char *str, size_t len) {
     if (len == 0) return false;
 
-    // Must contain at least one dot (for file extension)
     bool has_dot = false;
     for (size_t i = 0; i < len; i++) {
         if (str[i] == '.') {
@@ -155,7 +143,6 @@ static bool looks_like_file_path(const char *str, size_t len) {
     return has_dot;
 }
 
-// Read file content, returns NULL if file doesn't exist or can't be read
 static char *read_file_content(const char *filepath) {
     FILE *file = fopen(filepath, "r");
     if (file == NULL) {
@@ -191,7 +178,6 @@ static char *read_file_content(const char *filepath) {
     return content;
 }
 
-// Dynamic string buffer for building expanded content
 typedef struct {
     char *data;
     size_t len;
@@ -239,7 +225,8 @@ static void strbuf_free(StringBuffer *buf) {
     buf->capacity = 0;
 }
 
-// Expand @FILENAME references in content (non-recursive)
+// Expands @FILENAME references by inlining file contents wrapped in XML tags.
+// Non-recursive: files included this way are not scanned for further @references.
 static char *expand_file_references(const char *content) {
     if (content == NULL) return NULL;
 
@@ -251,11 +238,9 @@ static char *expand_file_references(const char *content) {
     const char *p = content;
     while (*p != '\0') {
         if (*p == '@') {
-            // Check if this looks like a file reference
             const char *start = p + 1;
             const char *end = start;
 
-            // Extract potential filename
             while (*end != '\0' && is_valid_filename_char(*end)) {
                 end++;
             }
@@ -263,7 +248,6 @@ static char *expand_file_references(const char *content) {
             size_t filename_len = (size_t)(end - start);
 
             if (filename_len > 0 && looks_like_file_path(start, filename_len)) {
-                // Extract filename as null-terminated string
                 char *filename = malloc(filename_len + 1);
                 if (filename == NULL) {
                     strbuf_free(&buf);
@@ -272,11 +256,9 @@ static char *expand_file_references(const char *content) {
                 memcpy(filename, start, filename_len);
                 filename[filename_len] = '\0';
 
-                // Try to read the file
                 char *file_content = read_file_content(filename);
 
                 if (file_content != NULL) {
-                    // File found - expand with tags
                     if (!strbuf_append_str(&buf, "<file name=\"") ||
                         !strbuf_append_str(&buf, filename) ||
                         !strbuf_append_str(&buf, "\">\n") ||
@@ -292,7 +274,6 @@ static char *expand_file_references(const char *content) {
                     p = end;  // Skip past the @FILENAME
                     continue;
                 } else {
-                    // File not found - leave @FILENAME unchanged (silent fail)
                     free(filename);
                     if (!strbuf_append(&buf, p, 1)) {
                         strbuf_free(&buf);
@@ -302,7 +283,6 @@ static char *expand_file_references(const char *content) {
                     continue;
                 }
             } else {
-                // Not a valid file reference, copy the @ literally
                 if (!strbuf_append(&buf, p, 1)) {
                     strbuf_free(&buf);
                     return NULL;
@@ -311,7 +291,6 @@ static char *expand_file_references(const char *content) {
                 continue;
             }
         } else {
-            // Regular character, copy it
             if (!strbuf_append(&buf, p, 1)) {
                 strbuf_free(&buf);
                 return NULL;
@@ -320,7 +299,6 @@ static char *expand_file_references(const char *content) {
         }
     }
 
-    // Transfer ownership of buffer data
     char *result = buf.data;
     buf.data = NULL;
     return result;
@@ -337,20 +315,14 @@ int load_system_prompt(char **prompt_content) {
     FILE *file = fopen("AGENTS.md", "r");
 
     if (file != NULL) {
-        // Get file size
         if (fseek(file, 0, SEEK_END) == 0) {
             long file_size = ftell(file);
             if (file_size != -1 && fseek(file, 0, SEEK_SET) == 0) {
-                // Allocate buffer for file content (+1 for null terminator)
                 char *buffer = malloc((size_t)file_size + 1);
                 if (buffer != NULL) {
-                    // Read file content
                     size_t bytes_read = fread(buffer, 1, (size_t)file_size, file);
                     if (bytes_read == (size_t)file_size) {
-                        // Null-terminate the string
                         buffer[file_size] = '\0';
-
-                        // Remove trailing newlines and whitespace
                         while (file_size > 0 && (buffer[file_size - 1] == '\n' ||
                                                 buffer[file_size - 1] == '\r' ||
                                                 buffer[file_size - 1] == ' ' ||
@@ -359,7 +331,6 @@ int load_system_prompt(char **prompt_content) {
                             file_size--;
                         }
 
-                        // Expand @FILENAME references
                         char *expanded = expand_file_references(buffer);
                         if (expanded != NULL) {
                             free(buffer);
@@ -376,21 +347,17 @@ int load_system_prompt(char **prompt_content) {
         fclose(file);
     }
 
-    // Get dynamic list of loaded Python tools
     char *tools_desc = python_get_loaded_tools_description();
     size_t tools_len = tools_desc ? strlen(tools_desc) : 0;
 
-    // Get platform information
     char *platform_info = get_platform_info();
     size_t platform_len = platform_info ? strlen(platform_info) : 0;
 
-    // Calculate total size needed for combined prompt
     size_t part1_len = strlen(SYSTEM_PROMPT_PART1);
     size_t part2_len = strlen(SYSTEM_PROMPT_PART2);
     size_t user_len = user_prompt ? strlen(user_prompt) : 0;
     size_t total_len = part1_len + platform_len + tools_len + part2_len + user_len + 1;
 
-    // Allocate buffer for combined prompt
     char *combined_prompt = malloc(total_len);
     if (combined_prompt == NULL) {
         free(user_prompt);
@@ -399,7 +366,6 @@ int load_system_prompt(char **prompt_content) {
         return -1;
     }
 
-    // Build the combined prompt: PART1 + platform + tools + PART2 + user
     strcpy(combined_prompt, SYSTEM_PROMPT_PART1);
 
     if (platform_info != NULL) {

@@ -1,10 +1,3 @@
-/**
- * Tool Executor Module
- *
- * Handles the iterative tool-calling state machine for ralph.
- * Extracted from ralph.c for better modularity and testability.
- */
-
 #include "tool_executor.h"
 #include "ralph.h"
 #include <cJSON.h>
@@ -26,14 +19,6 @@
 #include <string.h>
 #include "json_escape.h"
 
-// =============================================================================
-// Approval Gate Helpers
-// =============================================================================
-
-/**
- * Check if a tool performs file write operations.
- * These tools need protected file checks before execution.
- */
 static int is_file_write_tool(const char *tool_name) {
     if (tool_name == NULL) return 0;
     return (strcmp(tool_name, "write_file") == 0 ||
@@ -41,10 +26,6 @@ static int is_file_write_tool(const char *tool_name) {
             strcmp(tool_name, "apply_delta") == 0);
 }
 
-/**
- * Check if a tool performs file operations that need verified access.
- * These tools benefit from TOCTOU-safe file access via verified file context.
- */
 static int is_file_tool(const char *tool_name) {
     if (tool_name == NULL) return 0;
     return (strcmp(tool_name, "write_file") == 0 ||
@@ -55,21 +36,15 @@ static int is_file_tool(const char *tool_name) {
 
 /**
  * Check approval gates and protected files before tool execution.
- *
- * @param session The ralph session with gate config
- * @param tool_call The tool call to check
- * @param result Output: populated with error if operation is blocked
- * @return 0 if tool can be executed, -1 if blocked (result contains error)
+ * Returns 0 to allow, -1 if blocked (result populated with error), -2 if user aborted.
  */
 static int check_tool_approval(RalphSession *session, const ToolCall *tool_call,
                                ToolResult *result) {
     if (session == NULL || tool_call == NULL || result == NULL) {
-        return 0; // No session or tool call - allow execution
+        return 0;
     }
 
-    // Check protected files first (hard block, cannot be bypassed even with gates disabled)
-    // Per spec: "The following files are **hard-blocked** from modification by any tool,
-    // regardless of gate configuration or allowlist"
+    // Protected files are hard-blocked regardless of gate config or allowlist
     if (is_file_write_tool(tool_call->name)) {
         char *path = tool_args_get_path(tool_call);
         if (path != NULL) {
@@ -84,12 +59,10 @@ static int check_tool_approval(RalphSession *session, const ToolCall *tool_call,
         }
     }
 
-    // Skip remaining gate checking if gates are disabled
     if (!session->gate_config.enabled) {
         return 0;
     }
 
-    // Check approval gate (handles rate limiting internally)
     ApprovedPath approved_path;
     init_approved_path(&approved_path);
 
@@ -99,24 +72,19 @@ static int check_tool_approval(RalphSession *session, const ToolCall *tool_call,
 
     switch (approval) {
         case APPROVAL_ALLOWED_ALWAYS: {
-            // User selected "allow always" - generate and apply pattern to session allowlist
             GeneratedPattern gen_pattern = {0};
             if (generate_allowlist_pattern(tool_call, &gen_pattern) == 0) {
                 apply_generated_pattern(&session->gate_config, tool_call->name, &gen_pattern);
                 free_generated_pattern(&gen_pattern);
             }
-            // Fall through to APPROVAL_ALLOWED handling for file context setup
         }
         /* fallthrough */
         case APPROVAL_ALLOWED:
-            // For file tools with approved paths, set up the verified file context
-            // This enables TOCTOU-safe file operations via verify_and_open_approved_path()
+            // Set up verified file context for TOCTOU-safe file operations.
+            // Tools use this context to access pre-resolved file descriptors
+            // instead of re-opening paths that could have changed since approval.
             if (approved_path.resolved_path != NULL && is_file_tool(tool_call->name)) {
-                // Set the verified file context before tool execution
-                // The context stores the approved path and enables Python tools
-                // to use verified file descriptors instead of direct open()
                 if (verified_file_context_set(&approved_path) != 0) {
-                    // Context setup failed - fall back to verification-only check
                     VerifyResult verify = verify_approved_path(&approved_path);
                     if (verify != VERIFY_OK) {
                         result->tool_call_id = tool_call->id ? strdup(tool_call->id) : NULL;
@@ -126,9 +94,8 @@ static int check_tool_approval(RalphSession *session, const ToolCall *tool_call,
                         return -1; // Blocked
                     }
                 }
-                // verified_file_context_set() deep-copies the ApprovedPath, so we still
-                // free our local copy below. The context's copy is freed via
-                // verified_file_context_clear() after tool execution.
+                // verified_file_context_set() deep-copies ApprovedPath, so our local
+                // copy is freed here; the context's copy is freed after tool execution
             }
             free_approved_path(&approved_path);
             return 0; // Proceed with execution
@@ -149,8 +116,7 @@ static int check_tool_approval(RalphSession *session, const ToolCall *tool_call,
             return -1; // Blocked
 
         case APPROVAL_NON_INTERACTIVE_DENIED:
-            // Non-interactive denials are environmental, not user denials,
-            // so we don't track them for rate limiting purposes
+            // Environmental denial (no TTY), not a user decision -- skip rate limit tracking
             result->tool_call_id = tool_call->id ? strdup(tool_call->id) : NULL;
             result->result = format_non_interactive_error(tool_call);
             result->success = 0;
@@ -158,21 +124,15 @@ static int check_tool_approval(RalphSession *session, const ToolCall *tool_call,
             return -1; // Blocked
 
         case APPROVAL_ABORTED:
-            // User pressed Ctrl+C - signal abort
             free_approved_path(&approved_path);
-            return -2; // Special return code for abort
+            return -2;
     }
 
-    // Should not reach here - all enum values are handled above.
-    // If new ApprovalResult values are added, this will catch them.
+    // Catch-all for future ApprovalResult values
     debug_printf("Warning: Unhandled approval result %d, defaulting to allow\n", approval);
     free_approved_path(&approved_path);
     return 0; // Default: allow
 }
-
-// =============================================================================
-// OpenAI Assistant Message Construction
-// =============================================================================
 
 char* construct_openai_assistant_message_with_tools(const char* content,
                                                     const ToolCall* tool_calls,
@@ -181,23 +141,19 @@ char* construct_openai_assistant_message_with_tools(const char* content,
         return content ? strdup(content) : NULL;
     }
 
-    // Estimate size needed for the JSON message with overflow protection
-    size_t base_size = 200; // Base structure
+    size_t base_size = 200;
     size_t content_len = content ? strlen(content) : 0;
 
-    // Check for potential overflow in content size calculation
     if (content_len > SIZE_MAX / 2 - 50) {
         return NULL;
     }
-    size_t content_size = content_len * 2 + 50; // Escaped content
+    size_t content_size = content_len * 2 + 50; // worst-case JSON escaping
 
-    // Check for potential overflow in tools size calculation
     if (call_count > 0 && (size_t)call_count > SIZE_MAX / 200) {
         return NULL;
     }
-    size_t tools_size = (size_t)call_count * 200; // Rough estimate per tool call
+    size_t tools_size = (size_t)call_count * 200;
 
-    // Check for overflow in total size
     if (base_size > SIZE_MAX - content_size ||
         base_size + content_size > SIZE_MAX - tools_size) {
         return NULL;
@@ -208,7 +164,6 @@ char* construct_openai_assistant_message_with_tools(const char* content,
         return NULL;
     }
 
-    // Start constructing the message
     char* escaped_content = json_escape_string(content ? content : "");
     if (escaped_content == NULL) {
         free(message);
@@ -225,7 +180,6 @@ char* construct_openai_assistant_message_with_tools(const char* content,
         return NULL;
     }
 
-    // Add tool calls
     for (int i = 0; i < call_count; i++) {
         char* escaped_args = json_escape_string(tool_calls[i].arguments ? tool_calls[i].arguments : "{}");
         if (escaped_args == NULL) {
@@ -233,10 +187,8 @@ char* construct_openai_assistant_message_with_tools(const char* content,
             return NULL;
         }
 
-        // Dynamically calculate buffer size needed for this tool call
         const char* id = tool_calls[i].id ? tool_calls[i].id : "";
         const char* name = tool_calls[i].name ? tool_calls[i].name : "";
-        // Buffer needs: prefix (2) + id + json structure (~80) + name + arguments
         size_t tool_json_size = strlen(id) + strlen(name) + strlen(escaped_args) + 100;
         char* tool_call_json = malloc(tool_json_size);
         if (tool_call_json == NULL) {
@@ -257,7 +209,6 @@ char* construct_openai_assistant_message_with_tools(const char* content,
             return NULL;
         }
 
-        // Reallocate message buffer if needed
         size_t current_len = strlen(message);
         size_t needed_len = current_len + strlen(tool_call_json) + 3; // +3 for "]}" and null
         if (needed_len > base_size + content_size + tools_size) {
@@ -278,11 +229,6 @@ char* construct_openai_assistant_message_with_tools(const char* content,
     return message;
 }
 
-// =============================================================================
-// Executed Tool Tracker
-// =============================================================================
-
-// Check if a tool call ID was already executed
 static int is_tool_already_executed(const StringArray* tracker, const char* tool_call_id) {
     for (size_t i = 0; i < tracker->count; i++) {
         if (strcmp(tracker->data[i], tool_call_id) == 0) {
@@ -292,8 +238,6 @@ static int is_tool_already_executed(const StringArray* tracker, const char* tool
     return 0;
 }
 
-// Add a tool call ID to the executed tracker
-// Returns 0 on success, -1 on failure
 static int add_executed_tool(StringArray* tracker, const char* tool_call_id) {
     if (tracker == NULL || tool_call_id == NULL) {
         return -1;
@@ -312,18 +256,12 @@ static int add_executed_tool(StringArray* tracker, const char* tool_call_id) {
     return 0;
 }
 
-// =============================================================================
-// Tool Execution Loop (Internal)
-// =============================================================================
-
-// Iterative tool calling loop - continues until no more tool calls are found
 static int tool_executor_run_loop(RalphSession* session, const char* user_message,
                                   int max_tokens, const char** headers) {
     if (session == NULL) {
         return -1;
     }
 
-    // Suppress unused parameter warnings
     (void)user_message;
     (void)max_tokens;
 
@@ -339,7 +277,6 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
         loop_count++;
         debug_printf("Tool calling loop iteration %d\n", loop_count);
 
-        // Recalculate token allocation for this iteration
         TokenConfig token_config;
         token_config_init(&token_config, session->session_data.config.context_window);
         TokenUsage token_usage;
@@ -352,7 +289,6 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
         int iteration_max_tokens = token_usage.available_response_tokens;
         debug_printf("Using %d max_tokens for tool loop iteration %d\n", iteration_max_tokens, loop_count);
 
-        // Build JSON payload with current conversation state
         char* post_data = NULL;
         if (session->session_data.config.api_type == API_TYPE_ANTHROPIC) {
             post_data = ralph_build_anthropic_json_payload_with_todos(session, "", iteration_max_tokens);
@@ -366,18 +302,15 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
             return -1;
         }
 
-        // Make API request
         struct HTTPResponse response = {0};
         debug_printf("Making API request for tool loop iteration %d\n", loop_count);
 
-        // Display subtle thinking indicator to user (skip in JSON mode)
         if (!session->session_data.config.json_output_mode) {
             fprintf(stdout, "\033[36m•\033[0m ");
             fflush(stdout);
         }
 
         if (http_post_with_headers(session->session_data.config.api_url, post_data, headers, &response) != 0) {
-            // Clear the thinking indicator before showing error
             if (!session->session_data.config.json_output_mode) {
                 fprintf(stdout, "\r\033[K");
                 fflush(stdout);
@@ -400,9 +333,7 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
             return -1;
         }
 
-        // Check for NULL response data
         if (response.data == NULL) {
-            // Clear the thinking indicator before showing error
             if (!session->session_data.config.json_output_mode) {
                 fprintf(stdout, "\r\033[K");
                 fflush(stdout);
@@ -414,7 +345,6 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
             return -1;
         }
 
-        // Parse response
         ParsedResponse parsed_response;
         int parse_result;
         if (session->session_data.config.api_type == API_TYPE_ANTHROPIC) {
@@ -424,13 +354,11 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
         }
 
         if (parse_result != 0) {
-            // Clear the thinking indicator before showing error
             if (!session->session_data.config.json_output_mode) {
                 fprintf(stdout, "\r\033[K");
                 fflush(stdout);
             }
 
-            // Check for common API key errors and provide user-friendly messages
             if (strstr(response.data, "didn't provide an API key") != NULL ||
                 strstr(response.data, "Incorrect API key") != NULL ||
                 strstr(response.data, "invalid_api_key") != NULL) {
@@ -451,31 +379,25 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
             return -1;
         }
 
-        // Clear the thinking indicator on success (skip in JSON mode)
         if (!session->session_data.config.json_output_mode) {
             fprintf(stdout, "\r\033[K");
             fflush(stdout);
         }
 
-        // NOTE: Response display is deferred until after we check for tool calls
-        // so we can close the tool box first if this is the final response
-
-        // Check for tool calls in the response FIRST
+        // Response display is deferred until we know whether this iteration has tool calls
         ToolCall *tool_calls = NULL;
         int call_count = 0;
         int tool_parse_result;
 
-        // Use model capabilities to parse tool calls
         ModelRegistry* model_registry = get_model_registry();
         tool_parse_result = parse_model_tool_calls(model_registry, session->session_data.config.model,
                                                   response.data, &tool_calls, &call_count);
 
-        // If no tool calls found in raw response, check message content (for custom format)
         const char* assistant_content = parsed_response.response_content ?
                                        parsed_response.response_content :
                                        parsed_response.thinking_content;
+        // Some models embed tool calls in message content rather than the standard location
         if (tool_parse_result != 0 || call_count == 0) {
-            // Try parsing from content as fallback (for custom format)
             if (assistant_content != NULL && parse_model_tool_calls(model_registry, session->session_data.config.model,
                                                                     assistant_content, &tool_calls, &call_count) == 0 && call_count > 0) {
                 tool_parse_result = 0;
@@ -483,32 +405,26 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
             }
         }
 
-        // Save assistant response to conversation
         if (tool_parse_result == 0 && call_count > 0) {
-            // CRITICAL: Display any text content BEFORE executing tools
-            // This ensures the agent's reasoning/text is shown to the user interleaved with tool calls
+            // Display text content before tool execution so reasoning appears interleaved
             if (parsed_response.response_content != NULL && strlen(parsed_response.response_content) > 0) {
                 if (!session->session_data.config.json_output_mode) {
-                    // Terminal mode: display text content
                     printf("%s\n", parsed_response.response_content);
                     fflush(stdout);
                 } else {
-                    // JSON mode: output text content before tool calls
                     json_output_assistant_text(parsed_response.response_content,
                                                parsed_response.prompt_tokens,
                                                parsed_response.completion_tokens);
                 }
             }
 
-            // Output tool calls in JSON mode (after text content)
             if (session->session_data.config.json_output_mode) {
                 json_output_assistant_tool_calls_buffered(tool_calls, call_count,
                                                           parsed_response.prompt_tokens,
                                                           parsed_response.completion_tokens);
             }
 
-            // For responses with tool calls, use model-specific formatting
-            // Use parsed assistant_content, not raw response.data (which contains full API response JSON)
+            // Use parsed content, not raw response.data which includes the full API envelope
             char* formatted_message = format_model_assistant_tool_message(model_registry,
                                                                          session->session_data.config.model,
                                                                          assistant_content, tool_calls, call_count);
@@ -518,8 +434,6 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
                 }
                 free(formatted_message);
             } else {
-                // Fallback: create a proper assistant message with tool calls
-                // Don't save the raw API response as it contains invalid nested structure
                 char* simple_message = malloc(256);
                 if (simple_message) {
                     snprintf(simple_message, 256, "Used tools: ");
@@ -534,20 +448,17 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
                     }
                     free(simple_message);
                 } else {
-                    // Last resort: save a generic message
                     if (append_conversation_message(&session->session_data.conversation, "assistant", "Executed tool calls") != 0) {
                         fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
                     }
                 }
             }
         } else {
-            // For responses without tool calls, save the parsed content
             if (assistant_content != NULL) {
                 if (append_conversation_message(&session->session_data.conversation, "assistant", assistant_content) != 0) {
                     fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
                 }
 
-                // Output text response in JSON mode
                 if (session->session_data.config.json_output_mode) {
                     json_output_assistant_text(assistant_content,
                                                parsed_response.prompt_tokens,
@@ -559,7 +470,6 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
         cleanup_response(&response);
         free(post_data);
 
-        // If no tool calls found, display final response and exit loop
         if (tool_parse_result != 0 || call_count == 0) {
             debug_printf("No more tool calls found - ending tool loop after %d iterations\n", loop_count);
             print_formatted_response_improved(&parsed_response);
@@ -568,10 +478,9 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
             return 0;
         }
 
-        // Clean up parsed response for iterations that continue with more tool calls
         cleanup_parsed_response(&parsed_response);
 
-        // Check if we've already executed these tool calls (prevent infinite loops)
+        // Deduplicate to prevent infinite loops when the LLM re-emits the same tool call IDs
         int new_tool_calls = 0;
         for (int i = 0; i < call_count; i++) {
             if (!is_tool_already_executed(&tracker, tool_calls[i].id)) {
@@ -589,7 +498,6 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
         debug_printf("Found %d new tool calls (out of %d total) in iteration %d - executing them\n",
                     new_tool_calls, call_count, loop_count);
 
-        // Execute only the new tool calls - use calloc to zero-initialize
         ToolResult *results = calloc(call_count, sizeof(ToolResult));
         if (results == NULL) {
             cleanup_tool_calls(tool_calls, call_count);
@@ -597,46 +505,37 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
             return -1;
         }
 
-        // Track mapping from result index to tool call index for proper tool names
         int *tool_call_indices = malloc(call_count * sizeof(int));
         if (tool_call_indices == NULL) {
             free(results);
             cleanup_tool_calls(tool_calls, call_count);
-            // Note: Group is closed by caller (tool_executor_run_workflow)
             StringArray_destroy(&tracker);
             return -1;
         }
 
-        // Force refresh of protected inode cache before batch processing
         force_protected_inode_refresh();
 
         int executed_count = 0;
         int loop_aborted = 0;
         for (int i = 0; i < call_count; i++) {
-            // Skip already executed tool calls
             if (is_tool_already_executed(&tracker, tool_calls[i].id)) {
                 debug_printf("Skipping already executed tool: %s (ID: %s)\n",
                            tool_calls[i].name, tool_calls[i].id);
                 continue;
             }
 
-            // Track this tool call as executed - skip execution if tracking fails
-            // to prevent potential duplicate execution in subsequent iterations
+            // Skip execution if tracking fails to prevent duplicate runs in later iterations
             if (add_executed_tool(&tracker, tool_calls[i].id) != 0) {
                 debug_printf("Warning: Failed to track tool call ID %s, skipping execution\n", tool_calls[i].id);
                 continue;
             }
 
-            // Store mapping from result index to tool call index
             tool_call_indices[executed_count] = i;
 
-            // Check approval gates before execution
             int approval_check = check_tool_approval(session, &tool_calls[i], &results[executed_count]);
             if (approval_check == -2) {
-                // User aborted (Ctrl+C) - stop processing remaining tools
                 loop_aborted = 1;
                 debug_printf("User aborted tool execution in loop iteration %d\n", loop_count);
-                // Populate result for the aborted tool (APPROVAL_ABORTED doesn't populate it)
                 results[executed_count].tool_call_id = tool_calls[i].id ? strdup(tool_calls[i].id) : NULL;
                 results[executed_count].result = strdup("{\"error\": \"aborted\", \"message\": \"Operation aborted by user\"}");
                 results[executed_count].success = 0;
@@ -644,10 +543,8 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
                 break;
             }
             if (approval_check == -1) {
-                // Tool was blocked (result already populated)
                 debug_printf("Tool %s blocked by approval gate in iteration %d\n",
                            tool_calls[i].name, loop_count);
-                // Output tool result in JSON mode
                 if (session->session_data.config.json_output_mode) {
                     json_output_tool_result(tool_calls[i].id, results[executed_count].result, !results[executed_count].success);
                 }
@@ -657,33 +554,27 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
 
             int tool_executed = 0;
 
-            // Check if this is an MCP tool call
             if (strncmp(tool_calls[i].name, "mcp_", 4) == 0) {
                 if (mcp_client_execute_tool(&session->mcp_client, &tool_calls[i], &results[executed_count]) == 0) {
                     tool_executed = 1;
                 }
             }
 
-            // If not an MCP tool or MCP execution failed, try standard tool execution
             if (!tool_executed && execute_tool_call(&session->tools, &tool_calls[i], &results[executed_count]) != 0) {
                 fprintf(stderr, "Warning: Failed to execute tool call %s in iteration %d\n",
                        tool_calls[i].name, loop_count);
-                // Attempt to set error information - strdup may fail in low memory
                 results[executed_count].tool_call_id = tool_calls[i].id ? strdup(tool_calls[i].id) : NULL;
                 results[executed_count].result = strdup("Tool execution failed");
                 results[executed_count].success = 0;
-                // Note: If strdup fails, fields will be NULL. append_tool_message() returns -1
-                // for NULL params and logs a warning, cleanup_tool_results() handles NULL safely
+                // NULL from strdup is handled gracefully downstream
             } else {
                 debug_printf("Executed tool: %s (ID: %s) in iteration %d\n",
                            tool_calls[i].name, tool_calls[i].id, loop_count);
             }
 
-            // Clear verified file context after tool execution completes
-            // This ensures the context doesn't leak to subsequent tool calls
+            // Clear per-tool file context to prevent leaking to subsequent calls
             verified_file_context_clear();
 
-            // Output tool result in JSON mode
             if (session->session_data.config.json_output_mode) {
                 json_output_tool_result(tool_calls[i].id, results[executed_count].result, !results[executed_count].success);
             }
@@ -691,9 +582,7 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
             executed_count++;
         }
 
-        // Handle abort case - exit the entire tool loop
         if (loop_aborted) {
-            // Still add results for tools that were processed before abort
             for (int i = 0; i < executed_count; i++) {
                 int tool_call_index = tool_call_indices[i];
                 const char* tool_name = tool_calls[tool_call_index].name;
@@ -706,13 +595,9 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
             cleanup_tool_results(results, executed_count);
             cleanup_tool_calls(tool_calls, call_count);
             StringArray_destroy(&tracker);
-            return -1; // Signal abort
+            return -1;
         }
 
-        // Note: Tool execution group is NOT ended here - it spans the entire agentic loop
-        // and will be closed when exiting the loop
-
-        // Add tool result messages to conversation (only for executed tools)
         for (int i = 0; i < executed_count; i++) {
             int tool_call_index = tool_call_indices[i];
             const char* tool_name = tool_calls[tool_call_index].name;
@@ -726,14 +611,8 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
 
         cleanup_tool_results(results, executed_count);
         cleanup_tool_calls(tool_calls, call_count);
-
-        // Continue the loop to check for more tool calls in the next response
     }
 }
-
-// =============================================================================
-// Public Tool Execution Workflow
-// =============================================================================
 
 int tool_executor_run_workflow(RalphSession* session, ToolCall* tool_calls, int call_count,
                                const char* user_message, int max_tokens, const char** headers) {
@@ -743,32 +622,24 @@ int tool_executor_run_workflow(RalphSession* session, ToolCall* tool_calls, int 
 
     debug_printf("Executing %d tool call(s)...\n", call_count);
 
-    // Note: User message is already saved by caller
-    (void)user_message; // Acknowledge parameter usage
+    (void)user_message; // Saved by caller; passed through for the follow-up loop
 
-    // Execute tool calls - use calloc to zero-initialize
     ToolResult *results = calloc(call_count, sizeof(ToolResult));
     if (results == NULL) {
         return -1;
     }
 
-    // Force refresh of protected inode cache before batch processing
     force_protected_inode_refresh();
 
     int aborted = 0;
     for (int i = 0; i < call_count; i++) {
-        // Check approval gates before execution
         int approval_check = check_tool_approval(session, &tool_calls[i], &results[i]);
         if (approval_check == -2) {
-            // User aborted (Ctrl+C) - stop processing remaining tools
             aborted = 1;
             debug_printf("User aborted tool execution at tool %d of %d\n", i + 1, call_count);
-            // Populate result for current tool that was being approved (APPROVAL_ABORTED
-            // doesn't populate the result structure before returning)
             results[i].tool_call_id = tool_calls[i].id ? strdup(tool_calls[i].id) : NULL;
             results[i].result = strdup("{\"error\": \"aborted\", \"message\": \"Operation aborted by user\"}");
             results[i].success = 0;
-            // Populate abort-error results for remaining unprocessed tools
             for (int j = i + 1; j < call_count; j++) {
                 results[j].tool_call_id = tool_calls[j].id ? strdup(tool_calls[j].id) : NULL;
                 results[j].result = strdup("{\"error\": \"aborted\", \"message\": \"Operation aborted by user\"}");
@@ -777,9 +648,7 @@ int tool_executor_run_workflow(RalphSession* session, ToolCall* tool_calls, int 
             break;
         }
         if (approval_check == -1) {
-            // Tool was blocked (result already populated)
             debug_printf("Tool %s blocked by approval gate\n", tool_calls[i].name);
-            // Output tool result in JSON mode
             if (session->session_data.config.json_output_mode) {
                 json_output_tool_result(tool_calls[i].id, results[i].result, !results[i].success);
             }
@@ -788,55 +657,44 @@ int tool_executor_run_workflow(RalphSession* session, ToolCall* tool_calls, int 
 
         int tool_executed = 0;
 
-        // Check if this is an MCP tool call
         if (strncmp(tool_calls[i].name, "mcp_", 4) == 0) {
             if (mcp_client_execute_tool(&session->mcp_client, &tool_calls[i], &results[i]) == 0) {
                 tool_executed = 1;
             }
         }
 
-        // If not an MCP tool or MCP execution failed, try standard tool execution
         if (!tool_executed && execute_tool_call(&session->tools, &tool_calls[i], &results[i]) != 0) {
             fprintf(stderr, "Warning: Failed to execute tool call %s\n", tool_calls[i].name);
-            // Attempt to set error information - strdup may fail in low memory
             results[i].tool_call_id = tool_calls[i].id ? strdup(tool_calls[i].id) : NULL;
             results[i].result = strdup("Tool execution failed");
             results[i].success = 0;
-            // Note: If strdup fails, fields will be NULL. append_tool_message() returns -1
-            // for NULL params and logs a warning, cleanup_tool_results() handles NULL safely
         } else {
             debug_printf("Executed tool: %s (ID: %s)\n", tool_calls[i].name, tool_calls[i].id);
         }
 
-        // Clear verified file context after tool execution completes
-        // This ensures the context doesn't leak to subsequent tool calls
+        // Clear per-tool file context to prevent leaking to subsequent calls
         verified_file_context_clear();
 
-        // Output tool result in JSON mode
         if (session->session_data.config.json_output_mode) {
             json_output_tool_result(tool_calls[i].id, results[i].result, !results[i].success);
         }
     }
 
-    // Add tool result messages to conversation
     for (int i = 0; i < call_count; i++) {
         if (append_tool_message(&session->session_data.conversation, results[i].result, tool_calls[i].id, tool_calls[i].name) != 0) {
             fprintf(stderr, "Warning: Failed to save tool result to conversation history\n");
         }
     }
 
-    // If user aborted, don't continue with follow-up API calls
     if (aborted) {
         cleanup_tool_results(results, call_count);
-        return -2; // Signal abort to caller
+        return -2;
     }
 
-    // CRITICAL FIX: Now that initial tools are executed and saved to conversation,
-    // check if we need to continue with follow-up API calls for additional tool calls
+    // Continue the agentic loop: the LLM may request additional tool calls
     int result = tool_executor_run_loop(session, user_message, max_tokens, headers);
 
-    // Always return success if tools executed, even if follow-up fails
-    // This maintains backward compatibility with existing tests
+    // Treat follow-up loop failure as non-fatal since initial tools already executed
     if (result != 0) {
         debug_printf("Follow-up tool loop failed, but initial tools executed successfully\n");
         result = 0;

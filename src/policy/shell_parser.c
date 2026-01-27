@@ -1,22 +1,8 @@
-/**
- * Cross-Platform Shell Command Parser Implementation
- *
- * Parses shell commands to detect dangerous patterns, command chaining,
- * and to enable secure allowlist matching.
- *
- * This implementation focuses on POSIX shell parsing. Windows cmd.exe and
- * PowerShell parsing are implemented in separate files.
- */
-
 #include "shell_parser.h"
 
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
-
-/* ============================================================================
- * Internal Constants
- * ========================================================================== */
 
 /* Initial capacity for token array */
 #define INITIAL_TOKEN_CAPACITY 16
@@ -24,14 +10,6 @@
 /* Maximum command length we'll process */
 #define MAX_COMMAND_LENGTH 65536
 
-/* ============================================================================
- * Dangerous Pattern Definitions
- * ========================================================================== */
-
-/**
- * Dangerous command patterns that always require approval.
- * These are checked against the raw command string before parsing.
- */
 static const char *DANGEROUS_PATTERNS[] = {
     "rm -rf",
     "rm -fr",
@@ -43,10 +21,6 @@ static const char *DANGEROUS_PATTERNS[] = {
     NULL
 };
 
-/**
- * Patterns that indicate remote code execution attempts.
- * These combine download + execution.
- */
 static const char *RCE_DOWNLOAD_CMDS[] = {
     "curl",
     "wget",
@@ -63,9 +37,6 @@ static const char *RCE_SHELL_CMDS[] = {
     NULL
 };
 
-/**
- * Patterns for disk write attacks.
- */
 static const char *DISK_WRITE_PATTERNS[] = {
     "of=/dev/sd",
     "of=/dev/hd",
@@ -76,24 +47,17 @@ static const char *DISK_WRITE_PATTERNS[] = {
     NULL
 };
 
-/* ============================================================================
- * Shell Type Detection
- * ========================================================================== */
-
 ShellType detect_shell_type(void) {
 #ifdef _WIN32
-    /* Windows: Check environment to distinguish cmd.exe vs PowerShell */
     const char *psmodule = getenv("PSModulePath");
     const char *comspec = getenv("COMSPEC");
 
-    /* PSModulePath is set when running in PowerShell */
+    /* PSModulePath is only set inside a PowerShell session */
     if (psmodule && strlen(psmodule) > 0) {
         return SHELL_TYPE_POWERSHELL;
     }
 
-    /* Check COMSPEC for cmd.exe */
     if (comspec) {
-        /* Case-insensitive search for cmd.exe */
         const char *p = comspec;
         while (*p) {
             if ((p[0] == 'c' || p[0] == 'C') &&
@@ -106,19 +70,15 @@ ShellType detect_shell_type(void) {
         }
     }
 
-    /* Default to cmd on Windows */
     return SHELL_TYPE_CMD;
 #else
-    /* POSIX: Check SHELL environment variable */
     const char *shell = getenv("SHELL");
     if (shell) {
-        /* Check for PowerShell Core */
         if (strstr(shell, "pwsh") || strstr(shell, "powershell")) {
             return SHELL_TYPE_POWERSHELL;
         }
     }
 
-    /* Default to POSIX on non-Windows */
     return SHELL_TYPE_POSIX;
 #endif
 }
@@ -142,7 +102,6 @@ int parse_shell_type(const char *name, ShellType *out_type) {
         return -1;
     }
 
-    /* Case-insensitive comparison */
     if (strcasecmp(name, "posix") == 0 ||
         strcasecmp(name, "bash") == 0 ||
         strcasecmp(name, "sh") == 0 ||
@@ -168,23 +127,17 @@ int parse_shell_type(const char *name, ShellType *out_type) {
     return -1;
 }
 
-/* ============================================================================
- * Dangerous Pattern Detection
- * ========================================================================== */
-
 int shell_command_is_dangerous(const char *command) {
     if (!command || !*command) {
         return 0;
     }
 
-    /* Check direct dangerous patterns */
     for (int i = 0; DANGEROUS_PATTERNS[i]; i++) {
         if (strstr(command, DANGEROUS_PATTERNS[i])) {
             return 1;
         }
     }
 
-    /* Check for remote code execution (download + pipe to shell) */
     int has_download = 0;
     for (int i = 0; RCE_DOWNLOAD_CMDS[i]; i++) {
         if (strstr(command, RCE_DOWNLOAD_CMDS[i])) {
@@ -201,14 +154,12 @@ int shell_command_is_dangerous(const char *command) {
         }
     }
 
-    /* Check for disk write attacks */
     for (int i = 0; DISK_WRITE_PATTERNS[i]; i++) {
         if (strstr(command, DISK_WRITE_PATTERNS[i])) {
             return 1;
         }
     }
 
-    /* Check for dd command with device output */
     if (strstr(command, "dd ") && strstr(command, "of=/dev/")) {
         return 1;
     }
@@ -221,7 +172,6 @@ int powershell_command_is_dangerous(const char *command) {
         return 0;
     }
 
-    /* Dangerous PowerShell cmdlets and patterns (case-insensitive) */
     static const char *PS_DANGEROUS[] = {
         "invoke-expression",
         "invoke-command",
@@ -239,7 +189,6 @@ int powershell_command_is_dangerous(const char *command) {
         NULL
     };
 
-    /* Create lowercase copy for case-insensitive search */
     size_t len = strlen(command);
     char *lower = malloc(len + 1);
     if (!lower) {
@@ -262,13 +211,6 @@ int powershell_command_is_dangerous(const char *command) {
     return is_dangerous;
 }
 
-/* ============================================================================
- * POSIX Shell Parsing Helpers
- * ========================================================================== */
-
-/**
- * Token accumulator for building parsed results.
- */
 typedef struct {
     char **tokens;
     int count;
@@ -320,23 +262,16 @@ static void token_list_free(TokenList *list) {
     list->capacity = 0;
 }
 
-/**
- * Check if a character is a POSIX shell metacharacter.
- */
 static int is_posix_metachar(char c) {
     return c == ';' || c == '|' || c == '&' || c == '(' || c == ')' ||
            c == '$' || c == '`' || c == '>' || c == '<';
 }
 
-/**
- * Parse POSIX shell command into tokens and detect metacharacters.
- */
 int parse_posix_shell(const char *command, ParsedShellCommand *result) {
     if (!command || !result) {
         return -1;
     }
 
-    /* Initialize result */
     result->tokens = NULL;
     result->token_count = 0;
     result->has_chain = 0;
@@ -351,7 +286,6 @@ int parse_posix_shell(const char *command, ParsedShellCommand *result) {
         return -1;
     }
 
-    /* Current token being built */
     char *token_buf = malloc(strlen(command) + 1);
     if (!token_buf) {
         token_list_free(&tokens);
@@ -404,7 +338,6 @@ int parse_posix_shell(const char *command, ParsedShellCommand *result) {
             continue;
         }
 
-        /* Handle quotes */
         if (c == '\'' && !in_double_quote) {
             in_single_quote = !in_single_quote;
             had_quotes = 1;  /* Mark that this token had quotes */
@@ -419,16 +352,13 @@ int parse_posix_shell(const char *command, ParsedShellCommand *result) {
             continue;
         }
 
-        /* Inside quotes, just accumulate characters */
         if (in_single_quote || in_double_quote) {
             token_buf[token_len++] = c;
             p++;
             continue;
         }
 
-        /* Outside quotes - check for whitespace */
         if (isspace((unsigned char)c)) {
-            /* End current token if any (or if we had empty quotes) */
             if (token_len > 0 || had_quotes) {
                 if (token_list_add(&tokens, token_buf, token_len) != 0) {
                     free(token_buf);
@@ -442,20 +372,16 @@ int parse_posix_shell(const char *command, ParsedShellCommand *result) {
             continue;
         }
 
-        /* Check for metacharacters */
         if (is_posix_metachar(c)) {
-            /* Detect specific patterns */
             if (c == ';') {
                 result->has_chain = 1;
             } else if (c == '|') {
-                /* Check for || */
                 if (*(p + 1) == '|') {
                     result->has_chain = 1;
                 } else {
                     result->has_pipe = 1;
                 }
             } else if (c == '&') {
-                /* Check for && */
                 if (*(p + 1) == '&') {
                     result->has_chain = 1;
                 }
@@ -464,7 +390,6 @@ int parse_posix_shell(const char *command, ParsedShellCommand *result) {
                     result->has_chain = 1;
                 }
             } else if (c == '$') {
-                /* Check for $( */
                 if (*(p + 1) == '(') {
                     result->has_subshell = 1;
                 }
@@ -476,7 +401,6 @@ int parse_posix_shell(const char *command, ParsedShellCommand *result) {
                 result->has_redirect = 1;
             }
 
-            /* End current token if any */
             if (token_len > 0) {
                 if (token_list_add(&tokens, token_buf, token_len) != 0) {
                     free(token_buf);
@@ -486,9 +410,7 @@ int parse_posix_shell(const char *command, ParsedShellCommand *result) {
                 token_len = 0;
             }
 
-            /* Skip past the metacharacter(s) */
             p++;
-            /* Skip second character of two-char operators */
             if ((c == '&' && *p == '&') || (c == '|' && *p == '|') ||
                 (c == '>' && *p == '>') || (c == '<' && *p == '<')) {
                 p++;
@@ -496,17 +418,15 @@ int parse_posix_shell(const char *command, ParsedShellCommand *result) {
             continue;
         }
 
-        /* Regular character - accumulate into token */
         token_buf[token_len++] = c;
         p++;
     }
 
-    /* Handle unbalanced quotes - mark as having chain to prevent matching */
+    /* Unbalanced quotes make matching unsafe */
     if (in_single_quote || in_double_quote) {
         result->has_chain = 1;
     }
 
-    /* Add final token if any (or if we had empty quotes at the end) */
     if (token_len > 0 || had_quotes) {
         if (token_list_add(&tokens, token_buf, token_len) != 0) {
             free(token_buf);
@@ -517,33 +437,10 @@ int parse_posix_shell(const char *command, ParsedShellCommand *result) {
 
     free(token_buf);
 
-    /* Transfer tokens to result */
     result->tokens = tokens.tokens;
     result->token_count = tokens.count;
-
-    /* Don't free the token list itself - we've transferred ownership */
     return 0;
 }
-
-/* ============================================================================
- * Windows cmd.exe Parsing
- *
- * The full implementation is in shell_parser_cmd.c
- * ========================================================================== */
-
-/* parse_cmd_shell() is implemented in shell_parser_cmd.c */
-
-/* ============================================================================
- * PowerShell Parsing
- *
- * The full implementation is in shell_parser_ps.c
- * ========================================================================== */
-
-/* parse_powershell() is implemented in shell_parser_ps.c */
-
-/* ============================================================================
- * Unified Parser Interface
- * ========================================================================== */
 
 ParsedShellCommand *parse_shell_command(const char *command) {
     ShellType type = detect_shell_type();
@@ -555,7 +452,6 @@ ParsedShellCommand *parse_shell_command_for_type(const char *command, ShellType 
         return NULL;
     }
 
-    /* Reject overly long commands */
     if (strlen(command) > MAX_COMMAND_LENGTH) {
         return NULL;
     }
@@ -605,10 +501,6 @@ void free_parsed_shell_command(ParsedShellCommand *cmd) {
     free(cmd);
 }
 
-/* ============================================================================
- * Allowlist Matching
- * ========================================================================== */
-
 int shell_command_matches_prefix(const ParsedShellCommand *parsed,
                                  const char * const *prefix,
                                  int prefix_len) {
@@ -616,23 +508,19 @@ int shell_command_matches_prefix(const ParsedShellCommand *parsed,
         return 0;
     }
 
-    /* Commands with chains/pipes/subshells/redirects never match */
     if (parsed->has_chain || parsed->has_pipe ||
         parsed->has_subshell || parsed->has_redirect) {
         return 0;
     }
 
-    /* Dangerous commands never match */
     if (parsed->is_dangerous) {
         return 0;
     }
 
-    /* Must have at least as many tokens as prefix */
     if (parsed->token_count < prefix_len) {
         return 0;
     }
 
-    /* Check each prefix token matches */
     for (int i = 0; i < prefix_len; i++) {
         if (strcmp(parsed->tokens[i], prefix[i]) != 0) {
             return 0;
@@ -648,7 +536,6 @@ int commands_are_equivalent(const char *allowed_cmd,
         return 0;
     }
 
-    /* Exact match always works */
     if (strcmp(allowed_cmd, actual_cmd) == 0) {
         return 1;
     }
@@ -693,16 +580,11 @@ int commands_are_equivalent(const char *allowed_cmd,
     return 0;
 }
 
-/* ============================================================================
- * Utility Functions
- * ========================================================================== */
-
 int shell_command_is_safe_for_matching(const ParsedShellCommand *parsed) {
     if (!parsed) {
         return 0;
     }
 
-    /* Any of these flags prevents safe matching */
     if (parsed->has_chain || parsed->has_pipe ||
         parsed->has_subshell || parsed->has_redirect ||
         parsed->is_dangerous) {
@@ -729,7 +611,6 @@ ParsedShellCommand *copy_parsed_shell_command(const ParsedShellCommand *cmd) {
         return NULL;
     }
 
-    /* Copy scalar fields */
     copy->token_count = cmd->token_count;
     copy->has_chain = cmd->has_chain;
     copy->has_pipe = cmd->has_pipe;
@@ -738,7 +619,6 @@ ParsedShellCommand *copy_parsed_shell_command(const ParsedShellCommand *cmd) {
     copy->is_dangerous = cmd->is_dangerous;
     copy->shell_type = cmd->shell_type;
 
-    /* Copy tokens if any */
     if (cmd->token_count > 0) {
         copy->tokens = malloc((size_t)cmd->token_count * sizeof(char *));
         if (!copy->tokens) {
@@ -749,7 +629,6 @@ ParsedShellCommand *copy_parsed_shell_command(const ParsedShellCommand *cmd) {
         for (int i = 0; i < cmd->token_count; i++) {
             copy->tokens[i] = strdup(cmd->tokens[i]);
             if (!copy->tokens[i]) {
-                /* Clean up on failure */
                 for (int j = 0; j < i; j++) {
                     free(copy->tokens[j]);
                 }

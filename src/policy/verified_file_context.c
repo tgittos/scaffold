@@ -1,10 +1,3 @@
-/**
- * Verified File Context Implementation
- *
- * Uses thread-local storage to maintain the current approved path context
- * for file tool execution. This enables TOCTOU-safe file operations.
- */
-
 #include "verified_file_context.h"
 #include "atomic_file.h"
 #include "path_normalize.h"
@@ -27,19 +20,15 @@ int verified_file_context_set(const ApprovedPath *approved) {
         return -1;
     }
 
-    /* Clear any existing context */
     verified_file_context_clear();
 
-    /* Allocate and copy the approved path */
     current_context = malloc(sizeof(ApprovedPath));
     if (current_context == NULL) {
         return -1;
     }
 
-    /* Initialize the copy */
     init_approved_path(current_context);
 
-    /* Deep copy all fields */
     if (approved->user_path != NULL) {
         current_context->user_path = strdup(approved->user_path);
         if (current_context->user_path == NULL) {
@@ -61,7 +50,6 @@ int verified_file_context_set(const ApprovedPath *approved) {
         }
     }
 
-    /* Copy non-pointer fields */
     current_context->inode = approved->inode;
     current_context->device = approved->device;
     current_context->parent_inode = approved->parent_inode;
@@ -99,9 +87,6 @@ int verified_file_context_is_set(void) {
     return current_context != NULL;
 }
 
-/**
- * Convert VerifiedFileMode to open() flags.
- */
 static int mode_to_flags(VerifiedFileMode mode) {
     switch (mode) {
         case VERIFIED_MODE_READ:
@@ -146,13 +131,10 @@ VerifyResult verified_file_context_get_fd(const char *requested_path,
         return VERIFY_OK;
     }
 
-    /* Check that the requested path matches the approved path */
     if (!verified_file_context_path_matches(requested_path)) {
-        /* Path doesn't match - this could be a programming error or attack */
         return VERIFY_ERR_INODE_MISMATCH;
     }
 
-    /* Use atomic file verification to get the fd */
     int flags = mode_to_flags(mode);
     VerifyResult result = verify_and_open_approved_path(current_context, flags, out_fd);
 
@@ -171,19 +153,16 @@ int verified_file_context_path_matches(const char *requested_path) {
         return 0;
     }
 
-    /* First try exact match on user_path */
     if (current_context->user_path != NULL &&
         strcmp(requested_path, current_context->user_path) == 0) {
         return 1;
     }
 
-    /* Try exact match on resolved_path */
     if (current_context->resolved_path != NULL &&
         strcmp(requested_path, current_context->resolved_path) == 0) {
         return 1;
     }
 
-    /* Resolve the requested path and compare */
     char *resolved_requested = atomic_file_resolve_path(requested_path, 0);
     if (resolved_requested == NULL) {
         return 0;

@@ -29,10 +29,6 @@
  * - protected_files.h: Protected file detection for shell commands
  */
 
-/* ============================================================================
- * Shell Type Detection
- * ========================================================================== */
-
 /**
  * Shell types for cross-platform parsing.
  * Each shell type has different metacharacters and parsing rules.
@@ -43,10 +39,6 @@ typedef enum {
     SHELL_TYPE_POWERSHELL,  /* PowerShell (Windows or Core) - uses ; && || | $() {} */
     SHELL_TYPE_UNKNOWN      /* Unable to detect, treated as POSIX */
 } ShellType;
-
-/* ============================================================================
- * Parsed Command Structure
- * ========================================================================== */
 
 /**
  * Result of parsing a shell command.
@@ -72,10 +64,6 @@ typedef struct {
     /* Shell context */
     ShellType shell_type;   /* Shell used for parsing */
 } ParsedShellCommand;
-
-/* ============================================================================
- * Shell Detection
- * ========================================================================== */
 
 /**
  * Detect the shell type from the environment.
@@ -104,10 +92,6 @@ const char *shell_type_name(ShellType type);
  * @return 0 on success, -1 if name not recognized
  */
 int parse_shell_type(const char *name, ShellType *out_type);
-
-/* ============================================================================
- * Command Parsing - Unified Interface
- * ========================================================================== */
 
 /**
  * Parse a shell command using the detected shell type.
@@ -138,10 +122,6 @@ ParsedShellCommand *parse_shell_command_for_type(const char *command,
  * @param cmd Command to free (NULL safe)
  */
 void free_parsed_shell_command(ParsedShellCommand *cmd);
-
-/* ============================================================================
- * Dangerous Pattern Detection
- * ========================================================================== */
 
 /**
  * Check if a command contains known dangerous patterns.
@@ -177,10 +157,6 @@ int shell_command_is_dangerous(const char *command);
  * @return 1 if dangerous cmdlet detected, 0 otherwise
  */
 int powershell_command_is_dangerous(const char *command);
-
-/* ============================================================================
- * Allowlist Matching Support
- * ========================================================================== */
 
 /**
  * Check if a parsed command matches an allowlist prefix.
@@ -220,10 +196,6 @@ int shell_command_matches_prefix(const ParsedShellCommand *parsed,
 int commands_are_equivalent(const char *allowed_cmd,
                             const char *actual_cmd);
 
-/* ============================================================================
- * POSIX Shell Parsing (implemented in shell_parser.c)
- * ========================================================================== */
-
 /**
  * Parse a POSIX shell command.
  *
@@ -238,10 +210,6 @@ int commands_are_equivalent(const char *allowed_cmd,
  * @return 0 on success, -1 on error
  */
 int parse_posix_shell(const char *command, ParsedShellCommand *result);
-
-/* ============================================================================
- * cmd.exe Parsing (implemented in shell_parser_cmd.c)
- * ========================================================================== */
 
 /**
  * Parse a Windows cmd.exe command.
@@ -259,10 +227,6 @@ int parse_posix_shell(const char *command, ParsedShellCommand *result);
  */
 int parse_cmd_shell(const char *command, ParsedShellCommand *result);
 
-/* ============================================================================
- * PowerShell Parsing (implemented in shell_parser_ps.c)
- * ========================================================================== */
-
 /**
  * Parse a PowerShell command.
  *
@@ -279,10 +243,6 @@ int parse_cmd_shell(const char *command, ParsedShellCommand *result);
  * @return 0 on success, -1 on error
  */
 int parse_powershell(const char *command, ParsedShellCommand *result);
-
-/* ============================================================================
- * Utility Functions
- * ========================================================================== */
 
 /**
  * Check if a command can be safely matched against allowlist.

@@ -21,9 +21,6 @@ typedef struct {
 
 PTRARRAY_DECLARE(DocumentArray, document_t)
 
-/**
- * Single search result combining document with its distance score
- */
 typedef struct {
     document_t* document;
     float distance;

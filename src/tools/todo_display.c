@@ -7,7 +7,6 @@
 #define ANSI_GRAY  "\033[90m"
 #define ANSI_DIM   "\033[2m"
 
-// Global display configuration
 static TodoDisplayConfig g_display_config = {
     .enabled = true,
     .show_completed = false,
@@ -15,7 +14,6 @@ static TodoDisplayConfig g_display_config = {
     .max_display_items = 5
 };
 
-// Status symbols for visual representation
 static const char* get_status_symbol(TodoStatus status) {
     switch (status) {
         case TODO_STATUS_PENDING:     return "⏳";
@@ -25,7 +23,6 @@ static const char* get_status_symbol(TodoStatus status) {
     }
 }
 
-// Priority colors (using existing ANSI color constants)
 static const char* get_priority_color(TodoPriority priority) {
     switch (priority) {
         case TODO_PRIORITY_HIGH:   return "\033[91m"; // Bright red
@@ -47,7 +44,6 @@ void todo_display_print_compact(const TodoList* todo_list) {
         return;
     }
     
-    // Count active todos (pending + in_progress)
     int active_count = 0;
     int completed_count = 0;
     
@@ -63,14 +59,12 @@ void todo_display_print_compact(const TodoList* todo_list) {
         return; // Nothing to show
     }
     
-    // Print header with summary
     fprintf(stderr, ANSI_DIM ANSI_GRAY "[Tasks: %d active", active_count);
     if (completed_count > 0) {
         fprintf(stderr, ", %d completed", completed_count);
     }
     fprintf(stderr, "]\n" ANSI_RESET);
     
-    // Display todos up to max_display_items
     int displayed = 0;
     int max_items = (g_display_config.max_display_items > 0) ? 
                     g_display_config.max_display_items : (int)todo_list->count;
@@ -78,14 +72,12 @@ void todo_display_print_compact(const TodoList* todo_list) {
     for (size_t i = 0; i < todo_list->count && displayed < max_items; i++) {
         const Todo* todo = &todo_list->data[i];
         
-        // Skip completed todos unless configured to show them
         if (todo->status == TODO_STATUS_COMPLETED && !g_display_config.show_completed) {
             continue;
         }
         
-        // Skip pending todos if we have too many items and prioritize in_progress
+        // Prioritize in_progress over pending when space is limited
         if (displayed >= max_items - 1 && todo->status == TODO_STATUS_PENDING) {
-            // Check if there are any in_progress items still to show
             bool has_in_progress = false;
             for (size_t j = i + 1; j < todo_list->count; j++) {
                 if (todo_list->data[j].status == TODO_STATUS_IN_PROGRESS) {
@@ -99,7 +91,6 @@ void todo_display_print_compact(const TodoList* todo_list) {
         const char* status_symbol = get_status_symbol(todo->status);
         const char* priority_color = get_priority_color(todo->priority);
         
-        // Truncate long content for compact display
         char truncated_content[80];
         strncpy(truncated_content, todo->content, sizeof(truncated_content) - 1);
         truncated_content[sizeof(truncated_content) - 1] = '\0';
@@ -114,7 +105,6 @@ void todo_display_print_compact(const TodoList* todo_list) {
         displayed++;
     }
     
-    // Show "and X more..." if there are additional items
     int remaining = (int)todo_list->count - displayed;
     if (remaining > 0) {
         fprintf(stderr, ANSI_DIM ANSI_GRAY "  ... and %d more\n" ANSI_RESET, remaining);

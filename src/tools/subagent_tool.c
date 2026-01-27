@@ -61,7 +61,6 @@ static int init_subagent_approval_channel(void) {
         return -1;
     }
 
-    /* Parse request FD with proper error checking */
     char *endptr;
     errno = 0;
     long request_fd_long = strtol(request_fd_str, &endptr, 10);
@@ -69,7 +68,6 @@ static int init_subagent_approval_channel(void) {
         return -1;
     }
 
-    /* Parse response FD with proper error checking */
     errno = 0;
     long response_fd_long = strtol(response_fd_str, &endptr, 10);
     if (errno != 0 || *endptr != '\0' || response_fd_long <= 2 || response_fd_long > INT_MAX) {
@@ -88,10 +86,7 @@ static int init_subagent_approval_channel(void) {
     return 0;
 }
 
-/**
- * Clean up the subagent approval channel.
- * Called during subagent process cleanup.
- */
+/** Clean up the subagent approval channel. */
 static void cleanup_subagent_approval_channel(void) {
     if (g_subagent_approval_channel != NULL) {
         if (g_subagent_approval_channel->request_fd >= 0) {
@@ -105,10 +100,7 @@ static void cleanup_subagent_approval_channel(void) {
     }
 }
 
-/**
- * Get the approval channel for this subagent process.
- * Returns NULL if not running as a subagent.
- */
+/** Returns NULL if not running as a subagent process. */
 ApprovalChannel* subagent_get_approval_channel(void) {
     return g_subagent_approval_channel;
 }
@@ -147,9 +139,7 @@ void generate_subagent_id(char *id_out) {
     id_out[SUBAGENT_ID_LENGTH] = '\0';
 }
 
-/**
- * Convert subagent status enum to human-readable string.
- */
+/** Convert subagent status enum to string. */
 const char* subagent_status_to_string(SubagentStatus status) {
     switch (status) {
         case SUBAGENT_STATUS_PENDING:
@@ -180,7 +170,6 @@ void cleanup_subagent(Subagent *sub) {
         return;
     }
 
-    // Close stdout pipe ends if still open (using > 0, original behavior)
     if (sub->stdout_pipe[0] > 0) {
         close(sub->stdout_pipe[0]);
         sub->stdout_pipe[0] = -1;
@@ -190,8 +179,7 @@ void cleanup_subagent(Subagent *sub) {
         sub->stdout_pipe[1] = -1;
     }
 
-    // Close approval channel pipe ends if still open
-    // Use > 2 to skip stdin/stdout/stderr (0,1,2) which could be set by memset(0)
+    // > 2 avoids closing stdin/stdout/stderr when struct was zero-initialized
     if (sub->approval_channel.request_fd > 2) {
         close(sub->approval_channel.request_fd);
         sub->approval_channel.request_fd = -1;
@@ -202,7 +190,6 @@ void cleanup_subagent(Subagent *sub) {
     }
     sub->approval_channel.subagent_pid = 0;
 
-    // Free allocated strings
     if (sub->task) {
         free(sub->task);
         sub->task = NULL;
@@ -229,16 +216,12 @@ void cleanup_subagent(Subagent *sub) {
     sub->status = SUBAGENT_STATUS_PENDING;
 }
 
-/**
- * Initialize the subagent manager with default configuration.
- * Reads max_subagents and subagent_timeout from the global config.
- */
+/** Initialize using max_subagents and subagent_timeout from global config. */
 int subagent_manager_init(SubagentManager *manager) {
     if (manager == NULL) {
         return -1;
     }
 
-    // Get configuration values
     ralph_config_t *config = config_get();
     int max_subagents = SUBAGENT_MAX_DEFAULT;
     int timeout_seconds = SUBAGENT_TIMEOUT_DEFAULT;
@@ -251,15 +234,12 @@ int subagent_manager_init(SubagentManager *manager) {
     return subagent_manager_init_with_config(manager, max_subagents, timeout_seconds);
 }
 
-/**
- * Initialize the subagent manager with specific configuration values.
- */
+/** Initialize with explicit max_subagents and timeout. Values are clamped to safe ranges. */
 int subagent_manager_init_with_config(SubagentManager *manager, int max_subagents, int timeout_seconds) {
     if (manager == NULL) {
         return -1;
     }
 
-    // Validate and clamp configuration values
     if (max_subagents < 1) {
         max_subagents = SUBAGENT_MAX_DEFAULT;
     }
@@ -292,37 +272,29 @@ void subagent_manager_cleanup(SubagentManager *manager) {
         return;
     }
 
-    // Kill and clean up all subagents
     for (size_t i = 0; i < manager->subagents.count; i++) {
         Subagent *sub = &manager->subagents.data[i];
 
-        // Kill running processes
         if (sub->status == SUBAGENT_STATUS_RUNNING && sub->pid > 0) {
-            // Send SIGTERM first for graceful shutdown
+            // SIGTERM first for graceful shutdown, then SIGKILL if still alive
             kill(sub->pid, SIGTERM);
 
-            // Give it a brief moment to exit
             int status;
             pid_t result = waitpid(sub->pid, &status, WNOHANG);
             if (result == 0) {
-                // Still running, use SIGKILL
                 usleep(SUBAGENT_GRACE_PERIOD_USEC);
                 kill(sub->pid, SIGKILL);
                 waitpid(sub->pid, &status, 0);
             }
         }
 
-        // Clean up subagent resources
         cleanup_subagent(sub);
     }
 
-    // Free the subagents array
     SubagentArray_destroy(&manager->subagents);
 }
 
-/**
- * Find a subagent by its ID.
- */
+/** Find a subagent by its ID, or return NULL. */
 Subagent* subagent_find_by_id(SubagentManager *manager, const char *subagent_id) {
     if (manager == NULL || subagent_id == NULL) {
         return NULL;
@@ -346,7 +318,6 @@ int read_subagent_output_nonblocking(Subagent *sub) {
         return -1;
     }
 
-    // Set pipe to non-blocking
     int flags = fcntl(sub->stdout_pipe[0], F_GETFL, 0);
     if (flags == -1) {
         return -1;
@@ -360,24 +331,19 @@ int read_subagent_output_nonblocking(Subagent *sub) {
         ssize_t bytes_read = read(sub->stdout_pipe[0], buffer, sizeof(buffer) - 1);
         if (bytes_read <= 0) {
             if (bytes_read == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-                // No more data available
                 break;
             }
             if (bytes_read == 0) {
-                // EOF
                 break;
             }
-            // Error
             return -1;
         }
 
         buffer[bytes_read] = '\0';
         total_read += (int)bytes_read;
 
-        // Append to output buffer (with limit check)
         size_t new_len = sub->output_len + (size_t)bytes_read;
         if (new_len > SUBAGENT_MAX_OUTPUT_LENGTH) {
-            // Truncate to max length
             bytes_read = (ssize_t)(SUBAGENT_MAX_OUTPUT_LENGTH - sub->output_len);
             if (bytes_read <= 0) {
                 break;
@@ -395,7 +361,6 @@ int read_subagent_output_nonblocking(Subagent *sub) {
         sub->output[sub->output_len] = '\0';
     }
 
-    // Restore blocking mode
     fcntl(sub->stdout_pipe[0], F_SETFL, flags);
 
     return total_read;
@@ -416,16 +381,13 @@ int read_subagent_output(Subagent *sub) {
         ssize_t bytes_read = read(sub->stdout_pipe[0], buffer, sizeof(buffer) - 1);
         if (bytes_read <= 0) {
             if (bytes_read == 0) {
-                // EOF - done reading
                 break;
             }
-            // Error
             return -1;
         }
 
         buffer[bytes_read] = '\0';
 
-        // Check output limit
         size_t new_len = sub->output_len + (size_t)bytes_read;
         if (new_len > SUBAGENT_MAX_OUTPUT_LENGTH) {
             bytes_read = (ssize_t)(SUBAGENT_MAX_OUTPUT_LENGTH - sub->output_len);
@@ -435,7 +397,6 @@ int read_subagent_output(Subagent *sub) {
             new_len = SUBAGENT_MAX_OUTPUT_LENGTH;
         }
 
-        // Append to output buffer
         char *new_output = realloc(sub->output, new_len + 1);
         if (new_output == NULL) {
             return -1;
@@ -446,7 +407,6 @@ int read_subagent_output(Subagent *sub) {
         sub->output[sub->output_len] = '\0';
     }
 
-    // Close the pipe
     close(sub->stdout_pipe[0]);
     sub->stdout_pipe[0] = -1;
 
@@ -466,17 +426,14 @@ static void handle_process_exit(Subagent *sub, int proc_status) {
         return;
     }
 
-    // Read any remaining output
     read_subagent_output(sub);
 
     if (WIFEXITED(proc_status) && WEXITSTATUS(proc_status) == 0) {
-        // Successful exit - move output to result
         sub->status = SUBAGENT_STATUS_COMPLETED;
         sub->result = sub->output;
         sub->output = NULL;
         sub->output_len = 0;
     } else {
-        // Failed exit - create error message
         sub->status = SUBAGENT_STATUS_FAILED;
 
         char error_msg[256];
@@ -490,7 +447,6 @@ static void handle_process_exit(Subagent *sub, int proc_status) {
             snprintf(error_msg, sizeof(error_msg), "Subagent process failed");
         }
 
-        // Append captured output if available for debugging
         if (sub->output != NULL && sub->output_len > 0) {
             size_t error_len = strlen(error_msg) + sub->output_len + 32;
             char *full_error = malloc(error_len);
@@ -504,7 +460,6 @@ static void handle_process_exit(Subagent *sub, int proc_status) {
             sub->error = strdup(error_msg);
         }
 
-        // Free output after incorporating it into error message (prevents memory leak)
         free(sub->output);
         sub->output = NULL;
         sub->output_len = 0;
@@ -526,12 +481,10 @@ int subagent_poll_all(SubagentManager *manager) {
     for (size_t i = 0; i < manager->subagents.count; i++) {
         Subagent *sub = &manager->subagents.data[i];
 
-        // Skip non-running subagents
         if (sub->status != SUBAGENT_STATUS_RUNNING) {
             continue;
         }
 
-        // Check for timeout
         if (now - sub->start_time > manager->timeout_seconds) {
             kill(sub->pid, SIGKILL);
             waitpid(sub->pid, NULL, 0);
@@ -542,19 +495,15 @@ int subagent_poll_all(SubagentManager *manager) {
             continue;
         }
 
-        // Read any available output
         read_subagent_output_nonblocking(sub);
 
-        // Check process status
         int proc_status;
         pid_t result = waitpid(sub->pid, &proc_status, WNOHANG);
 
         if (result == sub->pid) {
-            // Process has exited - delegate to helper
             handle_process_exit(sub, proc_status);
             changed++;
         } else if (result == -1 && errno != ECHILD) {
-            // Error in waitpid
             sub->status = SUBAGENT_STATUS_FAILED;
             sub->error = strdup("Failed to check subagent status");
             changed++;
@@ -617,27 +566,22 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
         return -1;
     }
 
-    // Prevent nesting: don't allow subagents to spawn subagents
     if (manager->is_subagent_process) {
         return -1;
     }
 
-    // Check max limit (compare as size_t to avoid overflow on cast)
     if (manager->max_subagents <= 0 || manager->subagents.count >= (size_t)manager->max_subagents) {
         return -1;
     }
 
-    // Generate unique ID
     char id[SUBAGENT_ID_LENGTH + 1];
     generate_subagent_id(id);
 
-    // Create pipe for capturing child output
     int stdout_pipefd[2];
     if (pipe(stdout_pipefd) == -1) {
         return -1;
     }
 
-    // Create approval channel pipes for IPC-based approval proxying
     int request_pipe[2], response_pipe[2];
     if (create_approval_channel_pipes(request_pipe, response_pipe) < 0) {
         close(stdout_pipefd[0]);
@@ -645,7 +589,6 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
         return -1;
     }
 
-    // Get path to ralph executable
     char *ralph_path = get_executable_path();
     if (ralph_path == NULL) {
         close(stdout_pipefd[0]);
@@ -654,10 +597,8 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
         return -1;
     }
 
-    // Fork the process
     pid_t pid = fork();
     if (pid == -1) {
-        // Fork failed
         free(ralph_path);
         close(stdout_pipefd[0]);
         close(stdout_pipefd[1]);
@@ -666,34 +607,28 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
     }
 
     if (pid == 0) {
-        // Child process
-        close(stdout_pipefd[0]);  // Close read end of stdout pipe
+        close(stdout_pipefd[0]);
 
-        // Redirect stdout to pipe
         if (dup2(stdout_pipefd[1], STDOUT_FILENO) == -1) {
             _exit(127);
         }
         close(stdout_pipefd[1]);
 
-        // Also redirect stderr to stdout so we capture errors
+        // Merge stderr into stdout so parent captures all output
         if (dup2(STDOUT_FILENO, STDERR_FILENO) == -1) {
             _exit(127);
         }
 
-        // Set up approval channel for child (closes parent ends)
-        // Child writes requests (request_pipe[1]) and reads responses (response_pipe[0])
-        close(request_pipe[0]);   // Close read end of request pipe
-        close(response_pipe[1]);  // Close write end of response pipe
+        // Child keeps write-end of request pipe and read-end of response pipe
+        close(request_pipe[0]);
+        close(response_pipe[1]);
 
-        // Pass approval channel FDs to child via environment variables
         char request_fd_str[32], response_fd_str[32];
         snprintf(request_fd_str, sizeof(request_fd_str), "%d", request_pipe[1]);
         snprintf(response_fd_str, sizeof(response_fd_str), "%d", response_pipe[0]);
         setenv(RALPH_APPROVAL_REQUEST_FD, request_fd_str, 1);
         setenv(RALPH_APPROVAL_RESPONSE_FD, response_fd_str, 1);
 
-        // Build exec arguments
-        // Maximum: ralph --subagent --task "..." --context "..." NULL = 7 args
         char *args[7];
         int arg_idx = 0;
 
@@ -709,27 +644,21 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
 
         args[arg_idx] = NULL;
 
-        // Execute ralph in subagent mode
         execv(ralph_path, args);
-
-        // If execv fails, exit with error
         _exit(127);
     }
 
-    // Parent process
     free(ralph_path);
-    close(stdout_pipefd[1]);  // Close write end of stdout pipe
+    close(stdout_pipefd[1]);
 
-    // Set up approval channel for parent (closes child ends)
-    // Parent reads requests (request_pipe[0]) and writes responses (response_pipe[1])
-    close(request_pipe[1]);   // Close write end of request pipe
-    close(response_pipe[0]);  // Close read end of response pipe
+    // Parent keeps read-end of request pipe and write-end of response pipe
+    close(request_pipe[1]);
+    close(response_pipe[0]);
 
-    // Initialize the new subagent entry
     Subagent new_sub;
     memset(&new_sub, 0, sizeof(Subagent));
 
-    // Initialize FDs to -1 for safety (prevents accidental close of stdin/stdout/stderr)
+    // -1 prevents accidental close of stdin/stdout/stderr on cleanup
     new_sub.stdout_pipe[0] = -1;
     new_sub.stdout_pipe[1] = -1;
     new_sub.approval_channel.request_fd = -1;
@@ -740,9 +669,9 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
     new_sub.pid = pid;
     new_sub.status = SUBAGENT_STATUS_RUNNING;
     new_sub.stdout_pipe[0] = stdout_pipefd[0];
-    new_sub.stdout_pipe[1] = -1;  // Write end closed in parent
-    new_sub.approval_channel.request_fd = request_pipe[0];   // Parent reads requests
-    new_sub.approval_channel.response_fd = response_pipe[1]; // Parent writes responses
+    new_sub.stdout_pipe[1] = -1;
+    new_sub.approval_channel.request_fd = request_pipe[0];
+    new_sub.approval_channel.response_fd = response_pipe[1];
     new_sub.approval_channel.subagent_pid = pid;
     new_sub.task = strdup(task);
     new_sub.context = (context != NULL && strlen(context) > 0) ? strdup(context) : NULL;
@@ -752,9 +681,7 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
     new_sub.error = NULL;
     new_sub.start_time = time(NULL);
 
-    // Check if strdup failed
     if (new_sub.task == NULL || (context != NULL && strlen(context) > 0 && new_sub.context == NULL)) {
-        // Cleanup on allocation failure
         if (new_sub.task) free(new_sub.task);
         if (new_sub.context) free(new_sub.context);
         kill(pid, SIGKILL);
@@ -765,9 +692,7 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
         return -1;
     }
 
-    // Add to array
     if (SubagentArray_push(&manager->subagents, new_sub) != 0) {
-        // Array push failed - kill the child and clean up
         if (new_sub.task) free(new_sub.task);
         if (new_sub.context) free(new_sub.context);
         kill(pid, SIGKILL);
@@ -778,7 +703,6 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
         return -1;
     }
 
-    // Copy ID to output
     strcpy(subagent_id_out, id);
 
     return 0;
@@ -802,7 +726,6 @@ int subagent_get_status(SubagentManager *manager, const char *subagent_id, int w
         return -1;
     }
 
-    // Initialize outputs
     if (result != NULL) {
         *result = NULL;
     }
@@ -810,7 +733,6 @@ int subagent_get_status(SubagentManager *manager, const char *subagent_id, int w
         *error = NULL;
     }
 
-    // Find the subagent
     Subagent *sub = subagent_find_by_id(manager, subagent_id);
     if (sub == NULL) {
         *status = SUBAGENT_STATUS_FAILED;
@@ -820,7 +742,6 @@ int subagent_get_status(SubagentManager *manager, const char *subagent_id, int w
         return -1;
     }
 
-    // Helper macro to return current state
     #define RETURN_CURRENT_STATE() do { \
         *status = sub->status; \
         if (result != NULL && sub->result != NULL) { \
@@ -832,20 +753,15 @@ int subagent_get_status(SubagentManager *manager, const char *subagent_id, int w
         return 0; \
     } while (0)
 
-    // If already in a terminal state, return cached values
     if (sub->status == SUBAGENT_STATUS_COMPLETED ||
         sub->status == SUBAGENT_STATUS_FAILED ||
         sub->status == SUBAGENT_STATUS_TIMEOUT) {
         RETURN_CURRENT_STATE();
     }
 
-    // Subagent is still running - need to check/wait
     time_t now = time(NULL);
 
     if (!wait) {
-        // Non-blocking: check once and return
-
-        // Check timeout first
         if (now - sub->start_time > manager->timeout_seconds) {
             kill(sub->pid, SIGKILL);
             waitpid(sub->pid, NULL, 0);
@@ -855,18 +771,14 @@ int subagent_get_status(SubagentManager *manager, const char *subagent_id, int w
             RETURN_CURRENT_STATE();
         }
 
-        // Read any available output
         read_subagent_output_nonblocking(sub);
 
-        // Check process status non-blocking
         int proc_status;
         pid_t waitpid_result = waitpid(sub->pid, &proc_status, WNOHANG);
 
         if (waitpid_result == sub->pid) {
-            // Process has exited - delegate to helper
             handle_process_exit(sub, proc_status);
         } else if (waitpid_result == -1 && errno != ECHILD) {
-            // Error in waitpid
             sub->status = SUBAGENT_STATUS_FAILED;
             sub->error = strdup("Failed to check subagent status");
         }
@@ -875,11 +787,9 @@ int subagent_get_status(SubagentManager *manager, const char *subagent_id, int w
         RETURN_CURRENT_STATE();
     }
 
-    // Blocking wait: loop until completion or timeout
     while (sub->status == SUBAGENT_STATUS_RUNNING) {
         now = time(NULL);
 
-        // Check timeout
         if (now - sub->start_time > manager->timeout_seconds) {
             kill(sub->pid, SIGKILL);
             waitpid(sub->pid, NULL, 0);
@@ -889,31 +799,25 @@ int subagent_get_status(SubagentManager *manager, const char *subagent_id, int w
             break;
         }
 
-        // Read any available output while waiting
         read_subagent_output_nonblocking(sub);
 
-        // Wait for process to exit (with brief timeout for periodic checks)
         int proc_status;
         pid_t waitpid_result = waitpid(sub->pid, &proc_status, WNOHANG);
 
         if (waitpid_result == sub->pid) {
-            // Process has exited - delegate to helper
             handle_process_exit(sub, proc_status);
             break;
         } else if (waitpid_result == -1 && errno != ECHILD) {
-            // Error in waitpid
             sub->status = SUBAGENT_STATUS_FAILED;
             sub->error = strdup("Failed to check subagent status");
             break;
         }
 
-        // Still running, sleep briefly before checking again
         usleep(SUBAGENT_POLL_INTERVAL_USEC);
     }
 
     #undef RETURN_CURRENT_STATE
 
-    // Return final state
     *status = sub->status;
     if (result != NULL && sub->result != NULL) {
         *result = strdup(sub->result);
@@ -987,20 +891,16 @@ int register_subagent_tool(ToolRegistry *registry, SubagentManager *manager) {
         return -1;
     }
 
-    // Check for potential overwrite of existing manager (prevents subtle bugs)
     if (g_subagent_manager != NULL && g_subagent_manager != manager) {
         fprintf(stderr, "Warning: Overwriting existing subagent manager pointer. "
                         "Only one SubagentManager should be active per process.\n");
     }
 
-    // Store manager pointer for execute function
     g_subagent_manager = manager;
 
-    // Define parameters
     ToolParameter parameters[2];
     memset(parameters, 0, sizeof(parameters));
 
-    // Parameter 1: task (required)
     parameters[0].name = strdup("task");
     parameters[0].type = strdup("string");
     parameters[0].description = strdup("Task description for the subagent to execute");
@@ -1008,7 +908,6 @@ int register_subagent_tool(ToolRegistry *registry, SubagentManager *manager) {
     parameters[0].enum_count = 0;
     parameters[0].required = 1;
 
-    // Parameter 2: context (optional)
     parameters[1].name = strdup("context");
     parameters[1].type = strdup("string");
     parameters[1].description = strdup("Optional context information to provide to the subagent");
@@ -1016,12 +915,10 @@ int register_subagent_tool(ToolRegistry *registry, SubagentManager *manager) {
     parameters[1].enum_count = 0;
     parameters[1].required = 0;
 
-    // Check for allocation failures
     for (int i = 0; i < 2; i++) {
         if (parameters[i].name == NULL ||
             parameters[i].type == NULL ||
             parameters[i].description == NULL) {
-            // Cleanup on failure
             for (int j = 0; j <= i; j++) {
                 free(parameters[j].name);
                 free(parameters[j].type);
@@ -1031,14 +928,12 @@ int register_subagent_tool(ToolRegistry *registry, SubagentManager *manager) {
         }
     }
 
-    // Register the tool
     int result = register_tool(registry, "subagent",
                               "Spawn a background subagent process to execute a delegated task. "
                               "The subagent runs with fresh context and cannot spawn additional subagents. "
                               "Returns a subagent_id that can be used with subagent_status to check progress.",
                               parameters, 2, execute_subagent_tool_call);
 
-    // Clean up temporary parameter storage
     for (int i = 0; i < 2; i++) {
         free(parameters[i].name);
         free(parameters[i].type);
@@ -1059,16 +954,13 @@ int register_subagent_status_tool(ToolRegistry *registry, SubagentManager *manag
         return -1;
     }
 
-    // Check for potential overwrite of existing manager (prevents subtle bugs)
     if (g_subagent_manager != NULL && g_subagent_manager != manager) {
         fprintf(stderr, "Warning: Overwriting existing subagent manager pointer. "
                         "Only one SubagentManager should be active per process.\n");
     }
 
-    // Store manager pointer for execute function (may already be set)
     g_subagent_manager = manager;
 
-    // Define parameters
     ToolParameter parameters[2];
     memset(parameters, 0, sizeof(parameters));
 
@@ -1088,12 +980,10 @@ int register_subagent_status_tool(ToolRegistry *registry, SubagentManager *manag
     parameters[1].enum_count = 0;
     parameters[1].required = 0;
 
-    // Check for allocation failures
     for (int i = 0; i < 2; i++) {
         if (parameters[i].name == NULL ||
             parameters[i].type == NULL ||
             parameters[i].description == NULL) {
-            // Cleanup on failure
             for (int j = 0; j <= i; j++) {
                 free(parameters[j].name);
                 free(parameters[j].type);
@@ -1103,13 +993,11 @@ int register_subagent_status_tool(ToolRegistry *registry, SubagentManager *manag
         }
     }
 
-    // Register the tool
     int result = register_tool(registry, "subagent_status",
                               "Query the status of a running or completed subagent. "
                               "Returns status (running/completed/failed/timeout), progress, result, and any errors.",
                               parameters, 2, execute_subagent_status_tool_call);
 
-    // Clean up temporary parameter storage
     for (int i = 0; i < 2; i++) {
         free(parameters[i].name);
         free(parameters[i].type);
@@ -1128,27 +1016,23 @@ int execute_subagent_tool_call(const ToolCall *tool_call, ToolResult *result) {
         return -1;
     }
 
-    // Initialize result
     result->tool_call_id = strdup(tool_call->id);
     if (result->tool_call_id == NULL) {
         return -1;
     }
 
-    // Check if manager is available
     if (g_subagent_manager == NULL) {
         result->result = strdup("{\"error\": \"Subagent manager not initialized\"}");
         result->success = 0;
         return 0;
     }
 
-    // Check if we're already running as a subagent (prevent nesting)
     if (g_subagent_manager->is_subagent_process) {
         result->result = strdup("{\"error\": \"Subagents cannot spawn additional subagents\"}");
         result->success = 0;
         return 0;
     }
 
-    // Parse arguments
     char *task = extract_json_string_value(tool_call->arguments, "task");
     if (task == NULL || strlen(task) == 0) {
         free(task);
@@ -1159,7 +1043,6 @@ int execute_subagent_tool_call(const ToolCall *tool_call, ToolResult *result) {
 
     char *context = extract_json_string_value(tool_call->arguments, "context");
 
-    // Spawn the subagent
     char subagent_id[SUBAGENT_ID_LENGTH + 1];
     int spawn_result = subagent_spawn(g_subagent_manager, task, context, subagent_id);
 
@@ -1167,7 +1050,6 @@ int execute_subagent_tool_call(const ToolCall *tool_call, ToolResult *result) {
     free(context);
 
     if (spawn_result != 0) {
-        // Check if we hit the max limit
         if ((int)g_subagent_manager->subagents.count >= g_subagent_manager->max_subagents) {
             char error_msg[256];
             snprintf(error_msg, sizeof(error_msg),
@@ -1181,7 +1063,6 @@ int execute_subagent_tool_call(const ToolCall *tool_call, ToolResult *result) {
         return 0;
     }
 
-    // Build success response
     char response[512];
     snprintf(response, sizeof(response),
              "{\"subagent_id\": \"%s\", \"status\": \"running\", \"message\": \"Subagent spawned successfully\"}",
@@ -1202,20 +1083,17 @@ int execute_subagent_status_tool_call(const ToolCall *tool_call, ToolResult *res
         return -1;
     }
 
-    // Initialize result
     result->tool_call_id = strdup(tool_call->id);
     if (result->tool_call_id == NULL) {
         return -1;
     }
 
-    // Check if manager is available
     if (g_subagent_manager == NULL) {
         result->result = strdup("{\"error\": \"Subagent manager not initialized\"}");
         result->success = 0;
         return 0;
     }
 
-    // Parse arguments
     char *subagent_id = extract_json_string_value(tool_call->arguments, "subagent_id");
     if (subagent_id == NULL || strlen(subagent_id) == 0) {
         free(subagent_id);
@@ -1226,7 +1104,6 @@ int execute_subagent_status_tool_call(const ToolCall *tool_call, ToolResult *res
 
     int wait = extract_json_boolean_value(tool_call->arguments, "wait", 0);
 
-    // Get status
     SubagentStatus status;
     char *subagent_result = NULL;
     char *error = NULL;
@@ -1237,7 +1114,6 @@ int execute_subagent_status_tool_call(const ToolCall *tool_call, ToolResult *res
     free(subagent_id);
 
     if (get_result != 0) {
-        // Subagent not found
         char *escaped_error = json_escape_string(error ? error : "Subagent not found");
         char response[512];
         snprintf(response, sizeof(response),
@@ -1250,10 +1126,7 @@ int execute_subagent_status_tool_call(const ToolCall *tool_call, ToolResult *res
         return 0;
     }
 
-    // Build response based on status
     const char *status_str = subagent_status_to_string(status);
-
-    // Calculate response size
     size_t response_size = 256;
     char *escaped_result = NULL;
     char *escaped_error = NULL;
@@ -1282,7 +1155,6 @@ int execute_subagent_status_tool_call(const ToolCall *tool_call, ToolResult *res
         return 0;
     }
 
-    // Format response based on status
     if (status == SUBAGENT_STATUS_COMPLETED && escaped_result != NULL) {
         snprintf(response, response_size,
                  "{\"status\": \"%s\", \"result\": \"%s\"}",
@@ -1307,7 +1179,6 @@ int execute_subagent_status_tool_call(const ToolCall *tool_call, ToolResult *res
 
     result->result = response;
 
-    // Cleanup
     free(subagent_result);
     free(error);
     free(escaped_result);
@@ -1336,32 +1207,24 @@ int ralph_run_as_subagent(const char *task, const char *context) {
         return -1;
     }
 
-    // Initialize approval channel from environment variables
-    // This enables the subagent to request approvals from the parent process
-    if (init_subagent_approval_channel() == 0) {
-        // Approval channel successfully initialized - subagent will use IPC for approvals
-    }
-    // Note: If init fails, subagent will fall back to direct TTY prompting (if available)
-    // or denial (if no TTY). This is acceptable for backwards compatibility.
+    // If approval channel setup fails, subagent falls back to direct TTY prompting
+    // or denial (if no TTY), which is acceptable for backwards compatibility.
+    init_subagent_approval_channel();
 
     RalphSession session;
 
-    // Initialize session
     if (ralph_init_session(&session) != 0) {
         fprintf(stderr, "Error: Failed to initialize subagent session\n");
         cleanup_subagent_approval_channel();
         return -1;
     }
 
-    // Mark this process as a subagent to prevent nesting (subagent tools will return error if called)
     session.subagent_manager.is_subagent_process = 1;
 
-    // Clear conversation history for fresh context (subagents don't inherit parent history)
-    // This ensures isolation between parent and child conversations
+    // Subagents run with fresh context, not parent conversation history
     cleanup_conversation_history(&session.session_data.conversation);
     init_conversation_history(&session.session_data.conversation);
 
-    // Load configuration
     if (ralph_load_config(&session) != 0) {
         fprintf(stderr, "Error: Failed to load subagent configuration\n");
         ralph_cleanup_session(&session);
@@ -1369,10 +1232,8 @@ int ralph_run_as_subagent(const char *task, const char *context) {
         return -1;
     }
 
-    // Build message with optional context
     char *message = NULL;
     if (context != NULL && strlen(context) > 0) {
-        // Combine context and task
         const char *format = "Context: %s\n\nTask: %s";
         size_t len = strlen(format) + strlen(context) + strlen(task) + 1;
         message = malloc(len);
@@ -1384,7 +1245,6 @@ int ralph_run_as_subagent(const char *task, const char *context) {
         }
         snprintf(message, len, format, context, task);
     } else {
-        // Just the task
         message = strdup(task);
         if (message == NULL) {
             fprintf(stderr, "Error: Failed to allocate message buffer\n");
@@ -1394,22 +1254,15 @@ int ralph_run_as_subagent(const char *task, const char *context) {
         }
     }
 
-    // Process the message
-    // Output automatically goes to stdout (via print_formatted_response_improved)
-    // which the parent process captures through the pipe
+    // Output goes to stdout, which the parent captures through the pipe
     int result = ralph_process_message(&session, message);
 
-    // Clean up
     free(message);
     ralph_cleanup_session(&session);
     cleanup_subagent_approval_channel();
 
     return result;
 }
-
-/* =============================================================================
- * Parent-Side Approval Request Handling
- * ========================================================================== */
 
 /**
  * Poll all running subagents for pending approval requests.
@@ -1424,7 +1277,6 @@ int subagent_poll_approval_requests(SubagentManager *manager, int timeout_ms) {
         return -1;
     }
 
-    // Count running subagents with valid approval channels
     int running_count = 0;
     for (size_t i = 0; i < manager->subagents.count; i++) {
         Subagent *sub = &manager->subagents.data[i];
@@ -1438,7 +1290,6 @@ int subagent_poll_approval_requests(SubagentManager *manager, int timeout_ms) {
         return -1;
     }
 
-    // Build poll array
     struct pollfd *pfds = malloc(running_count * sizeof(struct pollfd));
     int *indices = malloc(running_count * sizeof(int));
     if (pfds == NULL || indices == NULL) {
@@ -1460,7 +1311,6 @@ int subagent_poll_approval_requests(SubagentManager *manager, int timeout_ms) {
         }
     }
 
-    // Poll for data
     int ready = poll(pfds, poll_idx, timeout_ms);
     if (ready <= 0) {
         free(pfds);
@@ -1468,7 +1318,6 @@ int subagent_poll_approval_requests(SubagentManager *manager, int timeout_ms) {
         return -1;
     }
 
-    // Find the first subagent with pending data or error/hangup
     int result = -1;
     for (int i = 0; i < poll_idx; i++) {
         if (pfds[i].revents & (POLLIN | POLLERR | POLLHUP)) {
@@ -1507,7 +1356,6 @@ int subagent_handle_approval_request(SubagentManager *manager,
         return -1;
     }
 
-    // Use the subagent approval module to handle the request
     handle_subagent_approval_request(gate_config, &sub->approval_channel);
 
     return 0;
@@ -1527,16 +1375,14 @@ int subagent_check_and_handle_approvals(SubagentManager *manager,
         return -1;
     }
 
-    // Non-blocking poll for pending requests
     int idx = subagent_poll_approval_requests(manager, 0);
     if (idx < 0) {
-        return 0; // No pending requests
+        return 0;
     }
 
-    // Handle the request
     if (subagent_handle_approval_request(manager, idx, gate_config) == 0) {
-        return 1; // Request handled
+        return 1;
     }
 
-    return -1; // Error handling request
+    return -1;
 }

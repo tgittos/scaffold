@@ -1,20 +1,3 @@
-/**
- * Subagent Approval Proxy Implementation
- *
- * This module provides IPC-based approval proxying for subagents.
- * The parent process maintains exclusive TTY ownership while subagents
- * send approval requests via pipes. This prevents deadlocks that would
- * occur if both parent and subagent tried to access the TTY simultaneously.
- *
- * Architecture:
- * - Parent creates request/response pipes when spawning subagent
- * - Subagent sends ApprovalRequest serialized as JSON via request pipe
- * - Parent reads request, prompts user via TTY, sends ApprovalResponse
- * - Subagent blocks waiting for response with timeout (5 minutes)
- *
- * See SPEC_APPROVAL_GATES.md section "Subagent Behavior > Subagent Deadlock Prevention"
- */
-
 #include "approval_gate.h"
 
 #include <cJSON.h>
@@ -31,57 +14,23 @@
 #include "../utils/debug_output.h"
 #include "../tools/subagent_tool.h"
 
-/* =============================================================================
- * Debug Macros
- * ========================================================================== */
-
-/* Debug print for info messages - uses debug_printf which checks debug_enabled */
 #define DEBUG_PRINT(...) debug_printf(__VA_ARGS__)
-
-/* Debug print for errors - always output to stderr */
 #define DEBUG_ERROR(...) fprintf(stderr, __VA_ARGS__), fprintf(stderr, "\n")
 
-/* =============================================================================
- * Constants
- * ========================================================================== */
-
-/* Timeout for subagent waiting for parent response (5 minutes) */
 #define APPROVAL_TIMEOUT_MS 300000
-
-/* Maximum size for serialized approval messages */
 #define APPROVAL_MSG_MAX_SIZE 65536
 
-/* Request ID counter (simple incrementing integer).
- * IMPORTANT: This counter is NOT thread-safe. All calls to next_request_id()
- * must occur from the same thread. In the current architecture, subagents
- * are separate processes (not threads), so each process has its own counter. */
+/* Not thread-safe, but each subagent is a separate process with its own counter */
 static uint32_t g_next_request_id = 1;
-
-/* =============================================================================
- * Internal Helper Functions
- * ========================================================================== */
-
-/**
- * Generate the next unique request ID.
- * Uses simple incrementing counter.
- *
- * NOTE: Not thread-safe. Must only be called from a single thread.
- * This is safe in the current process-based subagent architecture.
- */
 static uint32_t next_request_id(void) {
     return g_next_request_id++;
 }
 
-/**
- * Format a tool call into a human-readable summary string.
- * Returns allocated string that caller must free.
- */
 static char *format_tool_summary(const ToolCall *tool_call) {
     if (tool_call == NULL || tool_call->name == NULL) {
         return strdup("[unknown tool]");
     }
 
-    /* For shell commands, extract the command argument */
     if (strcmp(tool_call->name, "shell") == 0 && tool_call->arguments != NULL) {
         cJSON *args = cJSON_Parse(tool_call->arguments);
         if (args != NULL) {
@@ -97,7 +46,6 @@ static char *format_tool_summary(const ToolCall *tool_call) {
         }
     }
 
-    /* For file operations, extract the path argument */
     if ((strcmp(tool_call->name, "write_file") == 0 ||
          strcmp(tool_call->name, "read_file") == 0 ||
          strcmp(tool_call->name, "append_file") == 0) &&
@@ -116,7 +64,6 @@ static char *format_tool_summary(const ToolCall *tool_call) {
         }
     }
 
-    /* For network operations, extract the URL */
     if (strcmp(tool_call->name, "web_fetch") == 0 && tool_call->arguments != NULL) {
         cJSON *args = cJSON_Parse(tool_call->arguments);
         if (args != NULL) {
@@ -132,14 +79,9 @@ static char *format_tool_summary(const ToolCall *tool_call) {
         }
     }
 
-    /* Default: just the tool name */
     return strdup(tool_call->name);
 }
 
-/**
- * Serialize an ApprovalRequest to JSON string.
- * Returns allocated string that caller must free, or NULL on error.
- */
 static char *serialize_approval_request(const ApprovalRequest *req) {
     if (req == NULL) {
         return NULL;
@@ -160,10 +102,6 @@ static char *serialize_approval_request(const ApprovalRequest *req) {
     return result;
 }
 
-/**
- * Deserialize an ApprovalRequest from JSON string.
- * Returns 0 on success, -1 on error.
- */
 static int deserialize_approval_request(const char *json_str, ApprovalRequest *req) {
     if (json_str == NULL || req == NULL) {
         return -1;
@@ -204,9 +142,6 @@ static int deserialize_approval_request(const char *json_str, ApprovalRequest *r
     return 0;
 }
 
-/**
- * Free resources held by an ApprovalRequest.
- */
 static void free_approval_request(ApprovalRequest *req) {
     if (req != NULL) {
         free(req->tool_name);
@@ -216,10 +151,6 @@ static void free_approval_request(ApprovalRequest *req) {
     }
 }
 
-/**
- * Serialize an ApprovalResponse to JSON string.
- * Returns allocated string that caller must free, or NULL on error.
- */
 static char *serialize_approval_response(const ApprovalResponse *resp) {
     if (resp == NULL) {
         return NULL;
@@ -239,10 +170,6 @@ static char *serialize_approval_response(const ApprovalResponse *resp) {
     return result;
 }
 
-/**
- * Deserialize an ApprovalResponse from JSON string.
- * Returns 0 on success, -1 on error.
- */
 static int deserialize_approval_response(const char *json_str, ApprovalResponse *resp) {
     if (json_str == NULL || resp == NULL) {
         return -1;
@@ -274,9 +201,6 @@ static int deserialize_approval_response(const char *json_str, ApprovalResponse 
     return 0;
 }
 
-/**
- * Free resources held by an ApprovalResponse.
- */
 static void free_approval_response(ApprovalResponse *resp) {
     if (resp != NULL) {
         free(resp->pattern);
@@ -284,21 +208,14 @@ static void free_approval_response(ApprovalResponse *resp) {
     }
 }
 
-/**
- * Read a message from a file descriptor with timeout.
- * Messages are null-terminated strings.
- * Returns allocated buffer on success, NULL on error or timeout.
- */
 static char *read_message_with_timeout(int fd, int timeout_ms) {
     struct pollfd pfd = {.fd = fd, .events = POLLIN, .revents = 0};
 
     int ready = poll(&pfd, 1, timeout_ms);
     if (ready <= 0) {
-        /* Timeout or error */
         return NULL;
     }
 
-    /* Read message in chunks until we get a null terminator */
     char *buffer = malloc(APPROVAL_MSG_MAX_SIZE);
     if (buffer == NULL) {
         return NULL;
@@ -306,17 +223,14 @@ static char *read_message_with_timeout(int fd, int timeout_ms) {
 
     size_t total_read = 0;
     while (total_read < APPROVAL_MSG_MAX_SIZE - 1) {
-        /* Check if more data is available */
         pfd.revents = 0;
-        ready = poll(&pfd, 1, 100); /* 100ms timeout for subsequent chunks */
+        ready = poll(&pfd, 1, 100);
         if (ready <= 0) {
-            /* No more data or error */
             break;
         }
 
         ssize_t n = read(fd, buffer + total_read, APPROVAL_MSG_MAX_SIZE - 1 - total_read);
         if (n <= 0) {
-            /* EOF or error */
             if (total_read == 0) {
                 free(buffer);
                 return NULL;
@@ -324,10 +238,8 @@ static char *read_message_with_timeout(int fd, int timeout_ms) {
             break;
         }
 
-        /* Check for null terminator in what we just read */
         for (ssize_t i = 0; i < n; i++) {
             if (buffer[total_read + i] == '\0') {
-                /* Found terminator - message complete */
                 total_read += i + 1;
                 buffer[total_read - 1] = '\0';
                 return buffer;
@@ -340,16 +252,12 @@ static char *read_message_with_timeout(int fd, int timeout_ms) {
     return buffer;
 }
 
-/**
- * Write a message to a file descriptor with null terminator.
- * Returns 0 on success, -1 on error.
- */
 static int write_message(int fd, const char *msg) {
     if (msg == NULL) {
         return -1;
     }
 
-    size_t len = strlen(msg) + 1; /* Include null terminator */
+    size_t len = strlen(msg) + 1; /* include null terminator */
     size_t written = 0;
 
     while (written < len) {
@@ -366,22 +274,6 @@ static int write_message(int fd, const char *msg) {
     return 0;
 }
 
-/* =============================================================================
- * Public Functions
- * ========================================================================== */
-
-/**
- * Request approval from parent process (subagent side).
- *
- * This function is called by a subagent when it needs approval for a tool call.
- * It serializes the request, sends it to the parent via pipe, and blocks
- * waiting for the response with a 5-minute timeout.
- *
- * @param channel IPC channel to parent
- * @param tool_call The tool call requiring approval
- * @param out_path Output: path verification data (currently not populated by proxy)
- * @return Parent's decision (DENIED on timeout or error)
- */
 ApprovalResult subagent_request_approval(const ApprovalChannel *channel,
                                          const ToolCall *tool_call,
                                          ApprovedPath *out_path) {
@@ -390,12 +282,10 @@ ApprovalResult subagent_request_approval(const ApprovalChannel *channel,
         return APPROVAL_DENIED;
     }
 
-    /* Initialize out_path if provided */
     if (out_path != NULL) {
         memset(out_path, 0, sizeof(*out_path));
     }
 
-    /* Build the approval request */
     ApprovalRequest req = {
         .tool_name = (char *)tool_call->name,
         .arguments_json = (char *)tool_call->arguments,
@@ -407,9 +297,8 @@ ApprovalResult subagent_request_approval(const ApprovalChannel *channel,
         req.display_summary = strdup("[unknown]");
     }
 
-    /* Serialize and send to parent */
     char *serialized = serialize_approval_request(&req);
-    free(req.display_summary); /* We allocated this */
+    free(req.display_summary);
 
     if (serialized == NULL) {
         DEBUG_ERROR("subagent_request_approval: Failed to serialize request");
@@ -425,7 +314,6 @@ ApprovalResult subagent_request_approval(const ApprovalChannel *channel,
     }
     free(serialized);
 
-    /* Block waiting for parent response with timeout */
     char *response_str = read_message_with_timeout(channel->response_fd, APPROVAL_TIMEOUT_MS);
     if (response_str == NULL) {
         DEBUG_ERROR("subagent_request_approval: Timeout or error waiting for response");
@@ -434,7 +322,6 @@ ApprovalResult subagent_request_approval(const ApprovalChannel *channel,
 
     DEBUG_PRINT("Subagent received response: %s", response_str);
 
-    /* Parse the response */
     ApprovalResponse resp;
     if (deserialize_approval_response(response_str, &resp) < 0) {
         DEBUG_ERROR("subagent_request_approval: Failed to parse response");
@@ -443,7 +330,6 @@ ApprovalResult subagent_request_approval(const ApprovalChannel *channel,
     }
     free(response_str);
 
-    /* Verify request ID matches (basic sanity check) */
     if (resp.request_id != req.request_id) {
         DEBUG_ERROR("subagent_request_approval: Response request_id mismatch");
         free_approval_response(&resp);
@@ -463,21 +349,6 @@ ApprovalResult subagent_request_approval(const ApprovalChannel *channel,
     return result;
 }
 
-/**
- * Handle approval request from subagent (parent side).
- *
- * This function is called by the parent when it detects data on a subagent's
- * request pipe. It reads the request, prompts the user via TTY, and sends
- * the response back to the subagent.
- *
- * For nested subagents: If this process is also a subagent (has its own
- * approval channel to a grandparent), we forward the request up the chain
- * instead of prompting the TTY directly. This ensures all approval prompts
- * go to the root process which owns the TTY.
- *
- * @param config Parent's gate configuration (may be modified if ALLOWED_ALWAYS)
- * @param channel IPC channel to subagent
- */
 void handle_subagent_approval_request(ApprovalGateConfig *config,
                                       ApprovalChannel *channel) {
     if (config == NULL || channel == NULL) {
@@ -485,7 +356,6 @@ void handle_subagent_approval_request(ApprovalGateConfig *config,
         return;
     }
 
-    /* Read the request from subagent */
     char *request_str = read_message_with_timeout(channel->request_fd, 1000);
     if (request_str == NULL) {
         DEBUG_ERROR("handle_subagent_approval_request: Failed to read request");
@@ -494,7 +364,6 @@ void handle_subagent_approval_request(ApprovalGateConfig *config,
 
     DEBUG_PRINT("Parent received subagent request: %s", request_str);
 
-    /* Parse the request */
     ApprovalRequest req;
     if (deserialize_approval_request(request_str, &req) < 0) {
         DEBUG_ERROR("handle_subagent_approval_request: Failed to parse request");
@@ -503,7 +372,6 @@ void handle_subagent_approval_request(ApprovalGateConfig *config,
     }
     free(request_str);
 
-    /* Create a synthetic ToolCall for approval checking */
     ToolCall synthetic_call = {
         .name = req.tool_name,
         .arguments = req.arguments_json,
@@ -513,40 +381,32 @@ void handle_subagent_approval_request(ApprovalGateConfig *config,
     ApprovedPath approved_path = {0};
     ApprovalResult result;
 
-    /* Check if we're a nested subagent - if so, forward to our parent */
+    /* Forward up the chain if we're a nested subagent; only the root
+     * process owns the TTY and can prompt the user. */
     ApprovalChannel *our_channel = subagent_get_approval_channel();
     if (our_channel != NULL) {
-        /* We're a subagent ourselves - forward the request up the chain.
-         * The root process will prompt the TTY and send the response back.
-         * The response will propagate back down through each level. */
         DEBUG_PRINT("Nested subagent: forwarding request to grandparent");
         result = subagent_request_approval(our_channel, &synthetic_call, &approved_path);
     } else {
-        /* We're the root process - use the standard prompt mechanism */
         result = approval_gate_prompt(config, &synthetic_call, &approved_path);
     }
 
-    /* Build the response */
     ApprovalResponse resp = {
         .request_id = req.request_id,
         .result = result,
         .pattern = NULL
     };
 
-    /* If user selected "allow always", generate and apply pattern */
     if (result == APPROVAL_ALLOWED_ALWAYS) {
         GeneratedPattern gen_pattern = {0};
         if (generate_allowlist_pattern(&synthetic_call, &gen_pattern) == 0) {
             if (gen_pattern.pattern != NULL) {
                 resp.pattern = strdup(gen_pattern.pattern);
-                /* Pattern is already applied to config by approval_gate_prompt
-                 * (or was applied by root if we forwarded) */
             }
             free_generated_pattern(&gen_pattern);
         }
     }
 
-    /* Serialize and send response */
     char *response_str = serialize_approval_response(&resp);
     free(resp.pattern);
     free_approval_request(&req);
@@ -565,13 +425,6 @@ void handle_subagent_approval_request(ApprovalGateConfig *config,
     free(response_str);
 }
 
-/**
- * Free resources held by an ApprovalChannel.
- *
- * Closes both file descriptors if they are valid, then frees the struct.
- *
- * @param channel Channel to clean up (will be freed)
- */
 void free_approval_channel(ApprovalChannel *channel) {
     if (channel == NULL) {
         return;
@@ -588,25 +441,6 @@ void free_approval_channel(ApprovalChannel *channel) {
     free(channel);
 }
 
-/* =============================================================================
- * Pipe Creation for Subagent Spawning
- * ========================================================================== */
-
-/**
- * Create approval channel pipes for a new subagent.
- *
- * Creates two pipes:
- * - request_pipe: subagent writes, parent reads
- * - response_pipe: parent writes, subagent reads
- *
- * After fork:
- * - Child calls setup_subagent_channel_child() to get its channel
- * - Parent calls setup_subagent_channel_parent() to get its channel
- *
- * @param request_pipe Output: pipe for requests [0]=read, [1]=write
- * @param response_pipe Output: pipe for responses [0]=read, [1]=write
- * @return 0 on success, -1 on error
- */
 int create_approval_channel_pipes(int request_pipe[2], int response_pipe[2]) {
     if (request_pipe == NULL || response_pipe == NULL) {
         return -1;
@@ -624,7 +458,6 @@ int create_approval_channel_pipes(int request_pipe[2], int response_pipe[2]) {
         return -1;
     }
 
-    /* Set non-blocking on read ends for polling */
     int flags = fcntl(request_pipe[0], F_GETFL, 0);
     if (flags >= 0) {
         fcntl(request_pipe[0], F_SETFL, flags | O_NONBLOCK);
@@ -638,16 +471,6 @@ int create_approval_channel_pipes(int request_pipe[2], int response_pipe[2]) {
     return 0;
 }
 
-/**
- * Set up the approval channel for the subagent (child) process.
- *
- * Closes parent ends of pipes and initializes channel struct.
- * Call this in the child process after fork().
- *
- * @param channel Output: channel struct to initialize
- * @param request_pipe The request pipe from create_approval_channel_pipes()
- * @param response_pipe The response pipe from create_approval_channel_pipes()
- */
 void setup_subagent_channel_child(ApprovalChannel *channel,
                                   int request_pipe[2],
                                   int response_pipe[2]) {
@@ -664,17 +487,6 @@ void setup_subagent_channel_child(ApprovalChannel *channel,
     channel->subagent_pid = getpid();
 }
 
-/**
- * Set up the approval channel for the parent process.
- *
- * Closes child ends of pipes and initializes channel struct.
- * Call this in the parent process after fork().
- *
- * @param channel Output: channel struct to initialize
- * @param request_pipe The request pipe from create_approval_channel_pipes()
- * @param response_pipe The response pipe from create_approval_channel_pipes()
- * @param child_pid The PID of the child process
- */
 void setup_subagent_channel_parent(ApprovalChannel *channel,
                                    int request_pipe[2],
                                    int response_pipe[2],
@@ -692,12 +504,6 @@ void setup_subagent_channel_parent(ApprovalChannel *channel,
     channel->subagent_pid = child_pid;
 }
 
-/**
- * Close all pipe ends and clean up after failed fork/spawn.
- *
- * @param request_pipe The request pipe
- * @param response_pipe The response pipe
- */
 void cleanup_approval_channel_pipes(int request_pipe[2], int response_pipe[2]) {
     if (request_pipe != NULL) {
         if (request_pipe[0] >= 0) close(request_pipe[0]);
@@ -709,21 +515,6 @@ void cleanup_approval_channel_pipes(int request_pipe[2], int response_pipe[2]) {
     }
 }
 
-/* =============================================================================
- * Parent Approval Loop Support
- * ========================================================================== */
-
-/**
- * Check if any subagent has a pending approval request.
- *
- * Uses poll() to check if data is available on any subagent request pipe.
- * This is a non-blocking check suitable for integration into a main loop.
- *
- * @param channels Array of approval channels for active subagents
- * @param channel_count Number of channels in the array
- * @param timeout_ms Maximum time to wait in milliseconds (0 for non-blocking)
- * @return Index of channel with pending request, or -1 if none (or error)
- */
 int poll_subagent_approval_requests(ApprovalChannel *channels,
                                     int channel_count,
                                     int timeout_ms) {
@@ -748,7 +539,6 @@ int poll_subagent_approval_requests(ApprovalChannel *channels,
         return -1;
     }
 
-    /* Find the first channel with data */
     int result = -1;
     for (int i = 0; i < channel_count; i++) {
         if (pfds[i].revents & POLLIN) {
@@ -761,23 +551,6 @@ int poll_subagent_approval_requests(ApprovalChannel *channels,
     return result;
 }
 
-/**
- * Run the parent approval loop.
- *
- * Monitors all subagent request pipes using poll().
- * Handles interleaved approvals from multiple concurrent subagents.
- *
- * This function runs continuously until:
- * - All subagent channels are closed
- * - An error occurs
- * - The timeout expires
- *
- * @param config Parent's gate configuration
- * @param channels Array of approval channels for active subagents
- * @param channel_count Number of channels in the array
- * @param timeout_ms Maximum time to run the loop (0 for indefinite)
- * @return 0 on normal exit, -1 on error
- */
 int parent_approval_loop(ApprovalGateConfig *config,
                          ApprovalChannel *channels,
                          int channel_count,
@@ -790,7 +563,6 @@ int parent_approval_loop(ApprovalGateConfig *config,
     gettimeofday(&start_time, NULL);
 
     while (1) {
-        /* Check timeout */
         if (timeout_ms > 0) {
             gettimeofday(&current_time, NULL);
             long elapsed_ms = (current_time.tv_sec - start_time.tv_sec) * 1000 +
@@ -800,13 +572,11 @@ int parent_approval_loop(ApprovalGateConfig *config,
             }
         }
 
-        /* Poll for requests with 100ms timeout */
         int idx = poll_subagent_approval_requests(channels, channel_count, 100);
         if (idx >= 0) {
             handle_subagent_approval_request(config, &channels[idx]);
         }
 
-        /* Check if all channels are closed */
         int open_channels = 0;
         for (int i = 0; i < channel_count; i++) {
             if (channels[i].request_fd >= 0) {

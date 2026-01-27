@@ -46,10 +46,6 @@
  * this header and remove its local definitions.
  */
 
-/* ============================================================================
- * Error Codes
- * ========================================================================== */
-
 /**
  * Result codes from atomic file verification operations.
  */
@@ -68,10 +64,6 @@ typedef enum {
     VERIFY_ERR_RESOLVE,         /* Failed to resolve path */
     VERIFY_ERR_NETWORK_FS       /* Network filesystem, verification unreliable */
 } VerifyResult;
-
-/* ============================================================================
- * Data Structures
- * ========================================================================== */
 
 /**
  * Approved path with TOCTOU protection data.
@@ -119,10 +111,6 @@ typedef struct {
 #endif
 } ApprovedPath;
 
-/* ============================================================================
- * Approval-Time Functions
- * ========================================================================== */
-
 /**
  * Capture filesystem state for an approved path.
  *
@@ -150,10 +138,6 @@ void init_approved_path(ApprovedPath *ap);
  * @param ap Path to clean up (NULL safe)
  */
 void free_approved_path(ApprovedPath *ap);
-
-/* ============================================================================
- * Execution-Time Verification
- * ========================================================================== */
 
 /**
  * Verify that an approved path hasn't changed since approval.
@@ -187,10 +171,6 @@ VerifyResult verify_and_open_approved_path(const ApprovedPath *approved,
                                            int flags,
                                            int *out_fd);
 
-/* ============================================================================
- * Atomic File Creation
- * ========================================================================== */
-
 /**
  * Create a new file atomically in a verified parent directory.
  *
@@ -208,10 +188,6 @@ VerifyResult create_file_in_verified_parent(const ApprovedPath *approved,
                                             mode_t mode,
                                             int *out_fd);
 
-/* ============================================================================
- * Parent Directory Verification
- * ========================================================================== */
-
 /**
  * Open and verify a parent directory.
  *
@@ -224,10 +200,6 @@ VerifyResult create_file_in_verified_parent(const ApprovedPath *approved,
  */
 VerifyResult open_verified_parent(const ApprovedPath *approved,
                                   int *out_fd);
-
-/* ============================================================================
- * Network Filesystem Detection
- * ========================================================================== */
 
 /**
  * Check if a path is on a network filesystem.
@@ -250,10 +222,6 @@ VerifyResult open_verified_parent(const ApprovedPath *approved,
  */
 int is_network_filesystem(const char *path);
 
-/* ============================================================================
- * Error Message Utilities
- * ========================================================================== */
-
 /**
  * Get a human-readable message for a verification result.
  *
@@ -270,10 +238,6 @@ const char *verify_result_message(VerifyResult result);
  * @return Allocated JSON error string. Caller must free.
  */
 char *format_verify_error(VerifyResult result, const char *path);
-
-/* ============================================================================
- * Path Utilities
- * ========================================================================== */
 
 /**
  * Extract the basename from a path.

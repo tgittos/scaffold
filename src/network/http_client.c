@@ -10,7 +10,7 @@
 #include <time.h>
 #include <curl/curl.h>
 
-// Configure curl handle with embedded CA certificates for portable SSL/TLS
+// Uses embedded CA bundle so we don't depend on platform-specific cert stores
 static void configure_ssl_certs(CURL *curl) {
     struct curl_blob blob;
     blob.data = (void *)embedded_cacert_data;
@@ -19,7 +19,6 @@ static void configure_ssl_certs(CURL *curl) {
     curl_easy_setopt(curl, CURLOPT_CAINFO_BLOB, &blob);
 }
 
-// Default HTTP configuration
 const struct HTTPConfig DEFAULT_HTTP_CONFIG = {
     .timeout_seconds = 120,
     .connect_timeout_seconds = 30,
@@ -46,7 +45,6 @@ static size_t write_callback(void *contents, size_t size, size_t nmemb, void *us
     return realsize;
 }
 
-// Helper struct to capture response headers
 struct HeaderData {
     int retry_after_seconds;
 };
@@ -56,15 +54,12 @@ static size_t header_callback(char *buffer, size_t size, size_t nitems, void *us
     struct HeaderData *header_data = (struct HeaderData *)userdata;
     size_t realsize = size * nitems;
 
-    // Check for Retry-After header
     if (realsize > 13 && strncasecmp(buffer, "Retry-After:", 12) == 0) {
         const char *value = buffer + 12;
-        // Skip whitespace
         while (*value == ' ' || *value == '\t') value++;
 
-        // Parse as integer (seconds)
         int seconds = atoi(value);
-        if (seconds > 0 && seconds <= 300) {  // Cap at 5 minutes
+        if (seconds > 0 && seconds <= 300) {
             header_data->retry_after_seconds = seconds;
         }
     }
@@ -72,10 +67,8 @@ static size_t header_callback(char *buffer, size_t size, size_t nitems, void *us
     return realsize;
 }
 
-// Calculate delay with exponential backoff and jitter
 static int calculate_retry_delay(int attempt, int base_delay_ms, float backoff_factor)
 {
-    // Exponential backoff: base_delay * (backoff_factor ^ attempt)
     float multiplier = 1.0f;
     for (int i = 0; i < attempt; i++) {
         multiplier *= backoff_factor;
@@ -83,13 +76,12 @@ static int calculate_retry_delay(int attempt, int base_delay_ms, float backoff_f
 
     int delay = (int)(base_delay_ms * multiplier);
 
-    // Add jitter (0-25% of delay)
+    // Jitter avoids thundering herd on concurrent retries
     if (delay > 0) {
         int jitter = rand() % (delay / 4 + 1);
         delay += jitter;
     }
 
-    // Cap at 60 seconds
     if (delay > 60000) {
         delay = 60000;
     }
@@ -118,25 +110,20 @@ int http_post_with_config(const char *url, const char *post_data, const char **h
         return -1;
     }
 
-    // Get retry configuration
     int max_retries = config_get_int("api_max_retries", 3);
     int base_delay_ms = config_get_int("api_retry_delay_ms", 1000);
     float backoff_factor = config_get_float("api_backoff_factor", 2.0f);
 
-    // Seed random for jitter (only once)
     static int seeded = 0;
     if (!seeded) {
         srand((unsigned int)time(NULL));
         seeded = 1;
     }
 
-    // Clear previous error
     clear_last_api_error();
 
-    // Retry loop
     int attempt = 0;
     while (attempt <= max_retries) {
-        // Reset response for each attempt
         if (response->data != NULL) {
             free(response->data);
         }
@@ -194,7 +181,6 @@ int http_post_with_config(const char *url, const char *post_data, const char **h
 
         res = curl_easy_perform(curl);
 
-        // Get HTTP status code
         http_status = 0;
         if (res == CURLE_OK) {
             curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_status);
@@ -205,17 +191,14 @@ int http_post_with_config(const char *url, const char *post_data, const char **h
         curl_easy_cleanup(curl);
         curl = NULL;
 
-        // Check for success
         if (res == CURLE_OK && http_status >= 200 && http_status < 400) {
             return_code = 0;
-            break;  // Success!
+            break;
         }
 
-        // Determine if we should retry
         int is_retryable = api_error_is_retryable(http_status, res);
 
         if (!is_retryable || attempt == max_retries) {
-            // Non-retryable or exhausted retries
             api_error_set(&api_err, http_status, res, attempt + 1);
             set_last_api_error(&api_err);
 
@@ -230,7 +213,6 @@ int http_post_with_config(const char *url, const char *post_data, const char **h
             break;
         }
 
-        // Calculate delay for retry
         int delay_ms;
         if (header_data.retry_after_seconds > 0) {
             delay_ms = header_data.retry_after_seconds * 1000;
@@ -242,7 +224,6 @@ int http_post_with_config(const char *url, const char *post_data, const char **h
         debug_printf("API request failed (attempt %d/%d), retrying in %dms...\n",
                     attempt + 1, max_retries + 1, delay_ms);
 
-        // Sleep before retry (convert ms to microseconds)
         usleep(delay_ms * 1000);
 
         attempt++;
@@ -267,7 +248,7 @@ int http_get_with_config(const char *url, const char **headers,
     struct HeaderData header_data = {0};
     APIError api_err;
 
-    // Initialize response struct to avoid valgrind errors
+    // Must initialize before the NULL-check below may return early
     if (response != NULL) {
         response->data = NULL;
         response->size = 0;
@@ -278,25 +259,20 @@ int http_get_with_config(const char *url, const char **headers,
         return -1;
     }
 
-    // Get retry configuration
     int max_retries = config_get_int("api_max_retries", 3);
     int base_delay_ms = config_get_int("api_retry_delay_ms", 1000);
     float backoff_factor = config_get_float("api_backoff_factor", 2.0f);
 
-    // Seed random for jitter (only once)
     static int seeded = 0;
     if (!seeded) {
         srand((unsigned int)time(NULL));
         seeded = 1;
     }
 
-    // Clear previous error
     clear_last_api_error();
 
-    // Retry loop
     int attempt = 0;
     while (attempt <= max_retries) {
-        // Reset response for each attempt
         if (response->data != NULL) {
             free(response->data);
         }
@@ -348,7 +324,6 @@ int http_get_with_config(const char *url, const char **headers,
 
         res = curl_easy_perform(curl);
 
-        // Get HTTP status code
         http_status = 0;
         if (res == CURLE_OK) {
             curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_status);
@@ -361,17 +336,14 @@ int http_get_with_config(const char *url, const char **headers,
         curl_easy_cleanup(curl);
         curl = NULL;
 
-        // Check for success
         if (res == CURLE_OK && http_status >= 200 && http_status < 400) {
             return_code = 0;
-            break;  // Success!
+            break;
         }
 
-        // Determine if we should retry
         int is_retryable = api_error_is_retryable(http_status, res);
 
         if (!is_retryable || attempt == max_retries) {
-            // Non-retryable or exhausted retries
             api_error_set(&api_err, http_status, res, attempt + 1);
             set_last_api_error(&api_err);
 
@@ -386,7 +358,6 @@ int http_get_with_config(const char *url, const char **headers,
             break;
         }
 
-        // Calculate delay for retry
         int delay_ms;
         if (header_data.retry_after_seconds > 0) {
             delay_ms = header_data.retry_after_seconds * 1000;
@@ -398,7 +369,6 @@ int http_get_with_config(const char *url, const char **headers,
         debug_printf("API request failed (attempt %d/%d), retrying in %dms...\n",
                     attempt + 1, max_retries + 1, delay_ms);
 
-        // Sleep before retry (convert ms to microseconds)
         usleep(delay_ms * 1000);
 
         attempt++;
@@ -416,25 +386,19 @@ void cleanup_response(struct HTTPResponse *response)
     }
 }
 
-// =============================================================================
-// Streaming HTTP Support
-// =============================================================================
-
-// Default streaming configuration
 const struct StreamingHTTPConfig DEFAULT_STREAMING_HTTP_CONFIG = {
     .base = {
-        .timeout_seconds = 0,           // No overall timeout for streams
+        .timeout_seconds = 0, // SSE streams have no overall timeout; stall detection uses low_speed_*
         .connect_timeout_seconds = 30,
         .follow_redirects = 1,
         .max_redirects = 5
     },
     .stream_callback = NULL,
     .callback_data = NULL,
-    .low_speed_limit = 1,               // 1 byte/sec minimum
-    .low_speed_time = 30                // For 30 seconds before timeout
+    .low_speed_limit = 1,
+    .low_speed_time = 30
 };
 
-// Internal callback wrapper for streaming
 static size_t streaming_write_callback(void *contents, size_t size, size_t nmemb, void *userp)
 {
     struct StreamingHTTPConfig *config = (struct StreamingHTTPConfig *)userp;
@@ -444,7 +408,6 @@ static size_t streaming_write_callback(void *contents, size_t size, size_t nmemb
         return config->stream_callback((const char *)contents, total, config->callback_data);
     }
 
-    // If no callback is set, just consume the data
     return total;
 }
 
@@ -463,7 +426,6 @@ int http_post_streaming(const char *url, const char *post_data,
         return -1;
     }
 
-    // Clear previous error
     clear_last_api_error();
 
     curl = curl_easy_init();
@@ -473,7 +435,6 @@ int http_post_streaming(const char *url, const char *post_data,
     }
     configure_ssl_certs(curl);
 
-    // Set up headers
     curl_headers = curl_slist_append(NULL, "Content-Type: application/json");
     if (curl_headers == NULL) {
         fprintf(stderr, "Error: Failed to set default headers for streaming\n");
@@ -492,44 +453,35 @@ int http_post_streaming(const char *url, const char *post_data,
         }
     }
 
-    // Basic request setup
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_data);
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, curl_headers);
 
-    // Streaming callback
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, streaming_write_callback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)config);
 
-    // Timeouts - for streaming, we use low speed limits instead of overall timeout
     if (config->base.timeout_seconds > 0) {
         curl_easy_setopt(curl, CURLOPT_TIMEOUT, config->base.timeout_seconds);
     }
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, config->base.connect_timeout_seconds);
 
-    // Low speed timeout for stalled streams
     if (config->low_speed_limit > 0) {
         curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, config->low_speed_limit);
         curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, config->low_speed_time);
     }
 
-    // Redirect handling
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, config->base.follow_redirects ? 1L : 0L);
     curl_easy_setopt(curl, CURLOPT_MAXREDIRS, config->base.max_redirects);
 
-    // Perform the request
     res = curl_easy_perform(curl);
 
-    // Get HTTP status
     if (res == CURLE_OK) {
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_status);
     }
 
-    // Cleanup
     curl_slist_free_all(curl_headers);
     curl_easy_cleanup(curl);
 
-    // Check result
     if (res != CURLE_OK) {
         api_error_set(&api_err, http_status, res, 1);
         set_last_api_error(&api_err);

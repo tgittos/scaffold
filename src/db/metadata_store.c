@@ -26,7 +26,6 @@ static char* get_metadata_path(metadata_store_t* store, const char* index_name) 
     
     snprintf(path, path_len, "%s/%s", store->base_path, index_name);
     
-    // Ensure directory exists
     mkdir(store->base_path, 0755);
     mkdir(path, 0755);
     
@@ -47,7 +46,6 @@ metadata_store_t* metadata_store_create(const char* base_path) {
     if (store == NULL) return NULL;
 
     if (base_path == NULL) {
-        // Use default path under ralph home
         store->base_path = ralph_home_path("metadata");
         if (store->base_path == NULL) {
             free(store);
@@ -61,7 +59,6 @@ metadata_store_t* metadata_store_create(const char* base_path) {
         }
     }
 
-    // Ensure base directory exists
     mkdir(store->base_path, 0755);
 
     return store;
@@ -97,7 +94,6 @@ int metadata_store_save(metadata_store_t* store, const ChunkMetadata* metadata) 
         return -1;
     }
     
-    // Create JSON object
     cJSON* json = cJSON_CreateObject();
     if (json == NULL) {
         free(filename);
@@ -120,7 +116,6 @@ int metadata_store_save(metadata_store_t* store, const ChunkMetadata* metadata) 
         }
     }
     
-    // Write to file
     char* json_str = cJSON_Print(json);
     if (json_str == NULL) {
         cJSON_Delete(json);
@@ -161,7 +156,6 @@ ChunkMetadata* metadata_store_get(metadata_store_t* store, const char* index_nam
         return NULL;
     }
     
-    // Read file
     FILE* file = fopen(filename, "r");
     if (file == NULL) {
         free(filename);
@@ -185,7 +179,6 @@ ChunkMetadata* metadata_store_get(metadata_store_t* store, const char* index_nam
     json_str[read_size] = '\0';
     fclose(file);
     
-    // Parse JSON
     cJSON* json = cJSON_Parse(json_str);
     free(json_str);
     
@@ -195,7 +188,6 @@ ChunkMetadata* metadata_store_get(metadata_store_t* store, const char* index_nam
         return NULL;
     }
     
-    // Create metadata object
     ChunkMetadata* metadata = calloc(1, sizeof(ChunkMetadata));
     if (metadata == NULL) {
         cJSON_Delete(json);
@@ -204,7 +196,6 @@ ChunkMetadata* metadata_store_get(metadata_store_t* store, const char* index_nam
         return NULL;
     }
     
-    // Extract fields
     cJSON* item = cJSON_GetObjectItem(json, "chunk_id");
     if (item) metadata->chunk_id = (size_t)item->valuedouble;
 
@@ -396,7 +387,6 @@ ChunkMetadata** metadata_store_search(metadata_store_t* store, const char* index
 }
 
 int metadata_store_update(metadata_store_t* store, const ChunkMetadata* metadata) {
-    // Update is the same as save (overwrites existing file)
     return metadata_store_save(store, metadata);
 }
 

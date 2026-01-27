@@ -10,17 +10,11 @@
 #include <windows.h>
 #endif
 
-/* Include tools_system.h for ToolCall definition */
 #include "../tools/tools_system.h"
-/* Include shell_parser.h for ShellType, detect_shell_type(), and shell parsing */
 #include "shell_parser.h"
-/* Include atomic_file.h for ApprovedPath and VerifyResult (TOCTOU protection) */
 #include "atomic_file.h"
-/* Include allowlist.h for opaque Allowlist type */
 #include "allowlist.h"
-/* Include pattern_generator.h for GeneratedPattern and related functions */
 #include "pattern_generator.h"
-/* Include rate_limiter.h for opaque RateLimiter type */
 #include "rate_limiter.h"
 
 /**
@@ -80,9 +74,6 @@ typedef enum {
     APPROVAL_NON_INTERACTIVE_DENIED  /* No TTY available for gated operation */
 } ApprovalResult;
 
-/* ShellType is defined in shell_parser.h */
-/* VerifyResult is defined in atomic_file.h */
-
 /**
  * Shell-specific allowlist entry.
  * Uses parsed command prefix matching rather than regex.
@@ -103,8 +94,6 @@ typedef struct {
     regex_t compiled;       /* Pre-compiled regex for efficiency */
     int valid;              /* Whether regex compilation succeeded */
 } AllowlistEntry;
-
-/* DenialTracker is now internal to rate_limiter.c */
 
 /**
  * IPC channel for subagent approval proxying.
@@ -134,8 +123,6 @@ typedef struct {
     ApprovalResult result;  /* The user's decision */
     char *pattern;          /* If ALLOWED_ALWAYS, the generated pattern */
 } ApprovalResponse;
-
-/* ApprovedPath is defined in atomic_file.h */
 
 /**
  * Main approval gate configuration.
@@ -167,10 +154,6 @@ typedef struct ApprovalGateConfig {
     ApprovalChannel *approval_channel;
 } ApprovalGateConfig;
 
-/* ============================================================================
- * Initialization and Cleanup
- * ========================================================================== */
-
 /**
  * Initialize gate configuration with defaults.
  * Loads settings from config file if available.
@@ -198,10 +181,6 @@ int approval_gate_init_from_parent(ApprovalGateConfig *child,
  */
 void approval_gate_cleanup(ApprovalGateConfig *config);
 
-/* ============================================================================
- * Category and Tool Mapping
- * ========================================================================== */
-
 /**
  * Map a tool name to its category.
  *
@@ -219,10 +198,6 @@ GateCategory get_tool_category(const char *tool_name);
  */
 GateAction approval_gate_get_category_action(const ApprovalGateConfig *config,
                                              GateCategory category);
-
-/* ============================================================================
- * Approval Checking
- * ========================================================================== */
 
 /**
  * Check if a tool call requires approval (doesn't prompt).
@@ -259,10 +234,6 @@ ApprovalResult approval_gate_prompt(ApprovalGateConfig *config,
 ApprovalResult check_approval_gate(ApprovalGateConfig *config,
                                    const ToolCall *tool_call,
                                    ApprovedPath *out_path);
-
-/* ============================================================================
- * Batch Approval
- * ========================================================================== */
 
 /**
  * Result structure for batch approval.
@@ -327,10 +298,6 @@ int init_batch_result(ApprovalBatchResult *batch, int count);
  */
 void free_batch_result(ApprovalBatchResult *batch);
 
-/* ============================================================================
- * Allowlist Management
- * ========================================================================== */
-
 /**
  * Add a regex pattern to the session allowlist.
  *
@@ -366,10 +333,6 @@ int approval_gate_add_shell_allowlist(ApprovalGateConfig *config,
  */
 int approval_gate_matches_allowlist(const ApprovalGateConfig *config,
                                     const ToolCall *tool_call);
-
-/* ============================================================================
- * Rate Limiting
- * ========================================================================== */
 
 /**
  * Check if a tool is rate-limited from previous denials.
@@ -409,17 +372,6 @@ void reset_denial_tracker(ApprovalGateConfig *config,
 int get_rate_limit_remaining(const ApprovalGateConfig *config,
                              const char *tool);
 
-/* ============================================================================
- * Path Verification (TOCTOU Protection)
- * ========================================================================== */
-
-/* Path verification functions (verify_approved_path, verify_and_open_approved_path,
-   free_approved_path) are defined in atomic_file.h */
-
-/* ============================================================================
- * Subagent Approval Proxy
- * ========================================================================== */
-
 /**
  * Request approval from parent process (subagent side).
  *
@@ -447,10 +399,6 @@ void handle_subagent_approval_request(ApprovalGateConfig *config,
  * @param channel Channel to clean up
  */
 void free_approval_channel(ApprovalChannel *channel);
-
-/* ============================================================================
- * Error Formatting
- * ========================================================================== */
 
 /**
  * Format a rate limit error message as JSON.
@@ -487,12 +435,6 @@ char *format_protected_file_error(const char *path);
  */
 char *format_non_interactive_error(const ToolCall *tool_call);
 
-/* format_verify_error is defined in atomic_file.h */
-
-/* ============================================================================
- * Utility Functions
- * ========================================================================== */
-
 /**
  * Get category name as string.
  *
@@ -516,12 +458,6 @@ const char *gate_action_name(GateAction action);
  * @return Static string name
  */
 const char *approval_result_name(ApprovalResult result);
-
-/* verify_result_message is defined in atomic_file.h */
-
-/* ============================================================================
- * CLI Override Functions
- * ========================================================================== */
 
 /**
  * Enable yolo mode (disable all gates).
@@ -584,7 +520,5 @@ void approval_gate_detect_interactive(ApprovalGateConfig *config);
  * @return 1 if interactive (has TTY), 0 if non-interactive
  */
 int approval_gate_is_interactive(const ApprovalGateConfig *config);
-
-/* Pattern generation types and functions are in pattern_generator.h */
 
 #endif /* APPROVAL_GATE_H */

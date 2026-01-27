@@ -9,11 +9,9 @@
 #include <string.h>
 #include <pthread.h>
 
-// Provider registration functions
 int register_openai_embedding_provider(EmbeddingProviderRegistry* registry);
 int register_local_embedding_provider(EmbeddingProviderRegistry* registry);
 
-// Global embedding provider registry with thread-safe initialization
 static EmbeddingProviderRegistry g_embedding_registry = {0};
 static pthread_once_t g_registry_init_once = PTHREAD_ONCE_INIT;
 static int g_registry_init_result = -1;
@@ -24,8 +22,7 @@ static void init_embedding_registry_internal(void) {
         return;
     }
 
-    // Register built-in providers (order matters - specific providers first, fallback last)
-    // Check return values to detect registration failures
+    // Order matters: specific providers first, generic fallback last
     if (register_openai_embedding_provider(&g_embedding_registry) != 0) {
         cleanup_embedding_provider_registry(&g_embedding_registry);
         g_registry_init_result = -1;
@@ -41,8 +38,7 @@ static void init_embedding_registry_internal(void) {
     g_registry_init_result = 0;
 }
 
-// Note: pthread_once guarantees init_embedding_registry_internal runs exactly once.
-// If initialization fails, subsequent calls return the failure result with no retry.
+/* pthread_once has no retry: if init fails, all future calls also fail. */
 static int init_embedding_registry_once(void) {
     pthread_once(&g_registry_init_once, init_embedding_registry_internal);
     return g_registry_init_result;
@@ -54,28 +50,24 @@ int embeddings_init(embeddings_config_t *config, const char *model,
         return -1;
     }
     
-    // Initialize provider registry if not done yet
     if (init_embedding_registry_once() != 0) {
         return -1;
     }
     
-    // Set default URL if not provided
     const char *url = api_url ? api_url : "https://api.openai.com/v1/embeddings";
-    
-    // Detect provider based on URL
+
     EmbeddingProvider *provider = detect_embedding_provider_for_url(&g_embedding_registry, url);
     if (provider == NULL) {
         fprintf(stderr, "Error: No suitable embedding provider found for URL: %s\n", url);
         return -1;
     }
     
-    // Use default model from provider if not specified
     const char *final_model = model;
     if (final_model == NULL && provider->capabilities.default_model) {
         final_model = provider->capabilities.default_model;
     }
     if (final_model == NULL) {
-        final_model = "text-embedding-3-small"; // Ultimate fallback
+        final_model = "text-embedding-3-small";
     }
     
     config->model = safe_strdup(final_model);
@@ -88,19 +80,16 @@ int embeddings_init(embeddings_config_t *config, const char *model,
         return -1;
     }
     
-    // Check if auth is required but not provided
+    // Warn but don't fail: some providers work without auth in certain configurations
     if (provider->capabilities.requires_auth && (api_key == NULL || strlen(api_key) == 0)) {
-        fprintf(stderr, "Warning: Provider %s requires authentication but no API key provided\n", 
+        fprintf(stderr, "Warning: Provider %s requires authentication but no API key provided\n",
                 provider->capabilities.name);
-        // Don't fail here - some providers might work without auth in certain configurations
     }
     
     return 0;
 }
 
-// These functions are now handled by individual providers
-
-int embeddings_get_vector(const embeddings_config_t *config, const char *text, 
+int embeddings_get_vector(const embeddings_config_t *config, const char *text,
                           embedding_vector_t *embedding) {
     if (config == NULL || text == NULL || embedding == NULL) {
         return -1;
@@ -113,7 +102,6 @@ int embeddings_get_vector(const embeddings_config_t *config, const char *text,
     
     EmbeddingProvider *provider = config->provider;
 
-    // Verify required function pointers are set
     if (provider->build_request_json == NULL) {
         fprintf(stderr, "Error: Provider missing build_request_json implementation\n");
         return -1;
@@ -127,7 +115,6 @@ int embeddings_get_vector(const embeddings_config_t *config, const char *text,
         return -1;
     }
 
-    // Build request JSON using provider
     char *request_json = provider->build_request_json(provider, config->model, text);
     if (request_json == NULL) {
         fprintf(stderr, "Error: Failed to build embeddings request\n");
@@ -136,8 +123,7 @@ int embeddings_get_vector(const embeddings_config_t *config, const char *text,
 
     debug_printf("Embeddings request JSON: %s\n", request_json);
 
-    // Set up headers using provider (size 11 to always allow NULL terminator)
-    const char *headers[11];
+    const char *headers[11]; /* +1 for NULL terminator */
     const int max_headers = 10;
     int header_count = provider->build_headers(provider, config->api_key, headers, max_headers);
     if (header_count < 0 || header_count > max_headers) {
@@ -146,10 +132,8 @@ int embeddings_get_vector(const embeddings_config_t *config, const char *text,
         return -1;
     }
 
-    // Always null-terminate the headers array
     headers[header_count] = NULL;
 
-    // Make API request
     struct HTTPResponse response = {0};
     int result = http_post_with_headers(config->api_url, request_json, headers, &response);
 
@@ -161,7 +145,6 @@ int embeddings_get_vector(const embeddings_config_t *config, const char *text,
         return -1;
     }
 
-    // Check for API errors
     if (strstr(response.data, "\"error\"") != NULL) {
         debug_fprintf(stderr, "API Error: %s\n", response.data);
         cleanup_response(&response);
@@ -170,7 +153,6 @@ int embeddings_get_vector(const embeddings_config_t *config, const char *text,
 
     debug_printf_json("Embeddings response: ", response.data);
 
-    // Parse the response using provider
     result = provider->parse_response(provider, response.data, embedding);
     cleanup_response(&response);
 
@@ -193,6 +175,6 @@ void embeddings_cleanup(embeddings_config_t *config) {
         config->model = NULL;
         config->api_key = NULL;
         config->api_url = NULL;
-        config->provider = NULL; // Provider is not owned by config, just a reference
+        config->provider = NULL; /* not owned, just a reference to the global registry */
     }
 }

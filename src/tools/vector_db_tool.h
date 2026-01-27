@@ -6,12 +6,7 @@
 
 int register_vector_db_tool(ToolRegistry *registry);
 
-/**
- * Get the global vector database instance
- * Creates it if it doesn't exist
- * 
- * @return Global vector database instance
- */
+/** Returns the singleton vector database, creating it on first call. */
 vector_db_t* get_global_vector_db(void);
 
 int execute_vector_db_create_index_tool_call(const ToolCall *tool_call, ToolResult *result);

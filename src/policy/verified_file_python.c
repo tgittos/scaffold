@@ -1,10 +1,3 @@
-/**
- * Python Extension for Verified File Access
- *
- * Implements a Python extension module that allows Python-based file tools
- * to use TOCTOU-safe file operations through the verified file context.
- */
-
 #include "verified_file_python.h"
 #include "verified_file_context.h"
 #include <Python.h>
@@ -52,7 +45,6 @@ static PyObject *py_open_verified(PyObject *self, PyObject *args) {
         return NULL;
     }
 
-    /* Convert mode string to VerifiedFileMode */
     VerifiedFileMode file_mode;
     if (strcmp(mode, "r") == 0 || strcmp(mode, "rb") == 0) {
         file_mode = VERIFIED_MODE_READ;
@@ -132,7 +124,6 @@ static PyObject *py_path_matches(PyObject *self, PyObject *args) {
     }
 }
 
-/* Module method definitions */
 static PyMethodDef VerifiedIOMethods[] = {
     {"has_verified_context", py_has_verified_context, METH_NOARGS,
      "Check if a verified file context is active."},
@@ -145,7 +136,6 @@ static PyMethodDef VerifiedIOMethods[] = {
     {NULL, NULL, 0, NULL}
 };
 
-/* Module definition */
 static struct PyModuleDef verified_io_module = {
     PyModuleDef_HEAD_INIT,
     "_ralph_verified_io",
@@ -158,14 +148,12 @@ static struct PyModuleDef verified_io_module = {
     NULL   /* m_free */
 };
 
-/* Module initialization function */
 PyMODINIT_FUNC PyInit__ralph_verified_io(void) {
     return PyModule_Create(&verified_io_module);
 }
 
 int verified_file_python_init(void) {
-    /* Register the module as a built-in module.
-     * This must be called before Py_Initialize(). */
+    /* Must be called before Py_Initialize(). */
     if (PyImport_AppendInittab("_ralph_verified_io", PyInit__ralph_verified_io) == -1) {
         return -1;
     }

@@ -5,10 +5,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-// =============================================================================
-// JSON Type Constants
-// =============================================================================
-
 #define JSON_TYPE_ASSISTANT "assistant"
 #define JSON_TYPE_USER "user"
 #define JSON_TYPE_SYSTEM "system"
@@ -17,21 +13,10 @@
 #define JSON_CONTENT_TOOL_USE "tool_use"
 #define JSON_CONTENT_TOOL_RESULT "tool_result"
 
-// =============================================================================
-// Helper Functions
-// =============================================================================
-
-/**
- * Log an allocation failure to stderr (doesn't interfere with JSON on stdout).
- */
 static void log_alloc_failure(const char* context) {
     fprintf(stderr, "json_output: allocation failed in %s\n", context);
 }
 
-/**
- * Print a cJSON object as a single line to stdout and free it.
- * Returns 0 on success, -1 on failure.
- */
 static int print_and_free_json(cJSON* root) {
     if (root == NULL) {
         return -1;
@@ -51,10 +36,6 @@ static int print_and_free_json(cJSON* root) {
     return 0;
 }
 
-/**
- * Create a usage object with token counts.
- * Returns NULL on failure (caller should handle cleanup).
- */
 static cJSON* create_usage_object(int input_tokens, int output_tokens) {
     cJSON *usage = cJSON_CreateObject();
     if (usage == NULL) {
@@ -72,19 +53,12 @@ static cJSON* create_usage_object(int input_tokens, int output_tokens) {
     return usage;
 }
 
-/**
- * Callback type for extracting tool call fields from different struct types.
- */
 typedef struct {
     const char* id;
     const char* name;
     const char* arguments;
 } ToolCallFields;
 
-/**
- * Build assistant tool calls JSON using a generic field extractor.
- * This eliminates code duplication between streaming and buffered versions.
- */
 static int build_assistant_tool_calls_json(
     int count,
     ToolCallFields (*get_fields)(void* tools, int index),
@@ -128,7 +102,6 @@ static int build_assistant_tool_calls_json(
             continue;  // Skip this tool but try to output others
         }
 
-        // Require valid id and name - skip tool if missing
         if (fields.id == NULL || fields.name == NULL) {
             fprintf(stderr, "json_output: skipping tool call with NULL id or name\n");
             cJSON_Delete(tool_use);
@@ -139,13 +112,11 @@ static int build_assistant_tool_calls_json(
         cJSON_AddStringToObject(tool_use, "id", fields.id);
         cJSON_AddStringToObject(tool_use, "name", fields.name);
 
-        // Parse arguments as JSON object
         if (fields.arguments != NULL) {
             cJSON *input = cJSON_Parse(fields.arguments);
             if (input != NULL) {
                 cJSON_AddItemToObject(tool_use, "input", input);
             } else {
-                // Fallback to empty object if parse fails
                 cJSON *empty = cJSON_CreateObject();
                 if (empty != NULL) {
                     cJSON_AddItemToObject(tool_use, "input", empty);
@@ -163,7 +134,6 @@ static int build_assistant_tool_calls_json(
 
     cJSON_AddItemToObject(message, "content", content);
 
-    // Add usage object (optional - continue even if it fails)
     cJSON *usage = create_usage_object(input_tokens, output_tokens);
     if (usage != NULL) {
         cJSON_AddItemToObject(message, "usage", usage);
@@ -174,7 +144,6 @@ static int build_assistant_tool_calls_json(
     return print_and_free_json(root);
 }
 
-// Field extractors for the two tool call struct types
 static ToolCallFields get_streaming_tool_fields(void* tools, int index) {
     StreamingToolUse* arr = (StreamingToolUse*)tools;
     return (ToolCallFields){
@@ -192,10 +161,6 @@ static ToolCallFields get_buffered_tool_fields(void* tools, int index) {
         .arguments = arr[index].arguments
     };
 }
-
-// =============================================================================
-// Public API
-// =============================================================================
 
 void json_output_init(void) {
     // Intentional no-op: provides a consistent init/cleanup lifecycle pattern.
@@ -247,7 +212,6 @@ void json_output_assistant_text(const char* text, int input_tokens, int output_t
     cJSON_AddItemToArray(content, text_block);
     cJSON_AddItemToObject(message, "content", content);
 
-    // Add usage object (optional - continue even if it fails)
     cJSON *usage = create_usage_object(input_tokens, output_tokens);
     if (usage != NULL) {
         cJSON_AddItemToObject(message, "usage", usage);

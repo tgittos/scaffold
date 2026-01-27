@@ -26,7 +26,7 @@ LLMProvider* detect_provider_for_url(ProviderRegistry* registry, const char* api
         }
     }
 
-    return NULL; // No matching provider found
+    return NULL;
 }
 
 void cleanup_provider_registry(ProviderRegistry* registry) {

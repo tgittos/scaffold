@@ -1,47 +1,12 @@
-/**
- * PowerShell Command Parser Implementation
- *
- * Parses PowerShell commands with proper handling of:
- * - Single and double quotes (both are string delimiters)
- * - Metacharacters: ; && || | $() {} > >> <
- * - & and . as call operators at expression start
- * - $variable expansion
- * - Script blocks {}
- * - Subexpressions $()
- *
- * The parser is intentionally conservative: commands containing any potentially
- * dangerous constructs are flagged and never auto-matched by allowlist entries.
- *
- * PowerShell-specific dangerous patterns include cmdlets like:
- * - Invoke-Expression (iex)
- * - Invoke-Command (icm)
- * - Start-Process
- * - -EncodedCommand (-enc)
- * - DownloadString/DownloadFile
- */
-
 #include "shell_parser.h"
 
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 
-/* ============================================================================
- * Internal Constants
- * ========================================================================== */
-
 /* Initial capacity for token array */
 #define PS_INITIAL_TOKEN_CAPACITY 16
 
-/* Note: Maximum command length check is in parse_shell_command_for_type() */
-
-/* ============================================================================
- * Internal Helpers
- * ========================================================================== */
-
-/**
- * Token accumulator for building parsed results.
- */
 typedef struct {
     char **tokens;
     int count;
@@ -93,45 +58,16 @@ static void ps_token_list_free(PsTokenList *list) {
     list->capacity = 0;
 }
 
-/**
- * Check if a character is a PowerShell metacharacter (outside quotes).
- * PowerShell metacharacters: ; | & ( ) { } $ ` > <
- *
- * Note: && and || are pipeline chain operators in PowerShell 7+.
- */
 static int is_ps_metachar(char c) {
     return c == ';' || c == '|' || c == '&' || c == '(' || c == ')' ||
            c == '{' || c == '}' || c == '$' || c == '`' || c == '>' || c == '<';
 }
 
-/* ============================================================================
- * PowerShell Parser Implementation
- * ========================================================================== */
-
-/**
- * Parse a PowerShell command.
- *
- * Parsing rules:
- * - Both single and double quotes are string delimiters
- * - Single quotes: literal content, no escape sequences
- * - Double quotes: allow variable expansion and escape with backtick
- * - Detect metacharacters: ; | & ( ) { } $ ` > <
- * - ; is command separator
- * - && and || are pipeline chain operators (PS 7+)
- * - | is pipe
- * - $() is subexpression
- * - {} is script block (treated as subshell for safety)
- * - & at start of expression is call operator
- * - . at start of expression is dot-source operator
- * - $var is variable expansion (treated as subshell for safety)
- * - ` is escape character (like \ in POSIX)
- */
 int parse_powershell(const char *command, ParsedShellCommand *result) {
     if (!command || !result) {
         return -1;
     }
 
-    /* Initialize result */
     result->tokens = NULL;
     result->token_count = 0;
     result->has_chain = 0;
@@ -142,7 +78,6 @@ int parse_powershell(const char *command, ParsedShellCommand *result) {
                            powershell_command_is_dangerous(command);
     result->shell_type = SHELL_TYPE_POWERSHELL;
 
-    /* Empty command is valid */
     if (!*command) {
         return 0;
     }
@@ -152,7 +87,6 @@ int parse_powershell(const char *command, ParsedShellCommand *result) {
         return -1;
     }
 
-    /* Current token being built */
     char *token_buf = malloc(strlen(command) + 1);
     if (!token_buf) {
         ps_token_list_free(&tokens);
@@ -177,7 +111,6 @@ int parse_powershell(const char *command, ParsedShellCommand *result) {
             result->has_chain = 1;
         }
 
-        /* Handle single quotes */
         if (c == '\'' && !in_double_quote) {
             in_single_quote = !in_single_quote;
             had_quotes = 1;
@@ -186,7 +119,6 @@ int parse_powershell(const char *command, ParsedShellCommand *result) {
             continue;
         }
 
-        /* Handle double quotes */
         if (c == '"' && !in_single_quote) {
             in_double_quote = !in_double_quote;
             had_quotes = 1;
@@ -195,25 +127,21 @@ int parse_powershell(const char *command, ParsedShellCommand *result) {
             continue;
         }
 
-        /* Inside single quotes - literal content, no interpretation */
         if (in_single_quote) {
             token_buf[token_len++] = c;
             p++;
             continue;
         }
 
-        /* Inside double quotes - check for backtick escape and variables */
         if (in_double_quote) {
             if (c == '`' && *(p + 1)) {
-                /* Backtick is escape character in double quotes */
-                /* Skip the backtick and include the next character */
+                /* Backtick is escape character in PS double quotes */
                 p++;
                 token_buf[token_len++] = *p;
                 p++;
                 continue;
             }
             if (c == '$') {
-                /* Variable expansion in double quotes */
                 result->has_subshell = 1;
             }
             token_buf[token_len++] = c;
@@ -221,9 +149,7 @@ int parse_powershell(const char *command, ParsedShellCommand *result) {
             continue;
         }
 
-        /* Outside quotes - check for whitespace */
         if (isspace((unsigned char)c)) {
-            /* End current token if any (or if we had empty quotes) */
             if (token_len > 0 || had_quotes) {
                 if (ps_token_list_add(&tokens, token_buf, token_len) != 0) {
                     free(token_buf);
@@ -238,11 +164,7 @@ int parse_powershell(const char *command, ParsedShellCommand *result) {
             continue;
         }
 
-        /*
-         * Handle backtick escape outside quotes.
-         * In PowerShell, backtick is the escape character.
-         * Include the escaped character in the token but mark as unsafe.
-         */
+        /* Backtick escapes make matching unsafe */
         if (c == '`') {
             result->has_chain = 1;  /* Escape sequences make matching unsafe */
             if (*(p + 1)) {
@@ -256,13 +178,9 @@ int parse_powershell(const char *command, ParsedShellCommand *result) {
             continue;
         }
 
-        /*
-         * Check for && chain operator BEFORE checking for call operator.
-         * && is pipeline chain operator in PS 7+, should always be flagged.
-         */
+        /* Must check && before single & to avoid misidentifying as call operator */
         if (c == '&' && *(p + 1) == '&') {
             result->has_chain = 1;
-            /* End current token if any */
             if (token_len > 0) {
                 if (ps_token_list_add(&tokens, token_buf, token_len) != 0) {
                     free(token_buf);
@@ -276,9 +194,8 @@ int parse_powershell(const char *command, ParsedShellCommand *result) {
             continue;
         }
 
-        /* Check for call operator & at start of expression (single &) */
         if (c == '&' && at_expression_start) {
-            result->has_subshell = 1;  /* Call operator */
+            result->has_subshell = 1;
             if (token_len > 0) {
                 if (ps_token_list_add(&tokens, token_buf, token_len) != 0) {
                     free(token_buf);
@@ -291,15 +208,12 @@ int parse_powershell(const char *command, ParsedShellCommand *result) {
             continue;
         }
 
-        /*
-         * Check for dot-source operator . at start of expression.
-         * Dot-source requires a space/tab after the dot: ". script.ps1"
-         * A path like "./folder" is NOT dot-source (no space after dot).
-         */
+        /* Dot-source operator requires whitespace after the dot;
+         * "./folder" is a path, not dot-source */
         if (c == '.' && at_expression_start) {
             char next = *(p + 1);
             if (next == ' ' || next == '\t') {
-                result->has_subshell = 1;  /* Dot-source operator */
+                result->has_subshell = 1;
                 if (token_len > 0) {
                     if (ps_token_list_add(&tokens, token_buf, token_len) != 0) {
                         free(token_buf);
@@ -311,49 +225,33 @@ int parse_powershell(const char *command, ParsedShellCommand *result) {
                 p++;
                 continue;
             }
-            /* Otherwise, . is part of a path like ./folder, not dot-source */
         }
 
-        /* Check for metacharacters */
         if (is_ps_metachar(c)) {
             at_expression_start = 0;
 
-            /* Detect specific patterns */
             if (c == ';') {
                 result->has_chain = 1;
             } else if (c == '|') {
-                /* Check for || (conditional OR, PS 7+) */
                 if (*(p + 1) == '|') {
                     result->has_chain = 1;
                 } else {
                     result->has_pipe = 1;
                 }
             } else if (c == '&') {
-                /*
-                 * Single & reaching here is NOT at expression start (call operator handled above)
-                 * and NOT part of && (handled earlier). This is unusual in PowerShell and
-                 * should be flagged as potentially dangerous.
-                 */
+                /* Not at expression start and not &&; unusual, flag as unsafe */
                 result->has_chain = 1;
             } else if (c == '$') {
-                /* Check for $( subexpression */
-                if (*(p + 1) == '(') {
-                    result->has_subshell = 1;
-                } else {
-                    /* Variable expansion - $var */
-                    result->has_subshell = 1;  /* Variables make matching unsafe */
-                }
+                /* Both $() subexpressions and $var expansion make matching unsafe */
+                result->has_subshell = 1;
             } else if (c == '{' || c == '}') {
-                /* Script blocks */
                 result->has_subshell = 1;
             } else if (c == '(' || c == ')') {
-                /* Subexpressions and grouping */
                 result->has_subshell = 1;
             } else if (c == '>' || c == '<') {
                 result->has_redirect = 1;
             }
 
-            /* End current token if any */
             if (token_len > 0) {
                 if (ps_token_list_add(&tokens, token_buf, token_len) != 0) {
                     free(token_buf);
@@ -363,9 +261,7 @@ int parse_powershell(const char *command, ParsedShellCommand *result) {
                 token_len = 0;
             }
 
-            /* Skip past the metacharacter(s) */
             p++;
-            /* Skip second character of two-char operators */
             if ((c == '&' && *p == '&') || (c == '|' && *p == '|') ||
                 (c == '>' && *p == '>')) {
                 p++;
@@ -373,18 +269,16 @@ int parse_powershell(const char *command, ParsedShellCommand *result) {
             continue;
         }
 
-        /* Regular character - accumulate into token */
         token_buf[token_len++] = c;
         at_expression_start = 0;
         p++;
     }
 
-    /* Handle unbalanced quotes - mark as having chain to prevent matching */
+    /* Unbalanced quotes make matching unsafe */
     if (in_single_quote || in_double_quote) {
         result->has_chain = 1;
     }
 
-    /* Add final token if any (or if we had empty quotes at the end) */
     if (token_len > 0 || had_quotes) {
         if (ps_token_list_add(&tokens, token_buf, token_len) != 0) {
             free(token_buf);
@@ -395,10 +289,7 @@ int parse_powershell(const char *command, ParsedShellCommand *result) {
 
     free(token_buf);
 
-    /* Transfer tokens to result */
     result->tokens = tokens.tokens;
     result->token_count = tokens.count;
-
-    /* Don't free the token list itself - we've transferred ownership */
     return 0;
 }

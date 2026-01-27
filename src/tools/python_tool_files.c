@@ -14,11 +14,9 @@
 #include <errno.h>
 #include <pwd.h>
 
-// Static storage for loaded Python tools
 static PythonToolRegistry python_tool_registry = {0};
 static int tool_files_initialized = 0;
 
-// Names of the default Python tools (must match filenames without .py)
 static const char *DEFAULT_TOOL_NAMES[] = {
     "read_file",
     "write_file",
@@ -32,12 +30,10 @@ static const char *DEFAULT_TOOL_NAMES[] = {
     NULL
 };
 
-// Get or create the tools directory path
 static char* get_tools_dir_path(void) {
     return ralph_home_path(PYTHON_TOOLS_DIR_NAME);
 }
 
-// Create directory recursively
 static int mkdir_recursive(const char *path) {
     char *path_copy = strdup(path);
     if (path_copy == NULL) {
@@ -65,13 +61,11 @@ static int mkdir_recursive(const char *path) {
     return 0;
 }
 
-// Check if a file exists
 static int file_exists(const char *path) {
     struct stat st;
     return stat(path, &st) == 0;
 }
 
-// Read embedded file from /zip/python_defaults/
 static char* read_embedded_file(const char *filename) {
     char path[512];
     snprintf(path, sizeof(path), "/zip/python_defaults/%s", filename);
@@ -103,7 +97,6 @@ static char* read_embedded_file(const char *filename) {
     return content;
 }
 
-// Write content to a file
 static int write_file(const char *path, const char *content) {
     FILE *f = fopen(path, "w");
     if (f == NULL) {
@@ -117,7 +110,6 @@ static int write_file(const char *path, const char *content) {
     return (written == len) ? 0 : -1;
 }
 
-// Extract default Python tool files to ~/.local/ralph/tools/
 static int extract_default_tools(const char *tools_dir) {
     int extracted = 0;
 
@@ -128,7 +120,7 @@ static int extract_default_tools(const char *tools_dir) {
         snprintf(embedded_name, sizeof(embedded_name), "%s.py", DEFAULT_TOOL_NAMES[i]);
         snprintf(dest_path, sizeof(dest_path), "%s/%s", tools_dir, embedded_name);
 
-        // Only extract if file doesn't exist (user may have modified it)
+        // Skip if file already exists -- user may have customized it
         if (file_exists(dest_path)) {
             continue;
         }
@@ -156,14 +148,12 @@ int python_init_tool_files(void) {
         return 0;
     }
 
-    // Get tools directory path
     char *tools_dir = get_tools_dir_path();
     if (tools_dir == NULL) {
         fprintf(stderr, "Error: Could not determine tools directory path\n");
         return -1;
     }
 
-    // Create directory if it doesn't exist
     if (!file_exists(tools_dir)) {
         if (mkdir_recursive(tools_dir) != 0) {
             fprintf(stderr, "Error: Could not create tools directory: %s\n", tools_dir);
@@ -172,27 +162,20 @@ int python_init_tool_files(void) {
         }
     }
 
-    // Extract default tools if needed
-    int extracted = extract_default_tools(tools_dir);
-    if (extracted > 0) {
-        // Successfully extracted some tools
-    }
+    extract_default_tools(tools_dir);
 
-    // Store the tools directory path
     python_tool_registry.tools_dir = tools_dir;
     tool_files_initialized = 1;
 
     return 0;
 }
 
-// Parse Python function signature and docstring to create tool parameters
 static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
     if (!python_interpreter_is_initialized()) {
         return -1;
     }
 
-    // Python code to extract function schema
-    // Also parses Gate: and Match: directives from module docstring
+    // Introspects function signature, docstring, and Gate:/Match: directives
     const char *schema_code =
         "def _ralph_parse_docstring_args(doc):\n"
         "    \"\"\"Parse Args section from Google-style docstring.\"\"\"\n"
@@ -302,7 +285,6 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
         "    except Exception as e:\n"
         "        return None\n";
 
-    // Execute the schema extraction code
     PyObject *main_module = PyImport_AddModule("__main__");
     if (main_module == NULL) {
         return -1;
@@ -310,7 +292,6 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
 
     PyObject *globals = PyModule_GetDict(main_module);
 
-    // Define the extraction function
     PyObject *result = PyRun_String(schema_code, Py_file_input, globals, globals);
     if (result == NULL) {
         PyErr_Clear();
@@ -318,7 +299,6 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
     }
     Py_DECREF(result);
 
-    // Call the extraction function
     char call_code[512];
     snprintf(call_code, sizeof(call_code),
              "_ralph_schema_result = _ralph_extract_schema('%s')", func_name);
@@ -330,7 +310,6 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
     }
     Py_DECREF(result);
 
-    // Get the result
     PyObject *schema_result = PyDict_GetItemString(globals, "_ralph_schema_result");
     if (schema_result == NULL || schema_result == Py_None) {
         return -1;
@@ -342,13 +321,11 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
         return -1;
     }
 
-    // Parse JSON schema
     cJSON *schema = cJSON_Parse(schema_json);
     if (schema == NULL) {
         return -1;
     }
 
-    // Extract name and description
     cJSON *name_item = cJSON_GetObjectItem(schema, "name");
     cJSON *desc_item = cJSON_GetObjectItem(schema, "description");
     cJSON *params_item = cJSON_GetObjectItem(schema, "parameters");
@@ -385,7 +362,6 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
         tool_def->match_arg = strdup(match_item->valuestring);
     }
 
-    // Extract parameters
     if (cJSON_IsArray(params_item)) {
         int param_count = cJSON_GetArraySize(params_item);
         if (param_count > 0) {
@@ -437,7 +413,7 @@ int python_load_tool_files(void) {
         return -1;
     }
 
-    // Free existing tools if reloading (prevents memory leak on double-init)
+    // Prevent memory leak on double-init
     if (python_tool_registry.tools != NULL) {
         for (int i = 0; i < python_tool_registry.count; i++) {
             PythonToolDef *tool = &python_tool_registry.tools[i];
@@ -467,7 +443,6 @@ int python_load_tool_files(void) {
         return -1;
     }
 
-    // Allocate tools array
     if (python_tool_registry.tools == NULL) {
         python_tool_registry.tools = calloc(MAX_PYTHON_TOOLS, sizeof(PythonToolDef));
         if (python_tool_registry.tools == NULL) {
@@ -478,7 +453,6 @@ int python_load_tool_files(void) {
 
     struct dirent *entry;
     while ((entry = readdir(dir)) != NULL) {
-        // Skip hidden files and non-.py files
         if (entry->d_name[0] == '.') continue;
 
         size_t name_len = strlen(entry->d_name);
@@ -491,12 +465,10 @@ int python_load_tool_files(void) {
             break;
         }
 
-        // Build full path
         char full_path[512];
         snprintf(full_path, sizeof(full_path), "%s/%s",
                  python_tool_registry.tools_dir, entry->d_name);
 
-        // Read the file content
         FILE *f = fopen(full_path, "r");
         if (f == NULL) {
             fprintf(stderr, "Warning: Could not read tool file: %s\n", full_path);
@@ -522,7 +494,6 @@ int python_load_tool_files(void) {
         fclose(f);
         content[read] = '\0';
 
-        // Execute the Python file to load it into globals
         PyObject *main_module = PyImport_AddModule("__main__");
         if (main_module == NULL) {
             free(content);
@@ -540,12 +511,10 @@ int python_load_tool_files(void) {
         }
         Py_DECREF(result);
 
-        // Extract the function name from the filename
         char func_name[256];
         strncpy(func_name, entry->d_name, sizeof(func_name) - 1);
-        func_name[name_len - 3] = '\0';  // Remove .py extension
+        func_name[name_len - 3] = '\0';
 
-        // Extract tool schema
         PythonToolDef *tool_def = &python_tool_registry.tools[python_tool_registry.count];
         memset(tool_def, 0, sizeof(PythonToolDef));
 
@@ -573,7 +542,7 @@ int python_register_tool_schemas(ToolRegistry *registry) {
 
         if (tool->name == NULL) continue;
 
-        // Deep copy parameters for registration
+        // register_tool deep-copies, but we need our own copy since tool_def owns the originals
         ToolParameter *params = NULL;
         if (tool->parameter_count > 0 && tool->parameters != NULL) {
             params = calloc(tool->parameter_count, sizeof(ToolParameter));
@@ -593,7 +562,6 @@ int python_register_tool_schemas(ToolRegistry *registry) {
                                    params, tool->parameter_count,
                                    execute_python_file_tool_call);
 
-        // Free temporary parameter copies
         if (params != NULL) {
             for (int j = 0; j < tool->parameter_count; j++) {
                 free(params[j].name);
@@ -627,10 +595,8 @@ int execute_python_file_tool_call(const ToolCall *tool_call, ToolResult *result)
         return 0;
     }
 
-    // Parse the JSON arguments
     cJSON *args = cJSON_Parse(tool_call->arguments);
     if (args == NULL) {
-        // Debug: log what arguments were received
         debug_printf("[DEBUG] Failed to parse arguments for %s\n", tool_call->name);
         debug_printf("[DEBUG] Arguments string: '%s'\n",
                      tool_call->arguments ? tool_call->arguments : "(NULL)");
@@ -643,11 +609,8 @@ int execute_python_file_tool_call(const ToolCall *tool_call, ToolResult *result)
         return 0;
     }
 
-    // Build Python function call
-    // Convert JSON args to Python kwargs
-
-    // First pass: calculate required size for kwargs buffer
-    size_t kwargs_size_needed = 1; // For null terminator
+    // Two-pass approach: first calculate buffer size, then build kwargs string
+    size_t kwargs_size_needed = 1;
     cJSON *item = NULL;
     cJSON_ArrayForEach(item, args) {
         if (cJSON_IsNull(item)) {
@@ -674,7 +637,6 @@ int execute_python_file_tool_call(const ToolCall *tool_call, ToolResult *result)
         }
     }
 
-    // Allocate kwargs buffer dynamically
     char *kwargs = malloc(kwargs_size_needed);
     if (kwargs == NULL) {
         cJSON_Delete(args);
@@ -685,23 +647,19 @@ int execute_python_file_tool_call(const ToolCall *tool_call, ToolResult *result)
     kwargs[0] = '\0';
     size_t kwargs_pos = 0;
 
-    // Second pass: build kwargs string
     cJSON_ArrayForEach(item, args) {
-        // Skip null values - they would cause syntax errors
+        // Null values would cause Python syntax errors
         if (cJSON_IsNull(item)) {
             continue;
         }
 
-        // Add comma separator after first argument
         if (kwargs_pos > 0) {
             kwargs_pos += snprintf(kwargs + kwargs_pos, kwargs_size_needed - kwargs_pos, ", ");
         }
 
         if (cJSON_IsString(item)) {
-            // Escape single quotes and backslashes in string values
             const char *str_val = item->valuestring;
             size_t str_len = strlen(str_val);
-            // Worst case: every char escapes to 2 chars, plus null terminator
             size_t escaped_size = str_len * 2 + 1;
             char *escaped = malloc(escaped_size);
             if (escaped == NULL) {
@@ -758,8 +716,6 @@ int execute_python_file_tool_call(const ToolCall *tool_call, ToolResult *result)
     }
     cJSON_Delete(args);
 
-    // Allocate call_code buffer based on actual kwargs size
-    // Template code is ~700 bytes, plus function name
     size_t code_len = strlen(tool_call->name) + kwargs_pos + 1024;
     char *call_code = malloc(code_len);
     if (call_code == NULL) {
@@ -769,7 +725,6 @@ int execute_python_file_tool_call(const ToolCall *tool_call, ToolResult *result)
         return 0;
     }
 
-    // Build the Python execution code
     snprintf(call_code, code_len,
              "import json\n"
              "try:\n"
@@ -787,10 +742,8 @@ int execute_python_file_tool_call(const ToolCall *tool_call, ToolResult *result)
              "    _ralph_result_json = json.dumps({'error': str(e), 'traceback': traceback.format_exc(), 'success': False})\n",
              tool_call->name, kwargs);
 
-    // Free kwargs now that we've built call_code
     free(kwargs);
 
-    // Execute the Python code
     PyObject *main_module = PyImport_AddModule("__main__");
     if (main_module == NULL) {
         free(call_code);
@@ -812,7 +765,6 @@ int execute_python_file_tool_call(const ToolCall *tool_call, ToolResult *result)
     }
     Py_DECREF(exec_result);
 
-    // Get the result
     PyObject *result_obj = PyDict_GetItemString(globals, "_ralph_result_json");
     if (result_obj == NULL) {
         result->result = strdup("{\"error\": \"No result from Python\", \"success\": false}");
@@ -830,15 +782,12 @@ int execute_python_file_tool_call(const ToolCall *tool_call, ToolResult *result)
 
     result->result = strdup(result_str);
 
-    // Determine success: JSON parsed without an "error" field means success
     cJSON *result_json = cJSON_Parse(result_str);
     if (result_json != NULL) {
         cJSON *error_item = cJSON_GetObjectItem(result_json, "error");
-        // Success if no error field present
         result->success = (error_item == NULL || !cJSON_IsString(error_item)) ? 1 : 0;
         cJSON_Delete(result_json);
     } else {
-        // JSON didn't parse - treat as failure
         result->success = 0;
     }
 
@@ -866,7 +815,6 @@ char* python_get_loaded_tools_description(void) {
         return strdup("No Python tools loaded.");
     }
 
-    // Calculate required size
     size_t size = 256;
     for (int i = 0; i < python_tool_registry.count; i++) {
         if (python_tool_registry.tools[i].name != NULL) {

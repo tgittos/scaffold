@@ -31,27 +31,19 @@
 #include <io.h>
 #include <shlwapi.h>
 #define PATH_SEP '\\'
-/* Maximum path length for Windows long paths */
 #define WIN_LONG_PATH_PREFIX L"\\\\?\\"
 #define WIN_LONG_PATH_PREFIX_LEN 4
 #else
 #define PATH_SEP '/'
 #endif
 
-/* ============================================================================
- * Internal Constants
- * ========================================================================== */
-
-/* Maximum path length for internal buffers */
 #ifndef PATH_MAX
 #define PATH_MAX 4096
 #endif
 
-/* JSON format overhead for error messages (quotes, keys, braces, etc.) */
 #define JSON_FORMAT_OVERHEAD 128
 
 #ifdef __linux__
-/* Network filesystem type strings for Linux /proc/mounts */
 static const char *NETWORK_FS_TYPES[] = {
     "nfs",
     "nfs4",
@@ -66,30 +58,16 @@ static const char *NETWORK_FS_TYPES[] = {
 #endif
 
 #ifdef _WIN32
-/* ============================================================================
- * Windows Helper Functions
- * ========================================================================== */
-
-/**
- * Convert a path to a wide string for Windows API functions.
- * Prepends long path prefix (\\?\) for paths > 260 chars.
- *
- * @param path UTF-8 encoded path
- * @return Wide string path, caller must free with free()
- */
 static wchar_t *path_to_wide(const char *path) {
     if (!path) return NULL;
 
-    /* Calculate required buffer size */
     int len = MultiByteToWideChar(CP_UTF8, 0, path, -1, NULL, 0);
     if (len <= 0) return NULL;
 
-    /* Check if we need long path prefix */
     size_t path_len = strlen(path);
     size_t need_prefix = (path_len >= MAX_PATH) ? 1 : 0;
     size_t prefix_len = need_prefix ? WIN_LONG_PATH_PREFIX_LEN : 0;
 
-    /* Calculate allocation size with overflow check */
     size_t total_len = prefix_len + (size_t)len;
     size_t alloc_size = total_len * sizeof(wchar_t);
     if (alloc_size / sizeof(wchar_t) < total_len) {
@@ -111,13 +89,6 @@ static wchar_t *path_to_wide(const char *path) {
     return wide;
 }
 
-/**
- * Determine Windows access flags from POSIX open flags.
- * O_RDONLY is 0, so we check for write flags first.
- *
- * @param flags POSIX open flags (O_RDONLY, O_WRONLY, O_RDWR)
- * @return Windows access flags (GENERIC_READ, GENERIC_WRITE, etc.)
- */
 static DWORD flags_to_access(int flags) {
     int access_mode = flags & (O_RDONLY | O_WRONLY | O_RDWR);
 
@@ -132,10 +103,6 @@ static DWORD flags_to_access(int flags) {
     }
 }
 #endif
-
-/* ============================================================================
- * Error Message Utilities
- * ========================================================================== */
 
 const char *verify_result_message(VerifyResult result) {
     switch (result) {
@@ -174,7 +141,6 @@ char *format_verify_error(VerifyResult result, const char *path) {
     const char *message = verify_result_message(result);
     const char *error_type;
 
-    /* Handle NULL path */
     if (path == NULL) {
         path = "";
     }
@@ -201,17 +167,13 @@ char *format_verify_error(VerifyResult result, const char *path) {
             break;
     }
 
-    /* Calculate escaped path size: worst case every char needs escaping */
     size_t path_len = strlen(path);
     size_t escaped_size = path_len * 2 + 1;
-
-    /* Allocate escaped path buffer with calloc for zero-initialization */
     char *escaped_path = calloc(escaped_size, 1);
     if (!escaped_path) {
         return NULL;
     }
 
-    /* Escape path for JSON (escape quotes and backslashes) */
     size_t j = 0;
     for (size_t i = 0; i < path_len && j < escaped_size - 2; i++) {
         if (path[i] == '"' || path[i] == '\\') {
@@ -221,7 +183,6 @@ char *format_verify_error(VerifyResult result, const char *path) {
     }
     /* Already null-terminated by calloc */
 
-    /* Allocate buffer for JSON output */
     size_t buf_size = strlen(message) + j + strlen(error_type) + JSON_FORMAT_OVERHEAD;
     char *buf = malloc(buf_size);
     if (!buf) {
@@ -237,16 +198,11 @@ char *format_verify_error(VerifyResult result, const char *path) {
     return buf;
 }
 
-/* ============================================================================
- * Path Utilities
- * ========================================================================== */
-
 const char *atomic_file_basename(const char *path) {
     if (!path || !*path) {
         return ".";
     }
 
-    /* Find last separator */
     const char *last_sep = strrchr(path, '/');
 #ifdef _WIN32
     const char *last_bsep = strrchr(path, '\\');
@@ -256,17 +212,14 @@ const char *atomic_file_basename(const char *path) {
 #endif
 
     if (last_sep) {
-        /* Handle trailing slashes */
         if (*(last_sep + 1) == '\0') {
-            /* Path ends with separator, look for previous component */
             const char *end = last_sep;
             while (end > path && (*(end - 1) == '/' || *(end - 1) == '\\')) {
                 end--;
             }
             if (end == path) {
-                return path; /* Root or all separators */
+                return path;
             }
-            /* Find separator before this component */
             const char *prev = end - 1;
             while (prev > path && *prev != '/' && *prev != '\\') {
                 prev--;
@@ -294,12 +247,10 @@ char *atomic_file_dirname(const char *path) {
 
     size_t len = strlen(result);
 
-    /* Remove trailing slashes (but keep at least one char for root) */
     while (len > 1 && (result[len - 1] == '/' || result[len - 1] == '\\')) {
         result[--len] = '\0';
     }
 
-    /* Find last separator */
     char *last_sep = strrchr(result, '/');
 #ifdef _WIN32
     char *last_bsep = strrchr(result, '\\');
@@ -310,13 +261,11 @@ char *atomic_file_dirname(const char *path) {
 
     if (last_sep) {
         if (last_sep == result) {
-            /* Root directory */
             result[1] = '\0';
         } else {
             *last_sep = '\0';
         }
     } else {
-        /* No separator found - relative path with just filename */
         free(result);
         return strdup(".");
     }
@@ -330,18 +279,15 @@ char *atomic_file_resolve_path(const char *path, int must_exist) {
     }
 
 #ifdef _WIN32
-    /* Windows: Use GetFullPathNameW for Unicode and long path support */
     wchar_t *wide_path = path_to_wide(path);
     if (!wide_path) {
         return NULL;
     }
 
-    /* Get required buffer size */
     DWORD len = GetFullPathNameW(wide_path, 0, NULL, NULL);
     if (len == 0) {
         free(wide_path);
         if (!must_exist) {
-            /* For new files, resolve parent and append basename */
             char *parent = atomic_file_dirname(path);
             if (!parent) return NULL;
 
@@ -377,7 +323,6 @@ char *atomic_file_resolve_path(const char *path, int must_exist) {
         return NULL;
     }
 
-    /* Convert back to UTF-8 */
     int utf8_len = WideCharToMultiByte(CP_UTF8, 0, wide_resolved, -1, NULL, 0, NULL, NULL);
     if (utf8_len == 0) {
         free(wide_resolved);
@@ -399,13 +344,11 @@ char *atomic_file_resolve_path(const char *path, int must_exist) {
     free(wide_resolved);
     return result;
 #else
-    /* POSIX: Use realpath for existing files */
     if (must_exist) {
         char *resolved = realpath(path, NULL);
-        return resolved; /* May be NULL if path doesn't exist */
+        return resolved;
     }
 
-    /* For new files, resolve parent and append basename */
     char *parent = atomic_file_dirname(path);
     if (!parent) {
         return NULL;
@@ -431,21 +374,15 @@ char *atomic_file_resolve_path(const char *path, int must_exist) {
 #endif
 }
 
-/* ============================================================================
- * Network Filesystem Detection
- * ========================================================================== */
-
 int is_network_filesystem(const char *path) {
     if (!path || !*path) {
         return 0;
     }
 
 #ifdef __linux__
-    /* Linux: Check /proc/mounts */
     char resolved[PATH_MAX];
     char *real_path = realpath(path, resolved);
     if (!real_path) {
-        /* Path doesn't exist yet - check parent */
         char *parent = atomic_file_dirname(path);
         if (!parent) return 0;
         real_path = realpath(parent, resolved);
@@ -463,17 +400,14 @@ int is_network_filesystem(const char *path) {
     char best_match[PATH_MAX] = "";
 
     while ((entry = getmntent(mounts)) != NULL) {
-        /* Check if this mount point is a prefix of our path */
         size_t mount_len = strlen(entry->mnt_dir);
         if (strncmp(resolved, entry->mnt_dir, mount_len) == 0) {
-            /* Check it's a proper prefix (either exact match or followed by /) */
             if (resolved[mount_len] == '\0' || resolved[mount_len] == '/') {
-                /* Keep track of longest (most specific) match */
+                /* Use longest (most specific) mount point match */
                 if (mount_len > strlen(best_match)) {
                     strncpy(best_match, entry->mnt_dir, sizeof(best_match) - 1);
                     best_match[sizeof(best_match) - 1] = '\0';
 
-                    /* Check if this is a network filesystem type */
                     is_network = 0;
                     for (int i = 0; NETWORK_FS_TYPES[i]; i++) {
                         if (strcmp(entry->mnt_type, NETWORK_FS_TYPES[i]) == 0) {
@@ -490,7 +424,6 @@ int is_network_filesystem(const char *path) {
     return is_network;
 
 #elif defined(_WIN32)
-    /* Windows: Check drive type using wide path API */
     wchar_t root[4] = {0};
     if (path[0] && path[1] == ':') {
         root[0] = (wchar_t)path[0];
@@ -501,7 +434,6 @@ int is_network_filesystem(const char *path) {
         /* UNC path - always network */
         return 1;
     } else {
-        /* Relative path - check current drive */
         DWORD len = GetCurrentDirectoryW(0, NULL);
         if (len == 0) return 0;
         wchar_t *cwd = malloc(len * sizeof(wchar_t));
@@ -520,20 +452,11 @@ int is_network_filesystem(const char *path) {
     return (drive_type == DRIVE_REMOTE);
 
 #else
-    /* Other POSIX: Conservative approach - check for common network paths */
-    if (strncmp(path, "/net/", 5) == 0 ||
-        strncmp(path, "/nfs/", 5) == 0 ||
-        strncmp(path, "/mnt/", 5) == 0) {
-        /* These are common network mount points, but we can't be sure */
-        /* Return 0 and let the caller decide */
-    }
+    /* Cannot reliably detect network filesystems on this platform */
+    (void)path;
     return 0;
 #endif
 }
-
-/* ============================================================================
- * ApprovedPath Management
- * ========================================================================== */
 
 void init_approved_path(ApprovedPath *ap) {
     if (!ap) return;
@@ -559,23 +482,19 @@ VerifyResult capture_approved_path(const char *path, ApprovedPath *out) {
 
     init_approved_path(out);
 
-    /* Store user-provided path */
     out->user_path = strdup(path);
     if (!out->user_path) {
         return VERIFY_ERR_RESOLVE;
     }
 
-    /* Check if file exists */
     struct stat st;
     int exists = (stat(path, &st) == 0);
 
     if (exists) {
-        /* Existing file: capture its identity */
         out->existed = 1;
         out->inode = st.st_ino;
         out->device = st.st_dev;
 
-        /* Resolve to canonical path */
         out->resolved_path = atomic_file_resolve_path(path, 1);
         if (!out->resolved_path) {
             free_approved_path(out);
@@ -583,7 +502,6 @@ VerifyResult capture_approved_path(const char *path, ApprovedPath *out) {
         }
 
 #ifdef _WIN32
-        /* Get Windows file identity using wide path API */
         wchar_t *wide_path = path_to_wide(path);
         if (wide_path) {
             HANDLE h = CreateFileW(
@@ -608,17 +526,13 @@ VerifyResult capture_approved_path(const char *path, ApprovedPath *out) {
         }
 #endif
     } else {
-        /* New file: capture parent directory identity */
         out->existed = 0;
-
-        /* Get parent directory */
         out->parent_path = atomic_file_dirname(path);
         if (!out->parent_path) {
             free_approved_path(out);
             return VERIFY_ERR_RESOLVE;
         }
 
-        /* Stat parent directory */
         if (stat(out->parent_path, &st) != 0) {
             free_approved_path(out);
             return VERIFY_ERR_PARENT;
@@ -627,7 +541,6 @@ VerifyResult capture_approved_path(const char *path, ApprovedPath *out) {
         out->parent_inode = st.st_ino;
         out->parent_device = st.st_dev;
 
-        /* Resolve path (parent + basename) */
         out->resolved_path = atomic_file_resolve_path(path, 0);
         if (!out->resolved_path) {
             free_approved_path(out);
@@ -635,7 +548,6 @@ VerifyResult capture_approved_path(const char *path, ApprovedPath *out) {
         }
 
 #ifdef _WIN32
-        /* Get Windows parent directory identity using wide path API */
         wchar_t *wide_parent = path_to_wide(out->parent_path);
         if (wide_parent) {
             HANDLE h = CreateFileW(
@@ -661,15 +573,10 @@ VerifyResult capture_approved_path(const char *path, ApprovedPath *out) {
 #endif
     }
 
-    /* Check for network filesystem */
     out->is_network_fs = is_network_filesystem(path);
 
     return VERIFY_OK;
 }
-
-/* ============================================================================
- * Execution-Time Verification
- * ========================================================================== */
 
 VerifyResult verify_approved_path(const ApprovedPath *approved) {
     if (!approved || !approved->resolved_path) {
@@ -677,7 +584,6 @@ VerifyResult verify_approved_path(const ApprovedPath *approved) {
     }
 
     if (approved->existed) {
-        /* Verify existing file still has same identity */
         struct stat st;
         if (stat(approved->resolved_path, &st) != 0) {
             if (errno == ENOENT) {
@@ -686,13 +592,11 @@ VerifyResult verify_approved_path(const ApprovedPath *approved) {
             return VERIFY_ERR_STAT;
         }
 
-        /* Check inode and device match */
         if (st.st_ino != approved->inode || st.st_dev != approved->device) {
             return VERIFY_ERR_INODE_MISMATCH;
         }
 
 #ifdef _WIN32
-        /* Also verify Windows file identity using wide path API */
         wchar_t *wide_path = path_to_wide(approved->resolved_path);
         if (!wide_path) {
             return VERIFY_ERR_RESOLVE;
@@ -727,7 +631,6 @@ VerifyResult verify_approved_path(const ApprovedPath *approved) {
         }
 #endif
     } else {
-        /* Verify parent directory still has same identity */
         if (!approved->parent_path) {
             return VERIFY_ERR_INVALID_PATH;
         }
@@ -743,7 +646,6 @@ VerifyResult verify_approved_path(const ApprovedPath *approved) {
         }
 
 #ifdef _WIN32
-        /* Also verify Windows parent identity using wide path API */
         wchar_t *wide_parent = path_to_wide(approved->parent_path);
         if (!wide_parent) {
             return VERIFY_ERR_RESOLVE;
@@ -792,18 +694,13 @@ VerifyResult verify_and_open_approved_path(const ApprovedPath *approved,
     *out_fd = -1;
 
     if (approved->existed) {
-        /* Existing file: open with O_NOFOLLOW and verify inode */
-        /*
-         * IMPORTANT: Open user_path with O_NOFOLLOW, not resolved_path.
-         * resolved_path comes from realpath() which follows symlinks.
-         * We need to detect if the original path has become a symlink
-         * since approval time.
-         */
+        /* Open user_path (not resolved_path) with O_NOFOLLOW so we detect
+         * if the original path became a symlink since approval time.
+         * resolved_path comes from realpath() which already followed symlinks. */
         const char *path_to_open = approved->user_path ? approved->user_path
                                                        : approved->resolved_path;
 
 #ifdef _WIN32
-        /* Windows: Use CreateFileW with FILE_FLAG_OPEN_REPARSE_POINT */
         wchar_t *wide_path = path_to_wide(path_to_open);
         if (!wide_path) {
             return VERIFY_ERR_RESOLVE;
@@ -831,7 +728,6 @@ VerifyResult verify_and_open_approved_path(const ApprovedPath *approved,
             return VERIFY_ERR_OPEN;
         }
 
-        /* Check if it's a reparse point (symlink/junction) */
         BY_HANDLE_FILE_INFORMATION info;
         if (!GetFileInformationByHandle(h, &info)) {
             CloseHandle(h);
@@ -843,7 +739,6 @@ VerifyResult verify_and_open_approved_path(const ApprovedPath *approved,
             return VERIFY_ERR_SYMLINK;
         }
 
-        /* Verify file identity */
         if (info.dwVolumeSerialNumber != approved->volume_serial ||
             info.nFileIndexHigh != approved->index_high ||
             info.nFileIndexLow != approved->index_low) {
@@ -851,16 +746,13 @@ VerifyResult verify_and_open_approved_path(const ApprovedPath *approved,
             return VERIFY_ERR_INODE_MISMATCH;
         }
 
-        /* Convert HANDLE to file descriptor.
-         * Note: Cosmopolitan Libc maps POSIX O_* flags to MSVC _O_* flags
-         * internally, so we can pass POSIX flags directly. */
+        /* Cosmopolitan Libc maps POSIX O_* flags to MSVC _O_* internally */
         *out_fd = _open_osfhandle((intptr_t)h, flags);
         if (*out_fd == -1) {
             CloseHandle(h);
             return VERIFY_ERR_OPEN;
         }
 #else
-        /* POSIX: Use O_NOFOLLOW to reject symlinks */
         int open_flags = flags | O_NOFOLLOW;
         int fd = open(path_to_open, open_flags);
 
@@ -874,7 +766,6 @@ VerifyResult verify_and_open_approved_path(const ApprovedPath *approved,
             return VERIFY_ERR_OPEN;
         }
 
-        /* Verify inode/device match */
         struct stat st;
         if (fstat(fd, &st) < 0) {
             close(fd);
@@ -891,14 +782,9 @@ VerifyResult verify_and_open_approved_path(const ApprovedPath *approved,
         return VERIFY_OK;
 
     } else {
-        /* New file: verify parent and create with O_EXCL */
         return create_file_in_verified_parent(approved, flags, 0644, out_fd);
     }
 }
-
-/* ============================================================================
- * Parent Directory Verification
- * ========================================================================== */
 
 VerifyResult open_verified_parent(const ApprovedPath *approved, int *out_fd) {
     if (!approved || !approved->parent_path || !out_fd) {
@@ -908,7 +794,6 @@ VerifyResult open_verified_parent(const ApprovedPath *approved, int *out_fd) {
     *out_fd = -1;
 
 #ifdef _WIN32
-    /* Windows: Open directory with backup semantics using wide path API */
     wchar_t *wide_parent = path_to_wide(approved->parent_path);
     if (!wide_parent) {
         return VERIFY_ERR_RESOLVE;
@@ -929,7 +814,6 @@ VerifyResult open_verified_parent(const ApprovedPath *approved, int *out_fd) {
         return VERIFY_ERR_PARENT;
     }
 
-    /* Verify directory identity */
     BY_HANDLE_FILE_INFORMATION info;
     if (!GetFileInformationByHandle(h, &info)) {
         CloseHandle(h);
@@ -943,20 +827,17 @@ VerifyResult open_verified_parent(const ApprovedPath *approved, int *out_fd) {
         return VERIFY_ERR_PARENT_CHANGED;
     }
 
-    /* Convert HANDLE to fd */
     *out_fd = _open_osfhandle((intptr_t)h, O_RDONLY);
     if (*out_fd == -1) {
         CloseHandle(h);
         return VERIFY_ERR_PARENT;
     }
 #else
-    /* POSIX: Open with O_DIRECTORY */
     int fd = open(approved->parent_path, O_RDONLY | O_DIRECTORY);
     if (fd < 0) {
         return VERIFY_ERR_PARENT;
     }
 
-    /* Verify inode/device match */
     struct stat st;
     if (fstat(fd, &st) < 0) {
         close(fd);
@@ -974,10 +855,6 @@ VerifyResult open_verified_parent(const ApprovedPath *approved, int *out_fd) {
     return VERIFY_OK;
 }
 
-/* ============================================================================
- * Atomic File Creation
- * ========================================================================== */
-
 VerifyResult create_file_in_verified_parent(const ApprovedPath *approved,
                                             int flags,
                                             mode_t mode,
@@ -988,19 +865,16 @@ VerifyResult create_file_in_verified_parent(const ApprovedPath *approved,
 
     *out_fd = -1;
 
-    /* File should not already exist for this function */
     if (approved->existed) {
         return VERIFY_ERR_ALREADY_EXISTS;
     }
 
-    /* Open and verify parent directory */
     int parent_fd = -1;
     VerifyResult parent_result = open_verified_parent(approved, &parent_fd);
     if (parent_result != VERIFY_OK) {
         return parent_result;
     }
 
-    /* Get basename for openat */
     const char *base = atomic_file_basename(approved->user_path);
     if (!base || !*base) {
         close(parent_fd);
@@ -1008,8 +882,8 @@ VerifyResult create_file_in_verified_parent(const ApprovedPath *approved,
     }
 
 #ifdef _WIN32
-    /* Windows: Need to construct full path and use CreateFileW */
-    close(parent_fd); /* We verified parent, now use full path */
+    /* Windows lacks openat(); verify parent then use full path */
+    close(parent_fd);
 
     wchar_t *wide_path = path_to_wide(approved->resolved_path);
     if (!wide_path) {
@@ -1041,7 +915,7 @@ VerifyResult create_file_in_verified_parent(const ApprovedPath *approved,
         return VERIFY_ERR_CREATE;
     }
 #else
-    /* POSIX: Use openat for atomic creation relative to verified parent */
+    /* openat() is atomic relative to the verified parent fd */
     int open_flags = flags | O_CREAT | O_EXCL | O_NOFOLLOW;
     int fd = openat(parent_fd, base, open_flags, mode);
     close(parent_fd);

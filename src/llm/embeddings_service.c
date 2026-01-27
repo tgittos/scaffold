@@ -29,21 +29,18 @@ static void create_embeddings_instance(void) {
         return;
     }
     
-    // Initialize with configuration system
     ralph_config_t *config = config_get();
     if (config) {
         const char *api_key = config->openai_api_key;
         const char *model = config->embedding_model;
-        // Prefer embedding_api_url, fall back to openai_api_url
         const char *api_url = config->embedding_api_url ? config->embedding_api_url : config->openai_api_url;
-        
+
         if (!model) model = "text-embedding-3-small";
-        
+
         if (api_key && embeddings_init(&g_embeddings_instance->config, model, api_key, api_url) == 0) {
             g_embeddings_instance->configured = 1;
         }
     } else {
-        // Fallback to environment variables if config system not initialized
         const char *api_key = getenv("OPENAI_API_KEY");
         const char *model = getenv("EMBEDDING_MODEL");
         const char *api_url = getenv("OPENAI_API_URL");
@@ -134,23 +131,19 @@ int embeddings_service_reinitialize(void) {
     
     pthread_mutex_lock(&service->mutex);
     
-    // Clean up existing configuration
     if (service->configured) {
         embeddings_cleanup(&service->config);
         service->configured = 0;
     }
     
-    // Reinitialize with current configuration
     ralph_config_t *config = config_get();
     const char *api_key, *model, *api_url;
     
     if (config) {
         api_key = config->openai_api_key;
         model = config->embedding_model;
-        // Prefer embedding_api_url, fall back to openai_api_url
         api_url = config->embedding_api_url ? config->embedding_api_url : config->openai_api_url;
     } else {
-        // Fallback to environment variables
         api_key = getenv("OPENAI_API_KEY");
         model = getenv("EMBEDDING_MODEL");
         api_url = getenv("OPENAI_API_URL");

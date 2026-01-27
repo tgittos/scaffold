@@ -30,13 +30,11 @@ int is_pdf_url(const char *url) {
     size_t len = strlen(url);
     if (len < 4) return 0;
     
-    // Check for .pdf extension (case insensitive)
     const char *ext_pos = strrchr(url, '.');
     if (ext_pos && (strcasecmp(ext_pos, ".pdf") == 0)) {
         return 1;
     }
     
-    // Check for common PDF download patterns
     if (strstr(url, "/download") && strstr(url, "pdf")) {
         return 1;
     }
@@ -49,11 +47,10 @@ int is_pdf_url(const char *url) {
 }
 
 static char* generate_temp_filename(const char *url) {
-    (void)url; // Suppress unused parameter warning
+    (void)url;
     char *temp_path = malloc(256);
     if (!temp_path) return NULL;
-    
-    // Generate unique temporary filename
+
     snprintf(temp_path, 256, "/tmp/ralph_pdf_%d_%ld.pdf", getpid(), time(NULL));
     
     return temp_path;
@@ -76,7 +73,6 @@ static embeddings_config_t* get_embeddings_config(void) {
     static int initialized = 0;
     
     if (!initialized) {
-        // Initialize with configuration system or defaults
         ralph_config_t *global_config = config_get();
         const char *api_key, *model, *api_url;
         
@@ -85,7 +81,6 @@ static embeddings_config_t* get_embeddings_config(void) {
             model = global_config->embedding_model;
             api_url = global_config->openai_api_url;
         } else {
-            // Fallback to environment variables
             api_key = getenv("OPENAI_API_KEY");
             model = getenv("EMBEDDING_MODEL");
             api_url = getenv("OPENAI_API_URL");
@@ -118,7 +113,7 @@ pdf_processing_result_t* process_pdf_data(const unsigned char *pdf_data, size_t 
     result->vectors_stored = 0;
     result->error = NULL;
     
-    // Save PDF data to temporary file (PDFio needs file path)
+    // PDFio requires a file path, so we must write to a temp file first
     char *temp_path = generate_temp_filename(metadata ? metadata->url : "unknown");
     if (!temp_path) {
         free(result);
@@ -131,7 +126,6 @@ pdf_processing_result_t* process_pdf_data(const unsigned char *pdf_data, size_t 
         return create_error_result("Failed to save PDF to temp file");
     }
     
-    // Initialize PDF extractor
     if (pdf_extractor_init() != 0) {
         unlink(temp_path);
         free(temp_path);
@@ -139,11 +133,9 @@ pdf_processing_result_t* process_pdf_data(const unsigned char *pdf_data, size_t 
         return create_error_result("Failed to initialize PDF extractor");
     }
     
-    // Extract text from PDF
     pdf_extraction_config_t pdf_config = pdf_get_default_config();
     pdf_extraction_result_t *extraction_result = pdf_extract_text_with_config(temp_path, &pdf_config);
     
-    // Clean up temp file
     unlink(temp_path);
     free(temp_path);
     
@@ -166,7 +158,6 @@ pdf_processing_result_t* process_pdf_data(const unsigned char *pdf_data, size_t 
         return create_error_result("No text extracted from PDF");
     }
     
-    // Chunk the document
     chunking_config_t chunk_config = chunker_get_pdf_config();
     chunking_result_t *chunks = chunk_document(extraction_result->text, &chunk_config);
     
@@ -187,7 +178,6 @@ pdf_processing_result_t* process_pdf_data(const unsigned char *pdf_data, size_t 
     
     result->chunks_processed = chunks->chunks.count;
     
-    // Get embeddings configuration
     embeddings_config_t *embed_config = get_embeddings_config();
     if (!embed_config) {
         free_chunking_result(chunks);
@@ -196,51 +186,43 @@ pdf_processing_result_t* process_pdf_data(const unsigned char *pdf_data, size_t 
         return create_error_result("Embeddings not configured (missing API key?)");
     }
     
-    // Process each chunk
     for (size_t i = 0; i < chunks->chunks.count; i++) {
         document_chunk_t *chunk = &chunks->chunks.data[i];
         
-        // Generate embedding for chunk
         embedding_vector_t embedding = {0};
         if (embeddings_get_vector(embed_config, chunk->text, &embedding) != 0) {
-            // Skip this chunk if embedding fails
             continue;
         }
         
         result->embeddings_generated++;
         
-        // Create vector for storage
         vector_t vector = {
             .data = embedding.data,
             .dimension = embedding.dimension
         };
         
-        // Generate unique label for this chunk
-        // Use hash of URL + chunk index as label
+        // Hash URL + chunk index to produce a stable, unique label per chunk
         size_t label = 0;
         if (metadata && metadata->url) {
-            // Simple hash of URL + chunk index
             const char *url = metadata->url;
             for (const char *p = url; *p; p++) {
                 label = label * 31 + *p;
             }
-            label = label * 1000 + i; // Add chunk index
+            label = label * 1000 + i;
         } else {
-            label = time(NULL) * 1000 + i; // Fallback to timestamp
+            label = time(NULL) * 1000 + i;
         }
         
-        // Store vector in database
         vector_db_error_t db_error = vector_db_add_vector(vector_db, index_name, &vector, label);
         if (db_error == VECTOR_DB_OK) {
             result->vectors_stored++;
         }
         
-        // Don't free embedding.data - it's now owned by the vector
+        // Ownership of embedding.data transferred to the vector database
         embedding.data = NULL;
         embeddings_free_vector(&embedding);
     }
     
-    // Cleanup
     free_chunking_result(chunks);
     pdf_free_extraction_result(extraction_result);
     
@@ -256,7 +238,6 @@ pdf_processing_result_t* process_pdf_from_url(const char *url, vector_db_t *vect
         return create_error_result("Invalid parameters");
     }
     
-    // Download PDF
     struct HTTPResponse response = {0};
     if (http_get(url, &response) != 0) {
         return create_error_result("Failed to download PDF from URL");
@@ -267,7 +248,6 @@ pdf_processing_result_t* process_pdf_from_url(const char *url, vector_db_t *vect
         return create_error_result("Empty response from URL");
     }
     
-    // Create metadata
     pdf_metadata_t metadata = {
         .url = safe_strdup(url),
         .title = NULL,
@@ -276,12 +256,10 @@ pdf_processing_result_t* process_pdf_from_url(const char *url, vector_db_t *vect
         .fetch_time = time(NULL)
     };
     
-    // Process the downloaded PDF data
-    pdf_processing_result_t *result = process_pdf_data((unsigned char*)response.data, 
+    pdf_processing_result_t *result = process_pdf_data((unsigned char*)response.data,
                                                       response.size, &metadata, 
                                                       vector_db, index_name);
     
-    // Cleanup
     cleanup_response(&response);
     free_pdf_metadata(&metadata);
     
@@ -302,6 +280,5 @@ void free_pdf_metadata(pdf_metadata_t *metadata) {
     free(metadata->title);
     free(metadata->description);
     
-    // Zero out the structure
     memset(metadata, 0, sizeof(pdf_metadata_t));
 }

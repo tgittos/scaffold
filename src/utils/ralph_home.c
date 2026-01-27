@@ -10,28 +10,21 @@
 static char *g_ralph_home = NULL;
 static int g_initialized = 0;
 
-/**
- * Resolve a relative path to an absolute path.
- * Returns a newly allocated string, or NULL on error.
- */
 static char* resolve_to_absolute(const char *path) {
     if (path == NULL || path[0] == '\0') {
         return NULL;
     }
 
-    // Already absolute
     if (path[0] == '/') {
         return strdup(path);
     }
 
-    // Relative path - resolve against current working directory
     char cwd[PATH_MAX];
-    memset(cwd, 0, sizeof(cwd));  // Initialize for valgrind
+    memset(cwd, 0, sizeof(cwd));
     if (getcwd(cwd, sizeof(cwd)) == NULL) {
         return NULL;
     }
 
-    // Handle ./ prefix
     const char *rel = path;
     if (rel[0] == '.' && rel[1] == '/') {
         rel += 2;
@@ -47,9 +40,6 @@ static char* resolve_to_absolute(const char *path) {
     return absolute;
 }
 
-/**
- * Create directory and all parent directories.
- */
 static int mkdir_recursive(const char *path) {
     if (path == NULL || path[0] == '\0') {
         return -1;
@@ -60,9 +50,8 @@ static int mkdir_recursive(const char *path) {
         return -1;
     }
 
-    // Create each directory component
     char *p = path_copy;
-    if (*p == '/') p++; // Skip leading slash
+    if (*p == '/') p++;
 
     while (*p != '\0') {
         while (*p != '/' && *p != '\0') p++;
@@ -78,7 +67,6 @@ static int mkdir_recursive(const char *path) {
         if (*p == '/') p++;
     }
 
-    // Create final directory
     if (mkdir(path_copy, 0755) != 0 && errno != EEXIST) {
         free(path_copy);
         return -1;
@@ -89,7 +77,6 @@ static int mkdir_recursive(const char *path) {
 }
 
 int ralph_home_init(const char *cli_override) {
-    // Clean up any previous initialization
     if (g_ralph_home != NULL) {
         free(g_ralph_home);
         g_ralph_home = NULL;
@@ -99,11 +86,9 @@ int ralph_home_init(const char *cli_override) {
     const char *source = NULL;
     char *resolved = NULL;
 
-    // Priority 1: CLI override
     if (cli_override != NULL && cli_override[0] != '\0') {
         source = cli_override;
     }
-    // Priority 2: Environment variable
     else {
         const char *env_home = getenv("RALPH_HOME");
         if (env_home != NULL && env_home[0] != '\0') {
@@ -111,7 +96,6 @@ int ralph_home_init(const char *cli_override) {
         }
     }
 
-    // Resolve the path
     if (source != NULL) {
         resolved = resolve_to_absolute(source);
         if (resolved == NULL) {
@@ -119,7 +103,6 @@ int ralph_home_init(const char *cli_override) {
         }
         g_ralph_home = resolved;
     }
-    // Priority 3: Default path
     else {
         const char *home = getenv("HOME");
         if (home == NULL || home[0] == '\0') {
@@ -147,7 +130,6 @@ char* ralph_home_path(const char *relative_path) {
         return NULL;
     }
 
-    // Skip leading slash in relative path
     const char *rel = relative_path;
     if (rel[0] == '/') {
         rel++;

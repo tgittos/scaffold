@@ -5,10 +5,6 @@
 #include <stdbool.h>
 
 
-// =============================================================================
-// JSON Output Mode Control
-// =============================================================================
-
 /**
  * Set JSON output mode enabled/disabled.
  * When enabled, terminal display functions become no-ops and JSON output
@@ -129,10 +125,6 @@ void log_system_info(const char *category, const char *message);
  * Should be called during application shutdown.
  */
 void cleanup_output_formatter(void);
-
-// =============================================================================
-// Streaming Display Functions
-// =============================================================================
 
 /**
  * Initialize streaming display mode

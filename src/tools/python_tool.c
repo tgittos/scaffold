@@ -61,26 +61,19 @@ int python_interpreter_init(void) {
     // 0 Python tools (e.g., in test binaries without embedded stdlib).
     struct stat st;
     if (stat("/zip/lib/python3.12", &st) != 0 || !S_ISDIR(st.st_mode)) {
-        // Python stdlib not available - fail gracefully
-        return -1;
+            return -1;
     }
 
-    // Set PYTHONHOME for embedded stdlib
     setenv("PYTHONHOME", "/zip", 1);
-
-    // Disable bytecode writing since we're embedded
     setenv("PYTHONDONTWRITEBYTECODE", "1", 1);
 
-    // Register verified file I/O module before Python initialization
-    // This must be done exactly once, before Py_Initialize()
+    // Must register before Py_Initialize() -- exactly once
     if (!verified_file_module_registered) {
         if (verified_file_python_init() == 0) {
             verified_file_module_registered = 1;
         }
-        // If registration fails, continue anyway - tools will use fallback I/O
     }
 
-    // Initialize Python
     Py_Initialize();
 
     if (!Py_IsInitialized()) {
@@ -88,7 +81,6 @@ int python_interpreter_init(void) {
         return -1;
     }
 
-    // Get __main__ module and its globals dict for persistent state
     main_module = PyImport_AddModule("__main__");
     if (main_module == NULL) {
         fprintf(stderr, "Failed to get Python __main__ module\n");
@@ -103,21 +95,16 @@ int python_interpreter_init(void) {
         return -1;
     }
 
-    // Keep reference to globals
     Py_INCREF(globals_dict);
 
     interpreter_initialized = 1;
 
-    // Initialize Python tool files system (creates ~/.local/ralph/tools/ if needed)
     if (python_init_tool_files() != 0) {
         fprintf(stderr, "Warning: Failed to initialize Python tool files\n");
-        // Continue anyway - the base Python tool still works
     }
 
-    // Load Python tool files into the interpreter's global scope
     if (python_load_tool_files() != 0) {
         fprintf(stderr, "Warning: Failed to load Python tool files\n");
-        // Continue anyway - the base Python tool still works
     }
 
     return 0;
@@ -141,7 +128,6 @@ void python_interpreter_shutdown(void) {
         sigaction_saved = 0;
     }
 
-    // Cleanup Python tool files before finalizing interpreter
     python_cleanup_tool_files();
 
     if (globals_dict != NULL) {
@@ -149,7 +135,7 @@ void python_interpreter_shutdown(void) {
         globals_dict = NULL;
     }
 
-    main_module = NULL;  /* Borrowed reference, don't decref */
+    main_module = NULL;  /* Borrowed reference -- do not decref */
 
     Py_Finalize();
     interpreter_initialized = 0;
@@ -170,7 +156,6 @@ int register_python_tool(ToolRegistry *registry) {
     ToolParameter parameters[2];
     memset(parameters, 0, sizeof(parameters));
 
-    // Parameter 1: code (required)
     parameters[0].name = strdup("code");
     parameters[0].type = strdup("string");
     parameters[0].description = strdup("Python code to execute. Variables persist between calls.");
@@ -178,7 +163,6 @@ int register_python_tool(ToolRegistry *registry) {
     parameters[0].enum_count = 0;
     parameters[0].required = 1;
 
-    // Parameter 2: timeout (optional)
     parameters[1].name = strdup("timeout");
     parameters[1].type = strdup("number");
     parameters[1].description = strdup("Maximum execution time in seconds (default: 30)");
@@ -186,7 +170,6 @@ int register_python_tool(ToolRegistry *registry) {
     parameters[1].enum_count = 0;
     parameters[1].required = 0;
 
-    // Check for allocation failures
     for (int i = 0; i < 2; i++) {
         if (parameters[i].name == NULL ||
             parameters[i].type == NULL ||
@@ -200,12 +183,10 @@ int register_python_tool(ToolRegistry *registry) {
         }
     }
 
-    // Register the tool
     int result = register_tool(registry, "python",
         "Execute Python code in a persistent interpreter. Variables, imports, and function definitions persist across calls. Use for calculations, data processing, and scripting tasks.",
         parameters, 2, execute_python_tool_call);
 
-    // Clean up temporary parameter storage
     for (int i = 0; i < 2; i++) {
         free(parameters[i].name);
         free(parameters[i].type);
@@ -215,7 +196,6 @@ int register_python_tool(ToolRegistry *registry) {
     return result;
 }
 
-// JSON helper functions using cJSON
 static char* extract_json_string_value(const char *json, const char *key) {
     cJSON *json_obj = cJSON_Parse(json);
     if (json_obj == NULL) {
@@ -260,7 +240,6 @@ int parse_python_arguments(const char *json_args, PythonExecutionParams *params)
         return -1;
     }
 
-    // Validate code size
     if (strlen(params->code) > PYTHON_MAX_CODE_SIZE) {
         free(params->code);
         params->code = NULL;
@@ -269,7 +248,6 @@ int parse_python_arguments(const char *json_args, PythonExecutionParams *params)
 
     params->timeout_seconds = extract_json_number_value(json_args, "timeout", PYTHON_DEFAULT_TIMEOUT);
 
-    // Enforce reasonable timeout limits
     if (params->timeout_seconds <= 0) {
         params->timeout_seconds = PYTHON_DEFAULT_TIMEOUT;
     } else if (params->timeout_seconds > PYTHON_MAX_TIMEOUT_SECONDS) {
@@ -338,7 +316,6 @@ static char* get_python_exception_string(void) {
 
     char *result = NULL;
 
-    // Try to get a detailed traceback
     PyObject *traceback_module = PyImport_ImportModule("traceback");
     if (traceback_module != NULL) {
         PyObject *format_exception = PyObject_GetAttrString(traceback_module, "format_exception");
@@ -371,12 +348,11 @@ static char* get_python_exception_string(void) {
         Py_DECREF(traceback_module);
     }
 
-    // Fallback: try to include exception type name and value
+    // Fallback when traceback module is unavailable
     if (result == NULL) {
         char *type_name = NULL;
         char *value_str = NULL;
 
-        // Try to get the exception type name
         if (type != NULL) {
             PyObject *type_name_obj = PyObject_GetAttrString(type, "__name__");
             if (type_name_obj != NULL) {
@@ -388,7 +364,6 @@ static char* get_python_exception_string(void) {
             }
         }
 
-        // Try to get the value string
         if (value != NULL) {
             PyObject *str_value = PyObject_Str(value);
             if (str_value != NULL) {
@@ -400,7 +375,6 @@ static char* get_python_exception_string(void) {
             }
         }
 
-        // Combine type and value if available
         if (type_name && value_str) {
             size_t len = strlen(type_name) + strlen(value_str) + 3;  // ": " + null
             result = malloc(len);
@@ -433,7 +407,6 @@ int execute_python_code(const PythonExecutionParams *params, PythonExecutionResu
         return -1;
     }
 
-    // Initialize result structure early to ensure it's valid on all paths
     memset(result, 0, sizeof(PythonExecutionResult));
 
     if (params->code == NULL) {
@@ -453,7 +426,6 @@ int execute_python_code(const PythonExecutionParams *params, PythonExecutionResu
     struct timeval start_time, end_time;
     gettimeofday(&start_time, NULL);
 
-    // Import io module for StringIO
     PyObject *io_module = PyImport_ImportModule("io");
     if (io_module == NULL) {
         result->exception = strdup("Failed to import io module");
@@ -462,7 +434,6 @@ int execute_python_code(const PythonExecutionParams *params, PythonExecutionResu
         return 0;
     }
 
-    // Import sys module
     PyObject *sys_module = PyImport_ImportModule("sys");
     if (sys_module == NULL) {
         Py_DECREF(io_module);
@@ -472,7 +443,6 @@ int execute_python_code(const PythonExecutionParams *params, PythonExecutionResu
         return 0;
     }
 
-    // Create StringIO objects for capturing output
     PyObject *string_io_class = PyObject_GetAttrString(io_module, "StringIO");
     if (string_io_class == NULL) {
         Py_DECREF(io_module);
@@ -498,17 +468,14 @@ int execute_python_code(const PythonExecutionParams *params, PythonExecutionResu
         return 0;
     }
 
-    // Save original stdout/stderr
     PyObject *original_stdout = PySys_GetObject("stdout");
     PyObject *original_stderr = PySys_GetObject("stderr");
     Py_XINCREF(original_stdout);
     Py_XINCREF(original_stderr);
 
-    // Redirect stdout/stderr
     PySys_SetObject("stdout", stdout_capture);
     PySys_SetObject("stderr", stderr_capture);
 
-    // Set up timeout handler
     python_timed_out = 0;
     struct sigaction sa;
     memset(&sa, 0, sizeof(sa));
@@ -525,12 +492,10 @@ int execute_python_code(const PythonExecutionParams *params, PythonExecutionResu
         alarm(params->timeout_seconds);
     }
 
-    // Execute the Python code
     PyObject *exec_result = PyRun_String(params->code, Py_file_input, globals_dict, globals_dict);
 
-    // Cancel alarm and restore signal handler
-    // Block SIGALRM while we cancel the alarm and restore the old handler
-    // to avoid a race where the timeout handler could run in this window.
+    // Block SIGALRM during alarm cancellation and handler restoration
+    // to prevent a race where the timeout fires between alarm(0) and sigaction restore.
     {
         sigset_t sigalrm_set, old_set;
         sigemptyset(&sigalrm_set);
@@ -546,19 +511,16 @@ int execute_python_code(const PythonExecutionParams *params, PythonExecutionResu
         sigprocmask(SIG_SETMASK, &old_set, NULL);
     }
 
-    // Capture timing
     gettimeofday(&end_time, NULL);
     result->execution_time = (end_time.tv_sec - start_time.tv_sec) +
                             (end_time.tv_usec - start_time.tv_usec) / 1000000.0;
 
-    // Check for timeout
     if (python_timed_out) {
         result->timed_out = 1;
         result->success = 0;
         result->exception = strdup("Execution timed out");
         PyErr_Clear();
     } else if (exec_result == NULL) {
-        // Execution failed with exception
         result->success = 0;
         result->exception = get_python_exception_string();
     } else {
@@ -566,23 +528,18 @@ int execute_python_code(const PythonExecutionParams *params, PythonExecutionResu
         Py_DECREF(exec_result);
     }
 
-    // Capture output
     result->stdout_output = capture_python_output(stdout_capture);
     result->stderr_output = capture_python_output(stderr_capture);
 
-    // Truncate output if too large, adding truncation indicator
-    // Note: When output length >= PYTHON_MAX_OUTPUT_SIZE, the buffer (from strdup) is
-    // at least len+1 bytes, so writing up to PYTHON_MAX_OUTPUT_SIZE-1 is safe.
+    // Safe: strdup guarantees buffer >= len+1, so writing PYTHON_MAX_OUTPUT_SIZE-1 fits.
     truncate_output_if_needed(result->stdout_output, PYTHON_MAX_OUTPUT_SIZE);
     truncate_output_if_needed(result->stderr_output, PYTHON_MAX_OUTPUT_SIZE);
 
-    // Restore original stdout/stderr
     PySys_SetObject("stdout", original_stdout);
     PySys_SetObject("stderr", original_stderr);
     Py_XDECREF(original_stdout);
     Py_XDECREF(original_stderr);
 
-    // Cleanup
     Py_DECREF(stdout_capture);
     Py_DECREF(stderr_capture);
     Py_DECREF(string_io_class);
@@ -611,7 +568,6 @@ char* format_python_result_json(const PythonExecutionResult *exec_result) {
         return NULL;
     }
 
-    // Add stdout and stderr (cJSON handles escaping automatically)
     if (!cJSON_AddStringToObject(json_obj, "stdout",
             exec_result->stdout_output ? exec_result->stdout_output : "")) {
         cJSON_Delete(json_obj);
@@ -624,7 +580,6 @@ char* format_python_result_json(const PythonExecutionResult *exec_result) {
         return NULL;
     }
 
-    // Add exception (null if not present)
     if (exec_result->exception) {
         if (!cJSON_AddStringToObject(json_obj, "exception", exec_result->exception)) {
             cJSON_Delete(json_obj);
@@ -637,7 +592,6 @@ char* format_python_result_json(const PythonExecutionResult *exec_result) {
         }
     }
 
-    // Add boolean and numeric fields
     if (!cJSON_AddBoolToObject(json_obj, "success", exec_result->success)) {
         cJSON_Delete(json_obj);
         return NULL;
@@ -653,7 +607,6 @@ char* format_python_result_json(const PythonExecutionResult *exec_result) {
         return NULL;
     }
 
-    // Generate JSON string (unformatted for compactness)
     char *json_str = cJSON_PrintUnformatted(json_obj);
     cJSON_Delete(json_obj);
 
@@ -670,7 +623,6 @@ int execute_python_tool_call(const ToolCall *tool_call, ToolResult *result) {
         return -1;
     }
 
-    // Check if interpreter is available
     if (!interpreter_initialized) {
         if (python_interpreter_init() != 0) {
             result->result = strdup("{\"error\": \"Python interpreter not available\", \"success\": false}");

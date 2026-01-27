@@ -35,29 +35,24 @@ context_result_t* retrieve_relevant_context(const char *user_message, size_t max
         return create_empty_result();
     }
 
-    // Get vector database
     vector_db_t *vector_db = vector_db_service_get_database();
     if (!vector_db) {
         return create_error_result("Vector database not available");
     }
 
-    // Check if documents index exists
     if (!vector_db_has_index(vector_db, "documents")) {
         return create_empty_result();
     }
     
-    // Check embeddings service
     if (!embeddings_service_is_configured()) {
         return create_error_result("Embeddings not configured");
     }
     
-    // Generate embedding for user message
     vector_t *query_vector = embeddings_service_text_to_vector(user_message);
     if (!query_vector) {
         return create_error_result("Failed to generate embedding for query");
     }
     
-    // Search vector database
     search_results_t *search_results = vector_db_search(vector_db, "documents", query_vector, max_results);
     
     if (!search_results) {
@@ -65,7 +60,6 @@ context_result_t* retrieve_relevant_context(const char *user_message, size_t max
         return create_error_result("Vector search failed");
     }
     
-    // Create context result
     context_result_t *result = malloc(sizeof(context_result_t));
     if (!result) {
         vector_db_free_search_results(search_results);
@@ -82,20 +76,17 @@ context_result_t* retrieve_relevant_context(const char *user_message, size_t max
         return result;
     }
 
-    // Get metadata store to retrieve actual chunk content
+    // Vector DB stores embeddings only; actual text lives in the metadata store
     metadata_store_t *meta_store = metadata_store_get_instance();
 
-    // Fill context items by looking up content from the metadata store
     for (size_t i = 0; i < search_results->count; i++) {
         search_result_t *search_item = &search_results->results[i];
 
-        // Retrieve chunk metadata which contains the actual text content
         ChunkMetadata *chunk_meta = NULL;
         if (meta_store) {
             chunk_meta = metadata_store_get(meta_store, "documents", search_item->label);
         }
 
-        // Skip results where content cannot be retrieved
         if (!chunk_meta || !chunk_meta->content || strlen(chunk_meta->content) == 0) {
             if (chunk_meta) {
                 metadata_store_free_chunk(chunk_meta);
@@ -140,17 +131,12 @@ char* format_context_for_prompt(const context_result_t *context_result) {
         return NULL;
     }
 
-    // Header and footer text sizes
-    static const char *header = "\n\n## Relevant Context\n\nThe following information may be relevant to your response:\n\n";
+    static const char *header ="\n\n## Relevant Context\n\nThe following information may be relevant to your response:\n\n";
     static const char *footer = "\nPlease use this context to inform your response when relevant.\n";
 
-    // Calculate required buffer size accurately:
-    // - Header + footer overhead
-    // - Per item: "- " (2) + content + " (relevance: X.XX)\n" (20 max) + safety margin
     size_t total_size = strlen(header) + strlen(footer) + 1;
     for (size_t i = 0; i < context_result->items.count; i++) {
         if (context_result->items.data[i].content) {
-            // "- " (2) + content + " (relevance: X.XX)\n" (~22) + safety margin (~10)
             total_size += strlen(context_result->items.data[i].content) + 32;
         }
     }
@@ -164,7 +150,6 @@ char* format_context_for_prompt(const context_result_t *context_result) {
     for (size_t i = 0; i < context_result->items.count; i++) {
         context_item_t *item = &context_result->items.data[i];
         if (item->content) {
-            // Use snprintf directly into the buffer at the right offset
             int written = snprintf(formatted + current_len, total_size - current_len,
                                    "- %s (relevance: %.2f)\n",
                                    item->content, item->relevance_score);
@@ -174,7 +159,6 @@ char* format_context_for_prompt(const context_result_t *context_result) {
         }
     }
 
-    // Append footer - check we have space
     if (current_len + strlen(footer) < total_size) {
         strcpy(formatted + current_len, footer);
     }

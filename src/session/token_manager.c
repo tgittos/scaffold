@@ -5,19 +5,18 @@
 #include <string.h>
 #include <math.h>
 
-// Include ralph.h after token_manager.h to resolve the struct RalphSession
+// Must follow token_manager.h so SessionData is defined before RalphSession references it
 #include "ralph.h"
 
-// Default token configuration values
 #define DEFAULT_MIN_RESPONSE_TOKENS 150
 #define DEFAULT_SAFETY_BUFFER_BASE 50
-#define DEFAULT_SAFETY_BUFFER_RATIO 0.02f  // 2% of context window - reduced due to better estimation
-#define DEFAULT_CHARS_PER_TOKEN 5.5f       // Modern tokenizers: ~1 token per word (4-6 chars)
+#define DEFAULT_SAFETY_BUFFER_RATIO 0.02f
+#define DEFAULT_CHARS_PER_TOKEN 5.5f  // Typical modern tokenizer: ~1 token per 4-6 chars
 
-// Token overhead estimates
-#define TOKEN_OVERHEAD_PER_MESSAGE 10      // Overhead per message for role, structure, etc.
-#define TOKEN_OVERHEAD_PER_TOOL 50         // Rough estimate per tool definition
-#define TOKEN_OVERHEAD_JSON_STRUCTURE 50   // JSON structure overhead for request
+// Per-message overhead accounts for JSON framing (role, separators, etc.)
+#define TOKEN_OVERHEAD_PER_MESSAGE 10
+#define TOKEN_OVERHEAD_PER_TOOL 50
+#define TOKEN_OVERHEAD_JSON_STRUCTURE 50
 
 void token_config_init(TokenConfig* config, int context_window) {
     if (config == NULL) return;
@@ -35,26 +34,23 @@ int estimate_token_count(const char* text, const TokenConfig* config) {
     int char_count = strlen(text);
     float chars_per_token = config->chars_per_token;
     
-    // Adjust estimation based on content type
-    // Code and JSON are more efficiently tokenized
-    if (strstr(text, "```") != NULL || strstr(text, "function ") != NULL || 
+    // Code and JSON use more repetitive/structural tokens, so tokenizers
+    // compress them better -- adjust the chars-per-token ratio upward.
+    if (strstr(text, "```") != NULL || strstr(text, "function ") != NULL ||
         strstr(text, "#include") != NULL || strstr(text, "def ") != NULL) {
-        chars_per_token *= 1.2f; // Code is ~20% more efficient
+        chars_per_token *= 1.2f;
     }
-    
-    // JSON content is very efficiently tokenized
     if (text[0] == '{' || strstr(text, "\"role\":") != NULL) {
-        chars_per_token *= 1.3f; // JSON is ~30% more efficient
+        chars_per_token *= 1.3f;
     }
     
     int estimated_tokens = (int)ceil(char_count / chars_per_token);
     
-    // Add overhead for JSON structure, tool definitions, etc.
     if (strstr(text, "\"tools\"") != NULL) {
-        estimated_tokens += 50; // Reduced overhead - was too conservative
+        estimated_tokens += 50;
     }
     if (strstr(text, "\"system\"") != NULL) {
-        estimated_tokens += 10; // Reduced overhead
+        estimated_tokens += 10;
     }
     
     return estimated_tokens;
@@ -63,19 +59,15 @@ int estimate_token_count(const char* text, const TokenConfig* config) {
 int get_dynamic_safety_buffer(const TokenConfig* config, int estimated_prompt_tokens) {
     if (config == NULL) return DEFAULT_SAFETY_BUFFER_BASE;
     
-    // Base safety buffer
     int buffer = config->safety_buffer_base;
-    
-    // Add percentage-based buffer
     int ratio_buffer = (int)(config->context_window * config->safety_buffer_ratio);
     buffer += ratio_buffer;
-    
-    // Increase buffer for complex prompts (more tool calls, longer conversations)
+
+    // Near-full contexts are more likely to hit edge cases in token estimation
     if (estimated_prompt_tokens > config->context_window * 0.7) {
-        buffer += 50; // Extra buffer for complex contexts
+        buffer += 50;
     }
-    
-    // Ensure minimum safety buffer
+
     if (buffer < config->safety_buffer_base) {
         buffer = config->safety_buffer_base;
     }
@@ -113,7 +105,6 @@ int trim_conversation_for_tokens(ConversationHistory* conversation,
     int system_tokens = system_prompt ? estimate_token_count(system_prompt, config) : 0;
     int current_tokens = system_tokens;
     
-    // Calculate current token usage
     for (size_t i = 0; i < conversation->count; i++) {
         current_tokens += estimate_token_count(conversation->data[i].content, config);
         current_tokens += TOKEN_OVERHEAD_PER_MESSAGE;
@@ -121,13 +112,12 @@ int trim_conversation_for_tokens(ConversationHistory* conversation,
     
     debug_printf("Current conversation tokens: %d, max allowed: %d\n", current_tokens, max_prompt_tokens);
     
-    // Trim from oldest messages (but preserve recent tool interactions)
+    // Trim oldest messages first, but prefer removing non-tool messages to avoid
+    // breaking tool call/response sequences that the LLM needs for context.
     while (current_tokens > max_prompt_tokens && conversation->count > 0) {
-        // Find the oldest non-tool message to remove
         int remove_index = -1;
 
-        // Look for old user/assistant pairs, but preserve recent tool interactions
-        for (size_t i = 0; i < conversation->count - 2; i++) { // Keep last 2 messages
+        for (size_t i = 0; i < conversation->count - 2; i++) {
             if (conversation->data[i].role != NULL &&
                 strcmp(conversation->data[i].role, "tool") != 0) {
                 remove_index = i;
@@ -135,24 +125,20 @@ int trim_conversation_for_tokens(ConversationHistory* conversation,
             }
         }
 
-        // If no non-tool message found, remove the oldest message
         if (remove_index == -1 && conversation->count > 1) {
             remove_index = 0;
         }
 
-        if (remove_index == -1) break; // Can't trim anymore
+        if (remove_index == -1) break;
 
-        // Remove the message
         int removed_tokens = estimate_token_count(conversation->data[remove_index].content, config) + TOKEN_OVERHEAD_PER_MESSAGE;
         current_tokens -= removed_tokens;
 
-        // Free memory for this message's fields
         free(conversation->data[remove_index].role);
         free(conversation->data[remove_index].content);
         free(conversation->data[remove_index].tool_call_id);
         free(conversation->data[remove_index].tool_name);
 
-        // Remove from array using darray API
         ConversationHistory_remove(conversation, remove_index);
 
         trimmed_count++;
@@ -171,36 +157,28 @@ int calculate_token_allocation(const SessionData* session, const char* user_mess
                               TokenConfig* config, TokenUsage* usage) {
     if (session == NULL || config == NULL || usage == NULL) return -1;
     
-    // Initialize usage struct
     memset(usage, 0, sizeof(TokenUsage));
-    
-    // Validate configuration
+
     if (validate_token_config(config) != 0) {
         return -1;
     }
     
-    // Use the configured context window
     int effective_context_window = config->context_window;
-    
     usage->context_window_used = effective_context_window;
-    
-    // Estimate tokens for system prompt
+
     int system_tokens = 0;
     if (session->config.system_prompt) {
         system_tokens = estimate_token_count(session->config.system_prompt, config);
     }
     
-    // Estimate tokens for user message
     int user_tokens = user_message ? estimate_token_count(user_message, config) : 0;
-    
-    // Estimate tokens for conversation history
+
     int history_tokens = 0;
     for (size_t i = 0; i < session->conversation.count; i++) {
         history_tokens += estimate_token_count(session->conversation.data[i].content, config);
         history_tokens += TOKEN_OVERHEAD_PER_MESSAGE;
     }
     
-    // Estimate tokens for tool definitions
     int tool_tokens = 0;
     if (session->tool_count > 0) {
         tool_tokens = session->tool_count * TOKEN_OVERHEAD_PER_TOOL;
@@ -209,29 +187,25 @@ int calculate_token_allocation(const SessionData* session, const char* user_mess
     int total_prompt_tokens = system_tokens + user_tokens + history_tokens + tool_tokens + TOKEN_OVERHEAD_JSON_STRUCTURE;
     usage->total_prompt_tokens = total_prompt_tokens;
     
-    // Calculate dynamic safety buffer
     int safety_buffer = get_dynamic_safety_buffer(config, total_prompt_tokens);
     usage->safety_buffer_used = safety_buffer;
     
-    // Calculate available response tokens
     int available_tokens = effective_context_window - total_prompt_tokens - safety_buffer;
-    
-    // Apply model-specific output token limits based on actual model capabilities
+
+    // Clamp to known provider-specific max output token limits, which are
+    // independent of the context window and not discoverable at runtime.
     if (session->config.model) {
-        // Get model-specific response limits
-        int max_response_cap = -1;  // No cap by default
-        
-        // Determine response cap based on model pattern
+        int max_response_cap = -1;
+
         if (strstr(session->config.model, "claude") != NULL) {
-            max_response_cap = 60000;  // Claude models have ~64k output limit
+            max_response_cap = 60000;
         } else if (strstr(session->config.model, "gpt") != NULL) {
-            max_response_cap = 4000;   // OpenAI GPT models have ~4k output limit 
+            max_response_cap = 4000;
         } else if (strstr(session->config.model, "deepseek") != NULL) {
-            max_response_cap = 8000;   // DeepSeek models have ~8k output limit
+            max_response_cap = 8000;
         } else if (strstr(session->config.model, "qwen") != NULL) {
-            max_response_cap = 8000;   // Qwen models have ~8k output limit
+            max_response_cap = 8000;
         }
-        // Default/local models: no specific cap
         
         if (max_response_cap > 0 && available_tokens > max_response_cap) {
             available_tokens = max_response_cap;
@@ -239,9 +213,6 @@ int calculate_token_allocation(const SessionData* session, const char* user_mess
                         max_response_cap, session->config.model);
         }
     }
-    
-    // Note: If available_tokens < min_response_tokens, the caller should use
-    // manage_conversation_tokens() which will attempt compaction
     
     usage->available_response_tokens = available_tokens;
     
@@ -252,4 +223,3 @@ int calculate_token_allocation(const SessionData* session, const char* user_mess
     return 0;
 }
 
-// manage_conversation_tokens moved to ralph.c to avoid circular dependencies

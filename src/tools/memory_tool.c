@@ -25,7 +25,6 @@ static vector_db_error_t ensure_memory_index(void) {
     index_config_t config = vector_db_service_get_memory_config(dimension);
     vector_db_error_t result = vector_db_service_ensure_index(MEMORY_INDEX_NAME, &config);
     
-    // Free allocated metric string from config
     free(config.metric);
     return result;
 }
@@ -44,7 +43,6 @@ static char* create_memory_metadata(const char *memory_type, const char *source,
     char *timestamp = get_current_timestamp();
     if (timestamp == NULL) return NULL;
     
-    // Create JSON metadata
     char *metadata = malloc(1024);
     if (metadata == NULL) {
         free(timestamp);
@@ -67,11 +65,9 @@ static char* create_memory_metadata(const char *memory_type, const char *source,
 int execute_remember_tool_call(const ToolCall *tool_call, ToolResult *result) {
     if (tool_call == NULL || result == NULL) return -1;
     
-    // Create result builder
     tool_result_builder_t* builder = tool_result_builder_create(tool_call->id);
     if (builder == NULL) return -1;
-    
-    // Extract parameters first to check for missing required params
+
     char *content = extract_string_param(tool_call->arguments, "content");
     char *memory_type = extract_string_param(tool_call->arguments, "type");
     char *source = extract_string_param(tool_call->arguments, "source");
@@ -88,7 +84,6 @@ int execute_remember_tool_call(const ToolCall *tool_call, ToolResult *result) {
         goto cleanup;
     }
     
-    // Check embeddings service
     if (!embeddings_service_is_configured()) {
         tool_result_builder_set_error(builder, "Embeddings service not configured. OPENAI_API_KEY environment variable required");
         ToolResult* temp_result = tool_result_builder_finalize(builder);
@@ -99,7 +94,6 @@ int execute_remember_tool_call(const ToolCall *tool_call, ToolResult *result) {
         goto cleanup;
     }
     
-    // Ensure memory index exists
     vector_db_error_t index_err = ensure_memory_index();
     if (index_err != VECTOR_DB_OK) {
         tool_result_builder_set_error(builder, "Failed to initialize memory index: %s", 
@@ -112,7 +106,6 @@ int execute_remember_tool_call(const ToolCall *tool_call, ToolResult *result) {
         goto cleanup;
     }
     
-    // Generate embedding
     vector_t* vector = embeddings_service_text_to_vector(content);
     if (vector == NULL) {
         tool_result_builder_set_error(builder, "Failed to generate embedding for content");
@@ -124,7 +117,6 @@ int execute_remember_tool_call(const ToolCall *tool_call, ToolResult *result) {
         goto cleanup;
     }
     
-    // Get vector database
     vector_db_t *db = vector_db_service_get_database();
     if (db == NULL) {
         tool_result_builder_set_error(builder, "Failed to access vector database");
@@ -136,8 +128,7 @@ int execute_remember_tool_call(const ToolCall *tool_call, ToolResult *result) {
         embeddings_service_free_vector(vector);
         goto cleanup;
     }
-    
-    // Create metadata
+
     char *metadata = create_memory_metadata(memory_type, source, importance);
     if (metadata == NULL) {
         tool_result_builder_set_error(builder, "Failed to create metadata");
@@ -150,12 +141,10 @@ int execute_remember_tool_call(const ToolCall *tool_call, ToolResult *result) {
         goto cleanup;
     }
     
-    // Store vector
     size_t memory_id = next_memory_id - 1;
     vector_db_error_t err = vector_db_add_vector(db, MEMORY_INDEX_NAME, vector, memory_id);
     
     if (err == VECTOR_DB_OK) {
-        // Store metadata and content
         metadata_store_t* meta_store = metadata_store_get_instance();
         if (meta_store != NULL) {
             ChunkMetadata chunk = {
@@ -188,7 +177,6 @@ int execute_remember_tool_call(const ToolCall *tool_call, ToolResult *result) {
         free(temp_result);
     }
     
-    // Cleanup
     embeddings_service_free_vector(vector);
     free(metadata);
     
@@ -204,11 +192,9 @@ cleanup:
 int execute_forget_memory_tool_call(const ToolCall *tool_call, ToolResult *result) {
     if (tool_call == NULL || result == NULL) return -1;
     
-    // Create result builder
     tool_result_builder_t* builder = tool_result_builder_create(tool_call->id);
     if (builder == NULL) return -1;
-    
-    // Extract memory_id parameter
+
     double memory_id_num = extract_number_param(tool_call->arguments, "memory_id", -1);
     
     if (memory_id_num < 0) {
@@ -223,7 +209,6 @@ int execute_forget_memory_tool_call(const ToolCall *tool_call, ToolResult *resul
     
     size_t memory_id = (size_t)memory_id_num;
     
-    // Get vector database
     vector_db_t *db = vector_db_service_get_database();
     if (db == NULL) {
         tool_result_builder_set_error(builder, "Failed to access vector database");
@@ -234,8 +219,7 @@ int execute_forget_memory_tool_call(const ToolCall *tool_call, ToolResult *resul
         }
         return 0;
     }
-    
-    // Get metadata store
+
     metadata_store_t* meta_store = metadata_store_get_instance();
     if (meta_store == NULL) {
         tool_result_builder_set_error(builder, "Failed to access metadata store");
@@ -247,7 +231,6 @@ int execute_forget_memory_tool_call(const ToolCall *tool_call, ToolResult *resul
         return 0;
     }
     
-    // Try to get the memory metadata first to verify it exists
     ChunkMetadata* chunk = metadata_store_get(meta_store, MEMORY_INDEX_NAME, memory_id);
     if (chunk == NULL) {
         tool_result_builder_set_error(builder, "Memory with ID %zu not found", memory_id);
@@ -259,7 +242,6 @@ int execute_forget_memory_tool_call(const ToolCall *tool_call, ToolResult *resul
         return 0;
     }
     
-    // Store some info about the deleted memory for the response
     char* memory_type = chunk->type ? strdup(chunk->type) : strdup("unknown");
     char* content_preview = NULL;
     if (chunk->content) {
@@ -276,11 +258,8 @@ int execute_forget_memory_tool_call(const ToolCall *tool_call, ToolResult *resul
     }
     metadata_store_free_chunk(chunk);
     
-    // Delete from vector database
     vector_db_error_t err = vector_db_delete_vector(db, MEMORY_INDEX_NAME, memory_id);
     bool vector_deleted = (err == VECTOR_DB_OK || err == VECTOR_DB_ERROR_ELEMENT_NOT_FOUND);
-    
-    // Delete from metadata store
     bool metadata_deleted = (metadata_store_delete(meta_store, MEMORY_INDEX_NAME, memory_id) == 0);
     
     if (vector_deleted && metadata_deleted) {
@@ -306,7 +285,6 @@ int execute_forget_memory_tool_call(const ToolCall *tool_call, ToolResult *resul
         free(temp_result);
     }
     
-    // Cleanup
     free(memory_type);
     free(content_preview);
     
@@ -316,11 +294,9 @@ int execute_forget_memory_tool_call(const ToolCall *tool_call, ToolResult *resul
 int execute_recall_memories_tool_call(const ToolCall *tool_call, ToolResult *result) {
     if (tool_call == NULL || result == NULL) return -1;
     
-    // Create result builder
     tool_result_builder_t* builder = tool_result_builder_create(tool_call->id);
     if (builder == NULL) return -1;
-    
-    // Extract parameters first to check for missing required params
+
     char *query = extract_string_param(tool_call->arguments, "query");
     double k = extract_number_param(tool_call->arguments, "k", 5);
     
@@ -334,7 +310,6 @@ int execute_recall_memories_tool_call(const ToolCall *tool_call, ToolResult *res
         return 0;
     }
 
-    // Check embeddings service - required for semantic memory search
     if (!embeddings_service_is_configured()) {
         tool_result_builder_set_error(builder, "Embeddings service not configured. OPENAI_API_KEY environment variable required");
         ToolResult* temp_result = tool_result_builder_finalize(builder);
@@ -346,7 +321,6 @@ int execute_recall_memories_tool_call(const ToolCall *tool_call, ToolResult *res
         return 0;
     }
 
-    // Get metadata store for text search
     metadata_store_t* meta_store = metadata_store_get_instance();
     if (meta_store == NULL) {
         tool_result_builder_set_error(builder, "Failed to access metadata store");
@@ -359,27 +333,23 @@ int execute_recall_memories_tool_call(const ToolCall *tool_call, ToolResult *res
         return 0;
     }
     
-    // First, perform text-based search
     size_t text_count = 0;
     ChunkMetadata** text_results = metadata_store_search(meta_store, MEMORY_INDEX_NAME, query, &text_count);
-    
-    // Then perform vector similarity search if embeddings are available
+
     search_results_t *vector_results = NULL;
     if (embeddings_service_is_configured()) {
-        // Generate query embedding
         vector_t* query_vector = embeddings_service_text_to_vector(query);
         if (query_vector != NULL) {
-            // Get vector database
             vector_db_t *db = vector_db_service_get_database();
             if (db != NULL) {
-                // Search for similar vectors (get more than k to merge with text results)
+                // Fetch 2x results to allow deduplication with text search hits
                 vector_results = vector_db_search(db, MEMORY_INDEX_NAME, query_vector, (size_t)(k * 2));
             }
             embeddings_service_free_vector(query_vector);
         }
     }
     
-    // Build combined result set using a simple scoring system
+    // Hybrid search: merge text-exact and vector-similarity results with scoring
     typedef struct {
         size_t memory_id;
         float score;
@@ -396,7 +366,6 @@ int execute_recall_memories_tool_call(const ToolCall *tool_call, ToolResult *res
     
     size_t result_count = 0;
     
-    // Add text search results with high scores (exact matches)
     for (size_t i = 0; i < text_count && i < (size_t)k; i++) {
         scored_results[result_count].memory_id = text_results[i]->chunk_id;
         scored_results[result_count].score = 1.0; // Perfect score for text matches
@@ -405,17 +374,15 @@ int execute_recall_memories_tool_call(const ToolCall *tool_call, ToolResult *res
         result_count++;
     }
     
-    // Add vector search results, avoiding duplicates
     if (vector_results != NULL) {
         for (size_t i = 0; i < vector_results->count; i++) {
             size_t memory_id = vector_results->results[i].label;
             float similarity = 1.0 - vector_results->results[i].distance;
             
-            // Check if this ID is already in results from text search
             bool is_duplicate = false;
             for (size_t j = 0; j < result_count; j++) {
                 if (scored_results[j].memory_id == memory_id) {
-                    // Boost score if found in both searches
+                    // Boost: appearing in both text and vector search implies higher relevance
                     scored_results[j].score = (scored_results[j].score + similarity) / 2.0 + 0.1;
                     is_duplicate = true;
                     break;
@@ -432,7 +399,6 @@ int execute_recall_memories_tool_call(const ToolCall *tool_call, ToolResult *res
         }
     }
     
-    // Sort results by score (descending)
     for (size_t i = 0; result_count > 0 && i < result_count - 1; i++) {
         for (size_t j = i + 1; j < result_count; j++) {
             if (scored_results[j].score > scored_results[i].score) {
@@ -443,7 +409,6 @@ int execute_recall_memories_tool_call(const ToolCall *tool_call, ToolResult *res
         }
     }
     
-    // Build response
     if (result_count == 0) {
         tool_result_builder_set_success_json(builder, 
             "{\"success\": true, \"memories\": [], \"message\": \"No relevant memories found\"}");
@@ -470,7 +435,6 @@ int execute_recall_memories_tool_call(const ToolCall *tool_call, ToolResult *res
             
             ChunkMetadata* chunk = scored_results[i].chunk;
             if (chunk != NULL && chunk->content != NULL) {
-                // Escape content for JSON
                 char* escaped_content = json_escape_string(chunk->content);
                 if (escaped_content != NULL) {
                     p += sprintf(p, ", \"content\": \"%s\"", escaped_content);
@@ -499,7 +463,6 @@ int execute_recall_memories_tool_call(const ToolCall *tool_call, ToolResult *res
     }
     
 recall_cleanup_scored:
-    // Clean up scored results
     for (size_t i = 0; i < result_count; i++) {
         if (!scored_results[i].from_text_search && scored_results[i].chunk != NULL) {
             metadata_store_free_chunk(scored_results[i].chunk);
@@ -515,7 +478,6 @@ recall_cleanup:
         free(temp_result);
     }
     
-    // Cleanup
     if (text_results != NULL) {
         metadata_store_free_chunks(text_results, text_count);
     }
@@ -531,7 +493,6 @@ int register_memory_tools(ToolRegistry *registry) {
     if (registry == NULL) return -1;
     int result;
     
-    // 1. Register remember tool
     ToolParameter remember_parameters[4];
     memset(remember_parameters, 0, sizeof(remember_parameters));
 
@@ -563,12 +524,10 @@ int register_memory_tools(ToolRegistry *registry) {
     remember_parameters[3].enum_count = 0;
     remember_parameters[3].required = 0;
     
-    // Check for allocation failures
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i <4; i++) {
         if (remember_parameters[i].name == NULL || 
             remember_parameters[i].type == NULL ||
             remember_parameters[i].description == NULL) {
-            // Cleanup on failure
             for (int j = 0; j <= i; j++) {
                 free(remember_parameters[j].name);
                 free(remember_parameters[j].type);
@@ -578,12 +537,10 @@ int register_memory_tools(ToolRegistry *registry) {
         }
     }
     
-    // Register the tool using the new system
     result = register_tool(registry, "remember", 
                           "Store important information in long-term memory for future reference",
                           remember_parameters, 4, execute_remember_tool_call);
     
-    // Clean up temporary parameter storage
     for (int i = 0; i < 4; i++) {
         free(remember_parameters[i].name);
         free(remember_parameters[i].type);
@@ -592,7 +549,6 @@ int register_memory_tools(ToolRegistry *registry) {
     
     if (result != 0) return -1;
     
-    // 2. Register recall_memories tool
     ToolParameter recall_parameters[2];
     memset(recall_parameters, 0, sizeof(recall_parameters));
 
@@ -610,12 +566,10 @@ int register_memory_tools(ToolRegistry *registry) {
     recall_parameters[1].enum_count = 0;
     recall_parameters[1].required = 0;
     
-    // Check for allocation failures
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i <2; i++) {
         if (recall_parameters[i].name == NULL || 
             recall_parameters[i].type == NULL ||
             recall_parameters[i].description == NULL) {
-            // Cleanup on failure
             for (int j = 0; j <= i; j++) {
                 free(recall_parameters[j].name);
                 free(recall_parameters[j].type);
@@ -625,12 +579,10 @@ int register_memory_tools(ToolRegistry *registry) {
         }
     }
     
-    // Register the tool using the new system
     result = register_tool(registry, "recall_memories", 
                           "Search and retrieve relevant memories based on a query",
                           recall_parameters, 2, execute_recall_memories_tool_call);
     
-    // Clean up temporary parameter storage
     for (int i = 0; i < 2; i++) {
         free(recall_parameters[i].name);
         free(recall_parameters[i].type);
@@ -639,7 +591,6 @@ int register_memory_tools(ToolRegistry *registry) {
     
     if (result != 0) return -1;
     
-    // 3. Register forget_memory tool
     ToolParameter forget_parameters[1];
     memset(forget_parameters, 0, sizeof(forget_parameters));
 
@@ -650,8 +601,7 @@ int register_memory_tools(ToolRegistry *registry) {
     forget_parameters[0].enum_count = 0;
     forget_parameters[0].required = 1;
     
-    // Check for allocation failures
-    if (forget_parameters[0].name == NULL || 
+    if (forget_parameters[0].name == NULL ||
         forget_parameters[0].type == NULL ||
         forget_parameters[0].description == NULL) {
         free(forget_parameters[0].name);
@@ -660,12 +610,10 @@ int register_memory_tools(ToolRegistry *registry) {
         return -1;
     }
     
-    // Register the tool using the new system
     result = register_tool(registry, "forget_memory", 
                           "Delete a specific memory from long-term storage by its ID",
                           forget_parameters, 1, execute_forget_memory_tool_call);
     
-    // Clean up temporary parameter storage
     free(forget_parameters[0].name);
     free(forget_parameters[0].type);
     free(forget_parameters[0].description);

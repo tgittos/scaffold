@@ -27,8 +27,7 @@ int register_tool(ToolRegistry *registry, const char *name, const char *descript
         return -1;
     }
     
-    // Reallocate the functions array to accommodate the new tool
-    ToolFunction *new_functions = realloc(registry->functions, 
+    ToolFunction *new_functions = realloc(registry->functions,
                                           (registry->function_count + 1) * sizeof(ToolFunction));
     if (new_functions == NULL) {
         return -1;
@@ -37,7 +36,6 @@ int register_tool(ToolRegistry *registry, const char *name, const char *descript
     registry->functions = new_functions;
     ToolFunction *func = &registry->functions[registry->function_count];
     
-    // Initialize the new tool function
     func->name = strdup(name);
     func->description = strdup(description);
     func->parameter_count = param_count;
@@ -49,7 +47,6 @@ int register_tool(ToolRegistry *registry, const char *name, const char *descript
         return -1;
     }
     
-    // Copy parameters if provided
     if (param_count > 0 && parameters != NULL) {
         func->parameters = malloc(param_count * sizeof(ToolParameter));
         if (func->parameters == NULL) {
@@ -58,7 +55,7 @@ int register_tool(ToolRegistry *registry, const char *name, const char *descript
             return -1;
         }
         
-        // Deep copy each parameter
+
         for (int i = 0; i < param_count; i++) {
             ToolParameter *src_param = &parameters[i];
             ToolParameter *dst_param = &func->parameters[i];
@@ -71,7 +68,7 @@ int register_tool(ToolRegistry *registry, const char *name, const char *descript
             dst_param->items_schema = src_param->items_schema ? strdup(src_param->items_schema) : NULL;
 
             if (dst_param->name == NULL || dst_param->type == NULL || dst_param->description == NULL) {
-                // Cleanup on failure
+
                 for (int j = 0; j <= i; j++) {
                     free(func->parameters[j].name);
                     free(func->parameters[j].type);
@@ -83,11 +80,11 @@ int register_tool(ToolRegistry *registry, const char *name, const char *descript
                 return -1;
             }
             
-            // Copy enum values if present
+
             if (src_param->enum_count > 0 && src_param->enum_values != NULL) {
                 dst_param->enum_values = malloc(src_param->enum_count * sizeof(char*));
                 if (dst_param->enum_values == NULL) {
-                    // Cleanup on failure
+    
                     for (int j = 0; j <= i; j++) {
                         free(func->parameters[j].name);
                         free(func->parameters[j].type);
@@ -108,12 +105,12 @@ int register_tool(ToolRegistry *registry, const char *name, const char *descript
                 for (int j = 0; j < src_param->enum_count; j++) {
                     dst_param->enum_values[j] = strdup(src_param->enum_values[j]);
                     if (dst_param->enum_values[j] == NULL) {
-                        // Cleanup on failure
+        
                         for (int k = 0; k < j; k++) {
                             free(dst_param->enum_values[k]);
                         }
                         free(dst_param->enum_values);
-                        // Continue cleanup for other parameters...
+                        // Clean up previously completed parameters
                         for (int k = 0; k <= i; k++) {
                             free(func->parameters[k].name);
                             free(func->parameters[k].type);
@@ -148,8 +145,7 @@ char* generate_tools_json(const ToolRegistry *registry) {
         return NULL;
     }
     
-    // Calculate required size accurately
-    size_t required_size = 2; // For "[" and "]"
+    size_t required_size = 2;
     
     for (int i = 0; i < registry->function_count; i++) {
         const ToolFunction *func = &registry->functions[i];
@@ -167,15 +163,13 @@ char* generate_tools_json(const ToolRegistry *registry) {
                 }
             }
 
-            // Account for items_schema in array types
             if (param->items_schema != NULL) {
                 required_size += strlen(param->items_schema) + 20;
             }
         }
     }
     
-    // Multiply by 2 for safety margin
-    required_size *= 2;
+    required_size *= 2;  // Safety margin for JSON escaping overhead
     
     char *json = malloc(required_size);
     if (json == NULL) {
@@ -202,7 +196,6 @@ char* generate_tools_json(const ToolRegistry *registry) {
             pos += ret;
         }
         
-        // Escape description for JSON
         char *escaped_desc = json_escape_string(func->description);
         if (escaped_desc == NULL) {
             free(json);
@@ -238,7 +231,6 @@ char* generate_tools_json(const ToolRegistry *registry) {
                     pos += ret;
                 }
                 
-                // Escape parameter description for JSON
                 char *escaped_param_desc = json_escape_string(param->description);
                 if (escaped_param_desc == NULL) {
                     free(json);
@@ -254,13 +246,10 @@ char* generate_tools_json(const ToolRegistry *registry) {
                 }
                 pos += ret;
                 
-                // Add items schema for array types
                 if (strcmp(param->type, "array") == 0) {
                     if (param->items_schema != NULL) {
-                        // Use the provided items schema
                         ret = snprintf(json + pos, required_size - pos, ", \"items\": %s", param->items_schema);
                     } else {
-                        // Default to generic object
                         ret = snprintf(json + pos, required_size - pos, ", \"items\": {\"type\": \"object\"}");
                     }
                     if (ret < 0 || (size_t)ret >= required_size - pos) {
@@ -369,7 +358,6 @@ char* generate_anthropic_tools_json(const ToolRegistry *registry) {
         return NULL;
     }
 
-    // Use cJSON for safe JSON construction to prevent buffer overflows
     cJSON *tools_array = cJSON_CreateArray();
     if (tools_array == NULL) {
         return NULL;
@@ -384,7 +372,6 @@ char* generate_anthropic_tools_json(const ToolRegistry *registry) {
             return NULL;
         }
 
-        // Add name and description - check return values for memory allocation failures
         if (!cJSON_AddStringToObject(tool, "name", func->name) ||
             !cJSON_AddStringToObject(tool, "description", func->description)) {
             cJSON_Delete(tool);
@@ -392,7 +379,6 @@ char* generate_anthropic_tools_json(const ToolRegistry *registry) {
             return NULL;
         }
 
-        // Build input_schema
         cJSON *input_schema = cJSON_CreateObject();
         if (input_schema == NULL) {
             cJSON_Delete(tool);
@@ -437,7 +423,6 @@ char* generate_anthropic_tools_json(const ToolRegistry *registry) {
                     return NULL;
                 }
 
-                // Add items schema for array types
                 if (strcmp(param->type, "array") == 0) {
                     cJSON *items = cJSON_CreateObject();
                     if (items != NULL) {
@@ -446,7 +431,6 @@ char* generate_anthropic_tools_json(const ToolRegistry *registry) {
                     }
                 }
 
-                // Add enum values if present
                 if (param->enum_values != NULL && param->enum_count > 0) {
                     cJSON *enum_array = cJSON_CreateArray();
                     if (enum_array != NULL) {
@@ -462,7 +446,6 @@ char* generate_anthropic_tools_json(const ToolRegistry *registry) {
 
             cJSON_AddItemToObject(input_schema, "properties", properties);
 
-            // Add required array if there are required parameters
             cJSON *required = NULL;
             for (int j = 0; j < func->parameter_count; j++) {
                 if (func->parameters[j].required) {
@@ -493,7 +476,6 @@ char* generate_anthropic_tools_json(const ToolRegistry *registry) {
     return json;
 }
 
-// Helper functions for JSON extraction with proper cleanup
 static char* extract_string_from_json(const char *json, const char *key) {
     cJSON *json_obj = cJSON_Parse(json);
     if (json_obj == NULL) {
@@ -534,23 +516,20 @@ int parse_tool_calls(const char *json_response, ToolCall **tool_calls, int *call
     *tool_calls = NULL;
     *call_count = 0;
     
-    // First try to find standard tool_calls array
     const char *tool_calls_start = strstr(json_response, "\"tool_calls\":");
     if (tool_calls_start == NULL) {
-        // If no standard format, look for custom <tool_call> format
+        // Fallback: look for custom <tool_call> XML-style format
         const char *custom_call_start = strstr(json_response, "<tool_call>");
         if (custom_call_start == NULL) {
             return 0; // No tool calls found - this is OK
         }
         
-        // Parse custom format: <tool_call>{"name": "...", "arguments": {...}}</tool_call>
         const char *json_start = custom_call_start + strlen("<tool_call>");
         const char *json_end = strstr(json_start, "</tool_call>");
         if (json_end == NULL) {
             return -1;
         }
         
-        // Skip whitespace and newlines
         while (*json_start == ' ' || *json_start == '\t' || *json_start == '\n' || *json_start == '\r') {
             json_start++;
         }
@@ -564,18 +543,16 @@ int parse_tool_calls(const char *json_response, ToolCall **tool_calls, int *call
         memcpy(call_json, json_start, json_len);
         call_json[json_len] = '\0';
         
-        // Parse the tool call JSON
         ToolCall *call = malloc(sizeof(ToolCall));
         if (call == NULL) {
             free(call_json);
             return -1;
         }
         
-        call->id = strdup("custom_call_1"); // Generate an ID
+        call->id = strdup("custom_call_1");
         call->name = extract_string_from_json(call_json, "name");
         call->arguments = extract_object_from_json(call_json, "arguments");
         
-        // If arguments is not an object, try string format
         if (call->arguments == NULL) {
             call->arguments = extract_string_from_json(call_json, "arguments");
             if (call->arguments == NULL) {
@@ -599,19 +576,16 @@ int parse_tool_calls(const char *json_response, ToolCall **tool_calls, int *call
         return 0;
     }
     
-    // Find the opening bracket of the array
     const char *array_start = strchr(tool_calls_start, '[');
     if (array_start == NULL) {
         return -1;
     }
     
-    // Count tool calls in the array
     int count = 0;
     const char *current = array_start + 1;
     while (*current != '\0' && *current != ']') {
         if (*current == '{') {
             count++;
-            // Skip to the end of this object
             int brace_count = 1;
             current++;
             while (*current != '\0' && brace_count > 0) {
@@ -631,18 +605,15 @@ int parse_tool_calls(const char *json_response, ToolCall **tool_calls, int *call
         return 0; // Empty array
     }
     
-    // Allocate array for all tool calls
     ToolCall *calls = malloc(count * sizeof(ToolCall));
     if (calls == NULL) {
         return -1;
     }
     
-    // Parse each tool call
     current = array_start + 1;
     int parsed_count = 0;
     
     while (*current != '\0' && *current != ']' && parsed_count < count) {
-        // Skip whitespace and commas
         while (*current == ' ' || *current == '\t' || *current == '\n' || *current == '\r' || *current == ',') {
             current++;
         }
@@ -652,7 +623,6 @@ int parse_tool_calls(const char *json_response, ToolCall **tool_calls, int *call
             continue;
         }
         
-        // Find the end of this tool call object
         const char *call_start = current;
         const char *call_end = current + 1;
         int brace_count = 1;
@@ -667,7 +637,7 @@ int parse_tool_calls(const char *json_response, ToolCall **tool_calls, int *call
         }
         
         if (brace_count != 0) {
-            // Cleanup and return error
+
             for (int i = 0; i < parsed_count; i++) {
                 free(calls[i].id);
                 free(calls[i].name);
@@ -677,11 +647,10 @@ int parse_tool_calls(const char *json_response, ToolCall **tool_calls, int *call
             return -1;
         }
         
-        // Extract the tool call JSON
         size_t call_len = call_end - call_start;
         char *call_json = malloc(call_len + 1);
         if (call_json == NULL) {
-            // Cleanup and return error
+
             for (int i = 0; i < parsed_count; i++) {
                 free(calls[i].id);
                 free(calls[i].name);
@@ -694,13 +663,11 @@ int parse_tool_calls(const char *json_response, ToolCall **tool_calls, int *call
         memcpy(call_json, call_start, call_len);
         call_json[call_len] = '\0';
         
-        // Parse the tool call
         ToolCall *call = &calls[parsed_count];
         call->id = extract_string_from_json(call_json, "id");
         call->name = NULL;
         call->arguments = NULL;
         
-        // Extract function name and arguments from nested function object
         char *function_obj = extract_object_from_json(call_json, "function");
         if (function_obj != NULL) {
             call->name = extract_string_from_json(function_obj, "name");
@@ -712,9 +679,8 @@ int parse_tool_calls(const char *json_response, ToolCall **tool_calls, int *call
         
         free(call_json);
         
-        // Validate the parsed call
         if (call->id == NULL || call->name == NULL) {
-            // Cleanup and return error
+
             free(call->id);
             free(call->name);
             free(call->arguments);
@@ -727,7 +693,6 @@ int parse_tool_calls(const char *json_response, ToolCall **tool_calls, int *call
             return -1;
         }
         
-        // Default empty arguments if not provided
         if (call->arguments == NULL) {
             call->arguments = strdup("{}");
         }
@@ -750,14 +715,11 @@ int parse_anthropic_tool_calls(const char *json_response, ToolCall **tool_calls,
     *tool_calls = NULL;
     *call_count = 0;
     
-    // Anthropic returns tool use in a specific format in the content array
-    // Look for "type": "tool_use" in the content array
     const char *content_array = strstr(json_response, "\"content\":");
     if (content_array == NULL) {
         return 0; // No content array, no tool calls
     }
     
-    // Count tool_use items in the content array
     const char *search_pos = content_array;
     int tool_count = 0;
     const char *pos = search_pos;
@@ -782,12 +744,10 @@ int parse_anthropic_tool_calls(const char *json_response, ToolCall **tool_calls,
         return -1;
     }
     
-    // Parse each tool_use item
     search_pos = content_array;
     int parsed_count = 0;
     
     while (parsed_count < tool_count) {
-        // Find next tool_use
         const char *tool_use = strstr(search_pos, "\"type\": \"tool_use\"");
         if (tool_use == NULL) {
             tool_use = strstr(search_pos, "\"type\":\"tool_use\"");
@@ -796,7 +756,6 @@ int parse_anthropic_tool_calls(const char *json_response, ToolCall **tool_calls,
             break;
         }
         
-        // Find the containing object boundaries
         const char *obj_start = tool_use;
         while (obj_start > content_array && *obj_start != '{') {
             obj_start--;
@@ -807,7 +766,6 @@ int parse_anthropic_tool_calls(const char *json_response, ToolCall **tool_calls,
             continue;
         }
         
-        // Find matching closing brace
         const char *obj_end = obj_start + 1;
         int brace_count = 1;
         while (*obj_end != '\0' && brace_count > 0) {
@@ -824,7 +782,6 @@ int parse_anthropic_tool_calls(const char *json_response, ToolCall **tool_calls,
             continue;
         }
         
-        // Extract the tool use object
         size_t obj_len = obj_end - obj_start;
         char *tool_obj = malloc(obj_len + 1);
         if (tool_obj == NULL) {
@@ -836,13 +793,11 @@ int parse_anthropic_tool_calls(const char *json_response, ToolCall **tool_calls,
         memcpy(tool_obj, obj_start, obj_len);
         tool_obj[obj_len] = '\0';
         
-        // Parse the tool use object
         ToolCall *call = &(*tool_calls)[parsed_count];
         call->id = extract_string_from_json(tool_obj, "id");
         call->name = extract_string_from_json(tool_obj, "name");
         call->arguments = extract_object_from_json(tool_obj, "input");
         
-        // If arguments is not an object, try string format
         if (call->arguments == NULL) {
             call->arguments = extract_string_from_json(tool_obj, "input");
             if (call->arguments == NULL) {
@@ -855,14 +810,12 @@ int parse_anthropic_tool_calls(const char *json_response, ToolCall **tool_calls,
         free(tool_obj);
         
         if (call->id == NULL || call->name == NULL) {
-            // Generate ID if missing
             if (call->id == NULL) {
                 char id_buf[32];
                 snprintf(id_buf, sizeof(id_buf), "anthropic_call_%d", parsed_count);
                 call->id = strdup(id_buf);
             }
             
-            // Skip if name is missing
             if (call->name == NULL) {
                 free(call->id);
                 free(call->arguments);
@@ -898,19 +851,15 @@ int execute_tool_call(const ToolRegistry *registry, const ToolCall *tool_call, T
         return -1;
     }
     
-    // Look for the tool in the registry
     for (int i = 0; i < registry->function_count; i++) {
         if (strcmp(registry->functions[i].name, tool_call->name) == 0) {
-            // Execute the tool using its registered function pointer
             int exec_result = registry->functions[i].execute_func(tool_call, result);
-            
-            // Log the result after execution with improved formatting
+
             log_tool_execution_improved(tool_call->name, tool_call->arguments, result->success, result->result);
             return exec_result;
         }
     }
     
-    // Tool not found in registry
     result->result = strdup("Error: Unknown tool");
     result->success = 0;
     
@@ -919,7 +868,6 @@ int execute_tool_call(const ToolRegistry *registry, const ToolCall *tool_call, T
         return -1;
     }
     
-    // Log the result after execution with improved formatting
     log_tool_execution_improved(tool_call->name, tool_call->arguments, result->success, result->result);
     return 0;
 }
@@ -946,7 +894,6 @@ char* generate_tool_results_json(const ToolResult *results, int result_count) {
         strcat(json, results[i].tool_call_id);
         strcat(json, "\", \"content\": \"");
         
-        // Escape quotes in result content
         const char *src = results[i].result;
         size_t current_len = strlen(json);
         char *dst = json + current_len;
@@ -981,7 +928,6 @@ char* generate_tool_results_json(const ToolResult *results, int result_count) {
     return json;
 }
 
-// Generate a single tool result message for conversation history
 char* generate_single_tool_message(const ToolResult *result) {
     if (result == NULL || result->tool_call_id == NULL || result->result == NULL) {
         return NULL;
@@ -1004,39 +950,30 @@ int register_builtin_tools(ToolRegistry *registry) {
         return -1;
     }
 
-    // Register vector DB CRUD tool
     if (register_vector_db_tool(registry) != 0) {
         return -1;
     }
 
-    // Register memory tools
     if (register_memory_tools(registry) != 0) {
         return -1;
     }
 
-    // Register PDF text extraction tool
     if (register_pdf_tool(registry) != 0) {
         return -1;
     }
 
-    // Register Python interpreter tool (the host for Python file tools)
     if (register_python_tool(registry) != 0) {
         return -1;
     }
 
-    // Initialize Python interpreter eagerly so tool files can be loaded and registered
-    // This extracts default tools from /zip/python_defaults/ to ~/.local/ralph/tools/
-    // and loads them into the Python global scope
+    // Eagerly init Python so tool files from ~/.local/ralph/tools/ can be loaded
     if (python_interpreter_init() != 0) {
         fprintf(stderr, "Warning: Failed to initialize Python interpreter\n");
-        // Continue anyway - core tools are still available
     }
 
-    // Register Python file-based tools (read_file, write_file, shell, web_fetch, etc.)
-    // These are loaded from ~/.local/ralph/tools/ and provide external system access
+    // Python file tools (read_file, write_file, shell, etc.) provide external system access
     if (python_register_tool_schemas(registry) != 0) {
         fprintf(stderr, "Warning: Failed to register Python file tools\n");
-        // Continue anyway - core tools are still available
     }
 
     return 0;
@@ -1047,22 +984,18 @@ void cleanup_tool_registry(ToolRegistry *registry) {
         return;
     }
     
-    // Defensive programming: check if function_count is reasonable first
-    // before trying to access the functions pointer
+    // Guard against corrupted registry state
     if (registry->function_count < 0 || registry->function_count > 1000) {
-        // Function count is garbage - registry is corrupted
         return;
     }
-    
+
     if (registry->function_count == 0) {
-        // No functions to clean up, but still clean up the functions array if allocated
         free(registry->functions);
         registry->functions = NULL;
         return;
     }
-    
+
     if (registry->functions == NULL) {
-        // Functions pointer is NULL but count > 0 - corrupted
         registry->function_count = 0;
         return;
     }

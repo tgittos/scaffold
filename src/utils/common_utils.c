@@ -41,7 +41,6 @@ char* extract_string_param(const char *json, const char *param_name) {
     char *result = malloc(len + 1);
     if (result == NULL) return NULL;
     
-    // Copy and handle escape sequences
     size_t j = 0;
     for (size_t i = 0; i < len; i++) {
         if (start[i] == '\\' && i + 1 < len) {
@@ -98,7 +97,6 @@ int extract_array_numbers(const char *json, const char *param_name, float **out_
     if (*start != '[') return -1;
     start++; // Skip '['
     
-    // Count elements first
     size_t count = 0;
     const char *p = start;
     while (*p != ']' && *p != '\0') {
@@ -115,11 +113,9 @@ int extract_array_numbers(const char *json, const char *param_name, float **out_
     
     if (count == 0) return -1;
     
-    // Allocate array
     float *array = malloc(count * sizeof(float));
     if (array == NULL) return -1;
     
-    // Parse values
     p = start;
     size_t i = 0;
     while (*p != ']' && *p != '\0' && i < count) {
@@ -145,7 +141,6 @@ char* create_error_message(const char *format, ...) {
     va_list args;
     va_start(args, format);
     
-    // Calculate needed size
     va_list args_copy;
     va_copy(args_copy, args);
     int needed = vsnprintf(NULL, 0, format, args_copy);
@@ -156,7 +151,6 @@ char* create_error_message(const char *format, ...) {
         return NULL;
     }
     
-    // Allocate and format
     char *buffer = malloc(needed + 1);
     if (buffer == NULL) {
         va_end(args);

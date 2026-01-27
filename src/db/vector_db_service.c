@@ -58,13 +58,11 @@ vector_db_error_t vector_db_service_ensure_index(const char* name, const index_c
     
     pthread_mutex_lock(&service->mutex);
     
-    // Check if index already exists
     if (vector_db_has_index(service->database, name)) {
         pthread_mutex_unlock(&service->mutex);
         return VECTOR_DB_OK;
     }
     
-    // Create the index
     vector_db_error_t result = vector_db_create_index(service->database, name, config);
     
     pthread_mutex_unlock(&service->mutex);

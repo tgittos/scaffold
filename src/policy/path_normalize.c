@@ -1,19 +1,9 @@
-/**
- * Cross-Platform Path Normalization Implementation
- *
- * Provides consistent path normalization for protected file detection
- * and allowlist pattern matching across Windows and POSIX platforms.
- */
-
 #include "path_normalize.h"
 
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 
-/**
- * Normalize a filesystem path for cross-platform comparison.
- */
 NormalizedPath *normalize_path(const char *path) {
     if (!path || !*path) {
         return NULL;
@@ -24,7 +14,6 @@ NormalizedPath *normalize_path(const char *path) {
         return NULL;
     }
 
-    /* Start with a copy we can modify */
     char *work = strdup(path);
     if (!work) {
         free(np);
@@ -32,24 +21,19 @@ NormalizedPath *normalize_path(const char *path) {
     }
 
 #ifdef _WIN32
-    /* Windows: Convert backslashes to forward slashes */
     for (char *p = work; *p; p++) {
         if (*p == '\\') {
             *p = '/';
         }
     }
 
-    /* Windows: Lowercase the entire path (case-insensitive filesystem) */
     for (char *p = work; *p; p++) {
         *p = (char)tolower((unsigned char)*p);
     }
 
-    /* Windows: Handle drive letters - C:/foo -> /c/foo */
+    /* Normalize drive letters to POSIX-style: C:/foo -> /c/foo */
     if (isalpha((unsigned char)work[0]) && work[1] == ':') {
         size_t old_len = strlen(work);
-        /* Need space for: / + drive_letter + rest_of_path + null */
-        /* Original: C:/foo (len=6), becomes /c/foo (len=6) - same size */
-        /* Original: C:foo (len=5), becomes /c/foo (len=6) - need +1 */
         size_t new_len = old_len;
         int needs_slash = (work[2] != '/');
         if (needs_slash) {
@@ -76,12 +60,10 @@ NormalizedPath *normalize_path(const char *path) {
         work = new_work;
     }
 
-    /* Windows: Handle UNC paths - //server/share -> /unc/server/share */
+    /* Normalize UNC paths: //server/share -> /unc/server/share */
     if (work[0] == '/' && work[1] == '/') {
         size_t old_len = strlen(work);
-        /* //server/share (len=14) becomes /unc/server/share (len=17) */
-        /* We copy "/unc" (4 chars) then work+1, net change is +3 chars */
-        char *new_work = malloc(old_len + 3 + 1); /* +3 for "unc", +1 for null */
+        char *new_work = malloc(old_len + 3 + 1);
         if (!new_work) {
             free(work);
             free(np);
@@ -97,22 +79,18 @@ NormalizedPath *normalize_path(const char *path) {
 
     np->is_absolute = (work[0] == '/');
 #else
-    /* POSIX: paths are case-sensitive, already use forward slashes */
     np->is_absolute = (work[0] == '/');
 #endif
 
-    /* Both platforms: Remove trailing slashes (except for root "/") */
     size_t len = strlen(work);
     while (len > 1 && work[len - 1] == '/') {
         work[--len] = '\0';
     }
 
-    /* Both platforms: Collapse duplicate slashes */
     char *dst = work;
     char *src = work;
     while (*src) {
         if (*src == '/' && *(src + 1) == '/') {
-            /* Skip duplicate slash */
             src++;
         } else {
             *dst++ = *src++;
@@ -122,7 +100,6 @@ NormalizedPath *normalize_path(const char *path) {
 
     np->normalized = work;
 
-    /* Extract basename (final component) */
     char *last_slash = strrchr(np->normalized, '/');
     if (last_slash) {
         np->basename = last_slash + 1;
@@ -133,9 +110,6 @@ NormalizedPath *normalize_path(const char *path) {
     return np;
 }
 
-/**
- * Free a NormalizedPath structure.
- */
 void free_normalized_path(NormalizedPath *np) {
     if (np) {
         free(np->normalized);
@@ -144,9 +118,6 @@ void free_normalized_path(NormalizedPath *np) {
     }
 }
 
-/**
- * Compare two basenames using platform-appropriate case sensitivity.
- */
 int path_basename_cmp(const char *a, const char *b) {
     if (!a || !b) {
         if (a == b) {
@@ -156,18 +127,12 @@ int path_basename_cmp(const char *a, const char *b) {
     }
 
 #ifdef _WIN32
-    /* Windows: case-insensitive comparison */
     return _stricmp(a, b);
 #else
-    /* POSIX: case-sensitive comparison */
     return strcmp(a, b);
 #endif
 }
 
-/**
- * Check if a basename starts with a prefix using platform-appropriate
- * case sensitivity.
- */
 int path_basename_has_prefix(const char *basename, const char *prefix) {
     if (!basename || !prefix) {
         return 0;
@@ -179,10 +144,8 @@ int path_basename_has_prefix(const char *basename, const char *prefix) {
     }
 
 #ifdef _WIN32
-    /* Windows: case-insensitive comparison */
     return _strnicmp(basename, prefix, prefix_len) == 0;
 #else
-    /* POSIX: case-sensitive comparison */
     return strncmp(basename, prefix, prefix_len) == 0;
 #endif
 }

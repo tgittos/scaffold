@@ -16,22 +16,16 @@ typedef struct {
     int context_window;
     int max_tokens;
 
-    // API retry configuration
-    int api_max_retries;        // Default: 3
-    int api_retry_delay_ms;     // Default: 1000 (1 second)
-    float api_backoff_factor;   // Default: 2.0
+    int api_max_retries;
+    int api_retry_delay_ms;
+    float api_backoff_factor;
 
-    // Subagent configuration
-    int max_subagents;          // Default: 5
-    int subagent_timeout;       // Default: 300 seconds
+    int max_subagents;
+    int subagent_timeout;       // seconds
 
-    // Streaming configuration
-    bool enable_streaming;      // Default: true
+    bool enable_streaming;
+    bool json_output_mode;
 
-    // JSON output configuration
-    bool json_output_mode;      // Default: false
-
-    // Configuration file paths
     char *config_file_path;
     bool config_loaded;
 } ralph_config_t;

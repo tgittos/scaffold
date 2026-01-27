@@ -15,7 +15,7 @@ char* json_escape_string(const char* str) {
     
     if (json == NULL) return NULL;
     
-    // Extract the string value from the JSON (remove quotes)
+    // cJSON_PrintUnformatted wraps the value in JSON quotes; strip them
     size_t len = strlen(json);
     if (len >= 2 && json[0] == '"' && json[len-1] == '"') {
         memmove(json, json + 1, len - 2);

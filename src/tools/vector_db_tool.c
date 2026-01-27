@@ -18,7 +18,6 @@ int register_vector_db_tool(ToolRegistry *registry) {
     if (registry == NULL) return -1;
     int result;
     
-    // 1. Register vector_db_create_index
     ToolParameter create_parameters[6];
     memset(create_parameters, 0, sizeof(create_parameters));
 
@@ -89,7 +88,6 @@ int register_vector_db_tool(ToolRegistry *registry) {
     
     if (result != 0) return -1;
     
-    // 2. Register vector_db_delete_index
     ToolParameter delete_parameters[1];
     memset(delete_parameters, 0, sizeof(delete_parameters));
 
@@ -119,14 +117,12 @@ int register_vector_db_tool(ToolRegistry *registry) {
     
     if (result != 0) return -1;
     
-    // 3. Register vector_db_list_indices
     result = register_tool(registry, "vector_db_list_indices", 
                           "List all vector indices",
                           NULL, 0, execute_vector_db_list_indices_tool_call);
     
     if (result != 0) return -1;
     
-    // 4. Register vector_db_add_vector
     ToolParameter add_parameters[3];
     memset(add_parameters, 0, sizeof(add_parameters));
 
@@ -176,7 +172,6 @@ int register_vector_db_tool(ToolRegistry *registry) {
     
     if (result != 0) return -1;
     
-    // 5. Register vector_db_update_vector
     ToolParameter update_parameters[4];
     memset(update_parameters, 0, sizeof(update_parameters));
 
@@ -233,7 +228,6 @@ int register_vector_db_tool(ToolRegistry *registry) {
     
     if (result != 0) return -1;
     
-    // 6. Register vector_db_delete_vector
     ToolParameter delete_vec_parameters[2];
     memset(delete_vec_parameters, 0, sizeof(delete_vec_parameters));
 
@@ -276,7 +270,6 @@ int register_vector_db_tool(ToolRegistry *registry) {
     
     if (result != 0) return -1;
     
-    // 7. Register vector_db_get_vector
     ToolParameter get_parameters[2];
     memset(get_parameters, 0, sizeof(get_parameters));
 
@@ -319,7 +312,6 @@ int register_vector_db_tool(ToolRegistry *registry) {
     
     if (result != 0) return -1;
     
-    // 8. Register vector_db_search
     ToolParameter search_parameters[3];
     memset(search_parameters, 0, sizeof(search_parameters));
 
@@ -369,7 +361,6 @@ int register_vector_db_tool(ToolRegistry *registry) {
     
     if (result != 0) return -1;
     
-    // 9. Register vector_db_add_text
     ToolParameter add_text_parameters[3];
     memset(add_text_parameters, 0, sizeof(add_text_parameters));
 
@@ -419,7 +410,6 @@ int register_vector_db_tool(ToolRegistry *registry) {
     
     if (result != 0) return -1;
     
-    // 10. Register vector_db_add_chunked_text
     ToolParameter add_chunked_parameters[5];
     memset(add_chunked_parameters, 0, sizeof(add_chunked_parameters));
 
@@ -483,7 +473,6 @@ int register_vector_db_tool(ToolRegistry *registry) {
     
     if (result != 0) return -1;
     
-    // 11. Register vector_db_add_pdf_document
     ToolParameter add_pdf_parameters[4];
     memset(add_pdf_parameters, 0, sizeof(add_pdf_parameters));
 
@@ -540,7 +529,6 @@ int register_vector_db_tool(ToolRegistry *registry) {
     
     if (result != 0) return -1;
     
-    // 12. Register vector_db_search_text
     ToolParameter search_text_parameters[3];
     memset(search_text_parameters, 0, sizeof(search_text_parameters));
 
@@ -590,7 +578,6 @@ int register_vector_db_tool(ToolRegistry *registry) {
     
     if (result != 0) return -1;
     
-    // 13. Register vector_db_search_by_time
     ToolParameter search_time_parameters[4];
     memset(search_time_parameters, 0, sizeof(search_time_parameters));
 
@@ -811,7 +798,6 @@ int execute_vector_db_add_vector_tool_call(const ToolCall *tool_call, ToolResult
     
     vector_db_t *db = vector_db_service_get_database();
     
-    // Auto-generate label based on current index size
     size_t label = vector_db_get_index_size(db, index_name);
     
     vector_db_error_t err = vector_db_add_vector(db, index_name, &vec, label);
@@ -933,8 +919,8 @@ int execute_vector_db_get_vector_tool_call(const ToolCall *tool_call, ToolResult
     
     vector_db_t *db = vector_db_service_get_database();
     
-    // First get dimension to allocate vector
-    size_t dimension = 512; // Default, will be updated
+    // Pre-allocate at a default dimension; vector_db_get_vector will update if needed
+    size_t dimension = 512;
     vector_t vec = {
         .data = malloc(dimension * sizeof(float)),
         .dimension = dimension
@@ -1069,10 +1055,8 @@ int execute_vector_db_add_text_tool_call(const ToolCall *tool_call, ToolResult *
         return 0;
     }
     
-    // Use document store for unified storage
     document_store_t *doc_store = document_store_get_instance();
-    
-    // Ensure index exists
+
     if (document_store_ensure_index(doc_store, index_name, 1536, 10000) != 0) {
         result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to ensure index exists\"}");
         result->success = 0;
@@ -1082,7 +1066,6 @@ int execute_vector_db_add_text_tool_call(const ToolCall *tool_call, ToolResult *
         return 0;
     }
     
-    // Add text with embedding to document store
     int add_result = document_store_add_text(doc_store, index_name, text, "text", "api", metadata);
     
     char response[1024];
@@ -1100,7 +1083,6 @@ int execute_vector_db_add_text_tool_call(const ToolCall *tool_call, ToolResult *
     
     result->result = safe_strdup(response);
     
-    // Cleanup
     free(index_name);
     free(text);
     free(metadata);
@@ -1129,12 +1111,10 @@ int execute_vector_db_add_chunked_text_tool_call(const ToolCall *tool_call, Tool
         return 0;
     }
     
-    // Configure chunking
     chunking_config_t config = chunker_get_default_config();
     config.max_chunk_size = (size_t)max_chunk_size;
     config.overlap_size = (size_t)overlap_size;
     
-    // Chunk the document
     chunking_result_t *chunks = chunk_document(text, &config);
     if (!chunks || chunks->error) {
         char error_response[512];
@@ -1150,10 +1130,8 @@ int execute_vector_db_add_chunked_text_tool_call(const ToolCall *tool_call, Tool
         return 0;
     }
     
-    // Use document store to add chunked text
     document_store_t *doc_store = document_store_get_instance();
-    
-    // Ensure index exists
+
     if (document_store_ensure_index(doc_store, index_name, 1536, 10000) != 0) {
         result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to ensure index exists\"}");
         result->success = 0;
@@ -1163,13 +1141,11 @@ int execute_vector_db_add_chunked_text_tool_call(const ToolCall *tool_call, Tool
         free(metadata);
         return 0;
     }
-    
+
     size_t successful_chunks = 0;
     size_t failed_chunks = 0;
-    
-    // Process each chunk
+
     for (size_t i = 0; i < chunks->chunks.count; i++) {
-        // Add chunk text to document store (it will handle embedding internally)
         int add_result = document_store_add_text(doc_store, index_name, 
                                                 chunks->chunks.data[i].text, 
                                                 "chunk", "api", metadata);
@@ -1181,7 +1157,6 @@ int execute_vector_db_add_chunked_text_tool_call(const ToolCall *tool_call, Tool
         }
     }
     
-    // Build response
     char response[1024];
     if (successful_chunks > 0) {
         snprintf(response, sizeof(response),
@@ -1197,7 +1172,6 @@ int execute_vector_db_add_chunked_text_tool_call(const ToolCall *tool_call, Tool
     
     result->result = safe_strdup(response);
     
-    // Cleanup
     free_chunking_result(chunks);
     free(index_name);
     free(text);
@@ -1225,7 +1199,6 @@ int execute_vector_db_add_pdf_document_tool_call(const ToolCall *tool_call, Tool
         return 0;
     }
     
-    // Initialize PDF extractor
     if (pdf_extractor_init() != 0) {
         result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to initialize PDF extractor\"}");
         result->success = 0;
@@ -1234,7 +1207,6 @@ int execute_vector_db_add_pdf_document_tool_call(const ToolCall *tool_call, Tool
         return 0;
     }
     
-    // Extract text from PDF
     pdf_extraction_result_t *pdf_result = pdf_extract_text(pdf_path);
     if (!pdf_result || pdf_result->error) {
         char error_response[512];
@@ -1249,12 +1221,10 @@ int execute_vector_db_add_pdf_document_tool_call(const ToolCall *tool_call, Tool
         return 0;
     }
     
-    // Configure chunking for PDF
     chunking_config_t config = chunker_get_pdf_config();
     config.max_chunk_size = (size_t)max_chunk_size;
     config.overlap_size = (size_t)overlap_size;
     
-    // Chunk the extracted text
     chunking_result_t *chunks = chunk_document(pdf_result->text, &config);
     if (!chunks || chunks->error) {
         char error_response[512];
@@ -1270,10 +1240,8 @@ int execute_vector_db_add_pdf_document_tool_call(const ToolCall *tool_call, Tool
         return 0;
     }
     
-    // Use document store to add PDF chunks
     document_store_t *doc_store = document_store_get_instance();
-    
-    // Ensure index exists
+
     if (document_store_ensure_index(doc_store, index_name, 1536, 10000) != 0) {
         result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to ensure index exists\"}");
         result->success = 0;
@@ -1287,15 +1255,12 @@ int execute_vector_db_add_pdf_document_tool_call(const ToolCall *tool_call, Tool
     size_t successful_chunks = 0;
     size_t failed_chunks = 0;
     
-    // Process each chunk
     for (size_t i = 0; i < chunks->chunks.count; i++) {
-        // Build metadata with PDF info
         char metadata_json[512];
-        snprintf(metadata_json, sizeof(metadata_json), 
-                "{\"source\": \"pdf\", \"file\": \"%s\", \"page_count\": %d}", 
+        snprintf(metadata_json, sizeof(metadata_json),
+                "{\"source\": \"pdf\", \"file\": \"%s\", \"page_count\": %d}",
                 pdf_path, pdf_result->page_count);
-        
-        // Add chunk text to document store (it will handle embedding internally)
+
         int add_result = document_store_add_text(doc_store, index_name, 
                                                 chunks->chunks.data[i].text, 
                                                 "pdf_chunk", "pdf", metadata_json);
@@ -1307,7 +1272,6 @@ int execute_vector_db_add_pdf_document_tool_call(const ToolCall *tool_call, Tool
         }
     }
     
-    // Build response
     char response[1024];
     if (successful_chunks > 0) {
         snprintf(response, sizeof(response),
@@ -1323,7 +1287,6 @@ int execute_vector_db_add_pdf_document_tool_call(const ToolCall *tool_call, Tool
     
     result->result = safe_strdup(response);
     
-    // Cleanup
     free_chunking_result(chunks);
     pdf_free_extraction_result(pdf_result);
     free(index_name);

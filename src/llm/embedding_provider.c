@@ -26,7 +26,7 @@ EmbeddingProvider* detect_embedding_provider_for_url(EmbeddingProviderRegistry* 
         }
     }
 
-    return NULL; // No matching provider found
+    return NULL;
 }
 
 void cleanup_embedding_provider_registry(EmbeddingProviderRegistry* registry) {

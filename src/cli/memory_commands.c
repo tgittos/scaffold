@@ -55,7 +55,6 @@ static void print_chunk_summary(const ChunkMetadata* chunk) {
     if (chunk->source) printf(" | 📍 %s", chunk->source);
     printf("\n");
     
-    // Show first 100 chars of content
     if (chunk->content) {
         size_t len = strlen(chunk->content);
         if (len > 100) {
@@ -101,34 +100,33 @@ static void print_chunk_details(const ChunkMetadata* chunk) {
 }
 
 static int cmd_list(const char* args) {
-    const char* index_name = "long_term_memory"; // Default
-    
-    // Parse optional index name
+    const char* index_name = "long_term_memory";
+
     if (args && strlen(args) > 0) {
         index_name = args;
     }
-    
+
     metadata_store_t* store = metadata_store_get_instance();
     if (store == NULL) {
         printf("❌ Failed to access metadata store\n");
         return -1;
     }
-    
+
     size_t count = 0;
     ChunkMetadata** chunks = metadata_store_list(store, index_name, &count);
-    
+
     if (chunks == NULL || count == 0) {
         printf("📭 No memories found in index '%s'\n", index_name);
         return 0;
     }
-    
+
     printf("\n📚 \033[1mMemories in '%s' (%zu total)\033[0m\n", index_name, count);
     printf("════════════════════════════════════════\n\n");
-    
+
     for (size_t i = 0; i < count; i++) {
         print_chunk_summary(chunks[i]);
     }
-    
+
     metadata_store_free_chunks(chunks, count);
     return 0;
 }
@@ -139,14 +137,13 @@ static int cmd_search(const char* args) {
         printf("Usage: /memory search <query>\n");
         return -1;
     }
-    
+
     metadata_store_t* store = metadata_store_get_instance();
     if (store == NULL) {
         printf("❌ Failed to access metadata store\n");
         return -1;
     }
-    
-    // Search in default index
+
     const char* index_name = "long_term_memory";
     size_t count = 0;
     ChunkMetadata** chunks = metadata_store_search(store, index_name, args, &count);
@@ -189,21 +186,20 @@ static int cmd_show(const char* args) {
         return -1;
     }
     
-    // Try to find in default index first
+    //Fall through known indices since chunk IDs aren't globally unique
     const char* index_name = "long_term_memory";
     ChunkMetadata* chunk = metadata_store_get(store, index_name, chunk_id);
-    
+
     if (chunk == NULL) {
-        // Try conversation index
         index_name = "conversation_history";
         chunk = metadata_store_get(store, index_name, chunk_id);
     }
-    
+
     if (chunk == NULL) {
         printf("❌ Chunk #%zu not found\n", chunk_id);
         return -1;
     }
-    
+
     print_chunk_details(chunk);
     metadata_store_free_chunk(chunk);
     return 0;
@@ -218,7 +214,6 @@ static int cmd_edit(const char* args) {
         return -1;
     }
     
-    // Parse arguments
     char* args_copy = strdup(args);
     if (args_copy == NULL) return -1;
     
@@ -233,7 +228,6 @@ static int cmd_edit(const char* args) {
         return -1;
     }
     
-    // Trim leading whitespace from value
     while (*value && isspace(*value)) value++;
 
     char* endptr = NULL;
@@ -253,12 +247,11 @@ static int cmd_edit(const char* args) {
         return -1;
     }
     
-    // Try to find in default index first
+    // Fall through known indices since chunk IDs aren't globally unique
     const char* index_name = "long_term_memory";
     ChunkMetadata* chunk = metadata_store_get(store, index_name, chunk_id);
-    
+
     if (chunk == NULL) {
-        // Try conversation index
         index_name = "conversation_history";
         chunk = metadata_store_get(store, index_name, chunk_id);
     }
@@ -269,7 +262,6 @@ static int cmd_edit(const char* args) {
         return -1;
     }
     
-    // Update field
     bool valid_field = true;
     char* new_value = NULL;
     if (strcmp(field, "type") == 0) {
@@ -313,7 +305,7 @@ static int cmd_edit(const char* args) {
         free(chunk->content);
         chunk->content = new_value;
 
-        // Update embedding if embeddings service is available
+        // Content changes require re-embedding to keep vector search consistent
         if (embeddings_service_is_configured()) {
             vector_t* new_vector = embeddings_service_text_to_vector(value);
             if (new_vector == NULL) {
@@ -333,7 +325,6 @@ static int cmd_edit(const char* args) {
     }
     
     if (valid_field) {
-        // Save updated metadata
         if (metadata_store_update(store, chunk) != 0) {
             printf("❌ Failed to update metadata\n");
         } else {
@@ -388,9 +379,8 @@ static int cmd_indices(const char* args) {
 }
 
 static int cmd_stats(const char* args) {
-    const char* index_name = "long_term_memory"; // Default
-    
-    // Parse optional index name
+    const char* index_name = "long_term_memory";
+
     if (args && strlen(args) > 0) {
         index_name = args;
     }
@@ -439,25 +429,21 @@ static int cmd_stats(const char* args) {
 int process_memory_command(const char* command) {
     if (command == NULL) return -1;
     
-    // Check if it's a memory command
     if (strncmp(command, "/memory", 7) != 0) {
-        return -1; // Not a memory command
+        return -1;
     }
-    
-    // Skip "/memory" and any whitespace
+
     const char* args = command + 7;
     while (*args && isspace(*args)) args++;
-    
-    // Parse subcommand
+
     if (strlen(args) == 0 || strcmp(args, "help") == 0) {
         print_help();
         return 0;
     }
-    
-    // Extract subcommand
+
     char subcommand[32] = {0};
     const char* subargs = NULL;
-    
+
     const char* space = strchr(args, ' ');
     if (space != NULL) {
         size_t len = space - args;
@@ -468,8 +454,7 @@ int process_memory_command(const char* command) {
     } else {
         strncpy(subcommand, args, sizeof(subcommand) - 1);
     }
-    
-    // Execute subcommand
+
     if (strcmp(subcommand, "list") == 0) {
         return cmd_list(subargs);
     } else if (strcmp(subcommand, "search") == 0) {
@@ -490,7 +475,7 @@ int process_memory_command(const char* command) {
 }
 
 void memory_commands_init(void) {
-    // Ensure metadata store is initialized
+    // Side effect: initializes the singleton metadata store if not yet created
     metadata_store_get_instance();
 }
 

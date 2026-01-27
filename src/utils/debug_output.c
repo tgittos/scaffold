@@ -6,10 +6,8 @@
 #include <cJSON.h>
 #include "debug_output.h"
 
-// Global debug flag
 bool debug_enabled = false;
 
-// Threshold for summarizing arrays - arrays with more than this many numeric elements get summarized
 #define LARGE_ARRAY_THRESHOLD 10
 
 void debug_init(bool enable_debug) {
@@ -24,7 +22,6 @@ void debug_printf(const char *format, ...) {
     va_list args;
     va_start(args, format);
     
-    // Print in pale yellow
     fprintf(stderr, DEBUG_COLOR_YELLOW);
     vfprintf(stderr, format, args);
     fprintf(stderr, DEBUG_COLOR_RESET);
@@ -33,7 +30,7 @@ void debug_printf(const char *format, ...) {
 }
 
 void debug_fprintf(FILE *stream, const char *format, ...) {
-    (void)stream; // Suppress unused parameter warning - we always use stderr
+    (void)stream; // Always routes to stderr regardless of stream parameter
 
     if (!debug_enabled) {
         return;
@@ -42,7 +39,6 @@ void debug_fprintf(FILE *stream, const char *format, ...) {
     va_list args;
     va_start(args, format);
 
-    // Always output to stderr regardless of stream parameter, in pale yellow
     fprintf(stderr, DEBUG_COLOR_YELLOW);
     vfprintf(stderr, format, args);
     fprintf(stderr, DEBUG_COLOR_RESET);
@@ -50,7 +46,6 @@ void debug_fprintf(FILE *stream, const char *format, ...) {
     va_end(args);
 }
 
-// Check if an array contains only numeric values
 static bool is_numeric_array(const cJSON *array) {
     if (!cJSON_IsArray(array)) {
         return false;
@@ -67,7 +62,8 @@ static bool is_numeric_array(const cJSON *array) {
     return count > 0;
 }
 
-// Recursively summarize large numeric arrays in a cJSON object
+// Replaces large numeric arrays (e.g. embeddings) with a compact summary
+// to keep debug output readable.
 static void summarize_json_recursive(cJSON *node) {
     if (node == NULL) {
         return;
@@ -76,18 +72,15 @@ static void summarize_json_recursive(cJSON *node) {
     if (cJSON_IsArray(node) && is_numeric_array(node)) {
         int count = cJSON_GetArraySize(node);
         if (count > LARGE_ARRAY_THRESHOLD) {
-            // Get first and last values for summary
             cJSON *first = cJSON_GetArrayItem(node, 0);
             cJSON *last = cJSON_GetArrayItem(node, count - 1);
             double first_val = first ? first->valuedouble : 0.0;
             double last_val = last ? last->valuedouble : 0.0;
 
-            // Clear the array
             while (cJSON_GetArraySize(node) > 0) {
                 cJSON_DeleteItemFromArray(node, 0);
             }
 
-            // Add a placeholder string item with the summary
             char summary[128] = {0};
             snprintf(summary, sizeof(summary),
                      "<%d floats: %.4f ... %.4f>", count, first_val, last_val);
@@ -117,7 +110,6 @@ char* debug_summarize_json(const char *json) {
 
     cJSON *root = cJSON_Parse(json);
     if (root == NULL) {
-        // If parsing fails, return a copy of the original
         return strdup(json);
     }
 

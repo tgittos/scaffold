@@ -10,20 +10,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-// =============================================================================
-// Recap Generation (Streaming LLM call without history persistence)
-// =============================================================================
-
 #define RECAP_DEFAULT_MAX_MESSAGES 5
 #define RECAP_INITIAL_BUFFER_SIZE 4096
 
-// Helper function to format recent messages for recap context
 static char* format_recent_messages_for_recap(const ConversationHistory* history, int max_messages) {
     if (history == NULL || history->count == 0) {
         return NULL;
     }
 
-    // Determine how many messages to include
     int start_index = 0;
     int message_count = history->count;
     if (max_messages > 0 && message_count > max_messages) {
@@ -31,11 +25,10 @@ static char* format_recent_messages_for_recap(const ConversationHistory* history
         message_count = max_messages;
     }
 
-    // Calculate buffer size needed (estimate)
     size_t buffer_size = RECAP_INITIAL_BUFFER_SIZE;
     for (size_t i = (size_t)start_index; i < history->count; i++) {
         if (history->data[i].content != NULL) {
-            buffer_size += strlen(history->data[i].content) + 64; // Extra for formatting
+            buffer_size += strlen(history->data[i].content) + 64;
         }
     }
 
@@ -45,12 +38,11 @@ static char* format_recent_messages_for_recap(const ConversationHistory* history
     }
     buffer[0] = '\0';
 
-    // Format messages
     size_t offset = 0;
     for (size_t i = (size_t)start_index; i < history->count; i++) {
         const ConversationMessage* msg = &history->data[i];
 
-        // Skip tool messages for cleaner recap
+        // Tool messages are implementation detail noise in a recap
         if (msg->role != NULL && strcmp(msg->role, "tool") == 0) {
             continue;
         }
@@ -58,7 +50,6 @@ static char* format_recent_messages_for_recap(const ConversationHistory* history
         const char* role = msg->role ? msg->role : "unknown";
         const char* content = msg->content ? msg->content : "";
 
-        // Truncate very long messages for recap
         const int max_content_length = 500;
         char truncated_content[512];
         if (strlen(content) > (size_t)max_content_length) {
@@ -79,17 +70,11 @@ static char* format_recent_messages_for_recap(const ConversationHistory* history
     return buffer;
 }
 
-// =============================================================================
-// Streaming Callbacks for Recap
-// =============================================================================
-
-// User data for SSE callbacks
 typedef struct {
     StreamingContext* ctx;
     LLMProvider* provider;
 } RecapSSEUserData;
 
-// Callback: SSE data event - parse with provider-specific parser
 static void recap_sse_data_callback(const char* data, size_t len, void* user_data) {
     if (data == NULL || len == 0 || user_data == NULL) {
         return;
@@ -105,31 +90,26 @@ static void recap_sse_data_callback(const char* data, size_t len, void* user_dat
     }
 }
 
-// Callback: display text chunks as they arrive
 static void recap_text_callback(const char* text, size_t len, void* user_data) {
     (void)user_data;
     display_streaming_text(text, len);
 }
 
-// Callback: display thinking chunks (if model supports it)
 static void recap_thinking_callback(const char* text, size_t len, void* user_data) {
     (void)user_data;
     display_streaming_thinking(text, len);
 }
 
-// Callback: stream end (no-op, completion handled after HTTP returns)
 static void recap_end_callback(const char* stop_reason, void* user_data) {
     (void)stop_reason;
     (void)user_data;
 }
 
-// Callback: stream error
 static void recap_error_callback(const char* error, void* user_data) {
     (void)user_data;
     display_streaming_error(error);
 }
 
-// HTTP streaming callback that processes SSE chunks
 static size_t recap_stream_http_callback(const char* data, size_t size, void* user_data) {
     if (data == NULL || size == 0 || user_data == NULL) {
         return 0;
@@ -144,11 +124,6 @@ static size_t recap_stream_http_callback(const char* data, size_t size, void* us
     return size;
 }
 
-// =============================================================================
-// Main Recap Function
-// =============================================================================
-
-// Generate a recap of recent conversation without persisting to history
 int ralph_generate_recap(RalphSession* session, int max_messages) {
     if (session == NULL) {
         return -1;
@@ -156,21 +131,17 @@ int ralph_generate_recap(RalphSession* session, int max_messages) {
 
     const ConversationHistory* history = &session->session_data.conversation;
     if (history->count == 0) {
-        return 0; // Nothing to recap
+        return 0;
     }
-
-    // Use default if not specified
     if (max_messages <= 0) {
         max_messages = RECAP_DEFAULT_MAX_MESSAGES;
     }
 
-    // Format recent messages
     char* recent_messages = format_recent_messages_for_recap(history, max_messages);
     if (recent_messages == NULL) {
         return -1;
     }
 
-    // Build the recap prompt
     const char* recap_template =
         "You are resuming a conversation. Here are the most recent messages:\n\n"
         "%s\n"
@@ -189,7 +160,6 @@ int ralph_generate_recap(RalphSession* session, int max_messages) {
 
     debug_printf("Generating recap with prompt: %s\n", recap_prompt);
 
-    // Get provider registry
     ProviderRegistry* registry = streaming_get_provider_registry();
     if (registry == NULL) {
         fprintf(stderr, "Error: Failed to get provider registry for recap\n");
@@ -197,7 +167,6 @@ int ralph_generate_recap(RalphSession* session, int max_messages) {
         return -1;
     }
 
-    // Detect provider for this URL
     LLMProvider* provider = detect_provider_for_url(registry, session->session_data.config.api_url);
     if (provider == NULL) {
         fprintf(stderr, "Error: No provider found for URL: %s\n", session->session_data.config.api_url);
@@ -205,13 +174,10 @@ int ralph_generate_recap(RalphSession* session, int max_messages) {
         return -1;
     }
 
-    // Build minimal conversation (empty - just the recap prompt as user message)
+    // Empty history: recap is a one-shot call, not part of the conversation
     ConversationHistory empty_history = {0};
-
-    // Use a reasonable max_tokens for a short recap response
     int max_tokens = 300;
 
-    // Build streaming request JSON using provider's method
     char* post_data = provider->build_streaming_request_json(
         provider,
         session->session_data.config.model,
@@ -219,7 +185,7 @@ int ralph_generate_recap(RalphSession* session, int max_messages) {
         &empty_history,
         recap_prompt,
         max_tokens,
-        NULL  // No tools for recap
+        NULL
     );
 
     free(recap_prompt);
@@ -232,7 +198,6 @@ int ralph_generate_recap(RalphSession* session, int max_messages) {
     debug_printf("Making recap streaming API request to %s\n", session->session_data.config.api_url);
     debug_printf("POST data: %s\n\n", post_data);
 
-    // Setup authorization headers
     char auth_header[512];
     char anthropic_version[128] = "anthropic-version: 2023-06-01";
     char content_type[64] = "Content-Type: application/json";
@@ -261,7 +226,6 @@ int ralph_generate_recap(RalphSession* session, int max_messages) {
         }
     }
 
-    // Create streaming context
     StreamingContext* ctx = streaming_context_create();
     if (ctx == NULL) {
         free(post_data);
@@ -269,24 +233,20 @@ int ralph_generate_recap(RalphSession* session, int max_messages) {
         return -1;
     }
 
-    // Set up user data for SSE callbacks
     RecapSSEUserData sse_user_data = {
         .ctx = ctx,
         .provider = provider
     };
     ctx->user_data = &sse_user_data;
 
-    // Set up callbacks for real-time display
     ctx->on_text_chunk = recap_text_callback;
     ctx->on_thinking_chunk = recap_thinking_callback;
     ctx->on_stream_end = recap_end_callback;
     ctx->on_error = recap_error_callback;
     ctx->on_sse_data = recap_sse_data_callback;
 
-    // Initialize streaming display (shows thinking indicator)
     display_streaming_init();
 
-    // Configure streaming HTTP request
     struct StreamingHTTPConfig streaming_config = {
         .base = DEFAULT_HTTP_CONFIG,
         .stream_callback = recap_stream_http_callback,
@@ -295,7 +255,6 @@ int ralph_generate_recap(RalphSession* session, int max_messages) {
         .low_speed_time = 30
     };
 
-    // Execute streaming request
     int result = http_post_streaming(
         session->session_data.config.api_url,
         post_data,
@@ -306,7 +265,6 @@ int ralph_generate_recap(RalphSession* session, int max_messages) {
     free(post_data);
 
     if (result != 0) {
-        // Clean up provider-specific streaming state if needed
         if (provider->cleanup_stream_state != NULL) {
             provider->cleanup_stream_state(provider);
         }
@@ -315,14 +273,10 @@ int ralph_generate_recap(RalphSession* session, int max_messages) {
         return -1;
     }
 
-    // Display completion with token counts
     display_streaming_complete(ctx->input_tokens, ctx->output_tokens);
-
-    // Clean up
     streaming_context_free(ctx);
 
-    // NOTE: We intentionally do NOT save the recap exchange to conversation history
-    // This keeps the history clean and avoids bloating it with recap prompts
+    // Recap is intentionally not saved to conversation history to avoid bloat
 
     return 0;
 }

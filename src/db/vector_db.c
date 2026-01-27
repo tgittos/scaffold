@@ -43,7 +43,6 @@ char* vector_db_get_default_directory(void) {
         return NULL;
     }
 
-    // Ensure directory exists
     if (ralph_home_ensure_exists() != 0) {
         return NULL;
     }
@@ -104,7 +103,6 @@ void vector_db_destroy(vector_db_t* db) {
     while (entry) {
         index_entry_t* next = entry->next;
         
-        // Delete the index from hnswlib
         hnswlib_delete_index(entry->name);
         
         free(entry->name);
@@ -506,7 +504,6 @@ vector_db_error_t vector_db_load_index(vector_db_t* db, const char* index_name,
         return VECTOR_DB_ERROR_INVALID_PARAM;
     }
     
-    // Read metadata first to get config
     char meta_path[4096] = {0};
     snprintf(meta_path, sizeof(meta_path), "%s.meta", file_path);
     FILE* meta = fopen(meta_path, "r");
@@ -517,7 +514,7 @@ vector_db_error_t vector_db_load_index(vector_db_t* db, const char* index_name,
     if (meta) {
         size_t dimension, max_elements;
         if (fscanf(meta, "%zu %zu", &dimension, &max_elements) == 2) {
-            // Metric is optional - if fscanf fails, we use the default "l2" value
+            // Metric field is optional in older files; default to "l2" above.
             (void)fscanf(meta, "%63s", metric);
             hnswlib_config.dimension = dimension;
             hnswlib_config.max_elements = max_elements;
@@ -558,7 +555,6 @@ vector_db_error_t vector_db_load_index(vector_db_t* db, const char* index_name,
         return VECTOR_DB_ERROR_MEMORY;
     }
     
-    // Copy config from what we read
     entry->config.dimension = hnswlib_config.dimension;
     entry->config.max_elements = hnswlib_config.max_elements;
     entry->config.metric = strdup(metric);
@@ -739,7 +735,6 @@ static void* flush_thread_func(void* arg) {
         struct timespec ts;
         clock_gettime(CLOCK_REALTIME, &ts);
         
-        // Convert milliseconds to nanoseconds and add to current time
         long long total_ns = ts.tv_nsec + (db->flush_interval_ms * 1000000LL);
         ts.tv_sec += total_ns / 1000000000LL;
         ts.tv_nsec = total_ns % 1000000000LL;

@@ -18,10 +18,6 @@
 #include "approval_gate.h"
 #include <sys/types.h>
 
-/* =============================================================================
- * Pipe Creation for Subagent Spawning
- * ========================================================================== */
-
 /**
  * Create approval channel pipes for a new subagent.
  *
@@ -76,10 +72,6 @@ void setup_subagent_channel_parent(ApprovalChannel *channel,
  * @param response_pipe The response pipe
  */
 void cleanup_approval_channel_pipes(int request_pipe[2], int response_pipe[2]);
-
-/* =============================================================================
- * Parent Approval Loop Support
- * ========================================================================== */
 
 /**
  * Check if any subagent has a pending approval request.

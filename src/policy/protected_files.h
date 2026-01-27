@@ -37,10 +37,6 @@
  * - approval_gate.h: Integration with the approval gates system
  */
 
-/* ============================================================================
- * Configuration Constants
- * ========================================================================== */
-
 /* Refresh interval for inode cache (seconds) */
 #define PROTECTED_INODE_REFRESH_INTERVAL 30
 
@@ -49,10 +45,6 @@
 
 /* Initial capacity for the inode cache array */
 #define PROTECTED_INODE_INITIAL_CAPACITY 16
-
-/* ============================================================================
- * Data Structures
- * ========================================================================== */
 
 /**
  * Tracked inode for a protected file.
@@ -82,10 +74,6 @@ typedef struct {
     int capacity;           /* Allocated capacity */
     time_t last_refresh;    /* Timestamp of last cache refresh */
 } ProtectedInodeCache;
-
-/* ============================================================================
- * Core Detection Functions
- * ========================================================================== */
 
 /**
  * Check if a path points to a protected file.
@@ -132,10 +120,6 @@ int matches_protected_glob(const char *path);
  */
 int is_protected_inode(const char *path);
 
-/* ============================================================================
- * Inode Cache Management
- * ========================================================================== */
-
 /**
  * Refresh the protected inode cache if stale.
  *
@@ -179,10 +163,6 @@ void clear_protected_inode_cache(void);
  */
 void cleanup_protected_inode_cache(void);
 
-/* ============================================================================
- * Protected Patterns Access
- * ========================================================================== */
-
 /**
  * Get the NULL-terminated array of protected basename patterns.
  * These are exact filenames that are always protected.
@@ -206,10 +186,6 @@ const char **get_protected_prefix_patterns(void);
  * @return Pointer to static NULL-terminated array of pattern strings
  */
 const char **get_protected_glob_patterns(void);
-
-/* ============================================================================
- * Initialization and Cleanup
- * ========================================================================== */
 
 /**
  * Initialize the protected files module.

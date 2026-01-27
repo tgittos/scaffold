@@ -21,7 +21,6 @@ struct task_store {
 static task_store_t* g_store_instance = NULL;
 static pthread_once_t g_store_once = PTHREAD_ONCE_INIT;
 
-// Schema creation SQL
 static const char* SCHEMA_SQL =
     "CREATE TABLE IF NOT EXISTS tasks ("
     "    id TEXT PRIMARY KEY,"
@@ -48,12 +47,10 @@ static const char* SCHEMA_SQL =
     "CREATE INDEX IF NOT EXISTS idx_deps_task ON task_dependencies(task_id);"
     "CREATE INDEX IF NOT EXISTS idx_deps_blocked_by ON task_dependencies(blocked_by_id);";
 
-// Forward declarations
 static int init_schema(sqlite3* db);
 static char* get_default_db_path(void);
 static Task* row_to_task(sqlite3_stmt* stmt);
 
-// Create task store with custom path
 task_store_t* task_store_create(const char* db_path) {
     task_store_t* store = calloc(1, sizeof(task_store_t));
     if (store == NULL) {
@@ -71,14 +68,12 @@ task_store_t* task_store_create(const char* db_path) {
         return NULL;
     }
 
-    // Initialize mutex
     if (pthread_mutex_init(&store->mutex, NULL) != 0) {
         free(store->db_path);
         free(store);
         return NULL;
     }
 
-    // Open database with foreign keys enabled
     int rc = sqlite3_open(store->db_path, &store->db);
     if (rc != SQLITE_OK) {
         pthread_mutex_destroy(&store->mutex);
@@ -87,10 +82,9 @@ task_store_t* task_store_create(const char* db_path) {
         return NULL;
     }
 
-    // Enable foreign keys
+    // SQLite requires explicit opt-in for foreign key enforcement per connection.
     sqlite3_exec(store->db, "PRAGMA foreign_keys = ON;", NULL, NULL, NULL);
 
-    // Initialize schema
     if (init_schema(store->db) != 0) {
         sqlite3_close(store->db);
         pthread_mutex_destroy(&store->mutex);
@@ -141,10 +135,8 @@ void task_store_reset_instance(void) {
         task_store_destroy(g_store_instance);
         g_store_instance = NULL;
     }
-    // Reset pthread_once for testing
     g_store_once = (pthread_once_t)PTHREAD_ONCE_INIT;
 
-    // Delete the database file to ensure clean state for tests
     char *db_path = ralph_home_path("tasks.db");
     if (db_path != NULL) {
         unlink(db_path);
@@ -152,9 +144,7 @@ void task_store_reset_instance(void) {
     }
 }
 
-// Helper functions
 static char* get_default_db_path(void) {
-    // Ensure ralph home directory exists
     if (ralph_home_ensure_exists() != 0) {
         return NULL;
     }
@@ -210,7 +200,6 @@ static Task* row_to_task(sqlite3_stmt* stmt) {
     return task;
 }
 
-// CRUD operations
 int task_store_create_task(task_store_t* store, const char* session_id,
                            const char* content, TaskPriority priority,
                            const char* parent_id, char* out_id) {
@@ -396,7 +385,6 @@ int task_store_delete_task(task_store_t* store, const char* id) {
     return (rc == SQLITE_DONE && changes > 0) ? 0 : -1;
 }
 
-// Parent/Child operations
 Task** task_store_get_children(task_store_t* store, const char* parent_id, size_t* count) {
     if (store == NULL || parent_id == NULL || count == NULL) {
         return NULL;
@@ -544,10 +532,9 @@ int task_store_set_parent(task_store_t* store, const char* task_id, const char* 
     return (rc == SQLITE_DONE && changes > 0) ? 0 : -1;
 }
 
-// Dependency operations
+// Walks the dependency graph from blocked_by_id to see if task_id is reachable,
+// which would indicate a cycle.
 static int check_circular_dependency(sqlite3* db, const char* task_id, const char* blocked_by_id) {
-    // Check if adding this dependency would create a cycle
-    // i.e., check if blocked_by_id eventually depends on task_id
     const char* sql =
         "WITH RECURSIVE dep_chain(id) AS ("
         "    SELECT blocked_by_id FROM task_dependencies WHERE task_id = ?"
@@ -576,18 +563,16 @@ int task_store_add_dependency(task_store_t* store, const char* task_id, const ch
         return -1;
     }
 
-    // Cannot depend on self
     if (strcmp(task_id, blocked_by_id) == 0) {
         return -2;
     }
 
     pthread_mutex_lock(&store->mutex);
 
-    // Check for circular dependency
     int circular = check_circular_dependency(store->db, task_id, blocked_by_id);
     if (circular != 0) {
         pthread_mutex_unlock(&store->mutex);
-        return -2;  // Would create circular dependency
+        return -2;
     }
 
     const char* sql = "INSERT OR IGNORE INTO task_dependencies (task_id, blocked_by_id, created_at) VALUES (?, ?, ?);";
@@ -682,10 +667,10 @@ char** task_store_get_blockers(task_store_t* store, const char* task_id, size_t*
 
     *count = arr.count;
     char** result = arr.data;
-    arr.data = NULL;  // Transfer ownership; destructor won't free NULL
+    arr.data = NULL;
     arr.count = 0;
     arr.capacity = 0;
-    StringArray_destroy(&arr);  // Safe: data is NULL, just frees the array structure
+    StringArray_destroy(&arr);
 
     return result;
 }
@@ -738,10 +723,10 @@ char** task_store_get_blocking(task_store_t* store, const char* task_id, size_t*
 
     *count = arr.count;
     char** result = arr.data;
-    arr.data = NULL;  // Transfer ownership; destructor won't free NULL
+    arr.data = NULL;
     arr.count = 0;
     arr.capacity = 0;
-    StringArray_destroy(&arr);  // Safe: data is NULL, just frees the array structure
+    StringArray_destroy(&arr);
 
     return result;
 }
@@ -753,7 +738,6 @@ int task_store_is_blocked(task_store_t* store, const char* task_id) {
 
     pthread_mutex_lock(&store->mutex);
 
-    // A task is blocked if any of its blockers are not completed
     const char* sql =
         "SELECT 1 FROM task_dependencies td "
         "JOIN tasks t ON td.blocked_by_id = t.id "
@@ -776,7 +760,6 @@ int task_store_is_blocked(task_store_t* store, const char* task_id) {
     return blocked;
 }
 
-// Query operations
 Task** task_store_list_by_session(task_store_t* store, const char* session_id,
                                    int status_filter, size_t* count) {
     if (store == NULL || session_id == NULL || count == NULL) {
@@ -987,7 +970,6 @@ int task_store_has_pending(task_store_t* store, const char* session_id) {
     return has_pending;
 }
 
-// Bulk operations
 int task_store_replace_session_tasks(task_store_t* store, const char* session_id,
                                       Task* tasks, size_t count) {
     if (store == NULL || session_id == NULL) {
@@ -996,14 +978,12 @@ int task_store_replace_session_tasks(task_store_t* store, const char* session_id
 
     pthread_mutex_lock(&store->mutex);
 
-    // Start transaction
     int rc = sqlite3_exec(store->db, "BEGIN TRANSACTION;", NULL, NULL, NULL);
     if (rc != SQLITE_OK) {
         pthread_mutex_unlock(&store->mutex);
         return -1;
     }
 
-    // Delete existing tasks for session
     const char* delete_sql = "DELETE FROM tasks WHERE session_id = ?;";
     sqlite3_stmt* delete_stmt = NULL;
     rc = sqlite3_prepare_v2(store->db, delete_sql, -1, &delete_stmt, NULL);
@@ -1023,7 +1003,6 @@ int task_store_replace_session_tasks(task_store_t* store, const char* session_id
         return -1;
     }
 
-    // Insert new tasks
     if (tasks != NULL && count > 0) {
         const char* insert_sql = "INSERT INTO tasks (id, session_id, parent_id, content, status, priority, created_at, updated_at) "
                                  "VALUES (?, ?, ?, ?, ?, ?, ?, ?);";
@@ -1038,7 +1017,6 @@ int task_store_replace_session_tasks(task_store_t* store, const char* session_id
         time_t now = time(NULL);
         for (size_t i = 0; i < count; i++) {
             char task_id[40];
-            // Use provided ID or generate new one
             if (tasks[i].id[0] != '\0' && uuid_is_valid(tasks[i].id)) {
                 strcpy(task_id, tasks[i].id);
             } else if (uuid_generate_v4(task_id) != 0) {
@@ -1073,14 +1051,12 @@ int task_store_replace_session_tasks(task_store_t* store, const char* session_id
         sqlite3_finalize(insert_stmt);
     }
 
-    // Commit transaction
     rc = sqlite3_exec(store->db, "COMMIT;", NULL, NULL, NULL);
     pthread_mutex_unlock(&store->mutex);
 
     return (rc == SQLITE_OK) ? 0 : -1;
 }
 
-// Memory management
 void task_free(Task* task) {
     if (task == NULL) {
         return;
@@ -1127,7 +1103,6 @@ void task_free_id_list(char** ids, size_t count) {
     free(ids);
 }
 
-// Status/Priority conversion helpers
 const char* task_status_to_string(TaskStatus status) {
     switch (status) {
         case TASK_STATUS_PENDING:     return "pending";
