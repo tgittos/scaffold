@@ -57,7 +57,6 @@ This document provides a comprehensive overview of Ralph's codebase structure an
 
 #### `src/tools/` - AI Tool System
 - **`tools_system.c/h`** - Core tool registry and execution framework
-- **`tools_system_safe.c`** - Safe tool execution helpers
 - **`tool_result_builder.c/h`** - Standardized tool result construction (builder pattern)
 
 ##### Individual Tools
@@ -133,6 +132,9 @@ The policy module implements approval gates for controlling tool execution.
 - **`document_chunker.c/h`** - Intelligent text chunking for embeddings
 - **`pdf_processor.c/h`** - PDF download, extraction, chunking, and indexing pipeline
 - **`uuid_utils.c/h`** - UUID v4 generation and validation utilities
+- **`darray.h`** - Type-safe dynamic array macro implementation (header-only)
+- **`ptrarray.h`** - Type-safe dynamic pointer array with ownership semantics (header-only)
+- **`ralph_home.c/h`** - Centralized Ralph home directory management (~/.local/ralph/)
 
 ---
 
@@ -143,18 +145,16 @@ The test directory mirrors the source structure:
 #### `test/core/` - Core Functionality Tests
 - **`test_main.c`** - Main application tests
 - **`test_ralph.c`** - Core Ralph functionality tests
-- **`test_ralph_integration.c`** - Integration tests
+- **`test_cli_flags.c`** - CLI flag parsing tests
 - **`test_recap.c`** - Recap generation tests
 - **`test_incomplete_task_bug.c`** - Regression test for task handling
 
 #### `test/llm/` - LLM System Tests
 - **`test_model_tools.c`** - Model and tool integration tests
-- **`test_embedding_providers.c`** - Embedding provider tests
 
 #### `test/network/` - Network Layer Tests
 - **`test_http_client.c`** - HTTP client functionality tests
 - **`test_messages_array_bug.c`** - Message handling regression tests
-- **`test_null_message_fields.c`** - Null field handling tests
 - **`test_streaming.c`** - Streaming infrastructure tests
 - **`test_anthropic_streaming.c`** & **`test_openai_streaming.c`** - Provider streaming tests
 - **`test_http_retry.c`** - HTTP retry logic tests
@@ -163,20 +163,16 @@ The test directory mirrors the source structure:
 - **`test_conversation_tracker.c`** - Conversation persistence tests
 - **`test_conversation_compactor.c`** - History compression tests
 - **`test_token_manager.c`** - Token management tests
-- **`test_conversation_loading.c`** - Conversation loading tests
 - **`test_conversation_vector_db.c`** - Vector DB integration tests
-- **`test_conversation_tool_sequence_bug.c`** - Tool sequence regression tests
 - **`test_tool_calls_not_stored.c`** - Tool call storage tests
 
 #### `test/tools/` - Tool System Tests
 - **`test_tools_system.c`** - Core tool system tests
 - **`test_memory_tool.c`** - Memory system tests
-- **`test_todo_manager.c`** & **`test_todo_tool.c`** - Task management tests
+- **`test_todo_manager.c`** - Task management tests
 - **`test_vector_db_tool.c`** - Vector database tests
 - **`test_python_tool.c`** & **`test_python_integration.c`** - Python interpreter tests
 - **`test_subagent_tool.c`** - Subagent system tests
-- **`test_enhanced_tool_feedback.c`** - Enhanced feedback tests
-- **`test_tool_call_filtering.c`** - Tool filtering tests
 
 #### `test/pdf/` - PDF Processing Tests
 - **`test_pdf_extractor.c`** - PDF extraction functionality tests
@@ -188,7 +184,6 @@ The test directory mirrors the source structure:
 
 #### `test/mcp/` - MCP Integration Tests
 - **`test_mcp_client.c`** - MCP client functionality tests
-- **`test_mcp_integration.c`** - MCP protocol integration tests
 
 #### `test/utils/` - Utility Tests
 - **`test_output_formatter.c`** - Output formatting tests
@@ -196,12 +191,14 @@ The test directory mirrors the source structure:
 - **`test_config.c`** - Configuration system tests
 - **`test_json_output.c`** - JSON output mode tests
 - **`test_debug_output.c`** - Debug output tests
+- **`test_ralph_home.c`** - Ralph home directory management tests
 
-#### Policy Tests (Approval Gates)
+#### `test/policy/` - Policy Tests (Approval Gates)
 - **`test_approval_gate.c`** - Gate config initialization, category lookup, non-interactive mode
 - **`test_approval_gate_integration.c`** - End-to-end approval flow tests (26 tests)
 - **`test_rate_limiter.c`** - Denial tracking, exponential backoff, reset behavior
 - **`test_allowlist.c`** - Regex and shell pattern matching, JSON loading
+- **`test_gate_prompter.c`** - Gate prompter terminal UI tests
 - **`test_shell_parser.c`** - POSIX shell tokenization and dangerous pattern detection
 - **`test_shell_parser_cmd.c`** - cmd.exe parsing tests
 - **`test_shell_parser_ps.c`** - PowerShell parsing and dangerous cmdlet detection
@@ -210,9 +207,21 @@ The test directory mirrors the source structure:
 - **`test_atomic_file.c`** - TOCTOU-safe file operations (symlink rejection, O_EXCL)
 - **`test_subagent_approval.c`** - Approval proxy pipe management (excluded from valgrind)
 
+#### `test/` - Root-Level Tests
+- **`test_darray.c`** - Dynamic array implementation tests
+- **`test_ptrarray.c`** - Pointer array implementation tests
+- **`test_document_chunker.c`** - Document chunking algorithm tests
+- **`test_memory_management.c`** - Memory management tests
+- **`test_tool_args.c`** - Tool argument extraction tests
+- **`test_verified_file_context.c`** - Verified file context tests
+
 #### Test Infrastructure
 - **`test/unity/`** - Unity testing framework (vendored)
 - **`mock_api_server.c/h`** - Mock API server for testing
+- **`mock_embeddings.c`** - Mock embeddings for testing
+- **`mock_embeddings_server.c`** - Mock embeddings server
+- **`test/stubs/python_tool_stub.c`** - Python tool test stub
+- **`test/stubs/subagent_stub.c`** - Subagent test stub
 
 ---
 

@@ -141,7 +141,6 @@ graph TB
 
     %% File System
     ConversationTracker --> FileSystem[File System<br/>CONVERSATION.md]
-    EnvLoader --> EnvFile[.env File]
     PromptLoader --> PromptFile[PROMPT.md]
     ConfigSystem --> ConfigFile[Config File<br/>ralph.config.json]
     VectorDBService --> VectorStorage[Vector Storage<br/>~/.local/ralph/]
@@ -166,9 +165,9 @@ graph TB
     class ToolsSystem,ToolRegistry,PythonTool,PythonFileTools,PythonDefaults,TodoTool,MemoryTool,PDFTool,VectorDBTool,SubagentTool,TodoManager,TodoDisplay toolsLayer
     class ConversationTracker,TokenManager,ConversationCompactor sessionLayer
     class HTTPClient,APICommon networkLayer
-    class OutputFormatter,PromptLoader,EnvLoader,JSONEscape,DebugOutput,ToolResultBuilder,CommonUtils,ContextRetriever utilsLayer
+    class OutputFormatter,PromptLoader,JSONEscape,DebugOutput,ToolResultBuilder,CommonUtils,ContextRetriever utilsLayer
     class VectorDBService,VectorDB,EmbeddingsService,EmbeddingProvider,EmbedProviderRegistry,OpenAIEmbed,LocalEmbed,PDFExtractor,DocumentChunker,PDFProcessor,DocumentStore,MetadataStore vectorLayer
-    class cURL,mbedTLS,FileSystem,EnvFile,PromptFile,ConfigFile,VectorStorage,DocStorage,MetaStorage,HNSWLib,PDFio,pthread,CPP,cJSON externalLayer
+    class cURL,mbedTLS,FileSystem,PromptFile,ConfigFile,VectorStorage,DocStorage,MetaStorage,HNSWLib,PDFio,pthread,CPP,cJSON externalLayer
     class MCPClient,MCPServers mcpLayer
 ```
 
@@ -909,7 +908,8 @@ src/
 │   ├── http_client.c/h     # HTTP client (cURL wrapper)
 │   ├── api_common.c/h      # API payload building
 │   ├── streaming.c/h       # SSE streaming infrastructure
-│   └── api_error.c/h       # Enhanced error handling with retries
+│   ├── api_error.c/h       # Enhanced error handling with retries
+│   └── embedded_cacert.c/h # Embedded Mozilla CA certificate bundle
 ├── pdf/                    # PDF processing
 │   └── pdf_extractor.c/h   # PDFio-based text extraction
 ├── policy/                 # Approval gate system
@@ -935,7 +935,6 @@ src/
 │   └── conversation_compactor.c/h # Context trimming
 ├── tools/                  # Tool implementations
 │   ├── tools_system.c/h    # Tool registry and execution
-│   ├── tools_system_safe.c # Safe tool execution helpers
 │   ├── tool_result_builder.c/h # Result formatting
 │   ├── memory_tool.c/h     # Semantic memory (remember, recall_memories, forget_memory)
 │   ├── pdf_tool.c/h        # PDF processing tool
@@ -966,7 +965,10 @@ src/
 │   ├── context_retriever.c/h # Vector context retrieval
 │   ├── json_escape.c/h     # JSON escaping
 │   ├── json_output.c/h     # JSON output mode
-│   └── common_utils.c/h    # General utilities
-└── embedded_links.h        # Embedded Links browser binary
+│   ├── common_utils.c/h    # General utilities
+│   ├── darray.h            # Type-safe dynamic array macros
+│   ├── ptrarray.h          # Type-safe dynamic pointer array with ownership
+│   ├── ralph_home.c/h      # Centralized home directory management
+│   └── uuid_utils.c/h      # UUID v4 generation and validation
 ```
 

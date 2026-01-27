@@ -17,7 +17,7 @@ The code base is large and has most functionality implemented. Use `ripgrep` to 
 
 ### SSL/TLS CA Certificates
 
-Ralph embeds Mozilla's CA certificate bundle for portable SSL/TLS across all platforms. The bundle is stored in `src/network/embedded_cacert.c` and loaded via `CURLOPT_CAINFO_BLOB`.
+Ralph embeds Mozilla's CA certificate bundle for portable SSL/TLS across all platforms. The bundle is stored in `src/network/embedded_cacert.c` and applied in `src/network/http_client.c` via `CURLOPT_CAINFO_BLOB`.
 
 To refresh the CA bundle (recommended periodically for security updates):
 ```bash
