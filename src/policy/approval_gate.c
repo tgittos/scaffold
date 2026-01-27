@@ -18,20 +18,15 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <termios.h>
 #include <unistd.h>
 
 #include "../tools/python_tool_files.h"
 #include "../tools/subagent_tool.h"
 #include "../utils/debug_output.h"
-
-/* Signal flag for Ctrl+C during prompt */
-static volatile sig_atomic_t g_prompt_interrupted = 0;
 
 /* =============================================================================
  * Internal Helper Functions
@@ -1221,12 +1216,6 @@ int approval_gate_requires_check(const ApprovalGateConfig *config,
     }
 }
 
-/* Signal handler for Ctrl+C during prompt */
-static void prompt_sigint_handler(int sig) {
-    (void)sig;
-    g_prompt_interrupted = 1;
-}
-
 /**
  * Extract the shell command from tool call arguments.
  * Returns allocated string or NULL if not a shell command.
@@ -1249,147 +1238,6 @@ static char *extract_file_path(const ToolCall *tool_call) {
     return tool_args_get_path(tool_call);
 }
 
-/**
- * Read a single keypress from the terminal in raw mode.
- * Returns the character read, or -1 on error/interrupt.
- *
- * Note: We deliberately do NOT set SA_RESTART on the signal handler
- * so that read() is interrupted by SIGINT, allowing us to detect Ctrl+C.
- */
-static int read_single_keypress(void) {
-    struct termios old_termios, new_termios;
-    int ch = -1;
-    int have_termios = 0;
-
-    /* Set up Ctrl+C handler first (applies to both raw and cooked mode) */
-    struct sigaction sa, old_sa;
-    sa.sa_handler = prompt_sigint_handler;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;  /* No SA_RESTART - we want read() to be interrupted */
-    sigaction(SIGINT, &sa, &old_sa);
-    g_prompt_interrupted = 0;
-
-    /* Get current terminal settings */
-    if (tcgetattr(STDIN_FILENO, &old_termios) == 0) {
-        /* Set up raw mode: disable canonical mode and echo */
-        new_termios = old_termios;
-        new_termios.c_lflag &= ~(ICANON | ECHO);
-        new_termios.c_cc[VMIN] = 1;   /* Wait for at least 1 character */
-        new_termios.c_cc[VTIME] = 0;  /* No timeout */
-
-        if (tcsetattr(STDIN_FILENO, TCSANOW, &new_termios) == 0) {
-            have_termios = 1;
-        }
-    }
-
-    /* Read single character (works in both raw and cooked mode) */
-    char c;
-    ssize_t n = read(STDIN_FILENO, &c, 1);
-    if (n == 1 && !g_prompt_interrupted) {
-        ch = (unsigned char)c;
-    }
-
-    /* Restore terminal settings if we changed them */
-    if (have_termios) {
-        tcsetattr(STDIN_FILENO, TCSANOW, &old_termios);
-    }
-
-    /* Restore signal handler */
-    sigaction(SIGINT, &old_sa, NULL);
-
-    /* Check if interrupted */
-    if (g_prompt_interrupted) {
-        return -1;
-    }
-
-    return ch;
-}
-
-/* Maximum width for content inside the details box (excluding borders) */
-#define DETAILS_CONTENT_WIDTH 56
-
-/**
- * Display the approval prompt details view.
- * Shows full arguments and resolved paths.
- */
-static void display_details_view(const ToolCall *tool_call, const ApprovedPath *path) {
-    fprintf(stderr, "\n");
-    fprintf(stderr, "┌─ Details ────────────────────────────────────────────────────┐\n");
-
-    /* Show tool name */
-    fprintf(stderr, "│  Tool: %-53s │\n", tool_call->name ? tool_call->name : "unknown");
-    fprintf(stderr, "│                                                              │\n");
-
-    /* Show full arguments */
-    fprintf(stderr, "│  Full arguments:                                             │\n");
-    if (tool_call->arguments != NULL) {
-        /* Pretty print JSON if possible */
-        cJSON *json = cJSON_Parse(tool_call->arguments);
-        if (json != NULL) {
-            char *pretty = cJSON_Print(json);
-            if (pretty != NULL) {
-                /* Print each line with proper formatting, using strtok_r for thread safety */
-                char *saveptr = NULL;
-                char *line = strtok_r(pretty, "\n", &saveptr);
-                while (line != NULL) {
-                    /* Truncate lines that are too long */
-                    size_t line_len = strlen(line);
-                    if (line_len <= DETAILS_CONTENT_WIDTH) {
-                        fprintf(stderr, "│    %-56s │\n", line);
-                    } else {
-                        /* Truncate with ellipsis */
-                        fprintf(stderr, "│    %.53s... │\n", line);
-                    }
-                    line = strtok_r(NULL, "\n", &saveptr);
-                }
-                free(pretty);
-            }
-            cJSON_Delete(json);
-        } else {
-            /* Raw arguments (not valid JSON) - truncate if too long */
-            size_t arg_len = strlen(tool_call->arguments);
-            if (arg_len <= DETAILS_CONTENT_WIDTH) {
-                fprintf(stderr, "│    %-56s │\n", tool_call->arguments);
-            } else {
-                fprintf(stderr, "│    %.53s... │\n", tool_call->arguments);
-            }
-        }
-    } else {
-        fprintf(stderr, "│    (none)                                                    │\n");
-    }
-
-    /* Show resolved path if available */
-    if (path != NULL && path->resolved_path != NULL) {
-        fprintf(stderr, "│                                                              │\n");
-        fprintf(stderr, "│  Resolved path:                                              │\n");
-        /* Truncate path if too long */
-        char path_display[DETAILS_CONTENT_WIDTH + 1];
-        size_t path_len = strlen(path->resolved_path);
-        if (path_len <= DETAILS_CONTENT_WIDTH - 2) {
-            snprintf(path_display, sizeof(path_display), "%s", path->resolved_path);
-        } else {
-            snprintf(path_display, sizeof(path_display), "...%s",
-                     path->resolved_path + path_len - (DETAILS_CONTENT_WIDTH - 5));
-        }
-        fprintf(stderr, "│    %-56s │\n", path_display);
-
-        if (path->existed) {
-            fprintf(stderr, "│    (existing file)                                           │\n");
-        } else {
-            fprintf(stderr, "│    (new file)                                                │\n");
-        }
-    }
-
-    fprintf(stderr, "└──────────────────────────────────────────────────────────────┘\n");
-    fprintf(stderr, "\nPress any key to return to prompt...\n");
-
-    /* Wait for keypress */
-    read_single_keypress();
-}
-
-/* Maximum display width for prompt content */
-#define PROMPT_CONTENT_WIDTH 50
-
 ApprovalResult approval_gate_prompt(ApprovalGateConfig *config,
                                     const ToolCall *tool_call,
                                     ApprovedPath *out_path) {
@@ -1397,9 +1245,9 @@ ApprovalResult approval_gate_prompt(ApprovalGateConfig *config,
         return APPROVAL_DENIED;
     }
 
-    /* Check if we have a TTY available (safety net - should be checked earlier) */
-    if (!isatty(STDIN_FILENO)) {
-        /* No TTY, return non-interactive denial */
+    /* Create prompter - returns NULL if no TTY */
+    GatePrompter *gp = gate_prompter_create();
+    if (gp == NULL) {
         return APPROVAL_NON_INTERACTIVE_DENIED;
     }
 
@@ -1413,105 +1261,74 @@ ApprovalResult approval_gate_prompt(ApprovalGateConfig *config,
     char *file_path = extract_file_path(tool_call);
     GateCategory category = get_tool_category(tool_call->name);
 
-    /* Iterative prompt loop to prevent stack overflow from repeated input */
+    /* Determine what to show as primary detail */
+    const char *command_arg = NULL;
+    const char *path_arg = NULL;
+    if (shell_command != NULL) {
+        command_arg = shell_command;
+    } else if (file_path != NULL && (category == GATE_CATEGORY_FILE_READ ||
+                                      category == GATE_CATEGORY_FILE_WRITE)) {
+        path_arg = file_path;
+    }
+
+    ApprovalResult result = APPROVAL_DENIED;
+
+    /* Iterative prompt loop */
     for (;;) {
-        /* Display the approval prompt */
+        /* Display the prompt using gate_prompter */
         fprintf(stderr, "\n");
-        fprintf(stderr, "┌─ Approval Required ──────────────────────────────────────────┐\n");
-        fprintf(stderr, "│                                                              │\n");
-        fprintf(stderr, "│  Tool: %-53s │\n", tool_call->name ? tool_call->name : "unknown");
+        gate_prompter_show_single(gp, tool_call, command_arg, path_arg);
 
-        /* Show command for shell, path for file tools, or args for others */
-        if (shell_command != NULL) {
-            char cmd_display[PROMPT_CONTENT_WIDTH + 4];
-            size_t cmd_len = strlen(shell_command);
-            if (cmd_len <= PROMPT_CONTENT_WIDTH) {
-                snprintf(cmd_display, sizeof(cmd_display), "%s", shell_command);
-            } else {
-                snprintf(cmd_display, sizeof(cmd_display), "%.47s...", shell_command);
-            }
-            fprintf(stderr, "│  Command: %-50s │\n", cmd_display);
-        } else if (file_path != NULL && (category == GATE_CATEGORY_FILE_READ ||
-                                          category == GATE_CATEGORY_FILE_WRITE)) {
-            char path_display[PROMPT_CONTENT_WIDTH + 4];
-            size_t path_len = strlen(file_path);
-            if (path_len <= PROMPT_CONTENT_WIDTH) {
-                snprintf(path_display, sizeof(path_display), "%s", file_path);
-            } else {
-                /* Show end of path for long paths */
-                snprintf(path_display, sizeof(path_display), "...%s",
-                         file_path + path_len - 47);
-            }
-            fprintf(stderr, "│  Path: %-53s │\n", path_display);
-        } else if (tool_call->arguments != NULL) {
-            char arg_display[PROMPT_CONTENT_WIDTH + 4];
-            size_t arg_len = strlen(tool_call->arguments);
-            if (arg_len <= PROMPT_CONTENT_WIDTH) {
-                snprintf(arg_display, sizeof(arg_display), "%s", tool_call->arguments);
-            } else {
-                snprintf(arg_display, sizeof(arg_display), "%.47s...", tool_call->arguments);
-            }
-            fprintf(stderr, "│  Args: %-53s │\n", arg_display);
-        }
-
-        fprintf(stderr, "│                                                              │\n");
-        fprintf(stderr, "│  [y] Allow  [n] Deny  [a] Allow always  [?] Details          │\n");
-        fprintf(stderr, "│                                                              │\n");
-        fprintf(stderr, "└──────────────────────────────────────────────────────────────┘\n");
-        fprintf(stderr, "> ");
-        fflush(stderr);
-
-        /* Read single keypress in raw mode */
-        int response = read_single_keypress();
-        fprintf(stderr, "\n");  /* Echo newline after keypress */
+        /* Read single keypress */
+        int response = gate_prompter_read_key(gp);
+        gate_prompter_newline(gp);
 
         /* Handle the response */
         if (response < 0) {
-            /* Interrupted or error - clean up and abort */
-            free(shell_command);
-            free(file_path);
-            return APPROVAL_ABORTED;
+            result = APPROVAL_ABORTED;
+            break;
         }
 
         switch (tolower(response)) {
             case 'y':
-                /* Reset denial tracker on approval */
                 reset_denial_tracker(config, tool_call->name);
-                free(shell_command);
-                free(file_path);
-                return APPROVAL_ALLOWED;
+                result = APPROVAL_ALLOWED;
+                goto done;
 
             case 'n':
-                free(shell_command);
-                free(file_path);
-                return APPROVAL_DENIED;
+                result = APPROVAL_DENIED;
+                goto done;
 
             case 'a':
-                /* Allow always - reset tracker and add to session allowlist */
                 reset_denial_tracker(config, tool_call->name);
-                /* Note: Pattern generation for persistent allowlist is handled by
-                 * the caller when APPROVAL_ALLOWED_ALWAYS is returned */
-                free(shell_command);
-                free(file_path);
-                return APPROVAL_ALLOWED_ALWAYS;
+                result = APPROVAL_ALLOWED_ALWAYS;
+                goto done;
 
-            case '?':
-                /* Show details and continue loop to re-prompt */
-                display_details_view(tool_call, out_path);
+            case '?': {
+                /* Show details using gate_prompter */
+                char *resolved = out_path ? out_path->resolved_path : NULL;
+                int path_exists = out_path ? out_path->existed : 0;
+                gate_prompter_show_details(gp, tool_call, resolved, path_exists);
+                gate_prompter_read_key(gp);  /* Wait for keypress */
                 continue;
+            }
 
             case 3: /* Ctrl+C */
             case 4: /* Ctrl+D */
-                free(shell_command);
-                free(file_path);
-                return APPROVAL_ABORTED;
+                result = APPROVAL_ABORTED;
+                goto done;
 
             default:
-                /* Invalid input, continue loop to re-prompt */
                 fprintf(stderr, "Invalid input. Press y, n, a, or ? for details.\n");
                 continue;
         }
     }
+
+done:
+    free(shell_command);
+    free(file_path);
+    gate_prompter_destroy(gp);
+    return result;
 }
 
 ApprovalResult check_approval_gate(ApprovalGateConfig *config,
@@ -1620,196 +1437,6 @@ void free_batch_result(ApprovalBatchResult *batch) {
     batch->count = 0;
 }
 
-/**
- * Format a summary line for a tool call (for batch display).
- * Returns allocated string that must be freed.
- */
-static char *format_tool_summary(const ToolCall *tool_call) {
-    if (tool_call == NULL || tool_call->name == NULL) {
-        return strdup("unknown");
-    }
-
-    char *summary = NULL;
-    GateCategory category = get_tool_category(tool_call->name);
-
-    /* Extract relevant info based on category */
-    if (category == GATE_CATEGORY_SHELL) {
-        char *cmd = extract_shell_command(tool_call);
-        if (cmd != NULL) {
-            /* Truncate long commands */
-            if (strlen(cmd) > 40) {
-                cmd[37] = '.';
-                cmd[38] = '.';
-                cmd[39] = '.';
-                cmd[40] = '\0';
-            }
-            if (asprintf(&summary, "%s: %s", tool_call->name, cmd) < 0) {
-                summary = NULL;
-            }
-            free(cmd);
-        }
-    } else if (category == GATE_CATEGORY_FILE_READ ||
-               category == GATE_CATEGORY_FILE_WRITE) {
-        char *path = extract_file_path(tool_call);
-        if (path != NULL) {
-            /* Truncate long paths */
-            if (strlen(path) > 40) {
-                /* Show end of path */
-                char *truncated = path + strlen(path) - 37;
-                if (asprintf(&summary, "%s: ...%s", tool_call->name, truncated) < 0) {
-                    summary = NULL;
-                }
-            } else {
-                if (asprintf(&summary, "%s: %s", tool_call->name, path) < 0) {
-                    summary = NULL;
-                }
-            }
-            free(path);
-        }
-    }
-
-    /* Fallback to just tool name */
-    if (summary == NULL) {
-        summary = strdup(tool_call->name);
-    }
-
-    return summary;
-}
-
-/**
- * Display batch approval prompt.
- * Shows numbered list of operations.
- */
-static void display_batch_prompt(const ToolCall *tool_calls, int count,
-                                 const ApprovalResult *current_results) {
-    fprintf(stderr, "\n");
-    fprintf(stderr, "┌─ Approval Required (%d operations) ", count);
-    /* Fill rest of header with dashes */
-    int header_used = 28 + (count >= 10 ? 2 : 1);
-    for (int i = header_used; i < 64; i++) {
-        fprintf(stderr, "─");
-    }
-    fprintf(stderr, "┐\n");
-    fprintf(stderr, "│                                                              │\n");
-
-    /* List each operation */
-    for (int i = 0; i < count; i++) {
-        char *summary = format_tool_summary(&tool_calls[i]);
-        char status_char = ' ';
-
-        /* Show status indicator if already processed */
-        if (current_results != NULL) {
-            switch (current_results[i]) {
-                case APPROVAL_ALLOWED:
-                case APPROVAL_ALLOWED_ALWAYS:
-                    status_char = '+';
-                    break;
-                case APPROVAL_DENIED:
-                    status_char = '-';
-                    break;
-                default:
-                    status_char = ' ';
-                    break;
-            }
-        }
-
-        /* Format: "│  1. [+] shell: ls -la                                         │" */
-        char line[64];
-        snprintf(line, sizeof(line), "%d. %s", i + 1, summary ? summary : "unknown");
-
-        /* Truncate if too long */
-        if (strlen(line) > 52) {
-            line[49] = '.';
-            line[50] = '.';
-            line[51] = '.';
-            line[52] = '\0';
-        }
-
-        if (status_char != ' ') {
-            fprintf(stderr, "│  [%c] %-54s │\n", status_char, line);
-        } else {
-            fprintf(stderr, "│  %-58s │\n", line);
-        }
-
-        free(summary);
-    }
-
-    fprintf(stderr, "│                                                              │\n");
-    if (count <= 9) {
-        fprintf(stderr, "│  [y] Allow all  [n] Deny all  [1-%d] Review individual       │\n", count);
-    } else {
-        fprintf(stderr, "│  [y] Allow all  [n] Deny all  [1-%d] Review individual      │\n", count);
-    }
-    fprintf(stderr, "│                                                              │\n");
-    fprintf(stderr, "└──────────────────────────────────────────────────────────────┘\n");
-    fprintf(stderr, "> ");
-    fflush(stderr);
-}
-
-/**
- * Read a number from terminal input (for selecting operation 1-N).
- * Returns the number read, or -1 on error/invalid input.
- */
-static int read_operation_number(int first_digit, int max_value) {
-    /* For single digit max, just return the first digit */
-    if (max_value <= 9) {
-        int num = first_digit - '0';
-        if (num >= 1 && num <= max_value) {
-            return num;
-        }
-        return -1;
-    }
-
-    /* For multi-digit, need to read more characters */
-    char buf[16];
-    buf[0] = (char)first_digit;
-    int pos = 1;
-
-    /* Read until we get a non-digit or buffer full */
-    struct termios old_termios, new_termios;
-    int have_termios = 0;
-
-    if (tcgetattr(STDIN_FILENO, &old_termios) == 0) {
-        new_termios = old_termios;
-        new_termios.c_lflag &= ~(ICANON | ECHO);
-        new_termios.c_cc[VMIN] = 0;
-        new_termios.c_cc[VTIME] = 2; /* 200ms timeout */
-        if (tcsetattr(STDIN_FILENO, TCSANOW, &new_termios) == 0) {
-            have_termios = 1;
-        }
-    }
-
-    /* Read additional digits with timeout */
-    while (pos < 15) {
-        char c;
-        ssize_t n = read(STDIN_FILENO, &c, 1);
-        if (n <= 0) {
-            break; /* Timeout or error */
-        }
-        if (c >= '0' && c <= '9') {
-            buf[pos++] = c;
-        } else if (c == '\n' || c == '\r') {
-            break;
-        } else {
-            break;
-        }
-    }
-    buf[pos] = '\0';
-
-    if (have_termios) {
-        tcsetattr(STDIN_FILENO, TCSANOW, &old_termios);
-    }
-
-    /* Parse the number */
-    char *endptr;
-    long num = strtol(buf, &endptr, 10);
-    if (*endptr != '\0' || num < 1 || num > max_value) {
-        return -1;
-    }
-
-    return (int)num;
-}
-
 ApprovalResult approval_gate_prompt_batch(ApprovalGateConfig *config,
                                           const ToolCall *tool_calls,
                                           int count,
@@ -1818,21 +1445,26 @@ ApprovalResult approval_gate_prompt_batch(ApprovalGateConfig *config,
         return APPROVAL_DENIED;
     }
 
-    /* Check if we have a TTY available (safety net - should be checked earlier) */
-    if (!isatty(STDIN_FILENO)) {
-        /* No TTY, return non-interactive denial */
+    /* Create prompter - returns NULL if no TTY */
+    GatePrompter *gp = gate_prompter_create();
+    if (gp == NULL) {
         return APPROVAL_NON_INTERACTIVE_DENIED;
     }
 
     /* Initialize batch result */
     if (init_batch_result(out_batch, count) != 0) {
+        gate_prompter_destroy(gp);
         return APPROVAL_DENIED;
     }
 
-    /* Track which operations are pending */
+    /* Track which operations are pending and build status string */
     int *pending = calloc(count, sizeof(int));
-    if (pending == NULL) {
+    char *statuses = calloc(count + 1, sizeof(char));
+    if (pending == NULL || statuses == NULL) {
+        free(pending);
+        free(statuses);
         free_batch_result(out_batch);
+        gate_prompter_destroy(gp);
         return APPROVAL_DENIED;
     }
 
@@ -1840,23 +1472,26 @@ ApprovalResult approval_gate_prompt_batch(ApprovalGateConfig *config,
     int pending_count = count;
     for (int i = 0; i < count; i++) {
         pending[i] = 1;
+        statuses[i] = ' ';
     }
+
+    ApprovalResult result = APPROVAL_DENIED;
 
     /* Interactive batch prompt loop */
     for (;;) {
-        /* Display batch prompt with current status */
-        display_batch_prompt(tool_calls, count,
-                             pending_count < count ? out_batch->results : NULL);
+        /* Display batch prompt using gate_prompter */
+        fprintf(stderr, "\n");
+        gate_prompter_show_batch(gp, tool_calls, count,
+                                 pending_count < count ? statuses : NULL);
 
         /* Read user input */
-        int response = read_single_keypress();
-        fprintf(stderr, "\n");
+        int response = gate_prompter_read_key(gp);
+        gate_prompter_newline(gp);
 
         if (response < 0) {
-            /* Interrupted */
-            free(pending);
             free_batch_result(out_batch);
-            return APPROVAL_ABORTED;
+            result = APPROVAL_ABORTED;
+            goto done;
         }
 
         switch (tolower(response)) {
@@ -1868,8 +1503,8 @@ ApprovalResult approval_gate_prompt_batch(ApprovalGateConfig *config,
                         reset_denial_tracker(config, tool_calls[i].name);
                     }
                 }
-                free(pending);
-                return APPROVAL_ALLOWED;
+                result = APPROVAL_ALLOWED;
+                goto done;
 
             case 'n':
                 /* Deny all pending operations */
@@ -1878,77 +1513,96 @@ ApprovalResult approval_gate_prompt_batch(ApprovalGateConfig *config,
                         out_batch->results[i] = APPROVAL_DENIED;
                     }
                 }
-                free(pending);
-                return APPROVAL_DENIED;
+                result = APPROVAL_DENIED;
+                goto done;
 
             case '1': case '2': case '3': case '4': case '5':
-            case '6': case '7': case '8': case '9':
-                {
-                    /* Review individual operation */
-                    int op_num = read_operation_number(response, count);
-                    if (op_num < 1 || op_num > count) {
-                        fprintf(stderr, "Invalid operation number. Enter 1-%d.\n", count);
-                        continue;
+            case '6': case '7': case '8': case '9': {
+                /* Parse operation number (handles multi-digit) */
+                int op_num = response - '0';
+                if (count > 9) {
+                    /* May need more digits - read with timeout */
+                    char next_key;
+                    int got_key = gate_prompter_read_key_timeout(gp, 500, &next_key);
+                    if (got_key == 1 && next_key >= '0' && next_key <= '9') {
+                        op_num = op_num * 10 + (next_key - '0');
                     }
+                }
 
-                    int idx = op_num - 1;
-                    if (!pending[idx]) {
-                        fprintf(stderr, "Operation %d already processed.\n", op_num);
-                        continue;
-                    }
-
-                    /* Prompt for individual operation */
-                    ApprovalResult single_result = approval_gate_prompt(
-                        config, &tool_calls[idx], &out_batch->paths[idx]);
-
-                    if (single_result == APPROVAL_ABORTED) {
-                        free(pending);
-                        free_batch_result(out_batch);
-                        return APPROVAL_ABORTED;
-                    }
-
-                    out_batch->results[idx] = single_result;
-                    pending[idx] = 0;
-                    pending_count--;
-
-                    /* Check if all operations have been reviewed */
-                    if (pending_count == 0) {
-                        free(pending);
-                        /* Return overall status */
-                        int any_denied = 0;
-                        int all_always = 1;
-                        for (int i = 0; i < count; i++) {
-                            if (out_batch->results[i] == APPROVAL_DENIED) {
-                                any_denied = 1;
-                            }
-                            if (out_batch->results[i] != APPROVAL_ALLOWED_ALWAYS) {
-                                all_always = 0;
-                            }
-                        }
-                        if (any_denied) {
-                            return APPROVAL_DENIED;
-                        }
-                        if (all_always) {
-                            return APPROVAL_ALLOWED_ALWAYS;
-                        }
-                        return APPROVAL_ALLOWED;
-                    }
-
-                    /* Continue with remaining operations */
+                if (op_num < 1 || op_num > count) {
+                    fprintf(stderr, "Invalid operation number. Enter 1-%d.\n", count);
                     continue;
                 }
 
+                int idx = op_num - 1;
+                if (!pending[idx]) {
+                    fprintf(stderr, "Operation %d already processed.\n", op_num);
+                    continue;
+                }
+
+                /* Prompt for individual operation */
+                ApprovalResult single_result = approval_gate_prompt(
+                    config, &tool_calls[idx], &out_batch->paths[idx]);
+
+                if (single_result == APPROVAL_ABORTED) {
+                    free_batch_result(out_batch);
+                    result = APPROVAL_ABORTED;
+                    goto done;
+                }
+
+                out_batch->results[idx] = single_result;
+                pending[idx] = 0;
+                pending_count--;
+
+                /* Update status char */
+                if (single_result == APPROVAL_ALLOWED ||
+                    single_result == APPROVAL_ALLOWED_ALWAYS) {
+                    statuses[idx] = '+';
+                } else {
+                    statuses[idx] = '-';
+                }
+
+                /* Check if all operations have been reviewed */
+                if (pending_count == 0) {
+                    int any_denied = 0;
+                    int all_always = 1;
+                    for (int i = 0; i < count; i++) {
+                        if (out_batch->results[i] == APPROVAL_DENIED) {
+                            any_denied = 1;
+                        }
+                        if (out_batch->results[i] != APPROVAL_ALLOWED_ALWAYS) {
+                            all_always = 0;
+                        }
+                    }
+                    if (any_denied) {
+                        result = APPROVAL_DENIED;
+                    } else if (all_always) {
+                        result = APPROVAL_ALLOWED_ALWAYS;
+                    } else {
+                        result = APPROVAL_ALLOWED;
+                    }
+                    goto done;
+                }
+                continue;
+            }
+
             case 3: /* Ctrl+C */
             case 4: /* Ctrl+D */
-                free(pending);
                 free_batch_result(out_batch);
-                return APPROVAL_ABORTED;
+                result = APPROVAL_ABORTED;
+                goto done;
 
             default:
                 fprintf(stderr, "Invalid input. Press y, n, or 1-%d.\n", count);
                 continue;
         }
     }
+
+done:
+    free(pending);
+    free(statuses);
+    gate_prompter_destroy(gp);
+    return result;
 }
 
 ApprovalResult check_approval_gate_batch(ApprovalGateConfig *config,

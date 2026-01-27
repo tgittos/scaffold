@@ -522,18 +522,7 @@ void handle_subagent_approval_request(ApprovalGateConfig *config,
         DEBUG_PRINT("Nested subagent: forwarding request to grandparent");
         result = subagent_request_approval(our_channel, &synthetic_call, &approved_path);
     } else {
-        /* We're the root process - display prompt and get user response */
-        printf("\n");
-        printf("┌─ Subagent Approval Required ─────────────────────────────────┐\n");
-        printf("│  PID: %-55d│\n", channel->subagent_pid);
-        printf("│  Tool: %-54s│\n", req.tool_name ? req.tool_name : "[unknown]");
-        printf("│  %-61s│\n", req.display_summary ? req.display_summary : "");
-        printf("│                                                               │\n");
-        printf("│  [y] Allow  [n] Deny  [a] Allow always  [?] Details           │\n");
-        printf("└───────────────────────────────────────────────────────────────┘\n");
-        fflush(stdout);
-
-        /* Get user response using the standard prompt mechanism */
+        /* We're the root process - use the standard prompt mechanism */
         result = approval_gate_prompt(config, &synthetic_call, &approved_path);
     }
 

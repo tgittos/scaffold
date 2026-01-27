@@ -16,6 +16,13 @@
 #include <termios.h>
 #include <unistd.h>
 
+/* ANSI color codes - matching output_formatter.h */
+#define ANSI_RESET   "\033[0m"
+#define ANSI_DIM     "\033[2m"
+#define ANSI_GRAY    "\033[90m"
+#define ANSI_YELLOW  "\033[33m"
+#define ANSI_BOLD    "\033[1m"
+
 /* =============================================================================
  * Internal Data Structures
  * ========================================================================== */
@@ -221,46 +228,40 @@ void gate_prompter_show_single(GatePrompter *gp,
         return;
     }
 
-    fprintf(stderr, "\n");
-    fprintf(stderr, "\xe2\x94\x8c\xe2\x94\x80 Approval Required \xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x90\n");
-    fprintf(stderr, "\xe2\x94\x82                                                              \xe2\x94\x82\n");
-    fprintf(stderr, "\xe2\x94\x82  Tool: %-53s \xe2\x94\x82\n", tool_call->name ? tool_call->name : "unknown");
+    const char *tool_name = tool_call->name ? tool_call->name : "unknown";
 
-    /* Show command or path if available */
+    /* Build detail string (command, path, or truncated args) */
+    char detail[80] = "";
     if (command != NULL && strlen(command) > 0) {
-        char cmd_display[52];
         size_t cmd_len = strlen(command);
-        if (cmd_len <= 50) {
-            snprintf(cmd_display, sizeof(cmd_display), "%s", command);
+        if (cmd_len <= 60) {
+            snprintf(detail, sizeof(detail), "%s", command);
         } else {
-            snprintf(cmd_display, sizeof(cmd_display), "%.47s...", command);
+            snprintf(detail, sizeof(detail), "%.57s...", command);
         }
-        fprintf(stderr, "\xe2\x94\x82  Command: %-50s \xe2\x94\x82\n", cmd_display);
     } else if (path != NULL && strlen(path) > 0) {
-        char path_display[54];
         size_t path_len = strlen(path);
-        if (path_len <= 53) {
-            snprintf(path_display, sizeof(path_display), "%s", path);
+        if (path_len <= 60) {
+            snprintf(detail, sizeof(detail), "%s", path);
         } else {
-            snprintf(path_display, sizeof(path_display), "...%s", path + path_len - 50);
+            snprintf(detail, sizeof(detail), "...%s", path + path_len - 57);
         }
-        fprintf(stderr, "\xe2\x94\x82  Path: %-53s \xe2\x94\x82\n", path_display);
-    } else if (tool_call->arguments != NULL) {
-        char arg_display[54];
+    } else if (tool_call->arguments != NULL && strlen(tool_call->arguments) > 0) {
         size_t arg_len = strlen(tool_call->arguments);
-        if (arg_len <= 53) {
-            snprintf(arg_display, sizeof(arg_display), "%s", tool_call->arguments);
+        if (arg_len <= 60) {
+            snprintf(detail, sizeof(detail), "%s", tool_call->arguments);
         } else {
-            snprintf(arg_display, sizeof(arg_display), "%.50s...", tool_call->arguments);
+            snprintf(detail, sizeof(detail), "%.57s...", tool_call->arguments);
         }
-        fprintf(stderr, "\xe2\x94\x82  Args: %-53s \xe2\x94\x82\n", arg_display);
     }
 
-    fprintf(stderr, "\xe2\x94\x82                                                              \xe2\x94\x82\n");
-    fprintf(stderr, "\xe2\x94\x82  [y] Allow  [n] Deny  [a] Allow always  [?] Details          \xe2\x94\x82\n");
-    fprintf(stderr, "\xe2\x94\x82                                                              \xe2\x94\x82\n");
-    fprintf(stderr, "\xe2\x94\x94\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x98\n");
-    fprintf(stderr, "> ");
+    /* Compact tree-style format */
+    fprintf(stderr, "● %s", tool_name);
+    if (strlen(detail) > 0) {
+        fprintf(stderr, ANSI_DIM " %s" ANSI_RESET, detail);
+    }
+    fprintf(stderr, "\n");
+    fprintf(stderr, "  └─ Allow? [y/n/a/?] ");
     fflush(stderr);
 }
 
@@ -272,52 +273,29 @@ void gate_prompter_show_details(GatePrompter *gp,
         return;
     }
 
-    fprintf(stderr, "\n");
-    fprintf(stderr, "\xe2\x94\x8c\xe2\x94\x80 Details \xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x90\n");
+    const char *tool_name = tool_call->name ? tool_call->name : "unknown";
 
-    /* Tool name */
-    fprintf(stderr, "\xe2\x94\x82  Tool: %-53s \xe2\x94\x82\n", tool_call->name ? tool_call->name : "unknown");
-    fprintf(stderr, "\xe2\x94\x82                                                              \xe2\x94\x82\n");
+    /* Tree-style details view */
+    fprintf(stderr, "\n● %s details\n", tool_name);
+    fprintf(stderr, "  ├─ tool: %s\n", tool_name);
 
     /* Full arguments */
-    fprintf(stderr, "\xe2\x94\x82  Full arguments:                                             \xe2\x94\x82\n");
     if (tool_call->arguments != NULL && strlen(tool_call->arguments) > 0) {
-        /* Split arguments into lines for display */
-        const char *args = tool_call->arguments;
-        size_t args_len = strlen(args);
-
-        if (args_len <= 56) {
-            fprintf(stderr, "\xe2\x94\x82    %-56s \xe2\x94\x82\n", args);
-        } else {
-            /* Display first 56 chars with ellipsis */
-            fprintf(stderr, "\xe2\x94\x82    %.53s... \xe2\x94\x82\n", args);
-        }
-    } else {
-        fprintf(stderr, "\xe2\x94\x82    (none)                                                    \xe2\x94\x82\n");
+        fprintf(stderr, "  ├─ args:" ANSI_DIM " %s" ANSI_RESET "\n", tool_call->arguments);
     }
 
     /* Resolved path if available */
     if (resolved_path != NULL && strlen(resolved_path) > 0) {
-        fprintf(stderr, "\xe2\x94\x82                                                              \xe2\x94\x82\n");
-        fprintf(stderr, "\xe2\x94\x82  Resolved path:                                              \xe2\x94\x82\n");
-        char path_display[57];
-        size_t path_len = strlen(resolved_path);
-        if (path_len <= 56) {
-            snprintf(path_display, sizeof(path_display), "%s", resolved_path);
-        } else {
-            snprintf(path_display, sizeof(path_display), "...%s", resolved_path + path_len - 53);
-        }
-        fprintf(stderr, "\xe2\x94\x82    %-56s \xe2\x94\x82\n", path_display);
-
+        fprintf(stderr, "  ├─ path:" ANSI_DIM " %s", resolved_path);
         if (path_exists) {
-            fprintf(stderr, "\xe2\x94\x82    (existing file)                                           \xe2\x94\x82\n");
+            fprintf(stderr, " (exists)");
         } else {
-            fprintf(stderr, "\xe2\x94\x82    (new file)                                                \xe2\x94\x82\n");
+            fprintf(stderr, " (new)");
         }
+        fprintf(stderr, ANSI_RESET "\n");
     }
 
-    fprintf(stderr, "\xe2\x94\x94\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x98\n");
-    fprintf(stderr, "\nPress any key to return to prompt...\n");
+    fprintf(stderr, "  └─" ANSI_DIM " Press any key..." ANSI_RESET "\n");
     fflush(stderr);
 }
 
@@ -329,68 +307,35 @@ void gate_prompter_show_batch(GatePrompter *gp,
         return;
     }
 
-    fprintf(stderr, "\n");
-    fprintf(stderr, "\xe2\x94\x8c\xe2\x94\x80 Approval Required (%d operations) ", count);
+    /* Tree-style batch format */
+    fprintf(stderr, "● %d operations\n", count);
 
-    /* Fill the rest of the top border */
-    int title_len = 24 + (count >= 10 ? 2 : 1);  /* "Approval Required (N operations) " */
-    for (int i = title_len; i < 62; i++) {
-        fprintf(stderr, "\xe2\x94\x80");
-    }
-    fprintf(stderr, "\xe2\x94\x90\n");
-
-    fprintf(stderr, "\xe2\x94\x82                                                              \xe2\x94\x82\n");
-
-    /* List each operation */
+    /* List each operation with tree connectors */
     for (int i = 0; i < count; i++) {
-        char line[128];  /* Large enough for any formatting */
         char status_char = (statuses != NULL) ? statuses[i] : ' ';
-
-        /* Format: N. tool_name: first_arg_preview */
         const char *name = tool_calls[i].name ? tool_calls[i].name : "unknown";
-        if (tool_calls[i].arguments != NULL) {
+        const char *connector = (i == count - 1) ? "└─" : "├─";
+
+        /* Build truncated argument preview */
+        char arg_preview[50] = "";
+        if (tool_calls[i].arguments != NULL && strlen(tool_calls[i].arguments) > 0) {
             size_t arg_len = strlen(tool_calls[i].arguments);
-            if (arg_len <= 40) {
-                snprintf(line, sizeof(line), "%d. %s: %s",
-                         i + 1, name, tool_calls[i].arguments);
+            if (arg_len <= 45) {
+                snprintf(arg_preview, sizeof(arg_preview), " %s", tool_calls[i].arguments);
             } else {
-                /* Truncate and add ellipsis */
-                char arg_preview[44];
-                memcpy(arg_preview, tool_calls[i].arguments, 40);
-                arg_preview[40] = '.';
-                arg_preview[41] = '.';
-                arg_preview[42] = '.';
-                arg_preview[43] = '\0';
-                snprintf(line, sizeof(line), "%d. %s: %s", i + 1, name, arg_preview);
+                snprintf(arg_preview, sizeof(arg_preview), " %.42s...", tool_calls[i].arguments);
             }
-        } else {
-            snprintf(line, sizeof(line), "%d. %s", i + 1, name);
-        }
-        /* Ensure line fits in display width */
-        if (strlen(line) > 54) {
-            line[51] = '.';
-            line[52] = '.';
-            line[53] = '.';
-            line[54] = '\0';
         }
 
         if (status_char != ' ') {
-            fprintf(stderr, "\xe2\x94\x82  [%c] %-54s \xe2\x94\x82\n", status_char, line);
+            fprintf(stderr, "  %s [%c] %s" ANSI_DIM "%s" ANSI_RESET "\n",
+                    connector, status_char, name, arg_preview);
         } else {
-            fprintf(stderr, "\xe2\x94\x82  %-58s \xe2\x94\x82\n", line);
+            fprintf(stderr, "  %s %s" ANSI_DIM "%s" ANSI_RESET "\n",
+                    connector, name, arg_preview);
         }
     }
 
-    fprintf(stderr, "\xe2\x94\x82                                                              \xe2\x94\x82\n");
-
-    if (count <= 9) {
-        fprintf(stderr, "\xe2\x94\x82  [y] Allow all  [n] Deny all  [1-%d] Review individual       \xe2\x94\x82\n", count);
-    } else {
-        fprintf(stderr, "\xe2\x94\x82  [y] Allow all  [n] Deny all  [1-%d] Review individual      \xe2\x94\x82\n", count);
-    }
-
-    fprintf(stderr, "\xe2\x94\x82                                                              \xe2\x94\x82\n");
-    fprintf(stderr, "\xe2\x94\x94\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x80\xe2\x94\x98\n");
-    fprintf(stderr, "> ");
+    fprintf(stderr, "  └─ Allow all? [y/n/1-%d] ", count);
     fflush(stderr);
 }
