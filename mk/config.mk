@@ -73,7 +73,7 @@ INCLUDES := -I$(CURL_DIR)/include -I$(MBEDTLS_DIR)/include -I$(HNSWLIB_DIR) \
 
 TEST_INCLUDES := $(INCLUDES) -I$(TESTDIR)/unity -I$(TESTDIR) \
     -I$(TESTDIR)/core -I$(TESTDIR)/network -I$(TESTDIR)/llm \
-    -I$(TESTDIR)/session -I$(TESTDIR)/tools -I$(TESTDIR)/utils
+    -I$(TESTDIR)/session -I$(TESTDIR)/tools -I$(TESTDIR)/utils -I$(TESTDIR)/policy
 
 LDFLAGS := -L$(CURL_DIR)/lib/.libs -L$(MBEDTLS_DIR)/library -L$(PDFIO_DIR) \
     -L$(ZLIB_DIR) -L$(CJSON_DIR) -L$(READLINE_DIR) -L$(NCURSES_DIR)/lib

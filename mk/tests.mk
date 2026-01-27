@@ -40,10 +40,10 @@ $(eval $(call def_test,document_chunker,test_document_chunker,$(SRCDIR)/utils/do
 $(eval $(call def_test,streaming,network/test_streaming,$(SRCDIR)/network/streaming.c))
 $(eval $(call def_test,darray,test_darray,))
 $(eval $(call def_test,ptrarray,test_ptrarray,))
-$(eval $(call def_test,rate_limiter,test_rate_limiter,$(SRCDIR)/policy/rate_limiter.c))
-$(eval $(call def_test,allowlist,test_allowlist,$(SRCDIR)/policy/allowlist.c $(SRCDIR)/policy/shell_parser.c $(SRCDIR)/policy/shell_parser_cmd.c $(SRCDIR)/policy/shell_parser_ps.c))
+$(eval $(call def_test,rate_limiter,policy/test_rate_limiter,$(SRCDIR)/policy/rate_limiter.c))
+$(eval $(call def_test,allowlist,policy/test_allowlist,$(SRCDIR)/policy/allowlist.c $(SRCDIR)/policy/shell_parser.c $(SRCDIR)/policy/shell_parser_cmd.c $(SRCDIR)/policy/shell_parser_ps.c))
 $(eval $(call def_test,tool_args,test_tool_args,$(SRCDIR)/policy/tool_args.c))
-$(eval $(call def_test,gate_prompter,test_gate_prompter,$(SRCDIR)/policy/gate_prompter.c))
+$(eval $(call def_test,gate_prompter,policy/test_gate_prompter,$(SRCDIR)/policy/gate_prompter.c))
 
 # Gate dependencies (used by multiple gate-related tests)
 GATE_DEPS := \
@@ -62,16 +62,16 @@ GATE_DEPS := \
     $(SRCDIR)/utils/ralph_home.c \
     $(TESTDIR)/stubs/subagent_stub.c
 
-$(eval $(call def_test,approval_gate,test_approval_gate,$(GATE_DEPS)))
-$(eval $(call def_test,atomic_file,test_atomic_file,$(SRCDIR)/policy/atomic_file.c))
-$(eval $(call def_test,path_normalize,test_path_normalize,$(SRCDIR)/policy/path_normalize.c))
+$(eval $(call def_test,approval_gate,policy/test_approval_gate,$(GATE_DEPS)))
+$(eval $(call def_test,atomic_file,policy/test_atomic_file,$(SRCDIR)/policy/atomic_file.c))
+$(eval $(call def_test,path_normalize,policy/test_path_normalize,$(SRCDIR)/policy/path_normalize.c))
 $(eval $(call def_test,verified_file_context,test_verified_file_context,$(SRCDIR)/policy/verified_file_context.c $(SRCDIR)/policy/atomic_file.c $(SRCDIR)/policy/path_normalize.c))
-$(eval $(call def_test,protected_files,test_protected_files,$(SRCDIR)/policy/protected_files.c $(SRCDIR)/policy/path_normalize.c))
-$(eval $(call def_test,shell_parser,test_shell_parser,$(SRCDIR)/policy/shell_parser.c $(SRCDIR)/policy/shell_parser_cmd.c $(SRCDIR)/policy/shell_parser_ps.c))
-$(eval $(call def_test,shell_parser_cmd,test_shell_parser_cmd,$(SRCDIR)/policy/shell_parser_cmd.c $(SRCDIR)/policy/shell_parser.c $(SRCDIR)/policy/shell_parser_ps.c))
-$(eval $(call def_test,shell_parser_ps,test_shell_parser_ps,$(SRCDIR)/policy/shell_parser_ps.c $(SRCDIR)/policy/shell_parser.c $(SRCDIR)/policy/shell_parser_cmd.c))
-$(eval $(call def_test,subagent_approval,test_subagent_approval,$(GATE_DEPS)))
-$(eval $(call def_test,approval_gate_integration,test_approval_gate_integration,$(GATE_DEPS) $(TESTDIR)/stubs/python_tool_stub.c))
+$(eval $(call def_test,protected_files,policy/test_protected_files,$(SRCDIR)/policy/protected_files.c $(SRCDIR)/policy/path_normalize.c))
+$(eval $(call def_test,shell_parser,policy/test_shell_parser,$(SRCDIR)/policy/shell_parser.c $(SRCDIR)/policy/shell_parser_cmd.c $(SRCDIR)/policy/shell_parser_ps.c))
+$(eval $(call def_test,shell_parser_cmd,policy/test_shell_parser_cmd,$(SRCDIR)/policy/shell_parser_cmd.c $(SRCDIR)/policy/shell_parser.c $(SRCDIR)/policy/shell_parser_ps.c))
+$(eval $(call def_test,shell_parser_ps,policy/test_shell_parser_ps,$(SRCDIR)/policy/shell_parser_ps.c $(SRCDIR)/policy/shell_parser.c $(SRCDIR)/policy/shell_parser_cmd.c))
+$(eval $(call def_test,subagent_approval,policy/test_subagent_approval,$(GATE_DEPS)))
+$(eval $(call def_test,approval_gate_integration,policy/test_approval_gate_integration,$(GATE_DEPS) $(TESTDIR)/stubs/python_tool_stub.c))
 
 $(TEST_main_TARGET): $(TEST_main_OBJECTS)
 	$(CC) -o $@ $^

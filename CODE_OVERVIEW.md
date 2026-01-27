@@ -124,7 +124,6 @@ The policy module implements approval gates for controlling tool execution.
 #### `src/utils/` - Utility Functions
 - **`config.c/h`** - Configuration management with cascading priority (local → user → env → defaults)
 - **`common_utils.c/h`** - General utility functions (string ops, JSON extraction)
-- **`env_loader.c/h`** - Environment variable and .env file loading
 - **`json_escape.c/h`** - JSON string escaping utilities
 - **`json_output.c/h`** - JSON output mode for programmatic integration (--json flag)
 - **`output_formatter.c/h`** - Response formatting and display
@@ -192,7 +191,6 @@ The test directory mirrors the source structure:
 - **`test_mcp_integration.c`** - MCP protocol integration tests
 
 #### `test/utils/` - Utility Tests
-- **`test_env_loader.c`** - Configuration loading tests
 - **`test_output_formatter.c`** - Output formatting tests
 - **`test_prompt_loader.c`** - Prompt loading tests
 - **`test_config.c`** - Configuration system tests

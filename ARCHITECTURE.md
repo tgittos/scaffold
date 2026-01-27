@@ -126,8 +126,6 @@ graph TB
     %% Utilities Layer
     Core --> OutputFormatter[Output Formatter<br/>output_formatter.c/h]
     Core --> PromptLoader[Prompt Loader<br/>prompt_loader.c/h]
-    Core --> EnvLoader[Env Loader<br/>env_loader.c/h]
-
     ToolsSystem --> JSONEscape[JSON Escape<br/>json_escape.c/h]
     APICommon --> JSONEscape
     ConversationTracker --> cJSON[cJSON Library]
@@ -960,7 +958,6 @@ src/
 │       └── web_fetch.py
 ├── utils/                  # Utilities
 │   ├── config.c/h          # Configuration management
-│   ├── env_loader.c/h      # .env file loading
 │   ├── prompt_loader.c/h   # System prompt loading
 │   ├── output_formatter.c/h # Response formatting
 │   ├── debug_output.c/h    # Debug logging
