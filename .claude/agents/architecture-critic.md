@@ -65,10 +65,15 @@ Identify how these are handled across modules:
 
 Provide a rigorous critique organized as follows:
 
-### Strengths
-- What architectural decisions are working well?
-- Where does the design show good judgment?
-- What patterns are effectively applied?
+### Abstraction Analysis
+
+This is the most important part of your critique. Examine abstractions at every level:
+
+- **Missing abstractions**: Multiple modules repeating similar patterns, passing the same groups of parameters, or performing the same multi-step sequences. Code that individually makes sense in each module but, when viewed together across the whole codebase, reveals a concept that should exist but doesn't — a missing type, a missing module, a missing interface.
+- **Leaky abstractions**: Modules that expose implementation details through their interface. Callers that need to know internal state or sequencing to use an API correctly. Data structures whose fields are directly accessed by code outside the owning module.
+- **Wrongly applied abstractions**: Abstractions that don't match the actual problem. Patterns borrowed from other domains that create friction. Interfaces that force callers into unnatural usage patterns. Generalization applied where specialization would be simpler and clearer.
+- **Over-abstraction**: Indirection that adds complexity without adding value. Layers that just pass through to the next layer. Abstractions with a single implementation and no realistic prospect of alternatives.
+- **Structural gaps**: Code that works in isolation but, when you look at how modules compose into the whole system, indicates something is missing or wrong. For example: multiple modules each implementing their own version of lifecycle management suggests a missing lifecycle framework. Multiple modules each doing their own serialization suggests a missing serialization layer. The symptom is code that is correct but the system that emerges from it is incoherent.
 
 ### Violations & Concerns
 
@@ -82,9 +87,7 @@ For each issue found, provide:
 Common issues to look for:
 - God modules that do too much
 - Circular dependencies
-- Leaky abstractions
 - Inappropriate coupling
-- Missing abstraction layers
 - Inconsistent patterns across modules
 - Poor separation of concerns
 - Violation of information hiding
@@ -95,7 +98,6 @@ Rank issues by:
 1. **Critical**: Blocking further development or causing bugs
 2. **High**: Significantly impacting maintainability
 3. **Medium**: Worth addressing but not urgent
-4. **Low**: Nice-to-have improvements
 
 ## Output Format
 
@@ -116,8 +118,8 @@ Structure your final report as:
 ## Architectural Layers
 [Layer diagram and description]
 
-## Strengths
-[Bulleted list with explanations]
+## Abstraction Analysis
+[Missing, leaky, wrongly applied, and structural gap findings]
 
 ## Critical Issues
 [Detailed analysis per issue]
@@ -125,15 +127,13 @@ Structure your final report as:
 ## Recommendations
 [Prioritized action items]
 
-## Conclusion
-[Overall assessment and suggested next steps]
 ```
 
 ## Guidelines
 
 - Reference the existing ARCHITECTURE.md and CODE_OVERVIEW.md files for context, but form your own independent assessment
 - Be specific - cite actual file names, function names, and line numbers where relevant
-- Balance criticism with recognition of good design decisions
+- Do NOT include praise or "Strengths" sections. Focus entirely on problems, gaps, and risks.
 - Consider the project's constraints (Cosmopolitan portability, memory safety requirements)
 - Align recommendations with the project's coding standards from CLAUDE.md
 - Focus on actionable, incremental improvements rather than wholesale rewrites
