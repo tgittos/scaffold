@@ -161,7 +161,6 @@ RALPH_CORE_DEPS := \
     $(SRCDIR)/policy/tool_args.c \
     $(SRCDIR)/policy/verified_file_context.c \
     $(SRCDIR)/policy/verified_file_python.c \
-    $(SRCDIR)/utils/env_loader.c \
     $(SRCDIR)/utils/prompt_loader.c \
     $(SRCDIR)/session/conversation_tracker.c \
     $(SRCDIR)/session/conversation_compactor.c \
@@ -206,7 +205,6 @@ CONV_DEPS := \
     $(EMBEDDING_DEPS) \
     $(NETWORK_DEPS) \
     $(SRCDIR)/utils/json_escape.c \
-    $(SRCDIR)/utils/env_loader.c \
     $(SRCDIR)/utils/config.c \
     $(SRCDIR)/utils/debug_output.c \
     $(SRCDIR)/utils/common_utils.c \

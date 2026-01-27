@@ -50,13 +50,4 @@ int extract_array_numbers(const char *json, const char *param_name, float **out_
  */
 char* create_error_message(const char *format, ...);
 
-/**
- * Create formatted success message
- * 
- * @param format Printf-style format string
- * @param ... Format arguments
- * @return Formatted success message (caller must free)
- */
-char* create_success_message(const char *format, ...);
-
 #endif // COMMON_UTILS_H

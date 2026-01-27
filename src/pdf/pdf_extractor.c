@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
 #include <stdint.h>
 
 // PDFio headers
@@ -44,9 +43,7 @@ void pdf_extractor_cleanup(void) {
 pdf_extraction_config_t pdf_get_default_config(void) {
     pdf_extraction_config_t config = {
         .start_page = -1,        // All pages
-        .end_page = -1,          // All pages
-        .preserve_layout = 1,    // Preserve layout by default
-        .extract_metadata = 0    // Don't extract metadata by default
+        .end_page = -1           // All pages
     };
     return config;
 }
@@ -280,15 +277,6 @@ pdf_extraction_result_t* pdf_extract_text_with_config(const char* pdf_path, cons
     }
     
     return pdf_extract_text_internal(pdf_path, NULL, 0, config);
-}
-
-pdf_extraction_result_t* pdf_extract_text_from_memory(const unsigned char* pdf_data, size_t data_size) {
-    if (!pdf_data || data_size == 0) {
-        return create_error_result("Invalid PDF data");
-    }
-    
-    pdf_extraction_config_t config = pdf_get_default_config();
-    return pdf_extract_text_internal(NULL, pdf_data, data_size, &config);
 }
 
 void pdf_free_extraction_result(pdf_extraction_result_t* result) {

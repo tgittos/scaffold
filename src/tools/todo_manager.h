@@ -44,7 +44,6 @@ Todo* todo_find_by_id(TodoList* list, const char* id);
 int todo_list_filter(TodoList* list, int status_filter, TodoPriority min_priority, Todo** out_todos, size_t* out_count);
 
 char* todo_serialize_json(TodoList* list);
-int todo_deserialize_json(TodoList* list, const char* json_data);
 
 const char* todo_status_to_string(TodoStatus status);
 TodoStatus todo_status_from_string(const char* status_str);

@@ -22,13 +22,11 @@ extern const struct HTTPConfig DEFAULT_HTTP_CONFIG;
 // Standard HTTP Functions (buffered responses)
 // =============================================================================
 
-int http_post(const char *url, const char *post_data, struct HTTPResponse *response);
 int http_post_with_headers(const char *url, const char *post_data, const char **headers, struct HTTPResponse *response);
 int http_post_with_config(const char *url, const char *post_data, const char **headers,
                          const struct HTTPConfig *config, struct HTTPResponse *response);
 
 int http_get(const char *url, struct HTTPResponse *response);
-int http_get_with_headers(const char *url, const char **headers, struct HTTPResponse *response);
 int http_get_with_config(const char *url, const char **headers,
                         const struct HTTPConfig *config, struct HTTPResponse *response);
 

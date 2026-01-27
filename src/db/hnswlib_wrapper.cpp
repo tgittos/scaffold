@@ -122,10 +122,6 @@ int hnswlib_delete_index(const char* name) {
     return 0;
 }
 
-int hnswlib_has_index(const char* name) {
-    return indexes.find(std::string(name)) != indexes.end() ? 1 : 0;
-}
-
 int hnswlib_add_vector(const char* name, const float* data, size_t label) {
     try {
         auto it = indexes.find(std::string(name));
@@ -298,15 +294,6 @@ size_t hnswlib_get_current_count(const char* name) {
     }
     
     return it->second->cur_element_count;
-}
-
-size_t hnswlib_get_max_elements(const char* name) {
-    auto it = indexes.find(std::string(name));
-    if (it == indexes.end() || !it->second) {
-        return 0;
-    }
-    
-    return it->second->max_elements_;
 }
 
 void hnswlib_clear_all(void) {

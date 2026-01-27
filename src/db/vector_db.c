@@ -324,23 +324,6 @@ vector_db_error_t vector_db_add_vector(vector_db_t* db, const char* index_name,
     return (result == 0) ? VECTOR_DB_OK : VECTOR_DB_ERROR_MEMORY;
 }
 
-vector_db_error_t vector_db_add_vectors(vector_db_t* db, const char* index_name,
-                                       const vector_t* vectors, const size_t* labels, 
-                                       size_t count) {
-    if (!db || !index_name || !vectors || !labels || count == 0) {
-        return VECTOR_DB_ERROR_INVALID_PARAM;
-    }
-    
-    for (size_t i = 0; i < count; i++) {
-        vector_db_error_t err = vector_db_add_vector(db, index_name, &vectors[i], labels[i]);
-        if (err != VECTOR_DB_OK) {
-            return err;
-        }
-    }
-    
-    return VECTOR_DB_OK;
-}
-
 vector_db_error_t vector_db_update_vector(vector_db_t* db, const char* index_name,
                                          const vector_t* vector, size_t label) {
     if (!db || !index_name || !vector || !vector->data) {

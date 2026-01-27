@@ -54,7 +54,6 @@ typedef struct MCPServerState {
     int stdin_fd;                // stdin file descriptor (for stdio)
     int stdout_fd;               // stdout file descriptor (for stdio)
     int initialized;             // Whether server is initialized
-    char* session_id;            // Session identifier
     ToolFunctionArray tools;     // Available tools from this server
 } MCPServerState;
 

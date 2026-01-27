@@ -39,19 +39,11 @@ vector_db_error_t vector_db_service_ensure_index(const char* name, const index_c
 
 /**
  * Get a standard configuration for memory indices
- * 
+ *
  * @param dimension Vector dimension
  * @return Standard memory index configuration
  */
 index_config_t vector_db_service_get_memory_config(size_t dimension);
-
-/**
- * Get a standard configuration for document indices
- * 
- * @param dimension Vector dimension
- * @return Standard document index configuration
- */
-index_config_t vector_db_service_get_document_config(size_t dimension);
 
 /**
  * Cleanup vector database service

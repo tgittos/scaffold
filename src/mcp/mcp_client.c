@@ -1116,8 +1116,6 @@ void mcp_cleanup_server_state(MCPServerState* server) {
     }
     ToolFunctionArray_destroy(&server->tools);
 
-    free(server->session_id);
-
     memset(server, 0, sizeof(MCPServerState));
 }
 

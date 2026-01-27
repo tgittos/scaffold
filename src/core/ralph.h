@@ -26,8 +26,6 @@ typedef struct {
     SessionData session_data;            // Core session data (config, conversation, tool_count)
     TodoList todo_list;
     ToolRegistry tools;
-    ProviderRegistry provider_registry;  // New provider system
-    LLMProvider* provider;               // Current active provider
     MCPClient mcp_client;                // Model Context Protocol client
     SubagentManager subagent_manager;    // Subagent process management
     ApprovalGateConfig gate_config;      // Approval gates for user confirmation

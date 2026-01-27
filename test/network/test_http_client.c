@@ -48,26 +48,6 @@ void test_cleanup_response_with_allocated_data(void)
     TEST_ASSERT_EQUAL_size_t(0, response.size);
 }
 
-void test_http_post_with_null_url(void)
-{
-    struct HTTPResponse response = {0};
-    int result = http_post(NULL, "test data", &response);
-    TEST_ASSERT_EQUAL_INT(-1, result);
-}
-
-void test_http_post_with_null_data(void)
-{
-    struct HTTPResponse response = {0};
-    int result = http_post("http://example.com", NULL, &response);
-    TEST_ASSERT_EQUAL_INT(-1, result);
-}
-
-void test_http_post_with_null_response(void)
-{
-    int result = http_post("http://example.com", "test data", NULL);
-    TEST_ASSERT_EQUAL_INT(-1, result);
-}
-
 void test_http_post_with_headers_null_url(void)
 {
     struct HTTPResponse response = {0};
@@ -112,9 +92,6 @@ int main(void)
     RUN_TEST(test_cleanup_response_with_null_response);
     RUN_TEST(test_cleanup_response_with_null_data);
     RUN_TEST(test_cleanup_response_with_allocated_data);
-    RUN_TEST(test_http_post_with_null_url);
-    RUN_TEST(test_http_post_with_null_data);
-    RUN_TEST(test_http_post_with_null_response);
     RUN_TEST(test_http_post_with_headers_null_url);
     RUN_TEST(test_http_post_with_headers_null_data);
     RUN_TEST(test_http_post_with_headers_null_response);

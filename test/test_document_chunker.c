@@ -141,18 +141,6 @@ void test_chunker_pdf_config(void) {
     TEST_ASSERT_EQUAL_INT(150, config.min_chunk_size);
 }
 
-void test_calculate_optimal_chunk_size(void) {
-    size_t large_model = calculate_optimal_chunk_size(1536);
-    size_t medium_model = calculate_optimal_chunk_size(768);
-    size_t small_model = calculate_optimal_chunk_size(384);
-    size_t tiny_model = calculate_optimal_chunk_size(128);
-    
-    TEST_ASSERT_EQUAL_INT(1500, large_model);
-    TEST_ASSERT_EQUAL_INT(1000, medium_model);
-    TEST_ASSERT_EQUAL_INT(750, small_model);
-    TEST_ASSERT_EQUAL_INT(500, tiny_model);
-}
-
 void test_chunk_with_overlap(void) {
     // Create text that will be chunked with overlap - making it longer
     const char *text = "Word1 Word2 Word3 Word4 Word5 Word6 Word7 Word8 Word9 Word10 Word11 Word12 Word13 Word14 Word15 Word16 Word17 Word18 Word19 Word20 Word21 Word22 Word23 Word24 Word25 Word26 Word27 Word28 Word29 Word30";
@@ -225,7 +213,6 @@ int main(void) {
     RUN_TEST(test_chunk_with_paragraphs);
     RUN_TEST(test_chunker_default_config);
     RUN_TEST(test_chunker_pdf_config);
-    RUN_TEST(test_calculate_optimal_chunk_size);
     RUN_TEST(test_chunk_with_overlap);
     RUN_TEST(test_invalid_config);
     RUN_TEST(test_whitespace_trimming);

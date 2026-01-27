@@ -7,7 +7,6 @@
 
 // Default simplified compaction configuration
 #define DEFAULT_PRESERVE_RECENT_MESSAGES 10
-#define DEFAULT_PRESERVE_RECENT_TOOLS 5
 #define DEFAULT_BACKGROUND_THRESHOLD 0.6f  // 60% of context window
 
 // Token estimation constants
@@ -17,7 +16,6 @@ void compaction_config_init(CompactionConfig* config) {
     if (config == NULL) return;
     
     config->preserve_recent_messages = DEFAULT_PRESERVE_RECENT_MESSAGES;
-    config->preserve_recent_tools = DEFAULT_PRESERVE_RECENT_TOOLS;
     config->background_threshold = (int)(8192 * DEFAULT_BACKGROUND_THRESHOLD); // Default to 60% of 8K context
 }
 

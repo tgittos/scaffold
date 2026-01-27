@@ -937,24 +937,3 @@ void python_cleanup_tool_files(void) {
     memset(&python_tool_registry, 0, sizeof(python_tool_registry));
     tool_files_initialized = 0;
 }
-
-int python_reset_tool_files(void) {
-    if (!tool_files_initialized || python_tool_registry.tools_dir == NULL) {
-        return -1;
-    }
-
-    // Backup existing files and re-extract defaults
-    for (int i = 0; DEFAULT_TOOL_NAMES[i] != NULL; i++) {
-        char file_path[512];
-        snprintf(file_path, sizeof(file_path), "%s/%s.py",
-                 python_tool_registry.tools_dir, DEFAULT_TOOL_NAMES[i]);
-
-        if (file_exists(file_path)) {
-            char backup_path[520];
-            snprintf(backup_path, sizeof(backup_path), "%s.bak", file_path);
-            rename(file_path, backup_path);
-        }
-    }
-
-    return extract_default_tools(python_tool_registry.tools_dir);
-}

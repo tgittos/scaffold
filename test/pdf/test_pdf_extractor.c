@@ -24,23 +24,10 @@ void test_pdf_get_default_config(void) {
     pdf_extraction_config_t config = pdf_get_default_config();
     TEST_ASSERT_EQUAL(-1, config.start_page);
     TEST_ASSERT_EQUAL(-1, config.end_page);
-    TEST_ASSERT_EQUAL(1, config.preserve_layout);
-    TEST_ASSERT_EQUAL(0, config.extract_metadata);
 }
 
 void test_pdf_extract_text_null_path(void) {
     pdf_extraction_result_t *result = pdf_extract_text(NULL);
-    TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_NOT_NULL(result->error);
-    TEST_ASSERT_NULL(result->text);
-    TEST_ASSERT_EQUAL(0, result->length);
-    TEST_ASSERT_EQUAL(0, result->page_count);
-    
-    pdf_free_extraction_result(result);
-}
-
-void test_pdf_extract_text_from_memory_null_data(void) {
-    pdf_extraction_result_t *result = pdf_extract_text_from_memory(NULL, 0);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_NOT_NULL(result->error);
     TEST_ASSERT_NULL(result->text);
@@ -76,7 +63,6 @@ int main(void) {
     RUN_TEST(test_pdf_extractor_init_cleanup);
     RUN_TEST(test_pdf_get_default_config);
     RUN_TEST(test_pdf_extract_text_null_path);
-    RUN_TEST(test_pdf_extract_text_from_memory_null_data);
     RUN_TEST(test_pdf_extract_text_nonexistent_file);
     RUN_TEST(test_pdf_free_extraction_result_null);
     

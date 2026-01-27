@@ -107,14 +107,6 @@ StreamingContext* streaming_context_create(void);
  */
 void streaming_context_free(StreamingContext* ctx);
 
-/**
- * Reset a streaming context for reuse, clearing all accumulated content
- * but preserving callbacks and user_data
- *
- * @param ctx The context to reset
- */
-void streaming_context_reset(StreamingContext* ctx);
-
 // =============================================================================
 // SSE Parsing
 // =============================================================================
@@ -225,17 +217,5 @@ void streaming_emit_complete(StreamingContext* ctx, const char* stop_reason);
  * @param error Error message
  */
 void streaming_emit_error(StreamingContext* ctx, const char* error);
-
-/**
- * Get the last SSE data payload from the line buffer
- *
- * Returns a pointer to the JSON payload from the most recently
- * processed "data: " line. This is used by provider-specific
- * parsers to access the JSON for parsing.
- *
- * @param ctx The streaming context
- * @return Pointer to the data payload, or NULL if none available
- */
-const char* streaming_get_last_data(StreamingContext* ctx);
 
 #endif /* STREAMING_H */

@@ -51,10 +51,6 @@ typedef struct LLMProvider {
     // Message formatting for conversation history
     // Note: Tool calling is now handled through ModelCapabilities
 
-    // Conversation validation (for providers with specific requirements)
-    int (*validate_conversation)(const struct LLMProvider* provider,
-                                const ConversationHistory* conversation);
-
     // Streaming support
     int (*supports_streaming)(const struct LLMProvider* provider);
 

@@ -6,7 +6,6 @@
 #include <stdint.h>
 
 typedef struct vector_db vector_db_t;
-typedef struct vector_index vector_index_t;
 
 typedef struct {
     float* data;
@@ -55,9 +54,6 @@ char** vector_db_list_indices(const vector_db_t* db, size_t* count);
 
 vector_db_error_t vector_db_add_vector(vector_db_t* db, const char* index_name,
                                       const vector_t* vector, size_t label);
-vector_db_error_t vector_db_add_vectors(vector_db_t* db, const char* index_name,
-                                       const vector_t* vectors, const size_t* labels, 
-                                       size_t count);
 
 vector_db_error_t vector_db_update_vector(vector_db_t* db, const char* index_name,
                                          const vector_t* vector, size_t label);

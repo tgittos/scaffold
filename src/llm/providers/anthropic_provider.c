@@ -26,28 +26,6 @@ static int anthropic_build_headers(const LLMProvider* provider,
 static int anthropic_parse_response(const LLMProvider* provider,
                                    const char* json_response,
                                    ParsedResponse* result);
-// Tool calling functions removed - now handled by ModelCapabilities
-static int anthropic_validate_conversation(const LLMProvider* provider,
-                                          const ConversationHistory* conversation);
-
-// Helper function to check if a tool_use_id exists in an assistant message
-static int message_contains_tool_use_id(const ConversationMessage* msg, const char* tool_use_id) {
-    if (!msg || !tool_use_id || strcmp(msg->role, "assistant") != 0) {
-        return 0;
-    }
-    
-    // Search for the tool_use_id in the message content
-    char search_pattern[256];
-    snprintf(search_pattern, sizeof(search_pattern), "\"id\": \"%s\"", tool_use_id);
-    
-    if (strstr(msg->content, search_pattern)) {
-        return 1;
-    }
-    
-    // Also try without spaces around colon
-    snprintf(search_pattern, sizeof(search_pattern), "\"id\":\"%s\"", tool_use_id);
-    return strstr(msg->content, search_pattern) != NULL;
-}
 
 // Anthropic provider implementation
 static int anthropic_detect_provider(const char* api_url) {
@@ -112,49 +90,6 @@ static int anthropic_parse_response(const LLMProvider* provider,
     (void)provider; // Suppress unused parameter warning
     // Use existing Anthropic response parser
     return parse_anthropic_response(json_response, result);
-}
-
-// Tool calling implementation removed - now handled by ModelCapabilities
-
-static int anthropic_validate_conversation(const LLMProvider* provider,
-                                          const ConversationHistory* conversation) {
-    (void)provider; // Suppress unused parameter warning
-    // Anthropic-specific validation: tool_result must have corresponding tool_use
-    // This logic was moved here from api_common.c
-
-    for (size_t i = 0; i < conversation->count; i++) {
-        const ConversationMessage* msg = &conversation->data[i];
-
-        // For tool results, verify the previous assistant message contains the tool_use_id
-        if (strcmp(msg->role, "tool") == 0 && msg->tool_call_id != NULL) {
-            // Look backwards for the most recent assistant message
-            int found_tool_use = 0;
-
-            for (int j = (int)i - 1; j >= 0; j--) {
-                const ConversationMessage* prev_msg = &conversation->data[j];
-
-                if (strcmp(prev_msg->role, "assistant") == 0) {
-                    if (message_contains_tool_use_id(prev_msg, msg->tool_call_id)) {
-                        found_tool_use = 1;
-                    }
-                    break; // Stop at first assistant message found
-                }
-
-                // If we hit another role that breaks the sequence, stop looking
-                if (strcmp(prev_msg->role, "user") == 0) {
-                    break;
-                }
-            }
-
-            // Report orphaned tool results (but don't fail - they'll be filtered)
-            if (!found_tool_use) {
-                fprintf(stderr, "Warning: Orphaned tool result with ID %s will be filtered\n",
-                       msg->tool_call_id);
-            }
-        }
-    }
-
-    return 0; // Always succeed - orphaned results are handled by message builder
 }
 
 // =============================================================================
@@ -406,8 +341,6 @@ static LLMProvider anthropic_provider = {
     .build_request_json = anthropic_build_request_json,
     .build_headers = anthropic_build_headers,
     .parse_response = anthropic_parse_response,
-    // Tool functions removed - now handled by ModelCapabilities
-    .validate_conversation = anthropic_validate_conversation,
     // Streaming support
     .supports_streaming = anthropic_supports_streaming,
     .parse_stream_event = anthropic_parse_stream_event,

@@ -40,15 +40,6 @@ char* todo_serialize_json(TodoList* list) {
     return json;
 }
 
-int todo_deserialize_json(TodoList* list, const char* json_data) {
-    if (!list || !json_data) return -1;
-
-    TodoList_destroy(list);
-    if (TodoList_init_capacity(list, 10) != 0) return -1;
-
-    return 0;
-}
-
 int todo_list_init(TodoList* list) {
     if (!list) return -1;
     return TodoList_init_capacity(list, 10);

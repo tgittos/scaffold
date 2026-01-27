@@ -1,5 +1,6 @@
 #include "subagent_tool.h"
 #include "../utils/config.h"
+#include "../utils/json_escape.h"
 #include "../core/ralph.h"
 #include "../policy/subagent_approval.h"
 #include "../session/conversation_tracker.h"
@@ -972,79 +973,6 @@ static int extract_json_boolean_value(const char *json, const char *key, int def
     }
 
     cJSON_Delete(root);
-    return result;
-}
-
-/**
- * Escape a string for JSON output.
- * Returns a newly allocated string that must be freed by the caller.
- */
-static char* json_escape_string(const char *str) {
-    if (str == NULL) {
-        return strdup("");
-    }
-
-    // Calculate required size
-    size_t len = 0;
-    for (const char *p = str; *p != '\0'; p++) {
-        switch (*p) {
-            case '"':
-            case '\\':
-            case '\n':
-            case '\r':
-            case '\t':
-                len += 2;
-                break;
-            default:
-                if ((unsigned char)*p < 0x20) {
-                    len += 6;  // \uXXXX
-                } else {
-                    len += 1;
-                }
-                break;
-        }
-    }
-
-    char *result = malloc(len + 1);
-    if (result == NULL) {
-        return NULL;
-    }
-
-    char *out = result;
-    for (const char *p = str; *p != '\0'; p++) {
-        switch (*p) {
-            case '"':
-                *out++ = '\\';
-                *out++ = '"';
-                break;
-            case '\\':
-                *out++ = '\\';
-                *out++ = '\\';
-                break;
-            case '\n':
-                *out++ = '\\';
-                *out++ = 'n';
-                break;
-            case '\r':
-                *out++ = '\\';
-                *out++ = 'r';
-                break;
-            case '\t':
-                *out++ = '\\';
-                *out++ = 't';
-                break;
-            default:
-                if ((unsigned char)*p < 0x20) {
-                    snprintf(out, 7, "\\u%04x", (unsigned char)*p);
-                    out += 6;
-                } else {
-                    *out++ = *p;
-                }
-                break;
-        }
-    }
-    *out = '\0';
-
     return result;
 }
 

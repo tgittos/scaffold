@@ -23,36 +23,17 @@ typedef struct {
 int todo_display_init(const TodoDisplayConfig* config);
 
 /**
- * Update the todo list display 
+ * Update the todo list display
  * Called whenever the todo list changes to refresh the display
- * 
+ *
  * @param todo_list Current todo list state
  */
 void todo_display_update(const TodoList* todo_list);
 
 /**
- * Clear the current todo display from the console
- */
-void todo_display_clear(void);
-
-/**
- * Enable or disable todo display
- * 
- * @param enabled Whether to enable display
- */
-void todo_display_set_enabled(bool enabled);
-
-/**
- * Check if todo display is currently enabled
- * 
- * @return true if enabled, false otherwise
- */
-bool todo_display_is_enabled(void);
-
-/**
  * Print todo list in a compact, unobtrusive format
  * This is called directly by the todo tool after updates
- * 
+ *
  * @param todo_list Todo list to display
  */
 void todo_display_print_compact(const TodoList* todo_list);

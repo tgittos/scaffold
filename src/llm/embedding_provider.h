@@ -37,11 +37,7 @@ typedef struct EmbeddingProvider {
     int (*parse_response)(const struct EmbeddingProvider* provider,
                          const char* json_response,
                          embedding_vector_t* embedding);
-    
-    // Get default model dimension (if known)
-    size_t (*get_dimension)(const struct EmbeddingProvider* provider,
-                           const char* model);
-    
+
 } EmbeddingProvider;
 
 // Provider registry and factory

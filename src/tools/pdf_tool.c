@@ -134,7 +134,6 @@ int execute_pdf_extract_text_tool_call(const ToolCall *tool_call, ToolResult *re
     char *file_path = extract_string_param(tool_call->arguments, "file_path");
     int start_page = (int)extract_number_param(tool_call->arguments, "start_page", -1);
     int end_page = (int)extract_number_param(tool_call->arguments, "end_page", -1);
-    int preserve_layout = (int)extract_number_param(tool_call->arguments, "preserve_layout", 1);
     
     if (!file_path) {
         result->result = safe_strdup("{\"success\": false, \"error\": \"Missing required parameter: file_path\"}");
@@ -152,7 +151,6 @@ int execute_pdf_extract_text_tool_call(const ToolCall *tool_call, ToolResult *re
     pdf_extraction_config_t config = pdf_get_default_config();
     config.start_page = start_page;
     config.end_page = end_page;
-    config.preserve_layout = preserve_layout;
     
     // Extract text from PDF
     pdf_extraction_result_t *extraction_result = pdf_extract_text_with_config(file_path, &config);
@@ -214,7 +212,7 @@ int register_pdf_tool(ToolRegistry *registry) {
     }
     
     // Define parameters
-    ToolParameter parameters[4];
+    ToolParameter parameters[3];
     memset(parameters, 0, sizeof(parameters));
 
     // Parameter 1: file_path (required)
@@ -224,7 +222,7 @@ int register_pdf_tool(ToolRegistry *registry) {
     parameters[0].enum_values = NULL;
     parameters[0].enum_count = 0;
     parameters[0].required = 1;
-    
+
     // Parameter 2: start_page (optional)
     parameters[1].name = strdup("start_page");
     parameters[1].type = strdup("number");
@@ -232,7 +230,7 @@ int register_pdf_tool(ToolRegistry *registry) {
     parameters[1].enum_values = NULL;
     parameters[1].enum_count = 0;
     parameters[1].required = 0;
-    
+
     // Parameter 3: end_page (optional)
     parameters[2].name = strdup("end_page");
     parameters[2].type = strdup("number");
@@ -240,18 +238,10 @@ int register_pdf_tool(ToolRegistry *registry) {
     parameters[2].enum_values = NULL;
     parameters[2].enum_count = 0;
     parameters[2].required = 0;
-    
-    // Parameter 4: preserve_layout (optional)
-    parameters[3].name = strdup("preserve_layout");
-    parameters[3].type = strdup("number");
-    parameters[3].description = strdup("Whether to preserve layout formatting (1 for yes, 0 for no)");
-    parameters[3].enum_values = NULL;
-    parameters[3].enum_count = 0;
-    parameters[3].required = 0;
-    
+
     // Check for allocation failures
-    for (int i = 0; i < 4; i++) {
-        if (parameters[i].name == NULL || 
+    for (int i = 0; i < 3; i++) {
+        if (parameters[i].name == NULL ||
             parameters[i].type == NULL ||
             parameters[i].description == NULL) {
             // Cleanup on failure
@@ -263,14 +253,14 @@ int register_pdf_tool(ToolRegistry *registry) {
             return -1;
         }
     }
-    
+
     // Register the tool using the new system
-    int result = register_tool(registry, "pdf_extract_text", 
+    int result = register_tool(registry, "pdf_extract_text",
                               "Extract text content from a PDF file",
-                              parameters, 4, execute_pdf_extract_text_tool_call);
-    
+                              parameters, 3, execute_pdf_extract_text_tool_call);
+
     // Clean up temporary parameter storage
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 3; i++) {
         free(parameters[i].name);
         free(parameters[i].type);
         free(parameters[i].description);

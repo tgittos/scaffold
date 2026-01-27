@@ -139,33 +139,6 @@ void test_streaming_context_free_null(void)
     TEST_ASSERT_TRUE(1);
 }
 
-void test_streaming_context_reset(void)
-{
-    StreamingContext* ctx = streaming_context_create();
-    TEST_ASSERT_NOT_NULL(ctx);
-
-    // Add some content
-    streaming_emit_text(ctx, "Hello", 5);
-    streaming_emit_thinking(ctx, "Thinking", 8);
-    streaming_emit_tool_start(ctx, "tool_1", "test_tool");
-    ctx->state = STREAM_STATE_READING_DATA;
-    ctx->input_tokens = 100;
-    ctx->output_tokens = 50;
-
-    // Reset
-    streaming_context_reset(ctx);
-
-    // Verify reset state
-    TEST_ASSERT_EQUAL(STREAM_STATE_IDLE, ctx->state);
-    TEST_ASSERT_EQUAL_STRING("", ctx->text_content);
-    TEST_ASSERT_EQUAL_STRING("", ctx->thinking_content);
-    TEST_ASSERT_EQUAL_INT(0, ctx->tool_uses.count);
-    TEST_ASSERT_EQUAL_INT(0, ctx->input_tokens);
-    TEST_ASSERT_EQUAL_INT(0, ctx->output_tokens);
-
-    streaming_context_free(ctx);
-}
-
 // =============================================================================
 // SSE Line Parsing Tests
 // =============================================================================
@@ -587,25 +560,6 @@ void test_line_buffer_growth(void)
     streaming_context_free(ctx);
 }
 
-void test_get_last_data(void)
-{
-    StreamingContext* ctx = streaming_context_create();
-    TEST_ASSERT_NOT_NULL(ctx);
-
-    // Initially no data
-    TEST_ASSERT_NULL(streaming_get_last_data(ctx));
-
-    // Add a data line (but don't complete it with newline yet)
-    strcpy(ctx->line_buffer, "data: {\"test\":true}");
-    ctx->line_buffer_len = strlen(ctx->line_buffer);
-
-    const char* data = streaming_get_last_data(ctx);
-    TEST_ASSERT_NOT_NULL(data);
-    TEST_ASSERT_EQUAL_STRING("{\"test\":true}", data);
-
-    streaming_context_free(ctx);
-}
-
 // =============================================================================
 // Main
 // =============================================================================
@@ -617,7 +571,6 @@ int main(void)
     // Lifecycle tests
     RUN_TEST(test_streaming_context_create);
     RUN_TEST(test_streaming_context_free_null);
-    RUN_TEST(test_streaming_context_reset);
 
     // SSE parsing tests
     RUN_TEST(test_sse_complete_line);
@@ -656,7 +609,6 @@ int main(void)
 
     // Line buffer tests
     RUN_TEST(test_line_buffer_growth);
-    RUN_TEST(test_get_last_data);
 
     return UNITY_END();
 }

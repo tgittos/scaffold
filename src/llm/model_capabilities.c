@@ -78,25 +78,6 @@ void cleanup_model_registry(ModelRegistry* registry) {
     ModelRegistry_destroy(registry);
 }
 
-int process_model_response(ModelRegistry* registry, const char* model_name, 
-                          const char* content, ParsedResponse* result) {
-    if (!registry || !content || !result) {
-        return -1;
-    }
-    
-    ModelCapabilities* model = detect_model_capabilities(registry, model_name);
-    if (!model) {
-        return -1;
-    }
-    
-    if (model->process_response) {
-        return model->process_response(content, result);
-    }
-    
-    // Default processing if no custom processor
-    return -1;
-}
-
 char* generate_model_tools_json(ModelRegistry* registry, const char* model_name, const ToolRegistry* tools) {
     if (!registry || !tools) {
         return NULL;

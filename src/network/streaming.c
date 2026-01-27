@@ -201,56 +201,6 @@ void streaming_context_free(StreamingContext* ctx) {
     free(ctx);
 }
 
-void streaming_context_reset(StreamingContext* ctx) {
-    if (ctx == NULL) {
-        return;
-    }
-
-    // Reset state
-    ctx->state = STREAM_STATE_IDLE;
-    ctx->current_tool_index = -1;
-
-    // Clear line buffer
-    ctx->line_buffer_len = 0;
-    if (ctx->line_buffer != NULL) {
-        ctx->line_buffer[0] = '\0';
-    }
-
-    // Clear text content
-    ctx->text_len = 0;
-    if (ctx->text_content != NULL) {
-        ctx->text_content[0] = '\0';
-    }
-
-    // Clear thinking content
-    ctx->thinking_len = 0;
-    if (ctx->thinking_content != NULL) {
-        ctx->thinking_content[0] = '\0';
-    }
-
-    // Free and reset tool uses (preserve the array allocation)
-    for (size_t i = 0; i < ctx->tool_uses.count; i++) {
-        free_tool_use(&ctx->tool_uses.data[i]);
-    }
-    StreamingToolUseArray_clear(&ctx->tool_uses);
-
-    // Reset metadata
-    ctx->input_tokens = 0;
-    ctx->output_tokens = 0;
-
-    free(ctx->stop_reason);
-    ctx->stop_reason = NULL;
-
-    free(ctx->error_message);
-    ctx->error_message = NULL;
-
-    // Clear SSE event type
-    free(ctx->current_event_type);
-    ctx->current_event_type = NULL;
-
-    // Note: callbacks and user_data are preserved
-}
-
 // =============================================================================
 // SSE Parsing
 // =============================================================================
@@ -339,19 +289,6 @@ int streaming_process_sse_line(StreamingContext* ctx, const char* line, size_t l
     }
 
     return 0;
-}
-
-const char* streaming_get_last_data(StreamingContext* ctx) {
-    if (ctx == NULL || ctx->line_buffer == NULL || ctx->line_buffer_len < 6) {
-        return NULL;
-    }
-
-    // Check if line buffer contains a data line
-    if (strncmp(ctx->line_buffer, "data: ", 6) == 0) {
-        return ctx->line_buffer + 6;
-    }
-
-    return NULL;
 }
 
 // =============================================================================

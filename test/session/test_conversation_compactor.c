@@ -24,7 +24,6 @@ void test_compaction_config_init(void) {
     compaction_config_init(&config);
     
     TEST_ASSERT_EQUAL_INT(10, config.preserve_recent_messages);
-    TEST_ASSERT_EQUAL_INT(5, config.preserve_recent_tools);
     TEST_ASSERT_GREATER_THAN_INT(0, config.background_threshold);
 }
 

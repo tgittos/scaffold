@@ -33,7 +33,6 @@ endef
 
 $(eval $(call def_test,main,core/test_main,))
 $(eval $(call def_test,cli_flags,core/test_cli_flags,))
-$(eval $(call def_test,env,utils/test_env_loader,$(SRCDIR)/utils/env_loader.c))
 $(eval $(call def_test,prompt,utils/test_prompt_loader,$(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/utils/ralph_home.c))
 $(eval $(call def_test,ralph_home,utils/test_ralph_home,$(SRCDIR)/utils/ralph_home.c))
 $(eval $(call def_test,todo_manager,tools/test_todo_manager,$(SRCDIR)/tools/todo_manager.c))
@@ -79,9 +78,6 @@ $(TEST_main_TARGET): $(TEST_main_OBJECTS)
 
 $(TEST_cli_flags_TARGET): $(TEST_cli_flags_OBJECTS) ralph
 	$(CC) -o $@ $(TEST_cli_flags_OBJECTS)
-
-$(TEST_env_TARGET): $(TEST_env_OBJECTS)
-	$(CC) -o $@ $^
 
 $(TEST_prompt_TARGET): $(TEST_prompt_OBJECTS)
 	$(CC) -o $@ $^
@@ -195,7 +191,7 @@ CONV_EXTRA_OBJECTS := $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) \
     $(SRCDIR)/llm/embeddings.o $(SRCDIR)/llm/embeddings_service.o $(SRCDIR)/llm/embedding_provider.o \
     $(SRCDIR)/llm/providers/openai_embedding_provider.o $(SRCDIR)/llm/providers/local_embedding_provider.o \
     $(SRCDIR)/network/http_client.o $(SRCDIR)/network/embedded_cacert.o $(SRCDIR)/network/api_error.o \
-    $(SRCDIR)/utils/env_loader.o $(SRCDIR)/utils/config.o $(SRCDIR)/utils/debug_output.o $(SRCDIR)/utils/common_utils.o \
+    $(SRCDIR)/utils/config.o $(SRCDIR)/utils/debug_output.o $(SRCDIR)/utils/common_utils.o \
     $(SRCDIR)/utils/ralph_home.o
 
 $(eval $(call def_test,conversation,session/test_conversation_tracker,$(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/utils/json_escape.c))
@@ -217,14 +213,13 @@ $(TEST_tool_calls_not_stored_TARGET): $(TEST_tool_calls_not_stored_OBJECTS) $(AL
 # =============================================================================
 
 $(eval $(call def_test_mixed,json_output,utils/test_json_output,$(SRCDIR)/network/streaming.c $(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,todo_tool,tools/test_todo_tool,$(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,output,utils/test_output_formatter,$(COMPLEX_DEPS)))
 # test_tools now includes approval gate integration tests, requires RALPH_CORE_DEPS
 $(eval $(call def_test_mixed,tools,tools/test_tools_system,$(RALPH_CORE_DEPS) $(COMPLEX_DEPS)))
 # Mock embeddings sources for tests that need mocked embedding API
 MOCK_EMBEDDINGS_SOURCES := $(TESTDIR)/mock_api_server.c $(TESTDIR)/mock_embeddings.c $(TESTDIR)/mock_embeddings_server.c
 
-$(eval $(call def_test_mixed,vector_db_tool,tools/test_vector_db_tool,$(SRCDIR)/utils/env_loader.c $(MOCK_EMBEDDINGS_SOURCES) $(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,vector_db_tool,tools/test_vector_db_tool,$(MOCK_EMBEDDINGS_SOURCES) $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,memory_tool,tools/test_memory_tool,$(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,memory_mgmt,test_memory_management,$(SRCDIR)/cli/memory_commands.c $(DB_C_SOURCES) $(EMBEDDING_DEPS) $(SRCDIR)/utils/config.c $(NETWORK_DEPS) $(SRCDIR)/utils/common_utils.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/utils/ralph_home.c))
 $(eval $(call def_test_mixed,token_manager,session/test_token_manager,$(SRCDIR)/session/token_manager.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
@@ -238,7 +233,7 @@ $(eval $(call def_test_mixed,subagent_tool,tools/test_subagent_tool,$(RALPH_CORE
 $(eval $(call def_test_mixed,incomplete_task_bug,core/test_incomplete_task_bug,$(RALPH_CORE_DEPS) $(COMPLEX_DEPS)))
 
 # Batch link rule for standard tests
-STANDARD_TESTS := json_output todo_tool tools vector_db_tool memory_tool memory_mgmt \
+STANDARD_TESTS := json_output tools vector_db_tool memory_tool memory_mgmt \
     token_manager conversation_compactor model_tools openai_streaming \
     anthropic_streaming messages_array_bug mcp_client subagent_tool incomplete_task_bug
 
@@ -283,7 +278,7 @@ $(TEST_python_integration_TARGET): $(TEST_python_integration_OBJECTS) $(ALL_LIBS
 # FULL INTEGRATION TESTS
 # =============================================================================
 
-$(eval $(call def_test_mixed,http,network/test_http_client,$(SRCDIR)/utils/env_loader.c $(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,http,network/test_http_client,$(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,ralph,core/test_ralph,$(TESTDIR)/mock_api_server.c $(RALPH_CORE_DEPS) $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,recap,core/test_recap,$(RALPH_CORE_DEPS) $(COMPLEX_DEPS)))
 
@@ -327,9 +322,9 @@ TEST_EXECUTION_ORDER := \
     $(TEST_rate_limiter_TARGET) $(TEST_allowlist_TARGET) $(TEST_tool_args_TARGET) $(TEST_gate_prompter_TARGET) \
     $(TEST_ralph_home_TARGET) $(TEST_http_TARGET) $(TEST_http_retry_TARGET) \
     $(TEST_streaming_TARGET) $(TEST_openai_streaming_TARGET) $(TEST_anthropic_streaming_TARGET) \
-    $(TEST_env_TARGET) $(TEST_output_TARGET) $(TEST_prompt_TARGET) $(TEST_debug_output_TARGET) \
+    $(TEST_output_TARGET) $(TEST_prompt_TARGET) $(TEST_debug_output_TARGET) \
     $(TEST_conversation_TARGET) $(TEST_conversation_vdb_TARGET) $(TEST_tools_TARGET) \
-    $(TEST_ralph_TARGET) $(TEST_todo_manager_TARGET) $(TEST_todo_tool_TARGET) \
+    $(TEST_ralph_TARGET) $(TEST_todo_manager_TARGET) \
     $(TEST_vector_db_tool_TARGET) $(TEST_memory_tool_TARGET) $(TEST_python_tool_TARGET) \
     $(TEST_python_integration_TARGET) $(TEST_token_manager_TARGET) $(TEST_model_tools_TARGET) \
     $(TEST_conversation_compactor_TARGET) $(TEST_incomplete_task_bug_TARGET) \
@@ -359,10 +354,10 @@ VALGRIND_TESTS := \
     $(TEST_main_TARGET) $(TEST_cli_flags_TARGET) $(TEST_darray_TARGET) $(TEST_ptrarray_TARGET) \
     $(TEST_rate_limiter_TARGET) $(TEST_allowlist_TARGET) $(TEST_tool_args_TARGET) $(TEST_gate_prompter_TARGET) \
     $(TEST_ralph_home_TARGET) $(TEST_http_retry_TARGET) $(TEST_streaming_TARGET) \
-    $(TEST_openai_streaming_TARGET) $(TEST_anthropic_streaming_TARGET) $(TEST_env_TARGET) \
+    $(TEST_openai_streaming_TARGET) $(TEST_anthropic_streaming_TARGET) \
     $(TEST_output_TARGET) $(TEST_prompt_TARGET) $(TEST_conversation_TARGET) \
     $(TEST_conversation_vdb_TARGET) $(TEST_tools_TARGET) $(TEST_ralph_TARGET) \
-    $(TEST_todo_manager_TARGET) $(TEST_todo_tool_TARGET) $(TEST_vector_db_tool_TARGET) \
+    $(TEST_todo_manager_TARGET) $(TEST_vector_db_tool_TARGET) \
     $(TEST_memory_tool_TARGET) $(TEST_token_manager_TARGET) $(TEST_conversation_compactor_TARGET) \
     $(TEST_model_tools_TARGET) $(TEST_vector_db_TARGET) $(TEST_task_store_TARGET) \
     $(TEST_pdf_extractor_TARGET) $(TEST_document_chunker_TARGET) $(TEST_approval_gate_TARGET) \

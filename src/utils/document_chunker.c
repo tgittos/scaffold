@@ -39,20 +39,6 @@ chunking_config_t chunker_get_pdf_config(void) {
     return config;
 }
 
-size_t calculate_optimal_chunk_size(size_t embedding_dimension) {
-    // Rule of thumb: higher dimensional embeddings can handle larger chunks
-    // but there are diminishing returns after a certain point
-    if (embedding_dimension >= 1536) {
-        return 1500;  // Large models like text-embedding-3-large
-    } else if (embedding_dimension >= 768) {
-        return 1000;  // Medium models like text-embedding-3-small
-    } else if (embedding_dimension >= 384) {
-        return 750;   // Smaller models
-    } else {
-        return 500;   // Very small models
-    }
-}
-
 static int is_sentence_boundary(const char *text, size_t pos, size_t text_len) {
     if (pos >= text_len) return 0;
     

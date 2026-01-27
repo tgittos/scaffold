@@ -46,17 +46,10 @@ vector_t* embeddings_service_text_to_vector(const char *text);
 
 /**
  * Get the embedding dimension used by the service
- * 
+ *
  * @return Embedding dimension or 0 if service not configured
  */
 size_t embeddings_service_get_dimension(void);
-
-/**
- * Get the model name used by the service
- * 
- * @return Model name or NULL if service not configured
- */
-const char* embeddings_service_get_model(void);
 
 /**
  * Free a vector_t created by embeddings_service_text_to_vector

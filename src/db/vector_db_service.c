@@ -83,18 +83,6 @@ index_config_t vector_db_service_get_memory_config(size_t dimension) {
     return config;
 }
 
-index_config_t vector_db_service_get_document_config(size_t dimension) {
-    index_config_t config = {
-        .dimension = dimension,
-        .max_elements = 50000,
-        .M = 32,
-        .ef_construction = 400,
-        .random_seed = 123,
-        .metric = safe_strdup("cosine")
-    };
-    return config;
-}
-
 void vector_db_service_cleanup(void) {
     if (g_service_instance != NULL) {
         pthread_mutex_lock(&g_service_instance->mutex);

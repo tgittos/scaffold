@@ -69,36 +69,9 @@ ToolResult* tool_result_builder_finalize(tool_result_builder_t* builder);
 
 /**
  * Destroy builder without creating result (cleanup)
- * 
+ *
  * @param builder Builder instance to destroy
  */
 void tool_result_builder_destroy(tool_result_builder_t* builder);
-
-/**
- * Convenience function to create simple success result
- * 
- * @param tool_call_id Tool call ID
- * @param format Printf-style format string
- * @param ... Format arguments
- * @return Complete ToolResult or NULL on failure
- */
-ToolResult* tool_result_create_success(const char* tool_call_id, const char* format, ...);
-
-/**
- * Convenience function to create simple error result
- * 
- * @param tool_call_id Tool call ID
- * @param format Printf-style format string
- * @param ... Format arguments
- * @return Complete ToolResult or NULL on failure
- */
-ToolResult* tool_result_create_error(const char* tool_call_id, const char* format, ...);
-
-/**
- * Free a ToolResult structure
- * 
- * @param result Result to free
- */
-void tool_result_free(ToolResult* result);
 
 #endif // TOOL_RESULT_BUILDER_H

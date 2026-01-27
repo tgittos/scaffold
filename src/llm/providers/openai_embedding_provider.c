@@ -16,8 +16,6 @@ static int openai_embedding_build_headers(const EmbeddingProvider* provider,
 static int openai_embedding_parse_response(const EmbeddingProvider* provider,
                                           const char* json_response,
                                           embedding_vector_t* embedding);
-static size_t openai_embedding_get_dimension(const EmbeddingProvider* provider,
-                                            const char* model);
 
 // OpenAI embedding provider implementation
 static int openai_embedding_detect_provider(const char* api_url) {
@@ -151,27 +149,6 @@ static int openai_embedding_parse_response(const EmbeddingProvider* provider,
     return 0;
 }
 
-static size_t openai_embedding_get_dimension(const EmbeddingProvider* provider,
-                                            const char* model) {
-    (void)provider; // Suppress unused parameter warning
-    
-    if (model == NULL) {
-        return 1536; // Default for text-embedding-3-small
-    }
-    
-    // Return dimensions for known OpenAI models
-    if (strcmp(model, "text-embedding-3-small") == 0) {
-        return 1536;
-    } else if (strcmp(model, "text-embedding-3-large") == 0) {
-        return 3072;
-    } else if (strcmp(model, "text-embedding-ada-002") == 0) {
-        return 1536;
-    }
-    
-    // Default fallback
-    return 1536;
-}
-
 // OpenAI embedding provider instance
 static EmbeddingProvider openai_embedding_provider = {
     .capabilities = {
@@ -183,8 +160,7 @@ static EmbeddingProvider openai_embedding_provider = {
     .detect_provider = openai_embedding_detect_provider,
     .build_request_json = openai_embedding_build_request_json,
     .build_headers = openai_embedding_build_headers,
-    .parse_response = openai_embedding_parse_response,
-    .get_dimension = openai_embedding_get_dimension
+    .parse_response = openai_embedding_parse_response
 };
 
 int register_openai_embedding_provider(EmbeddingProviderRegistry* registry) {

@@ -169,32 +169,3 @@ char* create_error_message(const char *format, ...) {
     return buffer;
 }
 
-char* create_success_message(const char *format, ...) {
-    if (format == NULL) return NULL;
-    
-    va_list args;
-    va_start(args, format);
-    
-    // Calculate needed size
-    va_list args_copy;
-    va_copy(args_copy, args);
-    int needed = vsnprintf(NULL, 0, format, args_copy);
-    va_end(args_copy);
-    
-    if (needed < 0) {
-        va_end(args);
-        return NULL;
-    }
-    
-    // Allocate and format
-    char *buffer = malloc(needed + 1);
-    if (buffer == NULL) {
-        va_end(args);
-        return NULL;
-    }
-    
-    vsnprintf(buffer, needed + 1, format, args);
-    va_end(args);
-    
-    return buffer;
-}

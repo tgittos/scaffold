@@ -15,8 +15,6 @@ typedef struct {
 typedef struct {
     int start_page;       // First page to extract (0-based, -1 for all pages)
     int end_page;         // Last page to extract (0-based, -1 for all pages)
-    int preserve_layout;  // Whether to preserve layout formatting
-    int extract_metadata; // Whether to extract document metadata
 } pdf_extraction_config_t;
 
 // Initialize the PDF extraction system
@@ -34,11 +32,6 @@ pdf_extraction_result_t* pdf_extract_text(const char* pdf_path);
 // Returns NULL on memory allocation failure, or a result struct with error
 // field set on other failures. Caller must free result with pdf_free_extraction_result().
 pdf_extraction_result_t* pdf_extract_text_with_config(const char* pdf_path, const pdf_extraction_config_t* config);
-
-// Extract text from PDF data in memory.
-// Returns NULL on memory allocation failure, or a result struct with error
-// field set on other failures. Caller must free result with pdf_free_extraction_result().
-pdf_extraction_result_t* pdf_extract_text_from_memory(const unsigned char* pdf_data, size_t data_size);
 
 // Free extraction result
 void pdf_free_extraction_result(pdf_extraction_result_t* result);

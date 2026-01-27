@@ -26,7 +26,6 @@ typedef struct {
 
 hnswlib_index_t hnswlib_create_index(const char* name, const hnswlib_index_config_t* config);
 int hnswlib_delete_index(const char* name);
-int hnswlib_has_index(const char* name);
 
 int hnswlib_add_vector(const char* name, const float* data, size_t label);
 int hnswlib_update_vector(const char* name, const float* data, size_t label);
@@ -41,7 +40,6 @@ int hnswlib_load_index(const char* name, const char* path, const hnswlib_index_c
 
 int hnswlib_set_ef(const char* name, size_t ef);
 size_t hnswlib_get_current_count(const char* name);
-size_t hnswlib_get_max_elements(const char* name);
 
 void hnswlib_clear_all(void);
 

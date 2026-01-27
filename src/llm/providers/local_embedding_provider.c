@@ -16,8 +16,6 @@ static int local_embedding_build_headers(const EmbeddingProvider* provider,
 static int local_embedding_parse_response(const EmbeddingProvider* provider,
                                          const char* json_response,
                                          embedding_vector_t* embedding);
-static size_t local_embedding_get_dimension(const EmbeddingProvider* provider,
-                                           const char* model);
 
 // Local embedding provider implementation (LMStudio, Ollama, etc.)
 static int local_embedding_detect_provider(const char* api_url) {
@@ -176,27 +174,6 @@ static int local_embedding_parse_response(const EmbeddingProvider* provider,
     return -1;
 }
 
-static size_t local_embedding_get_dimension(const EmbeddingProvider* provider,
-                                           const char* model) {
-    (void)provider; // Suppress unused parameter warning
-    
-    if (model == NULL) {
-        return 0; // Unknown
-    }
-    
-    // Known dimensions for common local embedding models
-    if (strstr(model, "Qwen3-Embedding") != NULL) {
-        return 1024; // Qwen3-Embedding-0.6B typical dimension
-    } else if (strstr(model, "all-MiniLM") != NULL) {
-        return 384;  // all-MiniLM-L6-v2
-    } else if (strstr(model, "all-mpnet") != NULL) {
-        return 768;  // all-mpnet-base-v2
-    }
-    
-    // Return 0 for unknown - dimension will be determined at runtime
-    return 0;
-}
-
 // Local embedding provider instance
 static EmbeddingProvider local_embedding_provider = {
     .capabilities = {
@@ -208,8 +185,7 @@ static EmbeddingProvider local_embedding_provider = {
     .detect_provider = local_embedding_detect_provider,
     .build_request_json = local_embedding_build_request_json,
     .build_headers = local_embedding_build_headers,
-    .parse_response = local_embedding_parse_response,
-    .get_dimension = local_embedding_get_dimension
+    .parse_response = local_embedding_parse_response
 };
 
 int register_local_embedding_provider(EmbeddingProviderRegistry* registry) {

@@ -109,19 +109,10 @@ size_t embeddings_service_get_dimension(void) {
     if (service == NULL || !service->configured) {
         return 0;
     }
-    
+
     // For text-embedding-3-small, dimension is 1536
     // This could be made configurable or queried from the service
     return 1536;
-}
-
-const char* embeddings_service_get_model(void) {
-    embeddings_service_t* service = embeddings_service_get_instance();
-    if (service == NULL || !service->configured) {
-        return NULL;
-    }
-    
-    return service->config.model;
 }
 
 void embeddings_service_free_vector(vector_t* vector) {

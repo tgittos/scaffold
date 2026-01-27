@@ -118,12 +118,4 @@ char* python_get_loaded_tools_description(void);
  */
 void python_cleanup_tool_files(void);
 
-/**
- * Reset Python tools to defaults by re-extracting from embedded files.
- * User-modified tools will be backed up with .bak extension.
- *
- * @return 0 on success, -1 on failure
- */
-int python_reset_tool_files(void);
-
 #endif // PYTHON_TOOL_FILES_H

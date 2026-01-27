@@ -1,6 +1,7 @@
 #include "embeddings.h"
 #include "embedding_provider.h"
 #include "../network/http_client.h"
+#include "../utils/common_utils.h"
 #include <cJSON.h>
 #include "../utils/debug_output.h"
 #include <stdio.h>
@@ -47,12 +48,7 @@ static int init_embedding_registry_once(void) {
     return g_registry_init_result;
 }
 
-static char* safe_strdup(const char *str) {
-    if (str == NULL) return NULL;
-    return strdup(str);
-}
-
-int embeddings_init(embeddings_config_t *config, const char *model, 
+int embeddings_init(embeddings_config_t *config, const char *model,
                     const char *api_key, const char *api_url) {
     if (config == NULL) {
         return -1;

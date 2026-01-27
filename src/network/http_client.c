@@ -97,11 +97,6 @@ static int calculate_retry_delay(int attempt, int base_delay_ms, float backoff_f
     return delay;
 }
 
-int http_post(const char *url, const char *post_data, struct HTTPResponse *response)
-{
-    return http_post_with_config(url, post_data, NULL, &DEFAULT_HTTP_CONFIG, response);
-}
-
 int http_post_with_headers(const char *url, const char *post_data, const char **headers, struct HTTPResponse *response)
 {
     return http_post_with_config(url, post_data, headers, &DEFAULT_HTTP_CONFIG, response);
@@ -259,11 +254,6 @@ int http_post_with_config(const char *url, const char *post_data, const char **h
 int http_get(const char *url, struct HTTPResponse *response)
 {
     return http_get_with_config(url, NULL, &DEFAULT_HTTP_CONFIG, response);
-}
-
-int http_get_with_headers(const char *url, const char **headers, struct HTTPResponse *response)
-{
-    return http_get_with_config(url, headers, &DEFAULT_HTTP_CONFIG, response);
 }
 
 int http_get_with_config(const char *url, const char **headers,

@@ -3,7 +3,6 @@
 #include "tool_executor.h"
 #include "streaming_handler.h"
 #include "recap.h"
-#include <cJSON.h>
 #include "utils/config.h"
 #include "output_formatter.h"
 #include "json_output.h"
@@ -12,7 +11,6 @@
 #include "todo_display.h"
 #include "debug_output.h"
 #include "api_common.h"
-#include "api_error.h"
 #include "../llm/embeddings_service.h"
 #include "token_manager.h"
 #include "conversation_compactor.h"

@@ -20,7 +20,6 @@ typedef struct {
     int available_response_tokens; // Tokens available for response
     int safety_buffer_used;       // Actual safety buffer applied
     int context_window_used;      // Context window being used
-    int messages_trimmed;         // Number of messages trimmed
 } TokenUsage;
 
 // Initialize token configuration with sensible defaults

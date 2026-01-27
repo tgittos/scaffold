@@ -47,10 +47,6 @@ int register_claude_models(ModelRegistry* registry);
 int register_gpt_models(ModelRegistry* registry);
 int register_default_model(ModelRegistry* registry);
 
-// Helper function to process response with model-specific handling
-int process_model_response(ModelRegistry* registry, const char* model_name, 
-                          const char* content, ParsedResponse* result);
-
 // Helper functions for model-specific tool handling
 char* generate_model_tools_json(ModelRegistry* registry, const char* model_name, const ToolRegistry* tools);
 int parse_model_tool_calls(ModelRegistry* registry, const char* model_name, 

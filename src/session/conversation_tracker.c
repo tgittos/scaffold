@@ -10,7 +10,6 @@
 
 #define CONVERSATION_INDEX "conversations"
 #define CONVERSATION_EMBEDDING_DIM 1536
-#define SLIDING_WINDOW_SIZE 20  // Number of recent messages to retrieve
 
 // Define the ConversationHistory array implementation
 DARRAY_DEFINE(ConversationHistory, ConversationMessage)

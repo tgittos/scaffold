@@ -12,7 +12,6 @@
 // Simplified configuration for conversation trimming
 typedef struct {
     int preserve_recent_messages;     // Always keep this many recent messages
-    int preserve_recent_tools;        // Always keep this many recent tool interactions
     int background_threshold;         // Token count to trigger background trimming
 } CompactionConfig;
 

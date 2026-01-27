@@ -295,8 +295,6 @@ static LLMProvider openai_provider = {
     .build_request_json = openai_build_request_json,
     .build_headers = openai_build_headers,
     .parse_response = openai_parse_response,
-    // Tool functions removed - now handled by ModelCapabilities
-    .validate_conversation = NULL,  // No special validation needed
     // Streaming support
     .supports_streaming = openai_supports_streaming,
     .parse_stream_event = openai_parse_stream_event,

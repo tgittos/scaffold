@@ -37,22 +37,9 @@ static const char* get_priority_color(TodoPriority priority) {
 
 int todo_display_init(const TodoDisplayConfig* config) {
     if (config == NULL) return -1;
-    
+
     g_display_config = *config;
     return 0;
-}
-
-void todo_display_set_enabled(bool enabled) {
-    g_display_config.enabled = enabled;
-}
-
-bool todo_display_is_enabled(void) {
-    return g_display_config.enabled;
-}
-
-void todo_display_clear(void) {
-    // For simplicity, we don't implement terminal cursor manipulation
-    // The compact display format minimizes visual clutter instead
 }
 
 void todo_display_print_compact(const TodoList* todo_list) {

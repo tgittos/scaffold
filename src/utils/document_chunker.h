@@ -53,13 +53,4 @@ chunking_result_t* chunk_document(const char *text, const chunking_config_t *con
  */
 void free_chunking_result(chunking_result_t *result);
 
-/**
- * Calculate optimal chunk size for a given embedding dimension
- * This helps balance context preservation with embedding quality
- * 
- * @param embedding_dimension The dimension of the embedding model
- * @return Recommended chunk size in characters
- */
-size_t calculate_optimal_chunk_size(size_t embedding_dimension);
-
 #endif // DOCUMENT_CHUNKER_H
