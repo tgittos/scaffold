@@ -118,7 +118,7 @@ void test_parse_tool_calls_with_code_containing_quotes(void) {
     const char *json_response =
         "{\"choices\":[{\"message\":{\"tool_calls\":["
         "{\"id\":\"call_456\",\"function\":{\"name\":\"apply_delta\","
-        "\"arguments\":\"{\\\"path\\\": \\\"/tmp/test.py\\\", \\\"operations\\\": [{\\\"type\\\": \\\"insert\\\", \\\"start_line\\\": 1, \\\"lines\\\": [\\\"print(\\\\\\\"hello\\\\\\\")\\\"]}]}\""
+        "\"arguments\":\"{\\\"path\\\": \\\"/tmp/test.py\\\", \\\"operations\\\": [{\\\"type\\\": \\\"insert\\\", \\\"start_line\\\": 1, \\\"content\\\": [\\\"print(\\\\\\\"hello\\\\\\\")\\\"]}]}\""
         "}}"
         "]}}]}";
 
@@ -145,11 +145,11 @@ void test_parse_tool_calls_with_code_containing_quotes(void) {
     cJSON *first_op = cJSON_GetArrayItem(operations, 0);
     TEST_ASSERT_NOT_NULL(first_op);
 
-    cJSON *lines = cJSON_GetObjectItem(first_op, "lines");
-    TEST_ASSERT_NOT_NULL(lines);
-    TEST_ASSERT_TRUE(cJSON_IsArray(lines));
+    cJSON *content = cJSON_GetObjectItem(first_op, "content");
+    TEST_ASSERT_NOT_NULL(content);
+    TEST_ASSERT_TRUE(cJSON_IsArray(content));
 
-    cJSON *first_line = cJSON_GetArrayItem(lines, 0);
+    cJSON *first_line = cJSON_GetArrayItem(content, 0);
     TEST_ASSERT_NOT_NULL(first_line);
     TEST_ASSERT_TRUE(cJSON_IsString(first_line));
     TEST_ASSERT_EQUAL_STRING("print(\"hello\")", cJSON_GetStringValue(first_line));

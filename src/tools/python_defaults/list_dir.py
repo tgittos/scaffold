@@ -4,14 +4,21 @@ Gate: file_read
 Match: path
 """
 
-def list_dir(path: str, pattern: str = None, recursive: bool = False, include_hidden: bool = False) -> list:
+
+def _is_traversal_path(path: str) -> bool:
+    """Check if path contains directory traversal attempts."""
+    parts = path.replace('\\', '/').split('/')
+    return '..' in parts
+
+
+def list_dir(path: str, glob_filter: str = None, recursive: bool = False, include_hidden: bool = False) -> list:
     """List directory contents with optional filtering.
 
     Args:
         path: Path to the directory to list
-        pattern: Optional glob pattern to filter results (e.g., "*.py")
-        recursive: Whether to list recursively
-        include_hidden: Whether to include hidden files (starting with .)
+        glob_filter: Optional glob pattern to filter results (e.g., "*.py", "*.txt")
+        recursive: Whether to list recursively (default: False)
+        include_hidden: Whether to include hidden files starting with . (default: False)
 
     Returns:
         List of dictionaries with file/directory information
@@ -19,8 +26,8 @@ def list_dir(path: str, pattern: str = None, recursive: bool = False, include_hi
     from pathlib import Path
     import os
 
-    # Security check - prevent directory traversal (check BEFORE resolving)
-    if '..' in path:
+    # Security check - prevent directory traversal
+    if _is_traversal_path(path):
         raise ValueError("Invalid path: directory traversal not allowed")
 
     p = Path(path).resolve()
@@ -62,8 +69,8 @@ def list_dir(path: str, pattern: str = None, recursive: bool = False, include_hi
             return True  # Continue even if we can't stat this entry
 
     if recursive:
-        if pattern:
-            for entry in p.rglob(pattern):
+        if glob_filter:
+            for entry in p.rglob(glob_filter):
                 if not should_include(entry):
                     continue
                 # Skip common non-essential directories
@@ -93,8 +100,8 @@ def list_dir(path: str, pattern: str = None, recursive: bool = False, include_hi
                 if len(results) >= max_entries:
                     break
     else:
-        if pattern:
-            entries = list(p.glob(pattern))
+        if glob_filter:
+            entries = list(p.glob(glob_filter))
         else:
             entries = list(p.iterdir())
 

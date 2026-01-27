@@ -645,23 +645,47 @@ int execute_python_file_tool_call(const ToolCall *tool_call, ToolResult *result)
 
     // Build Python function call
     // Convert JSON args to Python kwargs
-    char *call_code = NULL;
-    // Template code is ~700 bytes, kwargs can be up to 4096, plus function name
-    // Allocate generous buffer to avoid truncation
-    size_t code_len = strlen(tool_call->name) + 4096 + 1024;
-    call_code = malloc(code_len);
-    if (call_code == NULL) {
+
+    // First pass: calculate required size for kwargs buffer
+    size_t kwargs_size_needed = 1; // For null terminator
+    cJSON *item = NULL;
+    cJSON_ArrayForEach(item, args) {
+        if (cJSON_IsNull(item)) {
+            continue;
+        }
+        // Add space for ", " separator
+        kwargs_size_needed += 4; // ", " plus some margin
+        // Add space for "name="
+        kwargs_size_needed += strlen(item->string) + 1;
+
+        if (cJSON_IsString(item)) {
+            // Worst case: every char escapes to 2 chars, plus quotes
+            kwargs_size_needed += strlen(item->valuestring) * 2 + 3;
+        } else if (cJSON_IsNumber(item)) {
+            kwargs_size_needed += 32; // Enough for any number
+        } else if (cJSON_IsBool(item)) {
+            kwargs_size_needed += 6; // "False" is 5 chars
+        } else if (cJSON_IsArray(item) || cJSON_IsObject(item)) {
+            char *json_str = cJSON_PrintUnformatted(item);
+            if (json_str) {
+                kwargs_size_needed += strlen(json_str);
+                free(json_str);
+            }
+        }
+    }
+
+    // Allocate kwargs buffer dynamically
+    char *kwargs = malloc(kwargs_size_needed);
+    if (kwargs == NULL) {
         cJSON_Delete(args);
         result->result = strdup("{\"error\": \"Memory allocation failed\", \"success\": false}");
         result->success = 0;
         return 0;
     }
-
-    // Build kwargs string from JSON
-    // Skip null values to avoid syntax errors like "func(a='x', , b='y')"
-    char kwargs[4096] = "";
+    kwargs[0] = '\0';
     size_t kwargs_pos = 0;
-    cJSON *item = NULL;
+
+    // Second pass: build kwargs string
     cJSON_ArrayForEach(item, args) {
         // Skip null values - they would cause syntax errors
         if (cJSON_IsNull(item)) {
@@ -670,7 +694,7 @@ int execute_python_file_tool_call(const ToolCall *tool_call, ToolResult *result)
 
         // Add comma separator after first argument
         if (kwargs_pos > 0) {
-            kwargs_pos += snprintf(kwargs + kwargs_pos, sizeof(kwargs) - kwargs_pos, ", ");
+            kwargs_pos += snprintf(kwargs + kwargs_pos, kwargs_size_needed - kwargs_pos, ", ");
         }
 
         if (cJSON_IsString(item)) {
@@ -681,7 +705,8 @@ int execute_python_file_tool_call(const ToolCall *tool_call, ToolResult *result)
             size_t escaped_size = str_len * 2 + 1;
             char *escaped = malloc(escaped_size);
             if (escaped == NULL) {
-                free(call_code);
+                free(kwargs);
+                cJSON_Delete(args);
                 result->result = strdup("{\"error\": \"Memory allocation failed\", \"success\": false}");
                 result->success = 0;
                 return 0;
@@ -708,30 +733,41 @@ int execute_python_file_tool_call(const ToolCall *tool_call, ToolResult *result)
                 }
             }
             escaped[e] = '\0';
-            kwargs_pos += snprintf(kwargs + kwargs_pos, sizeof(kwargs) - kwargs_pos,
+            kwargs_pos += snprintf(kwargs + kwargs_pos, kwargs_size_needed - kwargs_pos,
                                    "%s='%s'", item->string, escaped);
             free(escaped);
         } else if (cJSON_IsNumber(item)) {
             if (item->valuedouble == (double)item->valueint) {
-                kwargs_pos += snprintf(kwargs + kwargs_pos, sizeof(kwargs) - kwargs_pos,
+                kwargs_pos += snprintf(kwargs + kwargs_pos, kwargs_size_needed - kwargs_pos,
                                        "%s=%d", item->string, item->valueint);
             } else {
-                kwargs_pos += snprintf(kwargs + kwargs_pos, sizeof(kwargs) - kwargs_pos,
+                kwargs_pos += snprintf(kwargs + kwargs_pos, kwargs_size_needed - kwargs_pos,
                                        "%s=%f", item->string, item->valuedouble);
             }
         } else if (cJSON_IsBool(item)) {
-            kwargs_pos += snprintf(kwargs + kwargs_pos, sizeof(kwargs) - kwargs_pos,
+            kwargs_pos += snprintf(kwargs + kwargs_pos, kwargs_size_needed - kwargs_pos,
                                    "%s=%s", item->string, cJSON_IsTrue(item) ? "True" : "False");
         } else if (cJSON_IsArray(item) || cJSON_IsObject(item)) {
             char *json_str = cJSON_PrintUnformatted(item);
             if (json_str) {
-                kwargs_pos += snprintf(kwargs + kwargs_pos, sizeof(kwargs) - kwargs_pos,
+                kwargs_pos += snprintf(kwargs + kwargs_pos, kwargs_size_needed - kwargs_pos,
                                        "%s=%s", item->string, json_str);
                 free(json_str);
             }
         }
     }
     cJSON_Delete(args);
+
+    // Allocate call_code buffer based on actual kwargs size
+    // Template code is ~700 bytes, plus function name
+    size_t code_len = strlen(tool_call->name) + kwargs_pos + 1024;
+    char *call_code = malloc(code_len);
+    if (call_code == NULL) {
+        free(kwargs);
+        result->result = strdup("{\"error\": \"Memory allocation failed\", \"success\": false}");
+        result->success = 0;
+        return 0;
+    }
 
     // Build the Python execution code
     snprintf(call_code, code_len,
@@ -750,6 +786,9 @@ int execute_python_file_tool_call(const ToolCall *tool_call, ToolResult *result)
              "    import traceback\n"
              "    _ralph_result_json = json.dumps({'error': str(e), 'traceback': traceback.format_exc(), 'success': False})\n",
              tool_call->name, kwargs);
+
+    // Free kwargs now that we've built call_code
+    free(kwargs);
 
     // Execute the Python code
     PyObject *main_module = PyImport_AddModule("__main__");

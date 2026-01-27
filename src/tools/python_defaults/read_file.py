@@ -4,13 +4,20 @@ Gate: file_read
 Match: path
 """
 
-def read_file(path: str, start_line: int = 0, end_line: int = 0) -> str:
+
+def _is_traversal_path(path: str) -> bool:
+    """Check if path contains directory traversal attempts."""
+    parts = path.replace('\\', '/').split('/')
+    return '..' in parts
+
+
+def read_file(path: str, start_line: int = 1, end_line: int = None) -> str:
     """Read file contents, optionally with line range.
 
     Args:
         path: Path to the file to read
-        start_line: Starting line number (1-based, 0 for entire file)
-        end_line: Ending line number (1-based, 0 for to end of file)
+        start_line: Starting line number (1-based, default: 1 for first line)
+        end_line: Ending line number (1-based inclusive, default: None for end of file)
 
     Returns:
         File contents as a string
@@ -18,8 +25,8 @@ def read_file(path: str, start_line: int = 0, end_line: int = 0) -> str:
     from pathlib import Path
     import os
 
-    # Security check - prevent directory traversal (check BEFORE resolving)
-    if '..' in path:
+    # Security check - prevent directory traversal
+    if _is_traversal_path(path):
         raise ValueError("Invalid path: directory traversal not allowed")
 
     # Try to use verified file I/O for TOCTOU-safe reads
@@ -70,10 +77,11 @@ def read_file(path: str, start_line: int = 0, end_line: int = 0) -> str:
     if content is None:
         content = p.read_text(encoding='utf-8', errors='replace')
 
-    if start_line > 0 or end_line > 0:
+    # Apply line range if specified
+    if start_line != 1 or end_line is not None:
         lines = content.splitlines(keepends=True)
-        start = max(0, start_line - 1) if start_line > 0 else 0
-        end = end_line if end_line > 0 else len(lines)
+        start = max(0, start_line - 1)  # Convert to 0-based
+        end = end_line if end_line is not None else len(lines)
         content = ''.join(lines[start:end])
 
     return content

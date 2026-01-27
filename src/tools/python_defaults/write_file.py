@@ -6,13 +6,20 @@ Match: path
 
 MAX_WRITE_SIZE = 50 * 1024 * 1024  # 50MB
 
+
+def _is_traversal_path(path: str) -> bool:
+    """Check if path contains directory traversal attempts."""
+    parts = path.replace('\\', '/').split('/')
+    return '..' in parts
+
+
 def write_file(path: str, content: str, backup: bool = False) -> dict:
     """Write content to file.
 
     Args:
         path: Path to the file to write
         content: Content to write
-        backup: Whether to create a backup if file exists
+        backup: Whether to create a backup if file exists (default: False)
 
     Returns:
         Dictionary with success status and path
@@ -22,8 +29,8 @@ def write_file(path: str, content: str, backup: bool = False) -> dict:
     import shutil
     import os
 
-    # Security check - prevent directory traversal (check BEFORE resolving)
-    if '..' in path:
+    # Security check - prevent directory traversal
+    if _is_traversal_path(path):
         raise ValueError("Invalid path: directory traversal not allowed")
 
     # Check content size limit

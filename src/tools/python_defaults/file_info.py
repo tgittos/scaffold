@@ -4,6 +4,13 @@ Gate: file_read
 Match: path
 """
 
+
+def _is_traversal_path(path: str) -> bool:
+    """Check if path contains directory traversal attempts."""
+    parts = path.replace('\\', '/').split('/')
+    return '..' in parts
+
+
 def file_info(path: str) -> dict:
     """Get file information and metadata.
 
@@ -18,8 +25,8 @@ def file_info(path: str) -> dict:
     import stat as stat_module
     from datetime import datetime
 
-    # Security check - prevent directory traversal (check BEFORE resolving)
-    if '..' in path:
+    # Security check - prevent directory traversal
+    if _is_traversal_path(path):
         raise ValueError("Invalid path: directory traversal not allowed")
 
     p = Path(path).resolve()

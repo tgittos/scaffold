@@ -6,6 +6,13 @@ Match: path
 
 MAX_APPEND_SIZE = 10 * 1024 * 1024  # 10MB
 
+
+def _is_traversal_path(path: str) -> bool:
+    """Check if path contains directory traversal attempts."""
+    parts = path.replace('\\', '/').split('/')
+    return '..' in parts
+
+
 def append_file(path: str, content: str) -> dict:
     """Append content to file.
 
@@ -19,8 +26,8 @@ def append_file(path: str, content: str) -> dict:
     from pathlib import Path
     import os
 
-    # Security check - prevent directory traversal (check BEFORE resolving)
-    if '..' in path:
+    # Security check - prevent directory traversal
+    if _is_traversal_path(path):
         raise ValueError("Invalid path: directory traversal not allowed")
 
     # Check content size limit

@@ -10,6 +10,13 @@ list provides defense-in-depth against obvious accidents, not a security
 boundary. This is by design for an agent development tool.
 """
 
+
+def _is_traversal_path(path: str) -> bool:
+    """Check if path contains directory traversal attempts."""
+    parts = path.replace('\\', '/').split('/')
+    return '..' in parts
+
+
 def shell(command: str, working_dir: str = None, timeout: int = 30,
           capture_stderr: bool = True) -> dict:
     """Execute shell command.
@@ -56,6 +63,16 @@ def shell(command: str, working_dir: str = None, timeout: int = 30,
 
     # Validate working directory if specified
     if working_dir:
+        # Security check - prevent directory traversal
+        if _is_traversal_path(working_dir):
+            return {
+                "stdout": "",
+                "stderr": "Error: Invalid working directory path (directory traversal not allowed)",
+                "exit_code": -1,
+                "execution_time": 0.0,
+                "timed_out": False
+            }
+
         wd = Path(working_dir).resolve()
         if not wd.exists():
             return {

@@ -641,18 +641,20 @@ static char* extract_arg_summary(const char *tool_name, const char *arguments) {
             label = "";  // No label needed, command is self-explanatory
         }
     } else if (tool_name && strcmp(tool_name, "search_files") == 0) {
-        // Search tools - show the pattern (what we're searching for) with path context
-        if (pattern && cJSON_IsString(pattern)) {
-            const char *pattern_val = cJSON_GetStringValue(pattern);
+        // Search tools - show the regex pattern (what we're searching for) with path context
+        // The search_files tool uses "regex_pattern" as its parameter name
+        cJSON *regex_pattern = cJSON_GetObjectItem(json, "regex_pattern");
+        if (regex_pattern && cJSON_IsString(regex_pattern)) {
+            const char *pattern_val = cJSON_GetStringValue(regex_pattern);
             const char *path_val = path && cJSON_IsString(path) ? cJSON_GetStringValue(path) : ".";
-            // Format: "path → pattern" to show both where and what
-            // Truncate pattern if too long (leave room for path, arrow, quotes, ellipsis)
+            // Format: "path → /regex/" to show both where and what (regex syntax)
+            // Truncate pattern if too long (leave room for path, arrow, slashes, ellipsis)
             size_t pattern_len = strlen(pattern_val);
             if (pattern_len <= ARG_DISPLAY_MAX_LEN - 10) {
-                snprintf(summary, sizeof(summary), "%s → \"%s\"", path_val, pattern_val);
+                snprintf(summary, sizeof(summary), "%s → /%s/", path_val, pattern_val);
             } else {
                 // Truncate pattern with ellipsis
-                snprintf(summary, sizeof(summary), "%s → \"%.37s...\"", path_val, pattern_val);
+                snprintf(summary, sizeof(summary), "%s → /%.37s.../", path_val, pattern_val);
             }
             cJSON_Delete(json);
             return strdup(summary);
