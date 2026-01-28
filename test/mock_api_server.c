@@ -123,22 +123,21 @@ static void* server_thread_func(void* arg) {
                 body = "{}";  // Empty JSON as fallback
             }
 
-            // Send mock response
-            char http_response[RESPONSE_BUFFER_SIZE];
+            // Send headers and body separately to handle large responses
+            char headers_buf[512];
             int content_length = strlen(body);
 
-            snprintf(http_response, sizeof(http_response),
+            snprintf(headers_buf, sizeof(headers_buf),
                 "HTTP/1.1 %d OK\r\n"
                 "Content-Type: application/json\r\n"
                 "Content-Length: %d\r\n"
                 "Connection: close\r\n"
-                "\r\n"
-                "%s",
+                "\r\n",
                 response->response_code,
-                content_length,
-                body);
+                content_length);
 
-            write(client_fd, http_response, strlen(http_response));
+            write(client_fd, headers_buf, strlen(headers_buf));
+            write(client_fd, body, content_length);
 
             // Free dynamic body if allocated
             if (dynamic_body) {

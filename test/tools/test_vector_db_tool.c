@@ -54,7 +54,7 @@ void setUp(void) {
     config_init();
 
     // Set mock embedding API URL via config system
-    config_set("embedding_api_url", "http://127.0.0.1:18890/v1/embeddings");
+    config_set("embedding_api_url", "http://127.0.0.1:18890/api.openai.com/v1/embeddings");
 }
 
 void tearDown(void) {
