@@ -227,8 +227,9 @@ MOCK_EMBEDDINGS_SOURCES := $(TESTDIR)/mock_api_server.c $(TESTDIR)/mock_embeddin
 $(eval $(call def_test_mixed,vector_db_tool,tools/test_vector_db_tool,$(MOCK_EMBEDDINGS_SOURCES) $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,memory_tool,tools/test_memory_tool,$(MOCK_EMBEDDINGS_SOURCES) $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,memory_mgmt,test_memory_management,$(SRCDIR)/cli/memory_commands.c $(DB_C_SOURCES) $(EMBEDDING_DEPS) $(SRCDIR)/utils/config.c $(NETWORK_DEPS) $(SRCDIR)/utils/common_utils.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/utils/ralph_home.c))
-$(eval $(call def_test_mixed,token_manager,session/test_token_manager,$(SRCDIR)/session/token_manager.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,conversation_compactor,session/test_conversation_compactor,$(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/token_manager.c $(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,token_manager,session/test_token_manager,$(SRCDIR)/session/token_manager.c $(SRCDIR)/session/rolling_summary.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,conversation_compactor,session/test_conversation_compactor,$(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/rolling_summary.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/token_manager.c $(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,rolling_summary,session/test_rolling_summary,$(SRCDIR)/session/rolling_summary.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,model_tools,llm/test_model_tools,$(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,openai_streaming,llm/test_openai_streaming,$(SRCDIR)/network/streaming.c $(SRCDIR)/llm/llm_provider.c $(SRCDIR)/llm/providers/openai_provider.c $(SRCDIR)/llm/providers/anthropic_provider.c $(SRCDIR)/llm/providers/local_ai_provider.c $(SRCDIR)/network/api_common.c $(SRCDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,anthropic_streaming,llm/test_anthropic_streaming,$(SRCDIR)/network/streaming.c $(SRCDIR)/llm/llm_provider.c $(SRCDIR)/llm/providers/openai_provider.c $(SRCDIR)/llm/providers/anthropic_provider.c $(SRCDIR)/llm/providers/local_ai_provider.c $(SRCDIR)/network/api_common.c $(SRCDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
@@ -239,7 +240,7 @@ $(eval $(call def_test_mixed,incomplete_task_bug,core/test_incomplete_task_bug,$
 
 # Batch link rule for standard tests
 STANDARD_TESTS := json_output tools vector_db_tool memory_tool memory_mgmt \
-    token_manager conversation_compactor model_tools openai_streaming \
+    token_manager conversation_compactor rolling_summary model_tools openai_streaming \
     anthropic_streaming messages_array_bug mcp_client subagent_tool incomplete_task_bug
 
 $(foreach t,$(STANDARD_TESTS),$(eval \
@@ -332,7 +333,7 @@ TEST_EXECUTION_ORDER := \
     $(TEST_ralph_TARGET) $(TEST_todo_manager_TARGET) \
     $(TEST_vector_db_tool_TARGET) $(TEST_memory_tool_TARGET) $(TEST_python_tool_TARGET) \
     $(TEST_python_integration_TARGET) $(TEST_token_manager_TARGET) $(TEST_model_tools_TARGET) \
-    $(TEST_conversation_compactor_TARGET) $(TEST_incomplete_task_bug_TARGET) \
+    $(TEST_conversation_compactor_TARGET) $(TEST_rolling_summary_TARGET) $(TEST_incomplete_task_bug_TARGET) \
     $(TEST_messages_array_bug_TARGET) $(TEST_mcp_client_TARGET) $(TEST_vector_db_TARGET) \
     $(TEST_document_store_TARGET) $(TEST_task_store_TARGET) $(TEST_pdf_extractor_TARGET) \
     $(TEST_document_chunker_TARGET) $(TEST_approval_gate_TARGET) $(TEST_atomic_file_TARGET) \
@@ -363,7 +364,7 @@ VALGRIND_TESTS := \
     $(TEST_output_TARGET) $(TEST_prompt_TARGET) $(TEST_conversation_TARGET) \
     $(TEST_conversation_vdb_TARGET) $(TEST_tools_TARGET) $(TEST_ralph_TARGET) \
     $(TEST_todo_manager_TARGET) $(TEST_vector_db_tool_TARGET) \
-    $(TEST_memory_tool_TARGET) $(TEST_token_manager_TARGET) $(TEST_conversation_compactor_TARGET) \
+    $(TEST_memory_tool_TARGET) $(TEST_token_manager_TARGET) $(TEST_conversation_compactor_TARGET) $(TEST_rolling_summary_TARGET) \
     $(TEST_model_tools_TARGET) $(TEST_vector_db_TARGET) $(TEST_task_store_TARGET) \
     $(TEST_pdf_extractor_TARGET) $(TEST_document_chunker_TARGET) $(TEST_approval_gate_TARGET) \
     $(TEST_atomic_file_TARGET) $(TEST_path_normalize_TARGET) $(TEST_protected_files_TARGET) \

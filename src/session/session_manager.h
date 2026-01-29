@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include "conversation_tracker.h"
+#include "rolling_summary.h"
 
 typedef struct {
     char* api_url;
@@ -21,6 +22,7 @@ typedef struct {
     SessionConfig config;
     ConversationHistory conversation;
     int tool_count;
+    RollingSummary rolling_summary;
 } SessionData;
 
 void session_data_init(SessionData* session);

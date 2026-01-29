@@ -1,5 +1,6 @@
 #include "context_enhancement.h"
 #include "ralph.h"
+#include "rolling_summary.h"
 #include "todo_tool.h"
 #include "memory_tool.h"
 #include "../utils/context_retriever.h"
@@ -14,6 +15,10 @@
 
 static const char* const MEMORY_SECTION_HEADER = "\n\n# Relevant Memories\n"
                                                 "The following memories may be relevant to the current conversation:\n";
+
+static const char* const SUMMARY_SECTION_HEADER =
+    "\n\n# Prior Conversation Summary\n"
+    "Summary of earlier conversation that has been compacted:\n";
 
 static char* retrieve_relevant_memories(const char* query) {
     if (query == NULL || strlen(query) == 0) return NULL;
@@ -114,7 +119,10 @@ char* build_enhanced_prompt_with_context(const RalphSession* session,
         formatted_context = format_context_for_prompt(context);
     }
 
-    if (memories == NULL && formatted_context == NULL) {
+    const RollingSummary* summary = &session->session_data.rolling_summary;
+    int has_summary = summary->summary_text != NULL && strlen(summary->summary_text) > 0;
+
+    if (memories == NULL && formatted_context == NULL && !has_summary) {
         free_context_result(context);
         return enhanced_prompt;
     }
@@ -129,6 +137,10 @@ char* build_enhanced_prompt_with_context(const RalphSession* session,
         new_len += strlen(formatted_context) + 2;
     }
 
+    if (has_summary) {
+        new_len += strlen(SUMMARY_SECTION_HEADER) + strlen(summary->summary_text) + 2;
+    }
+
     char* final_prompt = malloc(new_len);
     if (final_prompt == NULL) {
         free(memories);
@@ -138,6 +150,12 @@ char* build_enhanced_prompt_with_context(const RalphSession* session,
     }
 
     strcpy(final_prompt, enhanced_prompt);
+
+    if (has_summary) {
+        strcat(final_prompt, SUMMARY_SECTION_HEADER);
+        strcat(final_prompt, summary->summary_text);
+        strcat(final_prompt, "\n");
+    }
 
     if (memories != NULL) {
         strcat(final_prompt, MEMORY_SECTION_HEADER);

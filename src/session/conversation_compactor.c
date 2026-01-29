@@ -1,4 +1,5 @@
 #include "conversation_compactor.h"
+#include "rolling_summary.h"
 #include "token_manager.h"
 #include "debug_output.h"
 #include <stdio.h>
@@ -6,15 +7,15 @@
 #include <string.h>
 
 #define DEFAULT_PRESERVE_RECENT_MESSAGES 10
-#define DEFAULT_BACKGROUND_THRESHOLD 0.6f
 #define ESTIMATED_TOKENS_PER_MESSAGE 50
+#define MIN_MESSAGES_FOR_SUMMARY 3
 
 void compaction_config_init(CompactionConfig* config) {
     if (config == NULL) return;
     
     config->preserve_recent_messages = DEFAULT_PRESERVE_RECENT_MESSAGES;
     // Default assumes 8K context; callers with larger windows should reconfigure
-    config->background_threshold = (int)(8192 * DEFAULT_BACKGROUND_THRESHOLD);
+    config->background_threshold = (int)(8192 * COMPACTION_TRIGGER_THRESHOLD);
 }
 
 int should_background_compact(const ConversationHistory* conversation,
@@ -35,6 +36,31 @@ int should_background_compact(const ConversationHistory* conversation,
     }
     
     return 0;
+}
+
+static int estimate_messages_to_trim(const ConversationHistory* conversation,
+                                     const TokenConfig* token_config,
+                                     int current_tokens,
+                                     int target_tokens,
+                                     const char* system_prompt) {
+    if (conversation == NULL || token_config == NULL) return 0;
+    if (current_tokens <= target_tokens) return 0;
+
+    int tokens_to_remove = current_tokens - target_tokens;
+    int system_tokens = system_prompt ? estimate_token_count(system_prompt, token_config) : 0;
+    int running_tokens = system_tokens;
+    int messages_to_trim = 0;
+
+    for (size_t i = 0; i < conversation->count && running_tokens < tokens_to_remove; i++) {
+        if (conversation->data[i].role != NULL &&
+            strcmp(conversation->data[i].role, "tool") != 0) {
+            running_tokens += estimate_token_count(conversation->data[i].content, token_config);
+            running_tokens += 10;
+            messages_to_trim++;
+        }
+    }
+
+    return messages_to_trim;
 }
 
 int background_compact_conversation(SessionData* session,
@@ -62,8 +88,51 @@ int background_compact_conversation(SessionData* session,
                 current_tokens, config->background_threshold);
     debug_printf("Removing oldest messages to maintain performance (full history preserved in vector DB)\n");
 
-    // Target 50% to leave headroom before the next compaction is needed
-    int target_tokens = (int)(session->config.context_window * 0.5);
+    int target_tokens = (int)(session->config.context_window * COMPACTION_TARGET_THRESHOLD);
+
+    int messages_to_trim = estimate_messages_to_trim(
+        &session->conversation,
+        &token_config,
+        current_tokens,
+        target_tokens,
+        session->config.system_prompt
+    );
+
+    if (messages_to_trim >= MIN_MESSAGES_FOR_SUMMARY &&
+        session->config.api_url != NULL &&
+        session->config.model != NULL) {
+        debug_printf("Generating rolling summary for %d messages before trimming\n", messages_to_trim);
+
+        char* new_summary = NULL;
+        int summary_result = generate_rolling_summary(
+            session->config.api_url,
+            session->config.api_key,
+            session->config.api_type,
+            session->config.model,
+            session->conversation.data,
+            messages_to_trim,
+            session->rolling_summary.summary_text,
+            &new_summary
+        );
+
+        if (summary_result == 0 && new_summary != NULL) {
+            free(session->rolling_summary.summary_text);
+            session->rolling_summary.summary_text = new_summary;
+            session->rolling_summary.messages_summarized += messages_to_trim;
+
+            TokenConfig sum_token_config;
+            token_config_init(&sum_token_config, session->config.context_window);
+            session->rolling_summary.estimated_tokens =
+                estimate_token_count(new_summary, &sum_token_config);
+
+            debug_printf("Rolling summary updated (%d total messages summarized, ~%d tokens)\n",
+                        session->rolling_summary.messages_summarized,
+                        session->rolling_summary.estimated_tokens);
+        } else {
+            debug_printf("Failed to generate rolling summary, proceeding with trim anyway\n");
+        }
+    }
+
     int messages_trimmed = trim_conversation_for_tokens(&session->conversation, &token_config, target_tokens, session->config.system_prompt);
 
     if (messages_trimmed > 0) {
@@ -78,7 +147,7 @@ int background_compact_conversation(SessionData* session,
         debug_printf("Full conversation history remains available in vector database\n");
 
         debug_printf("Background trimming: removed %d messages, %d remaining\n",
-                    messages_trimmed, session->conversation.count);
+                    messages_trimmed, (int)session->conversation.count);
 
         return COMPACT_SUCCESS_TRIMMED;
     }

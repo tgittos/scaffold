@@ -26,6 +26,7 @@ CORE_SOURCES := \
     $(SRCDIR)/utils/json_escape.c \
     $(SRCDIR)/session/conversation_tracker.c \
     $(SRCDIR)/session/conversation_compactor.c \
+    $(SRCDIR)/session/rolling_summary.c \
     $(SRCDIR)/session/session_manager.c \
     $(SRCDIR)/session/token_manager.c \
     $(SRCDIR)/llm/llm_provider.c
@@ -166,6 +167,7 @@ RALPH_CORE_DEPS := \
     $(SRCDIR)/utils/prompt_loader.c \
     $(SRCDIR)/session/conversation_tracker.c \
     $(SRCDIR)/session/conversation_compactor.c \
+    $(SRCDIR)/session/rolling_summary.c \
     $(SRCDIR)/session/session_manager.c \
     $(SRCDIR)/network/api_common.c \
     $(SRCDIR)/network/streaming.c \

@@ -14,6 +14,7 @@
 #include "../llm/embeddings_service.h"
 #include "token_manager.h"
 #include "conversation_compactor.h"
+#include "rolling_summary.h"
 #include "session_manager.h"
 #include "model_capabilities.h"
 #include "python_tool.h"
@@ -538,7 +539,7 @@ int manage_conversation_tokens(RalphSession* session, const char* user_message,
     CompactionConfig compact_config;
     compaction_config_init(&compact_config);
     
-    compact_config.background_threshold = (int)(config->context_window * 0.4f);
+    compact_config.background_threshold = (int)(config->context_window * COMPACTION_TRIGGER_THRESHOLD);
     
     CompactionResult background_result = {0};
     int background_status = background_compact_conversation(&session->session_data, &compact_config, &background_result);
