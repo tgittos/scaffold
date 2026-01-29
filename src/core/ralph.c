@@ -95,6 +95,11 @@ int ralph_init_session(RalphSession* session) {
         fprintf(stderr, "Warning: Message store unavailable, messaging disabled\n");
     } else {
         messaging_tool_set_agent_id(session->session_id);
+        // Check if we're a subagent with a parent
+        const char* parent_id = getenv(RALPH_PARENT_AGENT_ID_ENV);
+        if (parent_id != NULL && parent_id[0] != '\0') {
+            messaging_tool_set_parent_agent_id(parent_id);
+        }
     }
 
     session_data_init(&session->session_data);
@@ -176,6 +181,7 @@ void ralph_cleanup_session(RalphSession* session) {
     mcp_client_cleanup(&session->mcp_client);
 
     messaging_tool_set_agent_id(NULL);
+    messaging_tool_set_parent_agent_id(NULL);
 
     // Global tool reference must be cleared before the todo list it points to is destroyed
     clear_todo_tool_reference();

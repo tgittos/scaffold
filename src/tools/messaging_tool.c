@@ -7,7 +7,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define RALPH_PARENT_AGENT_ID "RALPH_PARENT_AGENT_ID"
+
 static char* g_agent_id = NULL;
+static char* g_parent_agent_id = NULL;
 
 void messaging_tool_set_agent_id(const char* agent_id) {
     free(g_agent_id);
@@ -16,6 +19,44 @@ void messaging_tool_set_agent_id(const char* agent_id) {
 
 const char* messaging_tool_get_agent_id(void) {
     return g_agent_id;
+}
+
+void messaging_tool_set_parent_agent_id(const char* parent_id) {
+    free(g_parent_agent_id);
+    g_parent_agent_id = parent_id ? strdup(parent_id) : NULL;
+}
+
+const char* messaging_tool_get_parent_agent_id(void) {
+    return g_parent_agent_id;
+}
+
+int execute_get_agent_info_tool_call(const ToolCall *tool_call, ToolResult *result) {
+    if (tool_call == NULL || result == NULL) return -1;
+
+    tool_result_builder_t* builder = tool_result_builder_create(tool_call->id);
+    if (builder == NULL) return -1;
+
+    const char* agent_id = messaging_tool_get_agent_id();
+    const char* parent_id = messaging_tool_get_parent_agent_id();
+
+    char response[512];
+    if (parent_id != NULL) {
+        snprintf(response, sizeof(response),
+                 "{\"agent_id\": \"%s\", \"parent_agent_id\": \"%s\", \"is_subagent\": true}",
+                 agent_id ? agent_id : "", parent_id);
+    } else {
+        snprintf(response, sizeof(response),
+                 "{\"agent_id\": \"%s\", \"parent_agent_id\": null, \"is_subagent\": false}",
+                 agent_id ? agent_id : "");
+    }
+
+    tool_result_builder_set_success(builder, response);
+    ToolResult* temp = tool_result_builder_finalize(builder);
+    if (temp) {
+        *result = *temp;
+        free(temp);
+    }
+    return 0;
 }
 
 int execute_send_message_tool_call(const ToolCall *tool_call, ToolResult *result) {
@@ -580,6 +621,14 @@ int register_messaging_tools(ToolRegistry *registry) {
                        "Check for unread messages from subscribed channels",
                        check_ch_params, 2, execute_check_channel_messages_tool_call);
     free_tool_params(check_ch_params, 2);
+    if (rc != 0) return -1;
+
+    // get_agent_info tool (no parameters)
+    rc = register_tool(registry, "get_agent_info",
+                       "Get this agent's ID and parent agent ID (if running as a subagent). "
+                       "Use this to discover your agent_id for sharing with other agents, "
+                       "or to get your parent's ID to send messages back to them.",
+                       NULL, 0, execute_get_agent_info_tool_call);
     if (rc != 0) return -1;
 
     return 0;

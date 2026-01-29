@@ -5,6 +5,7 @@
 #include "../policy/subagent_approval.h"
 #include "../session/conversation_tracker.h"
 #include "../db/message_store.h"
+#include "messaging_tool.h"
 #include <cJSON.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -636,6 +637,12 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
         snprintf(response_fd_str, sizeof(response_fd_str), "%d", response_pipe[0]);
         setenv(RALPH_APPROVAL_REQUEST_FD, request_fd_str, 1);
         setenv(RALPH_APPROVAL_RESPONSE_FD, response_fd_str, 1);
+
+        // Pass parent agent ID for messaging
+        const char* parent_id = messaging_tool_get_agent_id();
+        if (parent_id != NULL) {
+            setenv(RALPH_PARENT_AGENT_ID_ENV, parent_id, 1);
+        }
 
         char *args[7];
         int arg_idx = 0;
