@@ -6,33 +6,73 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pthread.h>
 
 static char* g_agent_id = NULL;
 static char* g_parent_agent_id = NULL;
+static pthread_mutex_t g_agent_mutex;
+static pthread_once_t g_mutex_init_once = PTHREAD_ONCE_INIT;
+
+static void init_agent_mutex(void) {
+    pthread_mutex_init(&g_agent_mutex, NULL);
+}
+
+static void ensure_mutex_initialized(void) {
+    pthread_once(&g_mutex_init_once, init_agent_mutex);
+}
 
 void messaging_tool_set_agent_id(const char* agent_id) {
+    ensure_mutex_initialized();
+    pthread_mutex_lock(&g_agent_mutex);
     free(g_agent_id);
     g_agent_id = agent_id ? strdup(agent_id) : NULL;
+    pthread_mutex_unlock(&g_agent_mutex);
+}
+
+char* messaging_tool_get_agent_id_copy(void) {
+    ensure_mutex_initialized();
+    pthread_mutex_lock(&g_agent_mutex);
+    char* copy = g_agent_id ? strdup(g_agent_id) : NULL;
+    pthread_mutex_unlock(&g_agent_mutex);
+    return copy;
 }
 
 const char* messaging_tool_get_agent_id(void) {
+    /* Deprecated: Use messaging_tool_get_agent_id_copy for thread-safe access.
+     * This function is retained for callers that hold the mutex or run
+     * single-threaded. */
     return g_agent_id;
 }
 
 void messaging_tool_set_parent_agent_id(const char* parent_id) {
+    ensure_mutex_initialized();
+    pthread_mutex_lock(&g_agent_mutex);
     free(g_parent_agent_id);
     g_parent_agent_id = parent_id ? strdup(parent_id) : NULL;
+    pthread_mutex_unlock(&g_agent_mutex);
+}
+
+char* messaging_tool_get_parent_agent_id_copy(void) {
+    ensure_mutex_initialized();
+    pthread_mutex_lock(&g_agent_mutex);
+    char* copy = g_parent_agent_id ? strdup(g_parent_agent_id) : NULL;
+    pthread_mutex_unlock(&g_agent_mutex);
+    return copy;
 }
 
 const char* messaging_tool_get_parent_agent_id(void) {
+    /* Deprecated: Use messaging_tool_get_parent_agent_id_copy for thread-safe access. */
     return g_parent_agent_id;
 }
 
 void messaging_tool_cleanup(void) {
+    ensure_mutex_initialized();
+    pthread_mutex_lock(&g_agent_mutex);
     free(g_agent_id);
     g_agent_id = NULL;
     free(g_parent_agent_id);
     g_parent_agent_id = NULL;
+    pthread_mutex_unlock(&g_agent_mutex);
 }
 
 int execute_get_agent_info_tool_call(const ToolCall *tool_call, ToolResult *result) {
@@ -123,9 +163,14 @@ int execute_send_message_tool_call(const ToolCall *tool_call, ToolResult *result
     int rc = message_send_direct(store, sender_id, recipient_id, content, (int)ttl, msg_id);
 
     if (rc == 0) {
+        char* escaped_recipient = json_escape_string(recipient_id);
+        char* escaped_msg_id = json_escape_string(msg_id);
         tool_result_builder_set_success(builder,
             "{\"success\": true, \"message_id\": \"%s\", \"recipient\": \"%s\"}",
-            msg_id, recipient_id);
+            escaped_msg_id ? escaped_msg_id : msg_id,
+            escaped_recipient ? escaped_recipient : recipient_id);
+        free(escaped_recipient);
+        free(escaped_msg_id);
     } else {
         tool_result_builder_set_error(builder, "Failed to send message");
     }
@@ -327,9 +372,11 @@ int execute_subscribe_channel_tool_call(const ToolCall *tool_call, ToolResult *r
 
     int rc = channel_subscribe(store, channel_name, agent_id);
     if (rc == 0) {
+        char* escaped_channel = json_escape_string(channel_name);
         tool_result_builder_set_success(builder,
             "{\"success\": true, \"channel\": \"%s\", \"subscribed\": true}",
-            channel_name);
+            escaped_channel ? escaped_channel : channel_name);
+        free(escaped_channel);
     } else {
         tool_result_builder_set_error(builder, "Failed to subscribe to channel: %s", channel_name);
     }
@@ -397,9 +444,14 @@ int execute_publish_channel_tool_call(const ToolCall *tool_call, ToolResult *res
     int rc = channel_publish(store, channel_name, sender_id, content, msg_id);
 
     if (rc == 0) {
+        char* escaped_msg_id = json_escape_string(msg_id);
+        char* escaped_channel = json_escape_string(channel_name);
         tool_result_builder_set_success(builder,
             "{\"success\": true, \"message_id\": \"%s\", \"channel\": \"%s\"}",
-            msg_id, channel_name);
+            escaped_msg_id ? escaped_msg_id : msg_id,
+            escaped_channel ? escaped_channel : channel_name);
+        free(escaped_msg_id);
+        free(escaped_channel);
     } else {
         tool_result_builder_set_error(builder, "Failed to publish to channel: %s", channel_name);
     }

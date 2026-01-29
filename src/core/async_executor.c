@@ -24,6 +24,7 @@ struct async_executor {
     pthread_cond_t cond;
     atomic_int running;
     atomic_int cancel_requested;
+    atomic_int thread_exited;  /* Set when thread function has fully completed */
     char* current_message;
     int last_result;
     char* last_error;
@@ -82,6 +83,12 @@ static void* executor_thread_func(void* arg) {
     atomic_store(&executor->running, 0);
     pthread_cond_broadcast(&executor->cond);
 
+    /* Signal that thread has fully completed all work.
+     * This must be the last operation before return to prevent
+     * the main thread from freeing the executor while we're still
+     * accessing it. */
+    atomic_store(&executor->thread_exited, 1);
+
     return NULL;
 }
 
@@ -100,6 +107,7 @@ async_executor_t* async_executor_create(RalphSession* session) {
     executor->pipe_fds[1] = -1;
     atomic_store(&executor->running, 0);
     atomic_store(&executor->cancel_requested, 0);
+    atomic_store(&executor->thread_exited, 1);  /* No thread running yet */
     executor->current_message = NULL;
     executor->last_result = 0;
     executor->last_error = NULL;
@@ -191,6 +199,7 @@ int async_executor_start(async_executor_t* executor, const char* message) {
     executor->last_error = NULL;
     executor->last_result = 0;
     atomic_store(&executor->cancel_requested, 0);
+    atomic_store(&executor->thread_exited, 0);  /* Thread about to start */
     atomic_store(&executor->running, 1);
 
     pthread_mutex_unlock(&executor->mutex);
@@ -278,6 +287,15 @@ int async_executor_wait(async_executor_t* executor) {
         }
     }
     pthread_mutex_unlock(&executor->mutex);
+
+    /* Spin-wait briefly for the detached thread to fully exit.
+     * This prevents a race where we free the executor while the
+     * thread is still in its return path after setting running=0. */
+    int spin_count = 0;
+    while (!atomic_load(&executor->thread_exited) && spin_count < 1000) {
+        usleep(100);  /* 100 microseconds */
+        spin_count++;
+    }
 
     return 0;
 }

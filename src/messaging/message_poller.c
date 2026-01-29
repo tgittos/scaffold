@@ -21,7 +21,6 @@ struct message_poller {
 
 static void* poller_thread_func(void* arg) {
     message_poller_t* poller = (message_poller_t*)arg;
-    message_store_t* store = message_store_get_instance();
 
     while (atomic_load(&poller->running)) {
         int sleep_ms = poller->poll_interval_ms;
@@ -35,6 +34,8 @@ static void* poller_thread_func(void* arg) {
             break;
         }
 
+        /* Re-fetch store each iteration to handle singleton reset */
+        message_store_t* store = message_store_get_instance();
         if (store == NULL) {
             continue;
         }

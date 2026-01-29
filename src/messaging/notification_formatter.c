@@ -261,7 +261,7 @@ char* notification_format_for_llm(const notification_bundle_t* bundle) {
     ptr += written;
     size_t remaining = total_size - written;
 
-    for (size_t i = 0; i < bundle->count && remaining > 0; i++) {
+    for (size_t i = 0; i < bundle->count && remaining > 1; i++) {
         const notification_message_t* msg = &bundle->messages[i];
         int len;
 
@@ -281,9 +281,11 @@ char* notification_format_for_llm(const notification_bundle_t* bundle) {
                           msg->content ? msg->content : "");
         }
 
-        if (len > 0 && (size_t)len < remaining) {
-            ptr += len;
-            remaining -= len;
+        /* Handle snprintf return: if len >= remaining, output was truncated */
+        if (len > 0) {
+            size_t written = ((size_t)len < remaining) ? (size_t)len : remaining - 1;
+            ptr += written;
+            remaining -= written;
         }
     }
 
