@@ -973,8 +973,13 @@ int register_builtin_tools(ToolRegistry *registry) {
         fprintf(stderr, "Warning: Failed to register Python file tools\n");
     }
 
-    if (register_messaging_tools(registry) != 0) {
-        fprintf(stderr, "Warning: Failed to register messaging tools\n");
+    // Only register messaging tools for non-subagent sessions.
+    // Subagents don't need messaging - the harness handles parent notification.
+    const char* is_subagent = getenv("RALPH_IS_SUBAGENT");
+    if (is_subagent == NULL || strcmp(is_subagent, "1") != 0) {
+        if (register_messaging_tools(registry) != 0) {
+            fprintf(stderr, "Warning: Failed to register messaging tools\n");
+        }
     }
 
     return 0;

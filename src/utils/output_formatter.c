@@ -903,9 +903,9 @@ void display_message_notification(int count) {
 
     fprintf(stdout, "\r\033[K" ANSI_YELLOW "● " ANSI_RESET);
     if (count == 1) {
-        fprintf(stdout, ANSI_YELLOW "1 new message" ANSI_RESET "\n");
+        fprintf(stdout, ANSI_YELLOW "1 new message" ANSI_RESET "\n\n");
     } else {
-        fprintf(stdout, ANSI_YELLOW "%d new messages" ANSI_RESET "\n", count);
+        fprintf(stdout, ANSI_YELLOW "%d new messages" ANSI_RESET "\n\n", count);
     }
     fflush(stdout);
 }

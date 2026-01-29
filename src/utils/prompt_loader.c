@@ -66,13 +66,10 @@ static const char* SYSTEM_PROMPT_PART1 =
     "Memory types: correction, preference, fact, instruction, web_content.\n"
     "Relevant memories are auto-retrieved into your context.\n"
     "\n# Inter-Agent Messaging\n"
-    "Tools: get_agent_info, send_message, check_messages, subscribe_channel, "
-    "publish_channel, check_channel_messages.\n"
     "Messages are automatically delivered - you'll be notified when messages arrive.\n"
-    "Subagent pattern: Use get_agent_info to discover parent_agent_id, then send_message "
-    "to report progress/results. The parent receives these automatically without polling.\n"
-    "Parent pattern: After spawning a subagent, wait for its messages instead of repeatedly "
-    "calling subagent_status. Messages arrive automatically via push notification.\n"
+    "Subagent dispatch is ONE atomic action - do NOT create todo lists for it. "
+    "Simply spawn the subagent and inform the user you're waiting. Results are sent "
+    "automatically when the subagent completes.\n"
     "\n# Python Tools\n"
     "External tools in ~/.local/ralph/tools/ are loaded into the Python REPL at startup.\n\n";
 

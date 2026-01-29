@@ -48,12 +48,14 @@ static void* poller_thread_func(void* arg) {
             poller->last_counts.channel_count = (channel_pending > 0) ? channel_pending : 0;
             pthread_mutex_unlock(&poller->counts_mutex);
 
-            if (!atomic_load(&poller->has_pending)) {
-                char notification = 'M';
-                ssize_t written = write(poller->pipe_fds[1], &notification, 1);
-                if (written == 1) {
-                    atomic_store(&poller->has_pending, 1);
-                }
+            // Always write to pipe when messages are pending, even if has_pending is set.
+            // This prevents a race where clear_notification drains the pipe but then
+            // this thread sets has_pending, leaving pipe empty but flag set.
+            // The pipe read in clear_notification drains all pending bytes.
+            char notification = 'M';
+            ssize_t written = write(poller->pipe_fds[1], &notification, 1);
+            if (written == 1) {
+                atomic_store(&poller->has_pending, 1);
             }
         }
     }

@@ -1,6 +1,9 @@
 #include "../../test/unity/unity.h"
 #include "../../src/tools/subagent_tool.h"
+#include "../../src/tools/messaging_tool.h"
+#include "../../src/db/message_store.h"
 #include "../../src/utils/config.h"
+#include "../../src/utils/ralph_home.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -71,11 +74,15 @@ static int spawn_mock_subagent(SubagentManager *manager, const char *mock_output
 void setUp(void) {
     // Initialize config for each test
     config_init();
+    ralph_home_init(NULL);
 }
 
 void tearDown(void) {
     // Clean up config after each test
     config_cleanup();
+    messaging_tool_cleanup();
+    message_store_reset_instance();
+    ralph_home_cleanup();
 }
 
 void test_subagent_manager_init_defaults(void) {
@@ -1075,6 +1082,154 @@ void test_execute_subagent_status_tool_call_with_wait(void) {
     subagent_manager_cleanup(&manager);
 }
 
+// =========================================================================
+// Subagent completion notification tests
+// =========================================================================
+
+void test_subagent_completion_sends_message_to_parent(void) {
+    // Set up message store singleton and agent ID (parent agent)
+    message_store_t* store = message_store_get_instance();
+    TEST_ASSERT_NOT_NULL(store);
+    messaging_tool_set_agent_id("parent-agent-123");
+
+    SubagentManager manager;
+    subagent_manager_init(&manager);
+    char id[SUBAGENT_ID_LENGTH + 1];
+
+    // Spawn a mock subagent that completes successfully
+    int result = spawn_mock_subagent(&manager, "task completed successfully", 0, 50, id);
+    TEST_ASSERT_EQUAL_INT(0, result);
+
+    // Wait for completion using blocking status check
+    SubagentStatus status;
+    char *result_str = NULL, *error_str = NULL;
+    subagent_get_status(&manager, id, 1, &status, &result_str, &error_str);
+
+    // Check that a message was sent to the parent
+    size_t msg_count = 0;
+    DirectMessage** msgs = message_receive_direct(store, "parent-agent-123", 10, &msg_count);
+
+    TEST_ASSERT_EQUAL(1, msg_count);
+    TEST_ASSERT_NOT_NULL(msgs);
+    TEST_ASSERT_NOT_NULL(msgs[0]);
+    TEST_ASSERT_NOT_NULL(msgs[0]->content);
+
+    // Verify message contains expected fields
+    TEST_ASSERT_NOT_NULL(strstr(msgs[0]->content, "subagent_completion"));
+    TEST_ASSERT_NOT_NULL(strstr(msgs[0]->content, "subagent_id"));
+    TEST_ASSERT_NOT_NULL(strstr(msgs[0]->content, id));
+
+    direct_message_free_list(msgs, msg_count);
+    if (result_str) free(result_str);
+    if (error_str) free(error_str);
+
+    subagent_manager_cleanup(&manager);
+}
+
+void test_subagent_failure_sends_message_to_parent(void) {
+    // Set up message store singleton and agent ID (parent agent)
+    message_store_t* store = message_store_get_instance();
+    TEST_ASSERT_NOT_NULL(store);
+    messaging_tool_set_agent_id("parent-agent-456");
+
+    SubagentManager manager;
+    subagent_manager_init(&manager);
+    char id[SUBAGENT_ID_LENGTH + 1];
+
+    // Spawn a mock subagent that fails (non-zero exit code)
+    int result = spawn_mock_subagent(&manager, "error occurred", 1, 50, id);
+    TEST_ASSERT_EQUAL_INT(0, result);
+
+    // Wait for completion using blocking status check
+    SubagentStatus status;
+    char *result_str = NULL, *error_str = NULL;
+    subagent_get_status(&manager, id, 1, &status, &result_str, &error_str);
+
+    // Check that a message was sent to the parent
+    size_t msg_count = 0;
+    DirectMessage** msgs = message_receive_direct(store, "parent-agent-456", 10, &msg_count);
+
+    TEST_ASSERT_EQUAL(1, msg_count);
+    TEST_ASSERT_NOT_NULL(msgs);
+    TEST_ASSERT_NOT_NULL(msgs[0]);
+    TEST_ASSERT_NOT_NULL(msgs[0]->content);
+
+    // Verify message indicates failure
+    TEST_ASSERT_NOT_NULL(strstr(msgs[0]->content, "subagent_completion"));
+    TEST_ASSERT_NOT_NULL(strstr(msgs[0]->content, "failed"));
+
+    direct_message_free_list(msgs, msg_count);
+    if (result_str) free(result_str);
+    if (error_str) free(error_str);
+
+    subagent_manager_cleanup(&manager);
+}
+
+void test_subagent_timeout_sends_message_to_parent(void) {
+    // Set up message store singleton and agent ID (parent agent)
+    message_store_t* store = message_store_get_instance();
+    TEST_ASSERT_NOT_NULL(store);
+    messaging_tool_set_agent_id("parent-agent-789");
+
+    SubagentManager manager;
+    // Set a very short timeout (1 second) for testing
+    subagent_manager_init_with_config(&manager, 5, 1);
+    char id[SUBAGENT_ID_LENGTH + 1];
+
+    // Spawn a mock subagent that takes longer than the timeout
+    int result = spawn_mock_subagent(&manager, "still working", 0, 2000, id);  // 2 second delay
+    TEST_ASSERT_EQUAL_INT(0, result);
+
+    // Wait for timeout to occur
+    sleep(2);
+
+    // Poll to detect timeout and trigger notification
+    int changed = subagent_poll_all(&manager);
+    TEST_ASSERT_TRUE(changed > 0);
+
+    // Check that a message was sent to the parent
+    size_t msg_count = 0;
+    DirectMessage** msgs = message_receive_direct(store, "parent-agent-789", 10, &msg_count);
+
+    TEST_ASSERT_EQUAL(1, msg_count);
+    TEST_ASSERT_NOT_NULL(msgs);
+    TEST_ASSERT_NOT_NULL(msgs[0]);
+    TEST_ASSERT_NOT_NULL(msgs[0]->content);
+
+    // Verify message indicates timeout
+    TEST_ASSERT_NOT_NULL(strstr(msgs[0]->content, "subagent_completion"));
+    TEST_ASSERT_NOT_NULL(strstr(msgs[0]->content, "timeout"));
+
+    direct_message_free_list(msgs, msg_count);
+
+    subagent_manager_cleanup(&manager);
+}
+
+void test_subagent_no_notification_without_parent_id(void) {
+    // Set up message store singleton but DON'T set agent ID (simulating no parent)
+    message_store_t* store = message_store_get_instance();
+    TEST_ASSERT_NOT_NULL(store);
+    messaging_tool_cleanup();  // Ensure no agent ID is set
+
+    SubagentManager manager;
+    subagent_manager_init(&manager);
+    char id[SUBAGENT_ID_LENGTH + 1];
+
+    // Spawn a mock subagent that completes
+    int result = spawn_mock_subagent(&manager, "done", 0, 50, id);
+    TEST_ASSERT_EQUAL_INT(0, result);
+
+    // Wait for completion
+    SubagentStatus status;
+    subagent_get_status(&manager, id, 1, &status, NULL, NULL);
+
+    // No message should be sent since there's no parent agent ID
+    // We can't easily verify this without a recipient ID, but the test
+    // ensures the code doesn't crash when parent ID is not set
+
+    subagent_manager_cleanup(&manager);
+}
+
 int main(void) {
     UNITY_BEGIN();
 
@@ -1152,6 +1307,12 @@ int main(void) {
     RUN_TEST(test_execute_subagent_status_tool_call_not_found);
     RUN_TEST(test_execute_subagent_status_tool_call_success);
     RUN_TEST(test_execute_subagent_status_tool_call_with_wait);
+
+    // Subagent completion notification tests
+    RUN_TEST(test_subagent_completion_sends_message_to_parent);
+    RUN_TEST(test_subagent_failure_sends_message_to_parent);
+    RUN_TEST(test_subagent_timeout_sends_message_to_parent);
+    RUN_TEST(test_subagent_no_notification_without_parent_id);
 
     return UNITY_END();
 }

@@ -108,6 +108,12 @@ char* notification_format_for_llm(const notification_bundle_t* bundle) {
         if (bundle->messages[i].content) {
             total_size += strlen(bundle->messages[i].content);
         }
+        if (bundle->messages[i].sender_id) {
+            total_size += strlen(bundle->messages[i].sender_id);
+        }
+        if (bundle->messages[i].channel_id) {
+            total_size += strlen(bundle->messages[i].channel_id);
+        }
     }
 
     char* result = malloc(total_size);

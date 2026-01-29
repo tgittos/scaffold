@@ -62,6 +62,7 @@ graph TB
     ToolRegistry --> PDFTool[PDF Tool<br/>pdf_tool.c/h]
     ToolRegistry --> VectorDBTool[Vector DB Tool<br/>vector_db_tool.c/h]
     ToolRegistry --> SubagentTool[Subagent Tool<br/>subagent_tool.c/h]
+    ToolRegistry --> MessagingTool[Messaging Tool<br/>messaging_tool.c/h]
 
     PythonFileTools --> PythonDefaults[Python Defaults<br/>python_defaults/]
     TodoTool --> TodoManager[Todo Manager<br/>todo_manager.c/h]
@@ -162,7 +163,7 @@ graph TB
     class CLI,Core,Session,ConfigSystem,MemoryCommands,ContextEnhancement,RecapModule,StreamingHandler,ToolExecutor coreLayer
     class ApprovalGate,RateLimiter,Allowlist,GatePrompter,ProtectedFiles,ShellParser,AtomicFile,SubagentApproval,PatternGen,PathNormalize policyLayer
     class LLMProvider,ProviderRegistry,Anthropic,OpenAI,LocalAI,ModelCaps,ClaudeModel,GPTModel,QwenModel,DeepSeekModel,DefaultModel llmLayer
-    class ToolsSystem,ToolRegistry,PythonTool,PythonFileTools,PythonDefaults,TodoTool,MemoryTool,PDFTool,VectorDBTool,SubagentTool,TodoManager,TodoDisplay toolsLayer
+    class ToolsSystem,ToolRegistry,PythonTool,PythonFileTools,PythonDefaults,TodoTool,MemoryTool,PDFTool,VectorDBTool,SubagentTool,MessagingTool,TodoManager,TodoDisplay toolsLayer
     class ConversationTracker,TokenManager,ConversationCompactor sessionLayer
     class HTTPClient,APICommon networkLayer
     class OutputFormatter,PromptLoader,JSONEscape,DebugOutput,ToolResultBuilder,CommonUtils,ContextRetriever utilsLayer
@@ -554,6 +555,73 @@ graph TB
 - `subagent`: Spawn a new subagent with a task
 - `subagent_status`: Query subagent status with optional blocking wait
 
+## Inter-Agent Messaging System
+
+Ralph supports inter-agent communication through a messaging system that enables parent-child and peer-to-peer agent communication.
+
+```mermaid
+graph TB
+    subgraph Parent Agent
+        ParentRalph[Parent Ralph] --> MessagePoller[Message Poller<br/>message_poller.c/h]
+        ParentRalph --> MessagingTool[Messaging Tool<br/>messaging_tool.c/h]
+        MessagePoller --> NotifyFmt[Notification Formatter<br/>notification_formatter.c/h]
+    end
+
+    subgraph Message Store
+        MessageStore[Message Store<br/>message_store.c/h<br/>SQLite Singleton]
+        MessageStore --> DirectMsgs[Direct Messages]
+        MessageStore --> Channels[Pub/Sub Channels]
+    end
+
+    subgraph Child Agent
+        ChildRalph[Child Ralph<br/>--subagent mode]
+        SubagentNotify[Subagent Notify<br/>Auto-completion message]
+    end
+
+    MessagingTool --> MessageStore
+    MessagePoller --> MessageStore
+    SubagentNotify --> MessageStore
+    MessageStore --> ParentRalph
+
+    classDef parent fill:#e1f5fe
+    classDef store fill:#e3f2fd
+    classDef child fill:#fff3e0
+
+    class ParentRalph,MessagePoller,MessagingTool,NotifyFmt parent
+    class MessageStore,DirectMsgs,Channels store
+    class ChildRalph,SubagentNotify child
+```
+
+### Messaging Components
+
+- **Message Store** (`message_store.c/h`): SQLite-backed singleton for persistent message storage
+  - Direct messages between agents
+  - Pub/sub channels for broadcast communication
+  - Automatic message expiry and cleanup
+- **Message Poller** (`message_poller.c/h`): Background thread that polls for new messages
+  - Uses self-pipe for integration with select/poll loops
+  - Configurable poll interval
+- **Notification Formatter** (`notification_formatter.c/h`): Formats messages for LLM context injection
+- **Messaging Tool** (`messaging_tool.c/h`): Tool interface for agent messaging operations
+- **Message Processor** (`message_processor.c/h`): Processes incoming messages and injects into context
+
+### Messaging Tools
+- `get_agent_info`: Get current agent ID and parent agent ID
+- `send_message`: Send a direct message to another agent
+- `check_messages`: Check for and receive pending messages
+- `subscribe_channel`: Subscribe to a pub/sub channel
+- `publish_channel`: Publish a message to a channel
+- `check_channel_messages`: Receive messages from subscribed channels
+
+### Automatic Subagent Notifications
+
+When a subagent completes (success, failure, or timeout), the parent harness automatically sends a completion message to the parent agent. This eliminates the need for subagents to explicitly send messages back. The notification includes:
+- Subagent ID and status
+- Result or error message
+- Original task description
+
+Subagents do not have access to messaging tools - the parent harness handles all notification automatically.
+
 ## Approval Gate System
 
 Ralph implements a comprehensive approval gate system that controls tool execution based on security categories and user preferences.
@@ -845,6 +913,14 @@ graph TB
 - **`subagent`**: Spawn a child ralph process for parallel task execution
 - **`subagent_status`**: Query the status of a running subagent
 
+### Messaging Tools (6 tools)
+- **`get_agent_info`**: Get current agent ID and parent information
+- **`send_message`**: Send a direct message to another agent
+- **`check_messages`**: Check for and receive pending direct messages
+- **`subscribe_channel`**: Subscribe to a pub/sub channel
+- **`publish_channel`**: Publish a message to a channel
+- **`check_channel_messages`**: Receive messages from subscribed channels
+
 ### Todo Tools (2 tools)
 - **`TodoWrite`**: Create, update status/priority, delete, or bulk set todos
 - **`TodoRead`**: List and filter todos by status and priority
@@ -882,6 +958,7 @@ src/
 │   ├── document_store.c/h  # High-level document storage
 │   ├── metadata_store.c/h  # Chunk metadata storage
 │   ├── task_store.c/h      # SQLite-based persistent task storage
+│   ├── message_store.c/h   # Inter-agent messaging storage
 │   └── hnswlib_wrapper.cpp/h # C++ bridge
 ├── llm/                    # LLM integration
 │   ├── llm_provider.c/h    # Provider abstraction
@@ -904,6 +981,10 @@ src/
 │       └── local_embedding_provider.c
 ├── mcp/                    # Model Context Protocol
 │   └── mcp_client.c/h      # MCP client implementation
+├── messaging/              # Inter-agent messaging
+│   ├── message_poller.c/h  # Background message polling
+│   ├── message_processor.c/h # Message context injection
+│   └── notification_formatter.c/h # LLM notification formatting
 ├── network/                # Network layer
 │   ├── http_client.c/h     # HTTP client (cURL wrapper)
 │   ├── api_common.c/h      # API payload building
@@ -942,6 +1023,7 @@ src/
 │   ├── python_tool.c/h     # Embedded Python interpreter
 │   ├── python_tool_files.c/h # Python file-based tools
 │   ├── subagent_tool.c/h   # Subagent process spawning
+│   ├── messaging_tool.c/h  # Inter-agent messaging (6 tools)
 │   ├── todo_manager.c/h    # Todo data structures
 │   ├── todo_tool.c/h       # Todo tool call handler
 │   ├── todo_display.c/h    # Todo visualization

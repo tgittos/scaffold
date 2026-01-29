@@ -1,6 +1,7 @@
 #include "subagent_tool.h"
 #include "../utils/config.h"
 #include "../utils/json_escape.h"
+#include "../utils/debug_output.h"
 #include "../core/ralph.h"
 #include "../policy/subagent_approval.h"
 #include "../session/conversation_tracker.h"
@@ -476,6 +477,69 @@ static void handle_process_exit(Subagent *sub, int proc_status) {
 }
 
 /**
+ * Send a completion message to the parent agent on behalf of a completed subagent.
+ * Called by the harness when subagent state changes to completed/failed/timeout.
+ */
+static void subagent_notify_parent(const Subagent* sub) {
+    if (sub == NULL) {
+        return;
+    }
+
+    const char* parent_id = messaging_tool_get_agent_id();
+    if (parent_id == NULL || parent_id[0] == '\0') {
+        debug_printf("subagent_notify_parent: no parent agent ID set, skipping notification\n");
+        return;
+    }
+
+    message_store_t* store = message_store_get_instance();
+    if (store == NULL) {
+        debug_printf("subagent_notify_parent: message store unavailable\n");
+        return;
+    }
+
+    cJSON* msg = cJSON_CreateObject();
+    if (msg == NULL) {
+        debug_printf("subagent_notify_parent: failed to create JSON object\n");
+        return;
+    }
+
+    cJSON_AddStringToObject(msg, "type", "subagent_completion");
+    cJSON_AddStringToObject(msg, "subagent_id", sub->id);
+    cJSON_AddStringToObject(msg, "status",
+        sub->status == SUBAGENT_STATUS_COMPLETED ? "completed" :
+        sub->status == SUBAGENT_STATUS_FAILED ? "failed" :
+        sub->status == SUBAGENT_STATUS_TIMEOUT ? "timeout" : "unknown");
+
+    if (sub->result != NULL) {
+        cJSON_AddStringToObject(msg, "result", sub->result);
+    }
+    if (sub->error != NULL) {
+        cJSON_AddStringToObject(msg, "error", sub->error);
+    }
+    if (sub->task != NULL) {
+        cJSON_AddStringToObject(msg, "task", sub->task);
+    }
+
+    char* json_str = cJSON_PrintUnformatted(msg);
+    cJSON_Delete(msg);
+
+    if (json_str == NULL) {
+        debug_printf("subagent_notify_parent: failed to serialize JSON\n");
+        return;
+    }
+
+    char msg_id[40];
+    int result = message_send_direct(store, sub->id, parent_id, json_str, 0, msg_id);
+    if (result != 0) {
+        debug_printf("subagent_notify_parent: failed to send message to parent\n");
+    } else {
+        debug_printf("subagent_notify_parent: sent completion message %s to parent %s\n",
+                     msg_id, parent_id);
+    }
+    free(json_str);
+}
+
+/**
  * Poll all running subagents for status changes (non-blocking).
  * Returns the number of subagents that changed state.
  */
@@ -500,6 +564,7 @@ int subagent_poll_all(SubagentManager *manager) {
             read_subagent_output(sub);
             sub->status = SUBAGENT_STATUS_TIMEOUT;
             sub->error = strdup("Subagent execution timed out");
+            subagent_notify_parent(sub);
             changed++;
             continue;
         }
@@ -511,10 +576,12 @@ int subagent_poll_all(SubagentManager *manager) {
 
         if (result == sub->pid) {
             handle_process_exit(sub, proc_status);
+            subagent_notify_parent(sub);
             changed++;
         } else if (result == -1 && errno != ECHILD) {
             sub->status = SUBAGENT_STATUS_FAILED;
             sub->error = strdup("Failed to check subagent status");
+            subagent_notify_parent(sub);
             changed++;
         }
         // result == 0 means still running, no change
@@ -783,6 +850,7 @@ int subagent_get_status(SubagentManager *manager, const char *subagent_id, int w
             read_subagent_output(sub);
             sub->status = SUBAGENT_STATUS_TIMEOUT;
             sub->error = strdup("Subagent execution timed out");
+            subagent_notify_parent(sub);
             RETURN_CURRENT_STATE();
         }
 
@@ -793,9 +861,11 @@ int subagent_get_status(SubagentManager *manager, const char *subagent_id, int w
 
         if (waitpid_result == sub->pid) {
             handle_process_exit(sub, proc_status);
+            subagent_notify_parent(sub);
         } else if (waitpid_result == -1 && errno != ECHILD) {
             sub->status = SUBAGENT_STATUS_FAILED;
             sub->error = strdup("Failed to check subagent status");
+            subagent_notify_parent(sub);
         }
         // waitpid_result == 0 means still running, status unchanged
 
@@ -811,6 +881,7 @@ int subagent_get_status(SubagentManager *manager, const char *subagent_id, int w
             read_subagent_output(sub);
             sub->status = SUBAGENT_STATUS_TIMEOUT;
             sub->error = strdup("Subagent execution timed out");
+            subagent_notify_parent(sub);
             break;
         }
 
@@ -821,10 +892,12 @@ int subagent_get_status(SubagentManager *manager, const char *subagent_id, int w
 
         if (waitpid_result == sub->pid) {
             handle_process_exit(sub, proc_status);
+            subagent_notify_parent(sub);
             break;
         } else if (waitpid_result == -1 && errno != ECHILD) {
             sub->status = SUBAGENT_STATUS_FAILED;
             sub->error = strdup("Failed to check subagent status");
+            subagent_notify_parent(sub);
             break;
         }
 
@@ -946,8 +1019,8 @@ int register_subagent_tool(ToolRegistry *registry, SubagentManager *manager) {
     int result = register_tool(registry, "subagent",
                               "Spawn a background subagent process to execute a delegated task. "
                               "The subagent runs with fresh context and cannot spawn additional subagents. "
-                              "Subagents should use send_message to report results to their parent. "
-                              "You'll receive messages automatically - no need to poll subagent_status.",
+                              "Results are automatically sent to you when the subagent completes - "
+                              "no need to poll or wait for messages.",
                               parameters, 2, execute_subagent_tool_call);
 
     for (int i = 0; i < 2; i++) {
@@ -1223,6 +1296,9 @@ int ralph_run_as_subagent(const char *task, const char *context) {
         fprintf(stderr, "Error: Subagent requires a task\n");
         return -1;
     }
+
+    // Signal subagent mode BEFORE session init (for tool registration decisions)
+    setenv("RALPH_IS_SUBAGENT", "1", 1);
 
     // If approval channel setup fails, subagent falls back to direct TTY prompting
     // or denial (if no TTY), which is acceptable for backwards compatibility.
