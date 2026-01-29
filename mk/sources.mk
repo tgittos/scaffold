@@ -156,6 +156,7 @@ UTIL_DEPS := \
 
 RALPH_CORE_DEPS := \
     $(SRCDIR)/core/ralph.c \
+    $(SRCDIR)/core/async_executor.c \
     $(SRCDIR)/core/tool_executor.c \
     $(SRCDIR)/core/streaming_handler.c \
     $(SRCDIR)/core/context_enhancement.c \

@@ -3,6 +3,7 @@
 #include "../utils/json_escape.h"
 #include "../utils/debug_output.h"
 #include "../core/ralph.h"
+#include "../core/async_executor.h"
 #include "../policy/subagent_approval.h"
 #include "../session/conversation_tracker.h"
 #include "../db/message_store.h"
@@ -786,6 +787,16 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
     }
 
     strcpy(subagent_id_out, id);
+
+    /* Notify the async executor (if running) that a new subagent was spawned.
+     * This wakes up the main thread's select() loop so it can rebuild its
+     * fd_set to include the new subagent's approval channel FD. Without this,
+     * approval prompts would be delayed until the select() timeout or user input. */
+    async_executor_t* executor = async_executor_get_active();
+    if (executor != NULL) {
+        async_executor_notify_subagent_spawned(executor);
+        debug_printf("subagent_spawn: Notified async executor of new subagent\n");
+    }
 
     return 0;
 }

@@ -145,6 +145,55 @@ void test_interrupt_handler_trigger_sets_flag(void) {
     TEST_ASSERT_EQUAL(1, interrupt_pending());
 }
 
+void test_async_executor_get_active_null_before_creation(void) {
+    /* Get active should return NULL when no executor exists */
+    async_executor_t* active = async_executor_get_active();
+    TEST_ASSERT_NULL(active);
+}
+
+void test_async_executor_get_active_returns_executor_after_creation(void) {
+    RalphSession session = {0};
+    async_executor_t* executor = async_executor_create(&session);
+    TEST_ASSERT_NOT_NULL(executor);
+
+    async_executor_t* active = async_executor_get_active();
+    TEST_ASSERT_EQUAL_PTR(executor, active);
+
+    async_executor_destroy(executor);
+}
+
+void test_async_executor_get_active_null_after_destruction(void) {
+    RalphSession session = {0};
+    async_executor_t* executor = async_executor_create(&session);
+    TEST_ASSERT_NOT_NULL(executor);
+
+    async_executor_destroy(executor);
+
+    async_executor_t* active = async_executor_get_active();
+    TEST_ASSERT_NULL(active);
+}
+
+void test_async_executor_notify_subagent_spawned_null_is_safe(void) {
+    /* Calling notify on NULL executor should be a no-op */
+    async_executor_notify_subagent_spawned(NULL);
+    TEST_PASS();
+}
+
+void test_async_executor_notify_subagent_spawned_when_not_running_is_noop(void) {
+    RalphSession session = {0};
+    async_executor_t* executor = async_executor_create(&session);
+    TEST_ASSERT_NOT_NULL(executor);
+
+    /* When not running, notify should not send any event */
+    async_executor_notify_subagent_spawned(executor);
+
+    /* Process events should return 0 (no event) since notify was a no-op */
+    int result = async_executor_process_events(executor);
+    TEST_ASSERT_EQUAL(0, result);
+
+    async_executor_destroy(executor);
+}
+
 int main(void) {
     UNITY_BEGIN();
 
@@ -166,6 +215,11 @@ int main(void) {
     RUN_TEST(test_async_executor_process_events_null_returns_error);
     RUN_TEST(test_async_executor_process_events_no_pending_returns_zero);
     RUN_TEST(test_interrupt_handler_trigger_sets_flag);
+    RUN_TEST(test_async_executor_get_active_null_before_creation);
+    RUN_TEST(test_async_executor_get_active_returns_executor_after_creation);
+    RUN_TEST(test_async_executor_get_active_null_after_destruction);
+    RUN_TEST(test_async_executor_notify_subagent_spawned_null_is_safe);
+    RUN_TEST(test_async_executor_notify_subagent_spawned_when_not_running_is_noop);
 
     return UNITY_END();
 }

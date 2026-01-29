@@ -9,6 +9,13 @@
 #include <fcntl.h>
 #include <errno.h>
 
+/**
+ * Global executor pointer for use by subagent_spawn notification.
+ * Set when executor is created in interactive mode.
+ * Thread-safety: Only written once during creation, read from executor thread.
+ */
+static async_executor_t* g_active_executor = NULL;
+
 struct async_executor {
     RalphSession* session;
     int pipe_fds[2];
@@ -124,6 +131,8 @@ async_executor_t* async_executor_create(RalphSession* session) {
         fcntl(executor->pipe_fds[1], F_SETFL, flags | O_NONBLOCK);
     }
 
+    g_active_executor = executor;
+
     debug_printf("async_executor: Created with notify fd %d\n", executor->pipe_fds[0]);
     return executor;
 }
@@ -131,6 +140,10 @@ async_executor_t* async_executor_create(RalphSession* session) {
 void async_executor_destroy(async_executor_t* executor) {
     if (executor == NULL) {
         return;
+    }
+
+    if (g_active_executor == executor) {
+        g_active_executor = NULL;
     }
 
     if (atomic_load(&executor->running)) {
@@ -281,4 +294,22 @@ int async_executor_get_result(async_executor_t* executor) {
         return -1;
     }
     return executor->last_result;
+}
+
+void async_executor_notify_subagent_spawned(async_executor_t* executor) {
+    if (executor == NULL) {
+        return;
+    }
+
+    /* Only notify if executor is currently running, otherwise the main
+     * thread isn't blocked in select() waiting for events */
+    if (!atomic_load(&executor->running)) {
+        return;
+    }
+
+    send_event(executor, ASYNC_EVENT_SUBAGENT_SPAWNED);
+}
+
+async_executor_t* async_executor_get_active(void) {
+    return g_active_executor;
 }

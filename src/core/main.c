@@ -246,6 +246,11 @@ static int run_interactive_loop(RalphSession* session, bool json_mode) {
                 case ASYNC_EVENT_APPROVAL:
                     debug_printf("Approval requested (not yet implemented)\n");
                     break;
+                case ASYNC_EVENT_SUBAGENT_SPAWNED:
+                    /* Subagent was spawned - just continue the loop to rebuild
+                     * the fd_set with the new subagent's approval channel FD */
+                    debug_printf("Subagent spawned, rebuilding fd_set\n");
+                    break;
                 default:
                     if (event > 0) {
                         debug_printf("Unknown executor event: %c\n", (char)event);
