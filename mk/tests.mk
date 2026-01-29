@@ -182,13 +182,17 @@ $(TEST_http_retry_TARGET): $(TEST_http_retry_OBJECTS) $(CJSON_LIB) $(LIBS_MBEDTL
 	$(CC) -o $@ $(TEST_http_retry_OBJECTS) $(CJSON_LIB) $(LIBS_MBEDTLS) -lm
 
 # =============================================================================
-# SQLITE TEST
+# SQLITE TESTS
 # =============================================================================
 
 $(eval $(call def_test,task_store,db/test_task_store,$(SRCDIR)/db/task_store.c $(SRCDIR)/utils/uuid_utils.c $(SRCDIR)/utils/ralph_home.c))
+$(eval $(call def_test,message_store,db/test_message_store,$(SRCDIR)/db/message_store.c $(SRCDIR)/utils/uuid_utils.c $(SRCDIR)/utils/ralph_home.c))
 
 $(TEST_task_store_TARGET): $(TEST_task_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB)
 	$(CC) -o $@ $(TEST_task_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) -lpthread -lm
+
+$(TEST_message_store_TARGET): $(TEST_message_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB)
+	$(CC) -o $@ $(TEST_message_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) -lpthread -lm
 
 # =============================================================================
 # CONVERSATION TESTS (special linking)
@@ -339,12 +343,12 @@ TEST_EXECUTION_ORDER := \
     $(TEST_python_integration_TARGET) $(TEST_token_manager_TARGET) $(TEST_model_tools_TARGET) \
     $(TEST_conversation_compactor_TARGET) $(TEST_rolling_summary_TARGET) $(TEST_incomplete_task_bug_TARGET) \
     $(TEST_messages_array_bug_TARGET) $(TEST_mcp_client_TARGET) $(TEST_vector_db_TARGET) \
-    $(TEST_document_store_TARGET) $(TEST_task_store_TARGET) $(TEST_pdf_extractor_TARGET) \
-    $(TEST_document_chunker_TARGET) $(TEST_approval_gate_TARGET) $(TEST_atomic_file_TARGET) \
-    $(TEST_path_normalize_TARGET) $(TEST_protected_files_TARGET) $(TEST_shell_parser_TARGET) \
-    $(TEST_shell_parser_cmd_TARGET) $(TEST_shell_parser_ps_TARGET) $(TEST_subagent_approval_TARGET) \
-    $(TEST_subagent_tool_TARGET) $(TEST_json_output_TARGET) $(TEST_verified_file_context_TARGET) \
-    $(TEST_approval_gate_integration_TARGET)
+    $(TEST_document_store_TARGET) $(TEST_task_store_TARGET) $(TEST_message_store_TARGET) \
+    $(TEST_pdf_extractor_TARGET) $(TEST_document_chunker_TARGET) $(TEST_approval_gate_TARGET) \
+    $(TEST_atomic_file_TARGET) $(TEST_path_normalize_TARGET) $(TEST_protected_files_TARGET) \
+    $(TEST_shell_parser_TARGET) $(TEST_shell_parser_cmd_TARGET) $(TEST_shell_parser_ps_TARGET) \
+    $(TEST_subagent_approval_TARGET) $(TEST_subagent_tool_TARGET) $(TEST_json_output_TARGET) \
+    $(TEST_verified_file_context_TARGET) $(TEST_approval_gate_integration_TARGET)
 
 test: $(ALL_TEST_TARGETS)
 	@echo "Running all tests..."
@@ -370,11 +374,11 @@ VALGRIND_TESTS := \
     $(TEST_todo_manager_TARGET) $(TEST_vector_db_tool_TARGET) \
     $(TEST_memory_tool_TARGET) $(TEST_token_manager_TARGET) $(TEST_conversation_compactor_TARGET) $(TEST_rolling_summary_TARGET) \
     $(TEST_model_tools_TARGET) $(TEST_vector_db_TARGET) $(TEST_task_store_TARGET) \
-    $(TEST_pdf_extractor_TARGET) $(TEST_document_chunker_TARGET) $(TEST_approval_gate_TARGET) \
-    $(TEST_atomic_file_TARGET) $(TEST_path_normalize_TARGET) $(TEST_protected_files_TARGET) \
-    $(TEST_shell_parser_TARGET) $(TEST_shell_parser_cmd_TARGET) $(TEST_shell_parser_ps_TARGET) \
-    $(TEST_subagent_approval_TARGET) $(TEST_json_output_TARGET) $(TEST_verified_file_context_TARGET) \
-    $(TEST_approval_gate_integration_TARGET)
+    $(TEST_message_store_TARGET) $(TEST_pdf_extractor_TARGET) $(TEST_document_chunker_TARGET) \
+    $(TEST_approval_gate_TARGET) $(TEST_atomic_file_TARGET) $(TEST_path_normalize_TARGET) \
+    $(TEST_protected_files_TARGET) $(TEST_shell_parser_TARGET) $(TEST_shell_parser_cmd_TARGET) \
+    $(TEST_shell_parser_ps_TARGET) $(TEST_subagent_approval_TARGET) $(TEST_json_output_TARGET) \
+    $(TEST_verified_file_context_TARGET) $(TEST_approval_gate_integration_TARGET)
 
 check-valgrind: $(ALL_TEST_TARGETS)
 	@echo "Running valgrind tests (excluding HTTP and Python tests)..."

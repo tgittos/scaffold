@@ -4,6 +4,7 @@
 #include "../core/ralph.h"
 #include "../policy/subagent_approval.h"
 #include "../session/conversation_tracker.h"
+#include "../db/message_store.h"
 #include <cJSON.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -214,6 +215,13 @@ void cleanup_subagent(Subagent *sub) {
     sub->output_len = 0;
     sub->pid = 0;
     sub->status = SUBAGENT_STATUS_PENDING;
+
+    if (sub->id[0] != '\0') {
+        message_store_t* msg_store = message_store_get_instance();
+        if (msg_store != NULL) {
+            message_cleanup_agent(msg_store, sub->id);
+        }
+    }
 }
 
 /** Initialize using max_subagents and subagent_timeout from global config. */

@@ -21,6 +21,8 @@
 #include "llm_provider.h"
 #include "uuid_utils.h"
 #include "../db/task_store.h"
+#include "../db/message_store.h"
+#include "messaging_tool.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -87,6 +89,12 @@ int ralph_init_session(RalphSession* session) {
 
     if (task_store_get_instance() == NULL) {
         fprintf(stderr, "Warning: Task store unavailable, using in-memory tasks only\n");
+    }
+
+    if (message_store_get_instance() == NULL) {
+        fprintf(stderr, "Warning: Message store unavailable, messaging disabled\n");
+    } else {
+        messaging_tool_set_agent_id(session->session_id);
     }
 
     session_data_init(&session->session_data);
@@ -166,6 +174,8 @@ void ralph_cleanup_session(RalphSession* session) {
     approval_gate_cleanup(&session->gate_config);
     subagent_manager_cleanup(&session->subagent_manager);
     mcp_client_cleanup(&session->mcp_client);
+
+    messaging_tool_set_agent_id(NULL);
 
     // Global tool reference must be cleared before the todo list it points to is destroyed
     clear_todo_tool_reference();

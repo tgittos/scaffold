@@ -6,6 +6,7 @@
 #include "pdf_tool.h"
 #include "python_tool.h"
 #include "python_tool_files.h"
+#include "messaging_tool.h"
 #include "output_formatter.h"
 #include "json_escape.h"
 #include <stdio.h>
@@ -970,6 +971,10 @@ int register_builtin_tools(ToolRegistry *registry) {
     // Python file tools (read_file, write_file, shell, etc.) provide external system access
     if (python_register_tool_schemas(registry) != 0) {
         fprintf(stderr, "Warning: Failed to register Python file tools\n");
+    }
+
+    if (register_messaging_tools(registry) != 0) {
+        fprintf(stderr, "Warning: Failed to register messaging tools\n");
     }
 
     return 0;

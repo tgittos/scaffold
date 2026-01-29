@@ -42,7 +42,7 @@ python: $(PYTHON_LIB)
 # These ensure deps are downloaded/built before compilation, without triggering
 # rebuilds when libs change
 COMPILE_DEPS := $(LIBS_MBEDTLS) $(CJSON_LIB) $(SQLITE_LIB) $(PDFIO_LIB) $(ZLIB_LIB) \
-    $(OSSP_UUID_LIB) $(READLINE_LIB) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
+    $(OSSP_UUID_LIB) $(READLINE_LIB) $(PYTHON_LIB) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
 
 $(SRCDIR)/%.o: $(SRCDIR)/%.c $(HEADERS) | $(COMPILE_DEPS)
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@

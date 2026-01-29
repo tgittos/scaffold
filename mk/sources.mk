@@ -61,7 +61,8 @@ TOOL_SOURCES := \
     $(SRCDIR)/tools/tool_result_builder.c \
     $(SRCDIR)/tools/subagent_tool.c \
     $(SRCDIR)/tools/python_tool.c \
-    $(SRCDIR)/tools/python_tool_files.c
+    $(SRCDIR)/tools/python_tool_files.c \
+    $(SRCDIR)/tools/messaging_tool.c
 
 # MCP system
 MCP_SOURCES := $(SRCDIR)/mcp/mcp_client.c
@@ -93,7 +94,8 @@ DB_C_SOURCES := \
     $(SRCDIR)/db/vector_db_service.c \
     $(SRCDIR)/db/metadata_store.c \
     $(SRCDIR)/db/document_store.c \
-    $(SRCDIR)/db/task_store.c
+    $(SRCDIR)/db/task_store.c \
+    $(SRCDIR)/db/message_store.c
 
 DB_CPP_SOURCES := $(SRCDIR)/db/hnswlib_wrapper.cpp
 

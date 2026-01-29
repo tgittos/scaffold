@@ -93,6 +93,12 @@ $(READLINE_LIB) $(HISTORY_LIB): $(NCURSES_LIB)
 	@echo "Building Readline..."
 	$(call download_extract,readline,$(READLINE_VERSION),https://ftp.gnu.org/gnu/readline/readline-$(READLINE_VERSION).tar.gz)
 	cd $(READLINE_DIR) && \
+	if [ ! -f doc/Makefile.in ]; then \
+		echo "# Stub Makefile for readline doc directory" > doc/Makefile.in; \
+		echo "all:" >> doc/Makefile.in; \
+		echo "install:" >> doc/Makefile.in; \
+		echo "clean:" >> doc/Makefile.in; \
+	fi && \
 	CC="$(CC)" AR="$(AR)" RANLIB="$(RANLIB)" \
 		CFLAGS="-O2 -fno-stack-protector -I$$(pwd)/../ncurses-$(NCURSES_VERSION)/include" \
 		LDFLAGS="-L$$(pwd)/../ncurses-$(NCURSES_VERSION)/lib" \
