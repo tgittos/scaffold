@@ -61,7 +61,8 @@ GATE_DEPS := \
     $(SRCDIR)/policy/tool_args.c \
     $(SRCDIR)/utils/debug_output.c \
     $(SRCDIR)/utils/ralph_home.c \
-    $(TESTDIR)/stubs/subagent_stub.c
+    $(TESTDIR)/stubs/subagent_stub.c \
+    $(TESTDIR)/stubs/output_formatter_stub.c
 
 $(eval $(call def_test,approval_gate,policy/test_approval_gate,$(GATE_DEPS)))
 $(eval $(call def_test,atomic_file,policy/test_atomic_file,$(SRCDIR)/policy/atomic_file.c))

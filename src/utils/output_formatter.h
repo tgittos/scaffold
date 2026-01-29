@@ -182,4 +182,17 @@ void display_message_notification(int count);
  */
 void display_message_notification_clear(void);
 
+/**
+ * Log a subagent approval request with visual deprioritization.
+ *
+ * @param subagent_id The 16-char hex ID of the subagent (abbreviated in display)
+ * @param tool_name Name of the tool that required approval
+ * @param display_summary Human-readable summary of the operation
+ * @param result The approval decision (requires ApprovalResult from approval_gate.h)
+ */
+void log_subagent_approval(const char *subagent_id,
+                           const char *tool_name,
+                           const char *display_summary,
+                           int result);
+
 #endif /* OUTPUT_FORMATTER_H */

@@ -9,3 +9,14 @@ void set_json_output_mode(bool enabled) {
 bool get_json_output_mode(void) {
     return g_json_output_mode;
 }
+
+void log_subagent_approval(const char *subagent_id,
+                           const char *tool_name,
+                           const char *display_summary,
+                           int result) {
+    /* Stub: no-op in tests */
+    (void)subagent_id;
+    (void)tool_name;
+    (void)display_summary;
+    (void)result;
+}

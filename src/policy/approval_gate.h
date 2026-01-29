@@ -389,9 +389,11 @@ ApprovalResult subagent_request_approval(const ApprovalChannel *channel,
  *
  * @param config Parent's gate configuration
  * @param channel IPC channel to subagent
+ * @param subagent_id Optional subagent ID for logging (NULL if unavailable)
  */
 void handle_subagent_approval_request(ApprovalGateConfig *config,
-                                      ApprovalChannel *channel);
+                                      ApprovalChannel *channel,
+                                      const char *subagent_id);
 
 /**
  * Free resources held by an ApprovalChannel.

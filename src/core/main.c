@@ -155,6 +155,19 @@ static int run_interactive_loop(RalphSession* session, bool json_mode) {
             }
         }
 
+        // Add subagent approval channel FDs to the select set
+        SubagentManager* mgr = &session->subagent_manager;
+        for (size_t i = 0; i < mgr->subagents.count; i++) {
+            Subagent* sub = &mgr->subagents.data[i];
+            if (sub->status == SUBAGENT_STATUS_RUNNING &&
+                sub->approval_channel.request_fd > 2) {
+                FD_SET(sub->approval_channel.request_fd, &read_fds);
+                if (sub->approval_channel.request_fd > max_fd) {
+                    max_fd = sub->approval_channel.request_fd;
+                }
+            }
+        }
+
         struct timeval timeout;
         timeout.tv_sec = 1;
         timeout.tv_usec = 0;
@@ -174,7 +187,26 @@ static int run_interactive_loop(RalphSession* session, bool json_mode) {
         }
 
         if (ready == 0) {
+            // Timeout - poll subagent status changes
+            subagent_poll_all(mgr);
             continue;
+        }
+
+        // Handle subagent approval requests first (they're blocking subagent execution)
+        for (size_t i = 0; i < mgr->subagents.count; i++) {
+            Subagent* sub = &mgr->subagents.data[i];
+            if (sub->status == SUBAGENT_STATUS_RUNNING &&
+                sub->approval_channel.request_fd > 2 &&
+                FD_ISSET(sub->approval_channel.request_fd, &read_fds)) {
+                // Temporarily remove readline handler to avoid prompt interference
+                rl_callback_handler_remove();
+
+                subagent_handle_approval_request(mgr, (int)i, &session->gate_config);
+
+                if (g_running) {
+                    rl_callback_handler_install("> ", handle_line_callback);
+                }
+            }
         }
 
         if (FD_ISSET(STDIN_FILENO, &read_fds)) {

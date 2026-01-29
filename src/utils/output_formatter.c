@@ -918,3 +918,46 @@ void display_message_notification_clear(void) {
     fprintf(stdout, "\r\033[K");
     fflush(stdout);
 }
+
+void log_subagent_approval(const char *subagent_id,
+                           const char *tool_name,
+                           const char *display_summary,
+                           int result) {
+    if (g_json_output_mode) return;
+    if (subagent_id == NULL || tool_name == NULL) return;
+
+    /* Abbreviate ID to first 4 chars */
+    char short_id[5] = {0};
+    strncpy(short_id, subagent_id, 4);
+    short_id[4] = '\0';  /* Explicit null termination for safety */
+
+    /*
+     * Map result to display text. Values must match ApprovalResult enum
+     * from policy/approval_gate.h. We use int here to avoid a circular
+     * dependency from utils -> policy.
+     */
+    const char *result_text;
+    switch (result) {
+        case 0: result_text = "allowed"; break;      /* APPROVAL_ALLOWED */
+        case 1: result_text = "denied"; break;       /* APPROVAL_DENIED */
+        case 2: result_text = "always"; break;       /* APPROVAL_ALLOWED_ALWAYS */
+        case 3: result_text = "aborted"; break;      /* APPROVAL_ABORTED */
+        case 4: result_text = "rate-limited"; break; /* APPROVAL_RATE_LIMITED */
+        case 5: result_text = "no-tty"; break;       /* APPROVAL_NON_INTERACTIVE_DENIED */
+        default: result_text = "unknown"; break;
+    }
+
+    /* Format detail (truncate if long) */
+    char detail[60] = {0};
+    if (display_summary != NULL && strlen(display_summary) > 0) {
+        if (strlen(display_summary) <= 50) {
+            snprintf(detail, sizeof(detail), " (%s)", display_summary);
+        } else {
+            snprintf(detail, sizeof(detail), " (%.47s...)", display_summary);
+        }
+    }
+
+    printf(ANSI_DIM ANSI_GRAY "  ↳ [%s] %s%s → %s" ANSI_RESET "\n",
+           short_id, tool_name, detail, result_text);
+    fflush(stdout);
+}

@@ -281,14 +281,14 @@ static void test_handle_subagent_approval_request_null_config_safe(void) {
     ApprovalChannel channel = {0};
 
     /* Should not crash */
-    handle_subagent_approval_request(NULL, &channel);
+    handle_subagent_approval_request(NULL, &channel, NULL);
 }
 
 static void test_handle_subagent_approval_request_null_channel_safe(void) {
     ApprovalGateConfig config = {0};
 
     /* Should not crash */
-    handle_subagent_approval_request(&config, NULL);
+    handle_subagent_approval_request(&config, NULL, NULL);
 }
 
 /* =============================================================================

@@ -12,6 +12,7 @@
 #include <unistd.h>
 
 #include "../utils/debug_output.h"
+#include "../utils/output_formatter.h"
 #include "../tools/subagent_tool.h"
 
 #define DEBUG_PRINT(...) debug_printf(__VA_ARGS__)
@@ -350,7 +351,8 @@ ApprovalResult subagent_request_approval(const ApprovalChannel *channel,
 }
 
 void handle_subagent_approval_request(ApprovalGateConfig *config,
-                                      ApprovalChannel *channel) {
+                                      ApprovalChannel *channel,
+                                      const char *subagent_id) {
     if (config == NULL || channel == NULL) {
         DEBUG_ERROR("handle_subagent_approval_request: NULL config or channel");
         return;
@@ -389,6 +391,12 @@ void handle_subagent_approval_request(ApprovalGateConfig *config,
         result = subagent_request_approval(our_channel, &synthetic_call, &approved_path);
     } else {
         result = approval_gate_prompt(config, &synthetic_call, &approved_path);
+    }
+
+    /* Log the approval decision persistently */
+    if (subagent_id != NULL) {
+        log_subagent_approval(subagent_id, req.tool_name,
+                              req.display_summary, (int)result);
     }
 
     ApprovalResponse resp = {
@@ -574,7 +582,7 @@ int parent_approval_loop(ApprovalGateConfig *config,
 
         int idx = poll_subagent_approval_requests(channels, channel_count, 100);
         if (idx >= 0) {
-            handle_subagent_approval_request(config, &channels[idx]);
+            handle_subagent_approval_request(config, &channels[idx], NULL);
         }
 
         int open_channels = 0;

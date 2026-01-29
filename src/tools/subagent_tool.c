@@ -946,7 +946,8 @@ int register_subagent_tool(ToolRegistry *registry, SubagentManager *manager) {
     int result = register_tool(registry, "subagent",
                               "Spawn a background subagent process to execute a delegated task. "
                               "The subagent runs with fresh context and cannot spawn additional subagents. "
-                              "Returns a subagent_id that can be used with subagent_status to check progress.",
+                              "Subagents should use send_message to report results to their parent. "
+                              "You'll receive messages automatically - no need to poll subagent_status.",
                               parameters, 2, execute_subagent_tool_call);
 
     for (int i = 0; i < 2; i++) {
@@ -1010,7 +1011,8 @@ int register_subagent_status_tool(ToolRegistry *registry, SubagentManager *manag
 
     int result = register_tool(registry, "subagent_status",
                               "Query the status of a running or completed subagent. "
-                              "Returns status (running/completed/failed/timeout), progress, result, and any errors.",
+                              "Returns status (running/completed/failed/timeout), progress, result, and any errors. "
+                              "Prefer waiting for messages from the subagent instead of polling this tool repeatedly.",
                               parameters, 2, execute_subagent_status_tool_call);
 
     for (int i = 0; i < 2; i++) {
@@ -1371,7 +1373,7 @@ int subagent_handle_approval_request(SubagentManager *manager,
         return -1;
     }
 
-    handle_subagent_approval_request(gate_config, &sub->approval_channel);
+    handle_subagent_approval_request(gate_config, &sub->approval_channel, sub->id);
 
     return 0;
 }
