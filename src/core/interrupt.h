@@ -43,4 +43,11 @@ void interrupt_clear(void);
  */
 void interrupt_acknowledge(void);
 
+/**
+ * Programmatically trigger an interrupt.
+ * Used by async_executor to cancel execution from main thread.
+ * Has the same effect as pressing Ctrl+C.
+ */
+void interrupt_handler_trigger(void);
+
 #endif

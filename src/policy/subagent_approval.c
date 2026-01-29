@@ -351,18 +351,19 @@ ApprovalResult subagent_request_approval(const ApprovalChannel *channel,
     return result;
 }
 
-void handle_subagent_approval_request(ApprovalGateConfig *config,
-                                      ApprovalChannel *channel,
-                                      const char *subagent_id) {
+int handle_subagent_approval_request(ApprovalGateConfig *config,
+                                     ApprovalChannel *channel,
+                                     const char *subagent_id) {
     if (config == NULL || channel == NULL) {
         DEBUG_ERROR("handle_subagent_approval_request: NULL config or channel");
-        return;
+        return -1;
     }
 
     char *request_str = read_message_with_timeout(channel->request_fd, 1000);
     if (request_str == NULL) {
-        DEBUG_ERROR("handle_subagent_approval_request: Failed to read request");
-        return;
+        /* Pipe closed or timeout - signal caller to close the channel */
+        DEBUG_ERROR("handle_subagent_approval_request: Failed to read request (pipe closed or timeout)");
+        return -1;
     }
 
     DEBUG_PRINT("Parent received subagent request: %s", request_str);
@@ -371,7 +372,7 @@ void handle_subagent_approval_request(ApprovalGateConfig *config,
     if (deserialize_approval_request(request_str, &req) < 0) {
         DEBUG_ERROR("handle_subagent_approval_request: Failed to parse request");
         free(request_str);
-        return;
+        return -1;
     }
     free(request_str);
 
@@ -425,15 +426,18 @@ void handle_subagent_approval_request(ApprovalGateConfig *config,
 
     if (response_str == NULL) {
         DEBUG_ERROR("handle_subagent_approval_request: Failed to serialize response");
-        return;
+        return -1;
     }
 
     DEBUG_PRINT("Parent sending response: %s", response_str);
 
     if (write_message(channel->response_fd, response_str) < 0) {
         DEBUG_ERROR("handle_subagent_approval_request: Failed to write response (errno=%d)", errno);
+        free(response_str);
+        return -1;
     }
     free(response_str);
+    return 0;
 }
 
 void free_approval_channel(ApprovalChannel *channel) {
@@ -585,7 +589,18 @@ int parent_approval_loop(ApprovalGateConfig *config,
 
         int idx = poll_subagent_approval_requests(channels, channel_count, 100);
         if (idx >= 0) {
-            handle_subagent_approval_request(config, &channels[idx], NULL);
+            int result = handle_subagent_approval_request(config, &channels[idx], NULL);
+            if (result < 0) {
+                /* Pipe broken - close FDs to prevent further polling */
+                if (channels[idx].request_fd >= 0) {
+                    close(channels[idx].request_fd);
+                    channels[idx].request_fd = -1;
+                }
+                if (channels[idx].response_fd >= 0) {
+                    close(channels[idx].response_fd);
+                    channels[idx].response_fd = -1;
+                }
+            }
         }
 
         int open_channels = 0;

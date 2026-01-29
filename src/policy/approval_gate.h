@@ -390,10 +390,11 @@ ApprovalResult subagent_request_approval(const ApprovalChannel *channel,
  * @param config Parent's gate configuration
  * @param channel IPC channel to subagent
  * @param subagent_id Optional subagent ID for logging (NULL if unavailable)
+ * @return 0 on success, -1 if pipe is broken/closed (caller should close channel FD)
  */
-void handle_subagent_approval_request(ApprovalGateConfig *config,
-                                      ApprovalChannel *channel,
-                                      const char *subagent_id);
+int handle_subagent_approval_request(ApprovalGateConfig *config,
+                                     ApprovalChannel *channel,
+                                     const char *subagent_id);
 
 /**
  * Free resources held by an ApprovalChannel.

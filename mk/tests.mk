@@ -34,6 +34,7 @@ endef
 $(eval $(call def_test,main,core/test_main,))
 $(eval $(call def_test,cli_flags,core/test_cli_flags,))
 $(eval $(call def_test,interrupt,core/test_interrupt,$(SRCDIR)/core/interrupt.c))
+$(eval $(call def_test,async_executor,core/test_async_executor,$(SRCDIR)/core/async_executor.c $(SRCDIR)/core/interrupt.c $(SRCDIR)/utils/debug_output.c $(TESTDIR)/stubs/ralph_stub.c))
 $(eval $(call def_test,prompt,utils/test_prompt_loader,$(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/utils/ralph_home.c))
 $(eval $(call def_test,ralph_home,utils/test_ralph_home,$(SRCDIR)/utils/ralph_home.c))
 $(eval $(call def_test,todo_manager,tools/test_todo_manager,$(SRCDIR)/tools/todo_manager.c))
@@ -83,6 +84,9 @@ $(TEST_cli_flags_TARGET): $(TEST_cli_flags_OBJECTS) ralph
 
 $(TEST_interrupt_TARGET): $(TEST_interrupt_OBJECTS)
 	$(CC) -o $@ $^
+
+$(TEST_async_executor_TARGET): $(TEST_async_executor_OBJECTS) $(CJSON_LIB)
+	$(CC) -o $@ $(TEST_async_executor_OBJECTS) $(CJSON_LIB) -lpthread
 
 $(TEST_prompt_TARGET): $(TEST_prompt_OBJECTS)
 	$(CC) -o $@ $^
@@ -350,7 +354,7 @@ $(TEST_document_store_TARGET): $(TEST_document_store_OBJECTS) $(ALL_LIBS)
 # =============================================================================
 
 TEST_EXECUTION_ORDER := \
-    $(TEST_main_TARGET) $(TEST_cli_flags_TARGET) $(TEST_interrupt_TARGET) $(TEST_darray_TARGET) $(TEST_ptrarray_TARGET) \
+    $(TEST_main_TARGET) $(TEST_cli_flags_TARGET) $(TEST_interrupt_TARGET) $(TEST_async_executor_TARGET) $(TEST_darray_TARGET) $(TEST_ptrarray_TARGET) \
     $(TEST_rate_limiter_TARGET) $(TEST_allowlist_TARGET) $(TEST_tool_args_TARGET) $(TEST_gate_prompter_TARGET) \
     $(TEST_ralph_home_TARGET) $(TEST_http_TARGET) $(TEST_http_retry_TARGET) \
     $(TEST_streaming_TARGET) $(TEST_openai_streaming_TARGET) $(TEST_anthropic_streaming_TARGET) \
@@ -382,7 +386,7 @@ check: test
 # VALGRIND
 # =============================================================================
 
-# Excluded: HTTP (network), Python (embedded stdlib), subagent (fork/exec), message_poller (threads)
+# Excluded: HTTP (network), Python (embedded stdlib), subagent (fork/exec), message_poller (threads), async_executor (threads)
 VALGRIND_TESTS := \
     $(TEST_main_TARGET) $(TEST_cli_flags_TARGET) $(TEST_interrupt_TARGET) $(TEST_darray_TARGET) $(TEST_ptrarray_TARGET) \
     $(TEST_rate_limiter_TARGET) $(TEST_allowlist_TARGET) $(TEST_tool_args_TARGET) $(TEST_gate_prompter_TARGET) \

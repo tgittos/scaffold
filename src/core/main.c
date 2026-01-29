@@ -7,6 +7,7 @@
 #include <readline/history.h>
 #include "ralph.h"
 #include "interrupt.h"
+#include "async_executor.h"
 #include "debug_output.h"
 #include "output_formatter.h"
 #include "json_output.h"
@@ -25,6 +26,7 @@
 
 static volatile int g_running = 1;
 static RalphSession* g_session = NULL;
+static async_executor_t* g_executor = NULL;
 
 static void print_version(void) {
     printf("ralph %s\n", RALPH_VERSION);
@@ -113,12 +115,25 @@ static void handle_line_callback(char* line) {
         }
     }
 
-    printf("\n");
-    int result = ralph_process_message(g_session, line);
-    if (result != 0) {
-        fprintf(stderr, "Error: Failed to process message\n");
+    if (g_executor != NULL && async_executor_is_running(g_executor)) {
+        debug_printf("Executor already running, ignoring input\n");
+        free(line);
+        return;
     }
+
     printf("\n");
+
+    if (g_executor != NULL) {
+        if (async_executor_start(g_executor, line) != 0) {
+            fprintf(stderr, "Error: Failed to start message processing\n");
+        }
+    } else {
+        int result = ralph_process_message(g_session, line);
+        if (result != 0) {
+            fprintf(stderr, "Error: Failed to process message\n");
+        }
+        printf("\n");
+    }
 
     free(line);
 }
@@ -132,11 +147,21 @@ static int run_interactive_loop(RalphSession* session, bool json_mode) {
         fprintf(stderr, "Warning: Failed to initialize interrupt handling\n");
     }
 
+    g_executor = async_executor_create(session);
+    if (g_executor == NULL) {
+        fprintf(stderr, "Warning: Failed to create async executor, using synchronous mode\n");
+    }
+
     rl_callback_handler_install("> ", handle_line_callback);
 
     int notify_fd = -1;
     if (session->message_poller != NULL) {
         notify_fd = message_poller_get_notify_fd(session->message_poller);
+    }
+
+    int executor_fd = -1;
+    if (g_executor != NULL) {
+        executor_fd = async_executor_get_notify_fd(g_executor);
     }
 
     while (g_running) {
@@ -155,7 +180,13 @@ static int run_interactive_loop(RalphSession* session, bool json_mode) {
             }
         }
 
-        // Add subagent approval channel FDs to the select set
+        if (executor_fd >= 0 && async_executor_is_running(g_executor)) {
+            FD_SET(executor_fd, &read_fds);
+            if (executor_fd > max_fd) {
+                max_fd = executor_fd;
+            }
+        }
+
         SubagentManager* mgr = &session->subagent_manager;
         for (size_t i = 0; i < mgr->subagents.count; i++) {
             Subagent* sub = &mgr->subagents.data[i];
@@ -176,6 +207,10 @@ static int run_interactive_loop(RalphSession* session, bool json_mode) {
 
         if (ready < 0) {
             if (interrupt_pending()) {
+                if (g_executor != NULL && async_executor_is_running(g_executor)) {
+                    debug_printf("Ctrl+C during async execution, cancelling...\n");
+                    async_executor_cancel(g_executor);
+                }
                 interrupt_clear();
                 printf("\n");
                 continue;
@@ -187,18 +222,43 @@ static int run_interactive_loop(RalphSession* session, bool json_mode) {
         }
 
         if (ready == 0) {
-            // Timeout - poll subagent status changes
             subagent_poll_all(mgr);
             continue;
         }
 
-        // Handle subagent approval requests first (they're blocking subagent execution)
+        if (executor_fd >= 0 && FD_ISSET(executor_fd, &read_fds)) {
+            int event = async_executor_process_events(g_executor);
+            switch (event) {
+                case ASYNC_EVENT_COMPLETE:
+                    debug_printf("Async execution completed\n");
+                    printf("\n");
+                    break;
+                case ASYNC_EVENT_ERROR: {
+                    const char* err = async_executor_get_error(g_executor);
+                    fprintf(stderr, "Error: %s\n", err ? err : "Message processing failed");
+                    printf("\n");
+                    break;
+                }
+                case ASYNC_EVENT_INTERRUPTED:
+                    debug_printf("Async execution was interrupted\n");
+                    printf("\n");
+                    break;
+                case ASYNC_EVENT_APPROVAL:
+                    debug_printf("Approval requested (not yet implemented)\n");
+                    break;
+                default:
+                    if (event > 0) {
+                        debug_printf("Unknown executor event: %c\n", (char)event);
+                    }
+                    break;
+            }
+        }
+
         for (size_t i = 0; i < mgr->subagents.count; i++) {
             Subagent* sub = &mgr->subagents.data[i];
             if (sub->status == SUBAGENT_STATUS_RUNNING &&
                 sub->approval_channel.request_fd > 2 &&
                 FD_ISSET(sub->approval_channel.request_fd, &read_fds)) {
-                // Temporarily remove readline handler to avoid prompt interference
                 rl_callback_handler_remove();
 
                 subagent_handle_approval_request(mgr, (int)i, &session->gate_config);
@@ -222,6 +282,11 @@ static int run_interactive_loop(RalphSession* session, bool json_mode) {
                 rl_callback_handler_install("> ", handle_line_callback);
             }
         }
+    }
+
+    if (g_executor != NULL) {
+        async_executor_destroy(g_executor);
+        g_executor = NULL;
     }
 
     rl_callback_handler_remove();

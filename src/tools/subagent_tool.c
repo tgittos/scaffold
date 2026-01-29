@@ -1449,7 +1449,21 @@ int subagent_handle_approval_request(SubagentManager *manager,
         return -1;
     }
 
-    handle_subagent_approval_request(gate_config, &sub->approval_channel, sub->id);
+    int result = handle_subagent_approval_request(gate_config, &sub->approval_channel, sub->id);
+
+    if (result < 0) {
+        /* Pipe broken or closed - close the approval channel FD to prevent
+         * further polling. The subagent may have exited or crashed. */
+        if (sub->approval_channel.request_fd > 2) {
+            close(sub->approval_channel.request_fd);
+            sub->approval_channel.request_fd = -1;
+        }
+        if (sub->approval_channel.response_fd > 2) {
+            close(sub->approval_channel.response_fd);
+            sub->approval_channel.response_fd = -1;
+        }
+        return -1;
+    }
 
     return 0;
 }

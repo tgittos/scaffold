@@ -57,3 +57,7 @@ void interrupt_clear(void) {
 void interrupt_acknowledge(void) {
     g_acknowledging = 1;
 }
+
+void interrupt_handler_trigger(void) {
+    g_interrupt_flag = 1;
+}

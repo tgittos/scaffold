@@ -5,6 +5,7 @@ CORE_SOURCES := \
     $(SRCDIR)/core/main.c \
     $(SRCDIR)/core/ralph.c \
     $(SRCDIR)/core/interrupt.c \
+    $(SRCDIR)/core/async_executor.c \
     $(SRCDIR)/core/tool_executor.c \
     $(SRCDIR)/core/streaming_handler.c \
     $(SRCDIR)/core/context_enhancement.c \
