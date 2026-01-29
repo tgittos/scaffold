@@ -517,6 +517,9 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
 
         force_protected_inode_refresh();
 
+        // Track subagent spawns per iteration to prevent duplicates within a single batch
+        int subagent_already_spawned = 0;
+
         int executed_count = 0;
         int loop_aborted = 0;
         int loop_interrupted = 0;
@@ -551,6 +554,29 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
             }
 
             tool_call_indices[executed_count] = i;
+
+            // Prevent duplicate subagent spawns within the same loop iteration
+            if (strcmp(tool_calls[i].name, "subagent") == 0) {
+                if (subagent_already_spawned) {
+                    debug_printf("Skipping duplicate subagent call %d in loop iteration %d (ID: %s)\n",
+                                 i, loop_count, tool_calls[i].id);
+                    results[executed_count].tool_call_id = tool_calls[i].id ? strdup(tool_calls[i].id) : NULL;
+                    results[executed_count].result = strdup("{\"error\": \"duplicate_subagent\", \"message\": "
+                                                            "\"Only one subagent can be spawned per turn. "
+                                                            "A subagent was already spawned in this batch.\"}");
+                    results[executed_count].success = 0;
+                    if (!session->session_data.config.json_output_mode) {
+                        log_tool_execution_improved(tool_calls[i].name, tool_calls[i].arguments, 0,
+                                                    "Duplicate subagent blocked");
+                    } else {
+                        json_output_tool_result(tool_calls[i].id, results[executed_count].result, 1);
+                    }
+                    executed_count++;
+                    continue;
+                }
+                subagent_already_spawned = 1;
+                debug_printf("First subagent call in loop iteration %d (ID: %s)\n", loop_count, tool_calls[i].id);
+            }
 
             int approval_check = check_tool_approval(session, &tool_calls[i], &results[executed_count]);
             if (approval_check == -2) {
@@ -662,6 +688,11 @@ int tool_executor_run_workflow(RalphSession* session, ToolCall* tool_calls, int 
 
     force_protected_inode_refresh();
 
+    // Track subagent spawns to prevent duplicates within a single batch.
+    // LLMs sometimes generate multiple parallel subagent calls for what should
+    // be a single task, resulting in duplicate approval prompts and wasted work.
+    int subagent_already_spawned = 0;
+
     int aborted = 0;
     int interrupted = 0;
     for (int i = 0; i < call_count; i++) {
@@ -676,6 +707,28 @@ int tool_executor_run_workflow(RalphSession* session, ToolCall* tool_calls, int 
                 log_tool_execution_improved(tool_calls[j].name, tool_calls[j].arguments, 0, "Cancelled by user");
             }
             break;
+        }
+
+        // Prevent duplicate subagent spawns within the same tool call batch
+        if (strcmp(tool_calls[i].name, "subagent") == 0) {
+            if (subagent_already_spawned) {
+                debug_printf("Skipping duplicate subagent call %d in batch (ID: %s)\n",
+                             i, tool_calls[i].id);
+                results[i].tool_call_id = tool_calls[i].id ? strdup(tool_calls[i].id) : NULL;
+                results[i].result = strdup("{\"error\": \"duplicate_subagent\", \"message\": "
+                                           "\"Only one subagent can be spawned per turn. "
+                                           "A subagent was already spawned in this batch.\"}");
+                results[i].success = 0;
+                if (!session->session_data.config.json_output_mode) {
+                    log_tool_execution_improved(tool_calls[i].name, tool_calls[i].arguments, 0,
+                                                "Duplicate subagent blocked");
+                } else {
+                    json_output_tool_result(tool_calls[i].id, results[i].result, 1);
+                }
+                continue;
+            }
+            subagent_already_spawned = 1;
+            debug_printf("First subagent call in batch (ID: %s)\n", tool_calls[i].id);
         }
 
         int approval_check = check_tool_approval(session, &tool_calls[i], &results[i]);
