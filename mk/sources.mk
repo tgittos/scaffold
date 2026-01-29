@@ -4,6 +4,7 @@
 CORE_SOURCES := \
     $(SRCDIR)/core/main.c \
     $(SRCDIR)/core/ralph.c \
+    $(SRCDIR)/core/interrupt.c \
     $(SRCDIR)/core/tool_executor.c \
     $(SRCDIR)/core/streaming_handler.c \
     $(SRCDIR)/core/context_enhancement.c \
@@ -118,7 +119,8 @@ HEADERS := $(wildcard $(SRCDIR)/*/*.h) $(SRCDIR)/embedded_links.h
 NETWORK_DEPS := \
     $(SRCDIR)/network/http_client.c \
     $(SRCDIR)/network/embedded_cacert.c \
-    $(SRCDIR)/network/api_error.c
+    $(SRCDIR)/network/api_error.c \
+    $(SRCDIR)/core/interrupt.c
 
 EMBEDDING_DEPS := \
     $(SRCDIR)/llm/embeddings.c \

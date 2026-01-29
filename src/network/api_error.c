@@ -61,6 +61,8 @@ const char* api_error_user_message(const APIError *err)
 
     if (err->curl_code != CURLE_OK) {
         switch (err->curl_code) {
+            case CURLE_ABORTED_BY_CALLBACK:
+                return "Operation cancelled.";
             case CURLE_COULDNT_CONNECT:
                 return "Network error. Could not connect to the API server.";
             case CURLE_OPERATION_TIMEDOUT:

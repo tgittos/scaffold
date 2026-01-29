@@ -1,6 +1,7 @@
 #include "http_client.h"
 #include "api_error.h"
 #include "embedded_cacert.h"
+#include "../core/interrupt.h"
 #include "../utils/config.h"
 #include "../utils/debug_output.h"
 #include <stdio.h>
@@ -65,6 +66,18 @@ static size_t header_callback(char *buffer, size_t size, size_t nitems, void *us
     }
 
     return realsize;
+}
+
+static int interrupt_progress_callback(void *clientp,
+    curl_off_t dltotal, curl_off_t dlnow,
+    curl_off_t ultotal, curl_off_t ulnow)
+{
+    (void)clientp;
+    (void)dltotal;
+    (void)dlnow;
+    (void)ultotal;
+    (void)ulnow;
+    return interrupt_pending() ? 1 : 0;
 }
 
 static int calculate_retry_delay(int attempt, int base_delay_ms, float backoff_factor)
@@ -178,6 +191,8 @@ int http_post_with_config(const char *url, const char *post_data, const char **h
         curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, config->connect_timeout_seconds);
         curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, config->follow_redirects ? 1L : 0L);
         curl_easy_setopt(curl, CURLOPT_MAXREDIRS, config->max_redirects);
+        curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, interrupt_progress_callback);
+        curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
 
         res = curl_easy_perform(curl);
 
@@ -193,6 +208,12 @@ int http_post_with_config(const char *url, const char *post_data, const char **h
 
         if (res == CURLE_OK && http_status >= 200 && http_status < 400) {
             return_code = 0;
+            break;
+        }
+
+        if (res == CURLE_ABORTED_BY_CALLBACK) {
+            debug_printf("HTTP request aborted by user interrupt\n");
+            return_code = -2;
             break;
         }
 
@@ -321,6 +342,8 @@ int http_get_with_config(const char *url, const char **headers,
         curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, config->connect_timeout_seconds);
         curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, config->follow_redirects ? 1L : 0L);
         curl_easy_setopt(curl, CURLOPT_MAXREDIRS, config->max_redirects);
+        curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, interrupt_progress_callback);
+        curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
 
         res = curl_easy_perform(curl);
 
@@ -338,6 +361,12 @@ int http_get_with_config(const char *url, const char **headers,
 
         if (res == CURLE_OK && http_status >= 200 && http_status < 400) {
             return_code = 0;
+            break;
+        }
+
+        if (res == CURLE_ABORTED_BY_CALLBACK) {
+            debug_printf("HTTP GET request aborted by user interrupt\n");
+            return_code = -2;
             break;
         }
 
@@ -472,6 +501,8 @@ int http_post_streaming(const char *url, const char *post_data,
 
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, config->base.follow_redirects ? 1L : 0L);
     curl_easy_setopt(curl, CURLOPT_MAXREDIRS, config->base.max_redirects);
+    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, interrupt_progress_callback);
+    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
 
     res = curl_easy_perform(curl);
 
@@ -481,6 +512,11 @@ int http_post_streaming(const char *url, const char *post_data,
 
     curl_slist_free_all(curl_headers);
     curl_easy_cleanup(curl);
+
+    if (res == CURLE_ABORTED_BY_CALLBACK) {
+        debug_printf("Streaming request aborted by user interrupt\n");
+        return -2;
+    }
 
     if (res != CURLE_OK) {
         api_error_set(&api_err, http_status, res, 1);

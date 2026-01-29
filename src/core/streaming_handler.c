@@ -1,5 +1,6 @@
 #include "streaming_handler.h"
 #include "context_enhancement.h"
+#include "interrupt.h"
 #include "tool_executor.h"
 #include "streaming.h"
 #include "llm_provider.h"
@@ -43,6 +44,10 @@ typedef struct {
 
 static void streaming_sse_data_callback(const char* data, size_t len, void* user_data) {
     if (data == NULL || len == 0 || user_data == NULL) {
+        return;
+    }
+
+    if (interrupt_pending()) {
         return;
     }
 

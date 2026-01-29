@@ -1,8 +1,9 @@
 #include "tool_executor.h"
 #include "ralph.h"
-#include <cJSON.h>
+#include "interrupt.h"
 #include "output_formatter.h"
 #include "json_output.h"
+#include <cJSON.h>
 #include "debug_output.h"
 #include "api_error.h"
 #include "token_manager.h"
@@ -517,7 +518,25 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
 
         int executed_count = 0;
         int loop_aborted = 0;
+        int loop_interrupted = 0;
         for (int i = 0; i < call_count; i++) {
+            if (interrupt_pending()) {
+                interrupt_acknowledge();
+                loop_interrupted = 1;
+                debug_printf("Tool execution interrupted by user at tool %d of %d\n", i + 1, call_count);
+                for (int j = i; j < call_count; j++) {
+                    if (!is_tool_already_executed(&tracker, tool_calls[j].id)) {
+                        results[executed_count].tool_call_id = tool_calls[j].id ? strdup(tool_calls[j].id) : NULL;
+                        results[executed_count].result = strdup("{\"error\": \"interrupted\", \"message\": \"Cancelled by user\"}");
+                        results[executed_count].success = 0;
+                        tool_call_indices[executed_count] = j;
+                        log_tool_execution_improved(tool_calls[j].name, tool_calls[j].arguments, 0, "Cancelled by user");
+                        executed_count++;
+                    }
+                }
+                break;
+            }
+
             if (is_tool_already_executed(&tracker, tool_calls[i].id)) {
                 debug_printf("Skipping already executed tool: %s (ID: %s)\n",
                            tool_calls[i].name, tool_calls[i].id);
@@ -539,6 +558,7 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
                 results[executed_count].tool_call_id = tool_calls[i].id ? strdup(tool_calls[i].id) : NULL;
                 results[executed_count].result = strdup("{\"error\": \"aborted\", \"message\": \"Operation aborted by user\"}");
                 results[executed_count].success = 0;
+                log_tool_execution_improved(tool_calls[i].name, tool_calls[i].arguments, 0, "Aborted by user");
                 executed_count++;
                 break;
             }
@@ -582,7 +602,7 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
             executed_count++;
         }
 
-        if (loop_aborted) {
+        if (loop_aborted || loop_interrupted) {
             for (int i = 0; i < executed_count; i++) {
                 int tool_call_index = tool_call_indices[i];
                 const char* tool_name = tool_calls[tool_call_index].name;
@@ -595,7 +615,7 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
             cleanup_tool_results(results, executed_count);
             cleanup_tool_calls(tool_calls, call_count);
             StringArray_destroy(&tracker);
-            return -1;
+            return loop_interrupted ? -2 : -1;
         }
 
         for (int i = 0; i < executed_count; i++) {
@@ -632,7 +652,21 @@ int tool_executor_run_workflow(RalphSession* session, ToolCall* tool_calls, int 
     force_protected_inode_refresh();
 
     int aborted = 0;
+    int interrupted = 0;
     for (int i = 0; i < call_count; i++) {
+        if (interrupt_pending()) {
+            interrupt_acknowledge();
+            interrupted = 1;
+            debug_printf("Tool workflow interrupted by user at tool %d of %d\n", i + 1, call_count);
+            for (int j = i; j < call_count; j++) {
+                results[j].tool_call_id = tool_calls[j].id ? strdup(tool_calls[j].id) : NULL;
+                results[j].result = strdup("{\"error\": \"interrupted\", \"message\": \"Cancelled by user\"}");
+                results[j].success = 0;
+                log_tool_execution_improved(tool_calls[j].name, tool_calls[j].arguments, 0, "Cancelled by user");
+            }
+            break;
+        }
+
         int approval_check = check_tool_approval(session, &tool_calls[i], &results[i]);
         if (approval_check == -2) {
             aborted = 1;
@@ -640,6 +674,7 @@ int tool_executor_run_workflow(RalphSession* session, ToolCall* tool_calls, int 
             results[i].tool_call_id = tool_calls[i].id ? strdup(tool_calls[i].id) : NULL;
             results[i].result = strdup("{\"error\": \"aborted\", \"message\": \"Operation aborted by user\"}");
             results[i].success = 0;
+            log_tool_execution_improved(tool_calls[i].name, tool_calls[i].arguments, 0, "Aborted by user");
             for (int j = i + 1; j < call_count; j++) {
                 results[j].tool_call_id = tool_calls[j].id ? strdup(tool_calls[j].id) : NULL;
                 results[j].result = strdup("{\"error\": \"aborted\", \"message\": \"Operation aborted by user\"}");
@@ -686,7 +721,7 @@ int tool_executor_run_workflow(RalphSession* session, ToolCall* tool_calls, int 
         }
     }
 
-    if (aborted) {
+    if (aborted || interrupted) {
         cleanup_tool_results(results, call_count);
         return -2;
     }

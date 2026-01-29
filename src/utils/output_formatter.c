@@ -1,6 +1,7 @@
 #include "output_formatter.h"
 #include "debug_output.h"
 #include "model_capabilities.h"
+#include "../core/interrupt.h"
 #include "../tools/todo_display.h"
 #include <cJSON.h>
 #include <stdio.h>
@@ -661,7 +662,13 @@ void log_tool_execution_improved(const char *tool_name, const char *arguments, b
         return;
     }
 
-    if (strcmp(tool_name, "TodoWrite") == 0) {
+    // If interrupted, always show as failure
+    bool was_interrupted = interrupt_pending();
+    if (was_interrupted) {
+        success = false;
+    }
+
+    if (strcmp(tool_name, "TodoWrite") == 0 && !was_interrupted) {
         char summary[128];
         memset(summary, 0, sizeof(summary));
         int task_count = 0;

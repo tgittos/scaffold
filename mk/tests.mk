@@ -33,6 +33,7 @@ endef
 
 $(eval $(call def_test,main,core/test_main,))
 $(eval $(call def_test,cli_flags,core/test_cli_flags,))
+$(eval $(call def_test,interrupt,core/test_interrupt,$(SRCDIR)/core/interrupt.c))
 $(eval $(call def_test,prompt,utils/test_prompt_loader,$(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/utils/ralph_home.c))
 $(eval $(call def_test,ralph_home,utils/test_ralph_home,$(SRCDIR)/utils/ralph_home.c))
 $(eval $(call def_test,todo_manager,tools/test_todo_manager,$(SRCDIR)/tools/todo_manager.c))
@@ -78,6 +79,9 @@ $(TEST_main_TARGET): $(TEST_main_OBJECTS)
 
 $(TEST_cli_flags_TARGET): $(TEST_cli_flags_OBJECTS) ralph
 	$(CC) -o $@ $(TEST_cli_flags_OBJECTS)
+
+$(TEST_interrupt_TARGET): $(TEST_interrupt_OBJECTS)
+	$(CC) -o $@ $^
 
 $(TEST_prompt_TARGET): $(TEST_prompt_OBJECTS)
 	$(CC) -o $@ $^
@@ -191,6 +195,7 @@ CONV_EXTRA_OBJECTS := $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) \
     $(SRCDIR)/llm/embeddings.o $(SRCDIR)/llm/embeddings_service.o $(SRCDIR)/llm/embedding_provider.o \
     $(SRCDIR)/llm/providers/openai_embedding_provider.o $(SRCDIR)/llm/providers/local_embedding_provider.o \
     $(SRCDIR)/network/http_client.o $(SRCDIR)/network/embedded_cacert.o $(SRCDIR)/network/api_error.o \
+    $(SRCDIR)/core/interrupt.o \
     $(SRCDIR)/utils/config.o $(SRCDIR)/utils/debug_output.o $(SRCDIR)/utils/common_utils.o \
     $(SRCDIR)/utils/ralph_home.o
 
@@ -318,7 +323,7 @@ $(TEST_document_store_TARGET): $(TEST_document_store_OBJECTS) $(ALL_LIBS)
 # =============================================================================
 
 TEST_EXECUTION_ORDER := \
-    $(TEST_main_TARGET) $(TEST_cli_flags_TARGET) $(TEST_darray_TARGET) $(TEST_ptrarray_TARGET) \
+    $(TEST_main_TARGET) $(TEST_cli_flags_TARGET) $(TEST_interrupt_TARGET) $(TEST_darray_TARGET) $(TEST_ptrarray_TARGET) \
     $(TEST_rate_limiter_TARGET) $(TEST_allowlist_TARGET) $(TEST_tool_args_TARGET) $(TEST_gate_prompter_TARGET) \
     $(TEST_ralph_home_TARGET) $(TEST_http_TARGET) $(TEST_http_retry_TARGET) \
     $(TEST_streaming_TARGET) $(TEST_openai_streaming_TARGET) $(TEST_anthropic_streaming_TARGET) \
@@ -351,7 +356,7 @@ check: test
 
 # Excluded: HTTP (network), Python (embedded stdlib), subagent (fork/exec)
 VALGRIND_TESTS := \
-    $(TEST_main_TARGET) $(TEST_cli_flags_TARGET) $(TEST_darray_TARGET) $(TEST_ptrarray_TARGET) \
+    $(TEST_main_TARGET) $(TEST_cli_flags_TARGET) $(TEST_interrupt_TARGET) $(TEST_darray_TARGET) $(TEST_ptrarray_TARGET) \
     $(TEST_rate_limiter_TARGET) $(TEST_allowlist_TARGET) $(TEST_tool_args_TARGET) $(TEST_gate_prompter_TARGET) \
     $(TEST_ralph_home_TARGET) $(TEST_http_retry_TARGET) $(TEST_streaming_TARGET) \
     $(TEST_openai_streaming_TARGET) $(TEST_anthropic_streaming_TARGET) \

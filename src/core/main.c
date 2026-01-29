@@ -4,6 +4,7 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 #include "ralph.h"
+#include "interrupt.h"
 #include "debug_output.h"
 #include "output_formatter.h"
 #include "json_output.h"
@@ -254,22 +255,33 @@ int main(int argc, char *argv[])
         using_history();
         memory_commands_init();
 
+        if (interrupt_init() != 0) {
+            fprintf(stderr, "Warning: Failed to initialize interrupt handling\n");
+        }
+
         char *input_line;
 
         while (1) {
+            interrupt_clear();
+
             input_line = readline("> ");
 
             if (input_line == NULL) {
+                if (interrupt_pending()) {
+                    interrupt_clear();
+                    printf("\n");
+                    continue;
+                }
                 printf("\n");
                 break;
             }
-            
+
             if (strcmp(input_line, "quit") == 0 || strcmp(input_line, "exit") == 0) {
                 printf("Goodbye!\n");
                 free(input_line);
                 break;
             }
-            
+
             if (strlen(input_line) == 0) {
                 free(input_line);
                 continue;
@@ -282,12 +294,13 @@ int main(int argc, char *argv[])
                     free(input_line);
                     continue;
                 }
-                // Unrecognized slash commands fall through to the LLM
             }
 
             printf("\n");
             int result = ralph_process_message(&session, input_line);
-            if (result != 0) {
+            if (result == -2) {
+                printf("Operation cancelled.\n");
+            } else if (result != 0) {
                 fprintf(stderr, "Error: Failed to process message\n");
             }
             printf("\n");
@@ -295,6 +308,7 @@ int main(int argc, char *argv[])
             free(input_line);
         }
 
+        interrupt_cleanup();
         memory_commands_cleanup();
         ralph_cleanup_session(&session);
         return EXIT_SUCCESS;
