@@ -4,6 +4,7 @@
 #include "../utils/debug_output.h"
 #include "../core/ralph.h"
 #include "../core/async_executor.h"
+#include "../core/interrupt.h"
 #include "../policy/subagent_approval.h"
 #include "../session/conversation_tracker.h"
 #include "../db/message_store.h"
@@ -270,8 +271,15 @@ int subagent_manager_init_with_config(SubagentManager *manager, int max_subagent
     manager->max_subagents = max_subagents;
     manager->timeout_seconds = timeout_seconds;
     manager->is_subagent_process = 0;
+    manager->gate_config = NULL;
 
     return 0;
+}
+
+void subagent_manager_set_gate_config(SubagentManager *manager, ApprovalGateConfig *gate_config) {
+    if (manager != NULL) {
+        manager->gate_config = gate_config;
+    }
 }
 
 /**
@@ -884,6 +892,15 @@ int subagent_get_status(SubagentManager *manager, const char *subagent_id, int w
     }
 
     while (sub->status == SUBAGENT_STATUS_RUNNING) {
+        /* Check for interrupt (Ctrl-C) */
+        if (interrupt_pending()) {
+            sub->status = SUBAGENT_STATUS_FAILED;
+            sub->error = strdup("Interrupted by user");
+            kill(sub->pid, SIGTERM);
+            waitpid(sub->pid, NULL, WNOHANG);
+            break;
+        }
+
         now = time(NULL);
 
         if (now - sub->start_time > manager->timeout_seconds) {
@@ -894,6 +911,15 @@ int subagent_get_status(SubagentManager *manager, const char *subagent_id, int w
             sub->error = strdup("Subagent execution timed out");
             subagent_notify_parent(sub);
             break;
+        }
+
+        /* Handle any pending approval requests from this subagent */
+        if (manager->gate_config != NULL &&
+            sub->approval_channel.request_fd > 2) {
+            int idx = subagent_poll_approval_requests(manager, 0);
+            if (idx >= 0) {
+                subagent_handle_approval_request(manager, idx, manager->gate_config);
+            }
         }
 
         read_subagent_output_nonblocking(sub);

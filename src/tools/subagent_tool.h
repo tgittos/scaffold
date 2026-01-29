@@ -48,10 +48,14 @@ typedef struct {
     int max_subagents;                 // Maximum allowed concurrent subagents
     int timeout_seconds;               // Timeout for each subagent execution
     int is_subagent_process;           // Flag: 1 if running as subagent (prevents nesting)
+    ApprovalGateConfig *gate_config;   // Parent's approval config for proxying requests
 } SubagentManager;
 
 int subagent_manager_init(SubagentManager *manager);
 int subagent_manager_init_with_config(SubagentManager *manager, int max_subagents, int timeout_seconds);
+
+/** Set the approval gate config for proxying subagent approval requests. */
+void subagent_manager_set_gate_config(SubagentManager *manager, ApprovalGateConfig *gate_config);
 
 /** Kills any running subagents and frees all memory. */
 void subagent_manager_cleanup(SubagentManager *manager);

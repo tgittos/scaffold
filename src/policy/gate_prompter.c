@@ -237,6 +237,9 @@ void gate_prompter_show_single(GatePrompter *gp,
         }
     }
 
+    /* Clear any existing prompt (e.g., readline "> ") before showing gate */
+    fprintf(stderr, "\r\033[K");
+
     fprintf(stderr, "● %s", tool_name);
     if (strlen(detail) > 0) {
         fprintf(stderr, ANSI_DIM " %s" ANSI_RESET, detail);
@@ -284,6 +287,9 @@ void gate_prompter_show_batch(GatePrompter *gp,
     if (gp == NULL || tool_calls == NULL || count <= 0) {
         return;
     }
+
+    /* Clear any existing prompt (e.g., readline "> ") before showing gate */
+    fprintf(stderr, "\r\033[K");
 
     fprintf(stderr, "● %d operations\n", count);
 

@@ -170,6 +170,8 @@ int ralph_init_session(RalphSession* session) {
         fprintf(stderr, "Warning: Failed to initialize approval gates\n");
     } else {
         approval_gate_detect_interactive(&session->gate_config);
+        /* Set gate_config on subagent manager for approval proxying during blocking waits */
+        subagent_manager_set_gate_config(&session->subagent_manager, &session->gate_config);
     }
 
     return 0;

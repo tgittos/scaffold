@@ -248,7 +248,6 @@ static int run_interactive_loop(RalphSession* session, bool json_mode) {
             switch (event) {
                 case ASYNC_EVENT_COMPLETE:
                     debug_printf("Async execution completed\n");
-                    printf("\n");
                     if (g_running) {
                         rl_callback_handler_install("> ", handle_line_callback);
                     }
@@ -306,6 +305,8 @@ static int run_interactive_loop(RalphSession* session, bool json_mode) {
 
         if (notify_fd >= 0 && FD_ISSET(notify_fd, &read_fds)) {
             rl_callback_handler_remove();
+            printf("\r\033[K");  /* Clear old prompt from display */
+            fflush(stdout);
 
             process_incoming_messages(session, session->message_poller);
 

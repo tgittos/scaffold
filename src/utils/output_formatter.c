@@ -866,8 +866,6 @@ void display_streaming_complete(int input_tokens, int output_tokens) {
         return;
     }
 
-    printf("\n");
-
     if (input_tokens > 0 || output_tokens > 0) {
         int total_tokens = input_tokens + output_tokens;
         printf(ANSI_DIM "    └─ %d tokens", total_tokens);
