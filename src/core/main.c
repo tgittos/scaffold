@@ -124,8 +124,10 @@ static void handle_line_callback(char* line) {
     printf("\n");
 
     if (g_executor != NULL) {
+        rl_callback_handler_remove();
         if (async_executor_start(g_executor, line) != 0) {
             fprintf(stderr, "Error: Failed to start message processing\n");
+            rl_callback_handler_install("> ", handle_line_callback);
         }
     } else {
         int result = ralph_process_message(g_session, line);
@@ -169,9 +171,18 @@ static int run_interactive_loop(RalphSession* session, bool json_mode) {
 
         fd_set read_fds;
         FD_ZERO(&read_fds);
-        FD_SET(STDIN_FILENO, &read_fds);
 
-        int max_fd = STDIN_FILENO;
+        bool async_running = (g_executor != NULL && async_executor_is_running(g_executor));
+        int max_fd = -1;
+
+        /* Only poll stdin when not in async execution mode.
+         * During async, the readline handler is removed, so calling
+         * rl_callback_read_char() would crash. User input during async
+         * is ignored anyway, and Ctrl+C is handled via signal. */
+        if (!async_running) {
+            FD_SET(STDIN_FILENO, &read_fds);
+            max_fd = STDIN_FILENO;
+        }
 
         if (notify_fd >= 0) {
             FD_SET(notify_fd, &read_fds);
@@ -180,7 +191,7 @@ static int run_interactive_loop(RalphSession* session, bool json_mode) {
             }
         }
 
-        if (executor_fd >= 0 && async_executor_is_running(g_executor)) {
+        if (executor_fd >= 0 && async_running) {
             FD_SET(executor_fd, &read_fds);
             if (executor_fd > max_fd) {
                 max_fd = executor_fd;
@@ -202,6 +213,12 @@ static int run_interactive_loop(RalphSession* session, bool json_mode) {
         struct timeval timeout;
         timeout.tv_sec = 1;
         timeout.tv_usec = 0;
+
+        /* If no fds to poll (shouldn't happen), just sleep and continue */
+        if (max_fd < 0) {
+            usleep(100000);
+            continue;
+        }
 
         int ready = select(max_fd + 1, &read_fds, NULL, NULL, &timeout);
 
@@ -232,16 +249,25 @@ static int run_interactive_loop(RalphSession* session, bool json_mode) {
                 case ASYNC_EVENT_COMPLETE:
                     debug_printf("Async execution completed\n");
                     printf("\n");
+                    if (g_running) {
+                        rl_callback_handler_install("> ", handle_line_callback);
+                    }
                     break;
                 case ASYNC_EVENT_ERROR: {
                     const char* err = async_executor_get_error(g_executor);
                     fprintf(stderr, "Error: %s\n", err ? err : "Message processing failed");
                     printf("\n");
+                    if (g_running) {
+                        rl_callback_handler_install("> ", handle_line_callback);
+                    }
                     break;
                 }
                 case ASYNC_EVENT_INTERRUPTED:
                     debug_printf("Async execution was interrupted\n");
                     printf("\n");
+                    if (g_running) {
+                        rl_callback_handler_install("> ", handle_line_callback);
+                    }
                     break;
                 case ASYNC_EVENT_APPROVAL:
                     debug_printf("Approval requested (not yet implemented)\n");
@@ -268,13 +294,13 @@ static int run_interactive_loop(RalphSession* session, bool json_mode) {
 
                 subagent_handle_approval_request(mgr, (int)i, &session->gate_config);
 
-                if (g_running) {
+                if (g_running && (g_executor == NULL || !async_executor_is_running(g_executor))) {
                     rl_callback_handler_install("> ", handle_line_callback);
                 }
             }
         }
 
-        if (FD_ISSET(STDIN_FILENO, &read_fds)) {
+        if (!async_running && FD_ISSET(STDIN_FILENO, &read_fds)) {
             rl_callback_read_char();
         }
 
@@ -283,7 +309,7 @@ static int run_interactive_loop(RalphSession* session, bool json_mode) {
 
             process_incoming_messages(session, session->message_poller);
 
-            if (g_running) {
+            if (g_running && (g_executor == NULL || !async_executor_is_running(g_executor))) {
                 rl_callback_handler_install("> ", handle_line_callback);
             }
         }
