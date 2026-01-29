@@ -23,6 +23,7 @@
 #include "../db/task_store.h"
 #include "../db/message_store.h"
 #include "messaging_tool.h"
+#include "../messaging/message_poller.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -87,6 +88,10 @@ int ralph_init_session(RalphSession* session) {
         snprintf(session->session_id, sizeof(session->session_id), "fallback-%ld", (long)time(NULL));
     }
 
+    session->polling_config.auto_poll_enabled = 1;
+    session->polling_config.poll_interval_ms = MESSAGE_POLLER_DEFAULT_INTERVAL_MS;
+    session->message_poller = NULL;
+
     if (task_store_get_instance() == NULL) {
         fprintf(stderr, "Warning: Task store unavailable, using in-memory tasks only\n");
     }
@@ -95,7 +100,6 @@ int ralph_init_session(RalphSession* session) {
         fprintf(stderr, "Warning: Message store unavailable, messaging disabled\n");
     } else {
         messaging_tool_set_agent_id(session->session_id);
-        // Check if we're a subagent with a parent
         const char* parent_id = getenv(RALPH_PARENT_AGENT_ID_ENV);
         if (parent_id != NULL && parent_id[0] != '\0') {
             messaging_tool_set_parent_agent_id(parent_id);
@@ -173,6 +177,12 @@ int ralph_init_session(RalphSession* session) {
 
 void ralph_cleanup_session(RalphSession* session) {
     if (session == NULL) return;
+
+    if (session->message_poller != NULL) {
+        message_poller_stop(session->message_poller);
+        message_poller_destroy(session->message_poller);
+        session->message_poller = NULL;
+    }
 
     streaming_handler_cleanup();
     python_interpreter_shutdown();
@@ -596,6 +606,54 @@ int manage_conversation_tokens(RalphSession* session, const char* user_message,
             cleanup_compaction_result(&compact_result);
         }
     }
-    
+
     return 0;
+}
+
+int ralph_start_message_polling(RalphSession* session) {
+    if (session == NULL) {
+        return -1;
+    }
+
+    if (!session->polling_config.auto_poll_enabled) {
+        debug_printf("Message polling disabled by configuration\n");
+        return 0;
+    }
+
+    if (message_store_get_instance() == NULL) {
+        debug_printf("Message store unavailable, skipping message polling\n");
+        return 0;
+    }
+
+    if (session->message_poller != NULL) {
+        return 0;
+    }
+
+    session->message_poller = message_poller_create(session->session_id,
+                                                     session->polling_config.poll_interval_ms);
+    if (session->message_poller == NULL) {
+        fprintf(stderr, "Warning: Failed to create message poller\n");
+        return -1;
+    }
+
+    if (message_poller_start(session->message_poller) != 0) {
+        fprintf(stderr, "Warning: Failed to start message poller\n");
+        message_poller_destroy(session->message_poller);
+        session->message_poller = NULL;
+        return -1;
+    }
+
+    debug_printf("Message polling started (interval: %dms)\n", session->polling_config.poll_interval_ms);
+    return 0;
+}
+
+void ralph_stop_message_polling(RalphSession* session) {
+    if (session == NULL || session->message_poller == NULL) {
+        return;
+    }
+
+    message_poller_stop(session->message_poller);
+    message_poller_destroy(session->message_poller);
+    session->message_poller = NULL;
+    debug_printf("Message polling stopped\n");
 }

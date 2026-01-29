@@ -891,3 +891,30 @@ void display_streaming_error(const char* error) {
     fprintf(stderr, "\n" ANSI_RED "Error: %s" ANSI_RESET "\n", error);
     fflush(stderr);
 }
+
+void display_message_notification(int count) {
+    if (g_json_output_mode) {
+        return;
+    }
+
+    if (count <= 0) {
+        return;
+    }
+
+    fprintf(stdout, "\r\033[K" ANSI_YELLOW "● " ANSI_RESET);
+    if (count == 1) {
+        fprintf(stdout, ANSI_YELLOW "1 new message" ANSI_RESET "\n");
+    } else {
+        fprintf(stdout, ANSI_YELLOW "%d new messages" ANSI_RESET "\n", count);
+    }
+    fflush(stdout);
+}
+
+void display_message_notification_clear(void) {
+    if (g_json_output_mode) {
+        return;
+    }
+
+    fprintf(stdout, "\r\033[K");
+    fflush(stdout);
+}

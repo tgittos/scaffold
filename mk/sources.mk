@@ -67,6 +67,12 @@ TOOL_SOURCES := \
 # MCP system
 MCP_SOURCES := $(SRCDIR)/mcp/mcp_client.c
 
+# Messaging system
+MESSAGING_SOURCES := \
+    $(SRCDIR)/messaging/message_poller.c \
+    $(SRCDIR)/messaging/notification_formatter.c \
+    $(SRCDIR)/messaging/message_processor.c
+
 # LLM providers
 PROVIDER_SOURCES := \
     $(SRCDIR)/llm/providers/openai_provider.c \
@@ -112,8 +118,8 @@ UTILS_EXTRA_SOURCES := \
 CLI_SOURCES := $(SRCDIR)/cli/memory_commands.c
 
 # Combined sources
-C_SOURCES := $(CORE_SOURCES) $(POLICY_SOURCES) $(TOOL_SOURCES) $(MCP_SOURCES) $(PROVIDER_SOURCES) \
-    $(MODEL_SOURCES) $(DB_C_SOURCES) $(PDF_SOURCES) $(CLI_SOURCES) $(UTILS_EXTRA_SOURCES)
+C_SOURCES := $(CORE_SOURCES) $(POLICY_SOURCES) $(TOOL_SOURCES) $(MCP_SOURCES) $(MESSAGING_SOURCES) \
+    $(PROVIDER_SOURCES) $(MODEL_SOURCES) $(DB_C_SOURCES) $(PDF_SOURCES) $(CLI_SOURCES) $(UTILS_EXTRA_SOURCES)
 CPP_SOURCES := $(DB_CPP_SOURCES)
 SOURCES := $(C_SOURCES) $(CPP_SOURCES)
 OBJECTS := $(C_SOURCES:.c=.o) $(CPP_SOURCES:.cpp=.o)
@@ -180,7 +186,8 @@ RALPH_CORE_DEPS := \
     $(SRCDIR)/llm/providers/openai_provider.c \
     $(SRCDIR)/llm/providers/anthropic_provider.c \
     $(SRCDIR)/llm/providers/local_ai_provider.c \
-    $(SRCDIR)/mcp/mcp_client.c
+    $(SRCDIR)/mcp/mcp_client.c \
+    $(MESSAGING_SOURCES)
 
 # Verified file I/O dependencies (needed by Python tools for TOCTOU-safe access)
 # Full set including atomic_file.c and path_normalize.c

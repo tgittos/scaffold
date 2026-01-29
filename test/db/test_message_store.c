@@ -231,10 +231,7 @@ void test_channel_get_subscribers(void) {
     TEST_ASSERT_NOT_NULL(subscribers);
     TEST_ASSERT_EQUAL(3, count);
 
-    for (size_t i = 0; i < count; i++) {
-        free(subscribers[i]);
-    }
-    free(subscribers);
+    channel_subscribers_free(subscribers, count);
 }
 
 void test_channel_get_agent_subscriptions(void) {
@@ -248,10 +245,7 @@ void test_channel_get_agent_subscriptions(void) {
     TEST_ASSERT_NOT_NULL(channels);
     TEST_ASSERT_EQUAL(2, count);
 
-    for (size_t i = 0; i < count; i++) {
-        free(channels[i]);
-    }
-    free(channels);
+    channel_subscriptions_free(channels, count);
 }
 
 void test_channel_publish(void) {
@@ -419,6 +413,62 @@ void test_channel_delete_cascades(void) {
     TEST_ASSERT_EQUAL(0, subscribed);
 }
 
+void test_channel_has_pending_no_subscriptions(void) {
+    int pending = channel_has_pending(g_store, "agent-1");
+    TEST_ASSERT_EQUAL(0, pending);
+}
+
+void test_channel_has_pending_no_messages(void) {
+    channel_create(g_store, "empty-channel", "Empty test", "creator", 0);
+    channel_subscribe(g_store, "empty-channel", "agent-1");
+
+    int pending = channel_has_pending(g_store, "agent-1");
+    TEST_ASSERT_EQUAL(0, pending);
+}
+
+void test_channel_has_pending_with_messages(void) {
+    channel_create(g_store, "msg-channel", "Message test", "creator", 0);
+    channel_subscribe(g_store, "msg-channel", "agent-1");
+
+    char msg_id[40] = {0};
+    channel_publish(g_store, "msg-channel", "publisher", "Test message", msg_id);
+
+    int pending = channel_has_pending(g_store, "agent-1");
+    TEST_ASSERT_EQUAL(1, pending);
+}
+
+void test_channel_has_pending_after_read(void) {
+    channel_create(g_store, "read-test-ch", "Read test", "creator", 0);
+    channel_subscribe(g_store, "read-test-ch", "agent-1");
+
+    char msg_id[40] = {0};
+    channel_publish(g_store, "read-test-ch", "publisher", "Message to read", msg_id);
+
+    size_t count = 0;
+    ChannelMessage** msgs = channel_receive(g_store, "read-test-ch", "agent-1", 10, &count);
+    TEST_ASSERT_EQUAL(1, count);
+    channel_message_free_list(msgs, count);
+
+    int pending = channel_has_pending(g_store, "agent-1");
+    TEST_ASSERT_EQUAL(0, pending);
+}
+
+void test_channel_has_pending_multiple_channels(void) {
+    channel_create(g_store, "multi-ch-1", "Channel 1", "creator", 0);
+    channel_create(g_store, "multi-ch-2", "Channel 2", "creator", 0);
+    channel_subscribe(g_store, "multi-ch-1", "agent-1");
+    channel_subscribe(g_store, "multi-ch-2", "agent-1");
+
+    int pending = channel_has_pending(g_store, "agent-1");
+    TEST_ASSERT_EQUAL(0, pending);
+
+    char msg_id[40] = {0};
+    channel_publish(g_store, "multi-ch-2", "publisher", "Message on ch2", msg_id);
+
+    pending = channel_has_pending(g_store, "agent-1");
+    TEST_ASSERT_EQUAL(1, pending);
+}
+
 int main(void) {
     UNITY_BEGIN();
 
@@ -453,6 +503,12 @@ int main(void) {
 
     RUN_TEST(test_cross_process_access);
     RUN_TEST(test_channel_delete_cascades);
+
+    RUN_TEST(test_channel_has_pending_no_subscriptions);
+    RUN_TEST(test_channel_has_pending_no_messages);
+    RUN_TEST(test_channel_has_pending_with_messages);
+    RUN_TEST(test_channel_has_pending_after_read);
+    RUN_TEST(test_channel_has_pending_multiple_channels);
 
     return UNITY_END();
 }

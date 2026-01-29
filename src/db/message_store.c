@@ -205,12 +205,12 @@ static DirectMessage* row_to_direct_message(sqlite3_stmt* stmt) {
         }
     }
 
-    msg->created_at = (time_t)sqlite3_column_int64(stmt, 4);
+    msg->created_at = (time_t)(sqlite3_column_int64(stmt, 4) / 1000);
     msg->read_at = sqlite3_column_type(stmt, 5) != SQLITE_NULL
-                       ? (time_t)sqlite3_column_int64(stmt, 5)
+                       ? (time_t)(sqlite3_column_int64(stmt, 5) / 1000)
                        : 0;
     msg->expires_at = sqlite3_column_type(stmt, 6) != SQLITE_NULL
-                          ? (time_t)sqlite3_column_int64(stmt, 6)
+                          ? (time_t)(sqlite3_column_int64(stmt, 6) / 1000)
                           : 0;
 
     return msg;
@@ -236,7 +236,7 @@ static Channel* row_to_channel(sqlite3_stmt* stmt) {
         strncpy(ch->creator_id, creator_id, sizeof(ch->creator_id) - 1);
     }
 
-    ch->created_at = (time_t)sqlite3_column_int64(stmt, 3);
+    ch->created_at = (time_t)(sqlite3_column_int64(stmt, 3) / 1000);
     ch->is_persistent = sqlite3_column_int(stmt, 4);
 
     return ch;
@@ -270,7 +270,7 @@ static ChannelMessage* row_to_channel_message(sqlite3_stmt* stmt) {
         }
     }
 
-    msg->created_at = (time_t)sqlite3_column_int64(stmt, 4);
+    msg->created_at = (time_t)(sqlite3_column_int64(stmt, 4) / 1000);
 
     return msg;
 }
@@ -402,6 +402,34 @@ int message_has_pending(message_store_t* store, const char* agent_id) {
 
     const char* sql =
         "SELECT 1 FROM direct_messages WHERE recipient_id = ? AND read_at IS NULL LIMIT 1;";
+    sqlite3_stmt* stmt = NULL;
+    int rc = sqlite3_prepare_v2(store->db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        pthread_mutex_unlock(&store->mutex);
+        return -1;
+    }
+
+    sqlite3_bind_text(stmt, 1, agent_id, -1, SQLITE_STATIC);
+
+    int has_pending = (sqlite3_step(stmt) == SQLITE_ROW) ? 1 : 0;
+    sqlite3_finalize(stmt);
+    pthread_mutex_unlock(&store->mutex);
+
+    return has_pending;
+}
+
+int channel_has_pending(message_store_t* store, const char* agent_id) {
+    if (store == NULL || agent_id == NULL) {
+        return -1;
+    }
+
+    pthread_mutex_lock(&store->mutex);
+
+    const char* sql =
+        "SELECT 1 FROM channel_messages cm "
+        "JOIN channel_subscriptions cs ON cm.channel_id = cs.channel_id "
+        "WHERE cs.agent_id = ? AND cm.created_at > cs.last_read_at "
+        "LIMIT 1;";
     sqlite3_stmt* stmt = NULL;
     int rc = sqlite3_prepare_v2(store->db, sql, -1, &stmt, NULL);
     if (rc != SQLITE_OK) {
@@ -1153,4 +1181,24 @@ void channel_message_free_list(ChannelMessage** msgs, size_t count) {
         channel_message_free(msgs[i]);
     }
     free(msgs);
+}
+
+void channel_subscribers_free(char** subscribers, size_t count) {
+    if (subscribers == NULL) {
+        return;
+    }
+    for (size_t i = 0; i < count; i++) {
+        free(subscribers[i]);
+    }
+    free(subscribers);
+}
+
+void channel_subscriptions_free(char** subscriptions, size_t count) {
+    if (subscriptions == NULL) {
+        return;
+    }
+    for (size_t i = 0; i < count; i++) {
+        free(subscriptions[i]);
+    }
+    free(subscriptions);
 }

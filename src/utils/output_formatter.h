@@ -170,4 +170,16 @@ void display_streaming_complete(int input_tokens, int output_tokens);
  */
 void display_streaming_error(const char* error);
 
+/**
+ * Display message notification indicator (yellow dot with count)
+ *
+ * @param count Number of pending messages
+ */
+void display_message_notification(int count);
+
+/**
+ * Clear the message notification indicator
+ */
+void display_message_notification_clear(void);
+
 #endif /* OUTPUT_FORMATTER_H */

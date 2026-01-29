@@ -194,6 +194,23 @@ $(TEST_task_store_TARGET): $(TEST_task_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_
 $(TEST_message_store_TARGET): $(TEST_message_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB)
 	$(CC) -o $@ $(TEST_message_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) -lpthread -lm
 
+# Messaging deps
+MESSAGING_DEPS := \
+    $(SRCDIR)/messaging/message_poller.c \
+    $(SRCDIR)/messaging/notification_formatter.c \
+    $(SRCDIR)/db/message_store.c \
+    $(SRCDIR)/utils/uuid_utils.c \
+    $(SRCDIR)/utils/ralph_home.c
+
+$(eval $(call def_test,message_poller,messaging/test_message_poller,$(MESSAGING_DEPS)))
+$(eval $(call def_test,notification_formatter,messaging/test_notification_formatter,$(MESSAGING_DEPS)))
+
+$(TEST_message_poller_TARGET): $(TEST_message_poller_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB)
+	$(CC) -o $@ $(TEST_message_poller_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) -lpthread -lm
+
+$(TEST_notification_formatter_TARGET): $(TEST_notification_formatter_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB)
+	$(CC) -o $@ $(TEST_notification_formatter_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) -lpthread -lm
+
 # =============================================================================
 # CONVERSATION TESTS (special linking)
 # =============================================================================
@@ -344,6 +361,7 @@ TEST_EXECUTION_ORDER := \
     $(TEST_conversation_compactor_TARGET) $(TEST_rolling_summary_TARGET) $(TEST_incomplete_task_bug_TARGET) \
     $(TEST_messages_array_bug_TARGET) $(TEST_mcp_client_TARGET) $(TEST_vector_db_TARGET) \
     $(TEST_document_store_TARGET) $(TEST_task_store_TARGET) $(TEST_message_store_TARGET) \
+    $(TEST_message_poller_TARGET) $(TEST_notification_formatter_TARGET) \
     $(TEST_pdf_extractor_TARGET) $(TEST_document_chunker_TARGET) $(TEST_approval_gate_TARGET) \
     $(TEST_atomic_file_TARGET) $(TEST_path_normalize_TARGET) $(TEST_protected_files_TARGET) \
     $(TEST_shell_parser_TARGET) $(TEST_shell_parser_cmd_TARGET) $(TEST_shell_parser_ps_TARGET) \
@@ -363,7 +381,7 @@ check: test
 # VALGRIND
 # =============================================================================
 
-# Excluded: HTTP (network), Python (embedded stdlib), subagent (fork/exec)
+# Excluded: HTTP (network), Python (embedded stdlib), subagent (fork/exec), message_poller (threads)
 VALGRIND_TESTS := \
     $(TEST_main_TARGET) $(TEST_cli_flags_TARGET) $(TEST_interrupt_TARGET) $(TEST_darray_TARGET) $(TEST_ptrarray_TARGET) \
     $(TEST_rate_limiter_TARGET) $(TEST_allowlist_TARGET) $(TEST_tool_args_TARGET) $(TEST_gate_prompter_TARGET) \
@@ -374,7 +392,8 @@ VALGRIND_TESTS := \
     $(TEST_todo_manager_TARGET) $(TEST_vector_db_tool_TARGET) \
     $(TEST_memory_tool_TARGET) $(TEST_token_manager_TARGET) $(TEST_conversation_compactor_TARGET) $(TEST_rolling_summary_TARGET) \
     $(TEST_model_tools_TARGET) $(TEST_vector_db_TARGET) $(TEST_task_store_TARGET) \
-    $(TEST_message_store_TARGET) $(TEST_pdf_extractor_TARGET) $(TEST_document_chunker_TARGET) \
+    $(TEST_message_store_TARGET) $(TEST_notification_formatter_TARGET) \
+    $(TEST_pdf_extractor_TARGET) $(TEST_document_chunker_TARGET) \
     $(TEST_approval_gate_TARGET) $(TEST_atomic_file_TARGET) $(TEST_path_normalize_TARGET) \
     $(TEST_protected_files_TARGET) $(TEST_shell_parser_TARGET) $(TEST_shell_parser_cmd_TARGET) \
     $(TEST_shell_parser_ps_TARGET) $(TEST_subagent_approval_TARGET) $(TEST_json_output_TARGET) \

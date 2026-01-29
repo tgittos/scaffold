@@ -190,7 +190,8 @@ int execute_check_messages_tool_call(const ToolCall *tool_call, ToolResult *resu
         }
         for (size_t i = 0; i < count; i++) {
             escaped_contents[i] = json_escape_string(msgs[i]->content);
-            required_size += 256 + strlen(escaped_contents[i] ? escaped_contents[i] : "");
+            required_size += 200 + sizeof(msgs[i]->id) + sizeof(msgs[i]->sender_id) +
+                             strlen(escaped_contents[i] ? escaped_contents[i] : "");
         }
     }
 
@@ -216,7 +217,8 @@ int execute_check_messages_tool_call(const ToolCall *tool_call, ToolResult *resu
             p += sprintf(p, ", ");
         }
 
-        p += sprintf(p, "{\"id\": \"%s\", \"sender\": \"%s\", \"content\": \"%s\", \"created_at\": %ld}",
+        p += snprintf(p, required_size - (p - response),
+                     "{\"id\": \"%s\", \"sender\": \"%s\", \"content\": \"%s\", \"created_at\": %ld}",
                      msgs[i]->id,
                      msgs[i]->sender_id,
                      escaped_contents[i] ? escaped_contents[i] : "",
@@ -472,7 +474,9 @@ int execute_check_channel_messages_tool_call(const ToolCall *tool_call, ToolResu
         }
         for (size_t i = 0; i < count; i++) {
             escaped_contents[i] = json_escape_string(msgs[i]->content);
-            required_size += 300 + strlen(escaped_contents[i] ? escaped_contents[i] : "");
+            required_size += 200 + sizeof(msgs[i]->id) + sizeof(msgs[i]->channel_id) +
+                             sizeof(msgs[i]->sender_id) +
+                             strlen(escaped_contents[i] ? escaped_contents[i] : "");
         }
     }
 
@@ -499,7 +503,8 @@ int execute_check_channel_messages_tool_call(const ToolCall *tool_call, ToolResu
             p += sprintf(p, ", ");
         }
 
-        p += sprintf(p, "{\"id\": \"%s\", \"channel\": \"%s\", \"sender\": \"%s\", \"content\": \"%s\", \"created_at\": %ld}",
+        p += snprintf(p, required_size - (p - response),
+                     "{\"id\": \"%s\", \"channel\": \"%s\", \"sender\": \"%s\", \"content\": \"%s\", \"created_at\": %ld}",
                      msgs[i]->id,
                      msgs[i]->channel_id,
                      msgs[i]->sender_id,

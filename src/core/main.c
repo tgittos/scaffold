@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <sys/select.h>
 #include <readline/readline.h>
 #include <readline/history.h>
 #include "ralph.h"
@@ -13,11 +15,16 @@
 #include "../tools/subagent_tool.h"
 #include "../utils/ralph_home.h"
 #include "../utils/spinner.h"
+#include "../messaging/message_poller.h"
+#include "../messaging/message_processor.h"
 
 #define MAX_INPUT_SIZE 8192
 #define RALPH_VERSION "0.1.0"
 #define MAX_CLI_ALLOW_ENTRIES 64
 #define MAX_CLI_ALLOW_CATEGORIES 16
+
+static volatile int g_running = 1;
+static RalphSession* g_session = NULL;
 
 static void print_version(void) {
     printf("ralph %s\n", RALPH_VERSION);
@@ -36,6 +43,8 @@ static void print_help(const char *program_name) {
     printf("  --yolo                    Disable all approval gates for this session\n");
     printf("  --allow <spec>            Add allowlist entry (e.g., 'shell:git,status' or 'file_write:.*\\.txt$')\n");
     printf("  --allow-category=<cat>    Allow all operations in category (file_write, shell, network, etc.)\n");
+    printf("  --no-auto-messages        Disable automatic message polling\n");
+    printf("  --message-poll-interval N Set message poll interval in milliseconds (default: 2000)\n");
     printf("\n");
     printf("Arguments:\n");
     printf("  MESSAGE           Process a single message and exit\n");
@@ -74,6 +83,120 @@ static void apply_gate_cli_overrides(RalphSession *session, bool yolo_mode,
     }
 }
 
+static void handle_line_callback(char* line) {
+    if (line == NULL) {
+        printf("\n");
+        g_running = 0;
+        rl_callback_handler_remove();
+        return;
+    }
+
+    if (strcmp(line, "quit") == 0 || strcmp(line, "exit") == 0) {
+        printf("Goodbye!\n");
+        free(line);
+        g_running = 0;
+        rl_callback_handler_remove();
+        return;
+    }
+
+    if (strlen(line) == 0) {
+        free(line);
+        return;
+    }
+
+    add_history(line);
+
+    if (line[0] == '/') {
+        if (process_memory_command(line) == 0) {
+            free(line);
+            return;
+        }
+    }
+
+    printf("\n");
+    int result = ralph_process_message(g_session, line);
+    if (result != 0) {
+        fprintf(stderr, "Error: Failed to process message\n");
+    }
+    printf("\n");
+
+    free(line);
+}
+
+static int run_interactive_loop(RalphSession* session, bool json_mode) {
+    (void)json_mode;
+    g_session = session;
+    g_running = 1;
+
+    if (interrupt_init() != 0) {
+        fprintf(stderr, "Warning: Failed to initialize interrupt handling\n");
+    }
+
+    rl_callback_handler_install("> ", handle_line_callback);
+
+    int notify_fd = -1;
+    if (session->message_poller != NULL) {
+        notify_fd = message_poller_get_notify_fd(session->message_poller);
+    }
+
+    while (g_running) {
+        interrupt_clear();
+
+        fd_set read_fds;
+        FD_ZERO(&read_fds);
+        FD_SET(STDIN_FILENO, &read_fds);
+
+        int max_fd = STDIN_FILENO;
+
+        if (notify_fd >= 0) {
+            FD_SET(notify_fd, &read_fds);
+            if (notify_fd > max_fd) {
+                max_fd = notify_fd;
+            }
+        }
+
+        struct timeval timeout;
+        timeout.tv_sec = 1;
+        timeout.tv_usec = 0;
+
+        int ready = select(max_fd + 1, &read_fds, NULL, NULL, &timeout);
+
+        if (ready < 0) {
+            if (interrupt_pending()) {
+                interrupt_clear();
+                printf("\n");
+                continue;
+            }
+            if (g_running) {
+                continue;
+            }
+            break;
+        }
+
+        if (ready == 0) {
+            continue;
+        }
+
+        if (FD_ISSET(STDIN_FILENO, &read_fds)) {
+            rl_callback_read_char();
+        }
+
+        if (notify_fd >= 0 && FD_ISSET(notify_fd, &read_fds)) {
+            rl_callback_handler_remove();
+
+            process_incoming_messages(session, session->message_poller);
+
+            if (g_running) {
+                rl_callback_handler_install("> ", handle_line_callback);
+            }
+        }
+    }
+
+    rl_callback_handler_remove();
+    interrupt_cleanup();
+    return 0;
+}
+
 int main(int argc, char *argv[])
 {
     for (int i = 1; i < argc; i++) {
@@ -87,7 +210,6 @@ int main(int argc, char *argv[])
         }
     }
 
-    // --home must be parsed before any initialization because other modules depend on ralph_home
     char *home_override = NULL;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--home") == 0 && i + 1 < argc) {
@@ -115,6 +237,9 @@ int main(int argc, char *argv[])
     const char *cli_allow_categories[MAX_CLI_ALLOW_CATEGORIES];
     int cli_allow_category_count = 0;
 
+    bool no_auto_messages = false;
+    int message_poll_interval = MESSAGE_POLLER_DEFAULT_INTERVAL_MS;
+
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--debug") == 0) {
             debug_mode = true;
@@ -124,6 +249,13 @@ int main(int argc, char *argv[])
             json_mode = true;
         } else if (strcmp(argv[i], "--yolo") == 0) {
             yolo_mode = true;
+        } else if (strcmp(argv[i], "--no-auto-messages") == 0) {
+            no_auto_messages = true;
+        } else if (strcmp(argv[i], "--message-poll-interval") == 0 && i + 1 < argc) {
+            message_poll_interval = atoi(argv[++i]);
+            if (message_poll_interval < 100) {
+                message_poll_interval = 100;
+            }
         } else if (strcmp(argv[i], "--allow") == 0 && i + 1 < argc) {
             if (cli_allow_count < MAX_CLI_ALLOW_ENTRIES) {
                 cli_allow_entries[cli_allow_count++] = argv[++i];
@@ -146,7 +278,7 @@ int main(int argc, char *argv[])
         } else if (strcmp(argv[i], "--context") == 0 && i + 1 < argc) {
             subagent_context = argv[++i];
         } else if (strcmp(argv[i], "--home") == 0 && i + 1 < argc) {
-            i++; // Already processed in early parse pass
+            i++;
         } else if (message_arg_index == -1 && argv[i][0] != '-') {
             message_arg_index = i;
         }
@@ -171,6 +303,8 @@ int main(int argc, char *argv[])
             fprintf(stderr, "Error: Failed to initialize Ralph session\n");
             return EXIT_FAILURE;
         }
+
+        session.polling_config.auto_poll_enabled = 0;
 
         if (ralph_load_config(&session) != 0) {
             fprintf(stderr, "Error: Failed to load Ralph configuration\n");
@@ -206,6 +340,11 @@ int main(int argc, char *argv[])
             fprintf(stderr, "Error: Failed to initialize Ralph session\n");
             return EXIT_FAILURE;
         }
+
+        if (no_auto_messages) {
+            session.polling_config.auto_poll_enabled = 0;
+        }
+        session.polling_config.poll_interval_ms = message_poll_interval;
 
         if (ralph_load_config(&session) != 0) {
             fprintf(stderr, "Error: Failed to load Ralph configuration\n");
@@ -252,64 +391,15 @@ int main(int argc, char *argv[])
                 printf("\n");
             }
         }
-        
+
         using_history();
         memory_commands_init();
 
-        if (interrupt_init() != 0) {
-            fprintf(stderr, "Warning: Failed to initialize interrupt handling\n");
-        }
+        ralph_start_message_polling(&session);
 
-        char *input_line;
+        run_interactive_loop(&session, json_mode);
 
-        while (1) {
-            interrupt_clear();
-
-            input_line = readline("> ");
-
-            if (input_line == NULL) {
-                if (interrupt_pending()) {
-                    interrupt_clear();
-                    printf("\n");
-                    continue;
-                }
-                printf("\n");
-                break;
-            }
-
-            if (strcmp(input_line, "quit") == 0 || strcmp(input_line, "exit") == 0) {
-                printf("Goodbye!\n");
-                free(input_line);
-                break;
-            }
-
-            if (strlen(input_line) == 0) {
-                free(input_line);
-                continue;
-            }
-
-            add_history(input_line);
-
-            if (input_line[0] == '/') {
-                if (process_memory_command(input_line) == 0) {
-                    free(input_line);
-                    continue;
-                }
-            }
-
-            printf("\n");
-            int result = ralph_process_message(&session, input_line);
-            if (result == -2) {
-                printf("Operation cancelled.\n");
-            } else if (result != 0) {
-                fprintf(stderr, "Error: Failed to process message\n");
-            }
-            printf("\n");
-
-            free(input_line);
-        }
-
-        interrupt_cleanup();
+        ralph_stop_message_polling(&session);
         memory_commands_cleanup();
         spinner_cleanup();
         ralph_cleanup_session(&session);

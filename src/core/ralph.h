@@ -12,12 +12,18 @@
 #include "../tools/subagent_tool.h"
 #include "../utils/uuid_utils.h"
 #include "../policy/approval_gate.h"
+#include "../messaging/message_poller.h"
 
 typedef enum {
     API_TYPE_OPENAI,
     API_TYPE_ANTHROPIC,
     API_TYPE_LOCAL
 } APIType;
+
+typedef struct {
+    int auto_poll_enabled;
+    int poll_interval_ms;
+} MessagePollingConfig;
 
 typedef struct {
     char session_id[40];
@@ -27,6 +33,8 @@ typedef struct {
     MCPClient mcp_client;
     SubagentManager subagent_manager;
     ApprovalGateConfig gate_config;
+    message_poller_t* message_poller;
+    MessagePollingConfig polling_config;
 } RalphSession;
 
 int ralph_init_session(RalphSession* session);
@@ -56,5 +64,8 @@ int manage_conversation_tokens(RalphSession* session, const char* user_message,
                               TokenConfig* config, TokenUsage* usage);
 
 int ralph_generate_recap(RalphSession* session, int max_messages);
+
+int ralph_start_message_polling(RalphSession* session);
+void ralph_stop_message_polling(RalphSession* session);
 
 #endif // RALPH_H

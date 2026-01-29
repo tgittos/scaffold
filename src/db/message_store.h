@@ -64,6 +64,9 @@ DirectMessage** message_receive_direct(message_store_t* store, const char* agent
 // Returns 1 if agent has pending messages, 0 if not, -1 on error.
 int message_has_pending(message_store_t* store, const char* agent_id);
 
+// Returns 1 if agent has pending channel messages (from subscribed channels), 0 if not, -1 on error.
+int channel_has_pending(message_store_t* store, const char* agent_id);
+
 // Caller owns returned message and must free with direct_message_free().
 DirectMessage* message_get_direct(message_store_t* store, const char* message_id);
 
@@ -91,11 +94,11 @@ int channel_unsubscribe(message_store_t* store, const char* channel_name,
 int channel_is_subscribed(message_store_t* store, const char* channel_name,
                           const char* agent_id);
 
-// Caller owns returned array and must free with free().
+// Caller owns returned array and must free with channel_subscribers_free().
 char** channel_get_subscribers(message_store_t* store, const char* channel_name,
                                size_t* out_count);
 
-// Caller owns returned array and must free with free().
+// Caller owns returned array and must free with channel_subscriptions_free().
 char** channel_get_agent_subscriptions(message_store_t* store, const char* agent_id,
                                        size_t* out_count);
 
@@ -137,5 +140,7 @@ void subscription_free(Subscription* sub);
 void subscription_free_list(Subscription** subs, size_t count);
 void channel_message_free(ChannelMessage* msg);
 void channel_message_free_list(ChannelMessage** msgs, size_t count);
+void channel_subscribers_free(char** subscribers, size_t count);
+void channel_subscriptions_free(char** subscriptions, size_t count);
 
 #endif // MESSAGE_STORE_H
