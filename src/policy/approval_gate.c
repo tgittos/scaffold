@@ -1110,6 +1110,10 @@ ApprovalResult approval_gate_prompt(ApprovalGateConfig *config,
     }
 
 done:
+    /* Clear the approval prompt on success so spinner starts clean */
+    if (result == APPROVAL_ALLOWED || result == APPROVAL_ALLOWED_ALWAYS) {
+        gate_prompter_clear_prompt(gp);
+    }
     free(shell_command);
     free(file_path);
     gate_prompter_destroy(gp);
@@ -1355,6 +1359,10 @@ ApprovalResult approval_gate_prompt_batch(ApprovalGateConfig *config,
     }
 
 done:
+    /* Clear the batch prompt on success so spinner starts clean */
+    if (result == APPROVAL_ALLOWED || result == APPROVAL_ALLOWED_ALWAYS) {
+        gate_prompter_clear_batch_prompt(gp, count);
+    }
     free(pending);
     free(statuses);
     gate_prompter_destroy(gp);

@@ -173,6 +173,36 @@ void gate_prompter_newline(GatePrompter *gp) {
     fflush(stderr);
 }
 
+void gate_prompter_clear_prompt(GatePrompter *gp) {
+    if (gp == NULL) {
+        return;
+    }
+    /* Move cursor up 3 lines and clear to end of screen.
+     * The prompt consists of:
+     *   1. Empty line (from approval_gate_prompt)
+     *   2. "● tool detail" line
+     *   3. "  └─ Allow? [y/n/a/?] <response>" line
+     */
+    fprintf(stderr, "\033[3A\033[J");
+    fflush(stderr);
+}
+
+void gate_prompter_clear_batch_prompt(GatePrompter *gp, int count) {
+    if (gp == NULL || count <= 0) {
+        return;
+    }
+    /* Move cursor up (count + 3) lines and clear to end of screen.
+     * The batch prompt consists of:
+     *   1. Empty line (from approval_gate_prompt_batch)
+     *   2. "● N operations" header line
+     *   3-N+2. One line per operation
+     *   N+3. "  └─ Allow all? [y/n/1-N] <response>" line
+     */
+    int lines_to_clear = count + 3;
+    fprintf(stderr, "\033[%dA\033[J", lines_to_clear);
+    fflush(stderr);
+}
+
 void gate_prompter_show_single(GatePrompter *gp,
                                const ToolCall *tool_call,
                                const char *command,

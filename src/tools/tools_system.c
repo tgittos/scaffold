@@ -853,22 +853,18 @@ int execute_tool_call(const ToolRegistry *registry, const ToolCall *tool_call, T
     
     for (int i = 0; i < registry->function_count; i++) {
         if (strcmp(registry->functions[i].name, tool_call->name) == 0) {
-            int exec_result = registry->functions[i].execute_func(tool_call, result);
-
-            log_tool_execution_improved(tool_call->name, tool_call->arguments, result->success, result->result);
-            return exec_result;
+            return registry->functions[i].execute_func(tool_call, result);
         }
     }
-    
+
     result->result = strdup("Error: Unknown tool");
     result->success = 0;
-    
+
     if (result->result == NULL) {
         free(result->tool_call_id);
         return -1;
     }
-    
-    log_tool_execution_improved(tool_call->name, tool_call->arguments, result->success, result->result);
+
     return 0;
 }
 

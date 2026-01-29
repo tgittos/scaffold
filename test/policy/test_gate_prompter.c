@@ -137,6 +137,38 @@ void test_gate_prompter_show_batch_zero_count_is_safe(void) {
 }
 
 /* =============================================================================
+ * clear_prompt Tests
+ * ========================================================================== */
+
+void test_gate_prompter_clear_prompt_null_prompter_is_safe(void) {
+    /* Should not crash when passed NULL prompter */
+    gate_prompter_clear_prompt(NULL);
+    TEST_PASS();
+}
+
+/* =============================================================================
+ * clear_batch_prompt Tests
+ * ========================================================================== */
+
+void test_gate_prompter_clear_batch_prompt_null_prompter_is_safe(void) {
+    /* Should not crash when passed NULL prompter */
+    gate_prompter_clear_batch_prompt(NULL, 5);
+    TEST_PASS();
+}
+
+void test_gate_prompter_clear_batch_prompt_zero_count_is_safe(void) {
+    /* Should not crash with zero count */
+    gate_prompter_clear_batch_prompt(NULL, 0);
+    TEST_PASS();
+}
+
+void test_gate_prompter_clear_batch_prompt_negative_count_is_safe(void) {
+    /* Should not crash with negative count */
+    gate_prompter_clear_batch_prompt(NULL, -1);
+    TEST_PASS();
+}
+
+/* =============================================================================
  * print Tests
  * ========================================================================== */
 
@@ -195,6 +227,14 @@ int main(void) {
     RUN_TEST(test_gate_prompter_show_batch_null_prompter_is_safe);
     RUN_TEST(test_gate_prompter_show_batch_null_tool_calls_is_safe);
     RUN_TEST(test_gate_prompter_show_batch_zero_count_is_safe);
+
+    /* clear_prompt tests */
+    RUN_TEST(test_gate_prompter_clear_prompt_null_prompter_is_safe);
+
+    /* clear_batch_prompt tests */
+    RUN_TEST(test_gate_prompter_clear_batch_prompt_null_prompter_is_safe);
+    RUN_TEST(test_gate_prompter_clear_batch_prompt_zero_count_is_safe);
+    RUN_TEST(test_gate_prompter_clear_batch_prompt_negative_count_is_safe);
 
     /* print tests */
     RUN_TEST(test_gate_prompter_print_null_prompter_is_safe);

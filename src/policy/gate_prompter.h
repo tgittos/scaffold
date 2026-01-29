@@ -132,4 +132,21 @@ void gate_prompter_print(GatePrompter *gp, const char *format, ...)
  */
 void gate_prompter_newline(GatePrompter *gp);
 
+/**
+ * Clear the single-tool approval prompt from the terminal.
+ * Moves cursor up and clears to end of screen to remove the prompt lines.
+ *
+ * @param gp Gate prompter (can be NULL, in which case this is a no-op)
+ */
+void gate_prompter_clear_prompt(GatePrompter *gp);
+
+/**
+ * Clear the batch approval prompt from the terminal.
+ * Moves cursor up and clears to end of screen to remove the prompt lines.
+ *
+ * @param gp Gate prompter (can be NULL, in which case this is a no-op)
+ * @param count Number of operations that were shown in the batch prompt
+ */
+void gate_prompter_clear_batch_prompt(GatePrompter *gp, int count);
+
 #endif /* GATE_PROMPTER_H */

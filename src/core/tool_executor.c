@@ -597,6 +597,12 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
 
             spinner_stop();
 
+            /* Log tool result after spinner is cleared */
+            if (!session->session_data.config.json_output_mode) {
+                log_tool_execution_improved(tool_calls[i].name, tool_calls[i].arguments,
+                                            results[executed_count].success, results[executed_count].result);
+            }
+
             // Clear per-tool file context to prevent leaking to subsequent calls
             verified_file_context_clear();
 
@@ -715,6 +721,12 @@ int tool_executor_run_workflow(RalphSession* session, ToolCall* tool_calls, int 
         }
 
         spinner_stop();
+
+        /* Log tool result after spinner is cleared */
+        if (!session->session_data.config.json_output_mode) {
+            log_tool_execution_improved(tool_calls[i].name, tool_calls[i].arguments,
+                                        results[i].success, results[i].result);
+        }
 
         // Clear per-tool file context to prevent leaking to subsequent calls
         verified_file_context_clear();
