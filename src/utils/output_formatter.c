@@ -868,7 +868,7 @@ void display_streaming_complete(int input_tokens, int output_tokens) {
 
     if (input_tokens > 0 || output_tokens > 0) {
         int total_tokens = input_tokens + output_tokens;
-        printf(ANSI_DIM "    └─ %d tokens", total_tokens);
+        printf("\n" ANSI_DIM "    └─ %d tokens", total_tokens);
         if (input_tokens > 0 && output_tokens > 0) {
             printf(" (%d prompt + %d completion)", input_tokens, output_tokens);
         }
@@ -917,6 +917,22 @@ void display_message_notification_clear(void) {
     fflush(stdout);
 }
 
+/*
+ * ApprovalResult enum values from policy/approval_gate.h.
+ * We maintain a local copy of result names here to avoid creating a dependency
+ * on the entire approval_gate module from output_formatter. If the enum changes,
+ * this array must be updated as well.
+ */
+static const char *APPROVAL_RESULT_NAMES[] = {
+    "allowed",              /* APPROVAL_ALLOWED = 0 */
+    "denied",               /* APPROVAL_DENIED = 1 */
+    "always",               /* APPROVAL_ALLOWED_ALWAYS = 2 */
+    "aborted",              /* APPROVAL_ABORTED = 3 */
+    "rate-limited",         /* APPROVAL_RATE_LIMITED = 4 */
+    "no-tty"                /* APPROVAL_NON_INTERACTIVE_DENIED = 5 */
+};
+#define APPROVAL_RESULT_COUNT 6
+
 void log_subagent_approval(const char *subagent_id,
                            const char *tool_name,
                            const char *display_summary,
@@ -929,21 +945,10 @@ void log_subagent_approval(const char *subagent_id,
     strncpy(short_id, subagent_id, 4);
     short_id[4] = '\0';  /* Explicit null termination for safety */
 
-    /*
-     * Map result to display text. Values must match ApprovalResult enum
-     * from policy/approval_gate.h. We use int here to avoid a circular
-     * dependency from utils -> policy.
-     */
-    const char *result_text;
-    switch (result) {
-        case 0: result_text = "allowed"; break;      /* APPROVAL_ALLOWED */
-        case 1: result_text = "denied"; break;       /* APPROVAL_DENIED */
-        case 2: result_text = "always"; break;       /* APPROVAL_ALLOWED_ALWAYS */
-        case 3: result_text = "aborted"; break;      /* APPROVAL_ABORTED */
-        case 4: result_text = "rate-limited"; break; /* APPROVAL_RATE_LIMITED */
-        case 5: result_text = "no-tty"; break;       /* APPROVAL_NON_INTERACTIVE_DENIED */
-        default: result_text = "unknown"; break;
-    }
+    /* Map result to display text using local array */
+    const char *result_text = (result >= 0 && result < APPROVAL_RESULT_COUNT)
+                              ? APPROVAL_RESULT_NAMES[result]
+                              : "unknown";
 
     /* Format detail (truncate if long) */
     char detail[60] = {0};
