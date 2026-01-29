@@ -68,6 +68,21 @@ When developing, practice test-driven-development in the following way:
 - write a test that describes your desired behavior; new feature, or the **result** of a bug fix, ensuring the test **fails**
 - fix the test by implementing the new feature or bug fix
 
+### Running Individual Tests
+
+Tests are defined in `mk/tests.mk` using the `def_test` macro. To build and run a specific test:
+
+```bash
+make test/test_<name>    # Build the test
+./test/test_<name>       # Run the test
+```
+
+The `<name>` is the first argument to `def_test` in `mk/tests.mk`, not the file path. For example:
+- `def_test(conversation_vdb,session/test_conversation_vector_db,...)` → `make test/test_conversation_vdb`
+- `def_test(main,core/test_main,)` → `make test/test_main`
+
+To find the correct target name for a test file, grep `mk/tests.mk` for the file path.
+
 Tests may write temporary conversation files during testing - clean up test artifacts before performing a full test run.
 
 Unit tests should be written against mocks where possible, however tests that need an LLM can be run against a real, live API.
@@ -78,16 +93,6 @@ As you work, segfaults are critical issues and must be fixed immediately when en
 Your work is not considered complete unless it is accompanied by automated unit tests and has been checked through `valgrind`.
 
 `valgrind` will sometimes fail with a SIGPIPE error if you're running timeout tests. This is ok.
-
-### Integration Tests Requiring API Keys
-
-Some tests require API credentials to pass. Before running these, source the environment file:
-
-```bash
-source .env && ./test/test_vector_db_tool
-```
-
-The `test_vector_db_tool` test specifically requires OpenAI Embeddings API access for the `test_vector_db_add_text` test case. Without sourcing `.env`, this test will fail with "Expected 1 Was 0" because the embeddings API call fails without authentication.
 
 ### Subagent Tests and Valgrind
 

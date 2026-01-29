@@ -350,9 +350,11 @@ int document_store_add_text(document_store_t* store, const char* index_name,
     
     ralph_config_t* config = config_get();
     const char* api_key = NULL;
+    const char* api_url = NULL;
 
-    if (config && config->openai_api_key) {
+    if (config) {
         api_key = config->openai_api_key;
+        api_url = config->embedding_api_url ? config->embedding_api_url : config->openai_api_url;
     }
 
     if (!api_key) {
@@ -370,9 +372,9 @@ int document_store_add_text(document_store_t* store, const char* index_name,
         free(zero_embedding);
         return result;
     }
-    
+
     embeddings_config_t embeddings_config;
-    if (embeddings_init(&embeddings_config, "text-embedding-3-small", api_key, NULL) != 0) {
+    if (embeddings_init(&embeddings_config, "text-embedding-3-small", api_key, api_url) != 0) {
         return -1;
     }
     
@@ -454,17 +456,19 @@ document_search_results_t* document_store_search_text(document_store_t* store,
     
     ralph_config_t* config = config_get();
     const char* api_key = NULL;
+    const char* api_url = NULL;
 
-    if (config && config->openai_api_key) {
+    if (config) {
         api_key = config->openai_api_key;
+        api_url = config->embedding_api_url ? config->embedding_api_url : config->openai_api_url;
     }
 
     if (!api_key) {
         return NULL;
     }
-    
+
     embeddings_config_t embeddings_config;
-    if (embeddings_init(&embeddings_config, "text-embedding-3-small", api_key, NULL) != 0) {
+    if (embeddings_init(&embeddings_config, "text-embedding-3-small", api_key, api_url) != 0) {
         return NULL;
     }
     

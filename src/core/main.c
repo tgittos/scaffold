@@ -12,6 +12,7 @@
 #include "../cli/memory_commands.h"
 #include "../tools/subagent_tool.h"
 #include "../utils/ralph_home.h"
+#include "../utils/spinner.h"
 
 #define MAX_INPUT_SIZE 8192
 #define RALPH_VERSION "0.1.0"
@@ -310,6 +311,7 @@ int main(int argc, char *argv[])
 
         interrupt_cleanup();
         memory_commands_cleanup();
+        spinner_cleanup();
         ralph_cleanup_session(&session);
         return EXIT_SUCCESS;
     }

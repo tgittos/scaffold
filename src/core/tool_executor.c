@@ -10,6 +10,7 @@
 #include "model_capabilities.h"
 #include "../mcp/mcp_client.h"
 #include "../utils/ptrarray.h"
+#include "../utils/spinner.h"
 #include "../policy/approval_gate.h"
 #include "../policy/protected_files.h"
 #include "../policy/tool_args.h"
@@ -574,6 +575,8 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
 
             int tool_executed = 0;
 
+            spinner_start(tool_calls[i].name, tool_calls[i].arguments);
+
             if (strncmp(tool_calls[i].name, "mcp_", 4) == 0) {
                 if (mcp_client_execute_tool(&session->mcp_client, &tool_calls[i], &results[executed_count]) == 0) {
                     tool_executed = 1;
@@ -591,6 +594,8 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
                 debug_printf("Executed tool: %s (ID: %s) in iteration %d\n",
                            tool_calls[i].name, tool_calls[i].id, loop_count);
             }
+
+            spinner_stop();
 
             // Clear per-tool file context to prevent leaking to subsequent calls
             verified_file_context_clear();
@@ -692,6 +697,8 @@ int tool_executor_run_workflow(RalphSession* session, ToolCall* tool_calls, int 
 
         int tool_executed = 0;
 
+        spinner_start(tool_calls[i].name, tool_calls[i].arguments);
+
         if (strncmp(tool_calls[i].name, "mcp_", 4) == 0) {
             if (mcp_client_execute_tool(&session->mcp_client, &tool_calls[i], &results[i]) == 0) {
                 tool_executed = 1;
@@ -706,6 +713,8 @@ int tool_executor_run_workflow(RalphSession* session, ToolCall* tool_calls, int 
         } else {
             debug_printf("Executed tool: %s (ID: %s)\n", tool_calls[i].name, tool_calls[i].id);
         }
+
+        spinner_stop();
 
         // Clear per-tool file context to prevent leaking to subsequent calls
         verified_file_context_clear();

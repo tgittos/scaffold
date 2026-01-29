@@ -152,12 +152,16 @@ $(TEST_approval_gate_integration_TARGET): $(TEST_approval_gate_integration_OBJEC
 
 $(eval $(call def_test,config,utils/test_config,$(SRCDIR)/utils/config.c $(SRCDIR)/utils/ralph_home.c))
 $(eval $(call def_test,debug_output,utils/test_debug_output,$(SRCDIR)/utils/debug_output.c))
+$(eval $(call def_test,spinner,utils/test_spinner,$(SRCDIR)/utils/spinner.c $(TESTDIR)/stubs/output_formatter_stub.c))
 
 $(TEST_config_TARGET): $(TEST_config_OBJECTS) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_config_OBJECTS) $(CJSON_LIB)
 
 $(TEST_debug_output_TARGET): $(TEST_debug_output_OBJECTS) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_debug_output_OBJECTS) $(CJSON_LIB)
+
+$(TEST_spinner_TARGET): $(TEST_spinner_OBJECTS) $(CJSON_LIB)
+	$(CC) -o $@ $(TEST_spinner_OBJECTS) $(CJSON_LIB) -lpthread
 
 # =============================================================================
 # PDF TEST
