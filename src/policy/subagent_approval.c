@@ -1,4 +1,5 @@
 #include "approval_gate.h"
+#include "pattern_generator.h"
 
 #include <cJSON.h>
 #include <errno.h>
@@ -408,6 +409,8 @@ void handle_subagent_approval_request(ApprovalGateConfig *config,
     if (result == APPROVAL_ALLOWED_ALWAYS) {
         GeneratedPattern gen_pattern = {0};
         if (generate_allowlist_pattern(&synthetic_call, &gen_pattern) == 0) {
+            /* Add pattern to parent's allowlist so future requests auto-approve */
+            apply_generated_pattern(config, synthetic_call.name, &gen_pattern);
             if (gen_pattern.pattern != NULL) {
                 resp.pattern = strdup(gen_pattern.pattern);
             }
