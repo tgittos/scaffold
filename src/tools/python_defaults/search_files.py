@@ -1,7 +1,7 @@
 """Search for patterns in files.
 
 Gate: file_read
-Match: regex_pattern
+Match: pattern
 """
 
 MAX_FILE_SIZE = 1024 * 1024  # 1MB
@@ -15,14 +15,14 @@ def _is_traversal_path(path: str) -> bool:
     return '..' in parts
 
 
-def search_files(path: str, regex_pattern: str, glob_filter: str = None,
+def search_files(path: str, pattern: str, glob_filter: str = None,
                  recursive: bool = True, case_sensitive: bool = True,
                  max_results: int = 100) -> dict:
     """Search for pattern in files.
 
     Args:
         path: Path to search (file or directory)
-        regex_pattern: Regular expression pattern to search for
+        pattern: Regular expression pattern to search for
         glob_filter: Optional glob pattern to filter files (e.g., "*.py", "*.txt")
         recursive: Whether to search recursively in directories (default: True)
         case_sensitive: Whether search is case sensitive (default: True)
@@ -47,9 +47,9 @@ def search_files(path: str, regex_pattern: str, glob_filter: str = None,
     # Compile regex pattern
     flags = 0 if case_sensitive else re.IGNORECASE
     try:
-        regex = re.compile(regex_pattern, flags)
+        regex = re.compile(pattern, flags)
     except re.error as e:
-        raise ValueError(f"Invalid regex pattern '{regex_pattern}': {e}")
+        raise ValueError(f"Invalid regex pattern '{pattern}': {e}")
 
     results = []
     files_searched = 0

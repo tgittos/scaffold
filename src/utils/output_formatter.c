@@ -559,9 +559,9 @@ static char* extract_arg_summary(const char *tool_name, const char *arguments) {
             label = "";
         }
     } else if (tool_name && strcmp(tool_name, "search_files") == 0) {
-        cJSON *regex_pattern = cJSON_GetObjectItem(json, "regex_pattern");
-        if (regex_pattern && cJSON_IsString(regex_pattern)) {
-            const char *pattern_val = cJSON_GetStringValue(regex_pattern);
+        cJSON *search_pattern = cJSON_GetObjectItem(json, "pattern");
+        if (search_pattern && cJSON_IsString(search_pattern)) {
+            const char *pattern_val = cJSON_GetStringValue(search_pattern);
             const char *path_val = path && cJSON_IsString(path) ? cJSON_GetStringValue(path) : ".";
             size_t pattern_len = strlen(pattern_val);
             if (pattern_len <= ARG_DISPLAY_MAX_LEN - 10) {
