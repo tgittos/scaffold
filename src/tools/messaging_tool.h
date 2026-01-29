@@ -20,4 +20,6 @@ const char* messaging_tool_get_agent_id(void);
 void messaging_tool_set_parent_agent_id(const char* parent_id);
 const char* messaging_tool_get_parent_agent_id(void);
 
+void messaging_tool_cleanup(void);
+
 #endif

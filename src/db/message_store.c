@@ -300,15 +300,15 @@ int message_send_direct(message_store_t* store, const char* sender_id,
         return -1;
     }
 
-    time_t now = time(NULL);
+    int64_t now_millis = get_time_millis();
 
     sqlite3_bind_text(stmt, 1, msg_id, -1, SQLITE_STATIC);
     sqlite3_bind_text(stmt, 2, sender_id, -1, SQLITE_STATIC);
     sqlite3_bind_text(stmt, 3, recipient_id, -1, SQLITE_STATIC);
     sqlite3_bind_text(stmt, 4, content, -1, SQLITE_STATIC);
-    sqlite3_bind_int64(stmt, 5, now);
+    sqlite3_bind_int64(stmt, 5, now_millis);
     if (ttl_seconds > 0) {
-        sqlite3_bind_int64(stmt, 6, now + ttl_seconds);
+        sqlite3_bind_int64(stmt, 6, now_millis + ((int64_t)ttl_seconds * 1000));
     } else {
         sqlite3_bind_null(stmt, 6);
     }
@@ -370,12 +370,12 @@ DirectMessage** message_receive_direct(message_store_t* store, const char* agent
     sqlite3_finalize(stmt);
 
     if (arr.count > 0) {
-        time_t now = time(NULL);
+        int64_t now_millis = get_time_millis();
         const char* update_sql =
             "UPDATE direct_messages SET read_at = ? WHERE recipient_id = ? AND read_at IS NULL;";
         sqlite3_stmt* update_stmt = NULL;
         if (sqlite3_prepare_v2(store->db, update_sql, -1, &update_stmt, NULL) == SQLITE_OK) {
-            sqlite3_bind_int64(update_stmt, 1, now);
+            sqlite3_bind_int64(update_stmt, 1, now_millis);
             sqlite3_bind_text(update_stmt, 2, agent_id, -1, SQLITE_STATIC);
             sqlite3_step(update_stmt);
             sqlite3_finalize(update_stmt);
@@ -474,7 +474,7 @@ int channel_create(message_store_t* store, const char* channel_name,
         sqlite3_bind_null(stmt, 2);
     }
     sqlite3_bind_text(stmt, 3, creator_id, -1, SQLITE_STATIC);
-    sqlite3_bind_int64(stmt, 4, time(NULL));
+    sqlite3_bind_int64(stmt, 4, get_time_millis());
     sqlite3_bind_int(stmt, 5, is_persistent ? 1 : 0);
 
     rc = sqlite3_step(stmt);
@@ -606,7 +606,7 @@ int channel_subscribe(message_store_t* store, const char* channel_name,
 
     sqlite3_bind_text(stmt, 1, channel_name, -1, SQLITE_STATIC);
     sqlite3_bind_text(stmt, 2, agent_id, -1, SQLITE_STATIC);
-    sqlite3_bind_int64(stmt, 3, time(NULL));
+    sqlite3_bind_int64(stmt, 3, get_time_millis());
 
     rc = sqlite3_step(stmt);
     sqlite3_finalize(stmt);
@@ -973,7 +973,7 @@ int message_cleanup_read(message_store_t* store, int grace_period_seconds) {
 
     pthread_mutex_lock(&store->mutex);
 
-    time_t cutoff = time(NULL) - grace_period_seconds;
+    int64_t cutoff_millis = get_time_millis() - ((int64_t)grace_period_seconds * 1000);
     const char* sql =
         "DELETE FROM direct_messages WHERE read_at IS NOT NULL AND read_at < ?;";
     sqlite3_stmt* stmt = NULL;
@@ -983,7 +983,7 @@ int message_cleanup_read(message_store_t* store, int grace_period_seconds) {
         return -1;
     }
 
-    sqlite3_bind_int64(stmt, 1, cutoff);
+    sqlite3_bind_int64(stmt, 1, cutoff_millis);
     rc = sqlite3_step(stmt);
     int deleted = sqlite3_changes(store->db);
     sqlite3_finalize(stmt);
@@ -999,7 +999,7 @@ int message_cleanup_expired(message_store_t* store) {
 
     pthread_mutex_lock(&store->mutex);
 
-    time_t now = time(NULL);
+    int64_t now_millis = get_time_millis();
     const char* sql =
         "DELETE FROM direct_messages WHERE expires_at IS NOT NULL AND expires_at < ?;";
     sqlite3_stmt* stmt = NULL;
@@ -1009,7 +1009,7 @@ int message_cleanup_expired(message_store_t* store) {
         return -1;
     }
 
-    sqlite3_bind_int64(stmt, 1, now);
+    sqlite3_bind_int64(stmt, 1, now_millis);
     rc = sqlite3_step(stmt);
     int deleted = sqlite3_changes(store->db);
     sqlite3_finalize(stmt);

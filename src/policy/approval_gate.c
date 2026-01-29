@@ -654,6 +654,15 @@ GateCategory get_tool_category(const char *tool_name) {
         return GATE_CATEGORY_MEMORY;
     }
 
+    if (strcmp(tool_name, "send_message") == 0 ||
+        strcmp(tool_name, "check_messages") == 0 ||
+        strcmp(tool_name, "subscribe_channel") == 0 ||
+        strcmp(tool_name, "publish_channel") == 0 ||
+        strcmp(tool_name, "check_channel_messages") == 0 ||
+        strcmp(tool_name, "get_agent_info") == 0) {
+        return GATE_CATEGORY_MEMORY;
+    }
+
     if (strncmp(tool_name, "mcp_", 4) == 0) {
         return GATE_CATEGORY_MCP;
     }

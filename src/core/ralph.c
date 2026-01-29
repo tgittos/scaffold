@@ -180,8 +180,7 @@ void ralph_cleanup_session(RalphSession* session) {
     subagent_manager_cleanup(&session->subagent_manager);
     mcp_client_cleanup(&session->mcp_client);
 
-    messaging_tool_set_agent_id(NULL);
-    messaging_tool_set_parent_agent_id(NULL);
+    messaging_tool_cleanup();
 
     // Global tool reference must be cleared before the todo list it points to is destroyed
     clear_todo_tool_reference();

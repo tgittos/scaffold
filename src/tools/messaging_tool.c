@@ -7,8 +7,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define RALPH_PARENT_AGENT_ID "RALPH_PARENT_AGENT_ID"
-
 static char* g_agent_id = NULL;
 static char* g_parent_agent_id = NULL;
 
@@ -30,6 +28,13 @@ const char* messaging_tool_get_parent_agent_id(void) {
     return g_parent_agent_id;
 }
 
+void messaging_tool_cleanup(void) {
+    free(g_agent_id);
+    g_agent_id = NULL;
+    free(g_parent_agent_id);
+    g_parent_agent_id = NULL;
+}
+
 int execute_get_agent_info_tool_call(const ToolCall *tool_call, ToolResult *result) {
     if (tool_call == NULL || result == NULL) return -1;
 
@@ -39,16 +44,23 @@ int execute_get_agent_info_tool_call(const ToolCall *tool_call, ToolResult *resu
     const char* agent_id = messaging_tool_get_agent_id();
     const char* parent_id = messaging_tool_get_parent_agent_id();
 
+    char* escaped_agent_id = json_escape_string(agent_id ? agent_id : "");
+    char* escaped_parent_id = parent_id ? json_escape_string(parent_id) : NULL;
+
     char response[512];
-    if (parent_id != NULL) {
+    if (escaped_parent_id != NULL) {
         snprintf(response, sizeof(response),
                  "{\"agent_id\": \"%s\", \"parent_agent_id\": \"%s\", \"is_subagent\": true}",
-                 agent_id ? agent_id : "", parent_id);
+                 escaped_agent_id ? escaped_agent_id : "",
+                 escaped_parent_id);
     } else {
         snprintf(response, sizeof(response),
                  "{\"agent_id\": \"%s\", \"parent_agent_id\": null, \"is_subagent\": false}",
-                 agent_id ? agent_id : "");
+                 escaped_agent_id ? escaped_agent_id : "");
     }
+
+    free(escaped_agent_id);
+    free(escaped_parent_id);
 
     tool_result_builder_set_success(builder, response);
     ToolResult* temp = tool_result_builder_finalize(builder);
@@ -162,9 +174,31 @@ int execute_check_messages_tool_call(const ToolCall *tool_call, ToolResult *resu
     size_t count = 0;
     DirectMessage** msgs = message_receive_direct(store, agent_id, (size_t)max_count, &count);
 
-    char* response = malloc(65536);
+    size_t required_size = 128;
+    char** escaped_contents = NULL;
+    if (count > 0) {
+        escaped_contents = calloc(count, sizeof(char*));
+        if (escaped_contents == NULL) {
+            tool_result_builder_set_error(builder, "Memory allocation failed");
+            direct_message_free_list(msgs, count);
+            ToolResult* temp = tool_result_builder_finalize(builder);
+            if (temp) {
+                *result = *temp;
+                free(temp);
+            }
+            return 0;
+        }
+        for (size_t i = 0; i < count; i++) {
+            escaped_contents[i] = json_escape_string(msgs[i]->content);
+            required_size += 256 + strlen(escaped_contents[i] ? escaped_contents[i] : "");
+        }
+    }
+
+    char* response = malloc(required_size);
     if (response == NULL) {
         tool_result_builder_set_error(builder, "Memory allocation failed");
+        for (size_t i = 0; i < count; i++) free(escaped_contents[i]);
+        free(escaped_contents);
         direct_message_free_list(msgs, count);
         ToolResult* temp = tool_result_builder_finalize(builder);
         if (temp) {
@@ -182,14 +216,14 @@ int execute_check_messages_tool_call(const ToolCall *tool_call, ToolResult *resu
             p += sprintf(p, ", ");
         }
 
-        char* escaped_content = json_escape_string(msgs[i]->content);
         p += sprintf(p, "{\"id\": \"%s\", \"sender\": \"%s\", \"content\": \"%s\", \"created_at\": %ld}",
                      msgs[i]->id,
                      msgs[i]->sender_id,
-                     escaped_content ? escaped_content : "",
+                     escaped_contents[i] ? escaped_contents[i] : "",
                      (long)msgs[i]->created_at);
-        free(escaped_content);
+        free(escaped_contents[i]);
     }
+    free(escaped_contents);
 
     sprintf(p, "], \"count\": %zu}", count);
 
@@ -421,9 +455,32 @@ int execute_check_channel_messages_tool_call(const ToolCall *tool_call, ToolResu
         msgs = channel_receive_all(store, agent_id, (size_t)max_count, &count);
     }
 
-    char* response = malloc(65536);
+    size_t required_size = 128;
+    char** escaped_contents = NULL;
+    if (count > 0) {
+        escaped_contents = calloc(count, sizeof(char*));
+        if (escaped_contents == NULL) {
+            tool_result_builder_set_error(builder, "Memory allocation failed");
+            channel_message_free_list(msgs, count);
+            ToolResult* temp = tool_result_builder_finalize(builder);
+            if (temp) {
+                *result = *temp;
+                free(temp);
+            }
+            free(channel_name);
+            return 0;
+        }
+        for (size_t i = 0; i < count; i++) {
+            escaped_contents[i] = json_escape_string(msgs[i]->content);
+            required_size += 300 + strlen(escaped_contents[i] ? escaped_contents[i] : "");
+        }
+    }
+
+    char* response = malloc(required_size);
     if (response == NULL) {
         tool_result_builder_set_error(builder, "Memory allocation failed");
+        for (size_t i = 0; i < count; i++) free(escaped_contents[i]);
+        free(escaped_contents);
         channel_message_free_list(msgs, count);
         ToolResult* temp = tool_result_builder_finalize(builder);
         if (temp) {
@@ -442,15 +499,15 @@ int execute_check_channel_messages_tool_call(const ToolCall *tool_call, ToolResu
             p += sprintf(p, ", ");
         }
 
-        char* escaped_content = json_escape_string(msgs[i]->content);
         p += sprintf(p, "{\"id\": \"%s\", \"channel\": \"%s\", \"sender\": \"%s\", \"content\": \"%s\", \"created_at\": %ld}",
                      msgs[i]->id,
                      msgs[i]->channel_id,
                      msgs[i]->sender_id,
-                     escaped_content ? escaped_content : "",
+                     escaped_contents[i] ? escaped_contents[i] : "",
                      (long)msgs[i]->created_at);
-        free(escaped_content);
+        free(escaped_contents[i]);
     }
+    free(escaped_contents);
 
     sprintf(p, "], \"count\": %zu}", count);
 
