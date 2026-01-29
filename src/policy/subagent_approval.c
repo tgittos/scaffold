@@ -361,8 +361,7 @@ int handle_subagent_approval_request(ApprovalGateConfig *config,
 
     char *request_str = read_message_with_timeout(channel->request_fd, 1000);
     if (request_str == NULL) {
-        /* Pipe closed or timeout - signal caller to close the channel */
-        DEBUG_ERROR("handle_subagent_approval_request: Failed to read request (pipe closed or timeout)");
+        /* Pipe closed or timeout - expected when subagent completes normally. */
         return -1;
     }
 

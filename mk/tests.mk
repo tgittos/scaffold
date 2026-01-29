@@ -210,11 +210,11 @@ MESSAGING_DEPS := \
 $(eval $(call def_test,message_poller,messaging/test_message_poller,$(MESSAGING_DEPS)))
 $(eval $(call def_test,notification_formatter,messaging/test_notification_formatter,$(MESSAGING_DEPS)))
 
-$(TEST_message_poller_TARGET): $(TEST_message_poller_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB)
-	$(CC) -o $@ $(TEST_message_poller_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) -lpthread -lm
+$(TEST_message_poller_TARGET): $(TEST_message_poller_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) $(CJSON_LIB)
+	$(CC) -o $@ $(TEST_message_poller_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) $(CJSON_LIB) -lpthread -lm
 
-$(TEST_notification_formatter_TARGET): $(TEST_notification_formatter_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB)
-	$(CC) -o $@ $(TEST_notification_formatter_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) -lpthread -lm
+$(TEST_notification_formatter_TARGET): $(TEST_notification_formatter_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) $(CJSON_LIB)
+	$(CC) -o $@ $(TEST_notification_formatter_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) $(CJSON_LIB) -lpthread -lm
 
 # =============================================================================
 # CONVERSATION TESTS (special linking)

@@ -901,7 +901,7 @@ void display_message_notification(int count) {
         return;
     }
 
-    fprintf(stdout, "\r\033[K" ANSI_YELLOW "● " ANSI_RESET);
+    fprintf(stdout, "\n\r\033[K" ANSI_YELLOW "● " ANSI_RESET);
     if (count == 1) {
         fprintf(stdout, ANSI_YELLOW "1 new message" ANSI_RESET "\n\n");
     } else {
