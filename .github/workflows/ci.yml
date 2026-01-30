@@ -43,6 +43,7 @@ jobs:
           key: deps-${{ hashFiles('mk/config.mk', 'mk/deps.mk', 'python/Makefile') }}
           restore-keys: |
             deps-
+          save-always: true
 
       - name: Cache uv
         uses: actions/cache@v4
@@ -76,6 +77,10 @@ jobs:
             -e PATH="/uv-bin:/opt/cosmos/bin:$PATH" \
             ralph-dev:latest \
             make test
+
+      - name: Fix permissions for cache
+        if: always()
+        run: sudo chown -R $(id -u):$(id -g) deps/ build/ python/build/ 2>/dev/null || true
 
       - name: Upload binary
         uses: actions/upload-artifact@v4
