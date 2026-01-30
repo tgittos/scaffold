@@ -57,7 +57,7 @@ static ApprovalChannel *g_subagent_approval_channel = NULL;
  * Uses strtol() instead of atoi() to properly detect parse failures.
  * FDs must be > 2 (skip stdin/stdout/stderr) and <= INT_MAX.
  */
-static int init_subagent_approval_channel(void) {
+int subagent_init_approval_channel(void) {
     const char *request_fd_str = getenv(RALPH_APPROVAL_REQUEST_FD);
     const char *response_fd_str = getenv(RALPH_APPROVAL_RESPONSE_FD);
 
@@ -92,7 +92,7 @@ static int init_subagent_approval_channel(void) {
 }
 
 /** Clean up the subagent approval channel. */
-static void cleanup_subagent_approval_channel(void) {
+void subagent_cleanup_approval_channel(void) {
     if (g_subagent_approval_channel != NULL) {
         if (g_subagent_approval_channel->request_fd >= 0) {
             close(g_subagent_approval_channel->request_fd);
@@ -1318,86 +1318,6 @@ int execute_subagent_status_tool_call(const ToolCall *tool_call, ToolResult *res
     free(escaped_error);
 
     return 0;
-}
-
-/**
- * Entry point for running ralph as a subagent process.
- * Called from main() when --subagent flag is present.
- *
- * The subagent runs with:
- * - Fresh conversation context (no parent history inheritance)
- * - Output written to stdout (captured by parent via pipe)
- * - Standard ralph capabilities except subagent tools (to prevent nesting)
- * - Approval channel for IPC-based approval proxying to parent
- *
- * @param task Task description to execute (required)
- * @param context Optional context information to prepend to task
- * @return 0 on success, non-zero on failure
- */
-int ralph_run_as_subagent(const char *task, const char *context) {
-    if (task == NULL || strlen(task) == 0) {
-        fprintf(stderr, "Error: Subagent requires a task\n");
-        return -1;
-    }
-
-    // Signal subagent mode BEFORE session init (for tool registration decisions)
-    setenv("RALPH_IS_SUBAGENT", "1", 1);
-
-    // If approval channel setup fails, subagent falls back to direct TTY prompting
-    // or denial (if no TTY), which is acceptable for backwards compatibility.
-    init_subagent_approval_channel();
-
-    RalphSession session;
-
-    if (ralph_init_session(&session) != 0) {
-        fprintf(stderr, "Error: Failed to initialize subagent session\n");
-        cleanup_subagent_approval_channel();
-        return -1;
-    }
-
-    session.subagent_manager.is_subagent_process = 1;
-
-    // Subagents run with fresh context, not parent conversation history
-    cleanup_conversation_history(&session.session_data.conversation);
-    init_conversation_history(&session.session_data.conversation);
-
-    if (ralph_load_config(&session) != 0) {
-        fprintf(stderr, "Error: Failed to load subagent configuration\n");
-        ralph_cleanup_session(&session);
-        cleanup_subagent_approval_channel();
-        return -1;
-    }
-
-    char *message = NULL;
-    if (context != NULL && strlen(context) > 0) {
-        const char *format = "Context: %s\n\nTask: %s";
-        size_t len = strlen(format) + strlen(context) + strlen(task) + 1;
-        message = malloc(len);
-        if (message == NULL) {
-            fprintf(stderr, "Error: Failed to allocate message buffer\n");
-            ralph_cleanup_session(&session);
-            cleanup_subagent_approval_channel();
-            return -1;
-        }
-        snprintf(message, len, format, context, task);
-    } else {
-        message = strdup(task);
-        if (message == NULL) {
-            fprintf(stderr, "Error: Failed to allocate message buffer\n");
-            ralph_cleanup_session(&session);
-            cleanup_subagent_approval_channel();
-            return -1;
-        }
-    }
-
-    // Output goes to stdout, which the parent captures through the pipe
-    int result = ralph_process_message(&session, message);
-
-    free(message);
-    ralph_cleanup_session(&session);
-    cleanup_subagent_approval_channel();
-
-    return result;
 }
 
 /**

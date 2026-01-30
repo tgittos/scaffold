@@ -7,6 +7,7 @@
 #include "agent.h"
 #include "../ui/repl.h"
 #include "../workflow/workflow.h"
+#include "../../src/session/conversation_tracker.h"
 #include "../../src/utils/debug_output.h"
 #include "../../src/utils/output_formatter.h"
 #include "../../src/utils/json_output.h"
@@ -64,9 +65,20 @@ int ralph_agent_init(RalphAgent* agent, const RalphAgentConfig* config) {
     /* Initialize debug mode */
     debug_init(agent->config.debug);
 
+    /* For BACKGROUND mode (subagent), set env var BEFORE session init
+     * so tool registration knows to skip subagent tools */
+    if (agent->config.mode == RALPH_AGENT_MODE_BACKGROUND) {
+        setenv("RALPH_IS_SUBAGENT", "1", 1);
+    }
+
     /* Initialize session */
     if (ralph_init_session(&agent->session) != 0) {
         return -1;
+    }
+
+    /* Mark as subagent process after session init */
+    if (agent->config.mode == RALPH_AGENT_MODE_BACKGROUND) {
+        agent->session.subagent_manager.is_subagent_process = 1;
     }
 
     agent->initialized = true;
@@ -144,12 +156,46 @@ int ralph_agent_run(RalphAgent* agent) {
             agent->session.polling_config.auto_poll_enabled = 0;
             return ralph_process_message(&agent->session, agent->config.initial_message);
 
-        case RALPH_AGENT_MODE_BACKGROUND:
+        case RALPH_AGENT_MODE_BACKGROUND: {
             if (agent->config.subagent_task == NULL) {
                 return -1;
             }
-            return ralph_run_as_subagent(agent->config.subagent_task,
-                                         agent->config.subagent_context);
+
+            /* Initialize approval channel for IPC with parent */
+            subagent_init_approval_channel();
+
+            /* Subagents run with fresh context, not parent conversation history */
+            cleanup_conversation_history(&agent->session.session_data.conversation);
+            init_conversation_history(&agent->session.session_data.conversation);
+
+            /* Build message with optional context */
+            char* message = NULL;
+            const char* task = agent->config.subagent_task;
+            const char* context = agent->config.subagent_context;
+
+            if (context != NULL && strlen(context) > 0) {
+                size_t len = strlen("Context: ") + strlen(context) +
+                             strlen("\n\nTask: ") + strlen(task) + 1;
+                message = malloc(len);
+                if (message != NULL) {
+                    snprintf(message, len, "Context: %s\n\nTask: %s", context, task);
+                }
+            } else {
+                message = strdup(task);
+            }
+
+            if (message == NULL) {
+                subagent_cleanup_approval_channel();
+                return -1;
+            }
+
+            /* Process the task */
+            int result = ralph_process_message(&agent->session, message);
+
+            free(message);
+            subagent_cleanup_approval_channel();
+            return result;
+        }
 
         case RALPH_AGENT_MODE_WORKER: {
             if (agent->config.worker_queue_name == NULL) {

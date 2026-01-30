@@ -79,9 +79,6 @@ int register_subagent_status_tool(ToolRegistry *registry, SubagentManager *manag
 int execute_subagent_tool_call(const ToolCall *tool_call, ToolResult *result);
 int execute_subagent_status_tool_call(const ToolCall *tool_call, ToolResult *result);
 
-/** Entry point when ralph is invoked with --subagent flag. */
-int ralph_run_as_subagent(const char *task, const char *context);
-
 /** Uses /dev/urandom with time/pid fallback. id_out must be >= SUBAGENT_ID_LENGTH + 1. */
 void generate_subagent_id(char *id_out);
 
@@ -106,5 +103,11 @@ int subagent_check_and_handle_approvals(SubagentManager *manager,
 
 /** Returns NULL if not running as a subagent process. */
 ApprovalChannel* subagent_get_approval_channel(void);
+
+/** Initialize approval channel from environment variables (for subagent processes). */
+int subagent_init_approval_channel(void);
+
+/** Clean up approval channel resources. */
+void subagent_cleanup_approval_channel(void);
 
 #endif // SUBAGENT_TOOL_H
