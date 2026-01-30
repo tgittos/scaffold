@@ -32,23 +32,26 @@ Ralph connects to LLM providers (OpenAI, Anthropic, or local models) and gives t
 
 ## Interactive Mode
 
-Ralph's interactive mode provides a conversational interface for working through problems iteratively:
+Ralph's interactive mode provides a conversational interface for working through problems. Context persists throughout the session, and Ralph can work on multiple things concurrently:
 
 ```bash
 $ ./ralph
-Ralph Interactive Mode
-Type 'quit' or 'exit' to end the conversation.
+> My test suite has been flaky lately. Sometimes test_parse_response fails.
 
-> I'm getting a segfault in my linked list implementation
+[Ralph spawns agents to investigate: one checks for timing dependencies,
+another looks for shared mutable state, a third examines test isolation.
+Results stream back as they're found.]
 
-[Ralph examines your code, identifies the issue, explains it, and offers a fix]
+> While you're looking at that, what's the complexity of our cache eviction?
 
-> Can you also add a test case that would have caught this?
+[You can discuss other topics while background investigation continues.
+When an agent finds the race condition, it interrupts with the result.]
 
-[Ralph creates a test file with the failing case]
+> Good find. Fix it, but keep the tests running in the background so I
+> know immediately if something else breaks.
+
+[Ralph fixes the issue and sets up a background watcher on the test output.]
 ```
-
-The conversation context persists throughout the session, so Ralph remembers what you've discussed and can build on previous work.
 
 ## One-Shot Mode
 
@@ -199,64 +202,114 @@ Ralph supports the [Model Context Protocol](https://modelcontextprotocol.io/) fo
 
 Ralph discovers and registers tools from configured servers at startup.
 
-### Subagents
+### Parallel Agents
 
-Ralph can spawn parallel subagents for complex tasks. This is useful when the AI needs to work on multiple independent subtasks simultaneously.
+Ralph can spawn subagents that work concurrently, communicate results back, and interrupt the main conversation when they find something relevant. This isn't just parallelism for speed—it changes how you can interact with the assistant.
 
-Configuration:
-- `max_subagents`: Maximum concurrent subagents (default: 5)
-- `subagent_timeout`: Timeout in seconds (default: 300)
+**Speculative exploration**: "Why is this slow?" Ralph spawns agents to profile the hot path, check for N+1 queries, and examine memory allocation patterns. The first conclusive finding interrupts with an answer; the others continue and may surface additional issues.
+
+**Background monitoring**: Start a long build or test run, then continue discussing other code. When something fails, Ralph interrupts with context about what went wrong.
+
+**Progressive refinement**: Get a quick approximation immediately, then receive refined analysis as deeper investigation completes. Useful for large codebases where thorough searches take time.
+
+**Tool composition**: Custom Python tools can participate in the messaging system. A file watcher tool notifies an analysis agent, which notifies you—reactive pipelines without polling.
+
+Configuration: `max_subagents` (default: 5), `subagent_timeout` (default: 300s). The messaging layer persists across sessions.
 
 ### Extensible Python Tools
 
-Ralph's file and shell operations are implemented as Python tools stored in `~/.local/ralph/tools/`. The AI can write new tools or modify existing ones:
+Ralph's capabilities come from Python tools in `~/.local/ralph/tools/`. The AI can write new tools or modify existing ones—ask for a tool, and it becomes part of Ralph's permanent repertoire.
 
 ```bash
-> I need a tool that converts CSV files to JSON
+> I need a tool that finds all SQL queries in the codebase and checks
+> them for injection vulnerabilities
 
-[Ralph writes a new csv_to_json.py file to ~/.local/ralph/tools/]
+[Ralph writes sql_audit.py to ~/.local/ralph/tools/]
 
-# After restarting Ralph, the new tool is available
-> Convert data.csv to JSON format
+# Next session, Ralph can use it autonomously when relevant
+> Review the user registration flow for security issues
 
-[Ralph uses the csv_to_json tool it created]
+[Ralph automatically uses sql_audit alongside other analysis]
 ```
 
-On startup, Ralph scans `~/.local/ralph/tools/` for `.py` files. Each Python function becomes a registered tool using its function name and docstring. Default tools include `read_file`, `write_file`, `shell`, `search_files`, `web_fetch`, and others.
+Tools can also participate in the messaging system—a file watcher tool can notify agents when files change, enabling reactive workflows without polling. On startup, Ralph scans `~/.local/ralph/tools/` for `.py` files; each function becomes a tool using its name and docstring.
 
 ### AGENTS.md Support
 
 Ralph reads `AGENTS.md` files following the [agents.md specification](https://agents.md/) to customize AI behavior for specific projects.
 
+## Command Line Options
+
+| Option | Description |
+|--------|-------------|
+| `-h, --help` | Show help message |
+| `-v, --version` | Show version information |
+| `--debug` | Enable debug output (shows HTTP requests and data exchange) |
+| `--no-stream` | Disable response streaming |
+| `--json` | Enable JSON output mode for programmatic integration |
+| `--home <path>` | Override Ralph home directory (default: `~/.local/ralph`) |
+| `--yolo` | Disable all approval gates for the session |
+
 ## Usage Examples
 
-### Code Review
+### One-Shot Commands
 ```bash
+# Generate a commit message from staged changes
+git diff --staged | ./ralph "Write a commit message for these changes"
+
+# Understand unfamiliar code
+./ralph "Explain how this regex works: ^(?=.*[A-Z])(?=.*[0-9]).{8,}$"
+
+# Quick code review
 git diff HEAD~1 | ./ralph "Review these changes for potential issues"
 ```
 
-### Debug Assistance
+### Investigative Workflows
 ```bash
-./ralph "I'm getting 'undefined reference' errors when linking. Here's my Makefile..."
+# Debug a problem with parallel investigation
+./ralph "Production is returning 502s intermittently. Check the nginx config,
+         the upstream health checks, and recent deployments."
+
+# Understand a new codebase
+./ralph "I just cloned this repo. Give me an overview of the architecture,
+         then dig into how authentication works."
 ```
 
-### Learning
+### Build a Custom Tool, Then Use It
 ```bash
-./ralph "Explain how this regex works: ^(?=.*[A-Z])(?=.*[0-9]).{8,}$"
+> I frequently need to check which functions call a given function.
+> Build me a tool for that.
+
+[Ralph writes a call_graph.py tool to ~/.local/ralph/tools/]
+
+# Next session, the tool is available
+> What calls parse_response?
+
+[Ralph uses the call_graph tool it created]
 ```
 
-### Refactoring
+### Background Monitoring
 ```bash
-./ralph "This function is too long. Suggest how to break it into smaller functions" < big_function.c
+> Run the full test suite in the background. While that's running,
+> let's refactor the cache module.
+
+[Tests run in background; Ralph interrupts if something fails]
+
+> Good, tests passed. Now deploy to staging and let me know when
+> the health check passes.
+
+[Ralph monitors staging while you context-switch to other work]
 ```
 
 ## Data Storage
 
 Ralph stores data in `~/.local/ralph/`:
 - `CONVERSATION.md` - Conversation history
-- Vector database files (HNSWLIB format)
-- Memory metadata (JSON)
-- Python tools
+- `ralph.db` - SQLite database (tasks, messages)
+- `*.idx` / `*.meta` - Vector database indices (HNSWLIB format)
+- `documents/` - Document storage (JSON)
+- `metadata/` - Chunk metadata (JSON)
+- `tools/` - Custom Python tools
 
 ## Platform Support
 

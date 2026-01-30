@@ -171,6 +171,8 @@ The test directory mirrors the source structure:
 - **`test_recap.c`** - Recap generation tests
 - **`test_incomplete_task_bug.c`** - Regression test for task handling
 - **`test_agent_identity.c`** - Agent identity thread-safety and operations tests
+- **`test_async_executor.c`** - Async executor background thread tests
+- **`test_interrupt.c`** - Cooperative Ctrl+C cancellation tests
 
 #### `test/llm/` - LLM System Tests
 - **`test_model_tools.c`** - Model and tool integration tests
@@ -188,6 +190,7 @@ The test directory mirrors the source structure:
 - **`test_token_manager.c`** - Token management tests
 - **`test_conversation_vector_db.c`** - Vector DB integration tests
 - **`test_tool_calls_not_stored.c`** - Tool call storage tests
+- **`test_rolling_summary.c`** - Rolling summary generation tests
 
 #### `test/tools/` - Tool System Tests
 - **`test_tools_system.c`** - Core tool system tests
@@ -196,6 +199,7 @@ The test directory mirrors the source structure:
 - **`test_vector_db_tool.c`** - Vector database tests
 - **`test_python_tool.c`** & **`test_python_integration.c`** - Python interpreter tests
 - **`test_subagent_tool.c`** - Subagent system tests
+- **`test_tool_param_dsl.c`** - Tool parameter DSL tests
 
 #### `test/pdf/` - PDF Processing Tests
 - **`test_pdf_extractor.c`** - PDF extraction functionality tests
@@ -205,6 +209,7 @@ The test directory mirrors the source structure:
 - **`test_document_store.c`** - Document store tests
 - **`test_task_store.c`** - Task store persistence tests
 - **`test_message_store.c`** - Inter-agent messaging storage tests
+- **`test_sqlite_dal.c`** - SQLite Data Access Layer tests
 
 #### `test/mcp/` - MCP Integration Tests
 - **`test_mcp_client.c`** - MCP client functionality tests
@@ -221,6 +226,7 @@ The test directory mirrors the source structure:
 - **`test_debug_output.c`** - Debug output tests
 - **`test_ralph_home.c`** - Ralph home directory management tests
 - **`test_pipe_notifier.c`** - Pipe notifier async notification tests
+- **`test_spinner.c`** - Tool execution spinner tests
 
 #### `test/policy/` - Policy Tests (Approval Gates)
 - **`test_approval_gate.c`** - Gate config initialization, category lookup, non-interactive mode
@@ -251,6 +257,8 @@ The test directory mirrors the source structure:
 - **`mock_embeddings_server.c`** - Mock embeddings server
 - **`test/stubs/python_tool_stub.c`** - Python tool test stub
 - **`test/stubs/subagent_stub.c`** - Subagent test stub
+- **`test/stubs/ralph_stub.c`** - Ralph core test stub
+- **`test/stubs/output_formatter_stub.c`** - Output formatter test stub
 
 ---
 

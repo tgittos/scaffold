@@ -55,10 +55,7 @@ void test_help_long_flag(void) {
     TEST_ASSERT_NOT_NULL(strstr(output, "--no-stream"));
     TEST_ASSERT_NOT_NULL(strstr(output, "--json"));
     TEST_ASSERT_NOT_NULL(strstr(output, "--home"));
-    // Approval gate CLI flags
     TEST_ASSERT_NOT_NULL(strstr(output, "--yolo"));
-    TEST_ASSERT_NOT_NULL(strstr(output, "--allow"));
-    TEST_ASSERT_NOT_NULL(strstr(output, "--allow-category"));
 }
 
 void test_help_short_flag(void) {
@@ -69,13 +66,18 @@ void test_help_short_flag(void) {
     TEST_ASSERT_NOT_NULL(strstr(output, "Options:"));
 }
 
-void test_help_excludes_subagent_flags(void) {
+void test_help_excludes_internal_flags(void) {
     char *output = run_command("./ralph --help 2>&1");
     TEST_ASSERT_NOT_NULL(output);
-    // Subagent flags should NOT be documented
+    // Internal flags should NOT be documented in user help
     TEST_ASSERT_NULL(strstr(output, "--subagent"));
     TEST_ASSERT_NULL(strstr(output, "--task"));
     TEST_ASSERT_NULL(strstr(output, "--context"));
+    TEST_ASSERT_NULL(strstr(output, "--allow"));
+    TEST_ASSERT_NULL(strstr(output, "--worker"));
+    TEST_ASSERT_NULL(strstr(output, "--queue"));
+    TEST_ASSERT_NULL(strstr(output, "--no-auto-messages"));
+    TEST_ASSERT_NULL(strstr(output, "--message-poll-interval"));
 }
 
 void test_version_exits_immediately(void) {
@@ -97,7 +99,7 @@ int main(void) {
     RUN_TEST(test_version_short_flag);
     RUN_TEST(test_help_long_flag);
     RUN_TEST(test_help_short_flag);
-    RUN_TEST(test_help_excludes_subagent_flags);
+    RUN_TEST(test_help_excludes_internal_flags);
     RUN_TEST(test_version_exits_immediately);
     RUN_TEST(test_help_exits_immediately);
 

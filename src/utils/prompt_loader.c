@@ -71,7 +71,18 @@ static const char* SYSTEM_PROMPT_PART1 =
     "Simply spawn the subagent and inform the user you're waiting. Results are sent "
     "automatically when the subagent completes.\n"
     "\n# Python Tools\n"
-    "External tools in ~/.local/ralph/tools/ are loaded into the Python REPL at startup.\n\n";
+    "External tools in ~/.local/ralph/tools/ are loaded into the Python REPL at startup.\n"
+    "\n# CLI Flags for Agent Use\n"
+    "When spawning subagents or workers, use these flags:\n"
+    "- --subagent: Run as a subagent (requires --task)\n"
+    "- --task <prompt>: Task prompt for subagent mode\n"
+    "- --context <json>: Context to pass to subagent\n"
+    "- --worker: Run as queue worker (requires --queue)\n"
+    "- --queue <name>: Queue name for worker mode\n"
+    "- --allow <spec>: Add allowlist entry (e.g., 'shell:git,status')\n"
+    "- --allow-category=<cat>: Allow category without prompting (file_write, shell, network)\n"
+    "- --no-auto-messages: Disable automatic message polling\n"
+    "- --message-poll-interval <ms>: Set message poll interval (default: 2000)\n\n";
 
 static const char* SYSTEM_PROMPT_PART2 =
     "\n# User Instructions (from AGENTS.md)\n";
