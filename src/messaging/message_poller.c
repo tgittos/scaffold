@@ -1,5 +1,6 @@
 #include "message_poller.h"
 #include "../db/message_store.h"
+#include "../utils/pipe_notifier.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -11,7 +12,7 @@
 struct message_poller {
     char* agent_id;
     int poll_interval_ms;
-    int pipe_fds[2];
+    PipeNotifier notifier;
     pthread_t thread;
     atomic_int running;
     atomic_int has_pending;
@@ -49,13 +50,10 @@ static void* poller_thread_func(void* arg) {
             poller->last_counts.channel_count = (channel_pending > 0) ? channel_pending : 0;
             pthread_mutex_unlock(&poller->counts_mutex);
 
-            // Always write to pipe when messages are pending, even if has_pending is set.
-            // This prevents a race where clear_notification drains the pipe but then
-            // this thread sets has_pending, leaving pipe empty but flag set.
-            // The pipe read in clear_notification drains all pending bytes.
-            char notification = 'M';
-            ssize_t written = write(poller->pipe_fds[1], &notification, 1);
-            if (written == 1) {
+            /* Always send notification when messages are pending, even if has_pending is set.
+             * This prevents a race where clear_notification drains the pipe but then
+             * this thread sets has_pending, leaving pipe empty but flag set. */
+            if (pipe_notifier_send(&poller->notifier, 'M') == 0) {
                 atomic_store(&poller->has_pending, 1);
             }
         }
@@ -81,8 +79,8 @@ message_poller_t* message_poller_create(const char* agent_id, int poll_interval_
     }
 
     poller->poll_interval_ms = (poll_interval_ms > 0) ? poll_interval_ms : MESSAGE_POLLER_DEFAULT_INTERVAL_MS;
-    poller->pipe_fds[0] = -1;
-    poller->pipe_fds[1] = -1;
+    poller->notifier.read_fd = -1;
+    poller->notifier.write_fd = -1;
     atomic_store(&poller->running, 0);
     atomic_store(&poller->has_pending, 0);
 
@@ -92,20 +90,11 @@ message_poller_t* message_poller_create(const char* agent_id, int poll_interval_
         return NULL;
     }
 
-    if (pipe(poller->pipe_fds) != 0) {
+    if (pipe_notifier_init(&poller->notifier) != 0) {
         pthread_mutex_destroy(&poller->counts_mutex);
         free(poller->agent_id);
         free(poller);
         return NULL;
-    }
-
-    int flags = fcntl(poller->pipe_fds[0], F_GETFL, 0);
-    if (flags != -1) {
-        fcntl(poller->pipe_fds[0], F_SETFL, flags | O_NONBLOCK);
-    }
-    flags = fcntl(poller->pipe_fds[1], F_GETFL, 0);
-    if (flags != -1) {
-        fcntl(poller->pipe_fds[1], F_SETFL, flags | O_NONBLOCK);
     }
 
     return poller;
@@ -118,12 +107,7 @@ void message_poller_destroy(message_poller_t* poller) {
 
     message_poller_stop(poller);
 
-    if (poller->pipe_fds[0] >= 0) {
-        close(poller->pipe_fds[0]);
-    }
-    if (poller->pipe_fds[1] >= 0) {
-        close(poller->pipe_fds[1]);
-    }
+    pipe_notifier_destroy(&poller->notifier);
 
     pthread_mutex_destroy(&poller->counts_mutex);
     free(poller->agent_id);
@@ -166,7 +150,7 @@ int message_poller_get_notify_fd(message_poller_t* poller) {
     if (poller == NULL) {
         return -1;
     }
-    return poller->pipe_fds[0];
+    return pipe_notifier_get_read_fd(&poller->notifier);
 }
 
 int message_poller_get_pending(message_poller_t* poller, pending_message_counts_t* counts) {
@@ -187,9 +171,7 @@ int message_poller_clear_notification(message_poller_t* poller) {
         return -1;
     }
 
-    char buf[32];
-    while (read(poller->pipe_fds[0], buf, sizeof(buf)) > 0) {
-    }
+    pipe_notifier_drain(&poller->notifier);
 
     atomic_store(&poller->has_pending, 0);
 

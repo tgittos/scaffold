@@ -34,7 +34,9 @@ endef
 $(eval $(call def_test,main,core/test_main,))
 $(eval $(call def_test,cli_flags,core/test_cli_flags,))
 $(eval $(call def_test,interrupt,core/test_interrupt,$(SRCDIR)/core/interrupt.c))
-$(eval $(call def_test,async_executor,core/test_async_executor,$(SRCDIR)/core/async_executor.c $(SRCDIR)/core/interrupt.c $(SRCDIR)/utils/debug_output.c $(TESTDIR)/stubs/ralph_stub.c))
+$(eval $(call def_test,async_executor,core/test_async_executor,$(SRCDIR)/core/async_executor.c $(SRCDIR)/core/interrupt.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/utils/pipe_notifier.c $(TESTDIR)/stubs/ralph_stub.c))
+$(eval $(call def_test,pipe_notifier,utils/test_pipe_notifier,$(SRCDIR)/utils/pipe_notifier.c))
+$(eval $(call def_test,agent_identity,core/test_agent_identity,$(SRCDIR)/core/agent_identity.c))
 $(eval $(call def_test,prompt,utils/test_prompt_loader,$(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/utils/ralph_home.c))
 $(eval $(call def_test,ralph_home,utils/test_ralph_home,$(SRCDIR)/utils/ralph_home.c))
 $(eval $(call def_test,todo_manager,tools/test_todo_manager,$(SRCDIR)/tools/todo_manager.c))
@@ -87,6 +89,12 @@ $(TEST_interrupt_TARGET): $(TEST_interrupt_OBJECTS)
 
 $(TEST_async_executor_TARGET): $(TEST_async_executor_OBJECTS) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_async_executor_OBJECTS) $(CJSON_LIB) -lpthread
+
+$(TEST_pipe_notifier_TARGET): $(TEST_pipe_notifier_OBJECTS)
+	$(CC) -o $@ $^
+
+$(TEST_agent_identity_TARGET): $(TEST_agent_identity_OBJECTS)
+	$(CC) -o $@ $^ -lpthread
 
 $(TEST_prompt_TARGET): $(TEST_prompt_OBJECTS)
 	$(CC) -o $@ $^
@@ -205,7 +213,8 @@ MESSAGING_DEPS := \
     $(SRCDIR)/messaging/notification_formatter.c \
     $(SRCDIR)/db/message_store.c \
     $(SRCDIR)/utils/uuid_utils.c \
-    $(SRCDIR)/utils/ralph_home.c
+    $(SRCDIR)/utils/ralph_home.c \
+    $(SRCDIR)/utils/pipe_notifier.c
 
 $(eval $(call def_test,message_poller,messaging/test_message_poller,$(MESSAGING_DEPS)))
 $(eval $(call def_test,notification_formatter,messaging/test_notification_formatter,$(MESSAGING_DEPS)))

@@ -599,11 +599,10 @@ graph TB
   - Pub/sub channels for broadcast communication
   - Automatic message expiry and cleanup
 - **Message Poller** (`message_poller.c/h`): Background thread that polls for new messages
-  - Uses self-pipe for integration with select/poll loops
+  - Uses PipeNotifier for integration with select/poll loops
   - Configurable poll interval
 - **Notification Formatter** (`notification_formatter.c/h`): Formats messages for LLM context injection
 - **Messaging Tool** (`messaging_tool.c/h`): Tool interface for agent messaging operations
-- **Message Processor** (`message_processor.c/h`): Processes incoming messages and injects into context
 
 ### Messaging Tools
 - `get_agent_info`: Get current agent ID and parent agent ID
@@ -948,6 +947,7 @@ src/
 ├── core/                   # Core application
 │   ├── main.c              # Entry point (CLI interface, --json, --subagent modes)
 │   ├── ralph.c/h           # Core orchestration logic
+│   ├── agent_identity.c/h  # Thread-safe agent identity management
 │   ├── context_enhancement.c/h  # Prompt enhancement with memory/context
 │   ├── recap.c/h           # Conversation recap generation
 │   ├── streaming_handler.c/h   # Streaming orchestration layer
@@ -983,7 +983,6 @@ src/
 │   └── mcp_client.c/h      # MCP client implementation
 ├── messaging/              # Inter-agent messaging
 │   ├── message_poller.c/h  # Background message polling
-│   ├── message_processor.c/h # Message context injection
 │   └── notification_formatter.c/h # LLM notification formatting
 ├── network/                # Network layer
 │   ├── http_client.c/h     # HTTP client (cURL wrapper)
@@ -1048,6 +1047,7 @@ src/
 │   ├── json_escape.c/h     # JSON escaping
 │   ├── json_output.c/h     # JSON output mode
 │   ├── common_utils.c/h    # General utilities
+│   ├── pipe_notifier.c/h   # Thread-safe pipe-based notification
 │   ├── darray.h            # Type-safe dynamic array macros
 │   ├── ptrarray.h          # Type-safe dynamic pointer array with ownership
 │   ├── ralph_home.c/h      # Centralized home directory management

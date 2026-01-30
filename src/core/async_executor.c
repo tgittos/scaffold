@@ -1,6 +1,7 @@
 #include "async_executor.h"
 #include "interrupt.h"
 #include "debug_output.h"
+#include "../utils/pipe_notifier.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -12,30 +13,38 @@
 /**
  * Global executor pointer for use by subagent_spawn notification.
  * Set when executor is created in interactive mode.
- * Thread-safety: Only written once during creation, read from executor thread.
+ * Thread-safety: Protected by g_executor_mutex for all accesses.
  */
 static async_executor_t* g_active_executor = NULL;
+static pthread_mutex_t g_executor_mutex;
+static pthread_once_t g_executor_mutex_once = PTHREAD_ONCE_INIT;
+
+static void init_executor_mutex(void) {
+    pthread_mutex_init(&g_executor_mutex, NULL);
+}
+
+static void ensure_executor_mutex_initialized(void) {
+    pthread_once(&g_executor_mutex_once, init_executor_mutex);
+}
 
 struct async_executor {
     RalphSession* session;
-    int pipe_fds[2];
+    PipeNotifier notifier;
     pthread_t thread;
     pthread_mutex_t mutex;
     pthread_cond_t cond;
     atomic_int running;
     atomic_int cancel_requested;
-    atomic_int thread_exited;  /* Set when thread function has fully completed */
+    atomic_int thread_started;  /* Set when thread has been created */
     char* current_message;
     int last_result;
     char* last_error;
 };
 
 static void send_event(async_executor_t* executor, AsyncEventType event) {
-    char c = (char)event;
-    ssize_t written = write(executor->pipe_fds[1], &c, 1);
-    if (written != 1) {
+    if (pipe_notifier_send(&executor->notifier, (char)event) != 0) {
         debug_printf("async_executor: Failed to write event %c to pipe: %s\n",
-                     c, strerror(errno));
+                     (char)event, strerror(errno));
     }
 }
 
@@ -83,12 +92,6 @@ static void* executor_thread_func(void* arg) {
     atomic_store(&executor->running, 0);
     pthread_cond_broadcast(&executor->cond);
 
-    /* Signal that thread has fully completed all work.
-     * This must be the last operation before return to prevent
-     * the main thread from freeing the executor while we're still
-     * accessing it. */
-    atomic_store(&executor->thread_exited, 1);
-
     return NULL;
 }
 
@@ -103,11 +106,11 @@ async_executor_t* async_executor_create(RalphSession* session) {
     }
 
     executor->session = session;
-    executor->pipe_fds[0] = -1;
-    executor->pipe_fds[1] = -1;
+    executor->notifier.read_fd = -1;
+    executor->notifier.write_fd = -1;
     atomic_store(&executor->running, 0);
     atomic_store(&executor->cancel_requested, 0);
-    atomic_store(&executor->thread_exited, 1);  /* No thread running yet */
+    atomic_store(&executor->thread_started, 0);
     executor->current_message = NULL;
     executor->last_result = 0;
     executor->last_error = NULL;
@@ -123,25 +126,19 @@ async_executor_t* async_executor_create(RalphSession* session) {
         return NULL;
     }
 
-    if (pipe(executor->pipe_fds) != 0) {
+    if (pipe_notifier_init(&executor->notifier) != 0) {
         pthread_cond_destroy(&executor->cond);
         pthread_mutex_destroy(&executor->mutex);
         free(executor);
         return NULL;
     }
 
-    int flags = fcntl(executor->pipe_fds[0], F_GETFL, 0);
-    if (flags != -1) {
-        fcntl(executor->pipe_fds[0], F_SETFL, flags | O_NONBLOCK);
-    }
-    flags = fcntl(executor->pipe_fds[1], F_GETFL, 0);
-    if (flags != -1) {
-        fcntl(executor->pipe_fds[1], F_SETFL, flags | O_NONBLOCK);
-    }
-
+    ensure_executor_mutex_initialized();
+    pthread_mutex_lock(&g_executor_mutex);
     g_active_executor = executor;
+    pthread_mutex_unlock(&g_executor_mutex);
 
-    debug_printf("async_executor: Created with notify fd %d\n", executor->pipe_fds[0]);
+    debug_printf("async_executor: Created with notify fd %d\n", executor->notifier.read_fd);
     return executor;
 }
 
@@ -150,21 +147,25 @@ void async_executor_destroy(async_executor_t* executor) {
         return;
     }
 
+    ensure_executor_mutex_initialized();
+    pthread_mutex_lock(&g_executor_mutex);
     if (g_active_executor == executor) {
         g_active_executor = NULL;
     }
+    pthread_mutex_unlock(&g_executor_mutex);
 
+    /* Cancel any running execution and wait for thread to finish */
     if (atomic_load(&executor->running)) {
         async_executor_cancel(executor);
-        async_executor_wait(executor);
     }
 
-    if (executor->pipe_fds[0] >= 0) {
-        close(executor->pipe_fds[0]);
+    /* Join the thread if it was ever started */
+    if (atomic_load(&executor->thread_started)) {
+        pthread_join(executor->thread, NULL);
+        atomic_store(&executor->thread_started, 0);
     }
-    if (executor->pipe_fds[1] >= 0) {
-        close(executor->pipe_fds[1]);
-    }
+
+    pipe_notifier_destroy(&executor->notifier);
 
     pthread_cond_destroy(&executor->cond);
     pthread_mutex_destroy(&executor->mutex);
@@ -186,6 +187,12 @@ int async_executor_start(async_executor_t* executor, const char* message) {
         return -1;
     }
 
+    /* Join any previous thread before starting a new one */
+    if (atomic_load(&executor->thread_started)) {
+        pthread_join(executor->thread, NULL);
+        atomic_store(&executor->thread_started, 0);
+    }
+
     pthread_mutex_lock(&executor->mutex);
 
     free(executor->current_message);
@@ -199,7 +206,6 @@ int async_executor_start(async_executor_t* executor, const char* message) {
     executor->last_error = NULL;
     executor->last_result = 0;
     atomic_store(&executor->cancel_requested, 0);
-    atomic_store(&executor->thread_exited, 0);  /* Thread about to start */
     atomic_store(&executor->running, 1);
 
     pthread_mutex_unlock(&executor->mutex);
@@ -213,7 +219,7 @@ int async_executor_start(async_executor_t* executor, const char* message) {
         return -1;
     }
 
-    pthread_detach(executor->thread);
+    atomic_store(&executor->thread_started, 1);
 
     debug_printf("async_executor: Started processing message\n");
     return 0;
@@ -223,7 +229,7 @@ int async_executor_get_notify_fd(async_executor_t* executor) {
     if (executor == NULL) {
         return -1;
     }
-    return executor->pipe_fds[0];
+    return pipe_notifier_get_read_fd(&executor->notifier);
 }
 
 int async_executor_process_events(async_executor_t* executor) {
@@ -232,16 +238,15 @@ int async_executor_process_events(async_executor_t* executor) {
     }
 
     char event;
-    ssize_t n = read(executor->pipe_fds[0], &event, 1);
-    if (n != 1) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            return 0;
-        }
-        return -1;
+    int result = pipe_notifier_recv(&executor->notifier, &event);
+    if (result == 1) {
+        debug_printf("async_executor: Received event '%c'\n", event);
+        return (int)event;
     }
-
-    debug_printf("async_executor: Received event '%c'\n", event);
-    return (int)event;
+    if (result == 0) {
+        return 0;  /* No event available */
+    }
+    return -1;  /* Error */
 }
 
 int async_executor_is_running(async_executor_t* executor) {
@@ -288,13 +293,10 @@ int async_executor_wait(async_executor_t* executor) {
     }
     pthread_mutex_unlock(&executor->mutex);
 
-    /* Spin-wait briefly for the detached thread to fully exit.
-     * This prevents a race where we free the executor while the
-     * thread is still in its return path after setting running=0. */
-    int spin_count = 0;
-    while (!atomic_load(&executor->thread_exited) && spin_count < 1000) {
-        usleep(100);  /* 100 microseconds */
-        spin_count++;
+    /* Join the thread to ensure it has fully exited */
+    if (atomic_load(&executor->thread_started)) {
+        pthread_join(executor->thread, NULL);
+        atomic_store(&executor->thread_started, 0);
     }
 
     return 0;
@@ -329,5 +331,9 @@ void async_executor_notify_subagent_spawned(async_executor_t* executor) {
 }
 
 async_executor_t* async_executor_get_active(void) {
-    return g_active_executor;
+    ensure_executor_mutex_initialized();
+    pthread_mutex_lock(&g_executor_mutex);
+    async_executor_t* executor = g_active_executor;
+    pthread_mutex_unlock(&g_executor_mutex);
+    return executor;
 }

@@ -785,7 +785,19 @@ int execute_python_file_tool_call(const ToolCall *tool_call, ToolResult *result)
     cJSON *result_json = cJSON_Parse(result_str);
     if (result_json != NULL) {
         cJSON *error_item = cJSON_GetObjectItem(result_json, "error");
-        result->success = (error_item == NULL || !cJSON_IsString(error_item)) ? 1 : 0;
+        if (error_item != NULL && cJSON_IsString(error_item)) {
+            // Explicit error field means failure
+            result->success = 0;
+        } else {
+            // Check for exit_code (shell commands return this)
+            // Non-zero exit_code means the command failed
+            cJSON *exit_code = cJSON_GetObjectItemCaseSensitive(result_json, "exit_code");
+            if (exit_code != NULL && cJSON_IsNumber(exit_code) && exit_code->valueint != 0) {
+                result->success = 0;
+            } else {
+                result->success = 1;
+            }
+        }
         cJSON_Delete(result_json);
     } else {
         result->success = 0;

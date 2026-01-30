@@ -12,12 +12,12 @@ static message_store_t* g_store = NULL;
 
 void setUp(void) {
     ralph_home_init("/tmp/test_poller_home");
-    message_store_reset_instance();
+    message_store_reset_instance_for_testing();
     g_store = message_store_get_instance();
 }
 
 void tearDown(void) {
-    message_store_reset_instance();
+    message_store_reset_instance_for_testing();
     g_store = NULL;
     ralph_home_cleanup();
 }

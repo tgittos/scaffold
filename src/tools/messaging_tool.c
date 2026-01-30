@@ -29,19 +29,12 @@ void messaging_tool_set_agent_id(const char* agent_id) {
     pthread_mutex_unlock(&g_agent_mutex);
 }
 
-char* messaging_tool_get_agent_id_copy(void) {
+char* messaging_tool_get_agent_id(void) {
     ensure_mutex_initialized();
     pthread_mutex_lock(&g_agent_mutex);
     char* copy = g_agent_id ? strdup(g_agent_id) : NULL;
     pthread_mutex_unlock(&g_agent_mutex);
     return copy;
-}
-
-const char* messaging_tool_get_agent_id(void) {
-    /* Deprecated: Use messaging_tool_get_agent_id_copy for thread-safe access.
-     * This function is retained for callers that hold the mutex or run
-     * single-threaded. */
-    return g_agent_id;
 }
 
 void messaging_tool_set_parent_agent_id(const char* parent_id) {
@@ -52,17 +45,12 @@ void messaging_tool_set_parent_agent_id(const char* parent_id) {
     pthread_mutex_unlock(&g_agent_mutex);
 }
 
-char* messaging_tool_get_parent_agent_id_copy(void) {
+char* messaging_tool_get_parent_agent_id(void) {
     ensure_mutex_initialized();
     pthread_mutex_lock(&g_agent_mutex);
     char* copy = g_parent_agent_id ? strdup(g_parent_agent_id) : NULL;
     pthread_mutex_unlock(&g_agent_mutex);
     return copy;
-}
-
-const char* messaging_tool_get_parent_agent_id(void) {
-    /* Deprecated: Use messaging_tool_get_parent_agent_id_copy for thread-safe access. */
-    return g_parent_agent_id;
 }
 
 void messaging_tool_cleanup(void) {
@@ -81,8 +69,8 @@ int execute_get_agent_info_tool_call(const ToolCall *tool_call, ToolResult *resu
     tool_result_builder_t* builder = tool_result_builder_create(tool_call->id);
     if (builder == NULL) return -1;
 
-    const char* agent_id = messaging_tool_get_agent_id();
-    const char* parent_id = messaging_tool_get_parent_agent_id();
+    char* agent_id = messaging_tool_get_agent_id();
+    char* parent_id = messaging_tool_get_parent_agent_id();
 
     char* escaped_agent_id = json_escape_string(agent_id ? agent_id : "");
     char* escaped_parent_id = parent_id ? json_escape_string(parent_id) : NULL;
@@ -101,6 +89,8 @@ int execute_get_agent_info_tool_call(const ToolCall *tool_call, ToolResult *resu
 
     free(escaped_agent_id);
     free(escaped_parent_id);
+    free(agent_id);
+    free(parent_id);
 
     tool_result_builder_set_success(builder, response);
     ToolResult* temp = tool_result_builder_finalize(builder);
@@ -133,7 +123,7 @@ int execute_send_message_tool_call(const ToolCall *tool_call, ToolResult *result
         return 0;
     }
 
-    const char* sender_id = messaging_tool_get_agent_id();
+    char* sender_id = messaging_tool_get_agent_id();
     if (sender_id == NULL) {
         tool_result_builder_set_error(builder, "Agent ID not configured");
         ToolResult* temp = tool_result_builder_finalize(builder);
@@ -154,6 +144,7 @@ int execute_send_message_tool_call(const ToolCall *tool_call, ToolResult *result
             *result = *temp;
             free(temp);
         }
+        free(sender_id);
         free(recipient_id);
         free(content);
         return 0;
@@ -161,6 +152,7 @@ int execute_send_message_tool_call(const ToolCall *tool_call, ToolResult *result
 
     char msg_id[40] = {0};
     int rc = message_send_direct(store, sender_id, recipient_id, content, (int)ttl, msg_id);
+    free(sender_id);
 
     if (rc == 0) {
         char* escaped_recipient = json_escape_string(recipient_id);
@@ -194,7 +186,7 @@ int execute_check_messages_tool_call(const ToolCall *tool_call, ToolResult *resu
 
     double max_count = extract_number_param(tool_call->arguments, "max_count", 10);
 
-    const char* agent_id = messaging_tool_get_agent_id();
+    char* agent_id = messaging_tool_get_agent_id();
     if (agent_id == NULL) {
         tool_result_builder_set_error(builder, "Agent ID not configured");
         ToolResult* temp = tool_result_builder_finalize(builder);
@@ -213,11 +205,13 @@ int execute_check_messages_tool_call(const ToolCall *tool_call, ToolResult *resu
             *result = *temp;
             free(temp);
         }
+        free(agent_id);
         return 0;
     }
 
     size_t count = 0;
     DirectMessage** msgs = message_receive_direct(store, agent_id, (size_t)max_count, &count);
+    free(agent_id);
 
     size_t required_size = 128;
     char** escaped_contents = NULL;
@@ -308,7 +302,7 @@ int execute_subscribe_channel_tool_call(const ToolCall *tool_call, ToolResult *r
         return 0;
     }
 
-    const char* agent_id = messaging_tool_get_agent_id();
+    char* agent_id = messaging_tool_get_agent_id();
     if (agent_id == NULL) {
         tool_result_builder_set_error(builder, "Agent ID not configured");
         ToolResult* temp = tool_result_builder_finalize(builder);
@@ -330,6 +324,7 @@ int execute_subscribe_channel_tool_call(const ToolCall *tool_call, ToolResult *r
             *result = *temp;
             free(temp);
         }
+        free(agent_id);
         free(channel_name);
         free(create_if_missing);
         free(description);
@@ -349,6 +344,7 @@ int execute_subscribe_channel_tool_call(const ToolCall *tool_call, ToolResult *r
                     *result = *temp;
                     free(temp);
                 }
+                free(agent_id);
                 free(channel_name);
                 free(create_if_missing);
                 free(description);
@@ -361,6 +357,7 @@ int execute_subscribe_channel_tool_call(const ToolCall *tool_call, ToolResult *r
                 *result = *temp;
                 free(temp);
             }
+            free(agent_id);
             free(channel_name);
             free(create_if_missing);
             free(description);
@@ -371,6 +368,7 @@ int execute_subscribe_channel_tool_call(const ToolCall *tool_call, ToolResult *r
     }
 
     int rc = channel_subscribe(store, channel_name, agent_id);
+    free(agent_id);
     if (rc == 0) {
         char* escaped_channel = json_escape_string(channel_name);
         tool_result_builder_set_success(builder,
@@ -414,7 +412,7 @@ int execute_publish_channel_tool_call(const ToolCall *tool_call, ToolResult *res
         return 0;
     }
 
-    const char* sender_id = messaging_tool_get_agent_id();
+    char* sender_id = messaging_tool_get_agent_id();
     if (sender_id == NULL) {
         tool_result_builder_set_error(builder, "Agent ID not configured");
         ToolResult* temp = tool_result_builder_finalize(builder);
@@ -435,6 +433,7 @@ int execute_publish_channel_tool_call(const ToolCall *tool_call, ToolResult *res
             *result = *temp;
             free(temp);
         }
+        free(sender_id);
         free(channel_name);
         free(content);
         return 0;
@@ -442,6 +441,7 @@ int execute_publish_channel_tool_call(const ToolCall *tool_call, ToolResult *res
 
     char msg_id[40] = {0};
     int rc = channel_publish(store, channel_name, sender_id, content, msg_id);
+    free(sender_id);
 
     if (rc == 0) {
         char* escaped_msg_id = json_escape_string(msg_id);
@@ -476,7 +476,7 @@ int execute_check_channel_messages_tool_call(const ToolCall *tool_call, ToolResu
     char* channel_name = extract_string_param(tool_call->arguments, "channel");
     double max_count = extract_number_param(tool_call->arguments, "max_count", 10);
 
-    const char* agent_id = messaging_tool_get_agent_id();
+    char* agent_id = messaging_tool_get_agent_id();
     if (agent_id == NULL) {
         tool_result_builder_set_error(builder, "Agent ID not configured");
         ToolResult* temp = tool_result_builder_finalize(builder);
@@ -496,6 +496,7 @@ int execute_check_channel_messages_tool_call(const ToolCall *tool_call, ToolResu
             *result = *temp;
             free(temp);
         }
+        free(agent_id);
         free(channel_name);
         return 0;
     }
@@ -508,6 +509,7 @@ int execute_check_channel_messages_tool_call(const ToolCall *tool_call, ToolResu
     } else {
         msgs = channel_receive_all(store, agent_id, (size_t)max_count, &count);
     }
+    free(agent_id);
 
     size_t required_size = 128;
     char** escaped_contents = NULL;

@@ -9,6 +9,7 @@ This document provides a comprehensive overview of Ralph's codebase structure an
 #### `src/core/` - Core Application Logic
 - **`main.c`** - Application entry point with CLI interface (single message, interactive, --json, --subagent modes)
 - **`ralph.c/ralph.h`** - Core Ralph orchestration: session management, API communication
+- **`agent_identity.c/h`** - Thread-safe agent identity management (ID, parent ID, subagent status)
 - **`context_enhancement.c/h`** - Prompt enhancement with todo state, memory recall, and context retrieval
 - **`recap.c/h`** - Conversation recap generation (one-shot LLM calls without history persistence)
 - **`streaming_handler.c/h`** - Application-layer streaming orchestration and provider registry management
@@ -55,6 +56,10 @@ This document provides a comprehensive overview of Ralph's codebase structure an
 #### `src/mcp/` - Model Context Protocol
 - **`mcp_client.c/h`** - MCP client implementation supporting STDIO/HTTP/SSE transports
 
+#### `src/messaging/` - Inter-Agent Messaging
+- **`message_poller.c/h`** - Background thread for polling new messages with PipeNotifier integration
+- **`notification_formatter.c/h`** - Formats messages for LLM context injection
+
 #### `src/tools/` - AI Tool System
 - **`tools_system.c/h`** - Core tool registry and execution framework
 - **`tool_result_builder.c/h`** - Standardized tool result construction (builder pattern)
@@ -66,6 +71,7 @@ This document provides a comprehensive overview of Ralph's codebase structure an
 - **`python_tool.c/h`** - Embedded Python interpreter execution
 - **`python_tool_files.c/h`** - Python file-based tool loading system
 - **`subagent_tool.c/h`** - Subagent process spawning and management
+- **`messaging_tool.c/h`** - Inter-agent messaging (6 tools: get_agent_info, send_message, check_messages, subscribe_channel, publish_channel, check_channel_messages)
 - **`todo_manager.c/h`** - Todo data structures and operations
 - **`todo_tool.c/h`** - Todo tool call handler
 - **`todo_display.c/h`** - Todo console visualization
@@ -87,6 +93,7 @@ This document provides a comprehensive overview of Ralph's codebase structure an
 - **`document_store.c/h`** - High-level document storage with embeddings and JSON persistence
 - **`metadata_store.c/h`** - Chunk metadata storage layer (separate from vectors)
 - **`task_store.c/h`** - SQLite-based persistent task storage with hierarchies, dependencies, and session scoping
+- **`message_store.c/h`** - SQLite-backed inter-agent messaging storage (direct messages, pub/sub channels)
 - **`hnswlib_wrapper.cpp/h`** - C++ wrapper for HNSW vector indexing
 
 #### `src/pdf/` - PDF Processing
@@ -132,6 +139,7 @@ The policy module implements approval gates for controlling tool execution.
 - **`document_chunker.c/h`** - Intelligent text chunking for embeddings
 - **`pdf_processor.c/h`** - PDF download, extraction, chunking, and indexing pipeline
 - **`uuid_utils.c/h`** - UUID v4 generation and validation utilities
+- **`pipe_notifier.c/h`** - Thread-safe pipe-based notification for async event handling
 - **`darray.h`** - Type-safe dynamic array macro implementation (header-only)
 - **`ptrarray.h`** - Type-safe dynamic pointer array with ownership semantics (header-only)
 - **`ralph_home.c/h`** - Centralized Ralph home directory management (~/.local/ralph/)
@@ -148,6 +156,7 @@ The test directory mirrors the source structure:
 - **`test_cli_flags.c`** - CLI flag parsing tests
 - **`test_recap.c`** - Recap generation tests
 - **`test_incomplete_task_bug.c`** - Regression test for task handling
+- **`test_agent_identity.c`** - Agent identity thread-safety and operations tests
 
 #### `test/llm/` - LLM System Tests
 - **`test_model_tools.c`** - Model and tool integration tests
@@ -181,9 +190,14 @@ The test directory mirrors the source structure:
 - **`test_vector_db.c`** - Vector database core tests
 - **`test_document_store.c`** - Document store tests
 - **`test_task_store.c`** - Task store persistence tests
+- **`test_message_store.c`** - Inter-agent messaging storage tests
 
 #### `test/mcp/` - MCP Integration Tests
 - **`test_mcp_client.c`** - MCP client functionality tests
+
+#### `test/messaging/` - Messaging Tests
+- **`test_message_poller.c`** - Message poller background thread tests
+- **`test_notification_formatter.c`** - Notification formatting tests
 
 #### `test/utils/` - Utility Tests
 - **`test_output_formatter.c`** - Output formatting tests
@@ -192,6 +206,7 @@ The test directory mirrors the source structure:
 - **`test_json_output.c`** - JSON output mode tests
 - **`test_debug_output.c`** - Debug output tests
 - **`test_ralph_home.c`** - Ralph home directory management tests
+- **`test_pipe_notifier.c`** - Pipe notifier async notification tests
 
 #### `test/policy/` - Policy Tests (Approval Gates)
 - **`test_approval_gate.c`** - Gate config initialization, category lookup, non-interactive mode

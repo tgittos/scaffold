@@ -14,7 +14,7 @@ static message_store_t* g_store = NULL;
 void setUp(void) {
     ralph_home_init(NULL);
     unlink(TEST_DB_PATH);
-    message_store_reset_instance();
+    message_store_reset_instance_for_testing();
     g_store = message_store_create(TEST_DB_PATH);
 }
 
@@ -34,7 +34,7 @@ void test_message_store_create_destroy(void) {
 void test_message_store_singleton(void) {
     message_store_destroy(g_store);
     g_store = NULL;
-    message_store_reset_instance();
+    message_store_reset_instance_for_testing();
 
     message_store_t* store1 = message_store_get_instance();
     TEST_ASSERT_NOT_NULL(store1);
@@ -42,7 +42,7 @@ void test_message_store_singleton(void) {
     message_store_t* store2 = message_store_get_instance();
     TEST_ASSERT_EQUAL_PTR(store1, store2);
 
-    message_store_reset_instance();
+    message_store_reset_instance_for_testing();
     g_store = message_store_create(TEST_DB_PATH);
 }
 

@@ -47,8 +47,17 @@ typedef struct message_store message_store_t;
 
 message_store_t* message_store_get_instance(void);
 void message_store_destroy(message_store_t* store);
-void message_store_reset_instance(void);
 message_store_t* message_store_create(const char* db_path);
+
+/**
+ * Reset the global singleton instance for testing.
+ *
+ * WARNING: This function is NOT thread-safe and should ONLY be called from
+ * single-threaded test code during teardown. It resets pthread_once_t which
+ * is undefined behavior per POSIX if called while other threads may be
+ * accessing the singleton.
+ */
+void message_store_reset_instance_for_testing(void);
 
 // Direct messaging
 // out_id must be at least 40 bytes. Pass 0 for ttl_seconds to disable expiry.

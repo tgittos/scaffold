@@ -144,7 +144,14 @@ void message_store_destroy(message_store_t* store) {
     free(store);
 }
 
-void message_store_reset_instance(void) {
+void message_store_reset_instance_for_testing(void) {
+    /*
+     * WARNING: This function is NOT thread-safe.
+     * Only call from single-threaded test teardown code.
+     *
+     * Resetting pthread_once_t is undefined behavior per POSIX, but works
+     * on most implementations when no other threads are accessing the singleton.
+     */
     if (g_store_instance != NULL) {
         message_store_destroy(g_store_instance);
         g_store_instance = NULL;

@@ -494,21 +494,24 @@ static void subagent_notify_parent(const Subagent* sub) {
         return;
     }
 
-    const char* parent_id = messaging_tool_get_agent_id();
+    char* parent_id = messaging_tool_get_agent_id();
     if (parent_id == NULL || parent_id[0] == '\0') {
         debug_printf("subagent_notify_parent: no parent agent ID set, skipping notification\n");
+        free(parent_id);
         return;
     }
 
     message_store_t* store = message_store_get_instance();
     if (store == NULL) {
         debug_printf("subagent_notify_parent: message store unavailable\n");
+        free(parent_id);
         return;
     }
 
     cJSON* msg = cJSON_CreateObject();
     if (msg == NULL) {
         debug_printf("subagent_notify_parent: failed to create JSON object\n");
+        free(parent_id);
         return;
     }
 
@@ -534,6 +537,7 @@ static void subagent_notify_parent(const Subagent* sub) {
 
     if (json_str == NULL) {
         debug_printf("subagent_notify_parent: failed to serialize JSON\n");
+        free(parent_id);
         return;
     }
 
@@ -546,6 +550,7 @@ static void subagent_notify_parent(const Subagent* sub) {
                      msg_id, parent_id);
     }
     free(json_str);
+    free(parent_id);
 }
 
 /**
@@ -715,9 +720,10 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
         setenv(RALPH_APPROVAL_RESPONSE_FD, response_fd_str, 1);
 
         // Pass parent agent ID for messaging
-        const char* parent_id = messaging_tool_get_agent_id();
+        char* parent_id = messaging_tool_get_agent_id();
         if (parent_id != NULL) {
             setenv(RALPH_PARENT_AGENT_ID_ENV, parent_id, 1);
+            free(parent_id);
         }
 
         char *args[7];

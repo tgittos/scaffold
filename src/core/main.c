@@ -17,7 +17,7 @@
 #include "../utils/ralph_home.h"
 #include "../utils/spinner.h"
 #include "../messaging/message_poller.h"
-#include "../messaging/message_processor.h"
+#include "../messaging/notification_formatter.h"
 
 #define MAX_INPUT_SIZE 8192
 #define RALPH_VERSION "0.1.0"
@@ -308,7 +308,24 @@ static int run_interactive_loop(RalphSession* session, bool json_mode) {
             printf("\r\033[K");  /* Clear old prompt from display */
             fflush(stdout);
 
-            process_incoming_messages(session, session->message_poller);
+            /* Inline message processing (was process_incoming_messages) */
+            message_poller_clear_notification(session->message_poller);
+            notification_bundle_t* bundle = notification_bundle_create(session->session_id);
+            if (bundle != NULL) {
+                int total_count = notification_bundle_total_count(bundle);
+                if (total_count > 0) {
+                    display_message_notification(total_count);
+                    char* notification_text = notification_format_for_llm(bundle);
+                    if (notification_text != NULL) {
+                        debug_printf("Processing %d incoming messages\n", total_count);
+                        ralph_process_message(session, notification_text);
+                        free(notification_text);
+                    } else {
+                        display_message_notification_clear();
+                    }
+                }
+                notification_bundle_destroy(bundle);
+            }
 
             if (g_running && (g_executor == NULL || !async_executor_is_running(g_executor))) {
                 rl_callback_handler_install("> ", handle_line_callback);

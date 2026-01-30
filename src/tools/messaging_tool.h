@@ -15,12 +15,20 @@ int execute_check_channel_messages_tool_call(const ToolCall *tool_call, ToolResu
 int execute_get_agent_info_tool_call(const ToolCall *tool_call, ToolResult *result);
 
 void messaging_tool_set_agent_id(const char* agent_id);
-const char* messaging_tool_get_agent_id(void);
-char* messaging_tool_get_agent_id_copy(void);  /* Thread-safe, caller must free */
+
+/**
+ * Get the current agent ID (thread-safe).
+ * @return Allocated copy of agent ID. Caller must free. Returns NULL if not set.
+ */
+char* messaging_tool_get_agent_id(void);
 
 void messaging_tool_set_parent_agent_id(const char* parent_id);
-const char* messaging_tool_get_parent_agent_id(void);
-char* messaging_tool_get_parent_agent_id_copy(void);  /* Thread-safe, caller must free */
+
+/**
+ * Get the parent agent ID (thread-safe).
+ * @return Allocated copy of parent ID. Caller must free. Returns NULL if not set.
+ */
+char* messaging_tool_get_parent_agent_id(void);
 
 void messaging_tool_cleanup(void);
 

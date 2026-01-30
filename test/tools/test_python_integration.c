@@ -242,6 +242,66 @@ void test_python_stdlib_math(void) {
     cleanup_python_result(&result);
 }
 
+// Test that shell tool exit_code propagates to result->success
+void test_shell_tool_exit_code_propagates(void) {
+    // Initialize tool files
+    TEST_ASSERT_EQUAL_INT(0, python_init_tool_files());
+    TEST_ASSERT_EQUAL_INT(0, python_load_tool_files());
+
+    // Create a registry and register tools
+    ToolRegistry shell_registry;
+    init_tool_registry(&shell_registry);
+    TEST_ASSERT_EQUAL_INT(0, python_register_tool_schemas(&shell_registry));
+
+    // Test 1: Command that exits 0 should have success=1
+    ToolCall call_success = {
+        .id = "shell-exit-0",
+        .name = "shell",
+        .arguments = "{\"command\": \"true\"}"
+    };
+    ToolResult result_success = {0};
+    TEST_ASSERT_EQUAL_INT(0, execute_python_file_tool_call(&call_success, &result_success));
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, result_success.success,
+        "Shell command 'true' (exit 0) should report success=1");
+    TEST_ASSERT_NOT_NULL(result_success.result);
+    TEST_ASSERT_NOT_NULL(strstr(result_success.result, "\"exit_code\": 0"));
+    free(result_success.tool_call_id);
+    free(result_success.result);
+
+    // Test 2: Command that exits non-zero should have success=0
+    ToolCall call_fail = {
+        .id = "shell-exit-1",
+        .name = "shell",
+        .arguments = "{\"command\": \"false\"}"
+    };
+    ToolResult result_fail = {0};
+    TEST_ASSERT_EQUAL_INT(0, execute_python_file_tool_call(&call_fail, &result_fail));
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, result_fail.success,
+        "Shell command 'false' (exit 1) should report success=0");
+    TEST_ASSERT_NOT_NULL(result_fail.result);
+    TEST_ASSERT_NOT_NULL(strstr(result_fail.result, "\"exit_code\": 1"));
+    free(result_fail.tool_call_id);
+    free(result_fail.result);
+
+    // Test 3: Command with specific exit code
+    ToolCall call_exit42 = {
+        .id = "shell-exit-42",
+        .name = "shell",
+        .arguments = "{\"command\": \"exit 42\"}"
+    };
+    ToolResult result_exit42 = {0};
+    TEST_ASSERT_EQUAL_INT(0, execute_python_file_tool_call(&call_exit42, &result_exit42));
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, result_exit42.success,
+        "Shell command 'exit 42' should report success=0");
+    TEST_ASSERT_NOT_NULL(result_exit42.result);
+    TEST_ASSERT_NOT_NULL(strstr(result_exit42.result, "\"exit_code\": 42"));
+    free(result_exit42.tool_call_id);
+    free(result_exit42.result);
+
+    cleanup_tool_registry(&shell_registry);
+    python_cleanup_tool_files();
+}
+
 // Test that docstring Args section is parsed correctly for tool descriptions
 void test_python_tool_docstring_parsing(void) {
     // Initialize tool files
@@ -313,6 +373,7 @@ int main(void) {
     RUN_TEST(test_python_timeout);
     RUN_TEST(test_python_stdlib_json);
     RUN_TEST(test_python_stdlib_math);
+    RUN_TEST(test_shell_tool_exit_code_propagates);
     RUN_TEST(test_python_tool_docstring_parsing);
 
     int result = UNITY_END();

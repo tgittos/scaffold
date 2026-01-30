@@ -81,7 +81,7 @@ void tearDown(void) {
     // Clean up config after each test
     config_cleanup();
     messaging_tool_cleanup();
-    message_store_reset_instance();
+    message_store_reset_instance_for_testing();
     ralph_home_cleanup();
 }
 

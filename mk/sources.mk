@@ -10,6 +10,7 @@ CORE_SOURCES := \
     $(SRCDIR)/core/streaming_handler.c \
     $(SRCDIR)/core/context_enhancement.c \
     $(SRCDIR)/core/recap.c \
+    $(SRCDIR)/core/agent_identity.c \
     $(SRCDIR)/network/http_client.c \
     $(SRCDIR)/network/embedded_cacert.c \
     $(SRCDIR)/network/streaming.c \
@@ -71,8 +72,7 @@ MCP_SOURCES := $(SRCDIR)/mcp/mcp_client.c
 # Messaging system
 MESSAGING_SOURCES := \
     $(SRCDIR)/messaging/message_poller.c \
-    $(SRCDIR)/messaging/notification_formatter.c \
-    $(SRCDIR)/messaging/message_processor.c
+    $(SRCDIR)/messaging/notification_formatter.c
 
 # LLM providers
 PROVIDER_SOURCES := \
@@ -113,7 +113,8 @@ PDF_SOURCES := $(SRCDIR)/pdf/pdf_extractor.c
 UTILS_EXTRA_SOURCES := \
     $(SRCDIR)/utils/uuid_utils.c \
     $(SRCDIR)/utils/ralph_home.c \
-    $(SRCDIR)/utils/spinner.c
+    $(SRCDIR)/utils/spinner.c \
+    $(SRCDIR)/utils/pipe_notifier.c
 
 # CLI
 CLI_SOURCES := $(SRCDIR)/cli/memory_commands.c
@@ -161,6 +162,7 @@ RALPH_CORE_DEPS := \
     $(SRCDIR)/core/streaming_handler.c \
     $(SRCDIR)/core/context_enhancement.c \
     $(SRCDIR)/core/recap.c \
+    $(SRCDIR)/utils/pipe_notifier.c \
     $(SRCDIR)/policy/allowlist.c \
     $(SRCDIR)/policy/approval_gate.c \
     $(SRCDIR)/policy/subagent_approval.c \
