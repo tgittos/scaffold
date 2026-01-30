@@ -1,0 +1,86 @@
+# CI Workflow for ralph
+# Builds and tests using the devcontainer for consistency with development
+
+name: CI
+
+on:
+  push:
+    branches: [master, develop]
+  pull_request:
+    branches: [master, develop]
+
+env:
+  UV_VERSION: "0.5.14"
+
+jobs:
+  build:
+    name: Build and Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build devcontainer image
+        uses: docker/build-push-action@v5
+        with:
+          context: .devcontainer
+          load: true
+          tags: ralph-dev:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps/
+            build/libpython*.a
+            build/python-include/
+            python/build/
+          key: deps-${{ hashFiles('mk/config.mk', 'mk/deps.mk', 'python/Makefile') }}
+          restore-keys: |
+            deps-
+
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/bin/uv
+          key: uv-${{ env.UV_VERSION }}-linux
+
+      - name: Install uv
+        run: |
+          if [ ! -f "$HOME/.local/bin/uv" ]; then
+            curl -LsSf https://astral.sh/uv/${{ env.UV_VERSION }}/install.sh | sh
+          fi
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Build ralph
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspaces/ralph \
+            -v $HOME/.local/bin:/uv-bin:ro \
+            -w /workspaces/ralph \
+            -e PATH="/uv-bin:/opt/cosmos/bin:$PATH" \
+            ralph-dev:latest \
+            make -j$(nproc)
+
+      - name: Run tests
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspaces/ralph \
+            -v $HOME/.local/bin:/uv-bin:ro \
+            -w /workspaces/ralph \
+            -e PATH="/uv-bin:/opt/cosmos/bin:$PATH" \
+            ralph-dev:latest \
+            ./scripts/run_tests.sh
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ralph
+          path: ralph
+          if-no-files-found: error
