@@ -7,6 +7,7 @@
 
 include mk/config.mk
 include mk/sources.mk
+include mk/lib.mk
 include mk/deps.mk
 include mk/tests.mk
 
@@ -18,12 +19,12 @@ include mk/tests.mk
 .DEFAULT_GOAL := all
 
 # Default target builds the complete ralph binary with embedded Python
-all: $(BUILDDIR)/.ralph-linked embed-python
+all: $(BUILDDIR)/.ralph-linked embed-python libralph
 
 # Linking step - produces the base binary and saves it for embedding
-$(BUILDDIR)/.ralph-linked: $(OBJECTS) $(ALL_LIBS) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
+$(BUILDDIR)/.ralph-linked: $(OBJECTS) $(ALL_LIBS) $(LIBRALPH) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
 	@echo "Linking with PDFio support"
-	$(CXX) $(LDFLAGS) -o $(TARGET) $(OBJECTS) $(LIBS) -lpthread
+	$(CXX) $(LDFLAGS) -o $(TARGET) $(OBJECTS) $(LIB_OBJECTS) $(LIBS) -lpthread
 	@echo "Saving base binary for smart embedding..."
 	@uv run scripts/embed_python.py --save-base
 	@touch $@

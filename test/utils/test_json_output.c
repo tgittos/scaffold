@@ -7,52 +7,57 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 // Buffer to capture stdout
 static char captured_output[8192];
 static int original_stdout = -1;
-static int pipe_fds[2] = {-1, -1};
+static char temp_file_path[256] = {0};
 
-// Helper to start capturing stdout
+// Helper to start capturing stdout using a temp file (safer than pipes)
 static void start_stdout_capture(void) {
     memset(captured_output, 0, sizeof(captured_output));
 
-    if (pipe(pipe_fds) == -1) {
-        TEST_FAIL_MESSAGE("Failed to create pipe for stdout capture");
+    // Create temp file for capture
+    snprintf(temp_file_path, sizeof(temp_file_path), "/tmp/json_output_test_%d.tmp", getpid());
+
+    int fd = open(temp_file_path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    if (fd == -1) {
+        TEST_FAIL_MESSAGE("Failed to create temp file for stdout capture");
         return;
     }
 
     original_stdout = dup(STDOUT_FILENO);
-    dup2(pipe_fds[1], STDOUT_FILENO);
+    dup2(fd, STDOUT_FILENO);
+    close(fd);  // STDOUT_FILENO now owns the file
 }
 
 // Helper to end capturing and read output
 static ssize_t end_stdout_capture(void) {
     fflush(stdout);
 
-    // Restore stdout FIRST - this closes the pipe write end via STDOUT_FILENO
-    // which is necessary to unblock read() below
+    // Restore stdout
     if (original_stdout != -1) {
         dup2(original_stdout, STDOUT_FILENO);
         close(original_stdout);
         original_stdout = -1;
     }
 
-    // Now close our reference to the write end (may already be closed by dup2 above)
-    if (pipe_fds[1] != -1) {
-        close(pipe_fds[1]);
-        pipe_fds[1] = -1;
-    }
-
-    // Read captured output - now safe since write end is fully closed
+    // Read captured output from temp file
     ssize_t bytes_read = 0;
-    if (pipe_fds[0] != -1) {
-        bytes_read = read(pipe_fds[0], captured_output, sizeof(captured_output) - 1);
-        if (bytes_read > 0) {
-            captured_output[bytes_read] = '\0';
+    if (temp_file_path[0] != '\0') {
+        int fd = open(temp_file_path, O_RDONLY);
+        if (fd != -1) {
+            bytes_read = read(fd, captured_output, sizeof(captured_output) - 1);
+            if (bytes_read > 0) {
+                captured_output[bytes_read] = '\0';
+            } else {
+                captured_output[0] = '\0';
+            }
+            close(fd);
         }
-        close(pipe_fds[0]);
-        pipe_fds[0] = -1;
+        unlink(temp_file_path);
+        temp_file_path[0] = '\0';
     }
 
     return bytes_read;
@@ -64,18 +69,14 @@ void setUp(void) {
 
 void tearDown(void) {
     // Clean up any leftover state if a test failed early
-    if (pipe_fds[1] != -1) {
-        close(pipe_fds[1]);
-        pipe_fds[1] = -1;
-    }
-    if (pipe_fds[0] != -1) {
-        close(pipe_fds[0]);
-        pipe_fds[0] = -1;
-    }
     if (original_stdout != -1) {
         dup2(original_stdout, STDOUT_FILENO);
         close(original_stdout);
         original_stdout = -1;
+    }
+    if (temp_file_path[0] != '\0') {
+        unlink(temp_file_path);
+        temp_file_path[0] = '\0';
     }
 }
 

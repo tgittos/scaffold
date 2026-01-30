@@ -2,13 +2,48 @@
 #include "spinner.h"
 #include "output_formatter.h"
 #include <unistd.h>
+#include <fcntl.h>
+#include <stdio.h>
+#include <sys/types.h>
+
+// Redirect stdout to /dev/null to prevent ANSI escape codes from corrupting output streams
+static int original_stdout = -1;
+static int devnull_fd = -1;
+
+static void redirect_stdout_to_devnull(void) {
+    if (original_stdout == -1) {
+        fflush(stdout);
+        original_stdout = dup(STDOUT_FILENO);
+        devnull_fd = open("/dev/null", O_WRONLY);
+        if (devnull_fd != -1) {
+            dup2(devnull_fd, STDOUT_FILENO);
+        }
+    }
+}
+
+static void restore_stdout(void) {
+    if (original_stdout != -1) {
+        fflush(stdout);
+        dup2(original_stdout, STDOUT_FILENO);
+        close(original_stdout);
+        original_stdout = -1;
+    }
+    if (devnull_fd != -1) {
+        close(devnull_fd);
+        devnull_fd = -1;
+    }
+}
 
 void setUp(void) {
     set_json_output_mode(false);
+    // Redirect stdout for spinner tests that actually run the spinner
+    // to prevent ANSI escape codes from corrupting output streams
+    redirect_stdout_to_devnull();
 }
 
 void tearDown(void) {
     spinner_cleanup();
+    restore_stdout();
 }
 
 void test_spinner_start_stop_basic(void) {

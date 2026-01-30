@@ -1,32 +1,19 @@
+/**
+ * ralph - AI Assistant CLI
+ *
+ * This is a thin wrapper around libralph that parses command-line arguments
+ * and invokes the agent API.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <sys/select.h>
-#include <readline/readline.h>
-#include <readline/history.h>
-#include "ralph.h"
-#include "interrupt.h"
-#include "async_executor.h"
+#include "../../lib/agent/agent.h"
 #include "debug_output.h"
-#include "output_formatter.h"
-#include "json_output.h"
-#include "../policy/approval_gate.h"
-#include "../cli/memory_commands.h"
-#include "../tools/subagent_tool.h"
-#include "../utils/ralph_home.h"
-#include "../utils/spinner.h"
-#include "../messaging/message_poller.h"
-#include "../messaging/notification_formatter.h"
 
-#define MAX_INPUT_SIZE 8192
 #define RALPH_VERSION "0.1.0"
 #define MAX_CLI_ALLOW_ENTRIES 64
 #define MAX_CLI_ALLOW_CATEGORIES 16
-
-static volatile int g_running = 1;
-static RalphSession* g_session = NULL;
-static async_executor_t* g_executor = NULL;
 
 static void print_version(void) {
     printf("ralph %s\n", RALPH_VERSION);
@@ -58,293 +45,8 @@ static void print_help(const char *program_name) {
     printf("  Ctrl+D            End session\n");
 }
 
-static void apply_gate_cli_overrides(RalphSession *session, bool yolo_mode,
-                                     const char **cli_allow_categories, int cli_allow_category_count,
-                                     const char **cli_allow_entries, int cli_allow_count) {
-    if (yolo_mode) {
-        approval_gate_enable_yolo(&session->gate_config);
-        debug_printf("Approval gates disabled (--yolo mode)\n");
-    }
-
-    for (int i = 0; i < cli_allow_category_count; i++) {
-        if (approval_gate_set_category_action(&session->gate_config, cli_allow_categories[i],
-                                              GATE_ACTION_ALLOW) != 0) {
-            fprintf(stderr, "Warning: Unknown category '%s' for --allow-category\n",
-                    cli_allow_categories[i]);
-        } else {
-            debug_printf("Category '%s' set to allow via CLI\n", cli_allow_categories[i]);
-        }
-    }
-
-    for (int i = 0; i < cli_allow_count; i++) {
-        if (approval_gate_add_cli_allow(&session->gate_config, cli_allow_entries[i]) != 0) {
-            fprintf(stderr, "Warning: Invalid format '%s' for --allow\n", cli_allow_entries[i]);
-        } else {
-            debug_printf("Added allow entry '%s' via CLI\n", cli_allow_entries[i]);
-        }
-    }
-}
-
-static void handle_line_callback(char* line) {
-    if (line == NULL) {
-        printf("\n");
-        g_running = 0;
-        rl_callback_handler_remove();
-        return;
-    }
-
-    if (strcmp(line, "quit") == 0 || strcmp(line, "exit") == 0) {
-        printf("Goodbye!\n");
-        free(line);
-        g_running = 0;
-        rl_callback_handler_remove();
-        return;
-    }
-
-    if (strlen(line) == 0) {
-        free(line);
-        return;
-    }
-
-    add_history(line);
-
-    if (line[0] == '/') {
-        if (process_memory_command(line) == 0) {
-            free(line);
-            return;
-        }
-    }
-
-    if (g_executor != NULL && async_executor_is_running(g_executor)) {
-        debug_printf("Executor already running, ignoring input\n");
-        free(line);
-        return;
-    }
-
-    printf("\n");
-
-    if (g_executor != NULL) {
-        rl_callback_handler_remove();
-        if (async_executor_start(g_executor, line) != 0) {
-            fprintf(stderr, "Error: Failed to start message processing\n");
-            rl_callback_handler_install("> ", handle_line_callback);
-        }
-    } else {
-        int result = ralph_process_message(g_session, line);
-        if (result != 0) {
-            fprintf(stderr, "Error: Failed to process message\n");
-        }
-        printf("\n");
-    }
-
-    free(line);
-}
-
-static int run_interactive_loop(RalphSession* session, bool json_mode) {
-    (void)json_mode;
-    g_session = session;
-    g_running = 1;
-
-    if (interrupt_init() != 0) {
-        fprintf(stderr, "Warning: Failed to initialize interrupt handling\n");
-    }
-
-    g_executor = async_executor_create(session);
-    if (g_executor == NULL) {
-        fprintf(stderr, "Warning: Failed to create async executor, using synchronous mode\n");
-    }
-
-    rl_callback_handler_install("> ", handle_line_callback);
-
-    int notify_fd = -1;
-    if (session->message_poller != NULL) {
-        notify_fd = message_poller_get_notify_fd(session->message_poller);
-    }
-
-    int executor_fd = -1;
-    if (g_executor != NULL) {
-        executor_fd = async_executor_get_notify_fd(g_executor);
-    }
-
-    while (g_running) {
-        interrupt_clear();
-
-        fd_set read_fds;
-        FD_ZERO(&read_fds);
-
-        bool async_running = (g_executor != NULL && async_executor_is_running(g_executor));
-        int max_fd = -1;
-
-        /* Only poll stdin when not in async execution mode.
-         * During async, the readline handler is removed, so calling
-         * rl_callback_read_char() would crash. User input during async
-         * is ignored anyway, and Ctrl+C is handled via signal. */
-        if (!async_running) {
-            FD_SET(STDIN_FILENO, &read_fds);
-            max_fd = STDIN_FILENO;
-        }
-
-        if (notify_fd >= 0) {
-            FD_SET(notify_fd, &read_fds);
-            if (notify_fd > max_fd) {
-                max_fd = notify_fd;
-            }
-        }
-
-        if (executor_fd >= 0 && async_running) {
-            FD_SET(executor_fd, &read_fds);
-            if (executor_fd > max_fd) {
-                max_fd = executor_fd;
-            }
-        }
-
-        SubagentManager* mgr = &session->subagent_manager;
-        for (size_t i = 0; i < mgr->subagents.count; i++) {
-            Subagent* sub = &mgr->subagents.data[i];
-            if (sub->status == SUBAGENT_STATUS_RUNNING &&
-                sub->approval_channel.request_fd > 2) {
-                FD_SET(sub->approval_channel.request_fd, &read_fds);
-                if (sub->approval_channel.request_fd > max_fd) {
-                    max_fd = sub->approval_channel.request_fd;
-                }
-            }
-        }
-
-        struct timeval timeout;
-        timeout.tv_sec = 1;
-        timeout.tv_usec = 0;
-
-        /* If no fds to poll (shouldn't happen), just sleep and continue */
-        if (max_fd < 0) {
-            usleep(100000);
-            continue;
-        }
-
-        int ready = select(max_fd + 1, &read_fds, NULL, NULL, &timeout);
-
-        if (ready < 0) {
-            if (interrupt_pending()) {
-                if (g_executor != NULL && async_executor_is_running(g_executor)) {
-                    debug_printf("Ctrl+C during async execution, cancelling...\n");
-                    async_executor_cancel(g_executor);
-                }
-                interrupt_clear();
-                printf("\n");
-                continue;
-            }
-            if (g_running) {
-                continue;
-            }
-            break;
-        }
-
-        if (ready == 0) {
-            subagent_poll_all(mgr);
-            continue;
-        }
-
-        if (executor_fd >= 0 && FD_ISSET(executor_fd, &read_fds)) {
-            int event = async_executor_process_events(g_executor);
-            switch (event) {
-                case ASYNC_EVENT_COMPLETE:
-                    debug_printf("Async execution completed\n");
-                    if (g_running) {
-                        rl_callback_handler_install("> ", handle_line_callback);
-                    }
-                    break;
-                case ASYNC_EVENT_ERROR: {
-                    const char* err = async_executor_get_error(g_executor);
-                    fprintf(stderr, "Error: %s\n", err ? err : "Message processing failed");
-                    printf("\n");
-                    if (g_running) {
-                        rl_callback_handler_install("> ", handle_line_callback);
-                    }
-                    break;
-                }
-                case ASYNC_EVENT_INTERRUPTED:
-                    debug_printf("Async execution was interrupted\n");
-                    printf("\n");
-                    if (g_running) {
-                        rl_callback_handler_install("> ", handle_line_callback);
-                    }
-                    break;
-                case ASYNC_EVENT_APPROVAL:
-                    debug_printf("Approval requested (not yet implemented)\n");
-                    break;
-                case ASYNC_EVENT_SUBAGENT_SPAWNED:
-                    /* Subagent was spawned - just continue the loop to rebuild
-                     * the fd_set with the new subagent's approval channel FD */
-                    debug_printf("Subagent spawned, rebuilding fd_set\n");
-                    break;
-                default:
-                    if (event > 0) {
-                        debug_printf("Unknown executor event: %c\n", (char)event);
-                    }
-                    break;
-            }
-        }
-
-        for (size_t i = 0; i < mgr->subagents.count; i++) {
-            Subagent* sub = &mgr->subagents.data[i];
-            if (sub->status == SUBAGENT_STATUS_RUNNING &&
-                sub->approval_channel.request_fd > 2 &&
-                FD_ISSET(sub->approval_channel.request_fd, &read_fds)) {
-                rl_callback_handler_remove();
-
-                subagent_handle_approval_request(mgr, (int)i, &session->gate_config);
-
-                if (g_running && (g_executor == NULL || !async_executor_is_running(g_executor))) {
-                    rl_callback_handler_install("> ", handle_line_callback);
-                }
-            }
-        }
-
-        if (!async_running && FD_ISSET(STDIN_FILENO, &read_fds)) {
-            rl_callback_read_char();
-        }
-
-        if (notify_fd >= 0 && FD_ISSET(notify_fd, &read_fds)) {
-            rl_callback_handler_remove();
-            printf("\r\033[K");  /* Clear old prompt from display */
-            fflush(stdout);
-
-            /* Inline message processing (was process_incoming_messages) */
-            message_poller_clear_notification(session->message_poller);
-            notification_bundle_t* bundle = notification_bundle_create(session->session_id);
-            if (bundle != NULL) {
-                int total_count = notification_bundle_total_count(bundle);
-                if (total_count > 0) {
-                    display_message_notification(total_count);
-                    char* notification_text = notification_format_for_llm(bundle);
-                    if (notification_text != NULL) {
-                        debug_printf("Processing %d incoming messages\n", total_count);
-                        ralph_process_message(session, notification_text);
-                        free(notification_text);
-                    } else {
-                        display_message_notification_clear();
-                    }
-                }
-                notification_bundle_destroy(bundle);
-            }
-
-            if (g_running && (g_executor == NULL || !async_executor_is_running(g_executor))) {
-                rl_callback_handler_install("> ", handle_line_callback);
-            }
-        }
-    }
-
-    if (g_executor != NULL) {
-        async_executor_destroy(g_executor);
-        g_executor = NULL;
-    }
-
-    rl_callback_handler_remove();
-    interrupt_cleanup();
-    return 0;
-}
-
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
+    /* Handle --version and --help before anything else */
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-v") == 0) {
             print_version();
@@ -356,52 +58,37 @@ int main(int argc, char *argv[])
         }
     }
 
-    char *home_override = NULL;
-    for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--home") == 0 && i + 1 < argc) {
-            home_override = argv[++i];
-            break;
-        }
-    }
+    /* Parse command-line arguments into agent config */
+    RalphAgentConfig config = ralph_agent_config_default();
 
-    if (ralph_home_init(home_override) != 0) {
-        fprintf(stderr, "Error: Failed to initialize ralph home directory\n");
-        return EXIT_FAILURE;
-    }
-
-    bool debug_mode = false;
-    bool no_stream = false;
-    bool json_mode = false;
-    int message_arg_index = -1;
-    int subagent_mode = 0;
-    char *subagent_task = NULL;
-    char *subagent_context = NULL;
-
-    bool yolo_mode = false;
     const char *cli_allow_entries[MAX_CLI_ALLOW_ENTRIES];
     int cli_allow_count = 0;
     const char *cli_allow_categories[MAX_CLI_ALLOW_CATEGORIES];
     int cli_allow_category_count = 0;
 
-    bool no_auto_messages = false;
-    int message_poll_interval = MESSAGE_POLLER_DEFAULT_INTERVAL_MS;
+    int message_arg_index = -1;
+    int subagent_mode = 0;
+    char *subagent_task = NULL;
+    char *subagent_context = NULL;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--debug") == 0) {
-            debug_mode = true;
+            config.debug = true;
         } else if (strcmp(argv[i], "--no-stream") == 0) {
-            no_stream = true;
+            config.no_stream = true;
         } else if (strcmp(argv[i], "--json") == 0) {
-            json_mode = true;
+            config.json_mode = true;
         } else if (strcmp(argv[i], "--yolo") == 0) {
-            yolo_mode = true;
+            config.yolo = true;
         } else if (strcmp(argv[i], "--no-auto-messages") == 0) {
-            no_auto_messages = true;
+            config.no_auto_messages = true;
         } else if (strcmp(argv[i], "--message-poll-interval") == 0 && i + 1 < argc) {
-            message_poll_interval = atoi(argv[++i]);
-            if (message_poll_interval < 100) {
-                message_poll_interval = 100;
+            config.message_poll_interval_ms = atoi(argv[++i]);
+            if (config.message_poll_interval_ms < 100) {
+                config.message_poll_interval_ms = 100;
             }
+        } else if (strcmp(argv[i], "--home") == 0 && i + 1 < argc) {
+            config.home_dir = argv[++i];
         } else if (strcmp(argv[i], "--allow") == 0 && i + 1 < argc) {
             if (cli_allow_count < MAX_CLI_ALLOW_ENTRIES) {
                 cli_allow_entries[cli_allow_count++] = argv[++i];
@@ -423,132 +110,48 @@ int main(int argc, char *argv[])
             subagent_task = argv[++i];
         } else if (strcmp(argv[i], "--context") == 0 && i + 1 < argc) {
             subagent_context = argv[++i];
-        } else if (strcmp(argv[i], "--home") == 0 && i + 1 < argc) {
-            i++;
         } else if (message_arg_index == -1 && argv[i][0] != '-') {
             message_arg_index = i;
         }
     }
 
+    /* Set up allow lists */
+    config.allow_entries = cli_allow_entries;
+    config.allow_entry_count = cli_allow_count;
+    config.allow_categories = cli_allow_categories;
+    config.allow_category_count = cli_allow_category_count;
+
+    /* Determine mode */
     if (subagent_mode) {
         if (subagent_task == NULL) {
             fprintf(stderr, "Error: --subagent requires --task argument\n");
             return EXIT_FAILURE;
         }
-        debug_init(debug_mode);
-        return ralph_run_as_subagent(subagent_task, subagent_context);
-    }
-
-    debug_init(debug_mode);
-
-    if (message_arg_index != -1) {
-        const char *user_message = argv[message_arg_index];
-
-        RalphSession session;
-        if (ralph_init_session(&session) != 0) {
-            fprintf(stderr, "Error: Failed to initialize Ralph session\n");
-            return EXIT_FAILURE;
-        }
-
-        session.polling_config.auto_poll_enabled = 0;
-
-        if (ralph_load_config(&session) != 0) {
-            fprintf(stderr, "Error: Failed to load Ralph configuration\n");
-            ralph_cleanup_session(&session);
-            return EXIT_FAILURE;
-        }
-
-        apply_gate_cli_overrides(&session, yolo_mode, cli_allow_categories,
-                                 cli_allow_category_count, cli_allow_entries, cli_allow_count);
-
-        if (no_stream) {
-            session.session_data.config.enable_streaming = false;
-        }
-
-        if (json_mode) {
-            session.session_data.config.json_output_mode = true;
-            set_json_output_mode(true);
-            json_output_init();
-        }
-
-        int result = ralph_process_message(&session, user_message);
-
-        ralph_cleanup_session(&session);
-        return (result == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
+        config.mode = RALPH_AGENT_MODE_BACKGROUND;
+        config.subagent_task = subagent_task;
+        config.subagent_context = subagent_context;
+    } else if (message_arg_index != -1) {
+        config.mode = RALPH_AGENT_MODE_SINGLE_SHOT;
+        config.initial_message = argv[message_arg_index];
     } else {
-        if (!json_mode) {
-            printf("\033[1mRalph\033[0m - AI Assistant\n");
-            printf("Commands: quit, exit | Ctrl+D to end\n\n");
-        }
-
-        RalphSession session;
-        if (ralph_init_session(&session) != 0) {
-            fprintf(stderr, "Error: Failed to initialize Ralph session\n");
-            return EXIT_FAILURE;
-        }
-
-        if (no_auto_messages) {
-            session.polling_config.auto_poll_enabled = 0;
-        }
-        session.polling_config.poll_interval_ms = message_poll_interval;
-
-        if (ralph_load_config(&session) != 0) {
-            fprintf(stderr, "Error: Failed to load Ralph configuration\n");
-            ralph_cleanup_session(&session);
-            return EXIT_FAILURE;
-        }
-
-        apply_gate_cli_overrides(&session, yolo_mode, cli_allow_categories,
-                                 cli_allow_category_count, cli_allow_entries, cli_allow_count);
-
-        if (no_stream) {
-            session.session_data.config.enable_streaming = false;
-        }
-
-        if (json_mode) {
-            session.session_data.config.json_output_mode = true;
-            set_json_output_mode(true);
-            json_output_init();
-        }
-
-        if (!json_mode) {
-            if (session.session_data.conversation.count == 0) {
-                debug_printf("Generating welcome message...\n");
-
-                const char* greeting_prompt = "This is your first interaction with this user in interactive mode. "
-                                            "Please introduce yourself as Ralph, briefly explain your capabilities "
-                                            "(answering questions, running shell commands, file operations, problem-solving), "
-                                            "and ask what you can help with today. Keep it warm, concise, and engaging. "
-                                            "Make it feel personal and conversational, not like a static template.";
-
-                int result = ralph_process_message(&session, greeting_prompt);
-                if (result != 0) {
-                    printf("Hello! I'm Ralph, your AI assistant. What can I help you with today?\n");
-                }
-                printf("\n");
-            } else {
-                debug_printf("Generating recap of recent conversation (%d messages)...\n",
-                           session.session_data.conversation.count);
-
-                int result = ralph_generate_recap(&session, 5);
-                if (result != 0) {
-                    printf("Welcome back! Ready to continue where we left off.\n");
-                }
-                printf("\n");
-            }
-        }
-
-        using_history();
-        memory_commands_init();
-
-        ralph_start_message_polling(&session);
-
-        run_interactive_loop(&session, json_mode);
-
-        ralph_stop_message_polling(&session);
-        memory_commands_cleanup();
-        spinner_cleanup();
-        ralph_cleanup_session(&session);
-        return EXIT_SUCCESS;
+        config.mode = RALPH_AGENT_MODE_INTERACTIVE;
     }
+
+    /* Create and run agent */
+    RalphAgent agent;
+    if (ralph_agent_init(&agent, &config) != 0) {
+        fprintf(stderr, "Error: Failed to initialize Ralph agent\n");
+        return EXIT_FAILURE;
+    }
+
+    if (ralph_agent_load_config(&agent) != 0) {
+        fprintf(stderr, "Error: Failed to load Ralph configuration\n");
+        ralph_agent_cleanup(&agent);
+        return EXIT_FAILURE;
+    }
+
+    int result = ralph_agent_run(&agent);
+
+    ralph_agent_cleanup(&agent);
+    return (result == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
