@@ -60,7 +60,7 @@ jobs:
 
       - name: Build ralph
         run: |
-          docker run --rm \
+          docker run --rm --privileged \
             -v ${{ github.workspace }}:/workspaces/ralph \
             -v $HOME/.local/bin:/uv-bin:ro \
             -w /workspaces/ralph \
@@ -70,7 +70,7 @@ jobs:
 
       - name: Run tests
         run: |
-          docker run --rm \
+          docker run --rm --privileged \
             -v ${{ github.workspace }}:/workspaces/ralph \
             -v $HOME/.local/bin:/uv-bin:ro \
             -w /workspaces/ralph \
