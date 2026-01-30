@@ -40,6 +40,7 @@ $(eval $(call def_test,agent_identity,core/test_agent_identity,$(SRCDIR)/core/ag
 $(eval $(call def_test,prompt,utils/test_prompt_loader,$(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/utils/ralph_home.c))
 $(eval $(call def_test,ralph_home,utils/test_ralph_home,$(SRCDIR)/utils/ralph_home.c))
 $(eval $(call def_test,todo_manager,tools/test_todo_manager,$(SRCDIR)/tools/todo_manager.c))
+$(eval $(call def_test_mixed,tool_param_dsl,tools/test_tool_param_dsl,$(COMPLEX_DEPS)))
 $(eval $(call def_test,document_chunker,test_document_chunker,$(SRCDIR)/utils/document_chunker.c $(SRCDIR)/utils/common_utils.c))
 $(eval $(call def_test,streaming,network/test_streaming,$(SRCDIR)/network/streaming.c))
 $(eval $(call def_test,darray,test_darray,))
@@ -53,6 +54,7 @@ $(eval $(call def_test,gate_prompter,policy/test_gate_prompter,$(SRCDIR)/policy/
 GATE_DEPS := \
     $(SRCDIR)/policy/allowlist.c \
     $(SRCDIR)/policy/approval_gate.c \
+    $(SRCDIR)/policy/approval_errors.c \
     $(SRCDIR)/policy/atomic_file.c \
     $(SRCDIR)/policy/gate_prompter.c \
     $(SRCDIR)/policy/pattern_generator.c \
@@ -64,6 +66,7 @@ GATE_DEPS := \
     $(SRCDIR)/policy/tool_args.c \
     $(SRCDIR)/utils/debug_output.c \
     $(SRCDIR)/utils/ralph_home.c \
+    $(SRCDIR)/utils/json_escape.c \
     $(TESTDIR)/stubs/subagent_stub.c \
     $(TESTDIR)/stubs/output_formatter_stub.c
 
@@ -104,6 +107,9 @@ $(TEST_ralph_home_TARGET): $(TEST_ralph_home_OBJECTS)
 
 $(TEST_todo_manager_TARGET): $(TEST_todo_manager_OBJECTS)
 	$(CC) -o $@ $^
+
+$(TEST_tool_param_dsl_TARGET): $(TEST_tool_param_dsl_OBJECTS) $(ALL_LIBS)
+	$(CXX) -o $@ $(TEST_tool_param_dsl_OBJECTS) $(LIBS_STANDARD)
 
 $(TEST_document_chunker_TARGET): $(TEST_document_chunker_OBJECTS)
 	$(CC) -o $@ $^
@@ -198,8 +204,12 @@ $(TEST_http_retry_TARGET): $(TEST_http_retry_OBJECTS) $(CJSON_LIB) $(LIBS_MBEDTL
 # SQLITE TESTS
 # =============================================================================
 
-$(eval $(call def_test,task_store,db/test_task_store,$(SRCDIR)/db/task_store.c $(SRCDIR)/utils/uuid_utils.c $(SRCDIR)/utils/ralph_home.c))
-$(eval $(call def_test,message_store,db/test_message_store,$(SRCDIR)/db/message_store.c $(SRCDIR)/utils/uuid_utils.c $(SRCDIR)/utils/ralph_home.c))
+$(eval $(call def_test,sqlite_dal,db/test_sqlite_dal,$(SRCDIR)/db/sqlite_dal.c $(SRCDIR)/utils/ralph_home.c))
+$(eval $(call def_test,task_store,db/test_task_store,$(SRCDIR)/db/task_store.c $(SRCDIR)/db/sqlite_dal.c $(SRCDIR)/utils/uuid_utils.c $(SRCDIR)/utils/ralph_home.c))
+$(eval $(call def_test,message_store,db/test_message_store,$(SRCDIR)/db/message_store.c $(SRCDIR)/db/sqlite_dal.c $(SRCDIR)/utils/uuid_utils.c $(SRCDIR)/utils/ralph_home.c))
+
+$(TEST_sqlite_dal_TARGET): $(TEST_sqlite_dal_OBJECTS) $(SQLITE_LIB)
+	$(CC) -o $@ $(TEST_sqlite_dal_OBJECTS) $(SQLITE_LIB) -lpthread -lm
 
 $(TEST_task_store_TARGET): $(TEST_task_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB)
 	$(CC) -o $@ $(TEST_task_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) -lpthread -lm
@@ -212,6 +222,7 @@ MESSAGING_DEPS := \
     $(SRCDIR)/messaging/message_poller.c \
     $(SRCDIR)/messaging/notification_formatter.c \
     $(SRCDIR)/db/message_store.c \
+    $(SRCDIR)/db/sqlite_dal.c \
     $(SRCDIR)/utils/uuid_utils.c \
     $(SRCDIR)/utils/ralph_home.c \
     $(SRCDIR)/utils/pipe_notifier.c
@@ -369,25 +380,28 @@ TEST_EXECUTION_ORDER := \
     $(TEST_streaming_TARGET) $(TEST_openai_streaming_TARGET) $(TEST_anthropic_streaming_TARGET) \
     $(TEST_output_TARGET) $(TEST_prompt_TARGET) $(TEST_debug_output_TARGET) \
     $(TEST_conversation_TARGET) $(TEST_conversation_vdb_TARGET) $(TEST_tools_TARGET) \
-    $(TEST_ralph_TARGET) $(TEST_todo_manager_TARGET) \
+    $(TEST_ralph_TARGET) $(TEST_todo_manager_TARGET) $(TEST_tool_param_dsl_TARGET) \
     $(TEST_vector_db_tool_TARGET) $(TEST_memory_tool_TARGET) $(TEST_python_tool_TARGET) \
     $(TEST_python_integration_TARGET) $(TEST_token_manager_TARGET) $(TEST_model_tools_TARGET) \
     $(TEST_conversation_compactor_TARGET) $(TEST_rolling_summary_TARGET) $(TEST_incomplete_task_bug_TARGET) \
     $(TEST_messages_array_bug_TARGET) $(TEST_mcp_client_TARGET) $(TEST_vector_db_TARGET) \
     $(TEST_document_store_TARGET) $(TEST_task_store_TARGET) $(TEST_message_store_TARGET) \
-    $(TEST_message_poller_TARGET) $(TEST_notification_formatter_TARGET) \
+    $(TEST_message_poller_TARGET) $(TEST_notification_formatter_TARGET) $(TEST_sqlite_dal_TARGET) \
     $(TEST_pdf_extractor_TARGET) $(TEST_document_chunker_TARGET) $(TEST_approval_gate_TARGET) \
     $(TEST_atomic_file_TARGET) $(TEST_path_normalize_TARGET) $(TEST_protected_files_TARGET) \
     $(TEST_shell_parser_TARGET) $(TEST_shell_parser_cmd_TARGET) $(TEST_shell_parser_ps_TARGET) \
     $(TEST_subagent_approval_TARGET) $(TEST_subagent_tool_TARGET) $(TEST_json_output_TARGET) \
     $(TEST_verified_file_context_TARGET) $(TEST_approval_gate_integration_TARGET)
 
-test: $(ALL_TEST_TARGETS)
+test:
 	@echo "Running all tests..."
 	@for t in $(TEST_EXECUTION_ORDER); do \
 		./$$t || exit 1; \
 	done
 	@echo "All tests completed"
+
+# Build tests without running them (for when you need to rebuild tests only)
+build-tests: $(ALL_TEST_TARGETS)
 
 check: test
 
@@ -403,9 +417,9 @@ VALGRIND_TESTS := \
     $(TEST_openai_streaming_TARGET) $(TEST_anthropic_streaming_TARGET) \
     $(TEST_output_TARGET) $(TEST_prompt_TARGET) $(TEST_conversation_TARGET) \
     $(TEST_conversation_vdb_TARGET) $(TEST_tools_TARGET) $(TEST_ralph_TARGET) \
-    $(TEST_todo_manager_TARGET) $(TEST_vector_db_tool_TARGET) \
+    $(TEST_todo_manager_TARGET) $(TEST_tool_param_dsl_TARGET) $(TEST_vector_db_tool_TARGET) \
     $(TEST_memory_tool_TARGET) $(TEST_token_manager_TARGET) $(TEST_conversation_compactor_TARGET) $(TEST_rolling_summary_TARGET) \
-    $(TEST_model_tools_TARGET) $(TEST_vector_db_TARGET) $(TEST_task_store_TARGET) \
+    $(TEST_model_tools_TARGET) $(TEST_vector_db_TARGET) $(TEST_sqlite_dal_TARGET) $(TEST_task_store_TARGET) \
     $(TEST_message_store_TARGET) $(TEST_notification_formatter_TARGET) \
     $(TEST_pdf_extractor_TARGET) $(TEST_document_chunker_TARGET) \
     $(TEST_approval_gate_TARGET) $(TEST_atomic_file_TARGET) $(TEST_path_normalize_TARGET) \
@@ -420,4 +434,4 @@ check-valgrind: $(ALL_TEST_TARGETS)
 	done
 	@echo "Valgrind tests completed (subagent tests excluded - see AGENTS.md)"
 
-.PHONY: test check check-valgrind
+.PHONY: test check check-valgrind build-tests

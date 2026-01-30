@@ -1,4 +1,5 @@
 #include "vector_db_tool.h"
+#include "tool_param_dsl.h"
 #include "../db/vector_db_service.h"
 #include "../db/document_store.h"
 #include <cJSON.h>
@@ -10,629 +11,174 @@
 #include <string.h>
 #include <errno.h>
 
-vector_db_t* get_global_vector_db(void) {
+vector_db_t *get_global_vector_db(void) {
     return vector_db_service_get_database();
 }
 
-int register_vector_db_tool(ToolRegistry *registry) {
-    if (registry == NULL) return -1;
-    int result;
-    
-    ToolParameter create_parameters[6];
-    memset(create_parameters, 0, sizeof(create_parameters));
+static char *document_results_to_json(document_search_results_t *search_results) {
+    cJSON *json = cJSON_CreateObject();
+    if (!json) return NULL;
 
-    create_parameters[0].name = strdup("index_name");
-    create_parameters[0].type = strdup("string");
-    create_parameters[0].description = strdup("Name of the index to create");
-    create_parameters[0].enum_values = NULL;
-    create_parameters[0].enum_count = 0;
-    create_parameters[0].required = 1;
-    
-    create_parameters[1].name = strdup("dimension");
-    create_parameters[1].type = strdup("number");
-    create_parameters[1].description = strdup("Dimension of vectors");
-    create_parameters[1].enum_values = NULL;
-    create_parameters[1].enum_count = 0;
-    create_parameters[1].required = 1;
-    
-    create_parameters[2].name = strdup("max_elements");
-    create_parameters[2].type = strdup("number");
-    create_parameters[2].description = strdup("Maximum number of elements");
-    create_parameters[2].enum_values = NULL;
-    create_parameters[2].enum_count = 0;
-    create_parameters[2].required = 0;
-    
-    create_parameters[3].name = strdup("M");
-    create_parameters[3].type = strdup("number");
-    create_parameters[3].description = strdup("M parameter for HNSW algorithm (default: 16)");
-    create_parameters[3].enum_values = NULL;
-    create_parameters[3].enum_count = 0;
-    create_parameters[3].required = 0;
-    
-    create_parameters[4].name = strdup("ef_construction");
-    create_parameters[4].type = strdup("number");
-    create_parameters[4].description = strdup("Construction parameter (default: 200)");
-    create_parameters[4].enum_values = NULL;
-    create_parameters[4].enum_count = 0;
-    create_parameters[4].required = 0;
-    
-    create_parameters[5].name = strdup("metric");
-    create_parameters[5].type = strdup("string");
-    create_parameters[5].description = strdup("Distance metric: 'l2', 'cosine', or 'ip' (default: 'l2')");
-    create_parameters[5].enum_values = NULL;
-    create_parameters[5].enum_count = 0;
-    create_parameters[5].required = 0;
-    
-    for (int i = 0; i < 6; i++) {
-        if (create_parameters[i].name == NULL || 
-            create_parameters[i].type == NULL ||
-            create_parameters[i].description == NULL) {
-            for (int j = 0; j <= i; j++) {
-                free(create_parameters[j].name);
-                free(create_parameters[j].type);
-                free(create_parameters[j].description);
+    cJSON_AddBoolToObject(json, "success", cJSON_True);
+    cJSON_AddNumberToObject(json, "count", search_results->results.count);
+
+    cJSON *results_array = cJSON_CreateArray();
+    if (results_array) {
+        for (size_t i = 0; i < search_results->results.count; i++) {
+            document_result_t *res = &search_results->results.data[i];
+            if (!res->document) continue;
+
+            cJSON *item = cJSON_CreateObject();
+            if (!item) continue;
+
+            cJSON_AddNumberToObject(item, "id", res->document->id);
+            cJSON_AddStringToObject(item, "content", res->document->content ? res->document->content : "");
+            cJSON_AddStringToObject(item, "type", res->document->type ? res->document->type : "text");
+            cJSON_AddStringToObject(item, "source", res->document->source ? res->document->source : "unknown");
+            cJSON_AddNumberToObject(item, "timestamp", res->document->timestamp);
+            if (res->distance > 0) {
+                cJSON_AddNumberToObject(item, "distance", res->distance);
             }
-            return -1;
+            if (res->document->metadata_json) {
+                cJSON *metadata = cJSON_Parse(res->document->metadata_json);
+                if (metadata) cJSON_AddItemToObject(item, "metadata", metadata);
+            }
+            cJSON_AddItemToArray(results_array, item);
         }
+        cJSON_AddItemToObject(json, "results", results_array);
     }
-    
-    result = register_tool(registry, "vector_db_create_index", 
-                          "Create a new vector index",
-                          create_parameters, 6, execute_vector_db_create_index_tool_call);
-    
-    for (int i = 0; i < 6; i++) {
-        free(create_parameters[i].name);
-        free(create_parameters[i].type);
-        free(create_parameters[i].description);
-    }
-    
-    if (result != 0) return -1;
-    
-    ToolParameter delete_parameters[1];
-    memset(delete_parameters, 0, sizeof(delete_parameters));
 
-    delete_parameters[0].name = strdup("index_name");
-    delete_parameters[0].type = strdup("string");
-    delete_parameters[0].description = strdup("Name of the index to delete");
-    delete_parameters[0].enum_values = NULL;
-    delete_parameters[0].enum_count = 0;
-    delete_parameters[0].required = 1;
-    
-    if (delete_parameters[0].name == NULL || 
-        delete_parameters[0].type == NULL ||
-        delete_parameters[0].description == NULL) {
-        free(delete_parameters[0].name);
-        free(delete_parameters[0].type);
-        free(delete_parameters[0].description);
+    char *result = cJSON_PrintUnformatted(json);
+    cJSON_Delete(json);
+    return result;
+}
+
+/* Parameter definitions for vector_db_create_index */
+static const ParamDef CREATE_INDEX_PARAMS[] = {
+    {"index_name", "string", "Name of the index to create", NULL, 1},
+    {"dimension", "number", "Dimension of vectors", NULL, 1},
+    {"max_elements", "number", "Maximum number of elements", NULL, 0},
+    {"M", "number", "M parameter for HNSW algorithm (default: 16)", NULL, 0},
+    {"ef_construction", "number", "Construction parameter (default: 200)", NULL, 0},
+    {"metric", "string", "Distance metric: 'l2', 'cosine', or 'ip' (default: 'l2')", NULL, 0},
+};
+
+/* Parameter definitions for vector_db_delete_index */
+static const ParamDef DELETE_INDEX_PARAMS[] = {
+    {"index_name", "string", "Name of the index to delete", NULL, 1},
+};
+
+/* Parameter definitions for vector_db_add_vector */
+static const ParamDef ADD_VECTOR_PARAMS[] = {
+    {"index_name", "string", "Name of the index", NULL, 1},
+    {"vector", "array", "Vector data as array of numbers", NULL, 1},
+    {"metadata", "object", "Optional metadata to store with vector", NULL, 0},
+};
+
+/* Parameter definitions for vector_db_update_vector */
+static const ParamDef UPDATE_VECTOR_PARAMS[] = {
+    {"index_name", "string", "Name of the index", NULL, 1},
+    {"label", "number", "Label/ID of the vector to update", NULL, 1},
+    {"vector", "array", "New vector data", NULL, 1},
+    {"metadata", "object", "Optional new metadata", NULL, 0},
+};
+
+/* Parameter definitions for vector_db_delete_vector */
+static const ParamDef DELETE_VECTOR_PARAMS[] = {
+    {"index_name", "string", "Name of the index", NULL, 1},
+    {"label", "number", "Label/ID of the vector to delete", NULL, 1},
+};
+
+/* Parameter definitions for vector_db_get_vector */
+static const ParamDef GET_VECTOR_PARAMS[] = {
+    {"index_name", "string", "Name of the index", NULL, 1},
+    {"label", "number", "Label/ID of the vector to retrieve", NULL, 1},
+};
+
+/* Parameter definitions for vector_db_search */
+static const ParamDef SEARCH_PARAMS[] = {
+    {"index_name", "string", "Name of the index to search", NULL, 1},
+    {"query_vector", "array", "Query vector data", NULL, 1},
+    {"k", "number", "Number of nearest neighbors to return", NULL, 1},
+};
+
+/* Parameter definitions for vector_db_add_text */
+static const ParamDef ADD_TEXT_PARAMS[] = {
+    {"index_name", "string", "Name of the index", NULL, 1},
+    {"text", "string", "Text content to embed and store", NULL, 1},
+    {"metadata", "object", "Optional metadata to store with the text", NULL, 0},
+};
+
+/* Parameter definitions for vector_db_add_chunked_text */
+static const ParamDef ADD_CHUNKED_TEXT_PARAMS[] = {
+    {"index_name", "string", "Name of the index", NULL, 1},
+    {"text", "string", "Text content to chunk, embed and store", NULL, 1},
+    {"max_chunk_size", "number", "Maximum size of each chunk (default: 1000)", NULL, 0},
+    {"overlap_size", "number", "Overlap between chunks (default: 200)", NULL, 0},
+    {"metadata", "object", "Optional metadata to store with each chunk", NULL, 0},
+};
+
+/* Parameter definitions for vector_db_add_pdf_document */
+static const ParamDef ADD_PDF_DOCUMENT_PARAMS[] = {
+    {"index_name", "string", "Name of the index", NULL, 1},
+    {"pdf_path", "string", "Path to the PDF file to extract, chunk and store", NULL, 1},
+    {"max_chunk_size", "number", "Maximum size of each chunk (default: 1500)", NULL, 0},
+    {"overlap_size", "number", "Overlap between chunks (default: 300)", NULL, 0},
+};
+
+/* Parameter definitions for vector_db_search_text */
+static const ParamDef SEARCH_TEXT_PARAMS[] = {
+    {"index_name", "string", "Name of the index to search", NULL, 1},
+    {"query", "string", "Query text to search for", NULL, 1},
+    {"k", "number", "Number of results to return (default: 5)", NULL, 0},
+};
+
+/* Parameter definitions for vector_db_search_by_time */
+static const ParamDef SEARCH_BY_TIME_PARAMS[] = {
+    {"index_name", "string", "Name of the index to search", NULL, 1},
+    {"start_time", "number", "Start timestamp (Unix epoch, default: 0)", NULL, 0},
+    {"end_time", "number", "End timestamp (Unix epoch, default: now)", NULL, 0},
+    {"limit", "number", "Maximum number of results (default: 100)", NULL, 0},
+};
+
+/* Tool definitions table */
+static const ToolDef VECTOR_DB_TOOLS[] = {
+    {"vector_db_create_index", "Create a new vector index",
+     CREATE_INDEX_PARAMS, 6, execute_vector_db_create_index_tool_call},
+    {"vector_db_delete_index", "Delete an existing vector index",
+     DELETE_INDEX_PARAMS, 1, execute_vector_db_delete_index_tool_call},
+    {"vector_db_list_indices", "List all vector indices",
+     NULL, 0, execute_vector_db_list_indices_tool_call},
+    {"vector_db_add_vector", "Add a vector to an index",
+     ADD_VECTOR_PARAMS, 3, execute_vector_db_add_vector_tool_call},
+    {"vector_db_update_vector", "Update an existing vector",
+     UPDATE_VECTOR_PARAMS, 4, execute_vector_db_update_vector_tool_call},
+    {"vector_db_delete_vector", "Delete a vector from an index",
+     DELETE_VECTOR_PARAMS, 2, execute_vector_db_delete_vector_tool_call},
+    {"vector_db_get_vector", "Retrieve a vector by label",
+     GET_VECTOR_PARAMS, 2, execute_vector_db_get_vector_tool_call},
+    {"vector_db_search", "Search for nearest neighbors",
+     SEARCH_PARAMS, 3, execute_vector_db_search_tool_call},
+    {"vector_db_add_text", "Add text content to index by generating embeddings",
+     ADD_TEXT_PARAMS, 3, execute_vector_db_add_text_tool_call},
+    {"vector_db_add_chunked_text", "Add long text content by chunking, embedding and storing each chunk",
+     ADD_CHUNKED_TEXT_PARAMS, 5, execute_vector_db_add_chunked_text_tool_call},
+    {"vector_db_add_pdf_document", "Extract text from PDF, chunk it, and store chunks as embeddings",
+     ADD_PDF_DOCUMENT_PARAMS, 4, execute_vector_db_add_pdf_document_tool_call},
+    {"vector_db_search_text", "Search for similar text content in the vector database",
+     SEARCH_TEXT_PARAMS, 3, execute_vector_db_search_text_tool_call},
+    {"vector_db_search_by_time", "Search for documents within a time range",
+     SEARCH_BY_TIME_PARAMS, 4, execute_vector_db_search_by_time_tool_call},
+};
+
+#define VECTOR_DB_TOOL_COUNT (sizeof(VECTOR_DB_TOOLS) / sizeof(VECTOR_DB_TOOLS[0]))
+
+int register_vector_db_tool(ToolRegistry *registry) {
+    if (registry == NULL) {
         return -1;
     }
-    
-    result = register_tool(registry, "vector_db_delete_index", 
-                          "Delete an existing vector index",
-                          delete_parameters, 1, execute_vector_db_delete_index_tool_call);
-    
-    free(delete_parameters[0].name);
-    free(delete_parameters[0].type);
-    free(delete_parameters[0].description);
-    
-    if (result != 0) return -1;
-    
-    result = register_tool(registry, "vector_db_list_indices", 
-                          "List all vector indices",
-                          NULL, 0, execute_vector_db_list_indices_tool_call);
-    
-    if (result != 0) return -1;
-    
-    ToolParameter add_parameters[3];
-    memset(add_parameters, 0, sizeof(add_parameters));
-
-    add_parameters[0].name = strdup("index_name");
-    add_parameters[0].type = strdup("string");
-    add_parameters[0].description = strdup("Name of the index");
-    add_parameters[0].enum_values = NULL;
-    add_parameters[0].enum_count = 0;
-    add_parameters[0].required = 1;
-    
-    add_parameters[1].name = strdup("vector");
-    add_parameters[1].type = strdup("array");
-    add_parameters[1].description = strdup("Vector data as array of numbers");
-    add_parameters[1].enum_values = NULL;
-    add_parameters[1].enum_count = 0;
-    add_parameters[1].required = 1;
-    
-    add_parameters[2].name = strdup("metadata");
-    add_parameters[2].type = strdup("object");
-    add_parameters[2].description = strdup("Optional metadata to store with vector");
-    add_parameters[2].enum_values = NULL;
-    add_parameters[2].enum_count = 0;
-    add_parameters[2].required = 0;
-    
-    for (int i = 0; i < 3; i++) {
-        if (add_parameters[i].name == NULL || 
-            add_parameters[i].type == NULL ||
-            add_parameters[i].description == NULL) {
-            for (int j = 0; j <= i; j++) {
-                free(add_parameters[j].name);
-                free(add_parameters[j].type);
-                free(add_parameters[j].description);
-            }
-            return -1;
-        }
-    }
-    
-    result = register_tool(registry, "vector_db_add_vector", 
-                          "Add a vector to an index",
-                          add_parameters, 3, execute_vector_db_add_vector_tool_call);
-    
-    for (int i = 0; i < 3; i++) {
-        free(add_parameters[i].name);
-        free(add_parameters[i].type);
-        free(add_parameters[i].description);
-    }
-    
-    if (result != 0) return -1;
-    
-    ToolParameter update_parameters[4];
-    memset(update_parameters, 0, sizeof(update_parameters));
-
-    update_parameters[0].name = strdup("index_name");
-    update_parameters[0].type = strdup("string");
-    update_parameters[0].description = strdup("Name of the index");
-    update_parameters[0].enum_values = NULL;
-    update_parameters[0].enum_count = 0;
-    update_parameters[0].required = 1;
-    
-    update_parameters[1].name = strdup("label");
-    update_parameters[1].type = strdup("number");
-    update_parameters[1].description = strdup("Label/ID of the vector to update");
-    update_parameters[1].enum_values = NULL;
-    update_parameters[1].enum_count = 0;
-    update_parameters[1].required = 1;
-    
-    update_parameters[2].name = strdup("vector");
-    update_parameters[2].type = strdup("array");
-    update_parameters[2].description = strdup("New vector data");
-    update_parameters[2].enum_values = NULL;
-    update_parameters[2].enum_count = 0;
-    update_parameters[2].required = 1;
-    
-    update_parameters[3].name = strdup("metadata");
-    update_parameters[3].type = strdup("object");
-    update_parameters[3].description = strdup("Optional new metadata");
-    update_parameters[3].enum_values = NULL;
-    update_parameters[3].enum_count = 0;
-    update_parameters[3].required = 0;
-    
-    for (int i = 0; i < 4; i++) {
-        if (update_parameters[i].name == NULL || 
-            update_parameters[i].type == NULL ||
-            update_parameters[i].description == NULL) {
-            for (int j = 0; j <= i; j++) {
-                free(update_parameters[j].name);
-                free(update_parameters[j].type);
-                free(update_parameters[j].description);
-            }
-            return -1;
-        }
-    }
-    
-    result = register_tool(registry, "vector_db_update_vector", 
-                          "Update an existing vector",
-                          update_parameters, 4, execute_vector_db_update_vector_tool_call);
-    
-    for (int i = 0; i < 4; i++) {
-        free(update_parameters[i].name);
-        free(update_parameters[i].type);
-        free(update_parameters[i].description);
-    }
-    
-    if (result != 0) return -1;
-    
-    ToolParameter delete_vec_parameters[2];
-    memset(delete_vec_parameters, 0, sizeof(delete_vec_parameters));
-
-    delete_vec_parameters[0].name = strdup("index_name");
-    delete_vec_parameters[0].type = strdup("string");
-    delete_vec_parameters[0].description = strdup("Name of the index");
-    delete_vec_parameters[0].enum_values = NULL;
-    delete_vec_parameters[0].enum_count = 0;
-    delete_vec_parameters[0].required = 1;
-    
-    delete_vec_parameters[1].name = strdup("label");
-    delete_vec_parameters[1].type = strdup("number");
-    delete_vec_parameters[1].description = strdup("Label/ID of the vector to delete");
-    delete_vec_parameters[1].enum_values = NULL;
-    delete_vec_parameters[1].enum_count = 0;
-    delete_vec_parameters[1].required = 1;
-    
-    for (int i = 0; i < 2; i++) {
-        if (delete_vec_parameters[i].name == NULL || 
-            delete_vec_parameters[i].type == NULL ||
-            delete_vec_parameters[i].description == NULL) {
-            for (int j = 0; j <= i; j++) {
-                free(delete_vec_parameters[j].name);
-                free(delete_vec_parameters[j].type);
-                free(delete_vec_parameters[j].description);
-            }
-            return -1;
-        }
-    }
-    
-    result = register_tool(registry, "vector_db_delete_vector", 
-                          "Delete a vector from an index",
-                          delete_vec_parameters, 2, execute_vector_db_delete_vector_tool_call);
-    
-    for (int i = 0; i < 2; i++) {
-        free(delete_vec_parameters[i].name);
-        free(delete_vec_parameters[i].type);
-        free(delete_vec_parameters[i].description);
-    }
-    
-    if (result != 0) return -1;
-    
-    ToolParameter get_parameters[2];
-    memset(get_parameters, 0, sizeof(get_parameters));
-
-    get_parameters[0].name = strdup("index_name");
-    get_parameters[0].type = strdup("string");
-    get_parameters[0].description = strdup("Name of the index");
-    get_parameters[0].enum_values = NULL;
-    get_parameters[0].enum_count = 0;
-    get_parameters[0].required = 1;
-    
-    get_parameters[1].name = strdup("label");
-    get_parameters[1].type = strdup("number");
-    get_parameters[1].description = strdup("Label/ID of the vector to retrieve");
-    get_parameters[1].enum_values = NULL;
-    get_parameters[1].enum_count = 0;
-    get_parameters[1].required = 1;
-    
-    for (int i = 0; i < 2; i++) {
-        if (get_parameters[i].name == NULL || 
-            get_parameters[i].type == NULL ||
-            get_parameters[i].description == NULL) {
-            for (int j = 0; j <= i; j++) {
-                free(get_parameters[j].name);
-                free(get_parameters[j].type);
-                free(get_parameters[j].description);
-            }
-            return -1;
-        }
-    }
-    
-    result = register_tool(registry, "vector_db_get_vector", 
-                          "Retrieve a vector by label",
-                          get_parameters, 2, execute_vector_db_get_vector_tool_call);
-    
-    for (int i = 0; i < 2; i++) {
-        free(get_parameters[i].name);
-        free(get_parameters[i].type);
-        free(get_parameters[i].description);
-    }
-    
-    if (result != 0) return -1;
-    
-    ToolParameter search_parameters[3];
-    memset(search_parameters, 0, sizeof(search_parameters));
-
-    search_parameters[0].name = strdup("index_name");
-    search_parameters[0].type = strdup("string");
-    search_parameters[0].description = strdup("Name of the index to search");
-    search_parameters[0].enum_values = NULL;
-    search_parameters[0].enum_count = 0;
-    search_parameters[0].required = 1;
-    
-    search_parameters[1].name = strdup("query_vector");
-    search_parameters[1].type = strdup("array");
-    search_parameters[1].description = strdup("Query vector data");
-    search_parameters[1].enum_values = NULL;
-    search_parameters[1].enum_count = 0;
-    search_parameters[1].required = 1;
-    
-    search_parameters[2].name = strdup("k");
-    search_parameters[2].type = strdup("number");
-    search_parameters[2].description = strdup("Number of nearest neighbors to return");
-    search_parameters[2].enum_values = NULL;
-    search_parameters[2].enum_count = 0;
-    search_parameters[2].required = 1;
-    
-    for (int i = 0; i < 3; i++) {
-        if (search_parameters[i].name == NULL || 
-            search_parameters[i].type == NULL ||
-            search_parameters[i].description == NULL) {
-            for (int j = 0; j <= i; j++) {
-                free(search_parameters[j].name);
-                free(search_parameters[j].type);
-                free(search_parameters[j].description);
-            }
-            return -1;
-        }
-    }
-    
-    result = register_tool(registry, "vector_db_search", 
-                          "Search for nearest neighbors",
-                          search_parameters, 3, execute_vector_db_search_tool_call);
-    
-    for (int i = 0; i < 3; i++) {
-        free(search_parameters[i].name);
-        free(search_parameters[i].type);
-        free(search_parameters[i].description);
-    }
-    
-    if (result != 0) return -1;
-    
-    ToolParameter add_text_parameters[3];
-    memset(add_text_parameters, 0, sizeof(add_text_parameters));
-
-    add_text_parameters[0].name = strdup("index_name");
-    add_text_parameters[0].type = strdup("string");
-    add_text_parameters[0].description = strdup("Name of the index");
-    add_text_parameters[0].enum_values = NULL;
-    add_text_parameters[0].enum_count = 0;
-    add_text_parameters[0].required = 1;
-    
-    add_text_parameters[1].name = strdup("text");
-    add_text_parameters[1].type = strdup("string");
-    add_text_parameters[1].description = strdup("Text content to embed and store");
-    add_text_parameters[1].enum_values = NULL;
-    add_text_parameters[1].enum_count = 0;
-    add_text_parameters[1].required = 1;
-    
-    add_text_parameters[2].name = strdup("metadata");
-    add_text_parameters[2].type = strdup("object");
-    add_text_parameters[2].description = strdup("Optional metadata to store with the text");
-    add_text_parameters[2].enum_values = NULL;
-    add_text_parameters[2].enum_count = 0;
-    add_text_parameters[2].required = 0;
-    
-    for (int i = 0; i < 3; i++) {
-        if (add_text_parameters[i].name == NULL || 
-            add_text_parameters[i].type == NULL ||
-            add_text_parameters[i].description == NULL) {
-            for (int j = 0; j <= i; j++) {
-                free(add_text_parameters[j].name);
-                free(add_text_parameters[j].type);
-                free(add_text_parameters[j].description);
-            }
-            return -1;
-        }
-    }
-    
-    result = register_tool(registry, "vector_db_add_text", 
-                          "Add text content to index by generating embeddings",
-                          add_text_parameters, 3, execute_vector_db_add_text_tool_call);
-    
-    for (int i = 0; i < 3; i++) {
-        free(add_text_parameters[i].name);
-        free(add_text_parameters[i].type);
-        free(add_text_parameters[i].description);
-    }
-    
-    if (result != 0) return -1;
-    
-    ToolParameter add_chunked_parameters[5];
-    memset(add_chunked_parameters, 0, sizeof(add_chunked_parameters));
-
-    add_chunked_parameters[0].name = strdup("index_name");
-    add_chunked_parameters[0].type = strdup("string");
-    add_chunked_parameters[0].description = strdup("Name of the index");
-    add_chunked_parameters[0].enum_values = NULL;
-    add_chunked_parameters[0].enum_count = 0;
-    add_chunked_parameters[0].required = 1;
-    
-    add_chunked_parameters[1].name = strdup("text");
-    add_chunked_parameters[1].type = strdup("string");
-    add_chunked_parameters[1].description = strdup("Text content to chunk, embed and store");
-    add_chunked_parameters[1].enum_values = NULL;
-    add_chunked_parameters[1].enum_count = 0;
-    add_chunked_parameters[1].required = 1;
-    
-    add_chunked_parameters[2].name = strdup("max_chunk_size");
-    add_chunked_parameters[2].type = strdup("number");
-    add_chunked_parameters[2].description = strdup("Maximum size of each chunk (default: 1000)");
-    add_chunked_parameters[2].enum_values = NULL;
-    add_chunked_parameters[2].enum_count = 0;
-    add_chunked_parameters[2].required = 0;
-    
-    add_chunked_parameters[3].name = strdup("overlap_size");
-    add_chunked_parameters[3].type = strdup("number");
-    add_chunked_parameters[3].description = strdup("Overlap between chunks (default: 200)");
-    add_chunked_parameters[3].enum_values = NULL;
-    add_chunked_parameters[3].enum_count = 0;
-    add_chunked_parameters[3].required = 0;
-    
-    add_chunked_parameters[4].name = strdup("metadata");
-    add_chunked_parameters[4].type = strdup("object");
-    add_chunked_parameters[4].description = strdup("Optional metadata to store with each chunk");
-    add_chunked_parameters[4].enum_values = NULL;
-    add_chunked_parameters[4].enum_count = 0;
-    add_chunked_parameters[4].required = 0;
-    
-    for (int i = 0; i < 5; i++) {
-        if (add_chunked_parameters[i].name == NULL || 
-            add_chunked_parameters[i].type == NULL ||
-            add_chunked_parameters[i].description == NULL) {
-            for (int j = 0; j <= i; j++) {
-                free(add_chunked_parameters[j].name);
-                free(add_chunked_parameters[j].type);
-                free(add_chunked_parameters[j].description);
-            }
-            return -1;
-        }
-    }
-    
-    result = register_tool(registry, "vector_db_add_chunked_text", 
-                          "Add long text content by chunking, embedding and storing each chunk",
-                          add_chunked_parameters, 5, execute_vector_db_add_chunked_text_tool_call);
-    
-    for (int i = 0; i < 5; i++) {
-        free(add_chunked_parameters[i].name);
-        free(add_chunked_parameters[i].type);
-        free(add_chunked_parameters[i].description);
-    }
-    
-    if (result != 0) return -1;
-    
-    ToolParameter add_pdf_parameters[4];
-    memset(add_pdf_parameters, 0, sizeof(add_pdf_parameters));
-
-    add_pdf_parameters[0].name = strdup("index_name");
-    add_pdf_parameters[0].type = strdup("string");
-    add_pdf_parameters[0].description = strdup("Name of the index");
-    add_pdf_parameters[0].enum_values = NULL;
-    add_pdf_parameters[0].enum_count = 0;
-    add_pdf_parameters[0].required = 1;
-    
-    add_pdf_parameters[1].name = strdup("pdf_path");
-    add_pdf_parameters[1].type = strdup("string");
-    add_pdf_parameters[1].description = strdup("Path to the PDF file to extract, chunk and store");
-    add_pdf_parameters[1].enum_values = NULL;
-    add_pdf_parameters[1].enum_count = 0;
-    add_pdf_parameters[1].required = 1;
-    
-    add_pdf_parameters[2].name = strdup("max_chunk_size");
-    add_pdf_parameters[2].type = strdup("number");
-    add_pdf_parameters[2].description = strdup("Maximum size of each chunk (default: 1500)");
-    add_pdf_parameters[2].enum_values = NULL;
-    add_pdf_parameters[2].enum_count = 0;
-    add_pdf_parameters[2].required = 0;
-    
-    add_pdf_parameters[3].name = strdup("overlap_size");
-    add_pdf_parameters[3].type = strdup("number");
-    add_pdf_parameters[3].description = strdup("Overlap between chunks (default: 300)");
-    add_pdf_parameters[3].enum_values = NULL;
-    add_pdf_parameters[3].enum_count = 0;
-    add_pdf_parameters[3].required = 0;
-    
-    for (int i = 0; i < 4; i++) {
-        if (add_pdf_parameters[i].name == NULL || 
-            add_pdf_parameters[i].type == NULL ||
-            add_pdf_parameters[i].description == NULL) {
-            for (int j = 0; j <= i; j++) {
-                free(add_pdf_parameters[j].name);
-                free(add_pdf_parameters[j].type);
-                free(add_pdf_parameters[j].description);
-            }
-            return -1;
-        }
-    }
-    
-    result = register_tool(registry, "vector_db_add_pdf_document", 
-                          "Extract text from PDF, chunk it, and store chunks as embeddings",
-                          add_pdf_parameters, 4, execute_vector_db_add_pdf_document_tool_call);
-    
-    for (int i = 0; i < 4; i++) {
-        free(add_pdf_parameters[i].name);
-        free(add_pdf_parameters[i].type);
-        free(add_pdf_parameters[i].description);
-    }
-    
-    if (result != 0) return -1;
-    
-    ToolParameter search_text_parameters[3];
-    memset(search_text_parameters, 0, sizeof(search_text_parameters));
-
-    search_text_parameters[0].name = strdup("index_name");
-    search_text_parameters[0].type = strdup("string");
-    search_text_parameters[0].description = strdup("Name of the index to search");
-    search_text_parameters[0].enum_values = NULL;
-    search_text_parameters[0].enum_count = 0;
-    search_text_parameters[0].required = 1;
-    
-    search_text_parameters[1].name = strdup("query");
-    search_text_parameters[1].type = strdup("string");
-    search_text_parameters[1].description = strdup("Query text to search for");
-    search_text_parameters[1].enum_values = NULL;
-    search_text_parameters[1].enum_count = 0;
-    search_text_parameters[1].required = 1;
-    
-    search_text_parameters[2].name = strdup("k");
-    search_text_parameters[2].type = strdup("number");
-    search_text_parameters[2].description = strdup("Number of results to return (default: 5)");
-    search_text_parameters[2].enum_values = NULL;
-    search_text_parameters[2].enum_count = 0;
-    search_text_parameters[2].required = 0;
-    
-    for (int i = 0; i < 3; i++) {
-        if (search_text_parameters[i].name == NULL || 
-            search_text_parameters[i].type == NULL ||
-            search_text_parameters[i].description == NULL) {
-            for (int j = 0; j <= i; j++) {
-                free(search_text_parameters[j].name);
-                free(search_text_parameters[j].type);
-                free(search_text_parameters[j].description);
-            }
-            return -1;
-        }
-    }
-    
-    result = register_tool(registry, "vector_db_search_text", 
-                          "Search for similar text content in the vector database",
-                          search_text_parameters, 3, execute_vector_db_search_text_tool_call);
-    
-    for (int i = 0; i < 3; i++) {
-        free(search_text_parameters[i].name);
-        free(search_text_parameters[i].type);
-        free(search_text_parameters[i].description);
-    }
-    
-    if (result != 0) return -1;
-    
-    ToolParameter search_time_parameters[4];
-    memset(search_time_parameters, 0, sizeof(search_time_parameters));
-
-    search_time_parameters[0].name = strdup("index_name");
-    search_time_parameters[0].type = strdup("string");
-    search_time_parameters[0].description = strdup("Name of the index to search");
-    search_time_parameters[0].enum_values = NULL;
-    search_time_parameters[0].enum_count = 0;
-    search_time_parameters[0].required = 1;
-    
-    search_time_parameters[1].name = strdup("start_time");
-    search_time_parameters[1].type = strdup("number");
-    search_time_parameters[1].description = strdup("Start timestamp (Unix epoch, default: 0)");
-    search_time_parameters[1].enum_values = NULL;
-    search_time_parameters[1].enum_count = 0;
-    search_time_parameters[1].required = 0;
-    
-    search_time_parameters[2].name = strdup("end_time");
-    search_time_parameters[2].type = strdup("number");
-    search_time_parameters[2].description = strdup("End timestamp (Unix epoch, default: now)");
-    search_time_parameters[2].enum_values = NULL;
-    search_time_parameters[2].enum_count = 0;
-    search_time_parameters[2].required = 0;
-    
-    search_time_parameters[3].name = strdup("limit");
-    search_time_parameters[3].type = strdup("number");
-    search_time_parameters[3].description = strdup("Maximum number of results (default: 100)");
-    search_time_parameters[3].enum_values = NULL;
-    search_time_parameters[3].enum_count = 0;
-    search_time_parameters[3].required = 0;
-    
-    for (int i = 0; i < 4; i++) {
-        if (search_time_parameters[i].name == NULL || 
-            search_time_parameters[i].type == NULL ||
-            search_time_parameters[i].description == NULL) {
-            for (int j = 0; j <= i; j++) {
-                free(search_time_parameters[j].name);
-                free(search_time_parameters[j].type);
-                free(search_time_parameters[j].description);
-            }
-            return -1;
-        }
-    }
-    
-    result = register_tool(registry, "vector_db_search_by_time", 
-                          "Search for documents within a time range",
-                          search_time_parameters, 4, execute_vector_db_search_by_time_tool_call);
-    
-    for (int i = 0; i < 4; i++) {
-        free(search_time_parameters[i].name);
-        free(search_time_parameters[i].type);
-        free(search_time_parameters[i].description);
-    }
-    
-    return result;
+    int registered = register_tools_from_defs(registry, VECTOR_DB_TOOLS, VECTOR_DB_TOOL_COUNT);
+    return (registered == VECTOR_DB_TOOL_COUNT) ? 0 : -1;
 }
 
 int execute_vector_db_create_index_tool_call(const ToolCall *tool_call, ToolResult *result) {
@@ -1317,47 +863,11 @@ int execute_vector_db_search_text_tool_call(const ToolCall *tool_call, ToolResul
     document_search_results_t *search_results = document_store_search_text(doc_store, index_name, query_text, (size_t)k);
     
     if (search_results != NULL) {
-        cJSON* json = cJSON_CreateObject();
-        if (json) {
-            cJSON_AddBoolToObject(json, "success", cJSON_True);
-            cJSON_AddNumberToObject(json, "count", search_results->results.count);
-
-            cJSON* results_array = cJSON_CreateArray();
-            if (results_array) {
-                for (size_t i = 0; i < search_results->results.count; i++) {
-                    document_result_t* res = &search_results->results.data[i];
-                    if (res->document) {
-                        cJSON* result_item = cJSON_CreateObject();
-                        if (result_item) {
-                            cJSON_AddNumberToObject(result_item, "id", res->document->id);
-                            cJSON_AddStringToObject(result_item, "content", res->document->content ? res->document->content : "");
-                            cJSON_AddStringToObject(result_item, "type", res->document->type ? res->document->type : "text");
-                            cJSON_AddStringToObject(result_item, "source", res->document->source ? res->document->source : "unknown");
-                            cJSON_AddNumberToObject(result_item, "distance", res->distance);
-                            cJSON_AddNumberToObject(result_item, "timestamp", res->document->timestamp);
-
-                            if (res->document->metadata_json) {
-                                cJSON* metadata = cJSON_Parse(res->document->metadata_json);
-                                if (metadata) {
-                                    cJSON_AddItemToObject(result_item, "metadata", metadata);
-                                }
-                            }
-
-                            cJSON_AddItemToArray(results_array, result_item);
-                        }
-                    }
-                }
-                cJSON_AddItemToObject(json, "results", results_array);
-            }
-
-            result->result = cJSON_PrintUnformatted(json);
-            cJSON_Delete(json);
-            result->success = 1;
-        } else {
+        result->result = document_results_to_json(search_results);
+        result->success = result->result ? 1 : 0;
+        if (!result->result) {
             result->result = safe_strdup("{\"success\": false, \"error\": \"Memory allocation failed\"}");
-            result->success = 0;
         }
-
         document_store_free_results(search_results);
     } else {
         result->result = safe_strdup("{\"success\": false, \"error\": \"Search failed or no results found\"}");
@@ -1392,52 +902,17 @@ int execute_vector_db_search_by_time_tool_call(const ToolCall *tool_call, ToolRe
                                                                              (time_t)start_time, (time_t)end_time, (size_t)limit);
 
     if (search_results != NULL) {
-        cJSON* json = cJSON_CreateObject();
-        if (json) {
-            cJSON_AddBoolToObject(json, "success", cJSON_True);
-            cJSON_AddNumberToObject(json, "count", search_results->results.count);
-
-            cJSON* results_array = cJSON_CreateArray();
-            if (results_array) {
-                for (size_t i = 0; i < search_results->results.count; i++) {
-                    document_result_t* res = &search_results->results.data[i];
-                    if (res->document) {
-                        cJSON* result_item = cJSON_CreateObject();
-                        if (result_item) {
-                            cJSON_AddNumberToObject(result_item, "id", res->document->id);
-                            cJSON_AddStringToObject(result_item, "content", res->document->content ? res->document->content : "");
-                            cJSON_AddStringToObject(result_item, "type", res->document->type ? res->document->type : "text");
-                            cJSON_AddStringToObject(result_item, "source", res->document->source ? res->document->source : "unknown");
-                            cJSON_AddNumberToObject(result_item, "timestamp", res->document->timestamp);
-
-                            if (res->document->metadata_json) {
-                                cJSON* metadata = cJSON_Parse(res->document->metadata_json);
-                                if (metadata) {
-                                    cJSON_AddItemToObject(result_item, "metadata", metadata);
-                                }
-                            }
-
-                            cJSON_AddItemToArray(results_array, result_item);
-                        }
-                    }
-                }
-                cJSON_AddItemToObject(json, "results", results_array);
-            }
-
-            result->result = cJSON_PrintUnformatted(json);
-            cJSON_Delete(json);
-            result->success = 1;
-        } else {
+        result->result = document_results_to_json(search_results);
+        result->success = result->result ? 1 : 0;
+        if (!result->result) {
             result->result = safe_strdup("{\"success\": false, \"error\": \"Memory allocation failed\"}");
-            result->success = 0;
         }
-        
         document_store_free_results(search_results);
     } else {
         result->result = safe_strdup("{\"success\": false, \"error\": \"No documents found in time range\"}");
         result->success = 0;
     }
-    
+
     free(index_name);
     return 0;
 }

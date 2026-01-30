@@ -37,6 +37,7 @@ CORE_SOURCES := \
 POLICY_SOURCES := \
     $(SRCDIR)/policy/allowlist.c \
     $(SRCDIR)/policy/approval_gate.c \
+    $(SRCDIR)/policy/approval_errors.c \
     $(SRCDIR)/policy/atomic_file.c \
     $(SRCDIR)/policy/gate_prompter.c \
     $(SRCDIR)/policy/path_normalize.c \
@@ -54,6 +55,9 @@ POLICY_SOURCES := \
 # Tool system
 TOOL_SOURCES := \
     $(SRCDIR)/tools/tools_system.c \
+    $(SRCDIR)/tools/tool_param_dsl.c \
+    $(SRCDIR)/tools/tool_format_openai.c \
+    $(SRCDIR)/tools/tool_format_anthropic.c \
     $(SRCDIR)/tools/todo_manager.c \
     $(SRCDIR)/tools/todo_tool.c \
     $(SRCDIR)/tools/todo_display.c \
@@ -62,12 +66,17 @@ TOOL_SOURCES := \
     $(SRCDIR)/tools/pdf_tool.c \
     $(SRCDIR)/tools/tool_result_builder.c \
     $(SRCDIR)/tools/subagent_tool.c \
+    $(SRCDIR)/tools/subagent_process.c \
     $(SRCDIR)/tools/python_tool.c \
     $(SRCDIR)/tools/python_tool_files.c \
     $(SRCDIR)/tools/messaging_tool.c
 
 # MCP system
-MCP_SOURCES := $(SRCDIR)/mcp/mcp_client.c
+MCP_SOURCES := \
+    $(SRCDIR)/mcp/mcp_client.c \
+    $(SRCDIR)/mcp/mcp_transport.c \
+    $(SRCDIR)/mcp/mcp_transport_stdio.c \
+    $(SRCDIR)/mcp/mcp_transport_http.c
 
 # Messaging system
 MESSAGING_SOURCES := \
@@ -97,6 +106,7 @@ MODEL_SOURCES := \
 
 # Database
 DB_C_SOURCES := \
+    $(SRCDIR)/db/sqlite_dal.c \
     $(SRCDIR)/db/vector_db.c \
     $(SRCDIR)/db/vector_db_service.c \
     $(SRCDIR)/db/metadata_store.c \
@@ -165,6 +175,7 @@ RALPH_CORE_DEPS := \
     $(SRCDIR)/utils/pipe_notifier.c \
     $(SRCDIR)/policy/allowlist.c \
     $(SRCDIR)/policy/approval_gate.c \
+    $(SRCDIR)/policy/approval_errors.c \
     $(SRCDIR)/policy/subagent_approval.c \
     $(SRCDIR)/policy/atomic_file.c \
     $(SRCDIR)/policy/gate_prompter.c \
@@ -191,6 +202,9 @@ RALPH_CORE_DEPS := \
     $(SRCDIR)/llm/providers/anthropic_provider.c \
     $(SRCDIR)/llm/providers/local_ai_provider.c \
     $(SRCDIR)/mcp/mcp_client.c \
+    $(SRCDIR)/mcp/mcp_transport.c \
+    $(SRCDIR)/mcp/mcp_transport_stdio.c \
+    $(SRCDIR)/mcp/mcp_transport_http.c \
     $(MESSAGING_SOURCES)
 
 # Verified file I/O dependencies (needed by Python tools for TOCTOU-safe access)

@@ -1,4 +1,5 @@
 #include "subagent_tool.h"
+#include "subagent_process.h"
 #include "../utils/config.h"
 #include "../utils/json_escape.h"
 #include "../utils/debug_output.h"
@@ -110,124 +111,6 @@ ApprovalChannel* subagent_get_approval_channel(void) {
     return g_subagent_approval_channel;
 }
 
-/**
- * Generate a unique subagent ID using random hex characters.
- * Uses /dev/urandom for cryptographic randomness with a time/pid fallback.
- */
-void generate_subagent_id(char *id_out) {
-    static const char hex[] = "0123456789abcdef";
-    unsigned char random_bytes[SUBAGENT_ID_LENGTH / 2];
-
-    FILE *f = fopen("/dev/urandom", "rb");
-    if (f) {
-        size_t read_count = fread(random_bytes, 1, sizeof(random_bytes), f);
-        fclose(f);
-        if (read_count != sizeof(random_bytes)) {
-            // Fallback if read was incomplete
-            srand((unsigned int)(time(NULL) ^ getpid()));
-            for (size_t i = read_count; i < sizeof(random_bytes); i++) {
-                random_bytes[i] = (unsigned char)(rand() & 0xFF);
-            }
-        }
-    } else {
-        // Fallback: combine time and pid for randomness
-        srand((unsigned int)(time(NULL) ^ getpid()));
-        for (size_t i = 0; i < sizeof(random_bytes); i++) {
-            random_bytes[i] = (unsigned char)(rand() & 0xFF);
-        }
-    }
-
-    for (size_t i = 0; i < sizeof(random_bytes); i++) {
-        id_out[i * 2] = hex[random_bytes[i] >> 4];
-        id_out[i * 2 + 1] = hex[random_bytes[i] & 0x0F];
-    }
-    id_out[SUBAGENT_ID_LENGTH] = '\0';
-}
-
-/** Convert subagent status enum to string. */
-const char* subagent_status_to_string(SubagentStatus status) {
-    switch (status) {
-        case SUBAGENT_STATUS_PENDING:
-            return "pending";
-        case SUBAGENT_STATUS_RUNNING:
-            return "running";
-        case SUBAGENT_STATUS_COMPLETED:
-            return "completed";
-        case SUBAGENT_STATUS_FAILED:
-            return "failed";
-        case SUBAGENT_STATUS_TIMEOUT:
-            return "timeout";
-        default:
-            return "unknown";
-    }
-}
-
-/**
- * Clean up resources for a single subagent.
- * Closes pipes and frees allocated strings.
- *
- * Note: We use > 0 checks for stdout_pipe (original behavior) and > 2 checks
- * for approval_channel FDs to avoid closing stdin/stdout/stderr (0,1,2) when
- * the struct was zero-initialized with memset.
- */
-void cleanup_subagent(Subagent *sub) {
-    if (sub == NULL) {
-        return;
-    }
-
-    if (sub->stdout_pipe[0] > 0) {
-        close(sub->stdout_pipe[0]);
-        sub->stdout_pipe[0] = -1;
-    }
-    if (sub->stdout_pipe[1] > 0) {
-        close(sub->stdout_pipe[1]);
-        sub->stdout_pipe[1] = -1;
-    }
-
-    // > 2 avoids closing stdin/stdout/stderr when struct was zero-initialized
-    if (sub->approval_channel.request_fd > 2) {
-        close(sub->approval_channel.request_fd);
-        sub->approval_channel.request_fd = -1;
-    }
-    if (sub->approval_channel.response_fd > 2) {
-        close(sub->approval_channel.response_fd);
-        sub->approval_channel.response_fd = -1;
-    }
-    sub->approval_channel.subagent_pid = 0;
-
-    if (sub->task) {
-        free(sub->task);
-        sub->task = NULL;
-    }
-    if (sub->context) {
-        free(sub->context);
-        sub->context = NULL;
-    }
-    if (sub->output) {
-        free(sub->output);
-        sub->output = NULL;
-    }
-    if (sub->result) {
-        free(sub->result);
-        sub->result = NULL;
-    }
-    if (sub->error) {
-        free(sub->error);
-        sub->error = NULL;
-    }
-
-    sub->output_len = 0;
-    sub->pid = 0;
-    sub->status = SUBAGENT_STATUS_PENDING;
-
-    if (sub->id[0] != '\0') {
-        message_store_t* msg_store = message_store_get_instance();
-        if (msg_store != NULL) {
-            message_cleanup_agent(msg_store, sub->id);
-        }
-    }
-}
-
 /** Initialize using max_subagents and subagent_timeout from global config. */
 int subagent_manager_init(SubagentManager *manager) {
     if (manager == NULL) {
@@ -329,231 +212,6 @@ Subagent* subagent_find_by_id(SubagentManager *manager, const char *subagent_id)
 }
 
 /**
- * Read available output from a subagent's pipe (non-blocking).
- * Sets pipe to non-blocking mode and reads any available data.
- */
-int read_subagent_output_nonblocking(Subagent *sub) {
-    if (sub == NULL || sub->stdout_pipe[0] <= 0) {
-        return -1;
-    }
-
-    int flags = fcntl(sub->stdout_pipe[0], F_GETFL, 0);
-    if (flags == -1) {
-        return -1;
-    }
-    fcntl(sub->stdout_pipe[0], F_SETFL, flags | O_NONBLOCK);
-
-    char buffer[4096];
-    int total_read = 0;
-
-    while (1) {
-        ssize_t bytes_read = read(sub->stdout_pipe[0], buffer, sizeof(buffer) - 1);
-        if (bytes_read <= 0) {
-            if (bytes_read == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-                break;
-            }
-            if (bytes_read == 0) {
-                break;
-            }
-            return -1;
-        }
-
-        buffer[bytes_read] = '\0';
-        total_read += (int)bytes_read;
-
-        size_t new_len = sub->output_len + (size_t)bytes_read;
-        if (new_len > SUBAGENT_MAX_OUTPUT_LENGTH) {
-            bytes_read = (ssize_t)(SUBAGENT_MAX_OUTPUT_LENGTH - sub->output_len);
-            if (bytes_read <= 0) {
-                break;
-            }
-            new_len = SUBAGENT_MAX_OUTPUT_LENGTH;
-        }
-
-        char *new_output = realloc(sub->output, new_len + 1);
-        if (new_output == NULL) {
-            return -1;
-        }
-        sub->output = new_output;
-        memcpy(sub->output + sub->output_len, buffer, (size_t)bytes_read);
-        sub->output_len = new_len;
-        sub->output[sub->output_len] = '\0';
-    }
-
-    fcntl(sub->stdout_pipe[0], F_SETFL, flags);
-
-    return total_read;
-}
-
-/**
- * Read all remaining output from a subagent's pipe (blocking).
- * Called when subagent has exited to collect final output.
- */
-int read_subagent_output(Subagent *sub) {
-    if (sub == NULL || sub->stdout_pipe[0] <= 0) {
-        return -1;
-    }
-
-    char buffer[4096];
-
-    while (1) {
-        ssize_t bytes_read = read(sub->stdout_pipe[0], buffer, sizeof(buffer) - 1);
-        if (bytes_read <= 0) {
-            if (bytes_read == 0) {
-                break;
-            }
-            return -1;
-        }
-
-        buffer[bytes_read] = '\0';
-
-        size_t new_len = sub->output_len + (size_t)bytes_read;
-        if (new_len > SUBAGENT_MAX_OUTPUT_LENGTH) {
-            bytes_read = (ssize_t)(SUBAGENT_MAX_OUTPUT_LENGTH - sub->output_len);
-            if (bytes_read <= 0) {
-                break;
-            }
-            new_len = SUBAGENT_MAX_OUTPUT_LENGTH;
-        }
-
-        char *new_output = realloc(sub->output, new_len + 1);
-        if (new_output == NULL) {
-            return -1;
-        }
-        sub->output = new_output;
-        memcpy(sub->output + sub->output_len, buffer, (size_t)bytes_read);
-        sub->output_len = new_len;
-        sub->output[sub->output_len] = '\0';
-    }
-
-    close(sub->stdout_pipe[0]);
-    sub->stdout_pipe[0] = -1;
-
-    return 0;
-}
-
-/**
- * Handle process exit status and update subagent state accordingly.
- * Reads any remaining output, then sets status to COMPLETED or FAILED
- * based on the process exit code or signal.
- *
- * @param sub Pointer to the Subagent structure
- * @param proc_status Process status from waitpid()
- */
-static void handle_process_exit(Subagent *sub, int proc_status) {
-    if (sub == NULL) {
-        return;
-    }
-
-    read_subagent_output(sub);
-
-    if (WIFEXITED(proc_status) && WEXITSTATUS(proc_status) == 0) {
-        sub->status = SUBAGENT_STATUS_COMPLETED;
-        sub->result = sub->output;
-        sub->output = NULL;
-        sub->output_len = 0;
-    } else {
-        sub->status = SUBAGENT_STATUS_FAILED;
-
-        char error_msg[256];
-        if (WIFEXITED(proc_status)) {
-            snprintf(error_msg, sizeof(error_msg),
-                     "Subagent exited with code %d", WEXITSTATUS(proc_status));
-        } else if (WIFSIGNALED(proc_status)) {
-            snprintf(error_msg, sizeof(error_msg),
-                     "Subagent killed by signal %d", WTERMSIG(proc_status));
-        } else {
-            snprintf(error_msg, sizeof(error_msg), "Subagent process failed");
-        }
-
-        if (sub->output != NULL && sub->output_len > 0) {
-            size_t error_len = strlen(error_msg) + sub->output_len + 32;
-            char *full_error = malloc(error_len);
-            if (full_error != NULL) {
-                snprintf(full_error, error_len, "%s. Output: %s", error_msg, sub->output);
-                sub->error = full_error;
-            } else {
-                sub->error = strdup(error_msg);
-            }
-        } else {
-            sub->error = strdup(error_msg);
-        }
-
-        free(sub->output);
-        sub->output = NULL;
-        sub->output_len = 0;
-    }
-}
-
-/**
- * Send a completion message to the parent agent on behalf of a completed subagent.
- * Called by the harness when subagent state changes to completed/failed/timeout.
- */
-static void subagent_notify_parent(const Subagent* sub) {
-    if (sub == NULL) {
-        return;
-    }
-
-    char* parent_id = messaging_tool_get_agent_id();
-    if (parent_id == NULL || parent_id[0] == '\0') {
-        debug_printf("subagent_notify_parent: no parent agent ID set, skipping notification\n");
-        free(parent_id);
-        return;
-    }
-
-    message_store_t* store = message_store_get_instance();
-    if (store == NULL) {
-        debug_printf("subagent_notify_parent: message store unavailable\n");
-        free(parent_id);
-        return;
-    }
-
-    cJSON* msg = cJSON_CreateObject();
-    if (msg == NULL) {
-        debug_printf("subagent_notify_parent: failed to create JSON object\n");
-        free(parent_id);
-        return;
-    }
-
-    cJSON_AddStringToObject(msg, "type", "subagent_completion");
-    cJSON_AddStringToObject(msg, "subagent_id", sub->id);
-    cJSON_AddStringToObject(msg, "status",
-        sub->status == SUBAGENT_STATUS_COMPLETED ? "completed" :
-        sub->status == SUBAGENT_STATUS_FAILED ? "failed" :
-        sub->status == SUBAGENT_STATUS_TIMEOUT ? "timeout" : "unknown");
-
-    if (sub->result != NULL) {
-        cJSON_AddStringToObject(msg, "result", sub->result);
-    }
-    if (sub->error != NULL) {
-        cJSON_AddStringToObject(msg, "error", sub->error);
-    }
-    if (sub->task != NULL) {
-        cJSON_AddStringToObject(msg, "task", sub->task);
-    }
-
-    char* json_str = cJSON_PrintUnformatted(msg);
-    cJSON_Delete(msg);
-
-    if (json_str == NULL) {
-        debug_printf("subagent_notify_parent: failed to serialize JSON\n");
-        free(parent_id);
-        return;
-    }
-
-    char msg_id[40];
-    int result = message_send_direct(store, sub->id, parent_id, json_str, 0, msg_id);
-    if (result != 0) {
-        debug_printf("subagent_notify_parent: failed to send message to parent\n");
-    } else {
-        debug_printf("subagent_notify_parent: sent completion message %s to parent %s\n",
-                     msg_id, parent_id);
-    }
-    free(json_str);
-    free(parent_id);
-}
-
-/**
  * Poll all running subagents for status changes (non-blocking).
  * Returns the number of subagents that changed state.
  */
@@ -589,7 +247,7 @@ int subagent_poll_all(SubagentManager *manager) {
         pid_t result = waitpid(sub->pid, &proc_status, WNOHANG);
 
         if (result == sub->pid) {
-            handle_process_exit(sub, proc_status);
+            subagent_handle_process_exit(sub, proc_status);
             subagent_notify_parent(sub);
             changed++;
         } else if (result == -1 && errno != ECHILD) {
@@ -602,48 +260,6 @@ int subagent_poll_all(SubagentManager *manager) {
     }
 
     return changed;
-}
-
-/**
- * Get the path to the current executable.
- * Uses /proc/self/exe on Linux with fallback options.
- * Returns a newly allocated string that must be freed by caller.
- *
- * Note: APE binaries run via an extracted loader (e.g., /root/.ape-1.10),
- * so /proc/self/exe returns the loader path, not the actual binary.
- * We detect this and fall back to finding ralph in the current directory.
- */
-static char* get_executable_path(void) {
-    char *path = malloc(SUBAGENT_PATH_BUFFER_SIZE);
-    if (path == NULL) {
-        return NULL;
-    }
-
-    // Try /proc/self/exe first (Linux)
-    ssize_t len = readlink("/proc/self/exe", path, SUBAGENT_PATH_BUFFER_SIZE - 1);
-    if (len > 0) {
-        path[len] = '\0';
-        // Check if this is the APE loader (contains ".ape-" in path)
-        // If so, skip and use fallback methods
-        if (strstr(path, ".ape-") == NULL) {
-            return path;
-        }
-    }
-
-    // Fallback: try current directory
-    if (getcwd(path, SUBAGENT_PATH_BUFFER_SIZE) != NULL) {
-        size_t cwd_len = strlen(path);
-        if (cwd_len + 7 < SUBAGENT_PATH_BUFFER_SIZE) {  // "/ralph" + null
-            strcat(path, "/ralph");
-            if (access(path, X_OK) == 0) {
-                return path;
-            }
-        }
-    }
-
-    // Last fallback: assume ./ralph
-    free(path);
-    return strdup("./ralph");
 }
 
 /**
@@ -679,7 +295,7 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
         return -1;
     }
 
-    char *ralph_path = get_executable_path();
+    char *ralph_path = subagent_get_executable_path();
     if (ralph_path == NULL) {
         close(stdout_pipefd[0]);
         close(stdout_pipefd[1]);
@@ -885,7 +501,7 @@ int subagent_get_status(SubagentManager *manager, const char *subagent_id, int w
         pid_t waitpid_result = waitpid(sub->pid, &proc_status, WNOHANG);
 
         if (waitpid_result == sub->pid) {
-            handle_process_exit(sub, proc_status);
+            subagent_handle_process_exit(sub, proc_status);
             subagent_notify_parent(sub);
         } else if (waitpid_result == -1 && errno != ECHILD) {
             sub->status = SUBAGENT_STATUS_FAILED;
@@ -934,7 +550,7 @@ int subagent_get_status(SubagentManager *manager, const char *subagent_id, int w
         pid_t waitpid_result = waitpid(sub->pid, &proc_status, WNOHANG);
 
         if (waitpid_result == sub->pid) {
-            handle_process_exit(sub, proc_status);
+            subagent_handle_process_exit(sub, proc_status);
             subagent_notify_parent(sub);
             break;
         } else if (waitpid_result == -1 && errno != ECHILD) {

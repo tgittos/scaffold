@@ -6,6 +6,9 @@
 #include "../utils/ptrarray.h"
 #include "../utils/darray.h"
 
+/* Forward declaration for transport */
+typedef struct MCPTransport MCPTransport;
+
 typedef enum {
     MCP_SERVER_STDIO,
     MCP_SERVER_SSE,
@@ -34,10 +37,8 @@ typedef struct MCPServerConfig {
 DARRAY_DECLARE(MCPServerConfigArray, MCPServerConfig)
 
 typedef struct MCPServerState {
-    MCPServerConfig* config;     // Borrowed from MCPClientConfig; not owned
-    int process_id;
-    int stdin_fd;
-    int stdout_fd;
+    MCPServerConfig* config;     /* Borrowed from MCPClientConfig; not owned */
+    MCPTransport* transport;     /* Transport abstraction for communication */
     int initialized;
     ToolFunctionArray tools;
 } MCPServerState;

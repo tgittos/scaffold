@@ -18,8 +18,8 @@ include mk/tests.mk
 # Set default goal explicitly (included makefiles define targets before this)
 .DEFAULT_GOAL := all
 
-# Default target builds the complete ralph binary with embedded Python
-all: $(BUILDDIR)/.ralph-linked embed-python libralph
+# Default target builds the complete ralph binary with embedded Python and all tests
+all: $(BUILDDIR)/.ralph-linked embed-python libralph $(ALL_TEST_TARGETS)
 
 # Linking step - produces the base binary and saves it for embedding
 $(BUILDDIR)/.ralph-linked: $(OBJECTS) $(ALL_LIBS) $(LIBRALPH) $(HNSWLIB_DIR)/hnswlib/hnswlib.h

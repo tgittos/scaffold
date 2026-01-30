@@ -2107,8 +2107,10 @@ void test_format_non_interactive_error_special_chars(void) {
 
     char *error = format_non_interactive_error(&call);
     TEST_ASSERT_NOT_NULL(error);
-    /* Verify the output is valid JSON by checking escaped characters */
-    TEST_ASSERT_NOT_NULL(strstr(error, "tool\\\"with\\\\special\\/chars"));
+    /* Verify the output is valid JSON by checking escaped characters.
+     * Note: Forward slash escaping is optional in JSON spec, so we only
+     * check for required escapes (quotes and backslashes). */
+    TEST_ASSERT_NOT_NULL(strstr(error, "tool\\\"with\\\\special"));
     free(error);
 }
 
