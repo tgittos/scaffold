@@ -83,6 +83,25 @@ The `<name>` is the first argument to `def_test` in `mk/tests.mk`, not the file 
 
 To find the correct target name for a test file, grep `mk/tests.mk` for the file path.
 
+### Running the Full Test Suite
+
+When running all tests, use the compact test harness instead of `make test`:
+
+```bash
+./scripts/run_tests.sh        # Run all tests with compact output
+./scripts/run_tests.sh -q     # Quiet mode (summary only)
+./scripts/run_tests.sh -v     # Verbose mode (full output)
+./scripts/run_tests.sh foo    # Run tests matching pattern "foo"
+```
+
+The compact harness provides:
+- Progress indicators and per-test timing
+- Automatic segfault detection with prominent warnings
+- Clean summary of passed/failed tests
+- Reduced output noise compared to raw Unity output
+
+**Use `make test` only when you need the raw Unity output for debugging.**
+
 Tests may write temporary conversation files during testing - clean up test artifacts before performing a full test run.
 
 Unit tests should be written against mocks where possible, however tests that need an LLM can be run against a real, live API.
