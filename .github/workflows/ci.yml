@@ -76,7 +76,7 @@ jobs:
             -w /workspaces/ralph \
             -e PATH="/uv-bin:/opt/cosmos/bin:$PATH" \
             ralph-dev:latest \
-            ./scripts/run_tests.sh
+            make test
 
       - name: Upload binary
         uses: actions/upload-artifact@v4
