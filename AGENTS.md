@@ -43,11 +43,16 @@ See `@ARCHITECTURE.md` and `@CODE_OVERVIEW.md` for design docs. Use `ripgrep` to
 
 ### Running Tests
 
+**Build first**: Always run `make` before running tests. Tests require compiled binaries.
+
 ```bash
+# Build, then run full suite (preferred)
+make && ./scripts/run_tests.sh
+
 # Individual test (name from def_test in mk/tests.mk, not file path)
 make test/test_<name> && ./test/test_<name>
 
-# Full suite (preferred over make test)
+# Test script options
 ./scripts/run_tests.sh        # Compact output with segfault detection
 ./scripts/run_tests.sh -q     # Summary only
 ./scripts/run_tests.sh foo    # Pattern match
@@ -56,6 +61,8 @@ make test/test_<name> && ./test/test_<name>
 Use mocks where possible. Integration tests connect to real LLM APIs - upstream errors are **your code's fault**.
 
 **Segfaults are critical** - fix immediately using valgrind. Work is incomplete without tests and valgrind check.
+
+**You own all failures** - You are the sole programmer. ALL test failures and valgrind errors are your responsibility to fix, even if they appear unrelated to your current changes.
 
 ### Valgrind Exclusions
 

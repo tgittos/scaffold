@@ -8,7 +8,6 @@
 
 #define INITIAL_CAPACITY 8
 #define MAX_MESSAGES_PER_TYPE 20
-#define SUBAGENT_OUTPUT_SUMMARY_LEN 500
 
 /**
  * Strip ANSI escape codes from a string.
@@ -90,7 +89,7 @@ static char* format_subagent_completion(const char* content) {
     /* Build formatted output */
     size_t buf_size = 1024;
     if (task_str) buf_size += strlen(task_str);
-    if (clean_result) buf_size += SUBAGENT_OUTPUT_SUMMARY_LEN + 100;
+    if (clean_result) buf_size += strlen(clean_result) + 100;
     if (clean_error) buf_size += strlen(clean_error) + 100;
 
     char* formatted = malloc(buf_size);
@@ -115,15 +114,7 @@ static char* format_subagent_completion(const char* content) {
     }
 
     if (strcmp(status_str, "completed") == 0 && clean_result && remaining > 0) {
-        /* Summarize the output if it's long */
-        size_t result_len = strlen(clean_result);
-        if (result_len > SUBAGENT_OUTPUT_SUMMARY_LEN) {
-            written = snprintf(ptr, remaining,
-                "\nOutput (%zu chars, summarized): %.500s...\n[Output truncated - use subagent_status to get full result]",
-                result_len, clean_result);
-        } else {
-            written = snprintf(ptr, remaining, "\nOutput: %s", clean_result);
-        }
+        written = snprintf(ptr, remaining, "\nOutput: %s", clean_result);
         ptr += written;
         remaining -= written;
     } else if (strcmp(status_str, "failed") == 0 && clean_error && remaining > 0) {

@@ -43,8 +43,8 @@ void tearDown(void) {
 // =============================================================================
 
 void test_uuid_generate_v4(void) {
-    char uuid1[40];
-    char uuid2[40];
+    char uuid1[40] = {0};
+    char uuid2[40] = {0};
 
     int result = uuid_generate_v4(uuid1);
     TEST_ASSERT_EQUAL(0, result);

@@ -221,7 +221,7 @@ int generate_rolling_summary(
 
     debug_printf("Summary API request: %s\n", post_data);
 
-    char auth_header[512];
+    char auth_header[512] = {0};
     char anthropic_version[128] = "anthropic-version: 2023-06-01";
     char content_type[64] = "Content-Type: application/json";
     const char* headers[4] = {NULL, NULL, NULL, NULL};

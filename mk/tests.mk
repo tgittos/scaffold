@@ -393,7 +393,7 @@ TEST_EXECUTION_ORDER := \
     $(TEST_subagent_approval_TARGET) $(TEST_subagent_tool_TARGET) $(TEST_json_output_TARGET) \
     $(TEST_verified_file_context_TARGET) $(TEST_approval_gate_integration_TARGET)
 
-test:
+test: all
 	@echo "Running all tests..."
 	@for t in $(TEST_EXECUTION_ORDER); do \
 		./$$t || exit 1; \

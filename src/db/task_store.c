@@ -5,6 +5,7 @@
 #include "task_store.h"
 #include "sqlite_dal.h"
 #include "../utils/uuid_utils.h"
+#include "../utils/ralph_home.h"
 #include "../utils/ptrarray.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -141,6 +142,12 @@ void task_store_reset_instance(void) {
         if (path_copy) {
             unlink(path_copy);
             free(path_copy);
+        }
+    } else {
+        char *default_path = ralph_home_path("tasks.db");
+        if (default_path) {
+            unlink(default_path);
+            free(default_path);
         }
     }
     g_store_once = (pthread_once_t)PTHREAD_ONCE_INIT;
