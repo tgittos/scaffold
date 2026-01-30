@@ -34,6 +34,8 @@ static void print_help(const char *program_name) {
     printf("  --allow-category=<cat>    Allow all operations in category (file_write, shell, network, etc.)\n");
     printf("  --no-auto-messages        Disable automatic message polling\n");
     printf("  --message-poll-interval N Set message poll interval in milliseconds (default: 2000)\n");
+    printf("  --worker                  Run as a queue worker (requires --queue)\n");
+    printf("  --queue <name>            Queue name for worker mode\n");
     printf("\n");
     printf("Arguments:\n");
     printf("  MESSAGE           Process a single message and exit\n");
@@ -70,6 +72,8 @@ int main(int argc, char *argv[]) {
     int subagent_mode = 0;
     char *subagent_task = NULL;
     char *subagent_context = NULL;
+    int worker_mode = 0;
+    char *worker_queue = NULL;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--debug") == 0) {
@@ -110,6 +114,10 @@ int main(int argc, char *argv[]) {
             subagent_task = argv[++i];
         } else if (strcmp(argv[i], "--context") == 0 && i + 1 < argc) {
             subagent_context = argv[++i];
+        } else if (strcmp(argv[i], "--worker") == 0) {
+            worker_mode = 1;
+        } else if (strcmp(argv[i], "--queue") == 0 && i + 1 < argc) {
+            worker_queue = argv[++i];
         } else if (message_arg_index == -1 && argv[i][0] != '-') {
             message_arg_index = i;
         }
@@ -122,7 +130,14 @@ int main(int argc, char *argv[]) {
     config.allow_category_count = cli_allow_category_count;
 
     /* Determine mode */
-    if (subagent_mode) {
+    if (worker_mode) {
+        if (worker_queue == NULL) {
+            fprintf(stderr, "Error: --worker requires --queue argument\n");
+            return EXIT_FAILURE;
+        }
+        config.mode = RALPH_AGENT_MODE_WORKER;
+        config.worker_queue_name = worker_queue;
+    } else if (subagent_mode) {
         if (subagent_task == NULL) {
             fprintf(stderr, "Error: --subagent requires --task argument\n");
             return EXIT_FAILURE;

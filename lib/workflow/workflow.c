@@ -14,6 +14,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <signal.h>
+#include <fcntl.h>
 
 /* =============================================================================
  * WORK QUEUE IMPLEMENTATION
@@ -191,9 +192,26 @@ WorkItem* work_queue_claim(WorkQueue* queue, const char* worker_id) {
 
     if (id) strncpy(item->id, id, sizeof(item->id) - 1);
     if (qname) strncpy(item->queue_name, qname, sizeof(item->queue_name) - 1);
-    if (desc) item->task_description = strdup(desc);
-    if (ctx) item->context = strdup(ctx);
     if (assigned) strncpy(item->assigned_to, assigned, sizeof(item->assigned_to) - 1);
+
+    /* Allocate strings with proper error handling */
+    if (desc) {
+        item->task_description = strdup(desc);
+        if (item->task_description == NULL) {
+            sqlite3_finalize(stmt);
+            free(item);
+            return NULL;
+        }
+    }
+    if (ctx) {
+        item->context = strdup(ctx);
+        if (item->context == NULL) {
+            sqlite3_finalize(stmt);
+            free(item->task_description);
+            free(item);
+            return NULL;
+        }
+    }
 
     item->status = (WorkItemStatus)sqlite3_column_int(stmt, 5);
     item->attempt_count = sqlite3_column_int(stmt, 6);
@@ -328,8 +346,41 @@ void work_item_free(WorkItem* item) {
  * WORKER MANAGEMENT
  * ============================================================================= */
 
+/**
+ * Get the path to the ralph executable.
+ * Tries /proc/self/exe first, then falls back to ./ralph.
+ */
+static char* get_ralph_executable_path(void) {
+    char* path = malloc(512);
+    if (path == NULL) {
+        return NULL;
+    }
+
+    /* Try /proc/self/exe first (Linux) */
+    ssize_t len = readlink("/proc/self/exe", path, 511);
+    if (len > 0) {
+        path[len] = '\0';
+        /* Check if this is the APE loader (contains ".ape-" in path) */
+        if (strstr(path, ".ape-") == NULL) {
+            return path;
+        }
+    }
+
+    /* Fallback: try current directory */
+    if (getcwd(path, 500) != NULL) {
+        strcat(path, "/ralph");
+        if (access(path, X_OK) == 0) {
+            return path;
+        }
+    }
+
+    /* Last fallback */
+    free(path);
+    return strdup("./ralph");
+}
+
 WorkerHandle* worker_spawn(const char* queue_name, const char* system_prompt) {
-    if (queue_name == NULL) {
+    if (queue_name == NULL || strlen(queue_name) == 0) {
         return NULL;
     }
 
@@ -348,21 +399,52 @@ WorkerHandle* worker_spawn(const char* queue_name, const char* system_prompt) {
     }
     snprintf(handle->agent_id, sizeof(handle->agent_id), "worker-%s", uuid);
 
+    /* Get path to ralph executable */
+    char* ralph_path = get_ralph_executable_path();
+    if (ralph_path == NULL) {
+        free(handle);
+        return NULL;
+    }
+
     /* Fork worker process */
     pid_t pid = fork();
     if (pid < 0) {
+        free(ralph_path);
         free(handle);
         return NULL;
     }
 
     if (pid == 0) {
         /* Child process - exec ralph as worker */
-        /* For now, just exit - full worker implementation requires more setup */
+        /* Redirect stdout/stderr to /dev/null for background operation */
+        int devnull = open("/dev/null", O_WRONLY);
+        if (devnull >= 0) {
+            dup2(devnull, STDOUT_FILENO);
+            dup2(devnull, STDERR_FILENO);
+            close(devnull);
+        }
+
+        /* Build argument list */
+        char* args[8];
+        int arg_idx = 0;
+
+        args[arg_idx++] = ralph_path;
+        args[arg_idx++] = "--worker";
+        args[arg_idx++] = "--queue";
+        args[arg_idx++] = (char*)queue_name;
+
+        /* Add system prompt if provided (future: --system-prompt flag) */
         (void)system_prompt;
-        _exit(0);
+
+        args[arg_idx] = NULL;
+
+        execv(ralph_path, args);
+        /* If execv fails, exit with error */
+        _exit(127);
     }
 
     /* Parent process */
+    free(ralph_path);
     handle->pid = pid;
     handle->is_running = true;
 

@@ -46,7 +46,10 @@ typedef enum {
     RALPH_AGENT_MODE_SINGLE_SHOT = 1,
 
     /** Background agent, no TTY, communicates via messages */
-    RALPH_AGENT_MODE_BACKGROUND = 2
+    RALPH_AGENT_MODE_BACKGROUND = 2,
+
+    /** Worker mode: claims and processes items from a work queue */
+    RALPH_AGENT_MODE_WORKER = 3
 } RalphAgentMode;
 
 /* =============================================================================
@@ -90,6 +93,12 @@ typedef struct RalphAgentConfig {
 
     /** Context for BACKGROUND mode subagent */
     const char* subagent_context;
+
+    /** Queue name for WORKER mode */
+    const char* worker_queue_name;
+
+    /** System prompt for WORKER mode (NULL uses default) */
+    const char* worker_system_prompt;
 
     /** CLI allowlist entries (tool:pattern format) */
     const char** allow_entries;

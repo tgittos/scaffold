@@ -50,112 +50,23 @@ typedef struct ReplConfig ReplConfig;
 typedef struct OutputConfig OutputConfig;
 
 /* =============================================================================
- * AGENT MODE
+ * AGENT MODULE
+ *
+ * Agent types and lifecycle are defined in lib/agent/agent.h.
+ * Include that header (via this file) for the actual API.
+ *
+ * Key types:
+ *   RalphAgentMode   - INTERACTIVE, SINGLE_SHOT, or BACKGROUND
+ *   RalphAgentConfig - Configuration struct
+ *   RalphAgent       - Agent instance
+ *
+ * Key functions:
+ *   ralph_agent_init()            - Initialize agent
+ *   ralph_agent_load_config()     - Load configuration
+ *   ralph_agent_run()             - Run based on mode
+ *   ralph_agent_process_message() - Process single message
+ *   ralph_agent_cleanup()         - Free resources
  * ============================================================================= */
-
-/**
- * Agent execution mode determines how the agent interacts.
- */
-typedef enum RalphAgentMode {
-    /** Interactive REPL with a user */
-    RALPH_AGENT_MODE_INTERACTIVE = 0,
-
-    /** Process a single message and exit */
-    RALPH_AGENT_MODE_SINGLE_SHOT = 1,
-
-    /** Background agent, no TTY, communicates via messages */
-    RALPH_AGENT_MODE_BACKGROUND = 2
-} RalphAgentMode;
-
-/* =============================================================================
- * AGENT CONFIGURATION
- * ============================================================================= */
-
-/**
- * Configuration for creating an agent.
- * All string fields are copied; caller retains ownership of originals.
- */
-struct RalphAgentConfig {
-    /** Unique session identifier (generated if NULL) */
-    const char* session_id;
-
-    /** Ralph home directory (uses default if NULL) */
-    const char* home_dir;
-
-    /** System prompt defining agent role/behavior */
-    const char* system_prompt;
-
-    /** Execution mode */
-    RalphAgentMode mode;
-
-    /** Tool registry (NULL uses default tools for mode) */
-    ToolRegistry* tools;
-
-    /** Services (NULL uses default singleton services) */
-    RalphServices* services;
-
-    /** Parent agent identity for subagents (NULL if root) */
-    AgentIdentity* parent_identity;
-
-    /** Initial user message for SINGLE_SHOT mode (ignored otherwise) */
-    const char* initial_message;
-
-    /** Enable debug output */
-    bool debug;
-
-    /** Enable JSON output mode */
-    bool json_mode;
-
-    /** Disable all approval gates (yolo mode) */
-    bool yolo;
-};
-
-/* =============================================================================
- * AGENT LIFECYCLE
- * ============================================================================= */
-
-/**
- * Create a new agent with the given configuration.
- *
- * @param config Agent configuration (NULL uses defaults)
- * @return New agent instance, or NULL on failure. Caller must free with ralph_agent_destroy.
- */
-RalphAgent* ralph_agent_create(const RalphAgentConfig* config);
-
-/**
- * Run an agent in INTERACTIVE mode.
- * Enters the REPL loop and blocks until the user exits.
- *
- * @param agent The agent to run
- * @return 0 on success, non-zero on error
- */
-int ralph_agent_run(RalphAgent* agent);
-
-/**
- * Process a single message with an agent.
- * For SINGLE_SHOT or programmatic use.
- *
- * @param agent The agent
- * @param message User message to process
- * @param response Output: agent response (caller must free)
- * @return 0 on success, non-zero on error
- */
-int ralph_agent_process(RalphAgent* agent, const char* message, char** response);
-
-/**
- * Destroy an agent and free all resources.
- *
- * @param agent Agent to destroy (may be NULL)
- */
-void ralph_agent_destroy(RalphAgent* agent);
-
-/**
- * Get the agent's identity.
- *
- * @param agent The agent
- * @return Agent identity, or NULL on error. Do not free; owned by agent.
- */
-AgentIdentity* ralph_agent_get_identity(RalphAgent* agent);
 
 /* =============================================================================
  * SERVICES MODULE (Dependency Injection)
@@ -270,37 +181,6 @@ AgentIdentity* ralph_agent_get_identity(RalphAgent* agent);
 
 #include "tools/tools.h"
 
-/* =============================================================================
- * AGENT MODULE
- *
- * The Agent module provides the core agent abstraction that ties together
- * tools, session management, IPC, and UI components.
- * ============================================================================= */
-
-/*
- * The agent abstraction wraps RalphSession with a cleaner lifecycle API.
- * For full documentation, see lib/agent/agent.h.
- *
- * Quick reference:
- *
- * Agent Lifecycle:
- *   ralph_agent_init()              - Initialize agent with config
- *   ralph_agent_load_config()       - Load configuration
- *   ralph_agent_run()               - Run based on mode
- *   ralph_agent_process_message()   - Process a single message
- *   ralph_agent_cleanup()           - Cleanup and free resources
- *
- * Agent Modes:
- *   RALPH_AGENT_MODE_INTERACTIVE    - REPL with user
- *   RALPH_AGENT_MODE_SINGLE_SHOT    - Process one message, exit
- *   RALPH_AGENT_MODE_BACKGROUND     - Subagent, no TTY
- *
- * Helper Functions:
- *   ralph_agent_config_default()    - Get default config
- *   ralph_agent_get_session()       - Access underlying session
- *   ralph_agent_get_session_id()    - Get session ID
- */
-
 #include "agent/agent.h"
 
 /* =============================================================================
@@ -331,104 +211,12 @@ AgentIdentity* ralph_agent_get_identity(RalphAgent* agent);
 
 #include "workflow/workflow.h"
 
-/* =============================================================================
- * UI: OUTPUT FORMATTING
- * ============================================================================= */
-
-/**
- * Output configuration for formatting.
- */
-struct OutputConfig {
-    bool json_mode;      /**< Output JSON instead of formatted text */
-    bool color_enabled;  /**< Enable ANSI color codes */
-    bool spinner_enabled;/**< Enable progress spinners */
-};
-
-/**
- * Initialize output with configuration.
+/* Note: UI types (OutputConfig, ReplConfig, ReplCallbacks) are defined
+ * in lib/ui/ui.h and lib/ui/repl.h. Include those headers for the actual API.
  *
- * @param config Output configuration
+ * The REPL is run via ralph_repl_run_session() which takes a RalphSession*.
+ * See lib/ui/repl.h for the full interface.
  */
-void ralph_output_init(const OutputConfig* config);
-
-/**
- * Print formatted assistant message.
- *
- * @param message Message to print
- */
-void ralph_output_assistant(const char* message);
-
-/**
- * Print formatted error message.
- *
- * @param message Error message
- */
-void ralph_output_error(const char* message);
-
-/**
- * Print formatted info message.
- *
- * @param message Info message
- */
-void ralph_output_info(const char* message);
-
-/* =============================================================================
- * UI: REPL
- * ============================================================================= */
-
-/**
- * REPL event callbacks.
- */
-typedef struct ReplCallbacks {
-    /** Called when user submits input. Return 0 to continue, non-zero to exit. */
-    int (*on_input)(void* context, const char* input);
-
-    /** Called when REPL is ready for input */
-    void (*on_ready)(void* context);
-
-    /** Called before REPL exits */
-    void (*on_shutdown)(void* context);
-
-    /** Called when external event is received on notifier pipe */
-    void (*on_event)(void* context, char event);
-} ReplCallbacks;
-
-/**
- * REPL configuration.
- */
-struct ReplConfig {
-    ReplCallbacks callbacks;     /**< Event callbacks */
-    void* context;               /**< User context passed to callbacks */
-    PipeNotifier* event_notifier;/**< For async events (may be NULL) */
-    const char* prompt;          /**< Input prompt string */
-    const char* history_file;    /**< History file path (may be NULL) */
-};
-
-/**
- * Run the REPL with the given configuration.
- * Blocks until on_input returns non-zero or EOF.
- *
- * @param config REPL configuration
- * @return Exit code from on_input callback
- */
-int ralph_repl_run(const ReplConfig* config);
-
-/* =============================================================================
- * INITIALIZATION
- * ============================================================================= */
-
-/**
- * Initialize libralph.
- * Must be called before any other libralph functions.
- *
- * @return 0 on success, -1 on failure
- */
-int ralph_init(void);
-
-/**
- * Shutdown libralph and release global resources.
- */
-void ralph_shutdown(void);
 
 #ifdef __cplusplus
 }

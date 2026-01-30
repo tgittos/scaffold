@@ -6,6 +6,7 @@
 
 #include "agent.h"
 #include "../ui/repl.h"
+#include "../workflow/workflow.h"
 #include "../../src/utils/debug_output.h"
 #include "../../src/utils/output_formatter.h"
 #include "../../src/utils/json_output.h"
@@ -18,7 +19,17 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <signal.h>
+#include <unistd.h>
 #include <readline/history.h>
+
+/* Signal handler for worker graceful shutdown */
+static volatile sig_atomic_t g_worker_running = 1;
+
+static void worker_signal_handler(int signum) {
+    (void)signum;
+    g_worker_running = 0;
+}
 
 int ralph_agent_init(RalphAgent* agent, const RalphAgentConfig* config) {
     if (agent == NULL) {
@@ -139,6 +150,97 @@ int ralph_agent_run(RalphAgent* agent) {
             }
             return ralph_run_as_subagent(agent->config.subagent_task,
                                          agent->config.subagent_context);
+
+        case RALPH_AGENT_MODE_WORKER: {
+            if (agent->config.worker_queue_name == NULL) {
+                fprintf(stderr, "Error: Worker mode requires queue name\n");
+                return -1;
+            }
+
+            /* Set up signal handlers for graceful shutdown */
+            struct sigaction sa;
+            sa.sa_handler = worker_signal_handler;
+            sigemptyset(&sa.sa_mask);
+            sa.sa_flags = 0;
+            sigaction(SIGTERM, &sa, NULL);
+            sigaction(SIGINT, &sa, NULL);
+
+            /* Open the work queue */
+            WorkQueue* queue = work_queue_create(agent->config.worker_queue_name);
+            if (queue == NULL) {
+                fprintf(stderr, "Error: Failed to open queue '%s'\n",
+                        agent->config.worker_queue_name);
+                return -1;
+            }
+
+            debug_printf("Worker started for queue '%s'\n", agent->config.worker_queue_name);
+
+            int items_processed = 0;
+            int errors = 0;
+
+            /* Worker loop */
+            while (g_worker_running) {
+                /* Claim next work item */
+                WorkItem* item = work_queue_claim(queue, agent->session.session_id);
+                if (item == NULL) {
+                    /* Queue empty, wait briefly then check again */
+                    usleep(1000000);  /* 1 second */
+                    continue;
+                }
+
+                debug_printf("Worker claimed item %s: %s\n", item->id,
+                             item->task_description ? item->task_description : "(no description)");
+
+                /* Build the message to process */
+                char* message = NULL;
+                if (item->context != NULL && strlen(item->context) > 0) {
+                    size_t len = strlen(item->task_description) + strlen(item->context) + 32;
+                    message = malloc(len);
+                    if (message != NULL) {
+                        snprintf(message, len, "Context: %s\n\nTask: %s",
+                                 item->context, item->task_description);
+                    }
+                } else {
+                    message = strdup(item->task_description);
+                }
+
+                if (message == NULL) {
+                    work_queue_fail(queue, item->id, "Failed to allocate message");
+                    work_item_free(item);
+                    errors++;
+                    continue;
+                }
+
+                /* Reset conversation for fresh context per task */
+                cleanup_conversation_history(&agent->session.session_data.conversation);
+                init_conversation_history(&agent->session.session_data.conversation);
+
+                /* Process the work item */
+                int result = ralph_process_message(&agent->session, message);
+                free(message);
+
+                if (result == 0) {
+                    work_queue_complete(queue, item->id, "Task completed successfully");
+                    items_processed++;
+                    debug_printf("Worker completed item %s\n", item->id);
+                } else {
+                    char error_msg[128];
+                    snprintf(error_msg, sizeof(error_msg),
+                             "Task processing failed with code %d", result);
+                    work_queue_fail(queue, item->id, error_msg);
+                    errors++;
+                    debug_printf("Worker failed item %s: %s\n", item->id, error_msg);
+                }
+
+                work_item_free(item);
+            }
+
+            debug_printf("Worker shutting down: %d items processed, %d errors\n",
+                         items_processed, errors);
+
+            work_queue_destroy(queue);
+            return (errors > 0) ? -1 : 0;
+        }
 
         case RALPH_AGENT_MODE_INTERACTIVE:
         default: {
