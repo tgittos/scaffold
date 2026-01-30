@@ -21,6 +21,9 @@ include mk/tests.mk
 # Default target builds the complete ralph binary with embedded Python and all tests
 all: $(BUILDDIR)/.ralph-linked embed-python libralph $(ALL_TEST_TARGETS)
 
+# Alias for test dependencies that reference 'ralph' directly
+ralph: $(BUILDDIR)/.ralph-linked
+
 # Linking step - produces the base binary and saves it for embedding
 $(BUILDDIR)/.ralph-linked: $(OBJECTS) $(ALL_LIBS) $(LIBRALPH) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
 	@echo "Linking with PDFio support"

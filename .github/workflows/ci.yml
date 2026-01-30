@@ -58,7 +58,7 @@ jobs:
           fi
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      - name: Build ralph
+      - name: Build and test
         run: |
           docker run --rm --privileged \
             -v ${{ github.workspace }}:/workspaces/ralph \
@@ -66,17 +66,7 @@ jobs:
             -w /workspaces/ralph \
             -e PATH="/uv-bin:/opt/cosmos/bin:$PATH" \
             ralph-dev:latest \
-            make -j$(nproc)
-
-      - name: Run tests
-        run: |
-          docker run --rm --privileged \
-            -v ${{ github.workspace }}:/workspaces/ralph \
-            -v $HOME/.local/bin:/uv-bin:ro \
-            -w /workspaces/ralph \
-            -e PATH="/uv-bin:/opt/cosmos/bin:$PATH" \
-            ralph-dev:latest \
-            make test
+            bash -c "make -j$(nproc) && ./scripts/run_tests.sh"
 
       - name: Fix permissions for cache
         if: always()
