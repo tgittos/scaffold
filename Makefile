@@ -39,11 +39,7 @@ python: $(PYTHON_LIB)
 # COMPILATION RULES
 # =============================================================================
 
-# Dependencies required for include paths to exist (order-only prerequisites)
-# These ensure deps are downloaded/built before compilation, without triggering
-# rebuilds when libs change
-COMPILE_DEPS := $(LIBS_MBEDTLS) $(CJSON_LIB) $(SQLITE_LIB) $(PDFIO_LIB) $(ZLIB_LIB) \
-    $(OSSP_UUID_LIB) $(READLINE_LIB) $(PYTHON_LIB) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
+# COMPILE_DEPS is defined in mk/config.mk (must be before lib.mk is included)
 
 $(SRCDIR)/%.o: $(SRCDIR)/%.c $(HEADERS) | $(COMPILE_DEPS)
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@

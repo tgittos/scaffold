@@ -62,6 +62,12 @@ LIBS_MBEDTLS := $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
 ALL_LIBS := $(LIBS_MBEDTLS) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(READLINE_LIB) $(HISTORY_LIB) $(NCURSES_LIB) $(SQLITE_LIB) $(OSSP_UUID_LIB) $(PYTHON_LIB)
 LIBS_STANDARD := $(LIBS_MBEDTLS) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(SQLITE_LIB) $(OSSP_UUID_LIB) $(PYTHON_LIB) -lm -lpthread
 
+# Dependencies required for include paths to exist (order-only prerequisites)
+# These ensure deps are downloaded/built before compilation, without triggering
+# rebuilds when libs change. Must be defined here (before lib.mk is included).
+COMPILE_DEPS := $(LIBS_MBEDTLS) $(CJSON_LIB) $(SQLITE_LIB) $(PDFIO_LIB) $(ZLIB_LIB) \
+    $(OSSP_UUID_LIB) $(READLINE_LIB) $(PYTHON_LIB) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
+
 # Include paths
 INCLUDES := -I$(CURL_DIR)/include -I$(MBEDTLS_DIR)/include -I$(HNSWLIB_DIR) \
     -I$(PDFIO_DIR) -I$(ZLIB_DIR) -I$(CJSON_DIR) -I$(READLINE_DIR) \
