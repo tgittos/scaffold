@@ -10,7 +10,9 @@ This document provides a comprehensive overview of Ralph's codebase structure an
 - **`main.c`** - Application entry point with CLI interface (single message, interactive, --json, --subagent modes)
 - **`ralph.c/ralph.h`** - Core Ralph orchestration: session management, API communication
 - **`agent_identity.c/h`** - Thread-safe agent identity management (ID, parent ID, subagent status)
+- **`async_executor.c/h`** - Non-blocking message processing using background thread with pipe notification
 - **`context_enhancement.c/h`** - Prompt enhancement with todo state, memory recall, and context retrieval
+- **`interrupt.c/h`** - Cooperative Ctrl+C cancellation with signal handling
 - **`recap.c/h`** - Conversation recap generation (one-shot LLM calls without history persistence)
 - **`streaming_handler.c/h`** - Application-layer streaming orchestration and provider registry management
 - **`tool_executor.c/h`** - Iterative tool-calling state machine for executing tool workflows
@@ -51,10 +53,14 @@ This document provides a comprehensive overview of Ralph's codebase structure an
 - **`session_manager.c/h`** - Session data structures and API payload building
 - **`conversation_tracker.c/h`** - Conversation history tracking with vector DB persistence
 - **`conversation_compactor.c/h`** - Intelligent conversation history compression
+- **`rolling_summary.c/h`** - Rolling conversation summary generation with compaction thresholds
 - **`token_manager.c/h`** - Token counting, allocation, and context window management
 
 #### `src/mcp/` - Model Context Protocol
-- **`mcp_client.c/h`** - MCP client implementation supporting STDIO/HTTP/SSE transports
+- **`mcp_client.c/h`** - MCP client implementation and server management
+- **`mcp_transport.c/h`** - Transport abstraction layer using strategy pattern
+- **`mcp_transport_stdio.c`** - STDIO transport for local MCP processes
+- **`mcp_transport_http.c`** - HTTP transport for remote MCP servers
 
 #### `src/messaging/` - Inter-Agent Messaging
 - **`message_poller.c/h`** - Background thread for polling new messages with PipeNotifier integration
@@ -71,10 +77,15 @@ This document provides a comprehensive overview of Ralph's codebase structure an
 - **`python_tool.c/h`** - Embedded Python interpreter execution
 - **`python_tool_files.c/h`** - Python file-based tool loading system
 - **`subagent_tool.c/h`** - Subagent process spawning and management
+- **`subagent_process.c/h`** - Subagent process I/O and lifecycle management
 - **`messaging_tool.c/h`** - Inter-agent messaging (6 tools: get_agent_info, send_message, check_messages, subscribe_channel, publish_channel, check_channel_messages)
 - **`todo_manager.c/h`** - Todo data structures and operations
 - **`todo_tool.c/h`** - Todo tool call handler
 - **`todo_display.c/h`** - Todo console visualization
+- **`tool_format.h`** - Provider-specific tool format strategy interface
+- **`tool_format_anthropic.c`** - Anthropic Messages API tool format
+- **`tool_format_openai.c`** - OpenAI Chat Completions tool format
+- **`tool_param_dsl.c/h`** - Declarative table-driven tool parameter registration
 
 ##### Python Default Tools (in `python_defaults/`)
 - **`read_file.py`** - Read file contents
@@ -92,6 +103,7 @@ This document provides a comprehensive overview of Ralph's codebase structure an
 - **`vector_db_service.c/h`** - Thread-safe vector database singleton service
 - **`document_store.c/h`** - High-level document storage with embeddings and JSON persistence
 - **`metadata_store.c/h`** - Chunk metadata storage layer (separate from vectors)
+- **`sqlite_dal.c/h`** - SQLite Data Access Layer providing shared connection management
 - **`task_store.c/h`** - SQLite-based persistent task storage with hierarchies, dependencies, and session scoping
 - **`message_store.c/h`** - SQLite-backed inter-agent messaging storage (direct messages, pub/sub channels)
 - **`hnswlib_wrapper.cpp/h`** - C++ wrapper for HNSW vector indexing
@@ -126,6 +138,7 @@ The policy module implements approval gates for controlling tool execution.
 
 ##### Subagent Support
 - **`subagent_approval.c/h`** - IPC-based approval proxying for child processes
+- **`approval_errors.c`** - JSON error message formatting for approval gate denials
 
 #### `src/utils/` - Utility Functions
 - **`config.c/h`** - Configuration management with cascading priority (local → user → env → defaults)
@@ -143,6 +156,7 @@ The policy module implements approval gates for controlling tool execution.
 - **`darray.h`** - Type-safe dynamic array macro implementation (header-only)
 - **`ptrarray.h`** - Type-safe dynamic pointer array with ownership semantics (header-only)
 - **`ralph_home.c/h`** - Centralized Ralph home directory management (~/.local/ralph/)
+- **`spinner.c/h`** - Pulsing spinner for tool execution visual feedback
 
 ---
 

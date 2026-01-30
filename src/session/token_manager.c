@@ -5,7 +5,7 @@
 #include <string.h>
 #include <math.h>
 
-// Must follow token_manager.h so SessionData is defined before RalphSession references it
+/* Include order matters: ralph.h uses SessionData from token_manager.h */
 #include "ralph.h"
 
 #define DEFAULT_MIN_RESPONSE_TOKENS 150
@@ -13,7 +13,6 @@
 #define DEFAULT_SAFETY_BUFFER_RATIO 0.02f
 #define DEFAULT_CHARS_PER_TOKEN 5.5f  // Typical modern tokenizer: ~1 token per 4-6 chars
 
-// Per-message overhead accounts for JSON framing (role, separators, etc.)
 #define TOKEN_OVERHEAD_PER_MESSAGE 10
 #define TOKEN_OVERHEAD_PER_TOOL 50
 #define TOKEN_OVERHEAD_JSON_STRUCTURE 50
@@ -34,8 +33,7 @@ int estimate_token_count(const char* text, const TokenConfig* config) {
     int char_count = strlen(text);
     float chars_per_token = config->chars_per_token;
     
-    // Code and JSON use more repetitive/structural tokens, so tokenizers
-    // compress them better -- adjust the chars-per-token ratio upward.
+    /* Code/JSON compress better due to repetitive structure */
     if (strstr(text, "```") != NULL || strstr(text, "function ") != NULL ||
         strstr(text, "#include") != NULL || strstr(text, "def ") != NULL) {
         chars_per_token *= 1.2f;
@@ -63,7 +61,7 @@ int get_dynamic_safety_buffer(const TokenConfig* config, int estimated_prompt_to
     int ratio_buffer = (int)(config->context_window * config->safety_buffer_ratio);
     buffer += ratio_buffer;
 
-    // Near-full contexts are more likely to hit edge cases in token estimation
+    /* Near-full contexts need extra safety margin for estimation errors */
     if (estimated_prompt_tokens > config->context_window * 0.7) {
         buffer += 50;
     }
@@ -112,8 +110,7 @@ int trim_conversation_for_tokens(ConversationHistory* conversation,
     
     debug_printf("Current conversation tokens: %d, max allowed: %d\n", current_tokens, max_prompt_tokens);
     
-    // Trim oldest messages first, but prefer removing non-tool messages to avoid
-    // breaking tool call/response sequences that the LLM needs for context.
+    /* Prefer trimming non-tool messages to avoid breaking tool call/response pairs */
     while (current_tokens > max_prompt_tokens && conversation->count > 0) {
         int remove_index = -1;
 
@@ -192,8 +189,7 @@ int calculate_token_allocation(const SessionData* session, const char* user_mess
     
     int available_tokens = effective_context_window - total_prompt_tokens - safety_buffer;
 
-    // Clamp to known provider-specific max output token limits, which are
-    // independent of the context window and not discoverable at runtime.
+    /* Provider-specific max output limits are independent of context window */
     if (session->config.model) {
         int max_response_cap = -1;
 

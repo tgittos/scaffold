@@ -178,7 +178,7 @@ void subagent_manager_cleanup(SubagentManager *manager) {
         Subagent *sub = &manager->subagents.data[i];
 
         if (sub->status == SUBAGENT_STATUS_RUNNING && sub->pid > 0) {
-            // SIGTERM first for graceful shutdown, then SIGKILL if still alive
+            /* SIGTERM for graceful shutdown, SIGKILL if unresponsive */
             kill(sub->pid, SIGTERM);
 
             int status;
@@ -196,7 +196,6 @@ void subagent_manager_cleanup(SubagentManager *manager) {
     SubagentArray_destroy(&manager->subagents);
 }
 
-/** Find a subagent by its ID, or return NULL. */
 Subagent* subagent_find_by_id(SubagentManager *manager, const char *subagent_id) {
     if (manager == NULL || subagent_id == NULL) {
         return NULL;
@@ -320,12 +319,10 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
         }
         close(stdout_pipefd[1]);
 
-        // Merge stderr into stdout so parent captures all output
         if (dup2(STDOUT_FILENO, STDERR_FILENO) == -1) {
             _exit(127);
         }
 
-        // Child keeps write-end of request pipe and read-end of response pipe
         close(request_pipe[0]);
         close(response_pipe[1]);
 
@@ -335,7 +332,6 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
         setenv(RALPH_APPROVAL_REQUEST_FD, request_fd_str, 1);
         setenv(RALPH_APPROVAL_RESPONSE_FD, response_fd_str, 1);
 
-        // Pass parent agent ID for messaging
         char* parent_id = messaging_tool_get_agent_id();
         if (parent_id != NULL) {
             setenv(RALPH_PARENT_AGENT_ID_ENV, parent_id, 1);
@@ -364,14 +360,13 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
     free(ralph_path);
     close(stdout_pipefd[1]);
 
-    // Parent keeps read-end of request pipe and write-end of response pipe
     close(request_pipe[1]);
     close(response_pipe[0]);
 
     Subagent new_sub;
     memset(&new_sub, 0, sizeof(Subagent));
 
-    // -1 prevents accidental close of stdin/stdout/stderr on cleanup
+    /* Initialize FDs to -1 to prevent accidental close of stdin/stdout/stderr */
     new_sub.stdout_pipe[0] = -1;
     new_sub.stdout_pipe[1] = -1;
     new_sub.approval_channel.request_fd = -1;
@@ -508,13 +503,10 @@ int subagent_get_status(SubagentManager *manager, const char *subagent_id, int w
             sub->error = strdup("Failed to check subagent status");
             subagent_notify_parent(sub);
         }
-        // waitpid_result == 0 means still running, status unchanged
-
         RETURN_CURRENT_STATE();
     }
 
     while (sub->status == SUBAGENT_STATUS_RUNNING) {
-        /* Check for interrupt (Ctrl-C) */
         if (interrupt_pending()) {
             sub->status = SUBAGENT_STATUS_FAILED;
             sub->error = strdup("Interrupted by user");
@@ -712,7 +704,6 @@ int register_subagent_status_tool(ToolRegistry *registry, SubagentManager *manag
     ToolParameter parameters[2];
     memset(parameters, 0, sizeof(parameters));
 
-    // Parameter 1: subagent_id (required)
     parameters[0].name = strdup("subagent_id");
     parameters[0].type = strdup("string");
     parameters[0].description = strdup("ID of the subagent to query status for");
@@ -720,7 +711,6 @@ int register_subagent_status_tool(ToolRegistry *registry, SubagentManager *manag
     parameters[0].enum_count = 0;
     parameters[0].required = 1;
 
-    // Parameter 2: wait (optional)
     parameters[1].name = strdup("wait");
     parameters[1].type = strdup("boolean");
     parameters[1].description = strdup("If true, block until the subagent completes (default: false)");

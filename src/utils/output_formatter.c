@@ -209,29 +209,6 @@ int parse_api_response(const char *json_response, ParsedResponse *result) {
     return ret;
 }
 
-void print_formatted_response(const ParsedResponse *response) {
-    if (!response) {
-        return;
-    }
-    
-    if (response->thinking_content) {
-        printf(ANSI_DIM ANSI_GRAY "%s" ANSI_RESET "\n\n", response->thinking_content);
-    }
-    
-    if (response->response_content) {
-        printf("%s\n", response->response_content);
-    }
-    
-    if (response->total_tokens > 0) {
-        debug_printf("\n[tokens: %d total", response->total_tokens);
-        if (response->prompt_tokens > 0 && response->completion_tokens > 0) {
-            debug_printf(" (%d prompt + %d completion)", 
-                        response->prompt_tokens, response->completion_tokens);
-        }
-        debug_printf("]\n");
-    }
-}
-
 int parse_anthropic_response(const char *json_response, ParsedResponse *result) {
     if (!json_response || !result) {
         return -1;

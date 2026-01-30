@@ -409,14 +409,14 @@ check: test
 # VALGRIND
 # =============================================================================
 
-# Excluded: HTTP (network), Python (embedded stdlib), subagent (fork/exec), message_poller (threads), async_executor (threads)
+# Excluded: HTTP (network), Python (embedded stdlib, including tools_system and ralph which call python_interpreter_init), subagent (fork/exec), message_poller (threads), async_executor (threads)
 VALGRIND_TESTS := \
     $(TEST_main_TARGET) $(TEST_cli_flags_TARGET) $(TEST_interrupt_TARGET) $(TEST_darray_TARGET) $(TEST_ptrarray_TARGET) \
     $(TEST_rate_limiter_TARGET) $(TEST_allowlist_TARGET) $(TEST_tool_args_TARGET) $(TEST_gate_prompter_TARGET) \
     $(TEST_ralph_home_TARGET) $(TEST_http_retry_TARGET) $(TEST_streaming_TARGET) \
     $(TEST_openai_streaming_TARGET) $(TEST_anthropic_streaming_TARGET) \
     $(TEST_output_TARGET) $(TEST_prompt_TARGET) $(TEST_conversation_TARGET) \
-    $(TEST_conversation_vdb_TARGET) $(TEST_tools_TARGET) $(TEST_ralph_TARGET) \
+    $(TEST_conversation_vdb_TARGET) \
     $(TEST_todo_manager_TARGET) $(TEST_tool_param_dsl_TARGET) $(TEST_vector_db_tool_TARGET) \
     $(TEST_memory_tool_TARGET) $(TEST_token_manager_TARGET) $(TEST_conversation_compactor_TARGET) $(TEST_rolling_summary_TARGET) \
     $(TEST_model_tools_TARGET) $(TEST_vector_db_TARGET) $(TEST_sqlite_dal_TARGET) $(TEST_task_store_TARGET) \

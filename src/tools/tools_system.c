@@ -112,7 +112,6 @@ int register_tool(ToolRegistry *registry, const char *name, const char *descript
                             free(dst_param->enum_values[k]);
                         }
                         free(dst_param->enum_values);
-                        // Clean up previously completed parameters
                         for (int k = 0; k <= i; k++) {
                             free(func->parameters[k].name);
                             free(func->parameters[k].type);
@@ -282,18 +281,16 @@ int register_builtin_tools(ToolRegistry *registry) {
         return -1;
     }
 
-    // Eagerly init Python so tool files from ~/.local/ralph/tools/ can be loaded
+    /* Initialize Python early so ~/.local/ralph/tools/ files can register their schemas */
     if (python_interpreter_init() != 0) {
         fprintf(stderr, "Warning: Failed to initialize Python interpreter\n");
     }
 
-    // Python file tools (read_file, write_file, shell, etc.) provide external system access
     if (python_register_tool_schemas(registry) != 0) {
         fprintf(stderr, "Warning: Failed to register Python file tools\n");
     }
 
-    // Only register messaging tools for non-subagent sessions.
-    // Subagents don't need messaging - the harness handles parent notification.
+    /* Subagents communicate with the parent via the harness, not messaging tools */
     const char* is_subagent = getenv("RALPH_IS_SUBAGENT");
     if (is_subagent == NULL || strcmp(is_subagent, "1") != 0) {
         if (register_messaging_tools(registry) != 0) {
@@ -309,7 +306,7 @@ void cleanup_tool_registry(ToolRegistry *registry) {
         return;
     }
     
-    // Guard against corrupted registry state
+    /* Bounds check guards against corrupted registry state from double-free or memory corruption */
     if (registry->function_count < 0 || registry->function_count > 1000) {
         return;
     }

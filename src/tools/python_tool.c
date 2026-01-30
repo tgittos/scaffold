@@ -55,10 +55,7 @@ int python_interpreter_init(void) {
         return 0;
     }
 
-    // Check if Python stdlib is available before attempting initialization.
-    // Py_Initialize() will fatally crash if stdlib is missing, so we must
-    // check first and fail gracefully. This allows the system to run with
-    // 0 Python tools (e.g., in test binaries without embedded stdlib).
+    /* Py_Initialize() crashes if stdlib is missing; check first to fail gracefully */
     struct stat st;
     if (stat("/zip/lib/python3.12", &st) != 0 || !S_ISDIR(st.st_mode)) {
             return -1;
@@ -67,7 +64,7 @@ int python_interpreter_init(void) {
     setenv("PYTHONHOME", "/zip", 1);
     setenv("PYTHONDONTWRITEBYTECODE", "1", 1);
 
-    // Must register before Py_Initialize() -- exactly once
+    /* verified_file module must be registered before Py_Initialize() */
     if (!verified_file_module_registered) {
         if (verified_file_python_init() == 0) {
             verified_file_module_registered = 1;
@@ -259,10 +256,6 @@ int parse_python_arguments(const char *json_args, PythonExecutionParams *params)
     return 0;
 }
 
-/**
- * Truncate output string if it exceeds max_size, appending a truncation indicator.
- * Modifies the string in-place.
- */
 static void truncate_output_if_needed(char *output, size_t max_size) {
     if (output == NULL) {
         return;
@@ -348,7 +341,6 @@ static char* get_python_exception_string(void) {
         Py_DECREF(traceback_module);
     }
 
-    // Fallback when traceback module is unavailable
     if (result == NULL) {
         char *type_name = NULL;
         char *value_str = NULL;
@@ -494,8 +486,7 @@ int execute_python_code(const PythonExecutionParams *params, PythonExecutionResu
 
     PyObject *exec_result = PyRun_String(params->code, Py_file_input, globals_dict, globals_dict);
 
-    // Block SIGALRM during alarm cancellation and handler restoration
-    // to prevent a race where the timeout fires between alarm(0) and sigaction restore.
+    /* Block SIGALRM during cleanup to prevent race between alarm(0) and sigaction restore */
     {
         sigset_t sigalrm_set, old_set;
         sigemptyset(&sigalrm_set);
@@ -531,7 +522,6 @@ int execute_python_code(const PythonExecutionParams *params, PythonExecutionResu
     result->stdout_output = capture_python_output(stdout_capture);
     result->stderr_output = capture_python_output(stderr_capture);
 
-    // Safe: strdup guarantees buffer >= len+1, so writing PYTHON_MAX_OUTPUT_SIZE-1 fits.
     truncate_output_if_needed(result->stdout_output, PYTHON_MAX_OUTPUT_SIZE);
     truncate_output_if_needed(result->stderr_output, PYTHON_MAX_OUTPUT_SIZE);
 

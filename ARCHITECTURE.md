@@ -948,7 +948,9 @@ src/
 │   ├── main.c              # Entry point (CLI interface, --json, --subagent modes)
 │   ├── ralph.c/h           # Core orchestration logic
 │   ├── agent_identity.c/h  # Thread-safe agent identity management
+│   ├── async_executor.c/h  # Non-blocking message processing thread
 │   ├── context_enhancement.c/h  # Prompt enhancement with memory/context
+│   ├── interrupt.c/h       # Cooperative Ctrl+C cancellation handling
 │   ├── recap.c/h           # Conversation recap generation
 │   ├── streaming_handler.c/h   # Streaming orchestration layer
 │   └── tool_executor.c/h   # Tool-calling state machine
@@ -957,6 +959,7 @@ src/
 │   ├── vector_db_service.c/h # Thread-safe singleton service
 │   ├── document_store.c/h  # High-level document storage
 │   ├── metadata_store.c/h  # Chunk metadata storage
+│   ├── sqlite_dal.c/h      # SQLite Data Access Layer abstraction
 │   ├── task_store.c/h      # SQLite-based persistent task storage
 │   ├── message_store.c/h   # Inter-agent messaging storage
 │   └── hnswlib_wrapper.cpp/h # C++ bridge
@@ -980,7 +983,10 @@ src/
 │       ├── openai_embedding_provider.c
 │       └── local_embedding_provider.c
 ├── mcp/                    # Model Context Protocol
-│   └── mcp_client.c/h      # MCP client implementation
+│   ├── mcp_client.c/h      # MCP client implementation
+│   ├── mcp_transport.c/h   # Transport abstraction layer
+│   ├── mcp_transport_stdio.c   # STDIO transport implementation
+│   └── mcp_transport_http.c    # HTTP transport implementation
 ├── messaging/              # Inter-agent messaging
 │   ├── message_poller.c/h  # Background message polling
 │   └── notification_formatter.c/h # LLM notification formatting
@@ -1006,13 +1012,15 @@ src/
 │   ├── shell_parser_ps.c   # PowerShell parsing
 │   ├── atomic_file.c/h     # TOCTOU-safe file operations
 │   ├── subagent_approval.c/h # Subagent approval proxy
+│   ├── approval_errors.c   # Approval gate error formatting
 │   ├── verified_file_context.c/h # Thread-local verified file context
 │   └── verified_file_python.c/h  # Python extension for verified I/O
 ├── session/                # Session management
 │   ├── session_manager.c/h # Session data structures
 │   ├── conversation_tracker.c/h # Conversation persistence
 │   ├── token_manager.c/h   # Token counting/allocation
-│   └── conversation_compactor.c/h # Context trimming
+│   ├── conversation_compactor.c/h # Context trimming
+│   └── rolling_summary.c/h # Rolling conversation summary generation
 ├── tools/                  # Tool implementations
 │   ├── tools_system.c/h    # Tool registry and execution
 │   ├── tool_result_builder.c/h # Result formatting
@@ -1022,10 +1030,15 @@ src/
 │   ├── python_tool.c/h     # Embedded Python interpreter
 │   ├── python_tool_files.c/h # Python file-based tools
 │   ├── subagent_tool.c/h   # Subagent process spawning
+│   ├── subagent_process.c/h    # Subagent I/O and lifecycle
 │   ├── messaging_tool.c/h  # Inter-agent messaging (6 tools)
 │   ├── todo_manager.c/h    # Todo data structures
 │   ├── todo_tool.c/h       # Todo tool call handler
 │   ├── todo_display.c/h    # Todo visualization
+│   ├── tool_format.h           # Tool format strategy pattern
+│   ├── tool_format_anthropic.c # Anthropic tool format
+│   ├── tool_format_openai.c    # OpenAI tool format
+│   ├── tool_param_dsl.c/h      # Table-driven parameter DSL
 │   └── python_defaults/    # Default Python tool files
 │       ├── read_file.py
 │       ├── write_file.py
@@ -1051,6 +1064,7 @@ src/
 │   ├── darray.h            # Type-safe dynamic array macros
 │   ├── ptrarray.h          # Type-safe dynamic pointer array with ownership
 │   ├── ralph_home.c/h      # Centralized home directory management
+│   ├── spinner.c/h         # Tool execution spinner feedback
 │   └── uuid_utils.c/h      # UUID v4 generation and validation
 ```
 

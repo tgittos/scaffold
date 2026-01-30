@@ -310,12 +310,11 @@ int approval_gate_init(ApprovalGateConfig *config) {
                 debug_printf("Warning: Failed to parse approval_gates from %s, "
                              "using defaults\n", CONFIG_FILE_PATHS[i]);
             }
-            break;  /* Stop after first config file found */
+            break;
         }
     }
 
-    /* Entries added after this point are session-only ("allow always") and
-     * will NOT be inherited by subagents. */
+    /* Session-only entries (added after this point) are NOT inherited by subagents */
     config->static_allowlist_count = config->allowlist_count;
     config->static_shell_allowlist_count = config->shell_allowlist_count;
 
@@ -369,7 +368,7 @@ int approval_gate_init_from_parent(ApprovalGateConfig *child,
         child->categories[i] = parent->categories[i];
     }
 
-    /* Only static entries (from config file) are inherited, not session entries */
+    /* Subagents inherit only config file entries, not session "allow always" entries */
     int static_count = parent->static_allowlist_count;
     if (static_count < 0) {
         static_count = 0;
@@ -818,7 +817,7 @@ static int match_regex_allowlist(const ApprovalGateConfig *config,
     return 0;
 }
 
-/* Commands with chains, pipes, subshells, or dangerous patterns never match */
+/* Shell commands with chains, pipes, or subshells are rejected as a security measure */
 static int match_shell_command_allowlist(const ApprovalGateConfig *config,
                                          const ToolCall *tool_call) {
     if (config == NULL || tool_call == NULL) {
@@ -886,7 +885,7 @@ static int match_shell_command_allowlist(const ApprovalGateConfig *config,
             break;
         }
 
-        /* For any-shell entries, try cross-platform command equivalence */
+        /* Cross-platform equivalence: e.g., "dir" and "ls" map to the same intent */
         if (entry->shell_type == SHELL_TYPE_UNKNOWN && entry->prefix_len >= 1) {
             if (commands_are_equivalent(entry->command_prefix[0], base_cmd)) {
                 if (entry->prefix_len == 1) {
@@ -1057,7 +1056,6 @@ ApprovalResult approval_gate_prompt(ApprovalGateConfig *config,
     }
 
 done:
-    /* Clear the approval prompt on success so spinner starts clean */
     if (result == APPROVAL_ALLOWED || result == APPROVAL_ALLOWED_ALWAYS) {
         gate_prompter_clear_prompt(gp);
     }
@@ -1093,7 +1091,7 @@ ApprovalResult check_approval_gate(ApprovalGateConfig *config,
 
         case 1:
             {
-                /* Subagents route approval through IPC to parent */
+                /* Subagents request approval from parent via IPC instead of prompting */
                 ApprovalChannel *channel = subagent_get_approval_channel();
                 if (channel != NULL) {
                     return subagent_request_approval(channel, tool_call, out_path);
@@ -1306,7 +1304,6 @@ ApprovalResult approval_gate_prompt_batch(ApprovalGateConfig *config,
     }
 
 done:
-    /* Clear the batch prompt on success so spinner starts clean */
     if (result == APPROVAL_ALLOWED || result == APPROVAL_ALLOWED_ALWAYS) {
         gate_prompter_clear_batch_prompt(gp, count);
     }
@@ -1435,8 +1432,8 @@ ApprovalResult check_approval_gate_batch(ApprovalGateConfig *config,
     for (int i = 0; i < approval_count; i++) {
         int idx = needs_approval_indices[i];
         out_batch->results[idx] = temp_batch.results[i];
+        /* Transfer ownership; zero prevents double-free when temp_batch is freed */
         out_batch->paths[idx] = temp_batch.paths[i];
-        /* Zero to prevent double-free when temp_batch is freed */
         memset(&temp_batch.paths[i], 0, sizeof(ApprovedPath));
     }
 

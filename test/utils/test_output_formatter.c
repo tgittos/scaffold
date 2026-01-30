@@ -216,15 +216,15 @@ void test_cleanup_parsed_response_with_allocated_content(void) {
     TEST_ASSERT_NULL(result.response_content);
 }
 
-void test_print_formatted_response_with_null_parameters(void) {
+void test_print_formatted_response_improved_with_null_parameters(void) {
     // Should not crash
-    print_formatted_response(NULL);
-    
+    print_formatted_response_improved(NULL);
+
     ParsedResponse result = {0};
     result.thinking_content = NULL;
     result.response_content = NULL;
-    print_formatted_response(&result);
-    
+    print_formatted_response_improved(&result);
+
     TEST_ASSERT_TRUE(1); // Just to have an assertion
 }
 
@@ -599,7 +599,7 @@ int main(void) {
     RUN_TEST(test_cleanup_parsed_response_with_null_pointer);
     RUN_TEST(test_cleanup_parsed_response_with_null_content);
     RUN_TEST(test_cleanup_parsed_response_with_allocated_content);
-    RUN_TEST(test_print_formatted_response_with_null_parameters);
+    RUN_TEST(test_print_formatted_response_improved_with_null_parameters);
     RUN_TEST(test_content_with_escaped_quotes);
     RUN_TEST(test_parse_api_response_tool_calls_format);
     

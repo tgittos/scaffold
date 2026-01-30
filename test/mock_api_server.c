@@ -20,7 +20,7 @@ static MockAPIServer* g_server = NULL;
 static void* server_thread_func(void* arg) {
     MockAPIServer* server = (MockAPIServer*)arg;
     int server_fd, client_fd;
-    struct sockaddr_in address;
+    struct sockaddr_in address = {0};
     int opt = 1;
     socklen_t addrlen = sizeof(address);
     
@@ -124,7 +124,7 @@ static void* server_thread_func(void* arg) {
             }
 
             // Send headers and body separately to handle large responses
-            char headers_buf[512];
+            char headers_buf[512] = {0};
             int content_length = strlen(body);
 
             snprintf(headers_buf, sizeof(headers_buf),

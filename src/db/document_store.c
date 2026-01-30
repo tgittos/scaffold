@@ -28,14 +28,14 @@ static document_store_t* singleton_instance = NULL;
 static int rmdir_recursive(const char* path) {
     DIR* dir = opendir(path);
     if (dir == NULL) return 0;
-    
+
     struct dirent* entry;
     while ((entry = readdir(dir)) != NULL) {
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
             continue;
         }
-        
-        char full_path[1024];
+
+        char full_path[1024] = {0};
         snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
         
         struct stat st;
@@ -127,15 +127,15 @@ document_store_t* document_store_get_instance(void) {
 
 void document_store_reset_instance(void) {
     if (singleton_instance != NULL && singleton_instance->base_path != NULL) {
-        char docs_path[512];
+        char docs_path[512] = {0};
         snprintf(docs_path, sizeof(docs_path), "%s/documents", singleton_instance->base_path);
         rmdir_recursive(docs_path);
-        
-        char metadata_path[512];
+
+        char metadata_path[512] = {0};
         snprintf(metadata_path, sizeof(metadata_path), "%s/metadata", singleton_instance->base_path);
         rmdir_recursive(metadata_path);
-        
-        char index_path[512];
+
+        char index_path[512] = {0};
         snprintf(index_path, sizeof(index_path), "%s/indexes", singleton_instance->base_path);
         rmdir_recursive(index_path);
     }
@@ -150,8 +150,8 @@ void document_store_reset_instance(void) {
 
 void document_store_clear_conversations(void) {
     if (singleton_instance == NULL) return;
-    
-    char conv_path[512];
+
+    char conv_path[512] = {0};
     if (singleton_instance->base_path != NULL) {
         snprintf(conv_path, sizeof(conv_path), "%s/documents/conversations", singleton_instance->base_path);
         rmdir_recursive(conv_path);

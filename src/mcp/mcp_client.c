@@ -15,7 +15,7 @@ DARRAY_DEFINE(MCPServerStateArray, MCPServerState)
 
 static int g_request_id = 1;
 
-/* Takes ownership of key and value; frees both on failure. */
+/* Caller transfers ownership of key and value; freed on failure */
 static int keyvalue_array_add(KeyValueArray* arr, char* key, char* value) {
     if (!arr || !key || !value) {
         free(key);
@@ -391,14 +391,12 @@ int mcp_connect_server(MCPServerState* server) {
 
     debug_printf("Connecting to MCP server: %s\n", server->config->name);
 
-    /* Create transport for this server type */
     server->transport = mcp_transport_create(server->config->type);
     if (!server->transport) {
         debug_printf("Failed to create transport for MCP server %s\n", server->config->name);
         return -1;
     }
 
-    /* Connect using the transport */
     if (server->transport->ops->connect(server->transport, server->config) != 0) {
         debug_printf("Failed to connect transport for MCP server %s\n", server->config->name);
         server->transport->ops->destroy(server->transport);
@@ -443,7 +441,6 @@ int mcp_send_request(MCPServerState* server, const char* method, const char* par
         return -1;
     }
 
-    /* Build JSON-RPC request */
     cJSON* request = cJSON_CreateObject();
     cJSON_AddStringToObject(request, "jsonrpc", "2.0");
     cJSON_AddStringToObject(request, "method", method);
@@ -470,7 +467,6 @@ int mcp_send_request(MCPServerState* server, const char* method, const char* par
 
     debug_printf("Sending MCP request to %s: %s\n", server->config->name, method);
 
-    /* Send via transport */
     int result = server->transport->ops->send_request(server->transport, request_str, response);
     free(request_str);
 
@@ -756,7 +752,7 @@ int mcp_client_register_tools(MCPClient* client, ToolRegistry* registry) {
                         continue;
                     }
                     reg_tool->description = tool->description ? strdup(tool->description) : NULL;
-                    /* NULL execute_func signals that this tool is dispatched via mcp_client_execute_tool. */
+                    /* NULL execute_func signals MCP dispatch via mcp_client_execute_tool */
                     reg_tool->execute_func = NULL;
                     reg_tool->parameter_count = tool->parameter_count;
                     reg_tool->parameters = deep_copy_parameters(tool->parameters, tool->parameter_count);
@@ -787,7 +783,7 @@ int mcp_client_execute_tool(MCPClient* client, const ToolCall* tool_call, ToolRe
         return -1;
     }
 
-    /* Tool names follow the format: mcp_<servername>_<toolname> */
+    /* Format: mcp_<servername>_<toolname> */
     char* server_name_end = strchr(tool_call->name + 4, '_');
     if (!server_name_end) {
         debug_printf("Invalid MCP tool name format: %s\n", tool_call->name);
@@ -924,7 +920,6 @@ void mcp_cleanup_server_state(MCPServerState* server) {
         return;
     }
 
-    /* Destroy transport (which also disconnects) */
     if (server->transport) {
         server->transport->ops->destroy(server->transport);
         server->transport = NULL;

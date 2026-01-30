@@ -11,7 +11,7 @@
 #include <time.h>
 #include <curl/curl.h>
 
-// Uses embedded CA bundle so we don't depend on platform-specific cert stores
+/* Embedded CA bundle ensures portable SSL across all platforms */
 static void configure_ssl_certs(CURL *curl) {
     struct curl_blob blob;
     blob.data = (void *)embedded_cacert_data;
@@ -89,7 +89,7 @@ static int calculate_retry_delay(int attempt, int base_delay_ms, float backoff_f
 
     int delay = (int)(base_delay_ms * multiplier);
 
-    // Jitter avoids thundering herd on concurrent retries
+    /* Jitter prevents thundering herd when multiple clients retry simultaneously */
     if (delay > 0) {
         int jitter = rand() % (delay / 4 + 1);
         delay += jitter;
@@ -269,7 +269,7 @@ int http_get_with_config(const char *url, const char **headers,
     struct HeaderData header_data = {0};
     APIError api_err;
 
-    // Must initialize before the NULL-check below may return early
+    /* Initialize before NULL-check to avoid returning with garbage data on error */
     if (response != NULL) {
         response->data = NULL;
         response->size = 0;

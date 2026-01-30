@@ -70,14 +70,6 @@ int parse_api_response_with_model(const char *json_response, const char *model_n
 int parse_anthropic_response(const char *json_response, ParsedResponse *result);
 
 /**
- * Format and print the parsed response with content and token usage
- * Content is printed prominently, token usage is visually de-prioritized
- * 
- * @param response Parsed response struct
- */
-void print_formatted_response(const ParsedResponse *response);
-
-/**
  * Clean up memory allocated in ParsedResponse
  * 
  * @param response Pointer to ParsedResponse struct to clean up

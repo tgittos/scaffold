@@ -24,28 +24,6 @@ static pdf_processing_result_t* create_error_result(const char *error_msg) {
     return result;
 }
 
-int is_pdf_url(const char *url) {
-    if (!url) return 0;
-    
-    size_t len = strlen(url);
-    if (len < 4) return 0;
-    
-    const char *ext_pos = strrchr(url, '.');
-    if (ext_pos && (strcasecmp(ext_pos, ".pdf") == 0)) {
-        return 1;
-    }
-    
-    if (strstr(url, "/download") && strstr(url, "pdf")) {
-        return 1;
-    }
-    
-    if (strstr(url, "content-disposition") || strstr(url, "attachment")) {
-        return 1;
-    }
-    
-    return 0;
-}
-
 static char* generate_temp_filename(const char *url) {
     (void)url;
     char *temp_path = malloc(256);

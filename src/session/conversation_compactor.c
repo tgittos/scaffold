@@ -14,7 +14,7 @@ void compaction_config_init(CompactionConfig* config) {
     if (config == NULL) return;
     
     config->preserve_recent_messages = DEFAULT_PRESERVE_RECENT_MESSAGES;
-    // Default assumes 8K context; callers with larger windows should reconfigure
+    /* Default 8K context; callers with larger windows should reconfigure */
     config->background_threshold = (int)(8192 * COMPACTION_TRIGGER_THRESHOLD);
 }
 

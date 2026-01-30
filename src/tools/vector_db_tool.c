@@ -222,7 +222,7 @@ int execute_vector_db_create_index_tool_call(const ToolCall *tool_call, ToolResu
     
     vector_db_error_t err = vector_db_create_index(db, index_name, &config);
     
-    char response[512];
+    char response[512] = {0};
     if (err == VECTOR_DB_OK) {
         snprintf(response, sizeof(response), 
                 "{\"success\": true, \"message\": \"Index '%s' created successfully\"}", 
@@ -256,8 +256,8 @@ int execute_vector_db_delete_index_tool_call(const ToolCall *tool_call, ToolResu
     
     vector_db_t *db = vector_db_service_get_database();
     vector_db_error_t err = vector_db_delete_index(db, index_name);
-    
-    char response[512];
+
+    char response[512] = {0};
     if (err == VECTOR_DB_OK) {
         snprintf(response, sizeof(response), 
                 "{\"success\": true, \"message\": \"Index '%s' deleted successfully\"}", 
@@ -348,7 +348,7 @@ int execute_vector_db_add_vector_tool_call(const ToolCall *tool_call, ToolResult
     
     vector_db_error_t err = vector_db_add_vector(db, index_name, &vec, label);
     
-    char response[512];
+    char response[512] = {0};
     if (err == VECTOR_DB_OK) {
         snprintf(response, sizeof(response), 
                 "{\"success\": true, \"label\": %zu, \"message\": \"Vector added successfully\"}", 
@@ -393,7 +393,7 @@ int execute_vector_db_update_vector_tool_call(const ToolCall *tool_call, ToolRes
     vector_db_t *db = vector_db_service_get_database();
     vector_db_error_t err = vector_db_update_vector(db, index_name, &vec, (size_t)label);
     
-    char response[512];
+    char response[512] = {0};
     if (err == VECTOR_DB_OK) {
         snprintf(response, sizeof(response), 
                 "{\"success\": true, \"message\": \"Vector updated successfully\"}");
@@ -430,7 +430,7 @@ int execute_vector_db_delete_vector_tool_call(const ToolCall *tool_call, ToolRes
     vector_db_t *db = vector_db_service_get_database();
     vector_db_error_t err = vector_db_delete_vector(db, index_name, (size_t)label);
     
-    char response[512];
+    char response[512] = {0};
     if (err == VECTOR_DB_OK) {
         snprintf(response, sizeof(response), 
                 "{\"success\": true, \"message\": \"Vector deleted successfully\"}");
@@ -506,7 +506,7 @@ int execute_vector_db_get_vector_tool_call(const ToolCall *tool_call, ToolResult
             result->success = 0;
         }
     } else {
-        char response[512];
+        char response[512] = {0};
         snprintf(response, sizeof(response), 
                 "{\"success\": false, \"error\": \"%s\"}", 
                 vector_db_error_string(err));
@@ -614,7 +614,7 @@ int execute_vector_db_add_text_tool_call(const ToolCall *tool_call, ToolResult *
     
     int add_result = document_store_add_text(doc_store, index_name, text, "text", "api", metadata);
     
-    char response[1024];
+    char response[1024] = {0};
     if (add_result == 0) {
         size_t doc_count = vector_db_get_index_size(vector_db_service_get_database(), index_name);
         snprintf(response, sizeof(response), 
@@ -703,7 +703,7 @@ int execute_vector_db_add_chunked_text_tool_call(const ToolCall *tool_call, Tool
         }
     }
     
-    char response[1024];
+    char response[1024] = {0};
     if (successful_chunks > 0) {
         snprintf(response, sizeof(response),
                 "{\"success\": true, \"message\": \"Added %zu chunks successfully\", \"successful_chunks\": %zu, \"failed_chunks\": %zu, \"total_chunks\": %zu}",
@@ -818,7 +818,7 @@ int execute_vector_db_add_pdf_document_tool_call(const ToolCall *tool_call, Tool
         }
     }
     
-    char response[1024];
+    char response[1024] = {0};
     if (successful_chunks > 0) {
         snprintf(response, sizeof(response),
                 "{\"success\": true, \"message\": \"Processed PDF and added %zu chunks successfully\", \"successful_chunks\": %zu, \"failed_chunks\": %zu, \"total_chunks\": %zu, \"pdf_pages\": %d}",

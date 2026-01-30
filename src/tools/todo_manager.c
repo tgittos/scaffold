@@ -61,7 +61,7 @@ int todo_create(TodoList* list, const char* content, TodoPriority priority, char
 
     if (list->count >= TODO_MAX_COUNT) return -1;
 
-    Todo new_todo;
+    Todo new_todo = {0};
     generate_todo_id(new_todo.id);
     strncpy(new_todo.content, content, TODO_MAX_CONTENT_LENGTH - 1);
     new_todo.content[TODO_MAX_CONTENT_LENGTH - 1] = '\0';

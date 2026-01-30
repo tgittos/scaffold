@@ -96,8 +96,8 @@ void test_ralph_init_session_null_parameter(void) {
 }
 
 void test_ralph_init_and_cleanup_session(void) {
-    RalphSession session;
-    
+    RalphSession session = {0};
+
     int init_result = ralph_init_session(&session);
     TEST_ASSERT_EQUAL_INT(0, init_result);
     
@@ -119,7 +119,7 @@ void test_ralph_load_config_null_parameter(void) {
 }
 
 void test_ralph_load_config_basic(void) {
-    RalphSession session;
+    RalphSession session = {0};
     
     // Initialize session first
     int init_result = ralph_init_session(&session);
@@ -150,7 +150,7 @@ void test_ralph_load_config_basic(void) {
 }
 
 void test_ralph_process_message_null_parameters(void) {
-    RalphSession session;
+    RalphSession session = {0};
     ralph_init_session(&session);
     ralph_load_config(&session);
     
@@ -166,7 +166,7 @@ void test_ralph_process_message_null_parameters(void) {
 }
 
 void test_ralph_config_parameter_selection(void) {
-    RalphSession session;
+    RalphSession session = {0};
     ralph_init_session(&session);
     
     // Test OpenAI URL parameter selection
@@ -190,7 +190,7 @@ void test_ralph_config_parameter_selection(void) {
 }
 
 void test_ralph_execute_tool_workflow_null_parameters(void) {
-    RalphSession session;
+    RalphSession session = {0};
     ToolCall tool_calls[1];
     const char* headers[2] = {NULL, NULL};
 
@@ -244,7 +244,7 @@ void test_ralph_execute_tool_workflow_api_failure_resilience(void) {
     setenv("API_URL", "http://127.0.0.1:8888/v1/chat/completions", 1);
     setenv("MODEL", "test-model", 1);
 
-    RalphSession session;
+    RalphSession session = {0};
     ToolCall tool_calls[1];
     const char* headers[2] = {"Content-Type: application/json", NULL};
 
@@ -300,7 +300,7 @@ void test_ralph_process_message_basic_workflow(void) {
     // This tests the core user workflow: user sends message, system processes it
     // Even if API fails, we can verify the message was added to conversation
     
-    RalphSession session;
+    RalphSession session = {0};
     ralph_init_session(&session);
     ralph_load_config(&session);
     
@@ -357,7 +357,7 @@ void test_tool_execution_without_api_server(void) {
     setenv("API_URL", "http://127.0.0.1:8888/v1/chat/completions", 1);
     setenv("MODEL", "test-model", 1);
 
-    RalphSession session;
+    RalphSession session = {0};
     ToolCall tool_calls[1];
     const char* headers[2] = {"Content-Type: application/json", NULL};
 
@@ -422,7 +422,7 @@ void test_tool_execution_with_network_timeout(void) {
     setenv("API_URL", "http://127.0.0.1:8888/v1/chat/completions", 1);
     setenv("MODEL", "test-model", 1);
 
-    RalphSession session;
+    RalphSession session = {0};
     ToolCall tool_calls[1];
     const char* headers[2] = {"Content-Type: application/json", NULL};
 
@@ -475,7 +475,7 @@ void test_tool_execution_with_auth_failure(void) {
     setenv("MODEL", "test-model", 1);
     setenv("API_KEY", "test-key", 1);
 
-    RalphSession session;
+    RalphSession session = {0};
     ToolCall tool_calls[1];
     const char* headers[2] = {"Content-Type: application/json", NULL};
 
@@ -525,7 +525,7 @@ void test_graceful_degradation_on_api_errors(void) {
     setenv("API_URL", "http://127.0.0.1:8888/v1/chat/completions", 1);
     setenv("MODEL", "test-model", 1);
 
-    RalphSession session;
+    RalphSession session = {0};
     ToolCall tool_calls[1];
     const char* headers[2] = {"Content-Type: application/json", NULL};
 
@@ -570,7 +570,7 @@ void test_shell_command_request_workflow(void) {
     // REALISTIC USER WORKFLOW TEST: User requests shell command execution
     // Tests the complete workflow without mock server - relies on live provider or graceful failure
     
-    RalphSession session;
+    RalphSession session = {0};
     ralph_init_session(&session);
     ralph_load_config(&session);
     
@@ -599,7 +599,7 @@ void test_sequential_tool_execution(void) {
     // TOOL WORKFLOW INTEGRATION TEST: Multiple tool calls in sequence
     // Tests that multiple tools execute properly and results are tracked
 
-    RalphSession session;
+    RalphSession session = {0};
     ToolCall tool_calls[2];
     const char* headers[2] = {"Content-Type: application/json", NULL};
 
@@ -654,7 +654,7 @@ void test_conversation_persistence_through_tools(void) {
     // REALISTIC USER WORKFLOW TEST: Multiple messages with tool usage
     // Tests that conversation history maintains context across tool executions
     
-    RalphSession session;
+    RalphSession session = {0};
     ralph_init_session(&session);
     ralph_load_config(&session);
     
@@ -682,7 +682,7 @@ void test_tool_name_hardcoded_bug_fixed(void) {
     // BUG FIX VERIFICATION TEST: Tool name should now use correct tool name, not hardcoded "tool_name"
     // This test verifies that the fix for the hardcoded tool_name bug works correctly
 
-    RalphSession session;
+    RalphSession session = {0};
     ToolCall tool_calls[1];
     const char* headers[2] = {"Content-Type: application/json", NULL};
 

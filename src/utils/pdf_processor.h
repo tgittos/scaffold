@@ -40,17 +40,9 @@ pdf_processing_result_t* process_pdf_from_url(const char *url, vector_db_t *vect
  * @param index_name Name of the vector index to use
  * @return Processing result (caller must free)
  */
-pdf_processing_result_t* process_pdf_data(const unsigned char *pdf_data, size_t data_size, 
-                                         const pdf_metadata_t *metadata, vector_db_t *vector_db, 
+pdf_processing_result_t* process_pdf_data(const unsigned char *pdf_data, size_t data_size,
+                                         const pdf_metadata_t *metadata, vector_db_t *vector_db,
                                          const char *index_name);
-
-/**
- * Check if a URL appears to be a PDF based on extension or content-type
- * 
- * @param url The URL to check
- * @return 1 if likely a PDF, 0 otherwise
- */
-int is_pdf_url(const char *url);
 
 /**
  * Free PDF processing result

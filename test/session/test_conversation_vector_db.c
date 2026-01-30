@@ -180,10 +180,10 @@ void test_search_conversation_history(void) {
 void test_sliding_window_retrieval(void) {
     ConversationHistory history;
     init_conversation_history(&history);
-    
+
     // Add many messages to test sliding window
     for (int i = 0; i < 30; i++) {
-        char msg[100];
+        char msg[100] = {0};
         snprintf(msg, sizeof(msg), "Message %d", i);
         append_conversation_message(&history, i % 2 == 0 ? "user" : "assistant", msg);
     }

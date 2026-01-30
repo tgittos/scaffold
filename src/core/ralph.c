@@ -139,7 +139,7 @@ int ralph_init_session(RalphSession* session) {
         fprintf(stderr, "Warning: Failed to initialize todo display\n");
     }
     
-    // MCP is entirely optional -- silent failure at every stage
+    /* MCP servers are optional; initialization failures are non-fatal */
     if (mcp_client_init(&session->mcp_client) != 0) {
         fprintf(stderr, "Warning: Failed to initialize MCP client\n");
     } else {
@@ -194,11 +194,10 @@ void ralph_cleanup_session(RalphSession* session) {
 
     messaging_tool_cleanup();
 
-    // Global tool reference must be cleared before the todo list it points to is destroyed
+    /* Cleanup ordering: todo tool holds a pointer to todo_list, which the registry references */
     clear_todo_tool_reference();
     todo_display_cleanup();
 
-    // Todo list must be destroyed before tool registry, which may hold references to it
     todo_list_destroy(&session->todo_list);
     cleanup_tool_registry(&session->tools);
     session_data_cleanup(&session->session_data);
@@ -240,7 +239,7 @@ int ralph_load_config(RalphSession* session) {
     session->session_data.config.max_tokens = config->max_tokens;
     session->session_data.config.enable_streaming = config->enable_streaming;
     
-    // Each provider uses a different JSON field name for max tokens
+    /* Provider-specific max tokens field: OpenAI uses "max_completion_tokens", others use "max_tokens" */
     if (strstr(session->session_data.config.api_url, "api.openai.com") != NULL) {
         session->session_data.config.api_type = API_TYPE_OPENAI;
         session->session_data.config.max_tokens_param = "max_completion_tokens";
@@ -252,7 +251,7 @@ int ralph_load_config(RalphSession* session) {
         session->session_data.config.max_tokens_param = "max_tokens";
     }
     
-    // Override the 8192-token default with the model's actual context length when known
+    /* 8192 is the fallback context window; upgrade to model-specific size when available */
     if (session->session_data.config.context_window == 8192) {
         ModelRegistry* registry = get_model_registry();
         if (registry && session->session_data.config.model) {
@@ -439,7 +438,7 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
         tool_parse_result = parse_model_tool_calls(model_registry, session->session_data.config.model,
                                                   response.data, &raw_tool_calls, &raw_call_count);
         
-        // Some models embed tool calls in message content rather than the standard location
+        /* Fallback: some models (e.g., LM Studio) embed tool calls in message content */
         if (tool_parse_result != 0 || raw_call_count == 0) {
             if (message_content != NULL && parse_model_tool_calls(model_registry, session->session_data.config.model,
                                                                   message_content, &raw_tool_calls, &raw_call_count) == 0 && raw_call_count > 0) {
@@ -455,13 +454,12 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
             
             print_formatted_response_improved(&parsed_response);
 
-            // Conversation order matters: user -> assistant (with tool_calls) -> tool results
+            /* Message ordering is protocol-required: user -> assistant (with tool_calls) -> tool results */
             if (append_conversation_message(&session->session_data.conversation, "user", user_message) != 0) {
                 fprintf(stderr, "Warning: Failed to save user message to conversation history\n");
             }
             
-            // Only save the assistant message with tool_calls if we can also save the
-            // corresponding tool results -- orphaned tool_calls break the conversation format.
+            /* Must save both assistant tool_calls and tool results together; orphaned calls break the API */
             ToolResult *results = malloc(raw_call_count * sizeof(ToolResult));
             if (results == NULL) {
                 const char* assistant_content = parsed_response.response_content ?
@@ -477,11 +475,10 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
                 const char* content_to_save = NULL;
                 char* constructed_message = NULL;
                 
+                /* Anthropic requires raw JSON; OpenAI requires structured tool_calls array */
                 if (session->session_data.config.api_type == API_TYPE_ANTHROPIC) {
-                    // Anthropic expects the raw JSON response in conversation history
                     content_to_save = response.data;
                 } else {
-                    // OpenAI expects a structured assistant message with a tool_calls array
                     constructed_message = construct_openai_assistant_message_with_tools(
                         parsed_response.response_content, raw_tool_calls, raw_call_count);
                     content_to_save = constructed_message;
@@ -500,7 +497,6 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
             cleanup_tool_calls(raw_tool_calls, raw_call_count);
         } else {
             debug_printf("No tool calls found in raw response (result: %d, count: %d)\n", tool_parse_result, raw_call_count);
-            // LM Studio embeds tool calls in message content rather than the response envelope
             ToolCall *tool_calls = NULL;
             int call_count = 0;
             if (message_content != NULL && parse_tool_calls(message_content, &tool_calls, &call_count) == 0 && call_count > 0) {
@@ -520,7 +516,6 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
                     fprintf(stderr, "Warning: Failed to save user message to conversation history\n");
                 }
                 
-                // Prefer response_content over thinking_content for the persisted message
                 const char* assistant_content = parsed_response.response_content ?
                                                parsed_response.response_content :
                                                parsed_response.thinking_content;
