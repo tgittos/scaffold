@@ -38,8 +38,7 @@ jobs:
         with:
           path: |
             deps/
-            build/libpython*.a
-            build/python-include/
+            build/
             python/build/
           key: deps-${{ hashFiles('mk/config.mk', 'mk/deps.mk', 'python/Makefile') }}
           restore-keys: |
