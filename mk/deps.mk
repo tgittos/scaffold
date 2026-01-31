@@ -161,23 +161,4 @@ update-cacert:
 	./scripts/gen_cacert.sh $(CACERT_PEM) $(CACERT_SOURCE)
 	@echo "CA certificate bundle updated. Rebuild with 'make clean && make'"
 
-# Links binary
-$(LINKS_BUNDLED):
-	@echo "Checking for pre-built Cosmopolitan Links binary..."
-	@if [ ! -f $(LINKS_BUNDLED) ]; then \
-		echo "Downloading pre-built Cosmopolitan Links binary..."; \
-		curl -L -o $(LINKS_BUNDLED) https://cosmo.zip/pub/cosmos/bin/links || \
-		wget -O $(LINKS_BUNDLED) https://cosmo.zip/pub/cosmos/bin/links; \
-		chmod +x $(LINKS_BUNDLED); \
-	else \
-		echo "Using existing $(LINKS_BUNDLED)"; \
-	fi
-
-# bin2c tool
-$(BIN2C): build/bin2c.c
-	$(CC) -O2 -o $@ $<
-
-$(EMBEDDED_LINKS_HEADER): $(LINKS_BUNDLED) $(BIN2C)
-	$(BIN2C) $(LINKS_BUNDLED) embedded_links > $(EMBEDDED_LINKS_HEADER)
-
 .PHONY: update-cacert

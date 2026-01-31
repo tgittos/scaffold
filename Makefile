@@ -67,9 +67,8 @@ clean:
 	rm -f src/*.aarch64.elf src/*/*.aarch64.elf src/*.com.dbg src/*/*.com.dbg src/*.dbg src/*/*.dbg
 	rm -f test/*.aarch64.elf test/*/*.aarch64.elf test/*.com.dbg test/*/*.com.dbg test/*.dbg test/*/*.dbg
 	rm -f test/*.log test/*.trs test/test-suite.log
-	rm -f $(EMBEDDED_LINKS_HEADER)
 	rm -f $(BUILDDIR)/.ralph-linked
-	find build -type f ! -name 'bin2c.c' ! -name 'links' ! -name 'libpython*.a' ! -path 'build/python-include/*' -delete 2>/dev/null || true
+	find build -type f ! -name 'libpython*.a' ! -path 'build/python-include/*' -delete 2>/dev/null || true
 
 clean-python:
 	rm -f $(PYTHON_LIB)
@@ -79,7 +78,6 @@ clean-python:
 distclean: clean
 	rm -rf $(DEPDIR)
 	rm -f *.tar.gz
-	rm -f $(LINKS_BUNDLED)
 	$(MAKE) -C python distclean
 
 # =============================================================================

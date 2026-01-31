@@ -11,15 +11,10 @@ test/.aarch64/
 
 # Executables
 ralph
-test_bundled_links
 
 # Build directory and artifacts
 build/
 python/python.com
-
-# Generated headers
-src/embedded_links.h
-include/embedded_links.h
 
 # Dependencies
 deps/

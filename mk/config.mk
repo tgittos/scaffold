@@ -88,11 +88,6 @@ LIBS := -lcurl -lmbedtls -lmbedx509 -lmbedcrypto $(PDFIO_LIB) $(ZLIB_LIB) \
     $(CJSON_LIB) $(READLINE_LIB) $(HISTORY_LIB) $(NCURSES_LIB) $(SQLITE_LIB) \
     $(OSSP_UUID_LIB) $(PYTHON_LIB) -lm
 
-# Tools
-BIN2C := $(BUILDDIR)/bin2c
-LINKS_BUNDLED := $(BUILDDIR)/links
-EMBEDDED_LINKS_HEADER := $(SRCDIR)/embedded_links.h
-
 # CA Certificate
 CACERT_PEM := $(BUILDDIR)/cacert.pem
 CACERT_SOURCE := $(SRCDIR)/network/embedded_cacert.c
