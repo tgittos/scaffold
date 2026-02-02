@@ -7,12 +7,12 @@ See `@ARCHITECTURE.md` and `@CODE_OVERVIEW.md` for design docs. Use `ripgrep` to
 
 | Command | Description |
 |---------|-------------|
-| `make` | Build |
-| `make clean` | Remove build artifacts (keeps dependencies) |
-| `make distclean` | Remove everything (nuclear) |
-| `make test` | Run test suite |
+| `./scripts/build.sh` | Build (compact output) |
+| `./scripts/build.sh -v` | Build with full output |
+| `./scripts/build.sh clean` | Remove build artifacts (keeps dependencies) |
+| `./scripts/build.sh distclean` | Remove everything (nuclear) |
 | `make check-valgrind` | Memory safety check |
-| `make update-cacert` | Refresh CA certificates (then `make clean && make`) |
+| `make update-cacert` | Refresh CA certificates (then `./scripts/build.sh clean && ./scripts/build.sh`) |
 
 ## Development Environment
 
@@ -45,14 +45,14 @@ See `@ARCHITECTURE.md` and `@CODE_OVERVIEW.md` for design docs. Use `ripgrep` to
 
 **TDD workflow**: Write a failing test first, then implement to make it pass.
 
-**Build first**: Always run `make` before running tests. Tests require compiled binaries.
+**Build first**: Always build before running tests. Tests require compiled binaries.
 
 ```bash
 # Build, then run full suite (preferred)
-make && ./scripts/run_tests.sh
+./scripts/build.sh && ./scripts/run_tests.sh
 
 # Individual test (name from def_test in mk/tests.mk, not file path)
-make test/test_<name> && ./test/test_<name>
+./scripts/build.sh test/test_<name> && ./test/test_<name>
 
 # Test script options
 ./scripts/run_tests.sh        # Compact output with segfault detection

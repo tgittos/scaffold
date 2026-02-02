@@ -177,7 +177,7 @@ print_progress() {
 run_test() {
     local test_path="$1"
     local test_name=$(basename "$test_path")
-    local start_time=$(date +%s%3N 2>/dev/null || date +%s)000
+    local start_time=$(date +%s)000
 
     # Run test and capture output
     local output
@@ -187,7 +187,7 @@ run_test() {
     output=$(./"$test_path" 2>&1)
     exit_code=$?
 
-    local end_time=$(date +%s%3N 2>/dev/null || date +%s)000
+    local end_time=$(date +%s)000
     local duration=$((end_time - start_time))
 
     # Parse results
@@ -255,7 +255,7 @@ main() {
     local failed_tests=()
     local segfault_tests=()
     local failure_details=()
-    local start_time=$(date +%s%3N 2>/dev/null || date +%s)000
+    local start_time=$(date +%s)000
 
     # Run each test
     local current=0
@@ -324,7 +324,7 @@ main() {
         fi
     done
 
-    local end_time=$(date +%s%3N 2>/dev/null || date +%s)000
+    local end_time=$(date +%s)000
     local total_duration=$((end_time - start_time))
 
     # Print summary
