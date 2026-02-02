@@ -20,7 +20,6 @@ typedef struct {
     char* value;
 } KeyValue;
 
-DARRAY_DECLARE(ToolFunctionArray, ToolFunction)
 DARRAY_DECLARE(KeyValueArray, KeyValue)
 
 typedef struct MCPServerConfig {

@@ -551,7 +551,7 @@ int manage_conversation_tokens(RalphSession* session, const char* user_message,
         return -1;
     }
     
-    session->session_data.tool_count = session->tools.function_count;
+    session->session_data.tool_count = session->tools.functions.count;
 
     int result = calculate_token_allocation(&session->session_data, user_message, config, usage);
     if (result != 0) {

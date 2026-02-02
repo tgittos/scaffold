@@ -27,8 +27,8 @@ void test_python_interpreter_init_succeeds(void) {
 // Test tool registration and execution through the tool registry
 void test_python_tool_through_registry(void) {
     TEST_ASSERT_EQUAL_INT(0, register_python_tool(&registry));
-    TEST_ASSERT_EQUAL_INT(1, registry.function_count);
-    TEST_ASSERT_EQUAL_STRING("python", registry.functions[0].name);
+    TEST_ASSERT_EQUAL_INT(1, registry.functions.count);
+    TEST_ASSERT_EQUAL_STRING("python", registry.functions.data[0].name);
 
     ToolCall call = {
         .id = "registry-test-1",
@@ -317,15 +317,15 @@ void test_python_tool_docstring_parsing(void) {
 
     // Find the apply_delta tool
     int found_apply_delta = 0;
-    for (int i = 0; i < file_registry.function_count; i++) {
-        if (strcmp(file_registry.functions[i].name, "apply_delta") == 0) {
+    for (size_t i = 0; i < file_registry.functions.count; i++) {
+        if (strcmp(file_registry.functions.data[i].name, "apply_delta") == 0) {
             found_apply_delta = 1;
 
             // Check that 'operations' parameter has a real description
             // (not just "operations" which was the old broken behavior)
-            for (int j = 0; j < file_registry.functions[i].parameter_count; j++) {
-                if (strcmp(file_registry.functions[i].parameters[j].name, "operations") == 0) {
-                    const char *desc = file_registry.functions[i].parameters[j].description;
+            for (int j = 0; j < file_registry.functions.data[i].parameter_count; j++) {
+                if (strcmp(file_registry.functions.data[i].parameters[j].name, "operations") == 0) {
+                    const char *desc = file_registry.functions.data[i].parameters[j].description;
                     TEST_ASSERT_NOT_NULL(desc);
                     // Description should contain details about the operations format
                     TEST_ASSERT_NOT_NULL_MESSAGE(

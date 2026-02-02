@@ -19,9 +19,9 @@ void tearDown(void) {
 
 /* Helper to find a tool by name in the registry */
 static ToolFunction *find_tool(ToolRegistry *reg, const char *name) {
-    for (int i = 0; i < reg->function_count; i++) {
-        if (strcmp(reg->functions[i].name, name) == 0) {
-            return &reg->functions[i];
+    for (size_t i = 0; i < reg->functions.count; i++) {
+        if (strcmp(reg->functions.data[i].name, name) == 0) {
+            return &reg->functions.data[i];
         }
     }
     return NULL;

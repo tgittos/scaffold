@@ -9,14 +9,14 @@
 #include <stdio.h>
 
 static char *openai_generate_tools_json(const ToolRegistry *registry) {
-    if (registry == NULL || registry->function_count == 0) {
+    if (registry == NULL || registry->functions.count == 0) {
         return NULL;
     }
 
     size_t required_size = 2;
 
-    for (int i = 0; i < registry->function_count; i++) {
-        const ToolFunction *func = &registry->functions[i];
+    for (size_t i = 0; i < registry->functions.count; i++) {
+        const ToolFunction *func = &registry->functions.data[i];
         required_size += strlen(func->name) + strlen(func->description) + 200;
 
         if (i > 0) required_size += 2;
@@ -52,8 +52,8 @@ static char *openai_generate_tools_json(const ToolRegistry *registry) {
     }
     pos += ret;
 
-    for (int i = 0; i < registry->function_count; i++) {
-        const ToolFunction *func = &registry->functions[i];
+    for (size_t i = 0; i < registry->functions.count; i++) {
+        const ToolFunction *func = &registry->functions.data[i];
 
         if (i > 0) {
             ret = snprintf(json + pos, required_size - pos, ", ");

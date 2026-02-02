@@ -2,6 +2,7 @@
 #define TOOLS_SYSTEM_H
 
 #include <stddef.h>
+#include "../utils/darray.h"
 
 /**
  * Structure representing a tool parameter
@@ -48,12 +49,13 @@ typedef struct {
     tool_execute_func_t execute_func;  // Function pointer for tool execution
 } ToolFunction;
 
+DARRAY_DECLARE(ToolFunctionArray, ToolFunction)
+
 /**
  * Structure containing all available tools
  */
 typedef struct {
-    ToolFunction *functions;
-    int function_count;
+    ToolFunctionArray functions;
 } ToolRegistry;
 
 /**

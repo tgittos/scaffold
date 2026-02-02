@@ -104,7 +104,7 @@ void test_ralph_init_and_cleanup_session(void) {
     // Verify session was initialized
     // Note: conversation.count may be > 0 due to loaded conversation history
     // (count is size_t, always >= 0, so just verify tools loaded)
-    TEST_ASSERT_TRUE(session.tools.function_count > 0); // Should have built-in tools
+    TEST_ASSERT_TRUE(session.tools.functions.count > 0); // Should have built-in tools
     
     // Cleanup should work without errors
     ralph_cleanup_session(&session);

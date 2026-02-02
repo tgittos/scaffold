@@ -19,20 +19,20 @@ void test_register_python_tool(void) {
     init_tool_registry(&registry);
 
     TEST_ASSERT_EQUAL_INT(0, register_python_tool(&registry));
-    TEST_ASSERT_EQUAL_INT(1, registry.function_count);
-    TEST_ASSERT_NOT_NULL(registry.functions);
-    TEST_ASSERT_EQUAL_STRING("python", registry.functions[0].name);
-    TEST_ASSERT_NOT_NULL(registry.functions[0].description);
-    TEST_ASSERT_EQUAL_INT(2, registry.functions[0].parameter_count);
+    TEST_ASSERT_EQUAL_INT(1, registry.functions.count);
+    TEST_ASSERT_NOT_NULL(registry.functions.data);
+    TEST_ASSERT_EQUAL_STRING("python", registry.functions.data[0].name);
+    TEST_ASSERT_NOT_NULL(registry.functions.data[0].description);
+    TEST_ASSERT_EQUAL_INT(2, registry.functions.data[0].parameter_count);
 
     // Check parameters
-    TEST_ASSERT_EQUAL_STRING("code", registry.functions[0].parameters[0].name);
-    TEST_ASSERT_EQUAL_STRING("string", registry.functions[0].parameters[0].type);
-    TEST_ASSERT_EQUAL_INT(1, registry.functions[0].parameters[0].required);
+    TEST_ASSERT_EQUAL_STRING("code", registry.functions.data[0].parameters[0].name);
+    TEST_ASSERT_EQUAL_STRING("string", registry.functions.data[0].parameters[0].type);
+    TEST_ASSERT_EQUAL_INT(1, registry.functions.data[0].parameters[0].required);
 
-    TEST_ASSERT_EQUAL_STRING("timeout", registry.functions[0].parameters[1].name);
-    TEST_ASSERT_EQUAL_STRING("number", registry.functions[0].parameters[1].type);
-    TEST_ASSERT_EQUAL_INT(0, registry.functions[0].parameters[1].required);
+    TEST_ASSERT_EQUAL_STRING("timeout", registry.functions.data[0].parameters[1].name);
+    TEST_ASSERT_EQUAL_STRING("number", registry.functions.data[0].parameters[1].type);
+    TEST_ASSERT_EQUAL_INT(0, registry.functions.data[0].parameters[1].required);
 
     cleanup_tool_registry(&registry);
 }

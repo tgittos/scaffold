@@ -21,11 +21,13 @@ void tearDown(void) {
 
 void test_init_tool_registry(void) {
     ToolRegistry registry;
-    
+
     init_tool_registry(&registry);
-    
-    TEST_ASSERT_NULL(registry.functions);
-    TEST_ASSERT_EQUAL(0, registry.function_count);
+
+    TEST_ASSERT_NOT_NULL(registry.functions.data);
+    TEST_ASSERT_EQUAL(0, registry.functions.count);
+
+    cleanup_tool_registry(&registry);
 }
 
 void test_init_tool_registry_with_null(void) {
@@ -309,15 +311,15 @@ void test_generate_tool_results_json_with_null_parameters(void) {
 void test_cleanup_tool_registry(void) {
     ToolRegistry registry;
     init_tool_registry(&registry);
-    
+
     // No tools registered, test cleanup of empty registry
-    TEST_ASSERT_EQUAL(0, registry.function_count);
-    TEST_ASSERT_NULL(registry.functions);
-    
+    TEST_ASSERT_EQUAL(0, registry.functions.count);
+    TEST_ASSERT_NOT_NULL(registry.functions.data);
+
     cleanup_tool_registry(&registry);
-    
-    TEST_ASSERT_EQUAL(0, registry.function_count);
-    TEST_ASSERT_NULL(registry.functions);
+
+    TEST_ASSERT_EQUAL(0, registry.functions.count);
+    TEST_ASSERT_NULL(registry.functions.data);
 }
 
 void test_cleanup_tool_registry_with_null(void) {

@@ -37,11 +37,13 @@ See `@ARCHITECTURE.md` and `@CODE_OVERVIEW.md` for design docs. Use `ripgrep` to
 
 **Makefile changes**: Maintain structure and organization for AI readability. 
 
+**Fast tests**: Use mocks for external APIs in tests where possible.
+
+**Segfaults are critical**: Fix segfaults immediately using all debugging tools at your disposal.
+
 ## Testing
 
 **TDD workflow**: Write a failing test first, then implement to make it pass.
-
-### Running Tests
 
 **Build first**: Always run `make` before running tests. Tests require compiled binaries.
 
@@ -57,12 +59,6 @@ make test/test_<name> && ./test/test_<name>
 ./scripts/run_tests.sh -q     # Summary only
 ./scripts/run_tests.sh foo    # Pattern match
 ```
-
-Use mocks where possible. Integration tests connect to real LLM APIs - upstream errors are **your code's fault**.
-
-**Segfaults are critical** - fix immediately using valgrind. Work is incomplete without tests and valgrind check.
-
-**You own all failures** - You are the sole programmer. ALL test failures and valgrind errors are your responsibility to fix, even if they appear unrelated to your current changes.
 
 ### Valgrind Exclusions
 

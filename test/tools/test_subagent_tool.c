@@ -763,7 +763,7 @@ void test_register_subagent_tools(void) {
     TEST_ASSERT_EQUAL_INT(0, register_subagent_status_tool(&registry, &manager));
 
     // Verify tools are registered
-    TEST_ASSERT_EQUAL_INT(2, registry.function_count);
+    TEST_ASSERT_EQUAL_INT(2, registry.functions.count);
 
     cleanup_tool_registry(&registry);
     subagent_manager_cleanup(&manager);

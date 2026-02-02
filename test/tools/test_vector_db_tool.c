@@ -92,7 +92,7 @@ void test_register_vector_db_tool(void) {
     TEST_ASSERT_EQUAL_INT(0, result);
     
     // Should have registered 13 tools (added search_text and search_by_time)
-    TEST_ASSERT_EQUAL_INT(13, registry.function_count);
+    TEST_ASSERT_EQUAL_INT(13, registry.functions.count);
     
     // Check tool names
     const char *expected_tools[] = {
@@ -110,7 +110,7 @@ void test_register_vector_db_tool(void) {
     };
     
     for (int i = 0; i < 11; i++) {
-        TEST_ASSERT_EQUAL_STRING(expected_tools[i], registry.functions[i].name);
+        TEST_ASSERT_EQUAL_STRING(expected_tools[i], registry.functions.data[i].name);
     }
     
     cleanup_tool_registry(&registry);

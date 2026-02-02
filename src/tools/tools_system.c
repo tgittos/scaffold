@@ -14,54 +14,63 @@
 #include <stdlib.h>
 #include <string.h>
 
+DARRAY_DEFINE(ToolFunctionArray, ToolFunction)
+
+static void free_tool_function_contents(ToolFunction *func) {
+    if (!func) return;
+    free(func->name);
+    free(func->description);
+    for (int j = 0; j < func->parameter_count; j++) {
+        ToolParameter *param = &func->parameters[j];
+        free(param->name);
+        free(param->type);
+        free(param->description);
+        free(param->items_schema);
+        for (int k = 0; k < param->enum_count; k++) {
+            free(param->enum_values[k]);
+        }
+        free(param->enum_values);
+    }
+    free(func->parameters);
+}
+
 void init_tool_registry(ToolRegistry *registry) {
     if (registry == NULL) {
         return;
     }
-    
-    registry->functions = NULL;
-    registry->function_count = 0;
+    ToolFunctionArray_init(&registry->functions);
 }
 
-int register_tool(ToolRegistry *registry, const char *name, const char *description, 
+int register_tool(ToolRegistry *registry, const char *name, const char *description,
                   ToolParameter *parameters, int param_count, tool_execute_func_t execute_func) {
     if (registry == NULL || name == NULL || description == NULL || execute_func == NULL) {
         return -1;
     }
-    
-    ToolFunction *new_functions = realloc(registry->functions,
-                                          (registry->function_count + 1) * sizeof(ToolFunction));
-    if (new_functions == NULL) {
+
+    ToolFunction func = {0};
+    func.name = strdup(name);
+    func.description = strdup(description);
+    func.parameter_count = param_count;
+    func.execute_func = execute_func;
+
+    if (func.name == NULL || func.description == NULL) {
+        free(func.name);
+        free(func.description);
         return -1;
     }
-    
-    registry->functions = new_functions;
-    ToolFunction *func = &registry->functions[registry->function_count];
-    
-    func->name = strdup(name);
-    func->description = strdup(description);
-    func->parameter_count = param_count;
-    func->execute_func = execute_func;
-    
-    if (func->name == NULL || func->description == NULL) {
-        free(func->name);
-        free(func->description);
-        return -1;
-    }
-    
+
     if (param_count > 0 && parameters != NULL) {
-        func->parameters = malloc(param_count * sizeof(ToolParameter));
-        if (func->parameters == NULL) {
-            free(func->name);
-            free(func->description);
+        func.parameters = malloc(param_count * sizeof(ToolParameter));
+        if (func.parameters == NULL) {
+            free(func.name);
+            free(func.description);
             return -1;
         }
-        
 
         for (int i = 0; i < param_count; i++) {
             ToolParameter *src_param = &parameters[i];
-            ToolParameter *dst_param = &func->parameters[i];
-            
+            ToolParameter *dst_param = &func.parameters[i];
+
             dst_param->name = strdup(src_param->name);
             dst_param->type = strdup(src_param->type);
             dst_param->description = strdup(src_param->description);
@@ -70,62 +79,61 @@ int register_tool(ToolRegistry *registry, const char *name, const char *descript
             dst_param->items_schema = src_param->items_schema ? strdup(src_param->items_schema) : NULL;
 
             if (dst_param->name == NULL || dst_param->type == NULL || dst_param->description == NULL) {
-
                 for (int j = 0; j <= i; j++) {
-                    free(func->parameters[j].name);
-                    free(func->parameters[j].type);
-                    free(func->parameters[j].description);
+                    free(func.parameters[j].name);
+                    free(func.parameters[j].type);
+                    free(func.parameters[j].description);
+                    free(func.parameters[j].items_schema);
                 }
-                free(func->parameters);
-                free(func->name);
-                free(func->description);
+                free(func.parameters);
+                free(func.name);
+                free(func.description);
                 return -1;
             }
-            
 
             if (src_param->enum_count > 0 && src_param->enum_values != NULL) {
                 dst_param->enum_values = malloc(src_param->enum_count * sizeof(char*));
                 if (dst_param->enum_values == NULL) {
-    
                     for (int j = 0; j <= i; j++) {
-                        free(func->parameters[j].name);
-                        free(func->parameters[j].type);
-                        free(func->parameters[j].description);
-                        if (j < i && func->parameters[j].enum_values != NULL) {
-                            for (int k = 0; k < func->parameters[j].enum_count; k++) {
-                                free(func->parameters[j].enum_values[k]);
+                        free(func.parameters[j].name);
+                        free(func.parameters[j].type);
+                        free(func.parameters[j].description);
+                        free(func.parameters[j].items_schema);
+                        if (j < i && func.parameters[j].enum_values != NULL) {
+                            for (int k = 0; k < func.parameters[j].enum_count; k++) {
+                                free(func.parameters[j].enum_values[k]);
                             }
-                            free(func->parameters[j].enum_values);
+                            free(func.parameters[j].enum_values);
                         }
                     }
-                    free(func->parameters);
-                    free(func->name);
-                    free(func->description);
+                    free(func.parameters);
+                    free(func.name);
+                    free(func.description);
                     return -1;
                 }
-                
+
                 for (int j = 0; j < src_param->enum_count; j++) {
                     dst_param->enum_values[j] = strdup(src_param->enum_values[j]);
                     if (dst_param->enum_values[j] == NULL) {
-        
                         for (int k = 0; k < j; k++) {
                             free(dst_param->enum_values[k]);
                         }
                         free(dst_param->enum_values);
                         for (int k = 0; k <= i; k++) {
-                            free(func->parameters[k].name);
-                            free(func->parameters[k].type);
-                            free(func->parameters[k].description);
-                            if (k < i && func->parameters[k].enum_values != NULL) {
-                                for (int l = 0; l < func->parameters[k].enum_count; l++) {
-                                    free(func->parameters[k].enum_values[l]);
+                            free(func.parameters[k].name);
+                            free(func.parameters[k].type);
+                            free(func.parameters[k].description);
+                            free(func.parameters[k].items_schema);
+                            if (k < i && func.parameters[k].enum_values != NULL) {
+                                for (int l = 0; l < func.parameters[k].enum_count; l++) {
+                                    free(func.parameters[k].enum_values[l]);
                                 }
-                                free(func->parameters[k].enum_values);
+                                free(func.parameters[k].enum_values);
                             }
                         }
-                        free(func->parameters);
-                        free(func->name);
-                        free(func->description);
+                        free(func.parameters);
+                        free(func.name);
+                        free(func.description);
                         return -1;
                     }
                 }
@@ -134,10 +142,13 @@ int register_tool(ToolRegistry *registry, const char *name, const char *descript
             }
         }
     } else {
-        func->parameters = NULL;
+        func.parameters = NULL;
     }
-    
-    registry->function_count++;
+
+    if (ToolFunctionArray_push(&registry->functions, func) != 0) {
+        free_tool_function_contents(&func);
+        return -1;
+    }
     return 0;
 }
 
@@ -170,9 +181,9 @@ int execute_tool_call(const ToolRegistry *registry, const ToolCall *tool_call, T
         return -1;
     }
     
-    for (int i = 0; i < registry->function_count; i++) {
-        if (strcmp(registry->functions[i].name, tool_call->name) == 0) {
-            return registry->functions[i].execute_func(tool_call, result);
+    for (size_t i = 0; i < registry->functions.count; i++) {
+        if (strcmp(registry->functions.data[i].name, tool_call->name) == 0) {
+            return registry->functions.data[i].execute_func(tool_call, result);
         }
     }
 
@@ -305,48 +316,11 @@ void cleanup_tool_registry(ToolRegistry *registry) {
     if (registry == NULL) {
         return;
     }
-    
-    /* Bounds check guards against corrupted registry state from double-free or memory corruption */
-    if (registry->function_count < 0 || registry->function_count > 1000) {
-        return;
-    }
 
-    if (registry->function_count == 0) {
-        free(registry->functions);
-        registry->functions = NULL;
-        return;
+    for (size_t i = 0; i < registry->functions.count; i++) {
+        free_tool_function_contents(&registry->functions.data[i]);
     }
-
-    if (registry->functions == NULL) {
-        registry->function_count = 0;
-        return;
-    }
-    
-    for (int i = 0; i < registry->function_count; i++) {
-        ToolFunction *func = &registry->functions[i];
-        
-        free(func->name);
-        free(func->description);
-        
-        for (int j = 0; j < func->parameter_count; j++) {
-            ToolParameter *param = &func->parameters[j];
-            free(param->name);
-            free(param->type);
-            free(param->description);
-            free(param->items_schema);
-
-            for (int k = 0; k < param->enum_count; k++) {
-                free(param->enum_values[k]);
-            }
-            free(param->enum_values);
-        }
-        
-        free(func->parameters);
-    }
-    
-    free(registry->functions);
-    registry->functions = NULL;
-    registry->function_count = 0;
+    ToolFunctionArray_destroy(&registry->functions);
 }
 
 void cleanup_tool_calls(ToolCall *tool_calls, int call_count) {

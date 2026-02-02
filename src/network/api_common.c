@@ -37,8 +37,8 @@ size_t calculate_json_payload_size(const char* model, const char* system_prompt,
     }
 
     size_t tools_len = 0;
-    if (tools != NULL && tools->function_count > 0) {
-        tools_len = tools->function_count * 500;
+    if (tools != NULL && tools->functions.count > 0) {
+        tools_len = tools->functions.count * 500;
     }
 
     size_t total = base_size;
@@ -350,7 +350,7 @@ char* build_json_payload_common(const char* model, const char* system_prompt,
         remaining -= written;
     }
 
-    if (tools != NULL && tools->function_count > 0 && model) {
+    if (tools != NULL && tools->functions.count > 0 && model) {
         ModelRegistry* registry = get_model_registry();
         if (registry) {
             char* tools_json = generate_model_tools_json(registry, model, tools);

@@ -8,7 +8,6 @@
 #include <string.h>
 #include <unistd.h>
 
-DARRAY_DEFINE(ToolFunctionArray, ToolFunction)
 DARRAY_DEFINE(KeyValueArray, KeyValue)
 DARRAY_DEFINE(MCPServerConfigArray, MCPServerConfig)
 DARRAY_DEFINE(MCPServerStateArray, MCPServerState)
@@ -735,29 +734,23 @@ int mcp_client_register_tools(MCPClient* client, ToolRegistry* registry) {
                     char prefixed_name[256];
                     snprintf(prefixed_name, sizeof(prefixed_name), "mcp_%s_%s", server->config->name, tool->name);
 
-                    ToolFunction* new_functions = realloc(registry->functions,
-                                                         (registry->function_count + 1) * sizeof(ToolFunction));
-                    if (!new_functions) {
-                        debug_printf("Failed to grow tool registry for MCP tool: %s\n", prefixed_name);
-                        break;
-                    }
-                    registry->functions = new_functions;
-
-                    ToolFunction* reg_tool = &registry->functions[registry->function_count];
-                    memset(reg_tool, 0, sizeof(ToolFunction));
-
-                    reg_tool->name = strdup(prefixed_name);
-                    if (!reg_tool->name) {
+                    ToolFunction reg_tool = {0};
+                    reg_tool.name = strdup(prefixed_name);
+                    if (!reg_tool.name) {
                         debug_printf("Failed to allocate memory for tool name: %s\n", prefixed_name);
                         continue;
                     }
-                    reg_tool->description = tool->description ? strdup(tool->description) : NULL;
+                    reg_tool.description = tool->description ? strdup(tool->description) : NULL;
                     /* NULL execute_func signals MCP dispatch via mcp_client_execute_tool */
-                    reg_tool->execute_func = NULL;
-                    reg_tool->parameter_count = tool->parameter_count;
-                    reg_tool->parameters = deep_copy_parameters(tool->parameters, tool->parameter_count);
+                    reg_tool.execute_func = NULL;
+                    reg_tool.parameter_count = tool->parameter_count;
+                    reg_tool.parameters = deep_copy_parameters(tool->parameters, tool->parameter_count);
 
-                    registry->function_count++;
+                    if (ToolFunctionArray_push(&registry->functions, reg_tool) != 0) {
+                        debug_printf("Failed to grow tool registry for MCP tool: %s\n", prefixed_name);
+                        free_tool_function(&reg_tool);
+                        break;
+                    }
 
                     debug_printf("Registered MCP tool: %s\n", prefixed_name);
                 }

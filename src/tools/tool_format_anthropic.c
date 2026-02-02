@@ -9,7 +9,7 @@
 #include <stdio.h>
 
 static char *anthropic_generate_tools_json(const ToolRegistry *registry) {
-    if (registry == NULL || registry->function_count == 0) {
+    if (registry == NULL || registry->functions.count == 0) {
         return NULL;
     }
 
@@ -18,8 +18,8 @@ static char *anthropic_generate_tools_json(const ToolRegistry *registry) {
         return NULL;
     }
 
-    for (int i = 0; i < registry->function_count; i++) {
-        const ToolFunction *func = &registry->functions[i];
+    for (size_t i = 0; i < registry->functions.count; i++) {
+        const ToolFunction *func = &registry->functions.data[i];
 
         cJSON *tool = cJSON_CreateObject();
         if (tool == NULL) {

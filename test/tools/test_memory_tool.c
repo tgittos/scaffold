@@ -102,36 +102,36 @@ void test_register_memory_tools(void) {
     ToolRegistry registry = {0};
     init_tool_registry(&registry);
 
-    int initial_count = registry.function_count;
+    int initial_count = registry.functions.count;
     int result = register_memory_tools(&registry);
     TEST_ASSERT_EQUAL_INT(0, result);
 
     // Should have registered 3 tools
-    TEST_ASSERT_EQUAL_INT(initial_count + 3, registry.function_count);
+    TEST_ASSERT_EQUAL_INT(initial_count + 3, registry.functions.count);
 
     // Check tool names
     int found_remember = 0;
     int found_recall = 0;
     int found_forget = 0;
 
-    for (int i = 0; i < registry.function_count; i++) {
-        if (strcmp(registry.functions[i].name, "remember") == 0) {
+    for (size_t i = 0; i < registry.functions.count; i++) {
+        if (strcmp(registry.functions.data[i].name, "remember") == 0) {
             found_remember = 1;
             TEST_ASSERT_EQUAL_STRING("Store important information in long-term memory for future reference",
-                                   registry.functions[i].description);
-            TEST_ASSERT_EQUAL_INT(4, registry.functions[i].parameter_count);
+                                   registry.functions.data[i].description);
+            TEST_ASSERT_EQUAL_INT(4, registry.functions.data[i].parameter_count);
         }
-        if (strcmp(registry.functions[i].name, "recall_memories") == 0) {
+        if (strcmp(registry.functions.data[i].name, "recall_memories") == 0) {
             found_recall = 1;
             TEST_ASSERT_EQUAL_STRING("Search and retrieve relevant memories based on a query",
-                                   registry.functions[i].description);
-            TEST_ASSERT_EQUAL_INT(2, registry.functions[i].parameter_count);
+                                   registry.functions.data[i].description);
+            TEST_ASSERT_EQUAL_INT(2, registry.functions.data[i].parameter_count);
         }
-        if (strcmp(registry.functions[i].name, "forget_memory") == 0) {
+        if (strcmp(registry.functions.data[i].name, "forget_memory") == 0) {
             found_forget = 1;
             TEST_ASSERT_EQUAL_STRING("Delete a specific memory from long-term storage by its ID",
-                                   registry.functions[i].description);
-            TEST_ASSERT_EQUAL_INT(1, registry.functions[i].parameter_count);
+                                   registry.functions.data[i].description);
+            TEST_ASSERT_EQUAL_INT(1, registry.functions.data[i].parameter_count);
         }
     }
 
