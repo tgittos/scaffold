@@ -445,14 +445,6 @@ void cleanup_parsed_response(ParsedResponse *response) {
     }
 }
 
-#define ANSI_CYAN    "\033[36m"
-#define ANSI_GREEN   "\033[32m"
-#define ANSI_RED     "\033[31m"
-#define ANSI_YELLOW  "\033[33m"
-#define ANSI_BOLD    "\033[1m"
-
-#define SEPARATOR_LIGHT "────────────────────────────────────────"
-#define SEPARATOR_HEAVY "════════════════════════════════════════"
 
 static bool system_info_group_active = false;
 
@@ -467,7 +459,7 @@ void print_formatted_response_improved(const ParsedResponse *response) {
     }
 
     if (response->thinking_content) {
-        printf(ANSI_DIM ANSI_GRAY "%s" ANSI_RESET "\n\n", response->thinking_content);
+        printf(TERM_DIM TERM_GRAY "%s" TERM_RESET "\n\n", response->thinking_content);
     }
 
     if (response->response_content) {
@@ -475,10 +467,10 @@ void print_formatted_response_improved(const ParsedResponse *response) {
 
         if (response->total_tokens > 0) {
             if (response->prompt_tokens > 0 && response->completion_tokens > 0) {
-                printf(ANSI_DIM "    └─ %d tokens (%d prompt + %d completion)\n" ANSI_RESET,
+                printf(TERM_DIM "    └─ %d tokens (%d prompt + %d completion)\n" TERM_RESET,
                        response->total_tokens, response->prompt_tokens, response->completion_tokens);
             } else {
-                printf(ANSI_DIM "    └─ %d tokens\n" ANSI_RESET, response->total_tokens);
+                printf(TERM_DIM "    └─ %d tokens\n" TERM_RESET, response->total_tokens);
             }
         }
 
@@ -504,7 +496,7 @@ static bool is_informational_check(const char *tool_name, const char *arguments)
 
 #define ARG_DISPLAY_MAX_LEN 50
 
-static char* extract_arg_summary(const char *tool_name, const char *arguments) {
+char* extract_arg_summary(const char *tool_name, const char *arguments) {
     if (!arguments || strlen(arguments) == 0) {
         return NULL;
     }
@@ -696,7 +688,7 @@ void log_tool_execution_improved(const char *tool_name, const char *arguments, b
             snprintf(summary, sizeof(summary), "updated");
         }
 
-        printf(ANSI_GREEN "✓" ANSI_RESET " TodoWrite" ANSI_DIM " (%s)" ANSI_RESET "\n\n", summary);
+        printf(TERM_GREEN "✓" TERM_RESET " TodoWrite" TERM_DIM " (%s)" TERM_RESET "\n\n", summary);
         fflush(stdout);
         return;
     }
@@ -715,16 +707,16 @@ void log_tool_execution_improved(const char *tool_name, const char *arguments, b
     }
 
     if (success) {
-        printf(ANSI_GREEN "✓" ANSI_RESET " %s" ANSI_DIM "%s" ANSI_RESET "\n\n", tool_name, context);
+        printf(TERM_GREEN "✓" TERM_RESET " %s" TERM_DIM "%s" TERM_RESET "\n\n", tool_name, context);
     } else if (is_info_check) {
-        printf(ANSI_YELLOW "◦" ANSI_RESET " %s" ANSI_DIM "%s" ANSI_RESET "\n\n", tool_name, context);
+        printf(TERM_YELLOW "◦" TERM_RESET " %s" TERM_DIM "%s" TERM_RESET "\n\n", tool_name, context);
     } else {
-        printf(ANSI_RED "✗" ANSI_RESET " %s" ANSI_DIM "%s" ANSI_RESET "\n", tool_name, context);
+        printf(TERM_RED "✗" TERM_RESET " %s" TERM_DIM "%s" TERM_RESET "\n", tool_name, context);
         if (result && strlen(result) > 0) {
             if (strlen(result) > 70) {
-                printf(ANSI_RED "  └─ Error: %.67s..." ANSI_RESET "\n\n", result);
+                printf(TERM_RED "  └─ Error: %.67s..." TERM_RESET "\n\n", result);
             } else {
-                printf(ANSI_RED "  └─ Error: %s" ANSI_RESET "\n\n", result);
+                printf(TERM_RED "  └─ Error: %s" TERM_RESET "\n\n", result);
             }
         } else {
             printf("\n");
@@ -740,8 +732,8 @@ void display_system_info_group_start(void) {
     }
 
     if (!system_info_group_active) {
-        printf("\n" ANSI_YELLOW ANSI_BOLD "▼ System Information" ANSI_RESET "\n");
-        printf(ANSI_YELLOW SEPARATOR_LIGHT ANSI_RESET "\n");
+        printf("\n" TERM_YELLOW TERM_BOLD "▼ System Information" TERM_RESET "\n");
+        printf(TERM_YELLOW TERM_SEP_LIGHT_40 TERM_RESET "\n");
         system_info_group_active = true;
     }
 }
@@ -763,7 +755,7 @@ void log_system_info(const char *category, const char *message) {
         return;
     }
 
-    printf(ANSI_YELLOW "  %s:" ANSI_RESET " %s\n", category, message);
+    printf(TERM_YELLOW "  %s:" TERM_RESET " %s\n", category, message);
     fflush(stdout);
 }
 
@@ -781,7 +773,7 @@ void display_streaming_init(void) {
     }
 
     streaming_first_chunk = 1;
-    fprintf(stdout, "\033[36m•\033[0m ");
+    fprintf(stdout, TERM_CYAN TERM_SYM_ACTIVE TERM_RESET " ");
     fflush(stdout);
 }
 
@@ -795,7 +787,7 @@ void display_streaming_text(const char* text, size_t len) {
     }
 
     if (streaming_first_chunk) {
-        fprintf(stdout, "\r\033[K");
+        fprintf(stdout, TERM_CLEAR_LINE);
         streaming_first_chunk = 0;
     }
     fwrite(text, 1, len, stdout);
@@ -812,12 +804,12 @@ void display_streaming_thinking(const char* text, size_t len) {
     }
 
     if (streaming_first_chunk) {
-        fprintf(stdout, "\r\033[K");
+        fprintf(stdout, TERM_CLEAR_LINE);
         streaming_first_chunk = 0;
     }
-    printf(ANSI_DIM ANSI_GRAY);
+    printf(TERM_DIM TERM_GRAY);
     fwrite(text, 1, len, stdout);
-    printf(ANSI_RESET);
+    printf(TERM_RESET);
     fflush(stdout);
 }
 
@@ -831,7 +823,7 @@ void display_streaming_tool_start(const char* tool_name) {
     }
 
     if (streaming_first_chunk) {
-        fprintf(stdout, "\r\033[K");
+        fprintf(stdout, TERM_CLEAR_LINE);
         streaming_first_chunk = 0;
     }
     (void)tool_name; // Tool info shown by log_tool_execution_improved instead
@@ -845,11 +837,11 @@ void display_streaming_complete(int input_tokens, int output_tokens) {
 
     if (input_tokens > 0 || output_tokens > 0) {
         int total_tokens = input_tokens + output_tokens;
-        printf("\n" ANSI_DIM "    └─ %d tokens", total_tokens);
+        printf("\n" TERM_DIM "    └─ %d tokens", total_tokens);
         if (input_tokens > 0 && output_tokens > 0) {
             printf(" (%d prompt + %d completion)", input_tokens, output_tokens);
         }
-        printf(ANSI_RESET "\n");
+        printf(TERM_RESET "\n");
     }
 
     fflush(stdout);
@@ -860,10 +852,10 @@ void display_streaming_error(const char* error) {
         return;
     }
     if (streaming_first_chunk) {
-        fprintf(stdout, "\r\033[K");
+        fprintf(stdout, TERM_CLEAR_LINE);
         streaming_first_chunk = 0;
     }
-    fprintf(stderr, "\n" ANSI_RED "Error: %s" ANSI_RESET "\n", error);
+    fprintf(stderr, "\n" TERM_RED "Error: %s" TERM_RESET "\n", error);
     fflush(stderr);
 }
 
@@ -876,11 +868,11 @@ void display_message_notification(int count) {
         return;
     }
 
-    fprintf(stdout, "\n\r\033[K" ANSI_YELLOW "● " ANSI_RESET);
+    fprintf(stdout, "\n" TERM_CLEAR_LINE TERM_YELLOW TERM_SYM_ACTIVE " " TERM_RESET);
     if (count == 1) {
-        fprintf(stdout, ANSI_YELLOW "1 new message" ANSI_RESET "\n\n");
+        fprintf(stdout, TERM_YELLOW "1 new message" TERM_RESET "\n\n");
     } else {
-        fprintf(stdout, ANSI_YELLOW "%d new messages" ANSI_RESET "\n\n", count);
+        fprintf(stdout, TERM_YELLOW "%d new messages" TERM_RESET "\n\n", count);
     }
     fflush(stdout);
 }
@@ -890,7 +882,7 @@ void display_message_notification_clear(void) {
         return;
     }
 
-    fprintf(stdout, "\r\033[K");
+    fprintf(stdout, TERM_CLEAR_LINE);
     fflush(stdout);
 }
 
@@ -937,7 +929,7 @@ void log_subagent_approval(const char *subagent_id,
         }
     }
 
-    printf(ANSI_DIM ANSI_GRAY "  ↳ [%s] %s%s → %s" ANSI_RESET "\n",
+    printf(TERM_DIM TERM_GRAY "  ↳ [%s] %s%s → %s" TERM_RESET "\n",
            short_id, tool_name, detail, result_text);
     fflush(stdout);
 }

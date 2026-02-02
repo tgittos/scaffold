@@ -2,6 +2,7 @@
 #include "../db/vector_db_service.h"
 #include "../db/metadata_store.h"
 #include "../llm/embeddings_service.h"
+#include "../utils/terminal.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,15 +11,15 @@
 #include <errno.h>
 
 static void print_help(void) {
-    printf("\n📚 \033[1mMemory Management Commands\033[0m\n");
-    printf("────────────────────────────\n");
-    printf("\033[1m/memory list [index]\033[0m - List all chunks (optionally from specific index)\n");
-    printf("\033[1m/memory search <query>\033[0m - Search chunks by content or metadata\n");
-    printf("\033[1m/memory show <chunk_id>\033[0m - Show details of a specific chunk\n");
-    printf("\033[1m/memory edit <chunk_id> <field> <value>\033[0m - Edit chunk metadata\n");
-    printf("\033[1m/memory indices\033[0m - List all available indices\n");
-    printf("\033[1m/memory stats [index]\033[0m - Show statistics for an index\n");
-    printf("\033[1m/memory help\033[0m - Show this help message\n\n");
+    printf("\n" TERM_BOLD "Memory Management Commands" TERM_RESET "\n");
+    printf(TERM_SEP_LIGHT_40 "\n");
+    printf(TERM_BOLD "/memory list [index]" TERM_RESET " - List all chunks (optionally from specific index)\n");
+    printf(TERM_BOLD "/memory search <query>" TERM_RESET " - Search chunks by content or metadata\n");
+    printf(TERM_BOLD "/memory show <chunk_id>" TERM_RESET " - Show details of a specific chunk\n");
+    printf(TERM_BOLD "/memory edit <chunk_id> <field> <value>" TERM_RESET " - Edit chunk metadata\n");
+    printf(TERM_BOLD "/memory indices" TERM_RESET " - List all available indices\n");
+    printf(TERM_BOLD "/memory stats [index]" TERM_RESET " - Show statistics for an index\n");
+    printf(TERM_BOLD "/memory help" TERM_RESET " - Show this help message\n\n");
 }
 
 static char* format_timestamp(time_t timestamp) {
@@ -34,27 +35,27 @@ static char* format_timestamp(time_t timestamp) {
 
 static void print_chunk_summary(const ChunkMetadata* chunk) {
     if (chunk == NULL) return;
-    
+
     char* timestamp = format_timestamp(chunk->timestamp);
-    
-    printf("📄 \033[1mChunk #%zu\033[0m", chunk->chunk_id);
-    if (chunk->type) printf(" [\033[36m%s\033[0m]", chunk->type);
+
+    printf(TERM_BOLD "Chunk #%zu" TERM_RESET, chunk->chunk_id);
+    if (chunk->type) printf(" [" TERM_CYAN "%s" TERM_RESET "]", chunk->type);
     if (chunk->importance && strcmp(chunk->importance, "normal") != 0) {
         if (strcmp(chunk->importance, "high") == 0 || strcmp(chunk->importance, "critical") == 0) {
-            printf(" \033[31m⚠️  %s\033[0m", chunk->importance);
+            printf(" " TERM_RED "%s" TERM_RESET, chunk->importance);
         } else {
             printf(" [%s]", chunk->importance);
         }
     }
     printf("\n");
-    
+
     if (timestamp) {
-        printf("   📅 %s", timestamp);
+        printf("   %s", timestamp);
         free(timestamp);
     }
-    if (chunk->source) printf(" | 📍 %s", chunk->source);
+    if (chunk->source) printf(" | %s", chunk->source);
     printf("\n");
-    
+
     if (chunk->content) {
         size_t len = strlen(chunk->content);
         if (len > 100) {
@@ -68,35 +69,35 @@ static void print_chunk_summary(const ChunkMetadata* chunk) {
 
 static void print_chunk_details(const ChunkMetadata* chunk) {
     if (chunk == NULL) return;
-    
+
     char* timestamp = format_timestamp(chunk->timestamp);
-    
-    printf("\n═══════════════════════════════════════\n");
-    printf("📄 \033[1mChunk Details\033[0m\n");
-    printf("═══════════════════════════════════════\n");
-    printf("\033[1mID:\033[0m          %zu\n", chunk->chunk_id);
-    printf("\033[1mIndex:\033[0m       %s\n", chunk->index_name ? chunk->index_name : "unknown");
-    printf("\033[1mType:\033[0m        %s\n", chunk->type ? chunk->type : "general");
-    printf("\033[1mSource:\033[0m      %s\n", chunk->source ? chunk->source : "unknown");
-    printf("\033[1mImportance:\033[0m  %s\n", chunk->importance ? chunk->importance : "normal");
-    
+
+    printf("\n" TERM_SEP_HEAVY_40 "\n");
+    printf(TERM_BOLD "Chunk Details" TERM_RESET "\n");
+    printf(TERM_SEP_HEAVY_40 "\n");
+    printf(TERM_BOLD "ID:" TERM_RESET "          %zu\n", chunk->chunk_id);
+    printf(TERM_BOLD "Index:" TERM_RESET "       %s\n", chunk->index_name ? chunk->index_name : "unknown");
+    printf(TERM_BOLD "Type:" TERM_RESET "        %s\n", chunk->type ? chunk->type : "general");
+    printf(TERM_BOLD "Source:" TERM_RESET "      %s\n", chunk->source ? chunk->source : "unknown");
+    printf(TERM_BOLD "Importance:" TERM_RESET "  %s\n", chunk->importance ? chunk->importance : "normal");
+
     if (timestamp) {
-        printf("\033[1mTimestamp:\033[0m   %s\n", timestamp);
+        printf(TERM_BOLD "Timestamp:" TERM_RESET "   %s\n", timestamp);
         free(timestamp);
     }
-    
+
     if (chunk->custom_metadata) {
-        printf("\033[1mMetadata:\033[0m    %s\n", chunk->custom_metadata);
+        printf(TERM_BOLD "Metadata:" TERM_RESET "    %s\n", chunk->custom_metadata);
     }
-    
-    printf("\n\033[1mContent:\033[0m\n");
-    printf("───────────────────────────────────────\n");
+
+    printf("\n" TERM_BOLD "Content:" TERM_RESET "\n");
+    printf(TERM_SEP_LIGHT_40 "\n");
     if (chunk->content) {
         printf("%s\n", chunk->content);
     } else {
         printf("(no content)\n");
     }
-    printf("═══════════════════════════════════════\n\n");
+    printf(TERM_SEP_HEAVY_40 "\n\n");
 }
 
 static int cmd_list(const char* args) {
@@ -120,8 +121,8 @@ static int cmd_list(const char* args) {
         return 0;
     }
 
-    printf("\n📚 \033[1mMemories in '%s' (%zu total)\033[0m\n", index_name, count);
-    printf("════════════════════════════════════════\n\n");
+    printf("\n" TERM_BOLD "Memories in '%s' (%zu total)" TERM_RESET "\n", index_name, count);
+    printf(TERM_SEP_HEAVY_40 "\n\n");
 
     for (size_t i = 0; i < count; i++) {
         print_chunk_summary(chunks[i]);
@@ -153,8 +154,8 @@ static int cmd_search(const char* args) {
         return 0;
     }
     
-    printf("\n🔍 \033[1mSearch Results for '%s' (%zu matches)\033[0m\n", args, count);
-    printf("════════════════════════════════════════\n\n");
+    printf("\n" TERM_BOLD "Search Results for '%s' (%zu matches)" TERM_RESET "\n", args, count);
+    printf(TERM_SEP_HEAVY_40 "\n\n");
     
     for (size_t i = 0; i < count; i++) {
         print_chunk_summary(chunks[i]);
@@ -355,14 +356,14 @@ static int cmd_indices(const char* args) {
         return 0;
     }
     
-    printf("\n📚 \033[1mAvailable Indices (%zu total)\033[0m\n", count);
-    printf("════════════════════════════════════════\n");
-    
+    printf("\n" TERM_BOLD "Available Indices (%zu total)" TERM_RESET "\n", count);
+    printf(TERM_SEP_HEAVY_40 "\n");
+
     for (size_t i = 0; i < count; i++) {
         size_t size = vector_db_get_index_size(db, indices[i]);
         size_t capacity = vector_db_get_index_capacity(db, indices[i]);
-        
-        printf("📁 \033[1m%s\033[0m\n", indices[i]);
+
+        printf(TERM_BOLD "%s" TERM_RESET "\n", indices[i]);
         printf("   Vectors: %zu / %zu", size, capacity);
         
         if (capacity > 0) {
@@ -408,8 +409,8 @@ static int cmd_stats(const char* args) {
         }
     }
     
-    printf("\n📊 \033[1mStatistics for '%s'\033[0m\n", index_name);
-    printf("════════════════════════════════════════\n");
+    printf("\n" TERM_BOLD "Statistics for '%s'" TERM_RESET "\n", index_name);
+    printf(TERM_SEP_HEAVY_40 "\n");
     printf("📈 Vectors:      %zu / %zu", size, capacity);
     if (capacity > 0) {
         float usage = (float)size / capacity * 100;

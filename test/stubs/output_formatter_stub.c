@@ -20,3 +20,10 @@ void log_subagent_approval(const char *subagent_id,
     (void)display_summary;
     (void)result;
 }
+
+char *extract_arg_summary(const char *tool_name, const char *arguments) {
+    /* Stub: return NULL in tests */
+    (void)tool_name;
+    (void)arguments;
+    return NULL;
+}

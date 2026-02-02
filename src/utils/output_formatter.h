@@ -21,11 +21,7 @@ void set_json_output_mode(bool enabled);
  */
 bool get_json_output_mode(void);
 
-// ANSI color codes
-#define ANSI_RESET   "\033[0m"
-#define ANSI_GRAY    "\033[90m"
-#define ANSI_DIM     "\033[2m"
-#define ANSI_BLUE    "\033[34m"
+#include "terminal.h"
 
 typedef struct {
     char *thinking_content;  // Content inside <think> tags (optional)
@@ -86,13 +82,23 @@ void print_formatted_response_improved(const ParsedResponse *response);
 
 /**
  * Log tool execution with improved formatting and grouping
- * 
+ *
  * @param tool_name Name of the tool
  * @param arguments Tool arguments in JSON format
  * @param success Whether the tool execution was successful
  * @param result Result of the tool execution
  */
 void log_tool_execution_improved(const char *tool_name, const char *arguments, bool success, const char *result);
+
+/**
+ * Extract a summary string from tool arguments for display.
+ * Returns a newly allocated string (caller must free) or NULL.
+ *
+ * @param tool_name Name of the tool (used for context-specific extraction)
+ * @param arguments JSON string of tool arguments
+ * @return Allocated summary string or NULL
+ */
+char *extract_arg_summary(const char *tool_name, const char *arguments);
 
 /**
  * Display start of system info group with visual separator

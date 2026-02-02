@@ -372,7 +372,7 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
     debug_printf("POST data: %s\n\n", post_data);
 
     if (!session->session_data.config.json_output_mode) {
-        fprintf(stdout, "\033[36m•\033[0m ");
+        fprintf(stdout, TERM_CYAN TERM_SYM_ACTIVE TERM_RESET " ");
         fflush(stdout);
     }
 
@@ -398,7 +398,7 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
         }
         
         if (parse_result != 0) {
-            fprintf(stdout, "\r\033[K");
+            fprintf(stdout, TERM_CLEAR_LINE);
             fflush(stdout);
 
             if (strstr(response.data, "didn't provide an API key") != NULL ||
@@ -422,7 +422,7 @@ int ralph_process_message(RalphSession* session, const char* user_message) {
         }
         
         if (!session->session_data.config.json_output_mode) {
-            fprintf(stdout, "\r\033[K");
+            fprintf(stdout, TERM_CLEAR_LINE);
             fflush(stdout);
         }
         

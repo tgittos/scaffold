@@ -9,8 +9,19 @@
 #include <cJSON.h>
 #include "../../src/utils/ralph_home.h"
 
+#define TEST_HOME_DIR "/tmp/test_tool_calls_not_stored_home"
+
+static void cleanup_test_dir(void) {
+    /* Remove test directory to ensure clean state */
+    system("rm -rf " TEST_HOME_DIR);
+}
+
 void setUp(void) {
-    ralph_home_init(NULL);
+    /* Clean up any leftover state from previous runs */
+    cleanup_test_dir();
+
+    /* Use a unique test directory to avoid interference with other tests */
+    ralph_home_init(TEST_HOME_DIR);
     // Initialize config to load API key from environment
     config_init();
     // Clear any existing conversation data
@@ -24,6 +35,9 @@ void tearDown(void) {
     config_cleanup();
 
     ralph_home_cleanup();
+
+    /* Clean up test directory */
+    cleanup_test_dir();
 }
 
 /**

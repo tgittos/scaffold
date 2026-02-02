@@ -1,11 +1,8 @@
 #include "todo_display.h"
+#include "../utils/terminal.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#define ANSI_RESET "\033[0m"
-#define ANSI_GRAY  "\033[90m"
-#define ANSI_DIM   "\033[2m"
 
 static TodoDisplayConfig g_display_config = {
     .enabled = true,
@@ -25,10 +22,10 @@ static const char* get_status_symbol(TodoStatus status) {
 
 static const char* get_priority_color(TodoPriority priority) {
     switch (priority) {
-        case TODO_PRIORITY_HIGH:   return "\033[91m"; // Bright red
-        case TODO_PRIORITY_MEDIUM: return "\033[93m"; // Bright yellow
-        case TODO_PRIORITY_LOW:    return "\033[92m"; // Bright green
-        default:                   return ANSI_RESET;
+        case TODO_PRIORITY_HIGH:   return TERM_BRIGHT_RED;
+        case TODO_PRIORITY_MEDIUM: return TERM_BRIGHT_YELLOW;
+        case TODO_PRIORITY_LOW:    return TERM_BRIGHT_GREEN;
+        default:                   return TERM_RESET;
     }
 }
 
@@ -59,11 +56,11 @@ void todo_display_print_compact(const TodoList* todo_list) {
         return; // Nothing to show
     }
     
-    fprintf(stderr, ANSI_DIM ANSI_GRAY "[Tasks: %d active", active_count);
+    fprintf(stderr, TERM_DIM TERM_GRAY "[Tasks: %d active", active_count);
     if (completed_count > 0) {
         fprintf(stderr, ", %d completed", completed_count);
     }
-    fprintf(stderr, "]\n" ANSI_RESET);
+    fprintf(stderr, "]\n" TERM_RESET);
     
     int displayed = 0;
     int max_items = (g_display_config.max_display_items > 0) ? 
@@ -99,7 +96,7 @@ void todo_display_print_compact(const TodoList* todo_list) {
             strcpy(truncated_content + sizeof(truncated_content) - 4, "...");
         }
         
-        fprintf(stderr, ANSI_DIM ANSI_GRAY "  %s %s%s" ANSI_RESET ANSI_DIM ANSI_GRAY "\n",
+        fprintf(stderr, TERM_DIM TERM_GRAY "  %s %s%s" TERM_RESET TERM_DIM TERM_GRAY "\n",
                 status_symbol, priority_color, truncated_content);
         
         displayed++;
@@ -107,10 +104,10 @@ void todo_display_print_compact(const TodoList* todo_list) {
     
     int remaining = (int)todo_list->count - displayed;
     if (remaining > 0) {
-        fprintf(stderr, ANSI_DIM ANSI_GRAY "  ... and %d more\n" ANSI_RESET, remaining);
+        fprintf(stderr, TERM_DIM TERM_GRAY "  ... and %d more\n" TERM_RESET, remaining);
     }
     
-    fprintf(stderr, ANSI_RESET);
+    fprintf(stderr, TERM_RESET);
     fflush(stderr);
 }
 

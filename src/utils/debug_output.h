@@ -3,9 +3,10 @@
 
 #include <stdio.h>
 #include <stdbool.h>
+#include "terminal.h"
 
-#define DEBUG_COLOR_YELLOW "\033[93m"
-#define DEBUG_COLOR_RESET  "\033[0m"
+#define DEBUG_COLOR_YELLOW TERM_BRIGHT_YELLOW
+#define DEBUG_COLOR_RESET  TERM_RESET
 
 extern bool debug_enabled;
 

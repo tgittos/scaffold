@@ -308,13 +308,13 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
         debug_printf("Making API request for tool loop iteration %d\n", loop_count);
 
         if (!session->session_data.config.json_output_mode) {
-            fprintf(stdout, "\033[36m•\033[0m ");
+            fprintf(stdout, TERM_CYAN TERM_SYM_ACTIVE TERM_RESET " ");
             fflush(stdout);
         }
 
         if (http_post_with_headers(session->session_data.config.api_url, post_data, headers, &response) != 0) {
             if (!session->session_data.config.json_output_mode) {
-                fprintf(stdout, "\r\033[K");
+                fprintf(stdout, TERM_CLEAR_LINE);
                 fflush(stdout);
             }
 
@@ -337,7 +337,7 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
 
         if (response.data == NULL) {
             if (!session->session_data.config.json_output_mode) {
-                fprintf(stdout, "\r\033[K");
+                fprintf(stdout, TERM_CLEAR_LINE);
                 fflush(stdout);
             }
             fprintf(stderr, "Error: Empty response from API in tool loop iteration %d\n", loop_count);
@@ -357,7 +357,7 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
 
         if (parse_result != 0) {
             if (!session->session_data.config.json_output_mode) {
-                fprintf(stdout, "\r\033[K");
+                fprintf(stdout, TERM_CLEAR_LINE);
                 fflush(stdout);
             }
 
@@ -382,7 +382,7 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
         }
 
         if (!session->session_data.config.json_output_mode) {
-            fprintf(stdout, "\r\033[K");
+            fprintf(stdout, TERM_CLEAR_LINE);
             fflush(stdout);
         }
 

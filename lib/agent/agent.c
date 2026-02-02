@@ -292,7 +292,7 @@ int ralph_agent_run(RalphAgent* agent) {
         default: {
             /* Print banner */
             if (!agent->config.json_mode) {
-                printf("\033[1mRalph\033[0m - AI Assistant\n");
+                printf(TERM_BOLD "Ralph" TERM_RESET " - AI Assistant\n");
                 printf("Commands: quit, exit | Ctrl+D to end\n\n");
             }
 

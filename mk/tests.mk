@@ -172,6 +172,7 @@ $(TEST_approval_gate_integration_TARGET): $(TEST_approval_gate_integration_OBJEC
 $(eval $(call def_test,config,utils/test_config,$(SRCDIR)/utils/config.c $(SRCDIR)/utils/ralph_home.c))
 $(eval $(call def_test,debug_output,utils/test_debug_output,$(SRCDIR)/utils/debug_output.c))
 $(eval $(call def_test,spinner,utils/test_spinner,$(SRCDIR)/utils/spinner.c $(TESTDIR)/stubs/output_formatter_stub.c))
+$(eval $(call def_test,terminal,utils/test_terminal,$(SRCDIR)/utils/terminal.c $(TESTDIR)/stubs/output_formatter_stub.c))
 
 $(TEST_config_TARGET): $(TEST_config_OBJECTS) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_config_OBJECTS) $(CJSON_LIB)
@@ -181,6 +182,9 @@ $(TEST_debug_output_TARGET): $(TEST_debug_output_OBJECTS) $(CJSON_LIB)
 
 $(TEST_spinner_TARGET): $(TEST_spinner_OBJECTS) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_spinner_OBJECTS) $(CJSON_LIB) -lpthread
+
+$(TEST_terminal_TARGET): $(TEST_terminal_OBJECTS)
+	$(CC) -o $@ $^
 
 # =============================================================================
 # PDF TEST
@@ -225,7 +229,9 @@ MESSAGING_DEPS := \
     $(SRCDIR)/db/sqlite_dal.c \
     $(SRCDIR)/utils/uuid_utils.c \
     $(SRCDIR)/utils/ralph_home.c \
-    $(SRCDIR)/utils/pipe_notifier.c
+    $(SRCDIR)/utils/pipe_notifier.c \
+    $(SRCDIR)/utils/terminal.c \
+    $(TESTDIR)/stubs/output_formatter_stub.c
 
 $(eval $(call def_test,message_poller,messaging/test_message_poller,$(MESSAGING_DEPS)))
 $(eval $(call def_test,notification_formatter,messaging/test_notification_formatter,$(MESSAGING_DEPS)))
@@ -378,7 +384,7 @@ TEST_EXECUTION_ORDER := \
     $(TEST_rate_limiter_TARGET) $(TEST_allowlist_TARGET) $(TEST_tool_args_TARGET) $(TEST_gate_prompter_TARGET) \
     $(TEST_ralph_home_TARGET) $(TEST_http_TARGET) $(TEST_http_retry_TARGET) \
     $(TEST_streaming_TARGET) $(TEST_openai_streaming_TARGET) $(TEST_anthropic_streaming_TARGET) \
-    $(TEST_output_TARGET) $(TEST_prompt_TARGET) $(TEST_debug_output_TARGET) \
+    $(TEST_output_TARGET) $(TEST_prompt_TARGET) $(TEST_debug_output_TARGET) $(TEST_terminal_TARGET) \
     $(TEST_conversation_TARGET) $(TEST_conversation_vdb_TARGET) $(TEST_tools_TARGET) \
     $(TEST_ralph_TARGET) $(TEST_todo_manager_TARGET) $(TEST_tool_param_dsl_TARGET) \
     $(TEST_vector_db_tool_TARGET) $(TEST_memory_tool_TARGET) $(TEST_python_tool_TARGET) \
@@ -415,7 +421,7 @@ VALGRIND_TESTS := \
     $(TEST_rate_limiter_TARGET) $(TEST_allowlist_TARGET) $(TEST_tool_args_TARGET) $(TEST_gate_prompter_TARGET) \
     $(TEST_ralph_home_TARGET) $(TEST_http_retry_TARGET) $(TEST_streaming_TARGET) \
     $(TEST_openai_streaming_TARGET) $(TEST_anthropic_streaming_TARGET) \
-    $(TEST_output_TARGET) $(TEST_prompt_TARGET) $(TEST_conversation_TARGET) \
+    $(TEST_output_TARGET) $(TEST_prompt_TARGET) $(TEST_terminal_TARGET) $(TEST_conversation_TARGET) \
     $(TEST_conversation_vdb_TARGET) \
     $(TEST_todo_manager_TARGET) $(TEST_tool_param_dsl_TARGET) $(TEST_vector_db_tool_TARGET) \
     $(TEST_memory_tool_TARGET) $(TEST_token_manager_TARGET) $(TEST_conversation_compactor_TARGET) $(TEST_rolling_summary_TARGET) \

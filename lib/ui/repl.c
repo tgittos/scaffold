@@ -155,7 +155,7 @@ int ralph_repl_run_session(RalphSession* session, bool json_mode) {
 
         if (notify_fd >= 0 && FD_ISSET(notify_fd, &read_fds)) {
             rl_callback_handler_remove();
-            printf("\r\033[K");
+            printf(TERM_CLEAR_LINE);
             fflush(stdout);
 
             message_poller_clear_notification(session->message_poller);

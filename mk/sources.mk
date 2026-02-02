@@ -124,7 +124,8 @@ UTILS_EXTRA_SOURCES := \
     $(SRCDIR)/utils/uuid_utils.c \
     $(SRCDIR)/utils/ralph_home.c \
     $(SRCDIR)/utils/spinner.c \
-    $(SRCDIR)/utils/pipe_notifier.c
+    $(SRCDIR)/utils/pipe_notifier.c \
+    $(SRCDIR)/utils/terminal.c
 
 # CLI
 CLI_SOURCES := $(SRCDIR)/cli/memory_commands.c

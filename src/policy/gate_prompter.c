@@ -1,4 +1,5 @@
 #include "gate_prompter.h"
+#include "../utils/terminal.h"
 
 #include <signal.h>
 #include <stdarg.h>
@@ -7,13 +8,6 @@
 #include <string.h>
 #include <termios.h>
 #include <unistd.h>
-
-/* ANSI color codes - matching output_formatter.h */
-#define ANSI_RESET   "\033[0m"
-#define ANSI_DIM     "\033[2m"
-#define ANSI_GRAY    "\033[90m"
-#define ANSI_YELLOW  "\033[33m"
-#define ANSI_BOLD    "\033[1m"
 
 struct GatePrompter {
     int is_interactive;     /* 1 if we have an interactive TTY */
@@ -183,7 +177,7 @@ void gate_prompter_clear_prompt(GatePrompter *gp) {
      *   2. "● tool detail" line
      *   3. "  └─ Allow? [y/n/a/?] <response>" line
      */
-    fprintf(stderr, "\033[3A\033[J");
+    fprintf(stderr, TERM_CURSOR_UP_FMT TERM_CLEAR_SCREEN, 3);
     fflush(stderr);
 }
 
@@ -199,7 +193,7 @@ void gate_prompter_clear_batch_prompt(GatePrompter *gp, int count) {
      *   N+3. "  └─ Allow all? [y/n/1-N] <response>" line
      */
     int lines_to_clear = count + 3;
-    fprintf(stderr, "\033[%dA\033[J", lines_to_clear);
+    fprintf(stderr, TERM_CURSOR_UP_FMT TERM_CLEAR_SCREEN, lines_to_clear);
     fflush(stderr);
 }
 
@@ -238,11 +232,11 @@ void gate_prompter_show_single(GatePrompter *gp,
     }
 
     /* Clear any existing prompt (e.g., readline "> ") before showing gate */
-    fprintf(stderr, "\r\033[K");
+    fprintf(stderr, TERM_CLEAR_LINE);
 
     fprintf(stderr, "● %s", tool_name);
     if (strlen(detail) > 0) {
-        fprintf(stderr, ANSI_DIM " %s" ANSI_RESET, detail);
+        fprintf(stderr, TERM_DIM " %s" TERM_RESET, detail);
     }
     fprintf(stderr, "\n");
     fprintf(stderr, "  └─ Allow? [y/n/a/?] ");
@@ -263,20 +257,20 @@ void gate_prompter_show_details(GatePrompter *gp,
     fprintf(stderr, "  ├─ tool: %s\n", tool_name);
 
     if (tool_call->arguments != NULL && strlen(tool_call->arguments) > 0) {
-        fprintf(stderr, "  ├─ args:" ANSI_DIM " %s" ANSI_RESET "\n", tool_call->arguments);
+        fprintf(stderr, "  ├─ args:" TERM_DIM " %s" TERM_RESET "\n", tool_call->arguments);
     }
 
     if (resolved_path != NULL && strlen(resolved_path) > 0) {
-        fprintf(stderr, "  ├─ path:" ANSI_DIM " %s", resolved_path);
+        fprintf(stderr, "  ├─ path:" TERM_DIM " %s", resolved_path);
         if (path_exists) {
             fprintf(stderr, " (exists)");
         } else {
             fprintf(stderr, " (new)");
         }
-        fprintf(stderr, ANSI_RESET "\n");
+        fprintf(stderr, TERM_RESET "\n");
     }
 
-    fprintf(stderr, "  └─" ANSI_DIM " Press any key..." ANSI_RESET "\n");
+    fprintf(stderr, "  └─" TERM_DIM " Press any key..." TERM_RESET "\n");
     fflush(stderr);
 }
 
@@ -289,7 +283,7 @@ void gate_prompter_show_batch(GatePrompter *gp,
     }
 
     /* Clear any existing prompt (e.g., readline "> ") before showing gate */
-    fprintf(stderr, "\r\033[K");
+    fprintf(stderr, TERM_CLEAR_LINE);
 
     fprintf(stderr, "● %d operations\n", count);
 
@@ -309,10 +303,10 @@ void gate_prompter_show_batch(GatePrompter *gp,
         }
 
         if (status_char != ' ') {
-            fprintf(stderr, "  %s [%c] %s" ANSI_DIM "%s" ANSI_RESET "\n",
+            fprintf(stderr, "  %s [%c] %s" TERM_DIM "%s" TERM_RESET "\n",
                     connector, status_char, name, arg_preview);
         } else {
-            fprintf(stderr, "  %s %s" ANSI_DIM "%s" ANSI_RESET "\n",
+            fprintf(stderr, "  %s %s" TERM_DIM "%s" TERM_RESET "\n",
                     connector, name, arg_preview);
         }
     }

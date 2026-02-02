@@ -1,50 +1,13 @@
 #include "notification_formatter.h"
 #include "../db/message_store.h"
+#include "../utils/terminal.h"
 #include <cJSON.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <ctype.h>
 
 #define INITIAL_CAPACITY 8
 #define MAX_MESSAGES_PER_TYPE 20
-
-/**
- * Strip ANSI escape codes from a string.
- * Returns a newly allocated string (caller must free).
- */
-static char* strip_ansi(const char* str) {
-    if (str == NULL) {
-        return NULL;
-    }
-
-    size_t len = strlen(str);
-    char* result = malloc(len + 1);
-    if (result == NULL) {
-        return NULL;
-    }
-
-    size_t j = 0;
-    for (size_t i = 0; i < len; i++) {
-        if (str[i] == '\033' || str[i] == '\x1b') {
-            /* Skip ESC [ ... m sequences */
-            if (i + 1 < len && str[i + 1] == '[') {
-                i += 2;
-                while (i < len && str[i] != 'm' && str[i] != 'K' &&
-                       str[i] != 'H' && str[i] != 'J' && !isalpha((unsigned char)str[i])) {
-                    i++;
-                }
-                continue;
-            }
-        } else if (str[i] == '\r') {
-            /* Skip carriage returns (often used with \033[K for line clearing) */
-            continue;
-        }
-        result[j++] = str[i];
-    }
-    result[j] = '\0';
-    return result;
-}
 
 /**
  * Format a subagent completion message for the LLM.
@@ -80,10 +43,10 @@ static char* format_subagent_completion(const char* content) {
     char* clean_result = NULL;
     char* clean_error = NULL;
     if (cJSON_IsString(result) && result->valuestring) {
-        clean_result = strip_ansi(result->valuestring);
+        clean_result = terminal_strip_ansi(result->valuestring);
     }
     if (cJSON_IsString(error) && error->valuestring) {
-        clean_error = strip_ansi(error->valuestring);
+        clean_error = terminal_strip_ansi(error->valuestring);
     }
 
     /* Build formatted output */
