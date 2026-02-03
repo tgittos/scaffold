@@ -20,7 +20,10 @@ LIB_IPC_SOURCES := \
     $(LIBDIR)/ipc/message_poller.c
 
 # UI module (Phase 3)
-LIB_UI_SOURCES := $(LIBDIR)/ui/repl.c
+LIB_UI_SOURCES := \
+    $(LIBDIR)/ui/terminal.c \
+    $(LIBDIR)/ui/spinner.c \
+    $(LIBDIR)/ui/repl.c
 
 # Tools module (Phase 4)
 LIB_TOOLS_SOURCES :=

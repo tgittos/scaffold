@@ -13,6 +13,7 @@
 #ifndef LIB_UI_UI_H
 #define LIB_UI_UI_H
 
+#include "terminal.h"
 #include "output.h"
 #include "spinner.h"
 #include "json_output.h"

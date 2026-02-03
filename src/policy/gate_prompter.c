@@ -1,5 +1,5 @@
 #include "gate_prompter.h"
-#include "../utils/terminal.h"
+#include "ui/terminal.h"
 
 #include <signal.h>
 #include <stdarg.h>

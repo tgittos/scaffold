@@ -21,7 +21,7 @@ void set_json_output_mode(bool enabled);
  */
 bool get_json_output_mode(void);
 
-#include "terminal.h"
+#include "ui/terminal.h"
 
 typedef struct {
     char *thinking_content;  // Content inside <think> tags (optional)

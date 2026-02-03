@@ -171,8 +171,8 @@ $(TEST_approval_gate_integration_TARGET): $(TEST_approval_gate_integration_OBJEC
 
 $(eval $(call def_test,config,utils/test_config,$(SRCDIR)/utils/config.c $(SRCDIR)/utils/ralph_home.c))
 $(eval $(call def_test,debug_output,utils/test_debug_output,$(SRCDIR)/utils/debug_output.c))
-$(eval $(call def_test,spinner,utils/test_spinner,$(SRCDIR)/utils/spinner.c $(TESTDIR)/stubs/output_formatter_stub.c))
-$(eval $(call def_test,terminal,utils/test_terminal,$(SRCDIR)/utils/terminal.c $(TESTDIR)/stubs/output_formatter_stub.c))
+$(eval $(call def_test,spinner,utils/test_spinner,$(LIBDIR)/ui/terminal.c $(LIBDIR)/ui/spinner.c $(TESTDIR)/stubs/output_formatter_stub.c))
+$(eval $(call def_test,terminal,utils/test_terminal,$(LIBDIR)/ui/terminal.c $(TESTDIR)/stubs/output_formatter_stub.c))
 
 $(TEST_config_TARGET): $(TEST_config_OBJECTS) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_config_OBJECTS) $(CJSON_LIB)
@@ -230,7 +230,7 @@ MESSAGING_DEPS := \
     $(LIBDIR)/util/uuid_utils.c \
     $(SRCDIR)/utils/ralph_home.c \
     $(LIBDIR)/ipc/pipe_notifier.c \
-    $(SRCDIR)/utils/terminal.c \
+    $(LIBDIR)/ui/terminal.c \
     $(TESTDIR)/stubs/output_formatter_stub.c
 
 $(eval $(call def_test,message_poller,messaging/test_message_poller,$(MESSAGING_DEPS)))

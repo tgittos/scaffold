@@ -10,7 +10,7 @@
 #include "../../src/utils/debug_output.h"
 #include "../../src/utils/output_formatter.h"
 #include "../../src/utils/json_output.h"
-#include "../../src/utils/spinner.h"
+#include "spinner.h"
 #include "../../src/cli/memory_commands.h"
 #include "../../src/tools/subagent_tool.h"
 #include "ipc/message_poller.h"

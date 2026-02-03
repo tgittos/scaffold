@@ -1,5 +1,5 @@
 #include "todo_display.h"
-#include "../utils/terminal.h"
+#include "ui/terminal.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

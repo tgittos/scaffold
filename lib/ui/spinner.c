@@ -1,6 +1,6 @@
 #include "spinner.h"
-#include "output_formatter.h"
 #include "terminal.h"
+#include "../../src/utils/output_formatter.h"
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>

@@ -12,24 +12,6 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 ---
 
-## Session 5: UI Terminal Utilities
-
-**Move:** Basic terminal primitives.
-
-| File | Destination |
-|------|-------------|
-| `src/utils/terminal.c/h` | `lib/ui/` |
-| `src/utils/spinner.c/h` | `lib/ui/` |
-
-**Changes:**
-1. Move to `lib/ui/`
-2. Update `mk/lib.mk`: Add to `LIB_UI_SOURCES`
-3. Update `mk/sources.mk`: Remove from `UTILS_EXTRA_SOURCES`
-
-**Verify:** `./scripts/build.sh && ./scripts/run_tests.sh spinner`
-
----
-
 ## Session 6: UI Output Formatting
 
 **Move:** Output and JSON formatting (has tool type dependencies).
@@ -381,7 +363,9 @@ Session 3: IPC message_store ✓ COMPLETE
     ↓
 Session 4: IPC completion (message_poller) ✓ COMPLETE
     ↓
-Session 5-7: UI (terminal, output, CLI commands)
+Session 5: UI terminal utilities (terminal, spinner) ✓ COMPLETE
+    ↓
+Session 6-7: UI (output, CLI commands)
     ↓
 Session 8-9: Tools Core + Simple (depends on UI for output)
     ↓

@@ -10,7 +10,7 @@
 #include "model_capabilities.h"
 #include "../mcp/mcp_client.h"
 #include "util/ptrarray.h"
-#include "../utils/spinner.h"
+#include "ui/spinner.h"
 #include "../policy/approval_gate.h"
 #include "../policy/protected_files.h"
 #include "../policy/tool_args.h"

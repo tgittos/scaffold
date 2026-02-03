@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../unity/unity.h"
-#include "../../src/utils/terminal.h"
+#include "ui/terminal.h"
 #include "../../src/utils/output_formatter.h"
 
 void setUp(void) {

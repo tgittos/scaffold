@@ -117,9 +117,7 @@ PDF_SOURCES := $(SRCDIR)/pdf/pdf_extractor.c
 
 # Utilities
 UTILS_EXTRA_SOURCES := \
-    $(SRCDIR)/utils/ralph_home.c \
-    $(SRCDIR)/utils/spinner.c \
-    $(SRCDIR)/utils/terminal.c
+    $(SRCDIR)/utils/ralph_home.c
 
 # CLI
 CLI_SOURCES := $(SRCDIR)/cli/memory_commands.c
@@ -158,7 +156,8 @@ UTIL_DEPS := \
     $(SRCDIR)/utils/config.c \
     $(LIBDIR)/util/uuid_utils.c \
     $(SRCDIR)/utils/ralph_home.c \
-    $(SRCDIR)/utils/spinner.c
+    $(LIBDIR)/ui/terminal.c \
+    $(LIBDIR)/ui/spinner.c
 
 RALPH_CORE_DEPS := \
     $(SRCDIR)/core/ralph.c \

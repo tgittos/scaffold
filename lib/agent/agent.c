@@ -12,7 +12,7 @@
 #include "../../src/utils/output_formatter.h"
 #include "../../src/utils/json_output.h"
 #include "../../src/utils/ralph_home.h"
-#include "../../src/utils/spinner.h"
+#include "../ui/spinner.h"
 #include "../../src/policy/approval_gate.h"
 #include "../../src/tools/subagent_tool.h"
 #include "../../src/cli/memory_commands.h"

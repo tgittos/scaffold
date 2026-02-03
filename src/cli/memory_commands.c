@@ -2,7 +2,7 @@
 #include "../db/vector_db_service.h"
 #include "../db/metadata_store.h"
 #include "../llm/embeddings_service.h"
-#include "../utils/terminal.h"
+#include "ui/terminal.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

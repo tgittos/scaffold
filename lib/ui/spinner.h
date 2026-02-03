@@ -1,18 +1,45 @@
+#ifndef SPINNER_H
+#define SPINNER_H
+
 /**
- * lib/ui/spinner.h - Library wrapper for spinner
+ * Pulsing spinner for local tool execution feedback.
  *
- * This header re-exports the spinner implementation from src/
- * through the library API. It provides compatibility between the
- * internal src/ interface and the public lib/ interface.
- *
- * Source implementation: src/utils/spinner.c
+ * Provides visual feedback during tool execution by pulsing a cyan dot
+ * on the terminal. Uses a background thread to animate independently
+ * of the main execution.
  */
 
-#ifndef LIB_UI_SPINNER_H
-#define LIB_UI_SPINNER_H
+/**
+ * Start the pulsing spinner with tool context.
+ *
+ * Displays a pulsing cyan dot followed by the tool name and a summary
+ * of the arguments. The dot alternates between bright and dim cyan
+ * every ~300ms.
+ *
+ * No-op in JSON output mode.
+ *
+ * @param tool_name Name of the tool being executed
+ * @param arguments Tool arguments in JSON format (may be NULL)
+ */
+void spinner_start(const char *tool_name, const char *arguments);
 
-/* Re-export the original implementation */
-#include "../../src/utils/spinner.h"
+/**
+ * Stop the pulsing spinner and clear the line.
+ *
+ * Clears the spinner line with \r\033[K to prepare for the result
+ * display from log_tool_execution_improved().
+ *
+ * Safe to call even if spinner was never started.
+ */
+void spinner_stop(void);
+
+/**
+ * Cleanup spinner resources.
+ *
+ * Should be called during application shutdown to ensure thread
+ * resources are released. Safe to call multiple times.
+ */
+void spinner_cleanup(void);
 
 /*
  * Library API aliases (ralph_* prefix)
@@ -23,4 +50,4 @@
 #define ralph_spinner_stop     spinner_stop
 #define ralph_spinner_cleanup  spinner_cleanup
 
-#endif /* LIB_UI_SPINNER_H */
+#endif /* SPINNER_H */
