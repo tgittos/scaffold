@@ -12,7 +12,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-#include "../utils/debug_output.h"
+#include "util/debug_output.h"
 #include "ui/output_formatter.h"
 #include "lib/tools/subagent_tool.h"
 

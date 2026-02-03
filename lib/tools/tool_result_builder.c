@@ -1,5 +1,5 @@
 #include "tool_result_builder.h"
-#include "../../src/utils/common_utils.h"
+#include "../util/common_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

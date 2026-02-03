@@ -1,6 +1,6 @@
 #include "unity/unity.h"
 #include "../../src/core/async_executor.h"
-#include "../../src/core/interrupt.h"
+#include "util/interrupt.h"
 #include <unistd.h>
 #include <fcntl.h>
 

@@ -1,7 +1,7 @@
 #include "messaging_tool.h"
 #include "../ipc/message_store.h"
-#include "../../src/utils/common_utils.h"
-#include "../../src/utils/json_escape.h"
+#include "../util/common_utils.h"
+#include "../util/json_escape.h"
 #include "tool_result_builder.h"
 #include <stdio.h>
 #include <stdlib.h>

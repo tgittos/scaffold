@@ -6,7 +6,7 @@
 #include <time.h>
 #include "../db/document_store.h"
 #include "../llm/embeddings_service.h"
-#include "debug_output.h"
+#include "util/debug_output.h"
 
 #define CONVERSATION_INDEX "conversations"
 #define CONVERSATION_EMBEDDING_DIM 1536

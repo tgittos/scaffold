@@ -3,7 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include "../unity/unity.h"
-#include "../../src/pdf/pdf_extractor.h"
+#include "pdf/pdf_extractor.h"
 
 void setUp(void) {
     // Set up test environment

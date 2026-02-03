@@ -5,9 +5,9 @@
  */
 
 #include "repl.h"
-#include "../../src/core/interrupt.h"
+#include "../util/interrupt.h"
 #include "../../src/core/recap.h"
-#include "../../src/utils/debug_output.h"
+#include "../util/debug_output.h"
 #include "output_formatter.h"
 #include "json_output.h"
 #include "spinner.h"

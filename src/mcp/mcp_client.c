@@ -1,7 +1,7 @@
 #include "mcp_client.h"
 #include "mcp_transport.h"
 #include <cJSON.h>
-#include "../utils/debug_output.h"
+#include "util/debug_output.h"
 #include "../utils/ralph_home.h"
 #include <stdio.h>
 #include <stdlib.h>

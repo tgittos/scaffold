@@ -1,10 +1,10 @@
 #include "pdf_processor.h"
 #include "../network/http_client.h"
-#include "../pdf/pdf_extractor.h"
-#include "../utils/document_chunker.h"
+#include "pdf/pdf_extractor.h"
+#include "util/document_chunker.h"
 #include "../llm/embeddings.h"
 #include "config.h"
-#include "common_utils.h"
+#include "util/common_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

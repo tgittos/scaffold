@@ -33,15 +33,15 @@ endef
 
 $(eval $(call def_test,main,core/test_main,))
 $(eval $(call def_test,cli_flags,core/test_cli_flags,))
-$(eval $(call def_test,interrupt,core/test_interrupt,$(SRCDIR)/core/interrupt.c))
-$(eval $(call def_test,async_executor,core/test_async_executor,$(SRCDIR)/core/async_executor.c $(SRCDIR)/core/interrupt.c $(SRCDIR)/utils/debug_output.c $(LIBDIR)/ipc/pipe_notifier.c $(TESTDIR)/stubs/ralph_stub.c))
+$(eval $(call def_test,interrupt,core/test_interrupt,$(LIBDIR)/util/interrupt.c))
+$(eval $(call def_test,async_executor,core/test_async_executor,$(SRCDIR)/core/async_executor.c $(LIBDIR)/util/interrupt.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/ipc/pipe_notifier.c $(TESTDIR)/stubs/ralph_stub.c))
 $(eval $(call def_test,pipe_notifier,utils/test_pipe_notifier,$(LIBDIR)/ipc/pipe_notifier.c))
 $(eval $(call def_test,agent_identity,core/test_agent_identity,$(LIBDIR)/ipc/agent_identity.c))
 $(eval $(call def_test,prompt,utils/test_prompt_loader,$(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/utils/ralph_home.c))
 $(eval $(call def_test,ralph_home,utils/test_ralph_home,$(SRCDIR)/utils/ralph_home.c))
 $(eval $(call def_test,todo_manager,tools/test_todo_manager,$(LIBDIR)/tools/todo_manager.c))
 $(eval $(call def_test_mixed,tool_param_dsl,tools/test_tool_param_dsl,$(COMPLEX_DEPS)))
-$(eval $(call def_test,document_chunker,test_document_chunker,$(SRCDIR)/utils/document_chunker.c $(SRCDIR)/utils/common_utils.c))
+$(eval $(call def_test,document_chunker,test_document_chunker,$(LIBDIR)/util/document_chunker.c $(LIBDIR)/util/common_utils.c))
 $(eval $(call def_test,streaming,network/test_streaming,$(SRCDIR)/network/streaming.c))
 $(eval $(call def_test,darray,test_darray,))
 $(eval $(call def_test,ptrarray,test_ptrarray,))
@@ -64,9 +64,9 @@ GATE_DEPS := \
     $(SRCDIR)/policy/shell_parser_ps.c \
     $(SRCDIR)/policy/subagent_approval.c \
     $(SRCDIR)/policy/tool_args.c \
-    $(SRCDIR)/utils/debug_output.c \
+    $(LIBDIR)/util/debug_output.c \
     $(SRCDIR)/utils/ralph_home.c \
-    $(SRCDIR)/utils/json_escape.c \
+    $(LIBDIR)/util/json_escape.c \
     $(TESTDIR)/stubs/subagent_stub.c \
     $(TESTDIR)/stubs/output_formatter_stub.c
 
@@ -170,7 +170,7 @@ $(TEST_approval_gate_integration_TARGET): $(TEST_approval_gate_integration_OBJEC
 # =============================================================================
 
 $(eval $(call def_test,config,utils/test_config,$(SRCDIR)/utils/config.c $(SRCDIR)/utils/ralph_home.c))
-$(eval $(call def_test,debug_output,utils/test_debug_output,$(SRCDIR)/utils/debug_output.c))
+$(eval $(call def_test,debug_output,utils/test_debug_output,$(LIBDIR)/util/debug_output.c))
 $(eval $(call def_test,spinner,utils/test_spinner,$(LIBDIR)/ui/terminal.c $(LIBDIR)/ui/spinner.c $(TESTDIR)/stubs/output_formatter_stub.c))
 $(eval $(call def_test,terminal,utils/test_terminal,$(LIBDIR)/ui/terminal.c $(TESTDIR)/stubs/output_formatter_stub.c))
 
@@ -190,7 +190,7 @@ $(TEST_terminal_TARGET): $(TEST_terminal_OBJECTS)
 # PDF TEST
 # =============================================================================
 
-$(eval $(call def_test,pdf_extractor,pdf/test_pdf_extractor,$(SRCDIR)/pdf/pdf_extractor.c))
+$(eval $(call def_test,pdf_extractor,pdf/test_pdf_extractor,$(LIBDIR)/pdf/pdf_extractor.c))
 
 $(TEST_pdf_extractor_TARGET): $(TEST_pdf_extractor_OBJECTS) $(PDFIO_LIB) $(ZLIB_LIB)
 	$(CC) -o $@ $(TEST_pdf_extractor_OBJECTS) $(PDFIO_LIB) $(ZLIB_LIB) -lm
@@ -251,12 +251,12 @@ CONV_EXTRA_OBJECTS := $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) \
     $(SRCDIR)/llm/embeddings.o $(SRCDIR)/llm/embeddings_service.o $(SRCDIR)/llm/embedding_provider.o \
     $(SRCDIR)/llm/providers/openai_embedding_provider.o $(SRCDIR)/llm/providers/local_embedding_provider.o \
     $(SRCDIR)/network/http_client.o $(SRCDIR)/network/embedded_cacert.o $(SRCDIR)/network/api_error.o \
-    $(SRCDIR)/core/interrupt.o \
-    $(SRCDIR)/utils/config.o $(SRCDIR)/utils/debug_output.o $(SRCDIR)/utils/common_utils.o \
+    $(LIBDIR)/util/interrupt.o \
+    $(SRCDIR)/utils/config.o $(LIBDIR)/util/debug_output.o $(LIBDIR)/util/common_utils.o \
     $(SRCDIR)/utils/ralph_home.o
 
-$(eval $(call def_test,conversation,session/test_conversation_tracker,$(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/utils/json_escape.c))
-$(eval $(call def_test,conversation_vdb,session/test_conversation_vector_db,$(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/utils/json_escape.c $(TESTDIR)/mock_api_server.c $(TESTDIR)/mock_embeddings.c $(TESTDIR)/mock_embeddings_server.c))
+$(eval $(call def_test,conversation,session/test_conversation_tracker,$(SRCDIR)/session/conversation_tracker.c $(LIBDIR)/util/json_escape.c))
+$(eval $(call def_test,conversation_vdb,session/test_conversation_vector_db,$(SRCDIR)/session/conversation_tracker.c $(LIBDIR)/util/json_escape.c $(TESTDIR)/mock_api_server.c $(TESTDIR)/mock_embeddings.c $(TESTDIR)/mock_embeddings_server.c))
 $(eval $(call def_test_mixed,tool_calls_not_stored,session/test_tool_calls_not_stored,$(CONV_DEPS)))
 
 $(TEST_conversation_TARGET): $(TEST_conversation_OBJECTS) $(CONV_EXTRA_OBJECTS) $(ALL_LIBS)
@@ -282,7 +282,7 @@ MOCK_EMBEDDINGS_SOURCES := $(TESTDIR)/mock_api_server.c $(TESTDIR)/mock_embeddin
 
 $(eval $(call def_test_mixed,vector_db_tool,tools/test_vector_db_tool,$(MOCK_EMBEDDINGS_SOURCES) $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,memory_tool,tools/test_memory_tool,$(MOCK_EMBEDDINGS_SOURCES) $(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,memory_mgmt,test_memory_management,$(LIBDIR)/ui/memory_commands.c $(LIBDIR)/ui/terminal.c $(DB_C_SOURCES) $(EMBEDDING_DEPS) $(SRCDIR)/utils/config.c $(NETWORK_DEPS) $(SRCDIR)/utils/common_utils.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/utils/ralph_home.c))
+$(eval $(call def_test_mixed,memory_mgmt,test_memory_management,$(LIBDIR)/ui/memory_commands.c $(LIBDIR)/ui/terminal.c $(DB_C_SOURCES) $(EMBEDDING_DEPS) $(SRCDIR)/utils/config.c $(NETWORK_DEPS) $(LIBDIR)/util/common_utils.c $(LIBDIR)/util/debug_output.c $(SRCDIR)/utils/ralph_home.c))
 $(eval $(call def_test_mixed,token_manager,session/test_token_manager,$(SRCDIR)/session/token_manager.c $(SRCDIR)/session/rolling_summary.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,conversation_compactor,session/test_conversation_compactor,$(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/rolling_summary.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/token_manager.c $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,rolling_summary,session/test_rolling_summary,$(SRCDIR)/session/rolling_summary.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
@@ -367,7 +367,7 @@ $(TEST_vector_db_TARGET): $(TEST_vector_db_OBJECTS) $(HNSWLIB_DIR)/hnswlib/hnswl
 	$(CXX) -o $@ $(TEST_vector_db_OBJECTS) -lpthread -lm
 
 # Document store test
-TEST_document_store_SOURCES := $(TESTDIR)/db/test_document_store.c $(DB_C_SOURCES) $(SRCDIR)/utils/common_utils.c $(SRCDIR)/utils/config.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/utils/ralph_home.c $(EMBEDDING_DEPS) $(NETWORK_DEPS) $(UNITY)
+TEST_document_store_SOURCES := $(TESTDIR)/db/test_document_store.c $(DB_C_SOURCES) $(LIBDIR)/util/common_utils.c $(SRCDIR)/utils/config.c $(LIBDIR)/util/debug_output.c $(SRCDIR)/utils/ralph_home.c $(EMBEDDING_DEPS) $(NETWORK_DEPS) $(UNITY)
 TEST_document_store_OBJECTS := $(TEST_document_store_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o)
 TEST_document_store_TARGET := $(TESTDIR)/test_document_store
 ALL_TEST_TARGETS += $(TEST_document_store_TARGET)

@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../../lib/agent/agent.h"
-#include "debug_output.h"
+#include "util/debug_output.h"
 
 #define RALPH_VERSION "0.1.0"
 #define MAX_CLI_ALLOW_ENTRIES 64

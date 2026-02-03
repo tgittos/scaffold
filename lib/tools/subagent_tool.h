@@ -43,19 +43,32 @@ typedef struct {
 
 DARRAY_DECLARE(SubagentArray, Subagent)
 
+/**
+ * Callback invoked when a new subagent is spawned.
+ * CLI uses this to notify its select() loop to rebuild fd_set.
+ * The user_data is whatever was passed to subagent_manager_set_spawn_callback().
+ */
+typedef void (*SubagentSpawnCallback)(void *user_data);
+
 typedef struct {
     SubagentArray subagents;           // Dynamic array of subagents
     int max_subagents;                 // Maximum allowed concurrent subagents
     int timeout_seconds;               // Timeout for each subagent execution
     int is_subagent_process;           // Flag: 1 if running as subagent (prevents nesting)
     ApprovalGateConfig *gate_config;   // Parent's approval config for proxying requests
+    SubagentSpawnCallback spawn_callback;  // Called when subagent spawns (optional)
+    void *spawn_callback_data;             // User data for spawn callback
 } SubagentManager;
 
-int subagent_manager_init(SubagentManager *manager);
 int subagent_manager_init_with_config(SubagentManager *manager, int max_subagents, int timeout_seconds);
 
 /** Set the approval gate config for proxying subagent approval requests. */
 void subagent_manager_set_gate_config(SubagentManager *manager, ApprovalGateConfig *gate_config);
+
+/** Set callback to be invoked when a subagent spawns (for main loop fd_set rebuild). */
+void subagent_manager_set_spawn_callback(SubagentManager *manager,
+                                         SubagentSpawnCallback callback,
+                                         void *user_data);
 
 /** Kills any running subagents and frees all memory. */
 void subagent_manager_cleanup(SubagentManager *manager);

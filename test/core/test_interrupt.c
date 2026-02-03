@@ -1,5 +1,5 @@
 #include "unity/unity.h"
-#include "../../src/core/interrupt.h"
+#include "util/interrupt.h"
 #include <signal.h>
 #include <stdlib.h>
 

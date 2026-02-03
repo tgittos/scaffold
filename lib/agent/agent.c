@@ -8,7 +8,7 @@
 #include "../ui/repl.h"
 #include "../workflow/workflow.h"
 #include "../../src/session/conversation_tracker.h"
-#include "../../src/utils/debug_output.h"
+#include "../util/debug_output.h"
 #include "../ui/output_formatter.h"
 #include "../ui/json_output.h"
 #include "../../src/utils/ralph_home.h"

@@ -1,11 +1,9 @@
 #include "subagent_tool.h"
 #include "subagent_process.h"
-#include "../../src/utils/config.h"
-#include "../../src/utils/json_escape.h"
-#include "../../src/utils/debug_output.h"
+#include "../util/json_escape.h"
+#include "../util/debug_output.h"
 #include "../../src/core/ralph.h"
-#include "../../src/core/async_executor.h"
-#include "../../src/core/interrupt.h"
+#include "../util/interrupt.h"
 #include "../../src/policy/subagent_approval.h"
 #include "../../src/session/conversation_tracker.h"
 #include "../ipc/message_store.h"
@@ -111,24 +109,6 @@ ApprovalChannel* subagent_get_approval_channel(void) {
     return g_subagent_approval_channel;
 }
 
-/** Initialize using max_subagents and subagent_timeout from global config. */
-int subagent_manager_init(SubagentManager *manager) {
-    if (manager == NULL) {
-        return -1;
-    }
-
-    ralph_config_t *config = config_get();
-    int max_subagents = SUBAGENT_MAX_DEFAULT;
-    int timeout_seconds = SUBAGENT_TIMEOUT_DEFAULT;
-
-    if (config != NULL) {
-        max_subagents = config->max_subagents > 0 ? config->max_subagents : SUBAGENT_MAX_DEFAULT;
-        timeout_seconds = config->subagent_timeout > 0 ? config->subagent_timeout : SUBAGENT_TIMEOUT_DEFAULT;
-    }
-
-    return subagent_manager_init_with_config(manager, max_subagents, timeout_seconds);
-}
-
 /** Initialize with explicit max_subagents and timeout. Values are clamped to safe ranges. */
 int subagent_manager_init_with_config(SubagentManager *manager, int max_subagents, int timeout_seconds) {
     if (manager == NULL) {
@@ -155,6 +135,8 @@ int subagent_manager_init_with_config(SubagentManager *manager, int max_subagent
     manager->timeout_seconds = timeout_seconds;
     manager->is_subagent_process = 0;
     manager->gate_config = NULL;
+    manager->spawn_callback = NULL;
+    manager->spawn_callback_data = NULL;
 
     return 0;
 }
@@ -162,6 +144,15 @@ int subagent_manager_init_with_config(SubagentManager *manager, int max_subagent
 void subagent_manager_set_gate_config(SubagentManager *manager, ApprovalGateConfig *gate_config) {
     if (manager != NULL) {
         manager->gate_config = gate_config;
+    }
+}
+
+void subagent_manager_set_spawn_callback(SubagentManager *manager,
+                                         SubagentSpawnCallback callback,
+                                         void *user_data) {
+    if (manager != NULL) {
+        manager->spawn_callback = callback;
+        manager->spawn_callback_data = user_data;
     }
 }
 
@@ -413,14 +404,13 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
 
     strcpy(subagent_id_out, id);
 
-    /* Notify the async executor (if running) that a new subagent was spawned.
+    /* Notify the main thread (if callback registered) that a new subagent was spawned.
      * This wakes up the main thread's select() loop so it can rebuild its
      * fd_set to include the new subagent's approval channel FD. Without this,
      * approval prompts would be delayed until the select() timeout or user input. */
-    async_executor_t* executor = async_executor_get_active();
-    if (executor != NULL) {
-        async_executor_notify_subagent_spawned(executor);
-        debug_printf("subagent_spawn: Notified async executor of new subagent\n");
+    if (manager->spawn_callback != NULL) {
+        manager->spawn_callback(manager->spawn_callback_data);
+        debug_printf("subagent_spawn: Notified main thread of new subagent\n");
     }
 
     return 0;

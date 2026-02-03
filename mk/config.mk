@@ -77,7 +77,7 @@ INCLUDES := -I. -I$(CURL_DIR)/include -I$(MBEDTLS_DIR)/include -I$(HNSWLIB_DIR) 
     -I$(OSSP_UUID_DIR) -I$(PYTHON_INCLUDE) \
     -I$(SRCDIR) -I$(SRCDIR)/core -I$(SRCDIR)/policy -I$(SRCDIR)/network -I$(SRCDIR)/llm \
     -I$(SRCDIR)/session -I$(SRCDIR)/tools -I$(SRCDIR)/utils -I$(SRCDIR)/db \
-    -I$(SRCDIR)/pdf -I$(SRCDIR)/cli
+    -I$(SRCDIR)/cli
 
 TEST_INCLUDES := $(INCLUDES) -I$(TESTDIR)/unity -I$(TESTDIR) \
     -I$(TESTDIR)/core -I$(TESTDIR)/network -I$(TESTDIR)/llm \

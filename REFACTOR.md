@@ -185,10 +185,11 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 ## Session 18: Final Cleanup
 
 **Tasks:**
-1. Audit remaining `src/` files (main.c, ralph.c, network/, mcp/, pdf/)
-2. Update `lib/ralph.h` as comprehensive public API
-3. Update `ARCHITECTURE.md` and `CODE_OVERVIEW.md`
-4. Final verification: `./scripts/build.sh && ./scripts/run_tests.sh && make check-valgrind`
+1. Audit remaining `src/` files (main.c, ralph.c, network/, mcp/)
+2. Resolve coupling issues (see "Known Coupling Issues" section)
+3. Update `lib/ralph.h` as comprehensive public API
+4. Update `ARCHITECTURE.md` and `CODE_OVERVIEW.md`
+5. Final verification: `./scripts/build.sh && ./scripts/run_tests.sh && make check-valgrind`
 
 **Namespace Rename:** Remove `ralph_` prefix from lib/ identifiers (73 total) and rename public header.
 
@@ -242,6 +243,19 @@ Current `ralph_` prefixed identifiers to rename:
 
 ---
 
+## Known Coupling Issues
+
+**RESOLVED in Session 7b:**
+
+1. **config.h** - Removed `subagent_manager_init()` which used `config_get()`. Callers now use `subagent_manager_init_with_config()` directly with explicit values.
+
+2. **async_executor.h** - Replaced direct `async_executor_get_active()`/`async_executor_notify_subagent_spawned()` calls with a callback interface (`SubagentSpawnCallback`). CLI can set this via `subagent_manager_set_spawn_callback()`.
+
+**Files that must stay in src/ (CLI-specific):**
+- `src/core/ralph.h/.c` - CLI orchestration layer defining `RalphSession`
+
+---
+
 ## Dependency Order
 
 ```
@@ -260,6 +274,8 @@ Session 6: UI output formatting (output_formatter, json_output) ✓ COMPLETE
 Session 7: UI CLI commands (memory_commands) ✓ COMPLETE
     ↓
 Session 8 (was 8-9, 16, 18): Tools System + All Tools (except Python) ✓ COMPLETE
+    ↓
+Session 7b: Utility Migration (fixes lib/tools/ → src/ dependencies) ✓ COMPLETE
     ↓
 Session 8-9: Vector DB + Services (depends on lib/db/sqlite_dal)
     ↓

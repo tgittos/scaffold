@@ -1,11 +1,11 @@
 #include "pdf_tool.h"
-#include "../../src/utils/json_escape.h"
-#include "../../src/pdf/pdf_extractor.h"
+#include "../util/json_escape.h"
+#include "../pdf/pdf_extractor.h"
 #include <cJSON.h>
-#include "../../src/utils/document_chunker.h"
+#include "../util/document_chunker.h"
 #include "../../src/llm/embeddings_service.h"
 #include "../../src/db/vector_db_service.h"
-#include "../../src/utils/common_utils.h"
+#include "../util/common_utils.h"
 #include "vector_db_tool.h"
 #include <stdio.h>
 #include <stdlib.h>

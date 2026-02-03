@@ -3,9 +3,9 @@
 #include "../../src/db/vector_db_service.h"
 #include "../../src/db/document_store.h"
 #include <cJSON.h>
-#include "../../src/utils/document_chunker.h"
-#include "../../src/pdf/pdf_extractor.h"
-#include "../../src/utils/common_utils.h"
+#include "../util/document_chunker.h"
+#include "../pdf/pdf_extractor.h"
+#include "../util/common_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

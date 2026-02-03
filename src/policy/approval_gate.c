@@ -17,7 +17,7 @@
 
 #include "../tools/python_tool_files.h"
 #include "lib/tools/subagent_tool.h"
-#include "../utils/debug_output.h"
+#include "util/debug_output.h"
 
 static const GateAction DEFAULT_CATEGORY_ACTIONS[GATE_CATEGORY_COUNT] = {
     [GATE_CATEGORY_FILE_WRITE] = GATE_ACTION_GATE,

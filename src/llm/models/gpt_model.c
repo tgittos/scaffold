@@ -1,5 +1,5 @@
 #include "model_capabilities.h"
-#include "json_escape.h"
+#include "util/json_escape.h"
 #include "ui/output_formatter.h"
 #include "response_processing.h"
 #include "lib/tools/tools_system.h"

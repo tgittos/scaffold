@@ -1,5 +1,5 @@
 #include "pdf_extractor.h"
-#include "util/darray.h"
+#include "../util/darray.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

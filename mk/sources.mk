@@ -1,10 +1,11 @@
 # Source file definitions for ralph
 
 # Core application sources
+# Note: interrupt.c, common_utils.c, json_escape.c, debug_output.c, document_chunker.c
+# have been migrated to lib/util/. See mk/lib.mk for LIB_UTIL_SOURCES.
 CORE_SOURCES := \
     $(SRCDIR)/core/main.c \
     $(SRCDIR)/core/ralph.c \
-    $(SRCDIR)/core/interrupt.c \
     $(SRCDIR)/core/async_executor.c \
     $(SRCDIR)/core/tool_executor.c \
     $(SRCDIR)/core/streaming_handler.c \
@@ -17,12 +18,8 @@ CORE_SOURCES := \
     $(SRCDIR)/network/api_error.c \
     $(SRCDIR)/utils/config.c \
     $(SRCDIR)/utils/prompt_loader.c \
-    $(SRCDIR)/utils/document_chunker.c \
     $(SRCDIR)/utils/pdf_processor.c \
     $(SRCDIR)/utils/context_retriever.c \
-    $(SRCDIR)/utils/common_utils.c \
-    $(SRCDIR)/utils/debug_output.c \
-    $(SRCDIR)/utils/json_escape.c \
     $(SRCDIR)/session/conversation_tracker.c \
     $(SRCDIR)/session/conversation_compactor.c \
     $(SRCDIR)/session/rolling_summary.c \
@@ -98,8 +95,7 @@ DB_C_SOURCES := \
 
 DB_CPP_SOURCES := $(SRCDIR)/db/hnswlib_wrapper.cpp
 
-# PDF
-PDF_SOURCES := $(SRCDIR)/pdf/pdf_extractor.c
+# PDF - pdf_extractor.c has been migrated to lib/pdf/. See mk/lib.mk for LIB_PDF_SOURCES.
 
 # Utilities
 UTILS_EXTRA_SOURCES := \
@@ -107,7 +103,7 @@ UTILS_EXTRA_SOURCES := \
 
 # Combined sources
 C_SOURCES := $(CORE_SOURCES) $(POLICY_SOURCES) $(TOOL_SOURCES) $(MCP_SOURCES) $(MESSAGING_SOURCES) \
-    $(PROVIDER_SOURCES) $(MODEL_SOURCES) $(DB_C_SOURCES) $(PDF_SOURCES) $(UTILS_EXTRA_SOURCES)
+    $(PROVIDER_SOURCES) $(MODEL_SOURCES) $(DB_C_SOURCES) $(UTILS_EXTRA_SOURCES)
 CPP_SOURCES := $(DB_CPP_SOURCES)
 SOURCES := $(C_SOURCES) $(CPP_SOURCES)
 OBJECTS := $(C_SOURCES:.c=.o) $(CPP_SOURCES:.cpp=.o)
@@ -118,7 +114,7 @@ NETWORK_DEPS := \
     $(SRCDIR)/network/http_client.c \
     $(SRCDIR)/network/embedded_cacert.c \
     $(SRCDIR)/network/api_error.c \
-    $(SRCDIR)/core/interrupt.c
+    $(LIBDIR)/util/interrupt.c
 
 EMBEDDING_DEPS := \
     $(SRCDIR)/llm/embeddings.c \
@@ -128,12 +124,12 @@ EMBEDDING_DEPS := \
     $(SRCDIR)/llm/providers/local_embedding_provider.c
 
 UTIL_DEPS := \
-    $(SRCDIR)/utils/json_escape.c \
+    $(LIBDIR)/util/json_escape.c \
     $(LIBDIR)/ui/output_formatter.c \
     $(LIBDIR)/ui/json_output.c \
-    $(SRCDIR)/utils/debug_output.c \
-    $(SRCDIR)/utils/common_utils.c \
-    $(SRCDIR)/utils/document_chunker.c \
+    $(LIBDIR)/util/debug_output.c \
+    $(LIBDIR)/util/common_utils.c \
+    $(LIBDIR)/util/document_chunker.c \
     $(SRCDIR)/utils/pdf_processor.c \
     $(SRCDIR)/utils/context_retriever.c \
     $(SRCDIR)/utils/config.c \
@@ -207,7 +203,7 @@ COMPLEX_DEPS := \
     $(LIBDIR)/db/sqlite_dal.c \
     $(LIBDIR)/ipc/message_store.c \
     $(EMBEDDING_DEPS) \
-    $(SRCDIR)/pdf/pdf_extractor.c \
+    $(LIBDIR)/pdf/pdf_extractor.c \
     $(NETWORK_DEPS) \
     $(SRCDIR)/policy/verified_file_context.c \
     $(SRCDIR)/policy/verified_file_python.c \
@@ -220,8 +216,8 @@ CONV_DEPS := \
     $(LIBDIR)/db/sqlite_dal.c \
     $(EMBEDDING_DEPS) \
     $(NETWORK_DEPS) \
-    $(SRCDIR)/utils/json_escape.c \
+    $(LIBDIR)/util/json_escape.c \
     $(SRCDIR)/utils/config.c \
-    $(SRCDIR)/utils/debug_output.c \
-    $(SRCDIR)/utils/common_utils.c \
+    $(LIBDIR)/util/debug_output.c \
+    $(LIBDIR)/util/common_utils.c \
     $(SRCDIR)/utils/ralph_home.c

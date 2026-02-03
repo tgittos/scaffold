@@ -1,7 +1,7 @@
 #include "python_tool_files.h"
 #include "python_tool.h"
 #include "../utils/ralph_home.h"
-#include "../utils/debug_output.h"
+#include "util/debug_output.h"
 #include <Python.h>
 #include <cJSON.h>
 #include <stdio.h>

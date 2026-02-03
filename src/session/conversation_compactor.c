@@ -1,7 +1,7 @@
 #include "conversation_compactor.h"
 #include "rolling_summary.h"
 #include "token_manager.h"
-#include "debug_output.h"
+#include "util/debug_output.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

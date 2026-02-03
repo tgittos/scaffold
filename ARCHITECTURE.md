@@ -947,7 +947,6 @@ src/
 │   ├── ralph.c/h           # Core orchestration logic
 │   ├── async_executor.c/h  # Non-blocking message processing thread
 │   ├── context_enhancement.c/h  # Prompt enhancement with memory/context
-│   ├── interrupt.c/h       # Cooperative Ctrl+C cancellation handling
 │   ├── recap.c/h           # Conversation recap generation
 │   ├── streaming_handler.c/h   # Streaming orchestration layer
 │   └── tool_executor.c/h   # Tool-calling state machine
@@ -956,9 +955,7 @@ src/
 │   ├── vector_db_service.c/h # Thread-safe singleton service
 │   ├── document_store.c/h  # High-level document storage
 │   ├── metadata_store.c/h  # Chunk metadata storage
-│   ├── sqlite_dal.c/h      # SQLite Data Access Layer abstraction
 │   ├── task_store.c/h      # SQLite-based persistent task storage
-│   ├── message_store.c/h   # Inter-agent messaging storage
 │   └── hnswlib_wrapper.cpp/h # C++ bridge
 ├── llm/                    # LLM integration
 │   ├── llm_provider.c/h    # Provider abstraction
@@ -992,8 +989,6 @@ src/
 │   ├── streaming.c/h       # SSE streaming infrastructure
 │   ├── api_error.c/h       # Enhanced error handling with retries
 │   └── embedded_cacert.c/h # Embedded Mozilla CA certificate bundle
-├── pdf/                    # PDF processing
-│   └── pdf_extractor.c/h   # PDFio-based text extraction
 ├── policy/                 # Approval gate system
 │   ├── approval_gate.c/h   # Core approval orchestration
 │   ├── allowlist.c/h       # Pattern matching allowlist
@@ -1017,24 +1012,9 @@ src/
 │   ├── token_manager.c/h   # Token counting/allocation
 │   ├── conversation_compactor.c/h # Context trimming
 │   └── rolling_summary.c/h # Rolling conversation summary generation
-├── tools/                  # Tool implementations
-│   ├── tools_system.c/h    # Tool registry and execution
-│   ├── tool_result_builder.c/h # Result formatting
-│   ├── memory_tool.c/h     # Semantic memory (remember, recall_memories, forget_memory)
-│   ├── pdf_tool.c/h        # PDF processing tool
-│   ├── vector_db_tool.c/h  # Vector DB operations (13 tools)
+├── tools/                  # Python tool integration
 │   ├── python_tool.c/h     # Embedded Python interpreter
 │   ├── python_tool_files.c/h # Python file-based tools
-│   ├── subagent_tool.c/h   # Subagent process spawning
-│   ├── subagent_process.c/h    # Subagent I/O and lifecycle
-│   ├── messaging_tool.c/h  # Inter-agent messaging (6 tools)
-│   ├── todo_manager.c/h    # Todo data structures
-│   ├── todo_tool.c/h       # Todo tool call handler
-│   ├── todo_display.c/h    # Todo visualization
-│   ├── tool_format.h           # Tool format strategy pattern
-│   ├── tool_format_anthropic.c # Anthropic tool format
-│   ├── tool_format_openai.c    # OpenAI tool format
-│   ├── tool_param_dsl.c/h      # Table-driven parameter DSL
 │   └── python_defaults/    # Default Python tool files
 │       ├── read_file.py
 │       ├── write_file.py
@@ -1048,27 +1028,51 @@ src/
 ├── utils/                  # Utilities
 │   ├── config.c/h          # Configuration management
 │   ├── prompt_loader.c/h   # System prompt loading
-│   ├── output_formatter.c/h # Response formatting
-│   ├── debug_output.c/h    # Debug logging
-│   ├── document_chunker.c/h # Text chunking
 │   ├── pdf_processor.c/h   # PDF download/processing
 │   ├── context_retriever.c/h # Vector context retrieval
-│   ├── json_escape.c/h     # JSON escaping
-│   ├── json_output.c/h     # JSON output mode
+│   └── ralph_home.c/h      # Centralized home directory management
+lib/
+├── util/                   # Generic utilities
+│   ├── darray.h            # Type-safe dynamic array macros
+│   ├── ptrarray.h          # Type-safe dynamic pointer array with ownership
+│   ├── uuid_utils.c/h      # UUID v4 generation and validation
+│   ├── interrupt.c/h       # Cooperative Ctrl+C cancellation handling
 │   ├── common_utils.c/h    # General utilities
-│   ├── ralph_home.c/h      # Centralized home directory management
-│   └── spinner.c/h         # Tool execution spinner feedback
-├── lib/                    # Library layer (being migrated from src/)
-│   ├── util/               # Generic utilities
-│   │   ├── darray.h            # Type-safe dynamic array macros
-│   │   ├── ptrarray.h          # Type-safe dynamic pointer array with ownership
-│   │   └── uuid_utils.c/h      # UUID v4 generation and validation
-│   ├── db/                 # Database abstraction
-│   │   └── sqlite_dal.c/h      # SQLite data access layer
-│   └── ipc/                # Inter-process communication primitives
-│       ├── pipe_notifier.c/h   # Thread-safe pipe-based notification
-│       ├── agent_identity.c/h  # Thread-safe agent identity management
-│       ├── message_store.c/h   # SQLite-backed direct and pub/sub messaging
-│       └── message_poller.c/h  # Background message polling
+│   ├── json_escape.c/h     # JSON escaping
+│   ├── debug_output.c/h    # Debug logging
+│   └── document_chunker.c/h # Text chunking
+├── db/                     # Database abstraction
+│   └── sqlite_dal.c/h      # SQLite data access layer
+├── pdf/                    # PDF processing
+│   └── pdf_extractor.c/h   # PDFio-based text extraction
+├── ipc/                    # Inter-process communication
+│   ├── pipe_notifier.c/h   # Thread-safe pipe-based notification
+│   ├── agent_identity.c/h  # Thread-safe agent identity management
+│   ├── message_store.c/h   # SQLite-backed direct and pub/sub messaging
+│   └── message_poller.c/h  # Background message polling
+├── ui/                     # User interface components
+│   ├── terminal.c/h        # Terminal abstraction
+│   ├── spinner.c/h         # Tool execution spinner feedback
+│   ├── output_formatter.c/h # Response formatting
+│   ├── json_output.c/h     # JSON output mode
+│   ├── memory_commands.c/h # Interactive /memory slash commands
+│   └── repl.c/h            # Read-Eval-Print-Loop implementation
+└── tools/                  # Tool system
+    ├── tools_system.c/h    # Tool registry and execution
+    ├── tool_result_builder.c/h # Result formatting
+    ├── tool_param_dsl.c/h  # Table-driven parameter DSL
+    ├── tool_format.h       # Tool format strategy pattern
+    ├── tool_format_anthropic.c # Anthropic tool format
+    ├── tool_format_openai.c    # OpenAI tool format
+    ├── builtin_tools.c/h   # Built-in tool registration
+    ├── memory_tool.c/h     # Semantic memory (remember, recall_memories, forget_memory)
+    ├── pdf_tool.c/h        # PDF processing tool
+    ├── vector_db_tool.c/h  # Vector DB operations (13 tools)
+    ├── subagent_tool.c/h   # Subagent process spawning
+    ├── subagent_process.c/h    # Subagent I/O and lifecycle
+    ├── messaging_tool.c/h  # Inter-agent messaging (6 tools)
+    ├── todo_manager.c/h    # Todo data structures
+    ├── todo_tool.c/h       # Todo tool call handler
+    └── todo_display.c/h    # Todo visualization
 ```
 

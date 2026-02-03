@@ -1,6 +1,6 @@
 #include "embeddings_service.h"
 #include "embedding_provider.h"
-#include "../utils/common_utils.h"
+#include "util/common_utils.h"
 #include "../utils/config.h"
 #include <stdlib.h>
 #include <string.h>

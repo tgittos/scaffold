@@ -1,9 +1,9 @@
 #include "http_client.h"
 #include "api_error.h"
 #include "embedded_cacert.h"
-#include "../core/interrupt.h"
+#include "util/interrupt.h"
 #include "../utils/config.h"
-#include "../utils/debug_output.h"
+#include "util/debug_output.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

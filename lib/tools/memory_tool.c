@@ -2,9 +2,9 @@
 #include "../../src/db/vector_db_service.h"
 #include "../../src/db/metadata_store.h"
 #include "../../src/llm/embeddings_service.h"
-#include "../../src/utils/common_utils.h"
-#include "../../src/utils/json_escape.h"
-#include "../../src/utils/debug_output.h"
+#include "../util/common_utils.h"
+#include "../util/json_escape.h"
+#include "../util/debug_output.h"
 #include "tool_result_builder.h"
 #include <stdio.h>
 #include <stdlib.h>

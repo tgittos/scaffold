@@ -3,7 +3,7 @@
 #include "tools/builtin_tools.h"
 #include "mock_api_server.h"
 #include "../src/db/document_store.h"
-#include "json_escape.h"
+#include "util/json_escape.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

@@ -89,7 +89,7 @@ void test_subagent_manager_init_defaults(void) {
     SubagentManager manager;
     memset(&manager, 0xFF, sizeof(manager));  // Fill with garbage
 
-    int result = subagent_manager_init(&manager);
+    int result = subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
 
     TEST_ASSERT_EQUAL_INT(0, result);
     TEST_ASSERT_EQUAL_INT(0, (int)manager.subagents.count);
@@ -117,7 +117,7 @@ void test_subagent_manager_init_with_config(void) {
 }
 
 void test_subagent_manager_init_null_pointer(void) {
-    int result = subagent_manager_init(NULL);
+    int result = subagent_manager_init_with_config(NULL, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
     TEST_ASSERT_EQUAL_INT(-1, result);
 
     result = subagent_manager_init_with_config(NULL, 5, 300);
@@ -159,7 +159,7 @@ void test_subagent_manager_cleanup_null(void) {
 
 void test_subagent_manager_cleanup_empty(void) {
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
 
     // Should handle empty manager gracefully
     subagent_manager_cleanup(&manager);
@@ -264,7 +264,7 @@ void test_cleanup_subagent_with_data(void) {
 
 void test_subagent_find_by_id_empty(void) {
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
 
     Subagent *found = subagent_find_by_id(&manager, "abc123");
     TEST_ASSERT_NULL(found);
@@ -274,7 +274,7 @@ void test_subagent_find_by_id_empty(void) {
 
 void test_subagent_find_by_id_null_params(void) {
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
 
     TEST_ASSERT_NULL(subagent_find_by_id(NULL, "abc123"));
     TEST_ASSERT_NULL(subagent_find_by_id(&manager, NULL));
@@ -284,7 +284,7 @@ void test_subagent_find_by_id_null_params(void) {
 
 void test_subagent_poll_all_empty(void) {
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
 
     int changed = subagent_poll_all(&manager);
     TEST_ASSERT_EQUAL_INT(0, changed);
@@ -349,7 +349,7 @@ void test_read_subagent_output_from_pipe(void) {
 
 void test_subagent_spawn_null_params(void) {
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
     char id[SUBAGENT_ID_LENGTH + 1];
 
     // Null manager
@@ -366,7 +366,7 @@ void test_subagent_spawn_null_params(void) {
 
 void test_subagent_spawn_prevents_nesting(void) {
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
     char id[SUBAGENT_ID_LENGTH + 1];
 
     // Set the is_subagent_process flag
@@ -402,7 +402,7 @@ void test_subagent_spawn_respects_max_limit(void) {
 
 void test_subagent_spawn_basic(void) {
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
     char id[SUBAGENT_ID_LENGTH + 1];
     memset(id, 0, sizeof(id));
 
@@ -437,7 +437,7 @@ void test_subagent_spawn_basic(void) {
 
 void test_subagent_spawn_with_context(void) {
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
     char id[SUBAGENT_ID_LENGTH + 1];
     memset(id, 0, sizeof(id));
 
@@ -457,7 +457,7 @@ void test_subagent_spawn_with_context(void) {
 
 void test_subagent_spawn_empty_context_treated_as_null(void) {
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
     char id[SUBAGENT_ID_LENGTH + 1];
     memset(id, 0, sizeof(id));
 
@@ -502,7 +502,7 @@ void test_subagent_spawn_multiple(void) {
 
 void test_subagent_spawn_and_poll(void) {
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
     char id[SUBAGENT_ID_LENGTH + 1];
 
     // Spawn a subagent
@@ -540,7 +540,7 @@ void test_subagent_spawn_and_poll(void) {
 
 void test_subagent_get_status_null_params(void) {
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
     SubagentStatus status;
     char *result_str = NULL;
     char *error_str = NULL;
@@ -559,7 +559,7 @@ void test_subagent_get_status_null_params(void) {
 
 void test_subagent_get_status_not_found(void) {
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
     SubagentStatus status;
     char *result_str = NULL;
     char *error_str = NULL;
@@ -578,7 +578,7 @@ void test_subagent_get_status_not_found(void) {
 
 void test_subagent_get_status_running_nowait(void) {
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
     char id[SUBAGENT_ID_LENGTH + 1];
     SubagentStatus status;
     char *result_str = NULL;
@@ -605,7 +605,7 @@ void test_subagent_get_status_running_nowait(void) {
 
 void test_subagent_get_status_after_completion(void) {
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
     char id[SUBAGENT_ID_LENGTH + 1];
     SubagentStatus status;
     char *result_str = NULL;
@@ -636,7 +636,7 @@ void test_subagent_get_status_after_completion(void) {
 
 void test_subagent_get_status_wait(void) {
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
     char id[SUBAGENT_ID_LENGTH + 1];
     SubagentStatus status;
     char *result_str = NULL;
@@ -663,7 +663,7 @@ void test_subagent_get_status_wait(void) {
 
 void test_subagent_get_status_cached_result(void) {
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
     char id[SUBAGENT_ID_LENGTH + 1];
     SubagentStatus status1, status2;
     char *result_str1 = NULL, *result_str2 = NULL;
@@ -694,7 +694,7 @@ void test_subagent_get_status_cached_result(void) {
 
 void test_subagent_get_status_null_optional_params(void) {
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
     char id[SUBAGENT_ID_LENGTH + 1];
     SubagentStatus status;
 
@@ -722,7 +722,7 @@ void test_subagent_get_status_null_optional_params(void) {
 
 void test_register_subagent_tool_null_params(void) {
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
     ToolRegistry registry;
     init_tool_registry(&registry);
 
@@ -738,7 +738,7 @@ void test_register_subagent_tool_null_params(void) {
 
 void test_register_subagent_status_tool_null_params(void) {
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
     ToolRegistry registry;
     init_tool_registry(&registry);
 
@@ -754,7 +754,7 @@ void test_register_subagent_status_tool_null_params(void) {
 
 void test_register_subagent_tools(void) {
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
     ToolRegistry registry;
     init_tool_registry(&registry);
 
@@ -788,7 +788,7 @@ void test_execute_subagent_tool_call_no_manager(void) {
     // This test needs to ensure g_subagent_manager is NULL
     // We'll register with a manager, then we can test the execution
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
     ToolRegistry registry;
     init_tool_registry(&registry);
 
@@ -815,7 +815,7 @@ void test_execute_subagent_tool_call_no_manager(void) {
 
 void test_execute_subagent_tool_call_missing_task(void) {
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
     ToolRegistry registry;
     init_tool_registry(&registry);
     register_subagent_tool(&registry, &manager);
@@ -839,7 +839,7 @@ void test_execute_subagent_tool_call_missing_task(void) {
 
 void test_execute_subagent_tool_call_empty_task(void) {
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
     ToolRegistry registry;
     init_tool_registry(&registry);
     register_subagent_tool(&registry, &manager);
@@ -863,7 +863,7 @@ void test_execute_subagent_tool_call_empty_task(void) {
 
 void test_execute_subagent_tool_call_success(void) {
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
     ToolRegistry registry;
     init_tool_registry(&registry);
     register_subagent_tool(&registry, &manager);
@@ -892,7 +892,7 @@ void test_execute_subagent_tool_call_success(void) {
 
 void test_execute_subagent_tool_call_prevents_nesting(void) {
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
     manager.is_subagent_process = 1;  // Simulate running as a subagent
     ToolRegistry registry;
     init_tool_registry(&registry);
@@ -931,7 +931,7 @@ void test_execute_subagent_status_tool_call_null_params(void) {
 
 void test_execute_subagent_status_tool_call_missing_id(void) {
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
     ToolRegistry registry;
     init_tool_registry(&registry);
     register_subagent_status_tool(&registry, &manager);
@@ -954,7 +954,7 @@ void test_execute_subagent_status_tool_call_missing_id(void) {
 
 void test_execute_subagent_status_tool_call_not_found(void) {
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
     ToolRegistry registry;
     init_tool_registry(&registry);
     register_subagent_status_tool(&registry, &manager);
@@ -981,7 +981,7 @@ void test_execute_subagent_status_tool_call_not_found(void) {
 
 void test_execute_subagent_status_tool_call_success(void) {
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
     ToolRegistry registry;
     init_tool_registry(&registry);
     register_subagent_tool(&registry, &manager);
@@ -1032,7 +1032,7 @@ void test_execute_subagent_status_tool_call_success(void) {
 
 void test_execute_subagent_status_tool_call_with_wait(void) {
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
     ToolRegistry registry;
     init_tool_registry(&registry);
     register_subagent_tool(&registry, &manager);
@@ -1093,7 +1093,7 @@ void test_subagent_completion_sends_message_to_parent(void) {
     messaging_tool_set_agent_id("parent-agent-123");
 
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
     char id[SUBAGENT_ID_LENGTH + 1];
 
     // Spawn a mock subagent that completes successfully
@@ -1133,7 +1133,7 @@ void test_subagent_failure_sends_message_to_parent(void) {
     messaging_tool_set_agent_id("parent-agent-456");
 
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
     char id[SUBAGENT_ID_LENGTH + 1];
 
     // Spawn a mock subagent that fails (non-zero exit code)
@@ -1212,7 +1212,7 @@ void test_subagent_no_notification_without_parent_id(void) {
     messaging_tool_cleanup();  // Ensure no agent ID is set
 
     SubagentManager manager;
-    subagent_manager_init(&manager);
+    subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
     char id[SUBAGENT_ID_LENGTH + 1];
 
     // Spawn a mock subagent that completes

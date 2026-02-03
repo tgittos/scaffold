@@ -1,5 +1,5 @@
 #include "unity/unity.h"
-#include "../src/utils/document_chunker.h"
+#include "util/document_chunker.h"
 #include <string.h>
 #include <stdlib.h>
 

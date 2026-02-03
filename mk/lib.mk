@@ -62,7 +62,16 @@ LIB_SESSION_SOURCES :=
 LIB_POLICY_SOURCES :=
 
 # Util module (generic utilities)
-LIB_UTIL_SOURCES := $(LIBDIR)/util/uuid_utils.c
+LIB_UTIL_SOURCES := \
+    $(LIBDIR)/util/uuid_utils.c \
+    $(LIBDIR)/util/common_utils.c \
+    $(LIBDIR)/util/json_escape.c \
+    $(LIBDIR)/util/debug_output.c \
+    $(LIBDIR)/util/document_chunker.c \
+    $(LIBDIR)/util/interrupt.c
+
+# PDF module
+LIB_PDF_SOURCES := $(LIBDIR)/pdf/pdf_extractor.c
 
 # Database module
 LIB_DB_SOURCES := $(LIBDIR)/db/sqlite_dal.c
@@ -74,7 +83,7 @@ LIB_WORKFLOW_SOURCES := $(LIBDIR)/workflow/workflow.c
 LIB_C_SOURCES := $(LIB_IPC_SOURCES) $(LIB_UI_SOURCES) $(LIB_TOOLS_SOURCES) \
     $(LIB_AGENT_SOURCES) $(LIB_SERVICES_SOURCES) $(LIB_LLM_SOURCES) \
     $(LIB_SESSION_SOURCES) $(LIB_POLICY_SOURCES) $(LIB_DB_SOURCES) \
-    $(LIB_WORKFLOW_SOURCES) $(LIB_UTIL_SOURCES)
+    $(LIB_WORKFLOW_SOURCES) $(LIB_UTIL_SOURCES) $(LIB_PDF_SOURCES)
 
 LIB_CPP_SOURCES :=
 

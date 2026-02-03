@@ -5,7 +5,7 @@
  */
 
 #include "mcp_transport.h"
-#include "../utils/debug_output.h"
+#include "util/debug_output.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>

@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../unity/unity.h"
-#include "../../src/utils/debug_output.h"
+#include "util/debug_output.h"
 
 void setUp(void) {
     debug_init(true);

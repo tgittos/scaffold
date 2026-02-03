@@ -1,5 +1,5 @@
 #include "vector_db_service.h"
-#include "../utils/common_utils.h"
+#include "util/common_utils.h"
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>

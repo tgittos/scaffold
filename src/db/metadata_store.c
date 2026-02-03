@@ -5,7 +5,7 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <cJSON.h>
-#include "../utils/common_utils.h"
+#include "util/common_utils.h"
 #include "util/ptrarray.h"
 #include "../utils/ralph_home.h"
 

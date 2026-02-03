@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "json_escape.h"
+#include "util/json_escape.h"
 
 extern ModelRegistry* get_model_registry(void);
 

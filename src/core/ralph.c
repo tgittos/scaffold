@@ -9,7 +9,7 @@
 #include "prompt_loader.h"
 #include "lib/tools/todo_tool.h"
 #include "lib/tools/todo_display.h"
-#include "debug_output.h"
+#include "util/debug_output.h"
 #include "api_common.h"
 #include "../llm/embeddings_service.h"
 #include "token_manager.h"
@@ -25,12 +25,23 @@
 #include "lib/tools/messaging_tool.h"
 #include "lib/tools/builtin_tools.h"
 #include "lib/ipc/message_poller.h"
+#include "async_executor.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <curl/curl.h>
-#include "json_escape.h"
+#include "util/json_escape.h"
+
+/**
+ * Callback invoked when a subagent spawns to notify the async executor's select loop.
+ * This allows the main thread to immediately rebuild its fd_set to include the new
+ * subagent's approval channel instead of waiting for the next timeout.
+ */
+static void on_subagent_spawn(void *user_data) {
+    (void)user_data;
+    async_executor_notify_subagent_spawned(async_executor_get_active());
+}
 
 char* ralph_build_json_payload(const char* model, const char* system_prompt,
                               const ConversationHistory* conversation, 
@@ -156,9 +167,13 @@ int ralph_init_session(RalphSession* session) {
         }
     }
 
-    if (subagent_manager_init(&session->subagent_manager) != 0) {
+    if (subagent_manager_init_with_config(&session->subagent_manager,
+                                          SUBAGENT_MAX_DEFAULT,
+                                          SUBAGENT_TIMEOUT_DEFAULT) != 0) {
         fprintf(stderr, "Warning: Failed to initialize subagent manager\n");
     } else {
+        /* Connect spawn callback for immediate fd_set rebuild in interactive mode */
+        subagent_manager_set_spawn_callback(&session->subagent_manager, on_subagent_spawn, NULL);
         if (register_subagent_tool(&session->tools, &session->subagent_manager) != 0) {
             fprintf(stderr, "Warning: Failed to register subagent tool\n");
         }
