@@ -1,18 +1,17 @@
 /**
  * lib/ui/output.h - Library wrapper for output formatting
  *
- * This header re-exports the output formatting implementation from src/
- * through the library API. It provides compatibility between the
- * internal src/ interface and the public lib/ interface.
+ * This header re-exports the output formatting implementation
+ * through the library API.
  *
- * Source implementation: src/utils/output_formatter.c
+ * Source implementation: lib/ui/output_formatter.c
  */
 
 #ifndef LIB_UI_OUTPUT_H
 #define LIB_UI_OUTPUT_H
 
-/* Re-export the original implementation */
-#include "../../src/utils/output_formatter.h"
+/* Re-export the implementation */
+#include "output_formatter.h"
 
 /*
  * Library API aliases (ralph_* prefix)

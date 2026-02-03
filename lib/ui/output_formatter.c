@@ -1,9 +1,9 @@
 #include "output_formatter.h"
-#include "debug_output.h"
 #include "json_output.h"
-#include "model_capabilities.h"
-#include "../core/interrupt.h"
-#include "../tools/todo_display.h"
+#include "../../src/utils/debug_output.h"
+#include "../../src/llm/model_capabilities.h"
+#include "../../src/core/interrupt.h"
+#include "../../src/tools/todo_display.h"
 #include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,25 +27,25 @@ static char *extract_json_string(const char *json, const char *key) {
     if (!json || !key) {
         return NULL;
     }
-    
+
     char pattern[256];
-    memset(pattern, 0, sizeof(pattern));  // Zero-initialize for Valgrind
+    memset(pattern, 0, sizeof(pattern));  /* Zero-initialize for Valgrind */
     int ret = snprintf(pattern, sizeof(pattern), "\"%s\":", key);
     if (ret < 0 || ret >= (int)sizeof(pattern)) {
         return NULL;
     }
-    
+
     const char *key_pos = strstr(json, pattern);
     if (!key_pos) {
         return NULL;
     }
-    
+
     const char *start = key_pos + strlen(pattern);
-    
+
     while (*start && (*start == ' ' || *start == '\t' || *start == '\n' || *start == '\r')) {
         start++;
     }
-    
+
     if (*start != '"') {
         return NULL;
     }
@@ -62,37 +62,37 @@ static char *extract_json_string(const char *json, const char *key) {
             end++;
         }
     }
-    
+
     if (*end != '"') {
         return NULL;
     }
-    
+
     if (end < start) {
-        return NULL;  // Invalid range
+        return NULL;  /* Invalid range */
     }
-    
+
     size_t len = (size_t)(end - start);
     char *result = malloc(len + 1);
     if (!result) {
         return NULL;
     }
-    
+
     if (len > 0) {
         memcpy(result, start, len);
     }
     result[len] = '\0';
-    
+
     return result;
 }
 
-// Strips <tool_call> XML blocks and memory-tool JSON patterns from response
-// text so raw markup never reaches the terminal display.
+/* Strips <tool_call> XML blocks and memory-tool JSON patterns from response
+ * text so raw markup never reaches the terminal display. */
 static void filter_tool_call_markup(char *str) {
     if (!str) return;
-    
+
     char *src = str;
     char *dst = str;
-    
+
     while (*src) {
         if (strncmp(src, "<tool_call>", 11) == 0) {
             const char *end_tag = strstr(src, "</tool_call>");
@@ -154,14 +154,14 @@ ModelRegistry* get_model_registry() {
 static void separate_thinking_and_response(const char *content, char **thinking, char **response) {
     *thinking = NULL;
     *response = NULL;
-    
+
     if (!content) {
         return;
     }
-    
+
     const char *think_start = strstr(content, "<think>");
     const char *think_end = strstr(content, "</think>");
-    
+
     if (think_start && think_end && think_end > think_start) {
         think_start += 7;
         size_t think_len = (size_t)(think_end - think_start);
@@ -170,13 +170,13 @@ static void separate_thinking_and_response(const char *content, char **thinking,
             memcpy(*thinking, think_start, think_len);
             (*thinking)[think_len] = '\0';
         }
-        
+
         const char *response_start = think_end + 8;
-        while (*response_start && (*response_start == ' ' || *response_start == '\t' || 
+        while (*response_start && (*response_start == ' ' || *response_start == '\t' ||
                *response_start == '\n' || *response_start == '\r')) {
             response_start++;
         }
-        
+
         if (*response_start) {
             size_t response_len = strlen(response_start);
             *response = malloc(response_len + 1);
@@ -199,14 +199,14 @@ int parse_api_response(const char *json_response, ParsedResponse *result) {
     if (!json_response || !result) {
         return -1;
     }
-    
+
     char *model_name = extract_json_string(json_response, "model");
     int ret = parse_api_response_with_model(json_response, model_name, result);
-    
+
     if (model_name) {
         free(model_name);
     }
-    
+
     return ret;
 }
 
@@ -232,7 +232,7 @@ int parse_anthropic_response(const char *json_response, ParsedResponse *result) 
         return -1;
     }
 
-    // Anthropic responses may contain multiple thinking/text content blocks
+    /* Anthropic responses may contain multiple thinking/text content blocks */
     char *accumulated_thinking = NULL;
     char *accumulated_text = NULL;
 
@@ -282,7 +282,7 @@ int parse_anthropic_response(const char *json_response, ParsedResponse *result) 
 
     result->thinking_content = accumulated_thinking;
 
-    // Some models embed <think> tags in text instead of using dedicated thinking blocks
+    /* Some models embed <think> tags in text instead of using dedicated thinking blocks */
     if (accumulated_text) {
         if (strstr(accumulated_text, "<think>") && strstr(accumulated_text, "</think>")) {
             char *inner_thinking = NULL;
@@ -368,7 +368,7 @@ int parse_api_response_with_model(const char *json_response, const char *model_n
 
     cJSON *content = cJSON_GetObjectItem(message, "content");
     if (!content) {
-        // Tool-call-only responses have no content field
+        /* Tool-call-only responses have no content field */
         cJSON *tool_calls = cJSON_GetObjectItem(message, "tool_calls");
         if (tool_calls) {
             cJSON *usage = cJSON_GetObjectItem(root, "usage");
@@ -388,7 +388,7 @@ int parse_api_response_with_model(const char *json_response, const char *model_n
     }
 
     if (cJSON_IsNull(content)) {
-        // null content is valid for tool-call-only responses
+        /* null content is valid for tool-call-only responses */
     } else if (cJSON_IsString(content) && content->valuestring) {
         char *raw_content = strdup(content->valuestring);
         if (!raw_content) {
@@ -483,9 +483,9 @@ void print_formatted_response_improved(const ParsedResponse *response) {
 static bool is_informational_check(const char *tool_name, const char *arguments) {
     if (!tool_name || !arguments) return false;
 
-    // Common informational commands that are expected to sometimes "fail"
+    /* Common informational commands that are expected to sometimes "fail" */
     if (strcmp(tool_name, "shell_execute") == 0 || strcmp(tool_name, "shell") == 0) {
-        // Version checks, which commands, etc.
+        /* Version checks, which commands, etc. */
         if (strstr(arguments, "--version") || strstr(arguments, "which ") ||
             strstr(arguments, "command -v") || strstr(arguments, "type ")) {
             return true;
@@ -632,7 +632,7 @@ void log_tool_execution_improved(const char *tool_name, const char *arguments, b
         return;
     }
 
-    // If interrupted, always show as failure
+    /* If interrupted, always show as failure */
     bool was_interrupted = interrupt_pending();
     if (was_interrupted) {
         success = false;
@@ -827,7 +827,7 @@ void display_streaming_tool_start(const char* tool_name) {
         fprintf(stdout, TERM_CLEAR_LINE);
         streaming_first_chunk = 0;
     }
-    (void)tool_name; // Tool info shown by log_tool_execution_improved instead
+    (void)tool_name; /* Tool info shown by log_tool_execution_improved instead */
     fflush(stdout);
 }
 

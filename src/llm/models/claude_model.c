@@ -1,5 +1,5 @@
 #include "model_capabilities.h"
-#include "output_formatter.h"
+#include "ui/output_formatter.h"
 #include "response_processing.h"
 #include "tools_system.h"
 #include <stdlib.h>

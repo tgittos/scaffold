@@ -1,5 +1,5 @@
 #include "unity.h"
-#include "output_formatter.h"
+#include "ui/output_formatter.h"
 #include <string.h>
 #include <stdio.h>
 

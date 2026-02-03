@@ -16,8 +16,6 @@ CORE_SOURCES := \
     $(SRCDIR)/network/api_common.c \
     $(SRCDIR)/network/api_error.c \
     $(SRCDIR)/utils/config.c \
-    $(SRCDIR)/utils/output_formatter.c \
-    $(SRCDIR)/utils/json_output.c \
     $(SRCDIR)/utils/prompt_loader.c \
     $(SRCDIR)/utils/document_chunker.c \
     $(SRCDIR)/utils/pdf_processor.c \
@@ -146,8 +144,8 @@ EMBEDDING_DEPS := \
 
 UTIL_DEPS := \
     $(SRCDIR)/utils/json_escape.c \
-    $(SRCDIR)/utils/output_formatter.c \
-    $(SRCDIR)/utils/json_output.c \
+    $(LIBDIR)/ui/output_formatter.c \
+    $(LIBDIR)/ui/json_output.c \
     $(SRCDIR)/utils/debug_output.c \
     $(SRCDIR)/utils/common_utils.c \
     $(SRCDIR)/utils/document_chunker.c \

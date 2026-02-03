@@ -1,4 +1,4 @@
-#include "output_formatter.h"
+#include "ui/output_formatter.h"
 
 static bool g_json_output_mode = false;
 

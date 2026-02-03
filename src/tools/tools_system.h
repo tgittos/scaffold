@@ -3,37 +3,20 @@
 
 #include <stddef.h>
 #include "util/darray.h"
+#include "types.h"
 
 /**
  * Structure representing a tool parameter
  */
 typedef struct {
     char *name;
-    char *type;          // "string", "number", "boolean", "object", "array"
+    char *type;          /* "string", "number", "boolean", "object", "array" */
     char *description;
-    char **enum_values;  // For enum types, NULL if not enum
+    char **enum_values;  /* For enum types, NULL if not enum */
     int enum_count;
-    int required;        // 1 if required, 0 if optional
-    char *items_schema;  // For array types: JSON schema defining item structure, NULL for default {"type": "object"}
+    int required;        /* 1 if required, 0 if optional */
+    char *items_schema;  /* For array types: JSON schema defining item structure, NULL for default {"type": "object"} */
 } ToolParameter;
-
-/**
- * Structure representing a tool call from the model
- */
-typedef struct {
-    char *id;           // Tool call ID from the model
-    char *name;         // Function name to call
-    char *arguments;    // JSON string of arguments
-} ToolCall;
-
-/**
- * Structure representing tool call result
- */
-typedef struct {
-    char *tool_call_id; // Matching the tool call ID
-    char *result;       // Tool execution result as string
-    int success;        // 1 if successful, 0 if error
-} ToolResult;
 
 // Forward declaration for the execution function type
 typedef int (*tool_execute_func_t)(const ToolCall *tool_call, ToolResult *result);

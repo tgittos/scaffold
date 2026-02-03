@@ -3,7 +3,7 @@
 #include <string.h>
 #include "../unity/unity.h"
 #include "ui/terminal.h"
-#include "../../src/utils/output_formatter.h"
+#include "ui/output_formatter.h"
 
 void setUp(void) {
     set_json_output_mode(false);

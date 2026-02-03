@@ -1,5 +1,4 @@
 #include "json_output.h"
-#include "tools_system.h"
 #include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -99,7 +98,7 @@ static int build_assistant_tool_calls_json(
         cJSON *tool_use = cJSON_CreateObject();
         if (tool_use == NULL) {
             log_alloc_failure("build_assistant_tool_calls_json tool_use");
-            continue;  // Skip this tool but try to output others
+            continue;  /* Skip this tool but try to output others */
         }
 
         if (fields.id == NULL || fields.name == NULL) {
@@ -163,7 +162,7 @@ static ToolCallFields get_buffered_tool_fields(void* tools, int index) {
 }
 
 void json_output_init(void) {
-    // Intentional no-op: provides a consistent init/cleanup lifecycle pattern.
+    /* Intentional no-op: provides a consistent init/cleanup lifecycle pattern. */
 }
 
 void json_output_assistant_text(const char* text, int input_tokens, int output_tokens) {

@@ -13,7 +13,7 @@
 #include <unistd.h>
 
 #include "../utils/debug_output.h"
-#include "../utils/output_formatter.h"
+#include "ui/output_formatter.h"
 #include "../tools/subagent_tool.h"
 
 #define DEBUG_PRINT(...) debug_printf(__VA_ARGS__)

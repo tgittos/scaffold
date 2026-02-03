@@ -1,6 +1,6 @@
 #include "unity.h"
-#include "json_output.h"
-#include "output_formatter.h"
+#include "ui/json_output.h"
+#include "ui/output_formatter.h"
 #include "tools_system.h"
 #include "streaming.h"
 #include <string.h>

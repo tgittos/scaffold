@@ -8,7 +8,7 @@
 #include "python_tool.h"
 #include "python_tool_files.h"
 #include "messaging_tool.h"
-#include "output_formatter.h"
+#include "ui/output_formatter.h"
 #include "json_escape.h"
 #include <stdio.h>
 #include <stdlib.h>

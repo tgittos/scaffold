@@ -12,25 +12,6 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 ---
 
-## Session 6: UI Output Formatting
-
-**Move:** Output and JSON formatting (has tool type dependencies).
-
-| File | Destination |
-|------|-------------|
-| `src/utils/output_formatter.c/h` | `lib/ui/` |
-| `src/utils/json_output.c/h` | `lib/ui/` |
-
-**Changes:**
-1. Create `lib/types.h` with shared types (ToolCall, ToolResult, StreamingToolUse)
-2. Move files to `lib/ui/`
-3. Update `mk/lib.mk`: Add to `LIB_UI_SOURCES`
-4. Update `src/tools/tools_system.h` to include `lib/types.h`
-
-**Verify:** `./scripts/build.sh && ./scripts/run_tests.sh`
-
----
-
 ## Session 7: Memory Commands
 
 **Move:** CLI command handlers.
@@ -365,7 +346,9 @@ Session 4: IPC completion (message_poller) ✓ COMPLETE
     ↓
 Session 5: UI terminal utilities (terminal, spinner) ✓ COMPLETE
     ↓
-Session 6-7: UI (output, CLI commands)
+Session 6: UI output formatting (output_formatter, json_output) ✓ COMPLETE
+    ↓
+Session 7: UI CLI commands (memory_commands)
     ↓
 Session 8-9: Tools Core + Simple (depends on UI for output)
     ↓

@@ -1,6 +1,6 @@
 #include "unity.h"
 #include "ui/spinner.h"
-#include "../../src/utils/output_formatter.h"
+#include "ui/output_formatter.h"
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdio.h>

@@ -1,8 +1,8 @@
 #include "tool_executor.h"
 #include "ralph.h"
 #include "interrupt.h"
-#include "output_formatter.h"
-#include "json_output.h"
+#include "ui/output_formatter.h"
+#include "ui/json_output.h"
 #include <cJSON.h>
 #include "debug_output.h"
 #include "api_error.h"

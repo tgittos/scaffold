@@ -23,7 +23,9 @@ LIB_IPC_SOURCES := \
 LIB_UI_SOURCES := \
     $(LIBDIR)/ui/terminal.c \
     $(LIBDIR)/ui/spinner.c \
-    $(LIBDIR)/ui/repl.c
+    $(LIBDIR)/ui/repl.c \
+    $(LIBDIR)/ui/output_formatter.c \
+    $(LIBDIR)/ui/json_output.c
 
 # Tools module (Phase 4)
 LIB_TOOLS_SOURCES :=

@@ -1,5 +1,5 @@
 #include "terminal.h"
-#include "../../src/utils/output_formatter.h"
+#include "output_formatter.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>

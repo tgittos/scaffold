@@ -2,8 +2,9 @@
 #define STREAMING_H
 
 #include <stddef.h>
-#include <sys/types.h>  // For ssize_t
+#include <sys/types.h>  /* For ssize_t */
 #include "util/darray.h"
+#include "types.h"
 
 /**
  * Streaming SSE Parser and Context Management
@@ -20,13 +21,6 @@ typedef enum {
     STREAM_STATE_COMPLETE,
     STREAM_STATE_ERROR
 } StreamState;
-
-typedef struct {
-    char* id;
-    char* name;
-    char* arguments_json;
-    size_t arguments_capacity;
-} StreamingToolUse;
 
 DARRAY_DECLARE(StreamingToolUseArray, StreamingToolUse)
 

@@ -21,11 +21,11 @@ void set_json_output_mode(bool enabled);
  */
 bool get_json_output_mode(void);
 
-#include "ui/terminal.h"
+#include "terminal.h"
 
 typedef struct {
-    char *thinking_content;  // Content inside <think> tags (optional)
-    char *response_content;  // Actual response content
+    char *thinking_content;  /* Content inside <think> tags (optional) */
+    char *response_content;  /* Actual response content */
     int prompt_tokens;
     int completion_tokens;
     int total_tokens;
@@ -33,48 +33,48 @@ typedef struct {
 
 /**
  * Parse JSON response from OpenAI/LLM API and extract message content and token usage
- * 
+ *
  * @param json_response Raw JSON response string
  * @param result Pointer to ParsedResponse struct to store results
  * @return 0 on success, -1 on error
- * 
+ *
  * Note: Caller must free result->thinking_content and result->response_content when done
  */
 int parse_api_response(const char *json_response, ParsedResponse *result);
 
 /**
  * Parse JSON response with model-specific capabilities
- * 
+ *
  * @param json_response Raw JSON response string
  * @param model_name Name of the model being used
  * @param result Pointer to ParsedResponse struct to store results
  * @return 0 on success, -1 on error
- * 
+ *
  * Note: Caller must free result->thinking_content and result->response_content when done
  */
 int parse_api_response_with_model(const char *json_response, const char *model_name, ParsedResponse *result);
 
 /**
  * Parse JSON response from Anthropic API and extract message content and token usage
- * 
+ *
  * @param json_response Raw JSON response string
  * @param result Pointer to ParsedResponse struct to store results
  * @return 0 on success, -1 on error
- * 
+ *
  * Note: Caller must free result->thinking_content and result->response_content when done
  */
 int parse_anthropic_response(const char *json_response, ParsedResponse *result);
 
 /**
  * Clean up memory allocated in ParsedResponse
- * 
+ *
  * @param response Pointer to ParsedResponse struct to clean up
  */
 void cleanup_parsed_response(ParsedResponse *response);
 
 /**
  * Print formatted response with improved visual grouping and separation
- * 
+ *
  * @param response Parsed response struct
  */
 void print_formatted_response_improved(const ParsedResponse *response);

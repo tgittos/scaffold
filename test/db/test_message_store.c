@@ -7,16 +7,19 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <stdio.h>
 
-static const char* TEST_DB_PATH = "/tmp/test_messages.db";
-static const char* TEST_HOME_DIR = "/tmp/test_message_store_home";
+static char g_test_db_path[256];
+static char g_test_home_dir[256];
 static message_store_t* g_store = NULL;
 
 void setUp(void) {
-    ralph_home_init(TEST_HOME_DIR);
-    unlink(TEST_DB_PATH);
+    snprintf(g_test_db_path, sizeof(g_test_db_path), "/tmp/test_messages_%d.db", getpid());
+    snprintf(g_test_home_dir, sizeof(g_test_home_dir), "/tmp/test_message_store_home_%d", getpid());
+    ralph_home_init(g_test_home_dir);
+    unlink(g_test_db_path);
     message_store_reset_instance_for_testing();
-    g_store = message_store_create(TEST_DB_PATH);
+    g_store = message_store_create(g_test_db_path);
 }
 
 void tearDown(void) {
@@ -24,7 +27,7 @@ void tearDown(void) {
         message_store_destroy(g_store);
         g_store = NULL;
     }
-    unlink(TEST_DB_PATH);
+    unlink(g_test_db_path);
     ralph_home_cleanup();
 }
 
@@ -44,7 +47,7 @@ void test_message_store_singleton(void) {
     TEST_ASSERT_EQUAL_PTR(store1, store2);
 
     message_store_reset_instance_for_testing();
-    g_store = message_store_create(TEST_DB_PATH);
+    g_store = message_store_create(g_test_db_path);
 }
 
 void test_send_direct_message(void) {
@@ -379,7 +382,7 @@ void test_cross_process_access(void) {
 
     pid_t pid = fork();
     if (pid == 0) {
-        message_store_t* child_store = message_store_create(TEST_DB_PATH);
+        message_store_t* child_store = message_store_create(g_test_db_path);
         if (child_store == NULL) {
             _exit(1);
         }

@@ -1,6 +1,6 @@
 #include "model_capabilities.h"
 #include "json_escape.h"
-#include "output_formatter.h"
+#include "ui/output_formatter.h"
 #include "response_processing.h"
 #include "tools_system.h"
 #include <stdio.h>

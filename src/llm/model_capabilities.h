@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 
-#include "output_formatter.h"
+#include "ui/output_formatter.h"
 #include "tools_system.h"
 #include "util/ptrarray.h"
 

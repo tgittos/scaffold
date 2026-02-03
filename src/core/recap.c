@@ -3,7 +3,7 @@
 #include "streaming.h"
 #include "llm_provider.h"
 #include "http_client.h"
-#include "output_formatter.h"
+#include "ui/output_formatter.h"
 #include "debug_output.h"
 #include "token_manager.h"
 #include <stdio.h>

@@ -4,7 +4,7 @@
 #include "conversation_tracker.h"
 #include "tools_system.h"
 #include "http_client.h"
-#include "output_formatter.h"
+#include "ui/output_formatter.h"
 #include "streaming.h"
 #include "util/ptrarray.h"
 
