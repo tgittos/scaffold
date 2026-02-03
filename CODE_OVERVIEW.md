@@ -9,7 +9,6 @@ This document provides a comprehensive overview of Ralph's codebase structure an
 #### `src/core/` - Core Application Logic
 - **`main.c`** - Application entry point with CLI interface (single message, interactive, --json, --subagent modes)
 - **`ralph.c/ralph.h`** - Core Ralph orchestration: session management, API communication
-- **`agent_identity.c/h`** - Thread-safe agent identity management (ID, parent ID, subagent status)
 - **`async_executor.c/h`** - Non-blocking message processing using background thread with pipe notification
 - **`context_enhancement.c/h`** - Prompt enhancement with todo state, memory recall, and context retrieval
 - **`interrupt.c/h`** - Cooperative Ctrl+C cancellation with signal handling
@@ -152,11 +151,20 @@ The policy module implements approval gates for controlling tool execution.
 - **`document_chunker.c/h`** - Intelligent text chunking for embeddings
 - **`pdf_processor.c/h`** - PDF download, extraction, chunking, and indexing pipeline
 - **`uuid_utils.c/h`** - UUID v4 generation and validation utilities
-- **`pipe_notifier.c/h`** - Thread-safe pipe-based notification for async event handling
 - **`darray.h`** - Type-safe dynamic array macro implementation (header-only)
 - **`ptrarray.h`** - Type-safe dynamic pointer array with ownership semantics (header-only)
 - **`ralph_home.c/h`** - Centralized Ralph home directory management (~/.local/ralph/)
 - **`spinner.c/h`** - Pulsing spinner for tool execution visual feedback
+
+---
+
+### `lib/` - Library Layer
+
+Components being migrated from `src/` to form a reusable library:
+
+#### `lib/ipc/` - Inter-Process Communication
+- **`pipe_notifier.c/h`** - Thread-safe pipe-based notification for async event handling
+- **`agent_identity.c/h`** - Thread-safe agent identity management (ID, parent ID, subagent status)
 
 ---
 
@@ -170,7 +178,7 @@ The test directory mirrors the source structure:
 - **`test_cli_flags.c`** - CLI flag parsing tests
 - **`test_recap.c`** - Recap generation tests
 - **`test_incomplete_task_bug.c`** - Regression test for task handling
-- **`test_agent_identity.c`** - Agent identity thread-safety and operations tests
+- **`test_agent_identity.c`** - Agent identity thread-safety and operations tests (tests lib/ipc/agent_identity)
 - **`test_async_executor.c`** - Async executor background thread tests
 - **`test_interrupt.c`** - Cooperative Ctrl+C cancellation tests
 
@@ -225,7 +233,7 @@ The test directory mirrors the source structure:
 - **`test_json_output.c`** - JSON output mode tests
 - **`test_debug_output.c`** - Debug output tests
 - **`test_ralph_home.c`** - Ralph home directory management tests
-- **`test_pipe_notifier.c`** - Pipe notifier async notification tests
+- **`test_pipe_notifier.c`** - Pipe notifier async notification tests (tests lib/ipc/pipe_notifier)
 - **`test_spinner.c`** - Tool execution spinner tests
 
 #### `test/policy/` - Policy Tests (Approval Gates)

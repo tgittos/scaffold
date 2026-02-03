@@ -12,6 +12,7 @@ TARGET := ralph
 
 # Directory structure
 SRCDIR := src
+LIBDIR := lib
 TESTDIR := test
 DEPDIR := deps
 BUILDDIR := build

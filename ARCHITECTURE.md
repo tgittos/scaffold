@@ -947,7 +947,6 @@ src/
 ├── core/                   # Core application
 │   ├── main.c              # Entry point (CLI interface, --json, --subagent modes)
 │   ├── ralph.c/h           # Core orchestration logic
-│   ├── agent_identity.c/h  # Thread-safe agent identity management
 │   ├── async_executor.c/h  # Non-blocking message processing thread
 │   ├── context_enhancement.c/h  # Prompt enhancement with memory/context
 │   ├── interrupt.c/h       # Cooperative Ctrl+C cancellation handling
@@ -1060,11 +1059,14 @@ src/
 │   ├── json_escape.c/h     # JSON escaping
 │   ├── json_output.c/h     # JSON output mode
 │   ├── common_utils.c/h    # General utilities
-│   ├── pipe_notifier.c/h   # Thread-safe pipe-based notification
 │   ├── darray.h            # Type-safe dynamic array macros
 │   ├── ptrarray.h          # Type-safe dynamic pointer array with ownership
 │   ├── ralph_home.c/h      # Centralized home directory management
 │   ├── spinner.c/h         # Tool execution spinner feedback
 │   └── uuid_utils.c/h      # UUID v4 generation and validation
+├── lib/                    # Library layer (being migrated from src/)
+│   └── ipc/                # Inter-process communication primitives
+│       ├── pipe_notifier.c/h   # Thread-safe pipe-based notification
+│       └── agent_identity.c/h  # Thread-safe agent identity management
 ```
 

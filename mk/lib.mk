@@ -1,7 +1,6 @@
 # Library build configuration for libralph
 # This file defines the library sources and build rules
-
-LIBDIR := lib
+# Note: LIBDIR is defined in config.mk
 
 # Library output
 LIBRALPH := $(BUILDDIR)/libralph.a
@@ -13,8 +12,10 @@ LIBRALPH := $(BUILDDIR)/libralph.a
 # Phase 1: Initial structure with stubs
 # These will be populated as modules are migrated from src/
 
-# IPC module (Phase 2)
-LIB_IPC_SOURCES :=
+# IPC module
+LIB_IPC_SOURCES := \
+    $(LIBDIR)/ipc/pipe_notifier.c \
+    $(LIBDIR)/ipc/agent_identity.c
 
 # UI module (Phase 3)
 LIB_UI_SOURCES := $(LIBDIR)/ui/repl.c

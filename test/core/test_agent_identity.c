@@ -1,5 +1,5 @@
 #include "unity/unity.h"
-#include "../../src/core/agent_identity.h"
+#include "ipc/agent_identity.h"
 #include <string.h>
 
 void setUp(void) {}

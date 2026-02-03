@@ -10,7 +10,6 @@ CORE_SOURCES := \
     $(SRCDIR)/core/streaming_handler.c \
     $(SRCDIR)/core/context_enhancement.c \
     $(SRCDIR)/core/recap.c \
-    $(SRCDIR)/core/agent_identity.c \
     $(SRCDIR)/network/http_client.c \
     $(SRCDIR)/network/embedded_cacert.c \
     $(SRCDIR)/network/streaming.c \
@@ -124,7 +123,6 @@ UTILS_EXTRA_SOURCES := \
     $(SRCDIR)/utils/uuid_utils.c \
     $(SRCDIR)/utils/ralph_home.c \
     $(SRCDIR)/utils/spinner.c \
-    $(SRCDIR)/utils/pipe_notifier.c \
     $(SRCDIR)/utils/terminal.c
 
 # CLI
@@ -173,7 +171,7 @@ RALPH_CORE_DEPS := \
     $(SRCDIR)/core/streaming_handler.c \
     $(SRCDIR)/core/context_enhancement.c \
     $(SRCDIR)/core/recap.c \
-    $(SRCDIR)/utils/pipe_notifier.c \
+    $(LIBDIR)/ipc/pipe_notifier.c \
     $(SRCDIR)/policy/allowlist.c \
     $(SRCDIR)/policy/approval_gate.c \
     $(SRCDIR)/policy/approval_errors.c \

@@ -1,6 +1,6 @@
 #include "message_poller.h"
 #include "../db/message_store.h"
-#include "../utils/pipe_notifier.h"
+#include "ipc/pipe_notifier.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>

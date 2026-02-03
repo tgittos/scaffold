@@ -1,7 +1,7 @@
 #include "async_executor.h"
 #include "interrupt.h"
 #include "debug_output.h"
-#include "../utils/pipe_notifier.h"
+#include "ipc/pipe_notifier.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>

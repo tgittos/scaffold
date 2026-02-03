@@ -1,5 +1,5 @@
 #include "unity/unity.h"
-#include "../../src/utils/pipe_notifier.h"
+#include "ipc/pipe_notifier.h"
 #include <fcntl.h>
 #include <string.h>
 #include <unistd.h>

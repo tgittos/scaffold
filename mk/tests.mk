@@ -34,9 +34,9 @@ endef
 $(eval $(call def_test,main,core/test_main,))
 $(eval $(call def_test,cli_flags,core/test_cli_flags,))
 $(eval $(call def_test,interrupt,core/test_interrupt,$(SRCDIR)/core/interrupt.c))
-$(eval $(call def_test,async_executor,core/test_async_executor,$(SRCDIR)/core/async_executor.c $(SRCDIR)/core/interrupt.c $(SRCDIR)/utils/debug_output.c $(SRCDIR)/utils/pipe_notifier.c $(TESTDIR)/stubs/ralph_stub.c))
-$(eval $(call def_test,pipe_notifier,utils/test_pipe_notifier,$(SRCDIR)/utils/pipe_notifier.c))
-$(eval $(call def_test,agent_identity,core/test_agent_identity,$(SRCDIR)/core/agent_identity.c))
+$(eval $(call def_test,async_executor,core/test_async_executor,$(SRCDIR)/core/async_executor.c $(SRCDIR)/core/interrupt.c $(SRCDIR)/utils/debug_output.c $(LIBDIR)/ipc/pipe_notifier.c $(TESTDIR)/stubs/ralph_stub.c))
+$(eval $(call def_test,pipe_notifier,utils/test_pipe_notifier,$(LIBDIR)/ipc/pipe_notifier.c))
+$(eval $(call def_test,agent_identity,core/test_agent_identity,$(LIBDIR)/ipc/agent_identity.c))
 $(eval $(call def_test,prompt,utils/test_prompt_loader,$(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/utils/ralph_home.c))
 $(eval $(call def_test,ralph_home,utils/test_ralph_home,$(SRCDIR)/utils/ralph_home.c))
 $(eval $(call def_test,todo_manager,tools/test_todo_manager,$(SRCDIR)/tools/todo_manager.c))
@@ -229,7 +229,7 @@ MESSAGING_DEPS := \
     $(SRCDIR)/db/sqlite_dal.c \
     $(SRCDIR)/utils/uuid_utils.c \
     $(SRCDIR)/utils/ralph_home.c \
-    $(SRCDIR)/utils/pipe_notifier.c \
+    $(LIBDIR)/ipc/pipe_notifier.c \
     $(SRCDIR)/utils/terminal.c \
     $(TESTDIR)/stubs/output_formatter_stub.c
 
