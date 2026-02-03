@@ -105,7 +105,6 @@ MODEL_SOURCES := \
 
 # Database
 DB_C_SOURCES := \
-    $(SRCDIR)/db/sqlite_dal.c \
     $(SRCDIR)/db/vector_db.c \
     $(SRCDIR)/db/vector_db_service.c \
     $(SRCDIR)/db/metadata_store.c \
@@ -120,7 +119,6 @@ PDF_SOURCES := $(SRCDIR)/pdf/pdf_extractor.c
 
 # Utilities
 UTILS_EXTRA_SOURCES := \
-    $(SRCDIR)/utils/uuid_utils.c \
     $(SRCDIR)/utils/ralph_home.c \
     $(SRCDIR)/utils/spinner.c \
     $(SRCDIR)/utils/terminal.c
@@ -160,7 +158,7 @@ UTIL_DEPS := \
     $(SRCDIR)/utils/pdf_processor.c \
     $(SRCDIR)/utils/context_retriever.c \
     $(SRCDIR)/utils/config.c \
-    $(SRCDIR)/utils/uuid_utils.c \
+    $(LIBDIR)/util/uuid_utils.c \
     $(SRCDIR)/utils/ralph_home.c \
     $(SRCDIR)/utils/spinner.c
 
@@ -223,6 +221,7 @@ COMPLEX_DEPS := \
     $(MODEL_SOURCES) \
     $(UTIL_DEPS) \
     $(DB_C_SOURCES) \
+    $(LIBDIR)/db/sqlite_dal.c \
     $(EMBEDDING_DEPS) \
     $(SRCDIR)/pdf/pdf_extractor.c \
     $(NETWORK_DEPS) \
@@ -234,6 +233,7 @@ COMPLEX_DEPS := \
 CONV_DEPS := \
     $(SRCDIR)/session/conversation_tracker.c \
     $(DB_C_SOURCES) \
+    $(LIBDIR)/db/sqlite_dal.c \
     $(EMBEDDING_DEPS) \
     $(NETWORK_DEPS) \
     $(SRCDIR)/utils/json_escape.c \

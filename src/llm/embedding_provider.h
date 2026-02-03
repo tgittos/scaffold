@@ -2,7 +2,7 @@
 #define EMBEDDING_PROVIDER_H
 
 #include "embeddings.h"
-#include "utils/ptrarray.h"
+#include "util/ptrarray.h"
 
 struct EmbeddingProvider;
 

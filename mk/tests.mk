@@ -208,9 +208,9 @@ $(TEST_http_retry_TARGET): $(TEST_http_retry_OBJECTS) $(CJSON_LIB) $(LIBS_MBEDTL
 # SQLITE TESTS
 # =============================================================================
 
-$(eval $(call def_test,sqlite_dal,db/test_sqlite_dal,$(SRCDIR)/db/sqlite_dal.c $(SRCDIR)/utils/ralph_home.c))
-$(eval $(call def_test,task_store,db/test_task_store,$(SRCDIR)/db/task_store.c $(SRCDIR)/db/sqlite_dal.c $(SRCDIR)/utils/uuid_utils.c $(SRCDIR)/utils/ralph_home.c))
-$(eval $(call def_test,message_store,db/test_message_store,$(SRCDIR)/db/message_store.c $(SRCDIR)/db/sqlite_dal.c $(SRCDIR)/utils/uuid_utils.c $(SRCDIR)/utils/ralph_home.c))
+$(eval $(call def_test,sqlite_dal,db/test_sqlite_dal,$(LIBDIR)/db/sqlite_dal.c $(SRCDIR)/utils/ralph_home.c))
+$(eval $(call def_test,task_store,db/test_task_store,$(SRCDIR)/db/task_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/uuid_utils.c $(SRCDIR)/utils/ralph_home.c))
+$(eval $(call def_test,message_store,db/test_message_store,$(SRCDIR)/db/message_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/uuid_utils.c $(SRCDIR)/utils/ralph_home.c))
 
 $(TEST_sqlite_dal_TARGET): $(TEST_sqlite_dal_OBJECTS) $(SQLITE_LIB)
 	$(CC) -o $@ $(TEST_sqlite_dal_OBJECTS) $(SQLITE_LIB) -lpthread -lm
@@ -226,8 +226,8 @@ MESSAGING_DEPS := \
     $(SRCDIR)/messaging/message_poller.c \
     $(SRCDIR)/messaging/notification_formatter.c \
     $(SRCDIR)/db/message_store.c \
-    $(SRCDIR)/db/sqlite_dal.c \
-    $(SRCDIR)/utils/uuid_utils.c \
+    $(LIBDIR)/db/sqlite_dal.c \
+    $(LIBDIR)/util/uuid_utils.c \
     $(SRCDIR)/utils/ralph_home.c \
     $(LIBDIR)/ipc/pipe_notifier.c \
     $(SRCDIR)/utils/terminal.c \

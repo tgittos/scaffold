@@ -9,7 +9,7 @@
 #include "token_manager.h"
 #include "model_capabilities.h"
 #include "../mcp/mcp_client.h"
-#include "../utils/ptrarray.h"
+#include "util/ptrarray.h"
 #include "../utils/spinner.h"
 #include "../policy/approval_gate.h"
 #include "../policy/protected_files.h"

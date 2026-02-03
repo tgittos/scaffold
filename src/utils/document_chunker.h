@@ -2,7 +2,7 @@
 #define DOCUMENT_CHUNKER_H
 
 #include <stddef.h>
-#include "darray.h"
+#include "util/darray.h"
 
 typedef struct {
     char *text;           // Chunk text content

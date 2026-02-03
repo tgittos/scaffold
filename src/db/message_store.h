@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 #include <time.h>
-#include "../utils/ptrarray.h"
+#include "util/ptrarray.h"
 
 typedef struct {
     char id[40];

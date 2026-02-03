@@ -12,31 +12,6 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 ---
 
-## Session 2: Shared Utilities and Database Foundation
-
-**Move:** Generic utilities and core database abstraction.
-
-| File | Destination | Notes |
-|------|-------------|-------|
-| `src/utils/ptrarray.h` | `lib/util/` | Generic pointer array (header-only) |
-| `src/utils/darray.h` | `lib/util/` | Generic dynamic array macros (header-only) |
-| `src/utils/uuid_utils.c/h` | `lib/util/` | UUID generation (general-purpose) |
-| `src/db/sqlite_dal.c/h` | `lib/db/` | SQLite abstraction layer |
-
-**Changes:**
-1. Create `lib/util/` directory for generic utilities
-2. Create `lib/db/` directory for database abstraction
-3. Move generic utilities to `lib/util/`
-4. Move sqlite_dal to `lib/db/`
-5. Update `mk/lib.mk`: Add `LIB_UTIL_SOURCES` (uuid_utils.c) and `LIB_DB_SOURCES` (sqlite_dal.c)
-6. Update `mk/sources.mk`: Remove from `DB_C_SOURCES`, `UTILS_EXTRA_SOURCES`
-
-**Verify:** `./scripts/build.sh && ./scripts/run_tests.sh`
-
-**Note:** sqlite_dal is shared between message_store (IPC) and task_store (workflow). uuid_utils is general-purpose and will be used across multiple modules.
-
----
-
 ## Session 3: Message Store
 
 **Move:** Message persistence for IPC (depends on lib/db/).
@@ -437,7 +412,7 @@ Current `ralph_` prefixed identifiers to rename:
 ```
 Session 1: IPC primitives (pipe_notifier, agent_identity) ✓ COMPLETE
     ↓
-Session 2: Database foundation (sqlite_dal, uuid_utils)
+Session 2: Database foundation (sqlite_dal, uuid_utils, darray, ptrarray) ✓ COMPLETE
     ↓
 Session 3-4: IPC completion (message_store, message_poller)
     ↓

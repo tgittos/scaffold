@@ -3,7 +3,7 @@
  */
 
 #include "sqlite_dal.h"
-#include "../utils/ralph_home.h"
+#include "utils/ralph_home.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>

@@ -1059,12 +1059,15 @@ src/
 │   ├── json_escape.c/h     # JSON escaping
 │   ├── json_output.c/h     # JSON output mode
 │   ├── common_utils.c/h    # General utilities
-│   ├── darray.h            # Type-safe dynamic array macros
-│   ├── ptrarray.h          # Type-safe dynamic pointer array with ownership
 │   ├── ralph_home.c/h      # Centralized home directory management
-│   ├── spinner.c/h         # Tool execution spinner feedback
-│   └── uuid_utils.c/h      # UUID v4 generation and validation
+│   └── spinner.c/h         # Tool execution spinner feedback
 ├── lib/                    # Library layer (being migrated from src/)
+│   ├── util/               # Generic utilities
+│   │   ├── darray.h            # Type-safe dynamic array macros
+│   │   ├── ptrarray.h          # Type-safe dynamic pointer array with ownership
+│   │   └── uuid_utils.c/h      # UUID v4 generation and validation
+│   ├── db/                 # Database abstraction
+│   │   └── sqlite_dal.c/h      # SQLite data access layer
 │   └── ipc/                # Inter-process communication primitives
 │       ├── pipe_notifier.c/h   # Thread-safe pipe-based notification
 │       └── agent_identity.c/h  # Thread-safe agent identity management

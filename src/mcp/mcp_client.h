@@ -3,8 +3,8 @@
 
 #include <stddef.h>
 #include "../tools/tools_system.h"
-#include "../utils/ptrarray.h"
-#include "../utils/darray.h"
+#include "util/ptrarray.h"
+#include "util/darray.h"
 
 /* Forward declaration for transport */
 typedef struct MCPTransport MCPTransport;

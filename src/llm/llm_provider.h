@@ -6,7 +6,7 @@
 #include "http_client.h"
 #include "output_formatter.h"
 #include "streaming.h"
-#include "utils/ptrarray.h"
+#include "util/ptrarray.h"
 
 struct LLMProvider;
 

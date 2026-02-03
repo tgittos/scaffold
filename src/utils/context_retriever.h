@@ -2,7 +2,7 @@
 #define CONTEXT_RETRIEVER_H
 
 #include <stddef.h>
-#include "darray.h"
+#include "util/darray.h"
 
 typedef struct {
     char *content;

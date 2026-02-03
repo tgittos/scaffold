@@ -5,7 +5,7 @@
 
 #include "output_formatter.h"
 #include "tools_system.h"
-#include "utils/ptrarray.h"
+#include "util/ptrarray.h"
 
 typedef struct {
     const char* model_pattern;  /* substring match, e.g. "qwen", "deepseek", "claude" */

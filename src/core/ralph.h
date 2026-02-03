@@ -10,7 +10,7 @@
 #include "session_manager.h"
 #include "../mcp/mcp_client.h"
 #include "../tools/subagent_tool.h"
-#include "../utils/uuid_utils.h"
+#include "util/uuid_utils.h"
 #include "../policy/approval_gate.h"
 #include "../messaging/message_poller.h"
 

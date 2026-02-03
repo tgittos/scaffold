@@ -2,7 +2,7 @@
 #define TOOLS_SYSTEM_H
 
 #include <stddef.h>
-#include "../utils/darray.h"
+#include "util/darray.h"
 
 /**
  * Structure representing a tool parameter

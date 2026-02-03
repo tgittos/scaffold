@@ -19,7 +19,7 @@
 #include "model_capabilities.h"
 #include "python_tool.h"
 #include "llm_provider.h"
-#include "uuid_utils.h"
+#include "util/uuid_utils.h"
 #include "../db/task_store.h"
 #include "../db/message_store.h"
 #include "messaging_tool.h"

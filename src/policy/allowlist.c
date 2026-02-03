@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "../utils/darray.h"
+#include "util/darray.h"
 
 typedef struct {
     char *tool;

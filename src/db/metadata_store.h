@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <time.h>
-#include "../utils/ptrarray.h"
+#include "util/ptrarray.h"
 
 typedef struct {
     size_t chunk_id;

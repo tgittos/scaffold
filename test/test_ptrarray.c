@@ -1,5 +1,5 @@
 #include "unity/unity.h"
-#include "../src/utils/ptrarray.h"
+#include "util/ptrarray.h"
 #include <string.h>
 
 /* Test item structure */

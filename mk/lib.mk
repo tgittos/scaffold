@@ -38,8 +38,11 @@ LIB_SESSION_SOURCES :=
 # Policy module (future)
 LIB_POLICY_SOURCES :=
 
-# Database module (future)
-LIB_DB_SOURCES :=
+# Util module (generic utilities)
+LIB_UTIL_SOURCES := $(LIBDIR)/util/uuid_utils.c
+
+# Database module
+LIB_DB_SOURCES := $(LIBDIR)/db/sqlite_dal.c
 
 # Workflow module (Phase 7)
 LIB_WORKFLOW_SOURCES := $(LIBDIR)/workflow/workflow.c
@@ -48,7 +51,7 @@ LIB_WORKFLOW_SOURCES := $(LIBDIR)/workflow/workflow.c
 LIB_C_SOURCES := $(LIB_IPC_SOURCES) $(LIB_UI_SOURCES) $(LIB_TOOLS_SOURCES) \
     $(LIB_AGENT_SOURCES) $(LIB_SERVICES_SOURCES) $(LIB_LLM_SOURCES) \
     $(LIB_SESSION_SOURCES) $(LIB_POLICY_SOURCES) $(LIB_DB_SOURCES) \
-    $(LIB_WORKFLOW_SOURCES)
+    $(LIB_WORKFLOW_SOURCES) $(LIB_UTIL_SOURCES)
 
 LIB_CPP_SOURCES :=
 

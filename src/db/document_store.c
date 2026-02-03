@@ -5,7 +5,7 @@
 #include "../utils/config.h"
 #include "../utils/ralph_home.h"
 #include "../llm/embeddings_service.h"
-#include "../utils/ptrarray.h"
+#include "util/ptrarray.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

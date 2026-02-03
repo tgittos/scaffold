@@ -5,8 +5,8 @@
 #include <stdbool.h>
 #include <time.h>
 #include "vector_db.h"
-#include "../utils/ptrarray.h"
-#include "../utils/darray.h"
+#include "util/ptrarray.h"
+#include "util/darray.h"
 
 typedef struct {
     size_t id;

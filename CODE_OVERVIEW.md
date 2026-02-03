@@ -102,7 +102,6 @@ This document provides a comprehensive overview of Ralph's codebase structure an
 - **`vector_db_service.c/h`** - Thread-safe vector database singleton service
 - **`document_store.c/h`** - High-level document storage with embeddings and JSON persistence
 - **`metadata_store.c/h`** - Chunk metadata storage layer (separate from vectors)
-- **`sqlite_dal.c/h`** - SQLite Data Access Layer providing shared connection management
 - **`task_store.c/h`** - SQLite-based persistent task storage with hierarchies, dependencies, and session scoping
 - **`message_store.c/h`** - SQLite-backed inter-agent messaging storage (direct messages, pub/sub channels)
 - **`hnswlib_wrapper.cpp/h`** - C++ wrapper for HNSW vector indexing
@@ -150,9 +149,6 @@ The policy module implements approval gates for controlling tool execution.
 - **`context_retriever.c/h`** - Vector database context retrieval for prompts
 - **`document_chunker.c/h`** - Intelligent text chunking for embeddings
 - **`pdf_processor.c/h`** - PDF download, extraction, chunking, and indexing pipeline
-- **`uuid_utils.c/h`** - UUID v4 generation and validation utilities
-- **`darray.h`** - Type-safe dynamic array macro implementation (header-only)
-- **`ptrarray.h`** - Type-safe dynamic pointer array with ownership semantics (header-only)
 - **`ralph_home.c/h`** - Centralized Ralph home directory management (~/.local/ralph/)
 - **`spinner.c/h`** - Pulsing spinner for tool execution visual feedback
 
@@ -161,6 +157,14 @@ The policy module implements approval gates for controlling tool execution.
 ### `lib/` - Library Layer
 
 Components being migrated from `src/` to form a reusable library:
+
+#### `lib/util/` - Generic Utilities
+- **`darray.h`** - Type-safe dynamic array macros (header-only)
+- **`ptrarray.h`** - Type-safe dynamic pointer array with ownership semantics (header-only)
+- **`uuid_utils.c/h`** - UUID v4 generation and validation
+
+#### `lib/db/` - Database Abstraction
+- **`sqlite_dal.c/h`** - SQLite data access layer with mutex protection, schema initialization, and common query patterns
 
 #### `lib/ipc/` - Inter-Process Communication
 - **`pipe_notifier.c/h`** - Thread-safe pipe-based notification for async event handling

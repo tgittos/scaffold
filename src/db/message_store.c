@@ -3,9 +3,9 @@
  */
 
 #include "message_store.h"
-#include "sqlite_dal.h"
-#include "../utils/uuid_utils.h"
-#include "../utils/ptrarray.h"
+#include "db/sqlite_dal.h"
+#include "util/uuid_utils.h"
+#include "util/ptrarray.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

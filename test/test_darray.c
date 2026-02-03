@@ -1,5 +1,5 @@
 #include "unity/unity.h"
-#include "../src/utils/darray.h"
+#include "util/darray.h"
 #include <string.h>
 
 /* Define test array types */

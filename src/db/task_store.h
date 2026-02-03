@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 #include <time.h>
-#include "../utils/ptrarray.h"
+#include "util/ptrarray.h"
 
 // Values match TodoStatus for compatibility with the tool API.
 typedef enum {

@@ -3,7 +3,7 @@
  */
 
 #include "../unity/unity.h"
-#include "../../src/db/sqlite_dal.h"
+#include "db/sqlite_dal.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>

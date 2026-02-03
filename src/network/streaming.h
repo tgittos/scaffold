@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 #include <sys/types.h>  // For ssize_t
-#include "../utils/darray.h"
+#include "util/darray.h"
 
 /**
  * Streaming SSE Parser and Context Management
