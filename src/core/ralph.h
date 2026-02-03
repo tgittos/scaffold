@@ -12,7 +12,7 @@
 #include "../tools/subagent_tool.h"
 #include "util/uuid_utils.h"
 #include "../policy/approval_gate.h"
-#include "../messaging/message_poller.h"
+#include "ipc/message_poller.h"
 
 typedef enum {
     API_TYPE_OPENAI,

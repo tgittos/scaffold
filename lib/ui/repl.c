@@ -13,7 +13,7 @@
 #include "../../src/utils/spinner.h"
 #include "../../src/cli/memory_commands.h"
 #include "../../src/tools/subagent_tool.h"
-#include "../../src/messaging/message_poller.h"
+#include "ipc/message_poller.h"
 #include "../../src/messaging/notification_formatter.h"
 #include <stdio.h>
 #include <stdlib.h>

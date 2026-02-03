@@ -12,24 +12,6 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 ---
 
-## Session 4: Message Poller
-
-**Move:** Complete IPC module.
-
-| File | Destination |
-|------|-------------|
-| `src/messaging/message_poller.c/h` | `lib/ipc/` |
-
-**Changes:**
-1. Move to `lib/ipc/`
-2. Update `mk/lib.mk`: Add to `LIB_IPC_SOURCES`
-3. Update `mk/sources.mk`: Remove from `MESSAGING_SOURCES`
-4. Update `lib/ipc/ipc.h` to include `message_poller.h`
-
-**Verify:** `./scripts/build.sh && ./scripts/run_tests.sh`
-
----
-
 ## Session 5: UI Terminal Utilities
 
 **Move:** Basic terminal primitives.
@@ -397,7 +379,7 @@ Session 2: Database foundation (sqlite_dal, uuid_utils, darray, ptrarray) ✓ CO
     ↓
 Session 3: IPC message_store ✓ COMPLETE
     ↓
-Session 4: IPC completion (message_poller)
+Session 4: IPC completion (message_poller) ✓ COMPLETE
     ↓
 Session 5-7: UI (terminal, output, CLI commands)
     ↓

@@ -15,5 +15,6 @@
 #include "pipe_notifier.h"
 #include "agent_identity.h"
 #include "message_store.h"
+#include "message_poller.h"
 
 #endif /* LIB_IPC_IPC_H */

@@ -23,7 +23,7 @@
 #include "../db/task_store.h"
 #include "ipc/message_store.h"
 #include "messaging_tool.h"
-#include "../messaging/message_poller.h"
+#include "ipc/message_poller.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

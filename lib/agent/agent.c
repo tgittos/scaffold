@@ -16,7 +16,7 @@
 #include "../../src/policy/approval_gate.h"
 #include "../../src/tools/subagent_tool.h"
 #include "../../src/cli/memory_commands.h"
-#include "../../src/messaging/message_poller.h"
+#include "ipc/message_poller.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>

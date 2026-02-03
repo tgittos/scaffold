@@ -987,7 +987,6 @@ src/
 │   ├── mcp_transport_stdio.c   # STDIO transport implementation
 │   └── mcp_transport_http.c    # HTTP transport implementation
 ├── messaging/              # Inter-agent messaging
-│   ├── message_poller.c/h  # Background message polling
 │   └── notification_formatter.c/h # LLM notification formatting
 ├── network/                # Network layer
 │   ├── http_client.c/h     # HTTP client (cURL wrapper)
@@ -1070,6 +1069,8 @@ src/
 │   │   └── sqlite_dal.c/h      # SQLite data access layer
 │   └── ipc/                # Inter-process communication primitives
 │       ├── pipe_notifier.c/h   # Thread-safe pipe-based notification
-│       └── agent_identity.c/h  # Thread-safe agent identity management
+│       ├── agent_identity.c/h  # Thread-safe agent identity management
+│       ├── message_store.c/h   # SQLite-backed direct and pub/sub messaging
+│       └── message_poller.c/h  # Background message polling
 ```
 

@@ -79,7 +79,6 @@ MCP_SOURCES := \
 
 # Messaging system
 MESSAGING_SOURCES := \
-    $(SRCDIR)/messaging/message_poller.c \
     $(SRCDIR)/messaging/notification_formatter.c
 
 # LLM providers
@@ -201,6 +200,7 @@ RALPH_CORE_DEPS := \
     $(SRCDIR)/mcp/mcp_transport.c \
     $(SRCDIR)/mcp/mcp_transport_stdio.c \
     $(SRCDIR)/mcp/mcp_transport_http.c \
+    $(LIBDIR)/ipc/message_poller.c \
     $(MESSAGING_SOURCES)
 
 # Verified file I/O dependencies (needed by Python tools for TOCTOU-safe access)

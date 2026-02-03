@@ -223,7 +223,7 @@ $(TEST_message_store_TARGET): $(TEST_message_store_OBJECTS) $(SQLITE_LIB) $(OSSP
 
 # Messaging deps
 MESSAGING_DEPS := \
-    $(SRCDIR)/messaging/message_poller.c \
+    $(LIBDIR)/ipc/message_poller.c \
     $(SRCDIR)/messaging/notification_formatter.c \
     $(LIBDIR)/ipc/message_store.c \
     $(LIBDIR)/db/sqlite_dal.c \
