@@ -16,7 +16,7 @@
 #include <unistd.h>
 
 #include "../tools/python_tool_files.h"
-#include "../tools/subagent_tool.h"
+#include "lib/tools/subagent_tool.h"
 #include "../utils/debug_output.h"
 
 static const GateAction DEFAULT_CATEGORY_ACTIONS[GATE_CATEGORY_COUNT] = {

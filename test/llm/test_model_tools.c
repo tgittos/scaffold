@@ -1,6 +1,7 @@
 #include "unity.h"
 #include "model_capabilities.h"
-#include "tools_system.h"
+#include "lib/tools/tools_system.h"
+#include "tools/builtin_tools.h"
 #include "ui/output_formatter.h"
 #include <stdio.h>
 #include <string.h>

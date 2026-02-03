@@ -3,7 +3,7 @@
 #include "../../src/utils/debug_output.h"
 #include "../../src/llm/model_capabilities.h"
 #include "../../src/core/interrupt.h"
-#include "../../src/tools/todo_display.h"
+#include "../tools/todo_display.h"
 #include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>

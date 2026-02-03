@@ -14,7 +14,7 @@
 
 #include "../utils/debug_output.h"
 #include "ui/output_formatter.h"
-#include "../tools/subagent_tool.h"
+#include "lib/tools/subagent_tool.h"
 
 #define DEBUG_PRINT(...) debug_printf(__VA_ARGS__)
 #define DEBUG_ERROR(...) fprintf(stderr, __VA_ARGS__), fprintf(stderr, "\n")

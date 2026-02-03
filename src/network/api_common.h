@@ -3,7 +3,7 @@
 
 #include "ralph.h"
 #include "conversation_tracker.h"
-#include "tools_system.h"
+#include "lib/tools/tools_system.h"
 
 size_t calculate_json_payload_size(const char* model, const char* system_prompt,
                                   const ConversationHistory* conversation,

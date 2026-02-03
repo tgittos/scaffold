@@ -1,7 +1,7 @@
 #ifndef PYTHON_TOOL_H
 #define PYTHON_TOOL_H
 
-#include "tools_system.h"
+#include "lib/tools/tools_system.h"
 
 /**
  * Maximum sizes for Python tool operations

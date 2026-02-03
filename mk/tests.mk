@@ -39,7 +39,7 @@ $(eval $(call def_test,pipe_notifier,utils/test_pipe_notifier,$(LIBDIR)/ipc/pipe
 $(eval $(call def_test,agent_identity,core/test_agent_identity,$(LIBDIR)/ipc/agent_identity.c))
 $(eval $(call def_test,prompt,utils/test_prompt_loader,$(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/utils/ralph_home.c))
 $(eval $(call def_test,ralph_home,utils/test_ralph_home,$(SRCDIR)/utils/ralph_home.c))
-$(eval $(call def_test,todo_manager,tools/test_todo_manager,$(SRCDIR)/tools/todo_manager.c))
+$(eval $(call def_test,todo_manager,tools/test_todo_manager,$(LIBDIR)/tools/todo_manager.c))
 $(eval $(call def_test_mixed,tool_param_dsl,tools/test_tool_param_dsl,$(COMPLEX_DEPS)))
 $(eval $(call def_test,document_chunker,test_document_chunker,$(SRCDIR)/utils/document_chunker.c $(SRCDIR)/utils/common_utils.c))
 $(eval $(call def_test,streaming,network/test_streaming,$(SRCDIR)/network/streaming.c))
@@ -275,8 +275,8 @@ $(TEST_tool_calls_not_stored_TARGET): $(TEST_tool_calls_not_stored_OBJECTS) $(AL
 
 $(eval $(call def_test_mixed,json_output,utils/test_json_output,$(SRCDIR)/network/streaming.c $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,output,utils/test_output_formatter,$(COMPLEX_DEPS)))
-# test_tools now includes approval gate integration tests, requires RALPH_CORE_DEPS
-$(eval $(call def_test_mixed,tools,tools/test_tools_system,$(RALPH_CORE_DEPS) $(COMPLEX_DEPS)))
+# test_tools_system includes approval gate integration tests, requires RALPH_CORE_DEPS
+$(eval $(call def_test_mixed,tools_system,tools/test_tools_system,$(RALPH_CORE_DEPS) $(COMPLEX_DEPS)))
 # Mock embeddings sources for tests that need mocked embedding API
 MOCK_EMBEDDINGS_SOURCES := $(TESTDIR)/mock_api_server.c $(TESTDIR)/mock_embeddings.c $(TESTDIR)/mock_embeddings_server.c
 
@@ -295,7 +295,7 @@ $(eval $(call def_test_mixed,subagent_tool,tools/test_subagent_tool,$(RALPH_CORE
 $(eval $(call def_test_mixed,incomplete_task_bug,core/test_incomplete_task_bug,$(RALPH_CORE_DEPS) $(COMPLEX_DEPS)))
 
 # Batch link rule for standard tests
-STANDARD_TESTS := json_output tools vector_db_tool memory_tool memory_mgmt \
+STANDARD_TESTS := json_output tools_system vector_db_tool memory_tool memory_mgmt \
     token_manager conversation_compactor rolling_summary model_tools openai_streaming \
     anthropic_streaming messages_array_bug mcp_client subagent_tool incomplete_task_bug
 
@@ -385,7 +385,7 @@ TEST_EXECUTION_ORDER := \
     $(TEST_ralph_home_TARGET) $(TEST_http_TARGET) $(TEST_http_retry_TARGET) \
     $(TEST_streaming_TARGET) $(TEST_openai_streaming_TARGET) $(TEST_anthropic_streaming_TARGET) \
     $(TEST_output_TARGET) $(TEST_prompt_TARGET) $(TEST_debug_output_TARGET) $(TEST_terminal_TARGET) \
-    $(TEST_conversation_TARGET) $(TEST_conversation_vdb_TARGET) $(TEST_tools_TARGET) \
+    $(TEST_conversation_TARGET) $(TEST_conversation_vdb_TARGET) $(TEST_tools_system_TARGET) \
     $(TEST_ralph_TARGET) $(TEST_todo_manager_TARGET) $(TEST_tool_param_dsl_TARGET) \
     $(TEST_vector_db_tool_TARGET) $(TEST_memory_tool_TARGET) $(TEST_python_tool_TARGET) \
     $(TEST_python_integration_TARGET) $(TEST_token_manager_TARGET) $(TEST_model_tools_TARGET) \

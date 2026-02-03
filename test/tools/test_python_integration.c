@@ -1,7 +1,7 @@
 #include "unity.h"
 #include "../../src/tools/python_tool.h"
 #include "../../src/tools/python_tool_files.h"
-#include "../../src/tools/tools_system.h"
+#include "lib/tools/tools_system.h"
 #include "../../src/utils/ralph_home.h"
 #include <string.h>
 #include <stdlib.h>

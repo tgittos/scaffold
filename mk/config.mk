@@ -70,7 +70,8 @@ COMPILE_DEPS := $(LIBS_MBEDTLS) $(CJSON_LIB) $(SQLITE_LIB) $(PDFIO_LIB) $(ZLIB_L
     $(OSSP_UUID_LIB) $(READLINE_LIB) $(PYTHON_LIB) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
 
 # Include paths
-INCLUDES := -I$(CURL_DIR)/include -I$(MBEDTLS_DIR)/include -I$(HNSWLIB_DIR) \
+# -I. allows includes like "lib/tools/tools_system.h"
+INCLUDES := -I. -I$(CURL_DIR)/include -I$(MBEDTLS_DIR)/include -I$(HNSWLIB_DIR) \
     -I$(PDFIO_DIR) -I$(ZLIB_DIR) -I$(CJSON_DIR) -I$(READLINE_DIR) \
     -I$(READLINE_DIR)/readline -I$(NCURSES_DIR)/include -I$(SQLITE_DIR) \
     -I$(OSSP_UUID_DIR) -I$(PYTHON_INCLUDE) \

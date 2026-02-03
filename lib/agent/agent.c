@@ -14,9 +14,9 @@
 #include "../../src/utils/ralph_home.h"
 #include "../ui/spinner.h"
 #include "../../src/policy/approval_gate.h"
-#include "../../src/tools/subagent_tool.h"
+#include "../tools/subagent_tool.h"
 #include "../ui/memory_commands.h"
-#include "ipc/message_poller.h"
+#include "../ipc/message_poller.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>

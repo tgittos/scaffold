@@ -5,7 +5,7 @@
  */
 
 #include "tool_format.h"
-#include "json_escape.h"
+#include "../../src/utils/json_escape.h"
 #include <stdio.h>
 
 static char *openai_generate_tools_json(const ToolRegistry *registry) {

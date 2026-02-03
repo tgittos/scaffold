@@ -6,8 +6,8 @@
 # =============================================================================
 
 include mk/config.mk
-include mk/sources.mk
 include mk/lib.mk
+include mk/sources.mk
 include mk/deps.mk
 include mk/tests.mk
 

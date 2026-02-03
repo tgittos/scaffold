@@ -50,23 +50,11 @@ POLICY_SOURCES := \
     $(SRCDIR)/policy/verified_file_python.c
 
 # Tool system
+# Note: Core tool infrastructure and built-in tools have been migrated to lib/tools/
+# See mk/lib.mk for LIB_TOOLS_SOURCES. Only Python tools remain in src/tools/.
 TOOL_SOURCES := \
-    $(SRCDIR)/tools/tools_system.c \
-    $(SRCDIR)/tools/tool_param_dsl.c \
-    $(SRCDIR)/tools/tool_format_openai.c \
-    $(SRCDIR)/tools/tool_format_anthropic.c \
-    $(SRCDIR)/tools/todo_manager.c \
-    $(SRCDIR)/tools/todo_tool.c \
-    $(SRCDIR)/tools/todo_display.c \
-    $(SRCDIR)/tools/vector_db_tool.c \
-    $(SRCDIR)/tools/memory_tool.c \
-    $(SRCDIR)/tools/pdf_tool.c \
-    $(SRCDIR)/tools/tool_result_builder.c \
-    $(SRCDIR)/tools/subagent_tool.c \
-    $(SRCDIR)/tools/subagent_process.c \
     $(SRCDIR)/tools/python_tool.c \
-    $(SRCDIR)/tools/python_tool_files.c \
-    $(SRCDIR)/tools/messaging_tool.c
+    $(SRCDIR)/tools/python_tool_files.c
 
 # MCP system
 MCP_SOURCES := \
@@ -209,8 +197,10 @@ VERIFIED_FILE_DEPS := \
 # NOT atomic_file.c and path_normalize.c which are already in RALPH_CORE_DEPS.
 # Tests that use COMPLEX_DEPS without RALPH_CORE_DEPS and need the full verified
 # file deps should include VERIFIED_FILE_DEPS directly.
+# Note: LIB_TOOLS_SOURCES defined in lib.mk must be included for tool system core.
 COMPLEX_DEPS := \
     $(TOOL_SOURCES) \
+    $(LIB_TOOLS_SOURCES) \
     $(MODEL_SOURCES) \
     $(UTIL_DEPS) \
     $(DB_C_SOURCES) \

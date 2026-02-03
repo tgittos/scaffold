@@ -1,5 +1,6 @@
 #include "unity.h"
 #include "ralph.h"
+#include "tools/builtin_tools.h"
 #include "mock_api_server.h"
 #include "../src/db/document_store.h"
 #include "json_escape.h"

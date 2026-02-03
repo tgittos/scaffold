@@ -4,7 +4,7 @@
 #include <stddef.h>
 
 #include "ui/output_formatter.h"
-#include "tools_system.h"
+#include "lib/tools/tools_system.h"
 #include "util/ptrarray.h"
 
 typedef struct {

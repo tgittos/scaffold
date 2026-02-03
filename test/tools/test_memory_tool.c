@@ -1,6 +1,6 @@
 #include "../../test/unity/unity.h"
-#include "../../src/tools/memory_tool.h"
-#include "../../src/tools/tools_system.h"
+#include "lib/tools/memory_tool.h"
+#include "lib/tools/tools_system.h"
 #include "../../src/db/vector_db.h"
 #include "../../src/llm/embeddings.h"
 #include "../../src/llm/embeddings_service.h"

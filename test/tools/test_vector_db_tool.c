@@ -1,6 +1,6 @@
 #include "../../test/unity/unity.h"
-#include "../../src/tools/vector_db_tool.h"
-#include "../../src/tools/tools_system.h"
+#include "lib/tools/vector_db_tool.h"
+#include "lib/tools/tools_system.h"
 #include "../../src/db/vector_db.h"
 #include "../../src/utils/config.h"
 #include "../../src/utils/ralph_home.h"

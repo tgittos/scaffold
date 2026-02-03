@@ -1,11 +1,11 @@
 #include "vector_db_tool.h"
 #include "tool_param_dsl.h"
-#include "../db/vector_db_service.h"
-#include "../db/document_store.h"
+#include "../../src/db/vector_db_service.h"
+#include "../../src/db/document_store.h"
 #include <cJSON.h>
-#include "../utils/document_chunker.h"
-#include "../pdf/pdf_extractor.h"
-#include "../utils/common_utils.h"
+#include "../../src/utils/document_chunker.h"
+#include "../../src/pdf/pdf_extractor.h"
+#include "../../src/utils/common_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

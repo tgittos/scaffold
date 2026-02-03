@@ -1,8 +1,8 @@
 #include "context_enhancement.h"
 #include "ralph.h"
 #include "rolling_summary.h"
-#include "todo_tool.h"
-#include "memory_tool.h"
+#include "lib/tools/todo_tool.h"
+#include "lib/tools/memory_tool.h"
 #include "../utils/context_retriever.h"
 #include "json_escape.h"
 #include <stdio.h>

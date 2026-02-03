@@ -10,7 +10,7 @@
 #include <windows.h>
 #endif
 
-#include "../tools/tools_system.h"
+#include "lib/tools/tools_system.h"
 #include "shell_parser.h"
 #include "atomic_file.h"
 #include "allowlist.h"

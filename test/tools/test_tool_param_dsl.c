@@ -3,7 +3,7 @@
  */
 
 #include "../unity/unity.h"
-#include "../../src/tools/tool_param_dsl.h"
+#include "lib/tools/tool_param_dsl.h"
 #include <stdlib.h>
 #include <string.h>
 

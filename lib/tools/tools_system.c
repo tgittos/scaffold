@@ -1,15 +1,6 @@
 #include "tools_system.h"
 #include "tool_format.h"
 #include <cJSON.h>
-#include "todo_tool.h"
-#include "vector_db_tool.h"
-#include "memory_tool.h"
-#include "pdf_tool.h"
-#include "python_tool.h"
-#include "python_tool_files.h"
-#include "messaging_tool.h"
-#include "ui/output_formatter.h"
-#include "json_escape.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -172,15 +163,15 @@ int execute_tool_call(const ToolRegistry *registry, const ToolCall *tool_call, T
     if (registry == NULL || tool_call == NULL || result == NULL) {
         return -1;
     }
-    
+
     result->tool_call_id = strdup(tool_call->id);
     result->success = 0; // Default to failure
     result->result = NULL;
-    
+
     if (result->tool_call_id == NULL) {
         return -1;
     }
-    
+
     for (size_t i = 0; i < registry->functions.count; i++) {
         if (strcmp(registry->functions.data[i].name, tool_call->name) == 0) {
             return registry->functions.data[i].execute_func(tool_call, result);
@@ -202,29 +193,29 @@ char* generate_tool_results_json(const ToolResult *results, int result_count) {
     if (results == NULL || result_count <= 0) {
         return NULL;
     }
-    
+
     size_t estimated_size = 1000 + (result_count * 500);
     char *json = malloc(estimated_size);
     if (json == NULL) {
         return NULL;
     }
-    
+
     strcpy(json, "[");
-    
+
     for (int i = 0; i < result_count; i++) {
         if (i > 0) {
             strcat(json, ", ");
         }
-        
+
         strcat(json, "{\"role\": \"tool\", \"tool_call_id\": \"");
         strcat(json, results[i].tool_call_id);
         strcat(json, "\", \"content\": \"");
-        
+
         const char *src = results[i].result;
         size_t current_len = strlen(json);
         char *dst = json + current_len;
         size_t remaining = estimated_size - current_len - 100; // Leave room for closing
-        
+
         while (*src != '\0' && remaining > 2) {
             if (*src == '"') {
                 *dst++ = '\\';
@@ -245,12 +236,12 @@ char* generate_tool_results_json(const ToolResult *results, int result_count) {
             src++;
         }
         *dst = '\0';
-        
+
         strcat(json, "\"}");
     }
-    
+
     strcat(json, "]");
-    
+
     return json;
 }
 
@@ -258,58 +249,17 @@ char* generate_single_tool_message(const ToolResult *result) {
     if (result == NULL || result->tool_call_id == NULL || result->result == NULL) {
         return NULL;
     }
-    
+
     size_t estimated_size = strlen(result->result) * 2 + 200; // *2 for escaping
     char *message = malloc(estimated_size);
     if (message == NULL) {
         return NULL;
     }
-    
-    snprintf(message, estimated_size, "Tool call %s result: %s", 
+
+    snprintf(message, estimated_size, "Tool call %s result: %s",
              result->tool_call_id, result->result);
-    
+
     return message;
-}
-
-int register_builtin_tools(ToolRegistry *registry) {
-    if (registry == NULL) {
-        return -1;
-    }
-
-    if (register_vector_db_tool(registry) != 0) {
-        return -1;
-    }
-
-    if (register_memory_tools(registry) != 0) {
-        return -1;
-    }
-
-    if (register_pdf_tool(registry) != 0) {
-        return -1;
-    }
-
-    if (register_python_tool(registry) != 0) {
-        return -1;
-    }
-
-    /* Initialize Python early so ~/.local/ralph/tools/ files can register their schemas */
-    if (python_interpreter_init() != 0) {
-        fprintf(stderr, "Warning: Failed to initialize Python interpreter\n");
-    }
-
-    if (python_register_tool_schemas(registry) != 0) {
-        fprintf(stderr, "Warning: Failed to register Python file tools\n");
-    }
-
-    /* Subagents communicate with the parent via the harness, not messaging tools */
-    const char* is_subagent = getenv("RALPH_IS_SUBAGENT");
-    if (is_subagent == NULL || strcmp(is_subagent, "1") != 0) {
-        if (register_messaging_tools(registry) != 0) {
-            fprintf(stderr, "Warning: Failed to register messaging tools\n");
-        }
-    }
-
-    return 0;
 }
 
 void cleanup_tool_registry(ToolRegistry *registry) {
@@ -327,13 +277,13 @@ void cleanup_tool_calls(ToolCall *tool_calls, int call_count) {
     if (tool_calls == NULL) {
         return;
     }
-    
+
     for (int i = 0; i < call_count; i++) {
         free(tool_calls[i].id);
         free(tool_calls[i].name);
         free(tool_calls[i].arguments);
     }
-    
+
     free(tool_calls);
 }
 
@@ -341,11 +291,11 @@ void cleanup_tool_results(ToolResult *results, int result_count) {
     if (results == NULL) {
         return;
     }
-    
+
     for (int i = 0; i < result_count; i++) {
         free(results[i].tool_call_id);
         free(results[i].result);
     }
-    
+
     free(results);
 }

@@ -2,7 +2,7 @@
 #include "json_escape.h"
 #include "ui/output_formatter.h"
 #include "response_processing.h"
-#include "tools_system.h"
+#include "lib/tools/tools_system.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

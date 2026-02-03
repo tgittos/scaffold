@@ -2,7 +2,7 @@
 #define LLM_PROVIDER_H
 
 #include "conversation_tracker.h"
-#include "tools_system.h"
+#include "lib/tools/tools_system.h"
 #include "http_client.h"
 #include "ui/output_formatter.h"
 #include "streaming.h"

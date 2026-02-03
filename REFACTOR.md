@@ -12,45 +12,7 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 ---
 
-## Session 8: Tools System Core
-
-**Move:** Tool framework (registry, parsing, execution).
-
-| File | Destination |
-|------|-------------|
-| `src/tools/tools_system.c/h` | `lib/tools/` |
-| `src/tools/tool_format.h` | `lib/tools/` |
-| `src/tools/tool_format_openai.c` | `lib/tools/` |
-| `src/tools/tool_format_anthropic.c` | `lib/tools/` |
-| `src/tools/tool_param_dsl.c/h` | `lib/tools/` |
-| `src/tools/tool_result_builder.c/h` | `lib/tools/` |
-
-**Changes:**
-1. Move files to `lib/tools/`
-2. Update includes to use `lib/util/darray.h` (moved in Session 2)
-3. Separate tool registrations into `src/tools/builtin_tools.c`
-4. Update `mk/lib.mk`: Add to `LIB_TOOLS_SOURCES`
-
-**Verify:** `./scripts/build.sh && ./scripts/run_tests.sh tools_system`
-
----
-
-## Session 9: Simple Tools
-
-**Move:** Self-contained tools.
-
-| File | Destination |
-|------|-------------|
-| `src/tools/todo_manager.c/h` | `lib/tools/` |
-| `src/tools/todo_tool.c/h` | `lib/tools/` |
-| `src/tools/todo_display.c/h` | `lib/tools/` |
-| `src/tools/messaging_tool.c/h` | `lib/tools/` |
-
-**Verify:** `./scripts/build.sh && ./scripts/run_tests.sh todo_manager`
-
----
-
-## Session 10: Vector Database
+## Session 8: Vector Database
 
 **Move:** Vector database infrastructure (lib/db/ already exists from Session 2).
 
@@ -70,7 +32,7 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 ---
 
-## Session 11: Database Services
+## Session 9: Database Services
 
 **Move:** Singleton database services.
 
@@ -83,7 +45,7 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 ---
 
-## Session 12: LLM Core
+## Session 10: LLM Core
 
 **Move:** Provider framework.
 
@@ -100,7 +62,7 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 ---
 
-## Session 13: LLM Embeddings
+## Session 11: LLM Embeddings
 
 **Move:** Embedding infrastructure.
 
@@ -114,7 +76,7 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 ---
 
-## Session 14: LLM Providers
+## Session 12: LLM Providers
 
 **Move:** Provider implementations.
 
@@ -130,7 +92,7 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 ---
 
-## Session 15: LLM Models
+## Session 13: LLM Models
 
 **Move:** Model capability definitions.
 
@@ -147,48 +109,7 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 ---
 
-## Session 16: Complex Tools
-
-**Move:** Tools with database dependencies.
-
-| File | Destination |
-|------|-------------|
-| `src/tools/memory_tool.c/h` | `lib/tools/` |
-| `src/tools/vector_db_tool.c/h` | `lib/tools/` |
-| `src/tools/pdf_tool.c/h` | `lib/tools/` |
-
-**Verify:** `./scripts/build.sh && ./scripts/run_tests.sh memory_tool`
-
----
-
-## Session 17: Python Tools
-
-**Move:** Python tool infrastructure.
-
-| File | Destination |
-|------|-------------|
-| `src/tools/python_tool.c/h` | `lib/tools/` |
-| `src/tools/python_tool_files.c/h` | `lib/tools/` |
-| `src/tools/python_defaults/` | `lib/tools/python_defaults/` |
-
-**Verify:** `./scripts/build.sh && ./scripts/run_tests.sh python_tool`
-
----
-
-## Session 18: Subagent Tools
-
-**Move:** Subagent spawning infrastructure.
-
-| File | Destination |
-|------|-------------|
-| `src/tools/subagent_tool.c/h` | `lib/tools/` |
-| `src/tools/subagent_process.c/h` | `lib/tools/` |
-
-**Verify:** `./scripts/build.sh && ./scripts/run_tests.sh subagent_tool`
-
----
-
-## Session 19: Policy Core
+## Session 14: Policy Core
 
 **Move:** Foundational policy utilities.
 
@@ -208,7 +129,7 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 ---
 
-## Session 20: Policy Advanced
+## Session 15: Policy Advanced
 
 **Move:** File protection and verification.
 
@@ -224,7 +145,7 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 ---
 
-## Session 21: Policy Gates
+## Session 16: Policy Gates
 
 **Move:** Approval gate system (security-critical).
 
@@ -241,7 +162,7 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 ---
 
-## Session 22: Session Module
+## Session 17: Session Module
 
 **Move:** Conversation and session management.
 
@@ -261,7 +182,7 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 ---
 
-## Session 23: Final Cleanup
+## Session 18: Final Cleanup
 
 **Tasks:**
 1. Audit remaining `src/` files (main.c, ralph.c, network/, mcp/, pdf/)
@@ -338,19 +259,17 @@ Session 6: UI output formatting (output_formatter, json_output) ✓ COMPLETE
     ↓
 Session 7: UI CLI commands (memory_commands) ✓ COMPLETE
     ↓
-Session 8-9: Tools Core + Simple (depends on UI for output)
+Session 8 (was 8-9, 16, 18): Tools System + All Tools (except Python) ✓ COMPLETE
     ↓
-Session 10-11: Vector DB + Services (depends on lib/db/sqlite_dal)
+Session 8-9: Vector DB + Services (depends on lib/db/sqlite_dal)
     ↓
-Session 12-15: LLM (depends on DB for embeddings)
+Session 10-13: LLM (depends on DB for embeddings)
     ↓
-Session 16-18: Complex Tools (depends on DB, LLM)
+Session 14-16: Policy (depends on Tools for types)
     ↓
-Session 19-21: Policy (depends on Tools for types)
+Session 17: Session (depends on DB, LLM)
     ↓
-Session 22: Session (depends on DB, LLM)
-    ↓
-Session 23: Cleanup
+Session 18: Cleanup
 ```
 
 ---

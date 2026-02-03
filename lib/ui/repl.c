@@ -12,8 +12,8 @@
 #include "json_output.h"
 #include "spinner.h"
 #include "memory_commands.h"
-#include "../../src/tools/subagent_tool.h"
-#include "ipc/message_poller.h"
+#include "../tools/subagent_tool.h"
+#include "../ipc/message_poller.h"
 #include "../../src/messaging/notification_formatter.h"
 #include <stdio.h>
 #include <stdlib.h>

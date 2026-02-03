@@ -1,7 +1,7 @@
 #ifndef PYTHON_TOOL_FILES_H
 #define PYTHON_TOOL_FILES_H
 
-#include "tools_system.h"
+#include "lib/tools/tools_system.h"
 
 /**
  * Directory name where Python tool files are stored (relative to ralph home)

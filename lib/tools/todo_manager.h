@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 #include <time.h>
-#include "util/darray.h"
+#include "../util/darray.h"
 
 #define TODO_MAX_CONTENT_LENGTH 512
 #define TODO_MAX_ID_LENGTH 64

@@ -2,7 +2,7 @@
 #define MCP_CLIENT_H
 
 #include <stddef.h>
-#include "../tools/tools_system.h"
+#include "lib/tools/tools_system.h"
 #include "util/ptrarray.h"
 #include "util/darray.h"
 

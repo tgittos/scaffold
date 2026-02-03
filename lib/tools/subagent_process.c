@@ -7,8 +7,8 @@
 
 #include "subagent_process.h"
 #include "messaging_tool.h"
-#include "ipc/message_store.h"
-#include "../utils/debug_output.h"
+#include "../ipc/message_store.h"
+#include "../../src/utils/debug_output.h"
 
 #include <cJSON.h>
 #include <errno.h>

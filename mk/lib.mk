@@ -29,7 +29,22 @@ LIB_UI_SOURCES := \
     $(LIBDIR)/ui/memory_commands.c
 
 # Tools module (Phase 4)
-LIB_TOOLS_SOURCES :=
+LIB_TOOLS_SOURCES := \
+    $(LIBDIR)/tools/tools_system.c \
+    $(LIBDIR)/tools/tool_format_openai.c \
+    $(LIBDIR)/tools/tool_format_anthropic.c \
+    $(LIBDIR)/tools/tool_param_dsl.c \
+    $(LIBDIR)/tools/tool_result_builder.c \
+    $(LIBDIR)/tools/builtin_tools.c \
+    $(LIBDIR)/tools/memory_tool.c \
+    $(LIBDIR)/tools/messaging_tool.c \
+    $(LIBDIR)/tools/pdf_tool.c \
+    $(LIBDIR)/tools/todo_manager.c \
+    $(LIBDIR)/tools/todo_tool.c \
+    $(LIBDIR)/tools/todo_display.c \
+    $(LIBDIR)/tools/vector_db_tool.c \
+    $(LIBDIR)/tools/subagent_tool.c \
+    $(LIBDIR)/tools/subagent_process.c
 
 # Agent module (Phase 5)
 LIB_AGENT_SOURCES := $(LIBDIR)/agent/agent.c

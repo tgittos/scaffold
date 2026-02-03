@@ -2,8 +2,8 @@
 #define TOOLS_SYSTEM_H
 
 #include <stddef.h>
-#include "util/darray.h"
-#include "types.h"
+#include "../util/darray.h"
+#include "../types.h"
 
 /**
  * Structure representing a tool parameter
@@ -47,14 +47,6 @@ typedef struct {
  * @param registry Pointer to ToolRegistry structure to initialize
  */
 void init_tool_registry(ToolRegistry *registry);
-
-/**
- * Register all built-in tools that are compiled into the binary
- *
- * @param registry Pointer to ToolRegistry structure to populate
- * @return 0 on success, -1 on failure
- */
-int register_builtin_tools(ToolRegistry *registry);
 
 /**
  * Register a tool with the registry

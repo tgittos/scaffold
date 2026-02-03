@@ -1,17 +1,14 @@
 /**
  * lib/tools/tools.h - Library wrapper for tool system
  *
- * This header re-exports the tool system implementation from src/
- * through the library API. It provides compatibility between the
- * internal src/ interface and the public lib/ interface.
- *
+ * This header provides the public API for the tool system infrastructure.
  * The tool system provides:
  * - ToolRegistry: Container for available tools
  * - Tool registration and execution
  * - JSON generation for LLM API requests
  * - Tool call parsing from LLM responses
  *
- * Source implementation: src/tools/tools_system.c
+ * Source implementation: lib/tools/tools_system.c
  */
 
 #ifndef LIB_TOOLS_TOOLS_H
@@ -19,8 +16,11 @@
 
 #include <stdlib.h>
 
-/* Re-export the original implementation */
-#include "../../src/tools/tools_system.h"
+/* Include the local implementation */
+#include "tools_system.h"
+
+/* Forward declaration - register_builtin_tools is in src/tools/builtin_tools.h */
+int register_builtin_tools(ToolRegistry *registry);
 
 /*
  * Library API aliases (ralph_* prefix)
