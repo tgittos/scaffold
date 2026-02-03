@@ -12,25 +12,6 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 ---
 
-## Session 3: Message Store
-
-**Move:** Message persistence for IPC (depends on lib/db/).
-
-| File | Destination |
-|------|-------------|
-| `src/db/message_store.c/h` | `lib/ipc/` |
-
-**Changes:**
-1. Move to `lib/ipc/`
-2. Update `mk/lib.mk`: Add to `LIB_IPC_SOURCES`
-3. Update `mk/sources.mk`: Remove from `DB_C_SOURCES`
-4. Update includes to use `lib/db/sqlite_dal.h`
-5. Update `lib/services/services.h` includes
-
-**Verify:** `./scripts/build.sh && ./scripts/run_tests.sh message_store`
-
----
-
 ## Session 4: Message Poller
 
 **Move:** Complete IPC module.
@@ -414,7 +395,9 @@ Session 1: IPC primitives (pipe_notifier, agent_identity) ✓ COMPLETE
     ↓
 Session 2: Database foundation (sqlite_dal, uuid_utils, darray, ptrarray) ✓ COMPLETE
     ↓
-Session 3-4: IPC completion (message_store, message_poller)
+Session 3: IPC message_store ✓ COMPLETE
+    ↓
+Session 4: IPC completion (message_poller)
     ↓
 Session 5-7: UI (terminal, output, CLI commands)
     ↓

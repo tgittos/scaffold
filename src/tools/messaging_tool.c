@@ -1,5 +1,5 @@
 #include "messaging_tool.h"
-#include "../db/message_store.h"
+#include "ipc/message_store.h"
 #include "../utils/common_utils.h"
 #include "../utils/json_escape.h"
 #include "tool_result_builder.h"

@@ -1,7 +1,7 @@
 #include "../../test/unity/unity.h"
 #include "../../src/tools/subagent_tool.h"
 #include "../../src/tools/messaging_tool.h"
-#include "../../src/db/message_store.h"
+#include "../../lib/ipc/message_store.h"
 #include "../../src/utils/config.h"
 #include "../../src/utils/ralph_home.h"
 #include <stdio.h>

@@ -12,7 +12,7 @@
 #include <stdbool.h>
 
 /* Re-export singleton types from src/ */
-#include "../../src/db/message_store.h"
+#include "../ipc/message_store.h"
 #include "../../src/db/vector_db_service.h"
 #include "../../src/db/task_store.h"
 #include "../../src/llm/embeddings_service.h"

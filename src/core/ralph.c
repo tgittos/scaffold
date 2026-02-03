@@ -21,7 +21,7 @@
 #include "llm_provider.h"
 #include "util/uuid_utils.h"
 #include "../db/task_store.h"
-#include "../db/message_store.h"
+#include "ipc/message_store.h"
 #include "messaging_tool.h"
 #include "../messaging/message_poller.h"
 #include <stdio.h>

@@ -109,8 +109,7 @@ DB_C_SOURCES := \
     $(SRCDIR)/db/vector_db_service.c \
     $(SRCDIR)/db/metadata_store.c \
     $(SRCDIR)/db/document_store.c \
-    $(SRCDIR)/db/task_store.c \
-    $(SRCDIR)/db/message_store.c
+    $(SRCDIR)/db/task_store.c
 
 DB_CPP_SOURCES := $(SRCDIR)/db/hnswlib_wrapper.cpp
 
@@ -222,6 +221,7 @@ COMPLEX_DEPS := \
     $(UTIL_DEPS) \
     $(DB_C_SOURCES) \
     $(LIBDIR)/db/sqlite_dal.c \
+    $(LIBDIR)/ipc/message_store.c \
     $(EMBEDDING_DEPS) \
     $(SRCDIR)/pdf/pdf_extractor.c \
     $(NETWORK_DEPS) \

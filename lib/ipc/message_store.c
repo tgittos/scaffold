@@ -5,7 +5,6 @@
 #include "message_store.h"
 #include "db/sqlite_dal.h"
 #include "util/uuid_utils.h"
-#include "util/ptrarray.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,11 +17,6 @@ static int64_t get_time_millis(void) {
     gettimeofday(&tv, NULL);
     return (int64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
 }
-
-PTRARRAY_DEFINE(DirectMessageArray, DirectMessage)
-PTRARRAY_DEFINE(ChannelArray, Channel)
-PTRARRAY_DEFINE(SubscriptionArray, Subscription)
-PTRARRAY_DEFINE(ChannelMessageArray, ChannelMessage)
 
 struct message_store {
     sqlite_dal_t *dal;

@@ -20,7 +20,7 @@
 
 /* Re-export task store types */
 #include "../../src/db/task_store.h"
-#include "../../src/db/message_store.h"
+#include "../ipc/message_store.h"
 
 #ifdef __cplusplus
 extern "C" {

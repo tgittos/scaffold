@@ -15,7 +15,8 @@ LIBRALPH := $(BUILDDIR)/libralph.a
 # IPC module
 LIB_IPC_SOURCES := \
     $(LIBDIR)/ipc/pipe_notifier.c \
-    $(LIBDIR)/ipc/agent_identity.c
+    $(LIBDIR)/ipc/agent_identity.c \
+    $(LIBDIR)/ipc/message_store.c
 
 # UI module (Phase 3)
 LIB_UI_SOURCES := $(LIBDIR)/ui/repl.c

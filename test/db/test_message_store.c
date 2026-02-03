@@ -1,5 +1,5 @@
 #include "unity.h"
-#include "db/message_store.h"
+#include "ipc/message_store.h"
 #include "util/uuid_utils.h"
 #include "utils/ralph_home.h"
 #include <stdlib.h>

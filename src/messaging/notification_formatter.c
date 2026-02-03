@@ -1,5 +1,5 @@
 #include "notification_formatter.h"
-#include "../db/message_store.h"
+#include "ipc/message_store.h"
 #include "../utils/terminal.h"
 #include <cJSON.h>
 #include <stdlib.h>

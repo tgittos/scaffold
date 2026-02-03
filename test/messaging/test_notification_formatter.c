@@ -1,6 +1,6 @@
 #include "unity.h"
 #include "messaging/notification_formatter.h"
-#include "db/message_store.h"
+#include "ipc/message_store.h"
 #include "utils/ralph_home.h"
 #include <stdlib.h>
 #include <string.h>
