@@ -9,10 +9,11 @@
 #include <sys/wait.h>
 
 static const char* TEST_DB_PATH = "/tmp/test_messages.db";
+static const char* TEST_HOME_DIR = "/tmp/test_message_store_home";
 static message_store_t* g_store = NULL;
 
 void setUp(void) {
-    ralph_home_init(NULL);
+    ralph_home_init(TEST_HOME_DIR);
     unlink(TEST_DB_PATH);
     message_store_reset_instance_for_testing();
     g_store = message_store_create(TEST_DB_PATH);

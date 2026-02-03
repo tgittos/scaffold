@@ -73,7 +73,7 @@ static void* executor_thread_func(void* arg) {
         executor->last_error = NULL;
     }
 
-    if (atomic_load(&executor->cancel_requested)) {
+    if (atomic_load(&executor->cancel_requested) || result == -2) {
         debug_printf("async_executor: Execution was cancelled\n");
         send_event(executor, ASYNC_EVENT_INTERRUPTED);
     } else if (result != 0) {

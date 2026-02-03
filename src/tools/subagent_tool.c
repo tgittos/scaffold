@@ -508,10 +508,22 @@ int subagent_get_status(SubagentManager *manager, const char *subagent_id, int w
 
     while (sub->status == SUBAGENT_STATUS_RUNNING) {
         if (interrupt_pending()) {
+            interrupt_acknowledge();
             sub->status = SUBAGENT_STATUS_FAILED;
             sub->error = strdup("Interrupted by user");
             kill(sub->pid, SIGTERM);
-            waitpid(sub->pid, NULL, WNOHANG);
+
+            // Wait with timeout, escalate to SIGKILL if needed
+            int proc_status;
+            pid_t result = waitpid(sub->pid, &proc_status, WNOHANG);
+            if (result == 0) {
+                usleep(SUBAGENT_GRACE_PERIOD_USEC);
+                kill(sub->pid, SIGKILL);
+                waitpid(sub->pid, &proc_status, 0);
+            }
+
+            read_subagent_output(sub);
+            subagent_notify_parent(sub);
             break;
         }
 

@@ -59,9 +59,10 @@ static void repl_line_callback(char* line) {
 
     printf("\n");
     int result = ralph_process_message(g_repl_session, line);
-    if (result != 0) {
+    if (result == -1) {
         fprintf(stderr, "Error: Failed to process message\n");
     }
+    // result == -2 (interrupted): cancellation message already shown by tool_executor
     printf("\n");
 
     free(line);

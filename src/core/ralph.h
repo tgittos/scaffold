@@ -41,6 +41,18 @@ int ralph_init_session(RalphSession* session);
 void ralph_cleanup_session(RalphSession* session);
 
 int ralph_load_config(RalphSession* session);
+
+/**
+ * Process a user message through the LLM and execute any tool calls.
+ *
+ * @param session The active Ralph session
+ * @param user_message The message to process
+ * @return 0 on success, -1 on error, -2 if interrupted by user (Ctrl+C)
+ *
+ * Return value -2 indicates the operation was cancelled by the user but the
+ * session is still valid. A cancellation message has already been displayed
+ * to the user, so callers should not print additional error messages.
+ */
 int ralph_process_message(RalphSession* session, const char* user_message);
 
 char* ralph_build_json_payload(const char* model, const char* system_prompt,

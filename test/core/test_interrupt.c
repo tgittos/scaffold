@@ -79,6 +79,24 @@ void test_interrupt_pending_after_cleanup(void) {
     TEST_ASSERT_EQUAL_INT(0, interrupt_pending());
 }
 
+void test_interrupt_acknowledge_pattern_for_cancellation(void) {
+    // This tests the pattern used in tool_executor for graceful cancellation:
+    // 1. Detect interrupt
+    // 2. Acknowledge it (prevents re-triggering)
+    // 3. Handle cancellation cleanly
+    interrupt_init();
+    raise(SIGINT);
+    TEST_ASSERT_EQUAL_INT(1, interrupt_pending());
+    interrupt_acknowledge();
+    TEST_ASSERT_EQUAL_INT(0, interrupt_pending());
+    // After acknowledge, new signals should still be detected
+    raise(SIGINT);
+    TEST_ASSERT_EQUAL_INT(0, interrupt_pending());  // Still suppressed until clear
+    interrupt_clear();
+    raise(SIGINT);
+    TEST_ASSERT_EQUAL_INT(1, interrupt_pending());  // Now detectable again
+}
+
 int main(void) {
     UNITY_BEGIN();
 
@@ -92,6 +110,7 @@ int main(void) {
     RUN_TEST(test_interrupt_cleanup_without_init);
     RUN_TEST(test_interrupt_cleanup_twice);
     RUN_TEST(test_interrupt_pending_after_cleanup);
+    RUN_TEST(test_interrupt_acknowledge_pattern_for_cancellation);
 
     return UNITY_END();
 }

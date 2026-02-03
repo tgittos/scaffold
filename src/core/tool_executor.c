@@ -526,15 +526,19 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
         for (int i = 0; i < call_count; i++) {
             if (interrupt_pending()) {
                 interrupt_acknowledge();
+                spinner_stop();
                 loop_interrupted = 1;
                 debug_printf("Tool execution interrupted by user at tool %d of %d\n", i + 1, call_count);
+                display_cancellation_message(i, call_count, session->session_data.config.json_output_mode);
                 for (int j = i; j < call_count; j++) {
                     if (!is_tool_already_executed(&tracker, tool_calls[j].id)) {
                         results[executed_count].tool_call_id = tool_calls[j].id ? strdup(tool_calls[j].id) : NULL;
                         results[executed_count].result = strdup("{\"error\": \"interrupted\", \"message\": \"Cancelled by user\"}");
                         results[executed_count].success = 0;
                         tool_call_indices[executed_count] = j;
-                        log_tool_execution_improved(tool_calls[j].name, tool_calls[j].arguments, 0, "Cancelled by user");
+                        if (session->session_data.config.json_output_mode) {
+                            json_output_tool_result(tool_calls[j].id, results[executed_count].result, 1);
+                        }
                         executed_count++;
                     }
                 }
@@ -698,13 +702,17 @@ int tool_executor_run_workflow(RalphSession* session, ToolCall* tool_calls, int 
     for (int i = 0; i < call_count; i++) {
         if (interrupt_pending()) {
             interrupt_acknowledge();
+            spinner_stop();
             interrupted = 1;
             debug_printf("Tool workflow interrupted by user at tool %d of %d\n", i + 1, call_count);
+            display_cancellation_message(i, call_count, session->session_data.config.json_output_mode);
             for (int j = i; j < call_count; j++) {
                 results[j].tool_call_id = tool_calls[j].id ? strdup(tool_calls[j].id) : NULL;
                 results[j].result = strdup("{\"error\": \"interrupted\", \"message\": \"Cancelled by user\"}");
                 results[j].success = 0;
-                log_tool_execution_improved(tool_calls[j].name, tool_calls[j].arguments, 0, "Cancelled by user");
+                if (session->session_data.config.json_output_mode) {
+                    json_output_tool_result(tool_calls[j].id, results[j].result, 1);
+                }
             }
             break;
         }

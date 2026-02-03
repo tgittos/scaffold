@@ -193,4 +193,13 @@ void log_subagent_approval(const char *subagent_id,
                            const char *display_summary,
                            int result);
 
+/**
+ * Display a cancellation message when an operation is interrupted by Ctrl+C.
+ *
+ * @param tools_completed Number of tools that completed before cancellation
+ * @param tools_total Total number of tools that were requested
+ * @param json_mode Whether to output in JSON format
+ */
+void display_cancellation_message(int tools_completed, int tools_total, bool json_mode);
+
 #endif /* OUTPUT_FORMATTER_H */

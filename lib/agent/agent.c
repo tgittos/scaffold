@@ -269,6 +269,10 @@ int ralph_agent_run(RalphAgent* agent) {
                     work_queue_complete(queue, item->id, "Task completed successfully");
                     items_processed++;
                     debug_printf("Worker completed item %s\n", item->id);
+                } else if (result == -2) {
+                    /* Interrupted by user - not a failure, just cancelled */
+                    work_queue_complete(queue, item->id, "Task interrupted by user");
+                    debug_printf("Worker item %s interrupted by user\n", item->id);
                 } else {
                     char error_msg[128];
                     snprintf(error_msg, sizeof(error_msg),

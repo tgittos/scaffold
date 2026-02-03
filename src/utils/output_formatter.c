@@ -1,5 +1,6 @@
 #include "output_formatter.h"
 #include "debug_output.h"
+#include "json_output.h"
 #include "model_capabilities.h"
 #include "../core/interrupt.h"
 #include "../tools/todo_display.h"
@@ -932,4 +933,17 @@ void log_subagent_approval(const char *subagent_id,
     printf(TERM_DIM TERM_GRAY "  ↳ [%s] %s%s → %s" TERM_RESET "\n",
            short_id, tool_name, detail, result_text);
     fflush(stdout);
+}
+
+void display_cancellation_message(int tools_completed, int tools_total, bool json_mode) {
+    char message[128];
+    snprintf(message, sizeof(message), "Operation cancelled (%d/%d tools completed)",
+             tools_completed, tools_total);
+
+    if (json_mode) {
+        json_output_system("cancelled", message);
+    } else {
+        printf(TERM_YELLOW TERM_SYM_INFO " %s" TERM_RESET "\n\n", message);
+        fflush(stdout);
+    }
 }
