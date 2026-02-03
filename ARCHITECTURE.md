@@ -8,7 +8,7 @@ Ralph is a portable C-based AI assistant that provides a consistent interface ac
 graph TB
     %% User Interface Layer
     CLI[Command Line Interface<br/>main.c] --> Core[Ralph Core<br/>ralph.c/h]
-    CLI --> MemoryCommands[Memory Commands<br/>memory_commands.c/h]
+    CLI --> MemoryCommands[Memory Commands<br/>lib/ui/memory_commands.c/h]
 
     %% Core Application Layer
     Core --> Session[Session Manager<br/>session_manager.c/h]
@@ -291,7 +291,7 @@ graph TB
     Tools --> Policy
     Policy --> Utils
 
-    CLI[CLI Layer<br/>main.c, memory_commands.c] --> Core
+    CLI[CLI Layer<br/>main.c] --> Core
     CLI --> Vector
 
     MCP --> Network[Network Layer]
@@ -731,7 +731,7 @@ Interactive slash commands provide direct access to memory management without LL
 graph TB
     CLI[main.c<br/>Interactive Mode] --> CommandParser[Command Parser<br/>Slash commands]
 
-    CommandParser --> MemoryCommands[Memory Commands<br/>memory_commands.c/h]
+    CommandParser --> MemoryCommands[Memory Commands<br/>lib/ui/memory_commands.c/h]
 
     MemoryCommands --> MemList[/memory list<br/>List chunks]
     MemoryCommands --> MemSearch[/memory search<br/>Search chunks]
@@ -942,8 +942,6 @@ graph TB
 
 ```
 src/
-├── cli/                    # CLI command handlers
-│   └── memory_commands.c/h # Interactive /memory slash commands
 ├── core/                   # Core application
 │   ├── main.c              # Entry point (CLI interface, --json, --subagent modes)
 │   ├── ralph.c/h           # Core orchestration logic

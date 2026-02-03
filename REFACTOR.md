@@ -12,18 +12,6 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 ---
 
-## Session 7: Memory Commands
-
-**Move:** CLI command handlers.
-
-| File | Destination |
-|------|-------------|
-| `src/cli/memory_commands.c/h` | `lib/ui/` |
-
-**Verify:** `./scripts/build.sh && ./scripts/run_tests.sh`
-
----
-
 ## Session 8: Tools System Core
 
 **Move:** Tool framework (registry, parsing, execution).
@@ -348,7 +336,7 @@ Session 5: UI terminal utilities (terminal, spinner) ✓ COMPLETE
     ↓
 Session 6: UI output formatting (output_formatter, json_output) ✓ COMPLETE
     ↓
-Session 7: UI CLI commands (memory_commands)
+Session 7: UI CLI commands (memory_commands) ✓ COMPLETE
     ↓
 Session 8-9: Tools Core + Simple (depends on UI for output)
     ↓

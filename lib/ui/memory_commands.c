@@ -1,8 +1,8 @@
 #include "memory_commands.h"
-#include "../db/vector_db_service.h"
-#include "../db/metadata_store.h"
-#include "../llm/embeddings_service.h"
-#include "ui/terminal.h"
+#include "../../src/db/vector_db_service.h"
+#include "../../src/db/metadata_store.h"
+#include "../../src/llm/embeddings_service.h"
+#include "terminal.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -148,19 +148,19 @@ static int cmd_search(const char* args) {
     const char* index_name = "long_term_memory";
     size_t count = 0;
     ChunkMetadata** chunks = metadata_store_search(store, index_name, args, &count);
-    
+
     if (chunks == NULL || count == 0) {
         printf("🔍 No memories found matching '%s'\n", args);
         return 0;
     }
-    
+
     printf("\n" TERM_BOLD "Search Results for '%s' (%zu matches)" TERM_RESET "\n", args, count);
     printf(TERM_SEP_HEAVY_40 "\n\n");
-    
+
     for (size_t i = 0; i < count; i++) {
         print_chunk_summary(chunks[i]);
     }
-    
+
     metadata_store_free_chunks(chunks, count);
     return 0;
 }
@@ -186,7 +186,7 @@ static int cmd_show(const char* args) {
         printf("❌ Failed to access metadata store\n");
         return -1;
     }
-    
+
     //Fall through known indices since chunk IDs aren't globally unique
     const char* index_name = "long_term_memory";
     ChunkMetadata* chunk = metadata_store_get(store, index_name, chunk_id);
@@ -214,21 +214,21 @@ static int cmd_edit(const char* args) {
         printf("Fields: type, source, importance, content\n");
         return -1;
     }
-    
+
     char* args_copy = strdup(args);
     if (args_copy == NULL) return -1;
-    
+
     char* chunk_id_str = strtok(args_copy, " ");
     char* field = strtok(NULL, " ");
     char* value = strtok(NULL, "");
-    
+
     if (chunk_id_str == NULL || field == NULL || value == NULL) {
         printf("❌ Invalid syntax\n");
         printf("Usage: /memory edit <chunk_id> <field> <value>\n");
         free(args_copy);
         return -1;
     }
-    
+
     while (*value && isspace(*value)) value++;
 
     char* endptr = NULL;
@@ -247,7 +247,7 @@ static int cmd_edit(const char* args) {
         free(args_copy);
         return -1;
     }
-    
+
     // Fall through known indices since chunk IDs aren't globally unique
     const char* index_name = "long_term_memory";
     ChunkMetadata* chunk = metadata_store_get(store, index_name, chunk_id);
@@ -256,13 +256,13 @@ static int cmd_edit(const char* args) {
         index_name = "conversation_history";
         chunk = metadata_store_get(store, index_name, chunk_id);
     }
-    
+
     if (chunk == NULL) {
         printf("❌ Chunk #%zu not found\n", chunk_id);
         free(args_copy);
         return -1;
     }
-    
+
     bool valid_field = true;
     char* new_value = NULL;
     if (strcmp(field, "type") == 0) {
@@ -324,7 +324,7 @@ static int cmd_edit(const char* args) {
         printf("❌ Invalid field '%s'\n", field);
         printf("Valid fields: type, source, importance, content\n");
     }
-    
+
     if (valid_field) {
         if (metadata_store_update(store, chunk) != 0) {
             printf("❌ Failed to update metadata\n");
@@ -333,7 +333,7 @@ static int cmd_edit(const char* args) {
             printf("   %s = %s\n", field, value);
         }
     }
-    
+
     metadata_store_free_chunk(chunk);
     free(args_copy);
     return valid_field ? 0 : -1;
@@ -341,21 +341,21 @@ static int cmd_edit(const char* args) {
 
 static int cmd_indices(const char* args) {
     (void)args; // Unused
-    
+
     vector_db_t* db = vector_db_service_get_database();
     if (db == NULL) {
         printf("❌ Failed to access vector database\n");
         return -1;
     }
-    
+
     size_t count = 0;
     char** indices = vector_db_list_indices(db, &count);
-    
+
     if (indices == NULL || count == 0) {
         printf("📭 No indices found\n");
         return 0;
     }
-    
+
     printf("\n" TERM_BOLD "Available Indices (%zu total)" TERM_RESET "\n", count);
     printf(TERM_SEP_HEAVY_40 "\n");
 
@@ -365,17 +365,17 @@ static int cmd_indices(const char* args) {
 
         printf(TERM_BOLD "%s" TERM_RESET "\n", indices[i]);
         printf("   Vectors: %zu / %zu", size, capacity);
-        
+
         if (capacity > 0) {
             float usage = (float)size / capacity * 100;
             printf(" (%.1f%% used)", usage);
         }
         printf("\n\n");
-        
+
         free(indices[i]);
     }
     free(indices);
-    
+
     return 0;
 }
 
@@ -385,21 +385,21 @@ static int cmd_stats(const char* args) {
     if (args && strlen(args) > 0) {
         index_name = args;
     }
-    
+
     vector_db_t* db = vector_db_service_get_database();
     if (db == NULL) {
         printf("❌ Failed to access vector database\n");
         return -1;
     }
-    
+
     if (!vector_db_has_index(db, index_name)) {
         printf("❌ Index '%s' not found\n", index_name);
         return -1;
     }
-    
+
     size_t size = vector_db_get_index_size(db, index_name);
     size_t capacity = vector_db_get_index_capacity(db, index_name);
-    
+
     metadata_store_t* store = metadata_store_get_instance();
     size_t metadata_count = 0;
     if (store != NULL) {
@@ -408,7 +408,7 @@ static int cmd_stats(const char* args) {
             metadata_store_free_chunks(chunks, metadata_count);
         }
     }
-    
+
     printf("\n" TERM_BOLD "Statistics for '%s'" TERM_RESET "\n", index_name);
     printf(TERM_SEP_HEAVY_40 "\n");
     printf("📈 Vectors:      %zu / %zu", size, capacity);
@@ -418,18 +418,18 @@ static int cmd_stats(const char* args) {
     }
     printf("\n");
     printf("📄 Metadata:     %zu chunks\n", metadata_count);
-    
+
     if (size != metadata_count) {
         printf("⚠️  Warning:     Vector count doesn't match metadata count\n");
     }
-    
+
     printf("\n");
     return 0;
 }
 
 int process_memory_command(const char* command) {
     if (command == NULL) return -1;
-    
+
     if (strncmp(command, "/memory", 7) != 0) {
         return -1;
     }

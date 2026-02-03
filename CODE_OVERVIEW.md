@@ -16,9 +16,6 @@ This document provides a comprehensive overview of Ralph's codebase structure an
 - **`streaming_handler.c/h`** - Application-layer streaming orchestration and provider registry management
 - **`tool_executor.c/h`** - Iterative tool-calling state machine for executing tool workflows
 
-#### `src/cli/` - Command Line Interface
-- **`memory_commands.c/h`** - Interactive `/memory` slash commands for direct memory management
-
 #### `src/llm/` - Language Model Integration
 - **`llm_provider.c/h`** - LLM provider abstraction layer with registry pattern
 - **`model_capabilities.c/h`** - Model capability detection and management (context windows, features)
