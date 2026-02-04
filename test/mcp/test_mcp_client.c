@@ -1,5 +1,5 @@
 #include "../unity/unity.h"
-#include "../../src/mcp/mcp_client.h"
+#include "mcp/mcp_client.h"
 #include "../../src/core/ralph.h"
 #include <stdio.h>
 #include <stdlib.h>

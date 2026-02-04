@@ -19,12 +19,6 @@ Application-specific code that uses the library layer.
 
 Note: The LLM integration layer has been fully migrated to `lib/llm/`. Model-specific implementations are in `lib/llm/models/` and providers are in `lib/llm/providers/`.
 
-#### `src/mcp/` - Model Context Protocol
-- **`mcp_client.c/h`** - MCP client implementation and server management
-- **`mcp_transport.c/h`** - Transport abstraction layer using strategy pattern
-- **`mcp_transport_stdio.c`** - STDIO transport for local MCP processes
-- **`mcp_transport_http.c`** - HTTP transport for remote MCP servers
-
 #### `src/messaging/` - Inter-Agent Messaging
 - **`notification_formatter.c/h`** - Formats messages for LLM context injection
 
@@ -177,6 +171,12 @@ Generic, CLI-independent components that can be reused.
 #### `lib/workflow/` - Task Queue
 - **`workflow.c/h`** - SQLite-backed work queue for asynchronous task processing
 
+#### `lib/mcp/` - Model Context Protocol
+- **`mcp_client.c/h`** - MCP client implementation and server management
+- **`mcp_transport.c/h`** - Transport abstraction layer using strategy pattern
+- **`mcp_transport_stdio.c`** - STDIO transport for local MCP processes
+- **`mcp_transport_http.c`** - HTTP transport for remote MCP servers
+
 ---
 
 ### `test/` - Test Suite
@@ -311,7 +311,7 @@ The `lib/policy/` directory implements security-aware tool execution control:
 - **Subagent Proxy**: IPC-based approval forwarding for child processes
 
 ### 6. MCP Protocol Integration
-The `src/mcp/` directory provides Model Context Protocol support:
+The `lib/mcp/` directory provides Model Context Protocol support:
 - **Multi-Transport**: STDIO (local processes), HTTP, and SSE connections
 - **Dynamic Discovery**: Tools fetched via JSON-RPC at connection time
 - **Namespaced Tools**: Registered as `mcp_{servername}_{toolname}`

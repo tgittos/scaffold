@@ -12,35 +12,6 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 ---
 
-## Session 17: MCP Module
-
-**Move:** Model Context Protocol plugin system.
-
-| File | Destination |
-|------|-------------|
-| `src/mcp/mcp_client.c/h` | `lib/mcp/` |
-| `src/mcp/mcp_transport.c/h` | `lib/mcp/` |
-| `src/mcp/mcp_transport_stdio.c` | `lib/mcp/` |
-| `src/mcp/mcp_transport_http.c` | `lib/mcp/` |
-
-**Changes:**
-1. Create `lib/mcp/` directory
-2. Move files to `lib/mcp/`
-3. Update includes in moved files (relative paths within lib/)
-4. Update `mk/lib.mk`: Add new `LIB_MCP_SOURCES` section:
-   - `$(LIBDIR)/mcp/mcp_client.c`
-   - `$(LIBDIR)/mcp/mcp_transport.c`
-   - `$(LIBDIR)/mcp/mcp_transport_stdio.c`
-   - `$(LIBDIR)/mcp/mcp_transport_http.c`
-5. Update `mk/lib.mk`: Add `$(LIB_MCP_SOURCES)` to `LIB_C_SOURCES`
-6. Update `mk/sources.mk`: Remove `MCP_SOURCES` section entirely
-7. Update `mk/sources.mk`: Update `RALPH_CORE_DEPS` to use `$(LIBDIR)/mcp/` paths
-8. Update includes in `src/` files that referenced moved headers
-
-**Verify:** `./scripts/build.sh clean && ./scripts/build.sh && ./scripts/run_tests.sh mcp_client`
-
----
-
 ## Session 18: Utils Module
 
 **Move:** Core utilities needed by the agent.
@@ -251,7 +222,7 @@ Session 15: Session Module (token_manager, conversation_tracker, conversation_co
     ↓
 Session 16: Network Module (http_client, api_common, api_error, streaming, embedded_cacert) ✓ COMPLETE
     ↓
-Session 17: MCP Module (mcp_client, mcp_transport, mcp_transport_stdio, mcp_transport_http)
+Session 17: MCP Module (mcp_client, mcp_transport, mcp_transport_stdio, mcp_transport_http) ✓ COMPLETE
     ↓
 Session 18: Utils Module (config, prompt_loader, ralph_home, context_retriever, pdf_processor)
     ↓

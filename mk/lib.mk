@@ -128,12 +128,19 @@ LIB_NETWORK_SOURCES := \
     $(LIBDIR)/network/streaming.c \
     $(LIBDIR)/network/embedded_cacert.c
 
+# MCP module (Model Context Protocol)
+LIB_MCP_SOURCES := \
+    $(LIBDIR)/mcp/mcp_client.c \
+    $(LIBDIR)/mcp/mcp_transport.c \
+    $(LIBDIR)/mcp/mcp_transport_stdio.c \
+    $(LIBDIR)/mcp/mcp_transport_http.c
+
 # Combined library sources
 LIB_C_SOURCES := $(LIB_IPC_SOURCES) $(LIB_UI_SOURCES) $(LIB_TOOLS_SOURCES) \
     $(LIB_AGENT_SOURCES) $(LIB_SERVICES_SOURCES) $(LIB_LLM_SOURCES) \
     $(LIB_SESSION_SOURCES) $(LIB_POLICY_SOURCES) $(LIB_DB_SOURCES) \
     $(LIB_WORKFLOW_SOURCES) $(LIB_UTIL_SOURCES) $(LIB_PDF_SOURCES) \
-    $(LIB_NETWORK_SOURCES)
+    $(LIB_NETWORK_SOURCES) $(LIB_MCP_SOURCES)
 
 LIB_CPP_SOURCES := $(LIB_DB_CPP_SOURCES)
 

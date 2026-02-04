@@ -1,17 +1,50 @@
 #include "../unity/unity.h"
 #include "db/document_store.h"
 #include "db/vector_db_service.h"
+#include "db/hnswlib_wrapper.h"
 #include "../../src/utils/ralph_home.h"
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <dirent.h>
+#include <sys/stat.h>
+
+static void rmdir_recursive(const char* path) {
+    DIR* dir = opendir(path);
+    if (dir == NULL) return;
+
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+        char full_path[1024] = {0};
+        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
+        struct stat st;
+        if (stat(full_path, &st) == 0) {
+            if (S_ISDIR(st.st_mode)) {
+                rmdir_recursive(full_path);
+            } else {
+                unlink(full_path);
+            }
+        }
+    }
+    closedir(dir);
+    rmdir(path);
+}
 
 void setUp(void) {
     ralph_home_init(NULL);
+    // Clear all hnswlib indexes to ensure clean state between tests
+    hnswlib_clear_all();
+    // Clean up any leftover test files
+    rmdir_recursive("/tmp/test_doc_store");
 }
 
 void tearDown(void) {
+    // Reset singleton if it was created
+    document_store_reset_instance();
     ralph_home_cleanup();
 }
 

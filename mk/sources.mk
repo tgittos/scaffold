@@ -19,12 +19,7 @@ TOOL_SOURCES := \
     $(SRCDIR)/tools/python_tool.c \
     $(SRCDIR)/tools/python_tool_files.c
 
-# MCP system
-MCP_SOURCES := \
-    $(SRCDIR)/mcp/mcp_client.c \
-    $(SRCDIR)/mcp/mcp_transport.c \
-    $(SRCDIR)/mcp/mcp_transport_stdio.c \
-    $(SRCDIR)/mcp/mcp_transport_http.c
+# MCP system (in lib/mcp/)
 
 # Messaging system
 MESSAGING_SOURCES := \
@@ -39,7 +34,7 @@ UTILS_EXTRA_SOURCES := \
     $(SRCDIR)/utils/ralph_home.c
 
 # Combined sources
-C_SOURCES := $(CORE_SOURCES) $(TOOL_SOURCES) $(MCP_SOURCES) $(MESSAGING_SOURCES) \
+C_SOURCES := $(CORE_SOURCES) $(TOOL_SOURCES) $(MESSAGING_SOURCES) \
     $(PROVIDER_SOURCES) $(MODEL_SOURCES) $(UTILS_EXTRA_SOURCES)
 CPP_SOURCES :=
 SOURCES := $(C_SOURCES) $(CPP_SOURCES)
@@ -111,10 +106,10 @@ RALPH_CORE_DEPS := \
     $(LIBDIR)/llm/providers/openai_provider.c \
     $(LIBDIR)/llm/providers/anthropic_provider.c \
     $(LIBDIR)/llm/providers/local_ai_provider.c \
-    $(SRCDIR)/mcp/mcp_client.c \
-    $(SRCDIR)/mcp/mcp_transport.c \
-    $(SRCDIR)/mcp/mcp_transport_stdio.c \
-    $(SRCDIR)/mcp/mcp_transport_http.c \
+    $(LIBDIR)/mcp/mcp_client.c \
+    $(LIBDIR)/mcp/mcp_transport.c \
+    $(LIBDIR)/mcp/mcp_transport_stdio.c \
+    $(LIBDIR)/mcp/mcp_transport_http.c \
     $(LIBDIR)/ipc/message_poller.c \
     $(MESSAGING_SOURCES)
 

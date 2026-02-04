@@ -965,11 +965,6 @@ src/
 │       ├── deepseek_model.c
 │       ├── default_model.c
 │       └── response_processing.c/h  # Thinking tag processing
-├── mcp/                    # Model Context Protocol
-│   ├── mcp_client.c/h      # MCP client implementation
-│   ├── mcp_transport.c/h   # Transport abstraction layer
-│   ├── mcp_transport_stdio.c   # STDIO transport implementation
-│   └── mcp_transport_http.c    # HTTP transport implementation
 ├── messaging/              # Inter-agent messaging
 │   └── notification_formatter.c/h # LLM notification formatting
 ├── network/                # Network layer
@@ -1044,6 +1039,11 @@ lib/
 │       ├── local_ai_provider.c   # Local AI server integration
 │       ├── openai_embedding_provider.c  # OpenAI embeddings
 │       └── local_embedding_provider.c   # Local embeddings
+├── mcp/                    # Model Context Protocol
+│   ├── mcp_client.c/h      # MCP client implementation
+│   ├── mcp_transport.c/h   # Transport abstraction layer
+│   ├── mcp_transport_stdio.c   # STDIO transport implementation
+│   └── mcp_transport_http.c    # HTTP transport implementation
 ├── pdf/                    # PDF processing
 │   └── pdf_extractor.c/h   # PDFio-based text extraction
 ├── ipc/                    # Inter-process communication
