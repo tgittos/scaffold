@@ -18,7 +18,7 @@ void test_async_executor_create_null_session_returns_null(void) {
 }
 
 void test_async_executor_create_returns_valid_executor(void) {
-    RalphSession session = {0};
+    AgentSession session = {0};
     async_executor_t* executor = async_executor_create(&session);
     TEST_ASSERT_NOT_NULL(executor);
     async_executor_destroy(executor);
@@ -30,7 +30,7 @@ void test_async_executor_destroy_null_is_safe(void) {
 }
 
 void test_async_executor_get_notify_fd_returns_valid_fd(void) {
-    RalphSession session = {0};
+    AgentSession session = {0};
     async_executor_t* executor = async_executor_create(&session);
     TEST_ASSERT_NOT_NULL(executor);
 
@@ -50,7 +50,7 @@ void test_async_executor_get_notify_fd_null_returns_neg_one(void) {
 }
 
 void test_async_executor_is_running_initially_false(void) {
-    RalphSession session = {0};
+    AgentSession session = {0};
     async_executor_t* executor = async_executor_create(&session);
     TEST_ASSERT_NOT_NULL(executor);
 
@@ -69,7 +69,7 @@ void test_async_executor_start_null_executor_returns_error(void) {
 }
 
 void test_async_executor_start_null_message_returns_error(void) {
-    RalphSession session = {0};
+    AgentSession session = {0};
     async_executor_t* executor = async_executor_create(&session);
     TEST_ASSERT_NOT_NULL(executor);
 
@@ -85,7 +85,7 @@ void test_async_executor_cancel_null_is_safe(void) {
 }
 
 void test_async_executor_cancel_when_not_running_is_safe(void) {
-    RalphSession session = {0};
+    AgentSession session = {0};
     async_executor_t* executor = async_executor_create(&session);
     TEST_ASSERT_NOT_NULL(executor);
 
@@ -111,7 +111,7 @@ void test_async_executor_get_result_null_returns_error(void) {
 }
 
 void test_async_executor_get_result_initial_is_zero(void) {
-    RalphSession session = {0};
+    AgentSession session = {0};
     async_executor_t* executor = async_executor_create(&session);
     TEST_ASSERT_NOT_NULL(executor);
 
@@ -127,7 +127,7 @@ void test_async_executor_process_events_null_returns_error(void) {
 }
 
 void test_async_executor_process_events_no_pending_returns_zero(void) {
-    RalphSession session = {0};
+    AgentSession session = {0};
     async_executor_t* executor = async_executor_create(&session);
     TEST_ASSERT_NOT_NULL(executor);
 
@@ -152,7 +152,7 @@ void test_async_executor_get_active_null_before_creation(void) {
 }
 
 void test_async_executor_get_active_returns_executor_after_creation(void) {
-    RalphSession session = {0};
+    AgentSession session = {0};
     async_executor_t* executor = async_executor_create(&session);
     TEST_ASSERT_NOT_NULL(executor);
 
@@ -163,7 +163,7 @@ void test_async_executor_get_active_returns_executor_after_creation(void) {
 }
 
 void test_async_executor_get_active_null_after_destruction(void) {
-    RalphSession session = {0};
+    AgentSession session = {0};
     async_executor_t* executor = async_executor_create(&session);
     TEST_ASSERT_NOT_NULL(executor);
 
@@ -180,7 +180,7 @@ void test_async_executor_notify_subagent_spawned_null_is_safe(void) {
 }
 
 void test_async_executor_notify_subagent_spawned_when_not_running_is_noop(void) {
-    RalphSession session = {0};
+    AgentSession session = {0};
     async_executor_t* executor = async_executor_create(&session);
     TEST_ASSERT_NOT_NULL(executor);
 

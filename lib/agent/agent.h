@@ -21,11 +21,12 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-/* Re-export the core session types from src/ */
-#include "../../src/core/ralph.h"
+/* Session types from lib/ */
+#include "session.h"
 #include "../ipc/ipc.h"
 #include "../tools/tools.h"
 #include "../services/services.h"
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,17 +41,17 @@ extern "C" {
  */
 typedef enum {
     /** Interactive REPL with a user */
-    RALPH_AGENT_MODE_INTERACTIVE = 0,
+    AGENT_MODE_INTERACTIVE = 0,
 
     /** Process a single message and exit */
-    RALPH_AGENT_MODE_SINGLE_SHOT = 1,
+    AGENT_MODE_SINGLE_SHOT = 1,
 
     /** Background agent, no TTY, communicates via messages */
-    RALPH_AGENT_MODE_BACKGROUND = 2,
+    AGENT_MODE_BACKGROUND = 2,
 
     /** Worker mode: claims and processes items from a work queue */
-    RALPH_AGENT_MODE_WORKER = 3
-} RalphAgentMode;
+    AGENT_MODE_WORKER = 3
+} AgentMode;
 
 /* =============================================================================
  * AGENT CONFIGURATION
@@ -60,12 +61,12 @@ typedef enum {
  * Configuration for creating an agent.
  * All string fields are copied; caller retains ownership of originals.
  */
-typedef struct RalphAgentConfig {
+typedef struct AgentConfig {
     /** Ralph home directory (uses default if NULL) */
     const char* home_dir;
 
     /** Execution mode */
-    RalphAgentMode mode;
+    AgentMode mode;
 
     /** Enable debug output */
     bool debug;
@@ -109,24 +110,24 @@ typedef struct RalphAgentConfig {
     int allow_category_count;
 
     /** Injected services (NULL uses default singletons) */
-    RalphServices* services;
-} RalphAgentConfig;
+    Services* services;
+} AgentConfig;
 
 /* =============================================================================
  * AGENT STRUCTURE
  * ============================================================================= */
 
 /**
- * The Agent wraps a RalphSession with a cleaner lifecycle API.
+ * The Agent wraps an AgentSession with a cleaner lifecycle API.
  */
-typedef struct RalphAgent {
-    RalphSession session;
-    RalphAgentConfig config;
-    RalphServices* services;      /**< Service container (owned if created internally) */
+typedef struct Agent {
+    AgentSession session;
+    AgentConfig config;
+    Services* services;      /**< Service container (owned if created internally) */
     bool owns_services;           /**< True if agent should destroy services on cleanup */
     bool initialized;
     bool config_loaded;
-} RalphAgent;
+} Agent;
 
 /* =============================================================================
  * AGENT LIFECYCLE
@@ -137,9 +138,9 @@ typedef struct RalphAgent {
  *
  * @return Configuration with default values
  */
-static inline RalphAgentConfig ralph_agent_config_default(void) {
-    RalphAgentConfig config = {0};
-    config.mode = RALPH_AGENT_MODE_INTERACTIVE;
+static inline AgentConfig agent_config_default(void) {
+    AgentConfig config = {0};
+    config.mode = AGENT_MODE_INTERACTIVE;
     config.debug = false;
     config.json_mode = false;
     config.no_stream = false;
@@ -157,16 +158,16 @@ static inline RalphAgentConfig ralph_agent_config_default(void) {
  * @param config Configuration (NULL uses defaults)
  * @return 0 on success, -1 on failure
  */
-int ralph_agent_init(RalphAgent* agent, const RalphAgentConfig* config);
+int agent_init(Agent* agent, const AgentConfig* config);
 
 /**
  * Load configuration for the agent.
- * Must be called after ralph_agent_init and before running.
+ * Must be called after agent_init and before running.
  *
  * @param agent The agent
  * @return 0 on success, -1 on failure
  */
-int ralph_agent_load_config(RalphAgent* agent);
+int agent_load_config(Agent* agent);
 
 /**
  * Run an agent based on its configured mode.
@@ -178,7 +179,7 @@ int ralph_agent_load_config(RalphAgent* agent);
  * @param agent The agent to run
  * @return 0 on success, non-zero on error
  */
-int ralph_agent_run(RalphAgent* agent);
+int agent_run(Agent* agent);
 
 /**
  * Process a single message with an agent.
@@ -188,14 +189,14 @@ int ralph_agent_run(RalphAgent* agent);
  * @param message User message to process
  * @return 0 on success, non-zero on error
  */
-int ralph_agent_process_message(RalphAgent* agent, const char* message);
+int agent_process_message(Agent* agent, const char* message);
 
 /**
  * Cleanup an agent and free all resources.
  *
  * @param agent Agent to cleanup
  */
-void ralph_agent_cleanup(RalphAgent* agent);
+void agent_cleanup(Agent* agent);
 
 /**
  * Get the underlying session from an agent.
@@ -204,7 +205,7 @@ void ralph_agent_cleanup(RalphAgent* agent);
  * @param agent The agent
  * @return Pointer to session, or NULL if not initialized
  */
-static inline RalphSession* ralph_agent_get_session(RalphAgent* agent) {
+static inline AgentSession* agent_get_session(Agent* agent) {
     return (agent != NULL && agent->initialized) ? &agent->session : NULL;
 }
 
@@ -214,7 +215,7 @@ static inline RalphSession* ralph_agent_get_session(RalphAgent* agent) {
  * @param agent The agent
  * @return Session ID string, or NULL if not initialized
  */
-static inline const char* ralph_agent_get_session_id(RalphAgent* agent) {
+static inline const char* agent_get_session_id(Agent* agent) {
     return (agent != NULL && agent->initialized) ? agent->session.session_id : NULL;
 }
 
@@ -224,7 +225,7 @@ static inline const char* ralph_agent_get_session_id(RalphAgent* agent) {
  * @param agent The agent
  * @return Services container, or NULL if not initialized
  */
-static inline RalphServices* ralph_agent_get_services(RalphAgent* agent) {
+static inline Services* agent_get_services(Agent* agent) {
     return (agent != NULL) ? agent->services : NULL;
 }
 

@@ -70,16 +70,4 @@ void json_output_error(const char* error);
  */
 void json_output_result(const char* result);
 
-/*
- * Library API aliases (ralph_* prefix)
- * These provide the public API as defined in lib/ralph.h
- */
-
-#define ralph_json_output_init             json_output_init
-#define ralph_json_output_assistant_text   json_output_assistant_text
-#define ralph_json_output_tool_result      json_output_tool_result
-#define ralph_json_output_system           json_output_system
-#define ralph_json_output_error            json_output_error
-#define ralph_json_output_result           json_output_result
-
 #endif /* JSON_OUTPUT_H */

@@ -89,7 +89,7 @@ void tearDown(void) {
 void test_config_init_with_defaults(void) {
     TEST_ASSERT_EQUAL(0, config_init());
 
-    ralph_config_t *config = config_get();
+    agent_config_t *config = config_get();
     TEST_ASSERT_NOT_NULL(config);
     TEST_ASSERT_NOT_NULL(config->api_url);
     TEST_ASSERT_NOT_NULL(config->model);
@@ -119,7 +119,7 @@ void test_config_init_with_anthropic_config(void) {
     
     TEST_ASSERT_EQUAL(0, config_init());
     
-    ralph_config_t *config = config_get();
+    agent_config_t *config = config_get();
     TEST_ASSERT_NOT_NULL(config);
     TEST_ASSERT_EQUAL_STRING("https://api.anthropic.com/v1/messages", config->api_url);
     TEST_ASSERT_EQUAL_STRING("claude-3-sonnet-20240229", config->model);
@@ -153,7 +153,7 @@ void test_config_load_from_json_file(void) {
     TEST_ASSERT_EQUAL(0, config_init());
     TEST_ASSERT_EQUAL(0, config_load_from_file("test_config.json"));
     
-    ralph_config_t *config = config_get();
+    agent_config_t *config = config_get();
     TEST_ASSERT_NOT_NULL(config);
     TEST_ASSERT_EQUAL_STRING("https://api.example.com/v1/chat", config->api_url);
     TEST_ASSERT_EQUAL_STRING("test-model", config->model);
@@ -186,7 +186,7 @@ void test_config_save_to_json_file(void) {
     TEST_ASSERT_EQUAL(0, config_init());
     TEST_ASSERT_EQUAL(0, config_load_from_file("test_config.json"));
     
-    ralph_config_t *config = config_get();
+    agent_config_t *config = config_get();
     TEST_ASSERT_EQUAL_STRING("https://api.example.com/v1/chat", config->api_url);
     TEST_ASSERT_EQUAL_STRING("test-model", config->model);
     TEST_ASSERT_EQUAL_STRING("test-key", config->openai_api_key);
@@ -209,7 +209,7 @@ void test_config_local_override_priority(void) {
     
     TEST_ASSERT_EQUAL(0, config_init());
     
-    ralph_config_t *config = config_get();
+    agent_config_t *config = config_get();
     TEST_ASSERT_NOT_NULL(config);
     // Local config should be loaded
     TEST_ASSERT_EQUAL_STRING("https://local.example.com/v1/chat", config->api_url);
@@ -256,7 +256,7 @@ void test_config_anthropic_api_key_selection(void) {
     TEST_ASSERT_EQUAL(0, config_set("anthropic_api_key", "anthropic-key"));
     TEST_ASSERT_EQUAL(0, config_set("openai_api_key", "openai-key"));
     
-    ralph_config_t *config = config_get();
+    agent_config_t *config = config_get();
     // Should select anthropic key for anthropic URL
     TEST_ASSERT_EQUAL_STRING("anthropic-key", config->api_key);
 }
@@ -269,7 +269,7 @@ void test_config_openai_api_key_selection(void) {
     TEST_ASSERT_EQUAL(0, config_set("anthropic_api_key", "anthropic-key"));
     TEST_ASSERT_EQUAL(0, config_set("openai_api_key", "openai-key"));
     
-    ralph_config_t *config = config_get();
+    agent_config_t *config = config_get();
     // Should select openai key for openai URL
     TEST_ASSERT_EQUAL_STRING("openai-key", config->api_key);
 }
@@ -294,7 +294,7 @@ void test_config_enable_streaming_default(void) {
     // Default should be true
     TEST_ASSERT_TRUE(config_get_bool("enable_streaming", false));
 
-    ralph_config_t *config = config_get();
+    agent_config_t *config = config_get();
     TEST_ASSERT_NOT_NULL(config);
     TEST_ASSERT_TRUE(config->enable_streaming);
 }
@@ -317,7 +317,7 @@ void test_config_enable_streaming_load_from_file(void) {
     TEST_ASSERT_EQUAL(0, config_init());
     TEST_ASSERT_EQUAL(0, config_load_from_file("test_config.json"));
 
-    ralph_config_t *config = config_get();
+    agent_config_t *config = config_get();
     TEST_ASSERT_NOT_NULL(config);
     TEST_ASSERT_FALSE(config->enable_streaming);
     TEST_ASSERT_FALSE(config_get_bool("enable_streaming", true));
@@ -327,7 +327,7 @@ void test_config_enable_streaming_save_to_file(void) {
     TEST_ASSERT_EQUAL(0, config_init());
 
     // Modify streaming setting
-    ralph_config_t *config = config_get();
+    agent_config_t *config = config_get();
     TEST_ASSERT_NOT_NULL(config);
     config->enable_streaming = false;
 

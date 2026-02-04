@@ -41,13 +41,4 @@ void spinner_stop(void);
  */
 void spinner_cleanup(void);
 
-/*
- * Library API aliases (ralph_* prefix)
- * These provide the public API as defined in lib/ralph.h
- */
-
-#define ralph_spinner_start    spinner_start
-#define ralph_spinner_stop     spinner_stop
-#define ralph_spinner_cleanup  spinner_cleanup
-
 #endif /* SPINNER_H */

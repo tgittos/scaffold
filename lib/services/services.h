@@ -33,7 +33,7 @@ extern "C" {
  * and should not be destroyed when the container is destroyed.
  * When using custom services, ownership depends on the use_singletons flag.
  */
-typedef struct RalphServices {
+typedef struct Services {
     /** Message store for inter-agent communication */
     message_store_t* message_store;
 
@@ -48,7 +48,7 @@ typedef struct RalphServices {
 
     /** Flag indicating if services are singletons (don't destroy on cleanup) */
     bool use_singletons;
-} RalphServices;
+} Services;
 
 /* =============================================================================
  * FACTORY FUNCTIONS
@@ -60,18 +60,18 @@ typedef struct RalphServices {
  * all agents using this container.
  *
  * @return New services container with singleton references, or NULL on failure.
- *         Caller must free with ralph_services_destroy().
+ *         Caller must free with services_destroy().
  */
-RalphServices* ralph_services_create_default(void);
+Services* services_create_default(void);
 
 /**
  * Create an empty services container for custom injection.
  * Caller must populate service pointers before use.
  *
  * @return Empty services container, or NULL on failure.
- *         Caller must free with ralph_services_destroy().
+ *         Caller must free with services_destroy().
  */
-RalphServices* ralph_services_create_empty(void);
+Services* services_create_empty(void);
 
 /**
  * Destroy a services container.
@@ -81,7 +81,7 @@ RalphServices* ralph_services_create_empty(void);
  *
  * @param services Services to destroy (may be NULL)
  */
-void ralph_services_destroy(RalphServices* services);
+void services_destroy(Services* services);
 
 /* =============================================================================
  * CONVENIENCE ACCESSORS
@@ -93,7 +93,7 @@ void ralph_services_destroy(RalphServices* services);
  * @param services Services container (may be NULL)
  * @return Message store instance
  */
-message_store_t* ralph_services_get_message_store(RalphServices* services);
+message_store_t* services_get_message_store(Services* services);
 
 /**
  * Get the vector DB service from a services container, or the singleton if NULL.
@@ -101,7 +101,7 @@ message_store_t* ralph_services_get_message_store(RalphServices* services);
  * @param services Services container (may be NULL)
  * @return Vector DB service instance
  */
-vector_db_service_t* ralph_services_get_vector_db(RalphServices* services);
+vector_db_service_t* services_get_vector_db(Services* services);
 
 /**
  * Get the embeddings service from a services container, or the singleton if NULL.
@@ -109,7 +109,7 @@ vector_db_service_t* ralph_services_get_vector_db(RalphServices* services);
  * @param services Services container (may be NULL)
  * @return Embeddings service instance
  */
-embeddings_service_t* ralph_services_get_embeddings(RalphServices* services);
+embeddings_service_t* services_get_embeddings(Services* services);
 
 /**
  * Get the task store from a services container, or the singleton if NULL.
@@ -117,7 +117,7 @@ embeddings_service_t* ralph_services_get_embeddings(RalphServices* services);
  * @param services Services container (may be NULL)
  * @return Task store instance
  */
-task_store_t* ralph_services_get_task_store(RalphServices* services);
+task_store_t* services_get_task_store(Services* services);
 
 #ifdef __cplusplus
 }

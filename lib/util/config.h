@@ -28,7 +28,7 @@ typedef struct {
 
     char *config_file_path;
     bool config_loaded;
-} ralph_config_t;
+} agent_config_t;
 
 /**
  * Initialize the configuration system
@@ -48,7 +48,7 @@ int config_init(void);
  *
  * @return Pointer to global config, or NULL if not initialized
  */
-ralph_config_t* config_get(void);
+agent_config_t* config_get(void);
 
 /**
  * Clean up configuration resources

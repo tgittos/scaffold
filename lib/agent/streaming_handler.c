@@ -102,7 +102,7 @@ static size_t stream_http_callback(const char* data, size_t size, void* user_dat
     return size;
 }
 
-int streaming_process_message(RalphSession* session, const char* user_message,
+int streaming_process_message(AgentSession* session, const char* user_message,
                               int max_tokens, const char** headers) {
     if (session == NULL || user_message == NULL) {
         return -1;
@@ -233,7 +233,7 @@ int streaming_process_message(RalphSession* session, const char* user_message,
                 json_output_assistant_tool_calls(ctx->tool_uses.data, call_count, input_tokens, output_tokens);
             }
 
-            result = ralph_execute_tool_workflow(session, tool_calls, call_count,
+            result = session_execute_tool_workflow(session, tool_calls, call_count,
                                                  user_message, max_tokens, headers);
 
             cleanup_tool_calls(tool_calls, call_count);

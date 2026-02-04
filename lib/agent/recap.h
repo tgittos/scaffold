@@ -1,7 +1,7 @@
 #ifndef RECAP_H
 #define RECAP_H
 
-#include "../../src/core/ralph.h"
+#include "session.h"
 
 /**
  * Recap Generation Module
@@ -23,11 +23,11 @@
  * prompt and response are NOT saved to conversation history to keep
  * it clean and avoid bloating with meta-conversation.
  *
- * @param session The Ralph session containing config and conversation
+ * @param session The agent session containing config and conversation
  * @param max_messages Maximum number of recent messages to include in recap
  *                     context (0 or negative for default of 5)
  * @return 0 on success, -1 on failure
  */
-int ralph_generate_recap(RalphSession* session, int max_messages);
+int recap_generate(AgentSession* session, int max_messages);
 
 #endif // RECAP_H

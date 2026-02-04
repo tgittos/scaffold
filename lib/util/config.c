@@ -9,9 +9,9 @@
 #include <sys/types.h>
 #include <errno.h>
 
-static ralph_config_t *g_config = NULL;
+static agent_config_t *g_config = NULL;
 
-static int config_set_defaults(ralph_config_t *config)
+static int config_set_defaults(agent_config_t *config)
 {
     if (!config) return -1;
 
@@ -50,7 +50,7 @@ static int config_set_defaults(ralph_config_t *config)
 }
 
 
-static int config_update_api_key_selection(ralph_config_t *config)
+static int config_update_api_key_selection(agent_config_t *config)
 {
     if (!config) return -1;
 
@@ -377,10 +377,10 @@ int config_init(void)
         return 0;
     }
 
-    g_config = malloc(sizeof(ralph_config_t));
+    g_config = malloc(sizeof(agent_config_t));
     if (!g_config) return -1;
 
-    memset(g_config, 0, sizeof(ralph_config_t));
+    memset(g_config, 0, sizeof(agent_config_t));
 
     if (config_set_defaults(g_config) != 0) {
         config_cleanup();
@@ -442,7 +442,7 @@ int config_init(void)
     return 0;
 }
 
-ralph_config_t* config_get(void)
+agent_config_t* config_get(void)
 {
     return g_config;
 }

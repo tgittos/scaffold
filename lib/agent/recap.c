@@ -124,7 +124,7 @@ static size_t recap_stream_http_callback(const char* data, size_t size, void* us
     return size;
 }
 
-int ralph_generate_recap(RalphSession* session, int max_messages) {
+int recap_generate(AgentSession* session, int max_messages) {
     if (session == NULL) {
         return -1;
     }

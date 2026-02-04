@@ -25,7 +25,7 @@
 
 /* Global state for readline callbacks */
 static volatile int g_repl_running = 1;
-static RalphSession* g_repl_session = NULL;
+static AgentSession* g_repl_session = NULL;
 
 static void repl_line_callback(char* line) {
     if (line == NULL) {
@@ -58,7 +58,7 @@ static void repl_line_callback(char* line) {
     }
 
     printf("\n");
-    int result = ralph_process_message(g_repl_session, line);
+    int result = session_process_message(g_repl_session, line);
     if (result == -1) {
         fprintf(stderr, "Error: Failed to process message\n");
     }
@@ -68,7 +68,7 @@ static void repl_line_callback(char* line) {
     free(line);
 }
 
-int ralph_repl_run_session(RalphSession* session, bool json_mode) {
+int repl_run_session(AgentSession* session, bool json_mode) {
     (void)json_mode;
     g_repl_session = session;
     g_repl_running = 1;
@@ -168,7 +168,7 @@ int ralph_repl_run_session(RalphSession* session, bool json_mode) {
                     char* notification_text = notification_format_for_llm(bundle);
                     if (notification_text != NULL) {
                         debug_printf("Processing %d incoming messages\n", total_count);
-                        ralph_process_message(session, notification_text);
+                        session_process_message(session, notification_text);
                         free(notification_text);
                     } else {
                         display_message_notification_clear();
@@ -188,7 +188,7 @@ int ralph_repl_run_session(RalphSession* session, bool json_mode) {
     return 0;
 }
 
-void ralph_repl_show_greeting(RalphSession* session, bool json_mode) {
+void repl_show_greeting(AgentSession* session, bool json_mode) {
     if (json_mode) {
         return;
     }
@@ -202,7 +202,7 @@ void ralph_repl_show_greeting(RalphSession* session, bool json_mode) {
                                       "and ask what you can help with today. Keep it warm, concise, and engaging. "
                                       "Make it feel personal and conversational, not like a static template.";
 
-        int result = ralph_process_message(session, greeting_prompt);
+        int result = session_process_message(session, greeting_prompt);
         if (result != 0) {
             printf("Hello! I'm Ralph, your AI assistant. What can I help you with today?\n");
         }
@@ -211,7 +211,7 @@ void ralph_repl_show_greeting(RalphSession* session, bool json_mode) {
         debug_printf("Generating recap of recent conversation (%d messages)...\n",
                      session->session_data.conversation.count);
 
-        int result = ralph_generate_recap(session, 5);
+        int result = session_generate_recap(session, 5);
         if (result != 0) {
             printf("Welcome back! Ready to continue where we left off.\n");
         }

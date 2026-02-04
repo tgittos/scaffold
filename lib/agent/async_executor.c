@@ -28,7 +28,7 @@ static void ensure_executor_mutex_initialized(void) {
 }
 
 struct async_executor {
-    RalphSession* session;
+    AgentSession* session;
     PipeNotifier notifier;
     pthread_t thread;
     pthread_mutex_t mutex;
@@ -64,7 +64,7 @@ static void* executor_thread_func(void* arg) {
         return NULL;
     }
 
-    int result = ralph_process_message(executor->session, executor->current_message);
+    int result = session_process_message(executor->session, executor->current_message);
 
     pthread_mutex_lock(&executor->mutex);
     executor->last_result = result;
@@ -95,7 +95,7 @@ static void* executor_thread_func(void* arg) {
     return NULL;
 }
 
-async_executor_t* async_executor_create(RalphSession* session) {
+async_executor_t* async_executor_create(AgentSession* session) {
     if (session == NULL) {
         return NULL;
     }

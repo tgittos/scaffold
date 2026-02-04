@@ -1,11 +1,12 @@
 #include "tool_executor.h"
-#include "../../src/core/ralph.h"
+#include "session.h"
 #include "../util/interrupt.h"
 #include "../ui/output_formatter.h"
 #include "../ui/json_output.h"
 #include <cJSON.h>
 #include "../util/debug_output.h"
 #include "../network/api_error.h"
+#include "../network/http_client.h"
 #include "../session/token_manager.h"
 #include "../llm/model_capabilities.h"
 #include "../mcp/mcp_client.h"
@@ -40,7 +41,7 @@ static int is_file_tool(const char *tool_name) {
  * Check approval gates and protected files before tool execution.
  * Returns 0 to allow, -1 if blocked (result populated with error), -2 if user aborted.
  */
-static int check_tool_approval(RalphSession *session, const ToolCall *tool_call,
+static int check_tool_approval(AgentSession *session, const ToolCall *tool_call,
                                ToolResult *result) {
     if (session == NULL || tool_call == NULL || result == NULL) {
         return 0;
@@ -258,7 +259,7 @@ static int add_executed_tool(StringArray* tracker, const char* tool_call_id) {
     return 0;
 }
 
-static int tool_executor_run_loop(RalphSession* session, const char* user_message,
+static int tool_executor_run_loop(AgentSession* session, const char* user_message,
                                   int max_tokens, const char** headers) {
     if (session == NULL) {
         return -1;
@@ -293,9 +294,9 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
 
         char* post_data = NULL;
         if (session->session_data.config.api_type == API_TYPE_ANTHROPIC) {
-            post_data = ralph_build_anthropic_json_payload_with_todos(session, "", iteration_max_tokens);
+            post_data = session_build_anthropic_json_payload(session, "", iteration_max_tokens);
         } else {
-            post_data = ralph_build_json_payload_with_todos(session, "", iteration_max_tokens);
+            post_data = session_build_json_payload(session, "", iteration_max_tokens);
         }
 
         if (post_data == NULL) {
@@ -675,7 +676,7 @@ static int tool_executor_run_loop(RalphSession* session, const char* user_messag
     }
 }
 
-int tool_executor_run_workflow(RalphSession* session, ToolCall* tool_calls, int call_count,
+int tool_executor_run_workflow(AgentSession* session, ToolCall* tool_calls, int call_count,
                                const char* user_message, int max_tokens, const char** headers) {
     if (session == NULL || tool_calls == NULL || call_count <= 0) {
         return -1;

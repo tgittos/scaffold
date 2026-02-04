@@ -83,17 +83,4 @@ int agent_identity_set_id(AgentIdentity* identity, const char* id);
  */
 int agent_identity_set_parent_id(AgentIdentity* identity, const char* parent_id);
 
-/*
- * Library API aliases (ralph_* prefix)
- * These provide the public API as defined in lib/ralph.h
- */
-#define ralph_agent_identity_create       agent_identity_create
-#define ralph_agent_identity_destroy      agent_identity_destroy
-#define ralph_agent_identity_get_id       agent_identity_get_id
-#define ralph_agent_identity_get_parent_id agent_identity_get_parent_id
-#define ralph_agent_identity_is_subagent  agent_identity_is_subagent
-#define ralph_agent_identity_set_id       agent_identity_set_id
-#define ralph_agent_identity_set_parent_id agent_identity_set_parent_id
-#define RALPH_AGENT_ID_MAX_LENGTH AGENT_ID_MAX_LENGTH
-
 #endif /* LIB_IPC_AGENT_IDENTITY_H */

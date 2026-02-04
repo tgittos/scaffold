@@ -348,7 +348,7 @@ int document_store_add_text(document_store_t* store, const char* index_name,
                            const char* source, const char* metadata_json) {
     if (store == NULL || index_name == NULL || text == NULL) return -1;
     
-    ralph_config_t* config = config_get();
+    agent_config_t* config = config_get();
     const char* api_key = NULL;
     const char* api_url = NULL;
 
@@ -454,7 +454,7 @@ document_search_results_t* document_store_search_text(document_store_t* store,
                                                      size_t k) {
     if (store == NULL || index_name == NULL || query_text == NULL) return NULL;
     
-    ralph_config_t* config = config_get();
+    agent_config_t* config = config_get();
     const char* api_key = NULL;
     const char* api_url = NULL;
 

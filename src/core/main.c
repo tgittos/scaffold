@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../../lib/agent/agent.h"
+#include "../tools/python_extension.h"
 #include "util/debug_output.h"
 
 #define RALPH_VERSION "0.1.0"
@@ -55,7 +56,7 @@ int main(int argc, char *argv[]) {
     }
 
     /* Parse command-line arguments into agent config */
-    RalphAgentConfig config = ralph_agent_config_default();
+    AgentConfig config = agent_config_default();
 
     const char *cli_allow_entries[MAX_CLI_ALLOW_ENTRIES];
     int cli_allow_count = 0;
@@ -129,38 +130,43 @@ int main(int argc, char *argv[]) {
             fprintf(stderr, "Error: --worker requires --queue argument\n");
             return EXIT_FAILURE;
         }
-        config.mode = RALPH_AGENT_MODE_WORKER;
+        config.mode = AGENT_MODE_WORKER;
         config.worker_queue_name = worker_queue;
     } else if (subagent_mode) {
         if (subagent_task == NULL) {
             fprintf(stderr, "Error: --subagent requires --task argument\n");
             return EXIT_FAILURE;
         }
-        config.mode = RALPH_AGENT_MODE_BACKGROUND;
+        config.mode = AGENT_MODE_BACKGROUND;
         config.subagent_task = subagent_task;
         config.subagent_context = subagent_context;
     } else if (message_arg_index != -1) {
-        config.mode = RALPH_AGENT_MODE_SINGLE_SHOT;
+        config.mode = AGENT_MODE_SINGLE_SHOT;
         config.initial_message = argv[message_arg_index];
     } else {
-        config.mode = RALPH_AGENT_MODE_INTERACTIVE;
+        config.mode = AGENT_MODE_INTERACTIVE;
+    }
+
+    /* Register tool extensions before agent initialization */
+    if (python_extension_register() != 0) {
+        fprintf(stderr, "Warning: Failed to register Python extension\n");
     }
 
     /* Create and run agent */
-    RalphAgent agent;
-    if (ralph_agent_init(&agent, &config) != 0) {
+    Agent agent;
+    if (agent_init(&agent, &config) != 0) {
         fprintf(stderr, "Error: Failed to initialize Ralph agent\n");
         return EXIT_FAILURE;
     }
 
-    if (ralph_agent_load_config(&agent) != 0) {
+    if (agent_load_config(&agent) != 0) {
         fprintf(stderr, "Error: Failed to load Ralph configuration\n");
-        ralph_agent_cleanup(&agent);
+        agent_cleanup(&agent);
         return EXIT_FAILURE;
     }
 
-    int result = ralph_agent_run(&agent);
+    int result = agent_run(&agent);
 
-    ralph_agent_cleanup(&agent);
+    agent_cleanup(&agent);
     return (result == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

@@ -19,15 +19,15 @@ void tearDown(void) {
 
 // Test that recap with NULL session returns error
 void test_recap_null_session(void) {
-    int result = ralph_generate_recap(NULL, 5);
+    int result = session_generate_recap(NULL, 5);
     TEST_ASSERT_EQUAL_INT(-1, result);
 }
 
 // Test that recap with empty conversation returns success (nothing to recap)
 void test_recap_empty_conversation(void) {
-    RalphSession session;
+    AgentSession session;
 
-    int init_result = ralph_init_session(&session);
+    int init_result = session_init(&session);
     TEST_ASSERT_EQUAL_INT(0, init_result);
 
     // Clear any loaded conversation
@@ -35,20 +35,20 @@ void test_recap_empty_conversation(void) {
     init_conversation_history(&session.session_data.conversation);
 
     // Recap with empty conversation should return 0 (nothing to do)
-    int result = ralph_generate_recap(&session, 5);
+    int result = session_generate_recap(&session, 5);
     TEST_ASSERT_EQUAL_INT(0, result);
 
-    ralph_cleanup_session(&session);
+    session_cleanup(&session);
 }
 
 // Test that recap doesn't persist to conversation history
 void test_recap_does_not_persist_conversation(void) {
-    RalphSession session;
+    AgentSession session;
 
-    int init_result = ralph_init_session(&session);
+    int init_result = session_init(&session);
     TEST_ASSERT_EQUAL_INT(0, init_result);
 
-    int load_result = ralph_load_config(&session);
+    int load_result = session_load_config(&session);
     TEST_ASSERT_EQUAL_INT(0, load_result);
 
     // Clear and add some test messages
@@ -63,21 +63,21 @@ void test_recap_does_not_persist_conversation(void) {
     TEST_ASSERT_EQUAL_INT(3, original_count);
 
     // Generate recap (will fail due to no API key, but should still not modify history)
-    int result = ralph_generate_recap(&session, 5);
+    int result = session_generate_recap(&session, 5);
     // Result may be -1 due to API failure, that's expected
     (void)result; // Suppress unused warning
 
     // Verify conversation count is unchanged
     TEST_ASSERT_EQUAL_INT(original_count, session.session_data.conversation.count);
 
-    ralph_cleanup_session(&session);
+    session_cleanup(&session);
 }
 
 // Test max_messages parameter with 0 (should use default)
 void test_recap_max_messages_zero_uses_default(void) {
-    RalphSession session;
+    AgentSession session;
 
-    int init_result = ralph_init_session(&session);
+    int init_result = session_init(&session);
     TEST_ASSERT_EQUAL_INT(0, init_result);
 
     // Clear and add test messages
@@ -89,20 +89,20 @@ void test_recap_max_messages_zero_uses_default(void) {
     int original_count = session.session_data.conversation.count;
 
     // Call with 0 max_messages - should use default
-    int result = ralph_generate_recap(&session, 0);
+    int result = session_generate_recap(&session, 0);
     (void)result;
 
     // History should be unchanged
     TEST_ASSERT_EQUAL_INT(original_count, session.session_data.conversation.count);
 
-    ralph_cleanup_session(&session);
+    session_cleanup(&session);
 }
 
 // Test that tool messages are skipped in recap context
 void test_recap_skips_tool_messages(void) {
-    RalphSession session;
+    AgentSession session;
 
-    int init_result = ralph_init_session(&session);
+    int init_result = session_init(&session);
     TEST_ASSERT_EQUAL_INT(0, init_result);
 
     // Clear and add messages including tool messages
@@ -117,13 +117,13 @@ void test_recap_skips_tool_messages(void) {
     TEST_ASSERT_EQUAL_INT(3, original_count);
 
     // Generate recap (may fail due to no API)
-    int result = ralph_generate_recap(&session, 5);
+    int result = session_generate_recap(&session, 5);
     (void)result;
 
     // History should be unchanged
     TEST_ASSERT_EQUAL_INT(original_count, session.session_data.conversation.count);
 
-    ralph_cleanup_session(&session);
+    session_cleanup(&session);
 }
 
 int main(void) {

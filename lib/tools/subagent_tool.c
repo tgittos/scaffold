@@ -2,7 +2,6 @@
 #include "subagent_process.h"
 #include "../util/json_escape.h"
 #include "../util/debug_output.h"
-#include "../../src/core/ralph.h"
 #include "../util/interrupt.h"
 #include "../policy/subagent_approval.h"
 #include "../session/conversation_tracker.h"

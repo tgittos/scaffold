@@ -1,5 +1,5 @@
 #include "prompt_loader.h"
-#include "../../src/tools/python_tool_files.h"
+#include "../tools/tool_extension.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -309,7 +309,7 @@ int load_system_prompt(char **prompt_content) {
         fclose(file);
     }
 
-    char *tools_desc = python_get_loaded_tools_description();
+    char *tools_desc = tool_extension_get_tools_description();
     size_t tools_len = tools_desc ? strlen(tools_desc) : 0;
 
     char *platform_info = get_platform_info();

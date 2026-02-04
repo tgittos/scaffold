@@ -153,15 +153,4 @@ void channel_message_free_list(ChannelMessage** msgs, size_t count);
 void channel_subscribers_free(char** subscribers, size_t count);
 void channel_subscriptions_free(char** subscriptions, size_t count);
 
-/*
- * Library API aliases (ralph_* prefix)
- * These provide the public API as defined in lib/ralph.h
- */
-
-#define ralph_message_store_get       message_store_get_instance
-#define ralph_message_store_create    message_store_create
-#define ralph_message_store_destroy   message_store_destroy
-#define ralph_message_send_direct     message_send_direct
-#define ralph_message_has_pending     message_has_pending
-
 #endif /* LIB_IPC_MESSAGE_STORE_H */

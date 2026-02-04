@@ -7,7 +7,7 @@
 #ifndef LIB_UI_REPL_H
 #define LIB_UI_REPL_H
 
-#include "../../src/core/ralph.h"
+#include "../agent/session.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -27,7 +27,7 @@ extern "C" {
  * @param json_mode Whether JSON output mode is enabled
  * @return 0 on success, non-zero on error
  */
-int ralph_repl_run_session(RalphSession* session, bool json_mode);
+int repl_run_session(AgentSession* session, bool json_mode);
 
 /**
  * Display welcome message or recap for interactive session.
@@ -35,7 +35,7 @@ int ralph_repl_run_session(RalphSession* session, bool json_mode);
  * @param session The session
  * @param json_mode Whether JSON output mode is enabled
  */
-void ralph_repl_show_greeting(RalphSession* session, bool json_mode);
+void repl_show_greeting(AgentSession* session, bool json_mode);
 
 #ifdef __cplusplus
 }

@@ -23,34 +23,6 @@
 int register_builtin_tools(ToolRegistry *registry);
 
 /*
- * Library API aliases (ralph_* prefix)
- * These provide the public API as defined in lib/ralph.h
- */
-
-/* Tool registry lifecycle */
-#define ralph_tools_init          init_tool_registry
-#define ralph_tools_cleanup       cleanup_tool_registry
-
-/* Tool registration */
-#define ralph_tools_register      register_tool
-#define ralph_tools_register_builtins  register_builtin_tools
-
-/* Tool execution */
-#define ralph_tools_execute       execute_tool_call
-
-/* JSON generation */
-#define ralph_tools_generate_json       generate_tools_json
-#define ralph_tools_generate_anthropic_json  generate_anthropic_tools_json
-
-/* Tool call parsing */
-#define ralph_tools_parse_calls         parse_tool_calls
-#define ralph_tools_parse_anthropic     parse_anthropic_tool_calls
-
-/* Cleanup helpers */
-#define ralph_tools_cleanup_calls       cleanup_tool_calls
-#define ralph_tools_cleanup_results     cleanup_tool_results
-
-/*
  * Tool Set Factory Functions
  *
  * These functions create pre-configured tool registries for different
@@ -63,9 +35,9 @@ int register_builtin_tools(ToolRegistry *registry);
  * Includes: file operations, shell, search, memory, todos, etc.
  *
  * @return Initialized registry with CLI tools, or NULL on failure.
- *         Caller must free with ralph_tools_cleanup.
+ *         Caller must free with tools_destroy.
  */
-static inline ToolRegistry* ralph_tools_create_cli(void) {
+static inline ToolRegistry* tools_create_cli(void) {
     ToolRegistry* registry = malloc(sizeof(ToolRegistry));
     if (registry == NULL) return NULL;
 
@@ -80,12 +52,12 @@ static inline ToolRegistry* ralph_tools_create_cli(void) {
 
 /**
  * Create an empty tool registry.
- * Use ralph_tools_register to add custom tools.
+ * Use register_tool to add custom tools.
  *
  * @return Empty initialized registry, or NULL on failure.
- *         Caller must free with ralph_tools_cleanup.
+ *         Caller must free with tools_destroy.
  */
-static inline ToolRegistry* ralph_tools_create_empty(void) {
+static inline ToolRegistry* tools_create_empty(void) {
     ToolRegistry* registry = malloc(sizeof(ToolRegistry));
     if (registry == NULL) return NULL;
 
@@ -98,7 +70,7 @@ static inline ToolRegistry* ralph_tools_create_empty(void) {
  *
  * @param registry Registry to destroy (may be NULL)
  */
-static inline void ralph_tools_destroy(ToolRegistry* registry) {
+static inline void tools_destroy(ToolRegistry* registry) {
     if (registry == NULL) return;
     cleanup_tool_registry(registry);
     free(registry);

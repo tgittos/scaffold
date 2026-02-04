@@ -1,12 +1,10 @@
 #include "token_manager.h"
+#include "session_manager.h"
 #include "../util/debug_output.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-
-/* Include order matters: ralph.h uses SessionData from token_manager.h */
-#include "../../src/core/ralph.h"
 
 #define DEFAULT_MIN_RESPONSE_TOKENS 150
 #define DEFAULT_SAFETY_BUFFER_BASE 50

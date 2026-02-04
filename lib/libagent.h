@@ -1,15 +1,15 @@
 /**
- * ralph.h - Public API for libralph
+ * libagent.h - Public API for the agent library
  *
- * libralph is the core library providing agent creation, configuration,
- * and execution. The ralph CLI binary is a thin wrapper around this library.
+ * This library provides agent creation, configuration, and execution.
+ * The ralph CLI binary is a thin wrapper around this library.
  *
- * This header defines the public API for embedding ralph functionality
+ * This header defines the public API for embedding agent functionality
  * in other programs or creating custom agent binaries.
  */
 
-#ifndef LIBRALPH_H
-#define LIBRALPH_H
+#ifndef LIBAGENT_H
+#define LIBAGENT_H
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -22,18 +22,18 @@ extern "C" {
  * VERSION
  * ============================================================================= */
 
-#define LIBRALPH_VERSION_MAJOR 0
-#define LIBRALPH_VERSION_MINOR 1
-#define LIBRALPH_VERSION_PATCH 0
+#define LIBAGENT_VERSION_MAJOR 0
+#define LIBAGENT_VERSION_MINOR 1
+#define LIBAGENT_VERSION_PATCH 0
 
 /* =============================================================================
  * FORWARD DECLARATIONS
  * ============================================================================= */
 
 /* Core agent types */
-typedef struct RalphAgent RalphAgent;
-typedef struct RalphAgentConfig RalphAgentConfig;
-typedef struct RalphServices RalphServices;
+typedef struct Agent Agent;
+typedef struct AgentConfig AgentConfig;
+typedef struct Services Services;
 
 /* IPC types (lib/ipc/) */
 typedef struct PipeNotifier PipeNotifier;
@@ -56,16 +56,16 @@ typedef struct OutputConfig OutputConfig;
  * Include that header (via this file) for the actual API.
  *
  * Key types:
- *   RalphAgentMode   - INTERACTIVE, SINGLE_SHOT, or BACKGROUND
- *   RalphAgentConfig - Configuration struct
- *   RalphAgent       - Agent instance
+ *   AgentMode   - INTERACTIVE, SINGLE_SHOT, or BACKGROUND
+ *   AgentConfig - Configuration struct
+ *   Agent       - Agent instance
  *
  * Key functions:
- *   ralph_agent_init()            - Initialize agent
- *   ralph_agent_load_config()     - Load configuration
- *   ralph_agent_run()             - Run based on mode
- *   ralph_agent_process_message() - Process single message
- *   ralph_agent_cleanup()         - Free resources
+ *   agent_init()            - Initialize agent
+ *   agent_load_config()     - Load configuration
+ *   agent_run()             - Run based on mode
+ *   agent_process_message() - Process single message
+ *   agent_cleanup()         - Free resources
  * ============================================================================= */
 
 /* =============================================================================
@@ -81,36 +81,36 @@ typedef struct OutputConfig OutputConfig;
  * IPC MODULE
  *
  * The IPC module provides inter-agent/inter-process communication primitives.
- * Include lib/ipc/ipc.h for full access, or use the convenience macros below.
+ * Include lib/ipc/ipc.h for full access.
  * ============================================================================= */
 
 /*
- * IPC components are implemented in src/ and re-exported through lib/ipc/.
+ * IPC components are implemented in lib/ipc/.
  * For full documentation, see lib/ipc/ipc.h and the individual headers.
  *
  * Quick reference:
  *
  * PipeNotifier - Non-blocking pipe for async event notification
- *   ralph_pipe_notifier_init()
- *   ralph_pipe_notifier_destroy()
- *   ralph_pipe_notifier_send()
- *   ralph_pipe_notifier_recv()
- *   ralph_pipe_notifier_get_read_fd()
- *   ralph_pipe_notifier_drain()
+ *   pipe_notifier_init()
+ *   pipe_notifier_destroy()
+ *   pipe_notifier_send()
+ *   pipe_notifier_recv()
+ *   pipe_notifier_get_read_fd()
+ *   pipe_notifier_drain()
  *
  * AgentIdentity - Thread-safe agent identity management
- *   ralph_agent_identity_create()
- *   ralph_agent_identity_destroy()
- *   ralph_agent_identity_get_id()
- *   ralph_agent_identity_get_parent_id()
- *   ralph_agent_identity_is_subagent()
+ *   agent_identity_create()
+ *   agent_identity_destroy()
+ *   agent_identity_get_id()
+ *   agent_identity_get_parent_id()
+ *   agent_identity_is_subagent()
  *
  * MessageStore - SQLite-backed messaging (direct + pub/sub)
- *   ralph_message_store_get()
- *   ralph_message_store_create()
- *   ralph_message_store_destroy()
- *   ralph_message_send_direct()
- *   ralph_message_has_pending()
+ *   message_store_get_instance()
+ *   message_store_create()
+ *   message_store_destroy()
+ *   message_send_direct()
+ *   message_has_pending()
  */
 
 #include "ipc/ipc.h"
@@ -119,33 +119,33 @@ typedef struct OutputConfig OutputConfig;
  * UI MODULE
  *
  * The UI module provides terminal output and display components.
- * Include lib/ui/ui.h for full access, or use the convenience macros below.
+ * Include lib/ui/ui.h for full access.
  * ============================================================================= */
 
 /*
- * UI components are implemented in src/ and re-exported through lib/ui/.
+ * UI components are implemented in lib/ui/.
  * For full documentation, see lib/ui/ui.h and the individual headers.
  *
  * Quick reference:
  *
  * Output - Terminal formatting with colors and sections
- *   ralph_output_set_json_mode()
- *   ralph_output_streaming_init()
- *   ralph_output_streaming_text()
- *   ralph_output_streaming_complete()
- *   ralph_output_tool_execution()
- *   ralph_output_cleanup()
+ *   set_json_output_mode()
+ *   display_streaming_init()
+ *   display_streaming_text()
+ *   display_streaming_complete()
+ *   log_tool_execution_improved()
+ *   cleanup_output_formatter()
  *
  * Spinner - Progress animation
- *   ralph_spinner_start()
- *   ralph_spinner_stop()
- *   ralph_spinner_cleanup()
+ *   spinner_start()
+ *   spinner_stop()
+ *   spinner_cleanup()
  *
  * JSON Output - Machine-readable output mode
- *   ralph_json_output_init()
- *   ralph_json_output_assistant_text()
- *   ralph_json_output_tool_result()
- *   ralph_json_output_error()
+ *   json_output_init()
+ *   json_output_assistant_text()
+ *   json_output_tool_result()
+ *   json_output_error()
  */
 
 #include "ui/ui.h"
@@ -154,29 +154,28 @@ typedef struct OutputConfig OutputConfig;
  * TOOLS MODULE
  *
  * The Tools module provides the tool registration and execution framework.
- * Include lib/tools/tools.h for full access, or use the convenience macros below.
+ * Include lib/tools/tools.h for full access.
  * ============================================================================= */
 
 /*
- * Tool components are implemented in src/ and re-exported through lib/tools/.
+ * Tool components are implemented in lib/tools/.
  * For full documentation, see lib/tools/tools.h.
  *
  * Quick reference:
  *
  * Tool Registry - Container for available tools
- *   ralph_tools_create_cli()        - Create registry with CLI tools
- *   ralph_tools_create_empty()      - Create empty registry
- *   ralph_tools_destroy()           - Destroy a registry
- *   ralph_tools_register()          - Register a custom tool
- *   ralph_tools_execute()           - Execute a tool call
+ *   init_tool_registry()       - Initialize a registry
+ *   cleanup_tool_registry()    - Destroy a registry
+ *   register_tool()            - Register a custom tool
+ *   execute_tool_call()        - Execute a tool call
  *
  * JSON Generation - For LLM API requests
- *   ralph_tools_generate_json()     - OpenAI format
- *   ralph_tools_generate_anthropic_json() - Anthropic format
+ *   generate_tools_json()             - OpenAI format
+ *   generate_anthropic_tools_json()   - Anthropic format
  *
  * Tool Call Parsing - From LLM responses
- *   ralph_tools_parse_calls()       - Parse OpenAI format
- *   ralph_tools_parse_anthropic()   - Parse Anthropic format
+ *   parse_tool_calls()           - Parse OpenAI format
+ *   parse_anthropic_tool_calls() - Parse Anthropic format
  */
 
 #include "tools/tools.h"
@@ -214,7 +213,7 @@ typedef struct OutputConfig OutputConfig;
 /* Note: UI types (OutputConfig, ReplConfig, ReplCallbacks) are defined
  * in lib/ui/ui.h and lib/ui/repl.h. Include those headers for the actual API.
  *
- * The REPL is run via ralph_repl_run_session() which takes a RalphSession*.
+ * The REPL is run via repl_run_session() which takes an AgentSession*.
  * See lib/ui/repl.h for the full interface.
  */
 
@@ -222,4 +221,4 @@ typedef struct OutputConfig OutputConfig;
 }
 #endif
 
-#endif /* LIBRALPH_H */
+#endif /* LIBAGENT_H */

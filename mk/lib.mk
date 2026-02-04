@@ -31,6 +31,7 @@ LIB_TOOLS_SOURCES := \
     $(LIBDIR)/tools/tool_format_anthropic.c \
     $(LIBDIR)/tools/tool_param_dsl.c \
     $(LIBDIR)/tools/tool_result_builder.c \
+    $(LIBDIR)/tools/tool_extension.c \
     $(LIBDIR)/tools/builtin_tools.c \
     $(LIBDIR)/tools/memory_tool.c \
     $(LIBDIR)/tools/messaging_tool.c \
@@ -45,6 +46,7 @@ LIB_TOOLS_SOURCES := \
 # Agent module
 LIB_AGENT_SOURCES := \
     $(LIBDIR)/agent/agent.c \
+    $(LIBDIR)/agent/session.c \
     $(LIBDIR)/agent/async_executor.c \
     $(LIBDIR)/agent/tool_executor.c \
     $(LIBDIR)/agent/streaming_handler.c \

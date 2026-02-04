@@ -51,7 +51,7 @@ static embeddings_config_t* get_embeddings_config(void) {
     static int initialized = 0;
 
     if (!initialized) {
-        ralph_config_t *global_config = config_get();
+        agent_config_t *global_config = config_get();
         const char *api_key, *model, *api_url;
 
         if (global_config) {

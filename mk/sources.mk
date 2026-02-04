@@ -8,7 +8,8 @@ CORE_SOURCES := \
 # Tool system (Python tools only; core tools in lib/tools/)
 TOOL_SOURCES := \
     $(SRCDIR)/tools/python_tool.c \
-    $(SRCDIR)/tools/python_tool_files.c
+    $(SRCDIR)/tools/python_tool_files.c \
+    $(SRCDIR)/tools/python_extension.c
 
 # LLM (in lib/llm/)
 PROVIDER_SOURCES :=
@@ -53,11 +54,13 @@ UTIL_DEPS := \
 
 RALPH_CORE_DEPS := \
     $(SRCDIR)/core/ralph.c \
+    $(LIBDIR)/agent/session.c \
     $(LIBDIR)/agent/async_executor.c \
     $(LIBDIR)/agent/tool_executor.c \
     $(LIBDIR)/agent/streaming_handler.c \
     $(LIBDIR)/agent/context_enhancement.c \
     $(LIBDIR)/agent/recap.c \
+    $(LIBDIR)/tools/tool_extension.c \
     $(LIBDIR)/ipc/pipe_notifier.c \
     $(LIBDIR)/policy/allowlist.c \
     $(LIBDIR)/policy/approval_gate.c \

@@ -15,7 +15,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "../../src/tools/python_tool_files.h"
+#include "../tools/tool_extension.h"
 #include "../tools/subagent_tool.h"
 #include "../util/debug_output.h"
 
@@ -570,8 +570,8 @@ GateCategory get_tool_category(const char *tool_name) {
     }
 
     /* Python file tools may declare their category via Gate: directive */
-    if (is_python_file_tool(tool_name)) {
-        const char *gate_category = python_tool_get_gate_category(tool_name);
+    if (tool_extension_is_extension_tool(tool_name)) {
+        const char *gate_category = tool_extension_get_gate_category(tool_name);
         if (gate_category != NULL) {
             GateCategory category;
             if (parse_gate_category(gate_category, &category) == 0) {
@@ -774,8 +774,8 @@ static char *extract_match_target(const char *tool_name, const char *arguments_j
         return NULL;
     }
 
-    if (is_python_file_tool(tool_name)) {
-        const char *match_arg = python_tool_get_match_arg(tool_name);
+    if (tool_extension_is_extension_tool(tool_name)) {
+        const char *match_arg = tool_extension_get_match_arg(tool_name);
         if (match_arg != NULL) {
             cJSON *args = cJSON_Parse(arguments_json);
             if (args != NULL) {

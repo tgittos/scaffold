@@ -37,7 +37,7 @@ $(eval $(call def_test,interrupt,core/test_interrupt,$(LIBDIR)/util/interrupt.c)
 $(eval $(call def_test,async_executor,core/test_async_executor,$(LIBDIR)/agent/async_executor.c $(LIBDIR)/util/interrupt.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/ipc/pipe_notifier.c $(TESTDIR)/stubs/ralph_stub.c))
 $(eval $(call def_test,pipe_notifier,utils/test_pipe_notifier,$(LIBDIR)/ipc/pipe_notifier.c))
 $(eval $(call def_test,agent_identity,core/test_agent_identity,$(LIBDIR)/ipc/agent_identity.c))
-$(eval $(call def_test,prompt,utils/test_prompt_loader,$(LIBDIR)/util/prompt_loader.c $(LIBDIR)/util/ralph_home.c))
+$(eval $(call def_test,prompt,utils/test_prompt_loader,$(LIBDIR)/util/prompt_loader.c $(LIBDIR)/util/ralph_home.c $(LIBDIR)/tools/tool_extension.c))
 $(eval $(call def_test,ralph_home,utils/test_ralph_home,$(LIBDIR)/util/ralph_home.c))
 $(eval $(call def_test,todo_manager,tools/test_todo_manager,$(LIBDIR)/tools/todo_manager.c))
 $(eval $(call def_test_mixed,tool_param_dsl,tools/test_tool_param_dsl,$(COMPLEX_DEPS)))
@@ -64,6 +64,7 @@ GATE_DEPS := \
     $(LIBDIR)/policy/shell_parser_ps.c \
     $(LIBDIR)/policy/subagent_approval.c \
     $(LIBDIR)/policy/tool_args.c \
+    $(LIBDIR)/tools/tool_extension.c \
     $(LIBDIR)/util/debug_output.c \
     $(LIBDIR)/util/ralph_home.c \
     $(LIBDIR)/util/json_escape.c \

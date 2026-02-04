@@ -1,7 +1,7 @@
 /**
  * lib/agent/agent.c - Agent Abstraction Implementation
  *
- * Implements the agent lifecycle API that wraps RalphSession.
+ * Implements the agent lifecycle API that wraps AgentSession.
  */
 
 #include "agent.h"
@@ -32,18 +32,18 @@ static void worker_signal_handler(int signum) {
     g_worker_running = 0;
 }
 
-int ralph_agent_init(RalphAgent* agent, const RalphAgentConfig* config) {
+int agent_init(Agent* agent, const AgentConfig* config) {
     if (agent == NULL) {
         return -1;
     }
 
-    memset(agent, 0, sizeof(RalphAgent));
+    memset(agent, 0, sizeof(Agent));
 
     /* Copy configuration */
     if (config != NULL) {
         agent->config = *config;
     } else {
-        agent->config = ralph_agent_config_default();
+        agent->config = agent_config_default();
     }
 
     /* Initialize ralph home directory FIRST - services depend on it */
@@ -58,7 +58,7 @@ int ralph_agent_init(RalphAgent* agent, const RalphAgentConfig* config) {
         agent->owns_services = false;
     } else {
         /* Create default services using singletons */
-        agent->services = ralph_services_create_default();
+        agent->services = services_create_default();
         agent->owns_services = true;
     }
 
@@ -67,17 +67,17 @@ int ralph_agent_init(RalphAgent* agent, const RalphAgentConfig* config) {
 
     /* For BACKGROUND mode (subagent), set env var BEFORE session init
      * so tool registration knows to skip subagent tools */
-    if (agent->config.mode == RALPH_AGENT_MODE_BACKGROUND) {
+    if (agent->config.mode == AGENT_MODE_BACKGROUND) {
         setenv("RALPH_IS_SUBAGENT", "1", 1);
     }
 
     /* Initialize session */
-    if (ralph_init_session(&agent->session) != 0) {
+    if (session_init(&agent->session) != 0) {
         return -1;
     }
 
     /* Mark as subagent process after session init */
-    if (agent->config.mode == RALPH_AGENT_MODE_BACKGROUND) {
+    if (agent->config.mode == AGENT_MODE_BACKGROUND) {
         agent->session.subagent_manager.is_subagent_process = 1;
     }
 
@@ -94,12 +94,12 @@ int ralph_agent_init(RalphAgent* agent, const RalphAgentConfig* config) {
     return 0;
 }
 
-int ralph_agent_load_config(RalphAgent* agent) {
+int agent_load_config(Agent* agent) {
     if (agent == NULL || !agent->initialized) {
         return -1;
     }
 
-    if (ralph_load_config(&agent->session) != 0) {
+    if (session_load_config(&agent->session) != 0) {
         return -1;
     }
 
@@ -142,21 +142,21 @@ int ralph_agent_load_config(RalphAgent* agent) {
     return 0;
 }
 
-int ralph_agent_run(RalphAgent* agent) {
+int agent_run(Agent* agent) {
     if (agent == NULL || !agent->initialized || !agent->config_loaded) {
         return -1;
     }
 
     switch (agent->config.mode) {
-        case RALPH_AGENT_MODE_SINGLE_SHOT:
+        case AGENT_MODE_SINGLE_SHOT:
             if (agent->config.initial_message == NULL) {
                 return -1;
             }
             /* For single-shot, disable auto polling */
             agent->session.polling_config.auto_poll_enabled = 0;
-            return ralph_process_message(&agent->session, agent->config.initial_message);
+            return session_process_message(&agent->session, agent->config.initial_message);
 
-        case RALPH_AGENT_MODE_BACKGROUND: {
+        case AGENT_MODE_BACKGROUND: {
             if (agent->config.subagent_task == NULL) {
                 return -1;
             }
@@ -190,14 +190,14 @@ int ralph_agent_run(RalphAgent* agent) {
             }
 
             /* Process the task */
-            int result = ralph_process_message(&agent->session, message);
+            int result = session_process_message(&agent->session, message);
 
             free(message);
             subagent_cleanup_approval_channel();
             return result;
         }
 
-        case RALPH_AGENT_MODE_WORKER: {
+        case AGENT_MODE_WORKER: {
             if (agent->config.worker_queue_name == NULL) {
                 fprintf(stderr, "Error: Worker mode requires queue name\n");
                 return -1;
@@ -262,7 +262,7 @@ int ralph_agent_run(RalphAgent* agent) {
                 init_conversation_history(&agent->session.session_data.conversation);
 
                 /* Process the work item */
-                int result = ralph_process_message(&agent->session, message);
+                int result = session_process_message(&agent->session, message);
                 free(message);
 
                 if (result == 0) {
@@ -292,7 +292,7 @@ int ralph_agent_run(RalphAgent* agent) {
             return (errors > 0) ? -1 : 0;
         }
 
-        case RALPH_AGENT_MODE_INTERACTIVE:
+        case AGENT_MODE_INTERACTIVE:
         default: {
             /* Print banner */
             if (!agent->config.json_mode) {
@@ -301,20 +301,20 @@ int ralph_agent_run(RalphAgent* agent) {
             }
 
             /* Show greeting or recap */
-            ralph_repl_show_greeting(&agent->session, agent->config.json_mode);
+            repl_show_greeting(&agent->session, agent->config.json_mode);
 
             /* Initialize readline history and memory commands */
             using_history();
             memory_commands_init();
 
             /* Start message polling */
-            ralph_start_message_polling(&agent->session);
+            session_start_message_polling(&agent->session);
 
             /* Run the REPL */
-            int result = ralph_repl_run_session(&agent->session, agent->config.json_mode);
+            int result = repl_run_session(&agent->session, agent->config.json_mode);
 
             /* Cleanup */
-            ralph_stop_message_polling(&agent->session);
+            session_stop_message_polling(&agent->session);
             memory_commands_cleanup();
             spinner_cleanup();
 
@@ -323,35 +323,35 @@ int ralph_agent_run(RalphAgent* agent) {
     }
 }
 
-int ralph_agent_process_message(RalphAgent* agent, const char* message) {
+int agent_process_message(Agent* agent, const char* message) {
     if (agent == NULL || !agent->initialized || message == NULL) {
         return -1;
     }
 
     /* Ensure config is loaded */
     if (!agent->config_loaded) {
-        if (ralph_agent_load_config(agent) != 0) {
+        if (agent_load_config(agent) != 0) {
             return -1;
         }
     }
 
-    return ralph_process_message(&agent->session, message);
+    return session_process_message(&agent->session, message);
 }
 
-void ralph_agent_cleanup(RalphAgent* agent) {
+void agent_cleanup(Agent* agent) {
     if (agent == NULL) {
         return;
     }
 
     if (agent->initialized) {
-        ralph_cleanup_session(&agent->session);
+        session_cleanup(&agent->session);
         agent->initialized = false;
         agent->config_loaded = false;
     }
 
     /* Clean up services if we own them */
     if (agent->owns_services && agent->services != NULL) {
-        ralph_services_destroy(agent->services);
+        services_destroy(agent->services);
         agent->services = NULL;
         agent->owns_services = false;
     }

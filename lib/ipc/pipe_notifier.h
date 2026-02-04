@@ -68,15 +68,4 @@ int pipe_notifier_get_read_fd(PipeNotifier* notifier);
  */
 void pipe_notifier_drain(PipeNotifier* notifier);
 
-/*
- * Library API aliases (ralph_* prefix)
- * These provide the public API as defined in lib/ralph.h
- */
-#define ralph_pipe_notifier_init     pipe_notifier_init
-#define ralph_pipe_notifier_destroy  pipe_notifier_destroy
-#define ralph_pipe_notifier_send     pipe_notifier_send
-#define ralph_pipe_notifier_recv     pipe_notifier_recv
-#define ralph_pipe_notifier_get_read_fd  pipe_notifier_get_read_fd
-#define ralph_pipe_notifier_drain    pipe_notifier_drain
-
 #endif /* LIB_IPC_PIPE_NOTIFIER_H */

@@ -1,5 +1,4 @@
 #include "context_enhancement.h"
-#include "../../src/core/ralph.h"
 #include "../session/rolling_summary.h"
 #include "../tools/todo_tool.h"
 #include "../tools/memory_tool.h"
@@ -59,7 +58,7 @@ static char* retrieve_relevant_memories(const char* query) {
     return memories;
 }
 
-static char* ralph_build_enhanced_system_prompt(const RalphSession* session) {
+static char* ralph_build_enhanced_system_prompt(const AgentSession* session) {
     if (session == NULL) return NULL;
 
     const char* base_prompt = session->session_data.config.system_prompt;
@@ -101,7 +100,7 @@ static char* ralph_build_enhanced_system_prompt(const RalphSession* session) {
     return enhanced_prompt;
 }
 
-char* build_enhanced_prompt_with_context(const RalphSession* session,
+char* build_enhanced_prompt_with_context(const AgentSession* session,
                                          const char* user_message) {
     if (session == NULL) return NULL;
 

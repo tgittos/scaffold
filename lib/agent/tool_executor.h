@@ -1,7 +1,7 @@
 #ifndef TOOL_EXECUTOR_H
 #define TOOL_EXECUTOR_H
 
-#include "../../src/core/ralph.h"
+#include "session.h"
 #include "../tools/tools_system.h"
 
 /**
@@ -39,7 +39,7 @@
  * @param headers HTTP headers for API requests (including auth)
  * @return 0 on success, -1 on failure, -2 if user aborted (Ctrl+C)
  */
-int tool_executor_run_workflow(RalphSession* session,
+int tool_executor_run_workflow(AgentSession* session,
                                ToolCall* tool_calls,
                                int call_count,
                                const char* user_message,

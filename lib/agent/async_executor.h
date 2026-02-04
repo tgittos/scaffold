@@ -1,12 +1,12 @@
 #ifndef ASYNC_EXECUTOR_H
 #define ASYNC_EXECUTOR_H
 
-#include "../../src/core/ralph.h"
+#include "session.h"
 
 /**
  * Async executor module for non-blocking message processing.
  *
- * Moves ralph_process_message() to a background thread that communicates
+ * Moves session_process_message() to a background thread that communicates
  * with the main select() loop via pipe notifications. This allows users
  * to continue typing while tools and LLM calls execute.
  *
@@ -31,10 +31,10 @@ typedef enum {
 /**
  * Create a new async executor bound to a session.
  *
- * @param session The RalphSession to use for message processing.
+ * @param session The AgentSession to use for message processing.
  * @return New executor, or NULL on failure. Caller must destroy with async_executor_destroy.
  */
-async_executor_t* async_executor_create(RalphSession* session);
+async_executor_t* async_executor_create(AgentSession* session);
 
 /**
  * Destroy an async executor and free resources.

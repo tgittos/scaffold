@@ -4,6 +4,7 @@
 #include "mock_api_server.h"
 #include "db/document_store.h"
 #include "util/json_escape.h"
+#include "network/api_common.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -58,48 +59,50 @@ void test_json_escape_string_newlines(void) {
     free(result);
 }
 
-void test_ralph_build_json_payload_basic(void) {
+void test_build_json_payload_basic(void) {
     // Create minimal conversation history
     ConversationHistory conversation = {0};
     ToolRegistry tools = {0};
-    
-    char* result = ralph_build_json_payload("gpt-3.5-turbo", NULL, &conversation, 
-                                           "Hello", "max_tokens", 100, &tools);
-    
+
+    char* result = build_json_payload_common("gpt-3.5-turbo", NULL, &conversation,
+                                           "Hello", "max_tokens", 100, &tools,
+                                           format_openai_message, 0);
+
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(strstr(result, "\"model\": \"gpt-3.5-turbo\"") != NULL);
     TEST_ASSERT_TRUE(strstr(result, "\"Hello\"") != NULL);
     TEST_ASSERT_TRUE(strstr(result, "\"max_tokens\": 100") != NULL);
-    
+
     free(result);
 }
 
-void test_ralph_build_json_payload_with_system_prompt(void) {
+void test_build_json_payload_with_system_prompt(void) {
     ConversationHistory conversation = {0};
     ToolRegistry tools = {0};
-    
-    char* result = ralph_build_json_payload("gpt-4", "You are helpful", &conversation, 
-                                           "Hello", "max_completion_tokens", 200, &tools);
-    
+
+    char* result = build_json_payload_common("gpt-4", "You are helpful", &conversation,
+                                           "Hello", "max_completion_tokens", 200, &tools,
+                                           format_openai_message, 0);
+
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_TRUE(strstr(result, "\"model\": \"gpt-4\"") != NULL);
     TEST_ASSERT_TRUE(strstr(result, "\"role\":\"system\"") != NULL);
     TEST_ASSERT_TRUE(strstr(result, "You are helpful") != NULL);
     TEST_ASSERT_TRUE(strstr(result, "\"Hello\"") != NULL);
     TEST_ASSERT_TRUE(strstr(result, "\"max_completion_tokens\": 200") != NULL);
-    
+
     free(result);
 }
 
-void test_ralph_init_session_null_parameter(void) {
-    int result = ralph_init_session(NULL);
+void test_session_init_null_parameter(void) {
+    int result = session_init(NULL);
     TEST_ASSERT_EQUAL_INT(-1, result);
 }
 
 void test_ralph_init_and_cleanup_session(void) {
-    RalphSession session = {0};
+    AgentSession session = {0};
 
-    int init_result = ralph_init_session(&session);
+    int init_result = session_init(&session);
     TEST_ASSERT_EQUAL_INT(0, init_result);
     
     // Verify session was initialized
@@ -108,26 +111,26 @@ void test_ralph_init_and_cleanup_session(void) {
     TEST_ASSERT_TRUE(session.tools.functions.count > 0); // Should have built-in tools
     
     // Cleanup should work without errors
-    ralph_cleanup_session(&session);
+    session_cleanup(&session);
     
     // After cleanup, session should be zeroed
     TEST_ASSERT_EQUAL_INT(0, session.session_data.conversation.count);
 }
 
-void test_ralph_load_config_null_parameter(void) {
-    int result = ralph_load_config(NULL);
+void test_session_load_config_null_parameter(void) {
+    int result = session_load_config(NULL);
     TEST_ASSERT_EQUAL_INT(-1, result);
 }
 
-void test_ralph_load_config_basic(void) {
-    RalphSession session = {0};
+void test_session_load_config_basic(void) {
+    AgentSession session = {0};
     
     // Initialize session first
-    int init_result = ralph_init_session(&session);
+    int init_result = session_init(&session);
     TEST_ASSERT_EQUAL_INT(0, init_result);
     
     // Load config
-    int config_result = ralph_load_config(&session);
+    int config_result = session_load_config(&session);
     TEST_ASSERT_EQUAL_INT(0, config_result);
     
     // Verify configuration was loaded (values may come from environment or defaults)
@@ -147,28 +150,28 @@ void test_ralph_load_config_basic(void) {
     TEST_ASSERT_TRUE(session.session_data.config.context_window > 0);
     TEST_ASSERT_NOT_NULL(session.session_data.config.max_tokens_param);
     
-    ralph_cleanup_session(&session);
+    session_cleanup(&session);
 }
 
-void test_ralph_process_message_null_parameters(void) {
-    RalphSession session = {0};
-    ralph_init_session(&session);
-    ralph_load_config(&session);
+void test_session_process_message_null_parameters(void) {
+    AgentSession session = {0};
+    session_init(&session);
+    session_load_config(&session);
     
     // Test null session
-    int result1 = ralph_process_message(NULL, "test");
+    int result1 = session_process_message(NULL, "test");
     TEST_ASSERT_EQUAL_INT(-1, result1);
     
     // Test null message
-    int result2 = ralph_process_message(&session, NULL);
+    int result2 = session_process_message(&session, NULL);
     TEST_ASSERT_EQUAL_INT(-1, result2);
     
-    ralph_cleanup_session(&session);
+    session_cleanup(&session);
 }
 
 void test_ralph_config_parameter_selection(void) {
-    RalphSession session = {0};
-    ralph_init_session(&session);
+    AgentSession session = {0};
+    session_init(&session);
     
     // Test OpenAI URL parameter selection
     session.session_data.config.api_url = strdup("https://api.openai.com/v1/chat/completions");
@@ -187,11 +190,11 @@ void test_ralph_config_parameter_selection(void) {
     }
     TEST_ASSERT_EQUAL_STRING("max_tokens", session.session_data.config.max_tokens_param);
     
-    ralph_cleanup_session(&session);
+    session_cleanup(&session);
 }
 
-void test_ralph_execute_tool_workflow_null_parameters(void) {
-    RalphSession session = {0};
+void test_session_execute_tool_workflow_null_parameters(void) {
+    AgentSession session = {0};
     ToolCall tool_calls[1];
     const char* headers[2] = {NULL, NULL};
 
@@ -200,31 +203,31 @@ void test_ralph_execute_tool_workflow_null_parameters(void) {
     tool_calls[0].name = "vector_db_list_indices";
     tool_calls[0].arguments = "{}";
     
-    ralph_init_session(&session);
-    ralph_load_config(&session);
+    session_init(&session);
+    session_load_config(&session);
     
     // Test null session
-    int result1 = ralph_execute_tool_workflow(NULL, tool_calls, 1, "test", 100, headers);
+    int result1 = session_execute_tool_workflow(NULL, tool_calls, 1, "test", 100, headers);
     TEST_ASSERT_EQUAL_INT(-1, result1);
     
     // Test null tool_calls
-    int result2 = ralph_execute_tool_workflow(&session, NULL, 1, "test", 100, headers);
+    int result2 = session_execute_tool_workflow(&session, NULL, 1, "test", 100, headers);
     TEST_ASSERT_EQUAL_INT(-1, result2);
     
     // Test zero call_count
-    int result3 = ralph_execute_tool_workflow(&session, tool_calls, 0, "test", 100, headers);
+    int result3 = session_execute_tool_workflow(&session, tool_calls, 0, "test", 100, headers);
     TEST_ASSERT_EQUAL_INT(-1, result3);
     
     // Test negative call_count
-    int result4 = ralph_execute_tool_workflow(&session, tool_calls, -1, "test", 100, headers);
+    int result4 = session_execute_tool_workflow(&session, tool_calls, -1, "test", 100, headers);
     TEST_ASSERT_EQUAL_INT(-1, result4);
     
-    ralph_cleanup_session(&session);
+    session_cleanup(&session);
 }
 
-void test_ralph_execute_tool_workflow_api_failure_resilience(void) {
+void test_session_execute_tool_workflow_api_failure_resilience(void) {
     // INTEGRATION TEST: Tool execution succeeds, API follow-up fails
-    // This tests the specific bug that was fixed: ralph_execute_tool_workflow
+    // This tests the specific bug that was fixed: session_execute_tool_workflow
     // should return 0 (success) when tools execute successfully, even if
     // the follow-up API request fails (network down, server error, etc.)
 
@@ -245,7 +248,7 @@ void test_ralph_execute_tool_workflow_api_failure_resilience(void) {
     setenv("API_URL", "http://127.0.0.1:8888/v1/chat/completions", 1);
     setenv("MODEL", "test-model", 1);
 
-    RalphSession session = {0};
+    AgentSession session = {0};
     ToolCall tool_calls[1];
     const char* headers[2] = {"Content-Type: application/json", NULL};
 
@@ -254,15 +257,15 @@ void test_ralph_execute_tool_workflow_api_failure_resilience(void) {
     tool_calls[0].name = "vector_db_list_indices";
     tool_calls[0].arguments = "{}";
 
-    ralph_init_session(&session);
-    ralph_load_config(&session);
+    session_init(&session);
+    session_load_config(&session);
 
     // Execute tool workflow - this should return 0 (success) because:
     // 1. Tool execution succeeds (vector_db_list_indices returns list of indices)
     // 2. Tool results are added to conversation history
     // 3. Follow-up API request fails (mock server drops connection)
     // 4. Function returns 0 anyway because tools executed successfully
-    int result = ralph_execute_tool_workflow(&session, tool_calls, 1, "list vector indices", 100, headers);
+    int result = session_execute_tool_workflow(&session, tool_calls, 1, "list vector indices", 100, headers);
 
     // The key assertion: even though API follow-up fails, workflow returns success (0)
     // because the actual tool execution was successful
@@ -286,7 +289,7 @@ void test_ralph_execute_tool_workflow_api_failure_resilience(void) {
     }
     TEST_ASSERT_TRUE(found_tool_result);
 
-    ralph_cleanup_session(&session);
+    session_cleanup(&session);
 
     // Stop mock server
     mock_api_server_stop(&server);
@@ -296,14 +299,14 @@ void test_ralph_execute_tool_workflow_api_failure_resilience(void) {
     unsetenv("MODEL");
 }
 
-void test_ralph_process_message_basic_workflow(void) {
+void test_session_process_message_basic_workflow(void) {
     // INTEGRATION TEST: End-to-end message processing workflow
     // This tests the core user workflow: user sends message, system processes it
     // Even if API fails, we can verify the message was added to conversation
     
-    RalphSession session = {0};
-    ralph_init_session(&session);
-    ralph_load_config(&session);
+    AgentSession session = {0};
+    session_init(&session);
+    session_load_config(&session);
     
     // Set up a non-working API URL to avoid dependency on external services
     // but still test the message processing pipeline
@@ -321,7 +324,7 @@ void test_ralph_process_message_basic_workflow(void) {
     // 2. JSON payload generation works (can be verified via debug output)
     // 3. Session state remains consistent
     // 4. Function correctly handles API failures
-    int result = ralph_process_message(&session, user_message);
+    int result = session_process_message(&session, user_message);
     
     // Function should return -1 because API call fails
     TEST_ASSERT_EQUAL_INT(-1, result);
@@ -334,7 +337,7 @@ void test_ralph_process_message_basic_workflow(void) {
     // The conversation should still be usable for future messages
     // When empty, messages array is NULL, which is valid
     
-    ralph_cleanup_session(&session);
+    session_cleanup(&session);
 }
 
 void test_tool_execution_without_api_server(void) {
@@ -358,7 +361,7 @@ void test_tool_execution_without_api_server(void) {
     setenv("API_URL", "http://127.0.0.1:8888/v1/chat/completions", 1);
     setenv("MODEL", "test-model", 1);
 
-    RalphSession session = {0};
+    AgentSession session = {0};
     ToolCall tool_calls[1];
     const char* headers[2] = {"Content-Type: application/json", NULL};
 
@@ -367,11 +370,11 @@ void test_tool_execution_without_api_server(void) {
     tool_calls[0].name = "vector_db_list_indices";
     tool_calls[0].arguments = "{}";
 
-    ralph_init_session(&session);
-    ralph_load_config(&session);
+    session_init(&session);
+    session_load_config(&session);
 
     // Execute tool workflow - should succeed despite unreachable API
-    int result = ralph_execute_tool_workflow(&session, tool_calls, 1, "test without api", 100, headers);
+    int result = session_execute_tool_workflow(&session, tool_calls, 1, "test without api", 100, headers);
 
     // Tool execution should succeed even when API is unreachable
     TEST_ASSERT_EQUAL_INT(0, result);
@@ -391,7 +394,7 @@ void test_tool_execution_without_api_server(void) {
     }
     TEST_ASSERT_TRUE(found_tool_result);
 
-    ralph_cleanup_session(&session);
+    session_cleanup(&session);
 
     // Stop mock server
     mock_api_server_stop(&server);
@@ -423,7 +426,7 @@ void test_tool_execution_with_network_timeout(void) {
     setenv("API_URL", "http://127.0.0.1:8888/v1/chat/completions", 1);
     setenv("MODEL", "test-model", 1);
 
-    RalphSession session = {0};
+    AgentSession session = {0};
     ToolCall tool_calls[1];
     const char* headers[2] = {"Content-Type: application/json", NULL};
 
@@ -432,11 +435,11 @@ void test_tool_execution_with_network_timeout(void) {
     tool_calls[0].name = "vector_db_list_indices";
     tool_calls[0].arguments = "{}";
 
-    ralph_init_session(&session);
-    ralph_load_config(&session);
+    session_init(&session);
+    session_load_config(&session);
 
     // Execute - should succeed because tool executes locally, API timeout doesn't matter
-    int result = ralph_execute_tool_workflow(&session, tool_calls, 1, "timeout test", 100, headers);
+    int result = session_execute_tool_workflow(&session, tool_calls, 1, "timeout test", 100, headers);
 
     // Tool workflow should succeed despite API timeout
     TEST_ASSERT_EQUAL_INT(0, result);
@@ -444,7 +447,7 @@ void test_tool_execution_with_network_timeout(void) {
     // Tool result should be in conversation
     TEST_ASSERT_TRUE(session.session_data.conversation.count > 0);
 
-    ralph_cleanup_session(&session);
+    session_cleanup(&session);
 
     // Stop mock server
     mock_api_server_stop(&server);
@@ -476,7 +479,7 @@ void test_tool_execution_with_auth_failure(void) {
     setenv("MODEL", "test-model", 1);
     setenv("API_KEY", "test-key", 1);
 
-    RalphSession session = {0};
+    AgentSession session = {0};
     ToolCall tool_calls[1];
     const char* headers[2] = {"Content-Type: application/json", NULL};
 
@@ -485,16 +488,16 @@ void test_tool_execution_with_auth_failure(void) {
     tool_calls[0].name = "vector_db_list_indices";
     tool_calls[0].arguments = "{}";
 
-    ralph_init_session(&session);
-    ralph_load_config(&session);
+    session_init(&session);
+    session_load_config(&session);
 
     // Execute - tool should succeed even with API auth failure
-    int result = ralph_execute_tool_workflow(&session, tool_calls, 1, "auth test", 100, headers);
+    int result = session_execute_tool_workflow(&session, tool_calls, 1, "auth test", 100, headers);
 
     TEST_ASSERT_EQUAL_INT(0, result);
     TEST_ASSERT_TRUE(session.session_data.conversation.count > 0);
 
-    ralph_cleanup_session(&session);
+    session_cleanup(&session);
 
     // Stop mock server
     mock_api_server_stop(&server);
@@ -526,7 +529,7 @@ void test_graceful_degradation_on_api_errors(void) {
     setenv("API_URL", "http://127.0.0.1:8888/v1/chat/completions", 1);
     setenv("MODEL", "test-model", 1);
 
-    RalphSession session = {0};
+    AgentSession session = {0};
     ToolCall tool_calls[1];
     const char* headers[2] = {"Content-Type: application/json", NULL};
 
@@ -535,11 +538,11 @@ void test_graceful_degradation_on_api_errors(void) {
     tool_calls[0].name = "vector_db_list_indices";
     tool_calls[0].arguments = "{}";
 
-    ralph_init_session(&session);
-    ralph_load_config(&session);
+    session_init(&session);
+    session_load_config(&session);
 
     // Execute tool workflow
-    int result = ralph_execute_tool_workflow(&session, tool_calls, 1, "server error test", 100, headers);
+    int result = session_execute_tool_workflow(&session, tool_calls, 1, "server error test", 100, headers);
 
     // Should succeed because tools execute locally regardless of API errors
     TEST_ASSERT_EQUAL_INT(0, result);
@@ -557,7 +560,7 @@ void test_graceful_degradation_on_api_errors(void) {
     }
     TEST_ASSERT_TRUE(found_tool_result);
 
-    ralph_cleanup_session(&session);
+    session_cleanup(&session);
 
     // Stop mock server
     mock_api_server_stop(&server);
@@ -571,9 +574,9 @@ void test_shell_command_request_workflow(void) {
     // REALISTIC USER WORKFLOW TEST: User requests shell command execution
     // Tests the complete workflow without mock server - relies on live provider or graceful failure
     
-    RalphSession session = {0};
-    ralph_init_session(&session);
-    ralph_load_config(&session);
+    AgentSession session = {0};
+    session_init(&session);
+    session_load_config(&session);
     
     // Use unreachable API to test tool execution without server dependency
     free(session.session_data.config.api_url);
@@ -584,7 +587,7 @@ void test_shell_command_request_workflow(void) {
     
     // Process message - API will fail but that's expected for this test
     // We're testing the tool execution path, not the API integration
-    int result = ralph_process_message(&session, user_message);
+    int result = session_process_message(&session, user_message);
     
     // Result will be -1 due to API failure, which is expected
     TEST_ASSERT_EQUAL_INT(-1, result);
@@ -593,14 +596,14 @@ void test_shell_command_request_workflow(void) {
     TEST_ASSERT_NOT_NULL(session.session_data.config.api_url);
     TEST_ASSERT_NOT_NULL(session.session_data.config.model);
     
-    ralph_cleanup_session(&session);
+    session_cleanup(&session);
 }
 
 void test_sequential_tool_execution(void) {
     // TOOL WORKFLOW INTEGRATION TEST: Multiple tool calls in sequence
     // Tests that multiple tools execute properly and results are tracked
 
-    RalphSession session = {0};
+    AgentSession session = {0};
     ToolCall tool_calls[2];
     const char* headers[2] = {"Content-Type: application/json", NULL};
 
@@ -614,15 +617,15 @@ void test_sequential_tool_execution(void) {
     tool_calls[1].name = "vector_db_list_indices";
     tool_calls[1].arguments = "{}";
 
-    ralph_init_session(&session);
-    ralph_load_config(&session);
+    session_init(&session);
+    session_load_config(&session);
 
     // Use unreachable API to focus on tool execution
     free(session.session_data.config.api_url);
     session.session_data.config.api_url = strdup("http://192.0.2.1:99999/v1/chat/completions");
 
     // Execute multiple tools
-    int result = ralph_execute_tool_workflow(&session, tool_calls, 2, "sequential test", 100, headers);
+    int result = session_execute_tool_workflow(&session, tool_calls, 2, "sequential test", 100, headers);
 
     TEST_ASSERT_EQUAL_INT(0, result);
 
@@ -648,16 +651,16 @@ void test_sequential_tool_execution(void) {
     TEST_ASSERT_TRUE(found_first);
     TEST_ASSERT_TRUE(found_second);
 
-    ralph_cleanup_session(&session);
+    session_cleanup(&session);
 }
 
 void test_conversation_persistence_through_tools(void) {
     // REALISTIC USER WORKFLOW TEST: Multiple messages with tool usage
     // Tests that conversation history maintains context across tool executions
     
-    RalphSession session = {0};
-    ralph_init_session(&session);
-    ralph_load_config(&session);
+    AgentSession session = {0};
+    session_init(&session);
+    session_load_config(&session);
     
     // Use unreachable API to test session persistence without server dependency
     free(session.session_data.config.api_url);
@@ -667,8 +670,8 @@ void test_conversation_persistence_through_tools(void) {
     TEST_ASSERT_EQUAL_INT(0, session.session_data.conversation.count);
     
     // Process messages - API will fail but session should remain consistent
-    ralph_process_message(&session, "Hello, I want to test conversation persistence");
-    ralph_process_message(&session, "Please run echo command to test persistence");
+    session_process_message(&session, "Hello, I want to test conversation persistence");
+    session_process_message(&session, "Please run echo command to test persistence");
     
     // Verify session remains in consistent state
     // This is the key test - session should be usable regardless of API failures
@@ -676,14 +679,14 @@ void test_conversation_persistence_through_tools(void) {
     TEST_ASSERT_NOT_NULL(session.session_data.config.api_url);
     TEST_ASSERT_EQUAL_INT(0, session.session_data.conversation.count); // No messages added due to API failures
     
-    ralph_cleanup_session(&session);
+    session_cleanup(&session);
 }
 
 void test_tool_name_hardcoded_bug_fixed(void) {
     // BUG FIX VERIFICATION TEST: Tool name should now use correct tool name, not hardcoded "tool_name"
     // This test verifies that the fix for the hardcoded tool_name bug works correctly
 
-    RalphSession session = {0};
+    AgentSession session = {0};
     ToolCall tool_calls[1];
     const char* headers[2] = {"Content-Type: application/json", NULL};
 
@@ -692,15 +695,15 @@ void test_tool_name_hardcoded_bug_fixed(void) {
     tool_calls[0].name = "vector_db_list_indices";  // This is the ACTUAL tool name that should be saved
     tool_calls[0].arguments = "{}";
 
-    ralph_init_session(&session);
-    ralph_load_config(&session);
+    session_init(&session);
+    session_load_config(&session);
 
     // Use unreachable API to focus on tool execution fix verification
     free(session.session_data.config.api_url);
     session.session_data.config.api_url = strdup("http://192.0.2.1:99999/v1/chat/completions");
 
     // Execute tool workflow which will eventually call the fixed ralph_execute_tool_loop
-    int result = ralph_execute_tool_workflow(&session, tool_calls, 1, "list indices", 100, headers);
+    int result = session_execute_tool_workflow(&session, tool_calls, 1, "list indices", 100, headers);
 
     // Tool execution should succeed
     TEST_ASSERT_EQUAL_INT(0, result);
@@ -724,55 +727,57 @@ void test_tool_name_hardcoded_bug_fixed(void) {
     }
     TEST_ASSERT_TRUE(found_tool_result);
 
-    ralph_cleanup_session(&session);
+    session_cleanup(&session);
 }
 
 // Anthropic-specific tests
-void test_ralph_build_anthropic_json_payload_basic(void) {
+void test_build_anthropic_json_payload_basic(void) {
     const char *test_message = "Hello Anthropic";
     const char *model = "claude-3-opus-20240229";
     int max_tokens = 200;
-    
+
     ConversationHistory conversation = {0};
     ToolRegistry tools = {0};
-    
-    char* result = ralph_build_anthropic_json_payload(model, NULL, &conversation, 
-                                                     test_message, max_tokens, &tools);
-    
+
+    char* result = build_json_payload_common(model, NULL, &conversation,
+                                           test_message, "max_tokens", max_tokens, &tools,
+                                           format_anthropic_message, 1);
+
     TEST_ASSERT_NOT_NULL(result);
-    
+
     // Check that payload contains expected fields
     TEST_ASSERT_TRUE(strstr(result, "\"model\": \"claude-3-opus-20240229\"") != NULL);
     TEST_ASSERT_TRUE(strstr(result, "\"messages\"") != NULL);
     TEST_ASSERT_TRUE(strstr(result, "\"Hello Anthropic\"") != NULL);
     TEST_ASSERT_TRUE(strstr(result, "\"max_tokens\": 200") != NULL);
-    
+
     free(result);
 }
 
-void test_ralph_build_anthropic_json_payload_with_system(void) {
+void test_build_anthropic_json_payload_with_system(void) {
     const char *test_message = "What is 2+2?";
     const char *system_prompt = "You are a helpful math tutor.";
     const char *model = "claude-3-opus-20240229";
     int max_tokens = 100;
-    
+
     ConversationHistory conversation = {0};
     ToolRegistry tools = {0};
-    
-    char* result = ralph_build_anthropic_json_payload(model, system_prompt, &conversation, 
-                                                     test_message, max_tokens, &tools);
-    
+
+    char* result = build_json_payload_common(model, system_prompt, &conversation,
+                                           test_message, "max_tokens", max_tokens, &tools,
+                                           format_anthropic_message, 1);
+
     TEST_ASSERT_NOT_NULL(result);
-    
+
     // Check that system prompt is in the top-level system field (Anthropic format)
     TEST_ASSERT_TRUE(strstr(result, "\"system\": \"You are a helpful math tutor.\"") != NULL);
     // Should not be in messages array
     TEST_ASSERT_NULL(strstr(result, "\"role\": \"system\""));
-    
+
     free(result);
 }
 
-void test_ralph_build_anthropic_json_payload_with_tools(void) {
+void test_build_anthropic_json_payload_with_tools(void) {
     const char *test_message = "List files";
     const char *model = "claude-3-opus-20240229";
     int max_tokens = 200;
@@ -782,8 +787,9 @@ void test_ralph_build_anthropic_json_payload_with_tools(void) {
     init_tool_registry(&tools);
     register_builtin_tools(&tools);
 
-    char* result = ralph_build_anthropic_json_payload(model, NULL, &conversation,
-                                                     test_message, max_tokens, &tools);
+    char* result = build_json_payload_common(model, NULL, &conversation,
+                                           test_message, "max_tokens", max_tokens, &tools,
+                                           format_anthropic_message, 1);
 
     TEST_ASSERT_NOT_NULL(result);
 
@@ -869,17 +875,17 @@ int main(void) {
     RUN_TEST(test_json_escape_string_quotes);
     RUN_TEST(test_json_escape_string_backslashes);
     RUN_TEST(test_json_escape_string_newlines);
-    RUN_TEST(test_ralph_build_json_payload_basic);
-    RUN_TEST(test_ralph_build_json_payload_with_system_prompt);
-    RUN_TEST(test_ralph_init_session_null_parameter);
+    RUN_TEST(test_build_json_payload_basic);
+    RUN_TEST(test_build_json_payload_with_system_prompt);
+    RUN_TEST(test_session_init_null_parameter);
     RUN_TEST(test_ralph_init_and_cleanup_session);
-    RUN_TEST(test_ralph_load_config_null_parameter);
-    RUN_TEST(test_ralph_load_config_basic);
-    RUN_TEST(test_ralph_process_message_null_parameters);
+    RUN_TEST(test_session_load_config_null_parameter);
+    RUN_TEST(test_session_load_config_basic);
+    RUN_TEST(test_session_process_message_null_parameters);
     RUN_TEST(test_ralph_config_parameter_selection);
-    RUN_TEST(test_ralph_execute_tool_workflow_null_parameters);
-    RUN_TEST(test_ralph_execute_tool_workflow_api_failure_resilience);
-    RUN_TEST(test_ralph_process_message_basic_workflow);
+    RUN_TEST(test_session_execute_tool_workflow_null_parameters);
+    RUN_TEST(test_session_execute_tool_workflow_api_failure_resilience);
+    RUN_TEST(test_session_process_message_basic_workflow);
     RUN_TEST(test_tool_execution_without_api_server);
     RUN_TEST(test_tool_execution_with_network_timeout);
     RUN_TEST(test_tool_execution_with_auth_failure);
@@ -890,9 +896,9 @@ int main(void) {
     RUN_TEST(test_tool_name_hardcoded_bug_fixed);
     
     // Anthropic tests
-    RUN_TEST(test_ralph_build_anthropic_json_payload_basic);
-    RUN_TEST(test_ralph_build_anthropic_json_payload_with_system);
-    RUN_TEST(test_ralph_build_anthropic_json_payload_with_tools);
+    RUN_TEST(test_build_anthropic_json_payload_basic);
+    RUN_TEST(test_build_anthropic_json_payload_with_system);
+    RUN_TEST(test_build_anthropic_json_payload_with_tools);
     RUN_TEST(test_ralph_api_type_detection);
     
     return UNITY_END();

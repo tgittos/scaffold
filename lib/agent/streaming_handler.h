@@ -1,7 +1,7 @@
 #ifndef STREAMING_HANDLER_H
 #define STREAMING_HANDLER_H
 
-#include "../../src/core/ralph.h"
+#include "session.h"
 #include "../llm/llm_provider.h"
 
 /**
@@ -44,14 +44,14 @@ ProviderRegistry* streaming_get_provider_registry(void);
  * @param headers HTTP headers for authentication
  * @return 0 on success, -1 on error
  */
-int streaming_process_message(RalphSession* session, const char* user_message,
+int streaming_process_message(AgentSession* session, const char* user_message,
                               int max_tokens, const char** headers);
 
 /**
  * Cleanup streaming handler resources
  *
  * Frees the global provider registry. Should be called from
- * ralph_cleanup_session() during shutdown.
+ * session_cleanup() during shutdown.
  */
 void streaming_handler_cleanup(void);
 

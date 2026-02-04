@@ -123,10 +123,10 @@ void test_ralph_initializes_with_hosted_mcp_server(void) {
     fputs(ralph_config, config_file);
     fclose(config_file);
     
-    RalphSession session;
+    AgentSession session;
     
     // Initialize ralph session - should load MCP config automatically
-    int result = ralph_init_session(&session);
+    int result = session_init(&session);
     TEST_ASSERT_EQUAL(0, result);
     
     // Verify MCP client was initialized
@@ -139,7 +139,7 @@ void test_ralph_initializes_with_hosted_mcp_server(void) {
     TEST_ASSERT_EQUAL(MCP_SERVER_SSE, session.mcp_client.config.servers.data[0].type);
     TEST_ASSERT_EQUAL_STRING("https://mcp.api.coingecko.com/sse", session.mcp_client.config.servers.data[0].url);
 
-    ralph_cleanup_session(&session);
+    session_cleanup(&session);
 }
 
 void test_mcp_client_handles_connection_to_hosted_server(void) {

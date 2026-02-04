@@ -5,8 +5,8 @@
 #include "services.h"
 #include <stdlib.h>
 
-RalphServices* ralph_services_create_default(void) {
-    RalphServices* services = malloc(sizeof(RalphServices));
+Services* services_create_default(void) {
+    Services* services = malloc(sizeof(Services));
     if (services == NULL) {
         return NULL;
     }
@@ -21,8 +21,8 @@ RalphServices* ralph_services_create_default(void) {
     return services;
 }
 
-RalphServices* ralph_services_create_empty(void) {
-    RalphServices* services = malloc(sizeof(RalphServices));
+Services* services_create_empty(void) {
+    Services* services = malloc(sizeof(Services));
     if (services == NULL) {
         return NULL;
     }
@@ -36,7 +36,7 @@ RalphServices* ralph_services_create_empty(void) {
     return services;
 }
 
-void ralph_services_destroy(RalphServices* services) {
+void services_destroy(Services* services) {
     if (services == NULL) {
         return;
     }
@@ -47,28 +47,28 @@ void ralph_services_destroy(RalphServices* services) {
     free(services);
 }
 
-message_store_t* ralph_services_get_message_store(RalphServices* services) {
+message_store_t* services_get_message_store(Services* services) {
     if (services != NULL && services->message_store != NULL) {
         return services->message_store;
     }
     return message_store_get_instance();
 }
 
-vector_db_service_t* ralph_services_get_vector_db(RalphServices* services) {
+vector_db_service_t* services_get_vector_db(Services* services) {
     if (services != NULL && services->vector_db != NULL) {
         return services->vector_db;
     }
     return vector_db_service_get_instance();
 }
 
-embeddings_service_t* ralph_services_get_embeddings(RalphServices* services) {
+embeddings_service_t* services_get_embeddings(Services* services) {
     if (services != NULL && services->embeddings != NULL) {
         return services->embeddings;
     }
     return embeddings_service_get_instance();
 }
 
-task_store_t* ralph_services_get_task_store(RalphServices* services) {
+task_store_t* services_get_task_store(Services* services) {
     if (services != NULL && services->task_store != NULL) {
         return services->task_store;
     }

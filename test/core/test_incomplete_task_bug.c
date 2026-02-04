@@ -58,8 +58,8 @@ void test_incomplete_task_bug_integration(void) {
     // 2. The session has pending todos
     // 3. The fix ensures processing continues when there are pending todos
     
-    RalphSession session;
-    TEST_ASSERT_EQUAL(0, ralph_init_session(&session));
+    AgentSession session;
+    TEST_ASSERT_EQUAL(0, session_init(&session));
     
     // Create some pending todos in the session
     char id1[TODO_MAX_ID_LENGTH];
@@ -85,7 +85,7 @@ void test_incomplete_task_bug_integration(void) {
     // Verify no pending tasks remain
     TEST_ASSERT_EQUAL(0, todo_has_pending_tasks(&session.todo_list));
     
-    ralph_cleanup_session(&session);
+    session_cleanup(&session);
     printf("Fix integration test passed - todo_has_pending_tasks correctly identifies incomplete work!\n");
 }
 
