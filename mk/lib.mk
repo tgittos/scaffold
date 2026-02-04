@@ -120,11 +120,20 @@ LIB_DB_CPP_SOURCES := $(LIBDIR)/db/hnswlib_wrapper.cpp
 # Workflow module
 LIB_WORKFLOW_SOURCES := $(LIBDIR)/workflow/workflow.c
 
+# Network module
+LIB_NETWORK_SOURCES := \
+    $(LIBDIR)/network/http_client.c \
+    $(LIBDIR)/network/api_common.c \
+    $(LIBDIR)/network/api_error.c \
+    $(LIBDIR)/network/streaming.c \
+    $(LIBDIR)/network/embedded_cacert.c
+
 # Combined library sources
 LIB_C_SOURCES := $(LIB_IPC_SOURCES) $(LIB_UI_SOURCES) $(LIB_TOOLS_SOURCES) \
     $(LIB_AGENT_SOURCES) $(LIB_SERVICES_SOURCES) $(LIB_LLM_SOURCES) \
     $(LIB_SESSION_SOURCES) $(LIB_POLICY_SOURCES) $(LIB_DB_SOURCES) \
-    $(LIB_WORKFLOW_SOURCES) $(LIB_UTIL_SOURCES) $(LIB_PDF_SOURCES)
+    $(LIB_WORKFLOW_SOURCES) $(LIB_UTIL_SOURCES) $(LIB_PDF_SOURCES) \
+    $(LIB_NETWORK_SOURCES)
 
 LIB_CPP_SOURCES := $(LIB_DB_CPP_SOURCES)
 

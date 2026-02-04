@@ -2,12 +2,12 @@
 #include "context_enhancement.h"
 #include "util/interrupt.h"
 #include "tool_executor.h"
-#include "streaming.h"
+#include "network/streaming.h"
 #include "lib/llm/llm_provider.h"
 #include "ui/output_formatter.h"
 #include "ui/json_output.h"
 #include "util/debug_output.h"
-#include "http_client.h"
+#include "network/http_client.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

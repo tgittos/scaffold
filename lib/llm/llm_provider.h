@@ -3,9 +3,9 @@
 
 #include "../session/conversation_tracker.h"
 #include "../tools/tools_system.h"
-#include "../../src/network/http_client.h"
+#include "../network/http_client.h"
 #include "../ui/output_formatter.h"
-#include "../../src/network/streaming.h"
+#include "../network/streaming.h"
 #include "../util/ptrarray.h"
 
 struct LLMProvider;

@@ -42,7 +42,7 @@ $(eval $(call def_test,ralph_home,utils/test_ralph_home,$(SRCDIR)/utils/ralph_ho
 $(eval $(call def_test,todo_manager,tools/test_todo_manager,$(LIBDIR)/tools/todo_manager.c))
 $(eval $(call def_test_mixed,tool_param_dsl,tools/test_tool_param_dsl,$(COMPLEX_DEPS)))
 $(eval $(call def_test,document_chunker,test_document_chunker,$(LIBDIR)/util/document_chunker.c $(LIBDIR)/util/common_utils.c))
-$(eval $(call def_test,streaming,network/test_streaming,$(SRCDIR)/network/streaming.c))
+$(eval $(call def_test,streaming,network/test_streaming,$(LIBDIR)/network/streaming.c))
 $(eval $(call def_test,darray,test_darray,))
 $(eval $(call def_test,ptrarray,test_ptrarray,))
 $(eval $(call def_test,rate_limiter,policy/test_rate_limiter,$(LIBDIR)/policy/rate_limiter.c))
@@ -199,7 +199,7 @@ $(TEST_pdf_extractor_TARGET): $(TEST_pdf_extractor_OBJECTS) $(PDFIO_LIB) $(ZLIB_
 # HTTP RETRY TEST
 # =============================================================================
 
-$(eval $(call def_test,http_retry,network/test_http_retry,$(SRCDIR)/network/api_error.c $(SRCDIR)/utils/config.c $(SRCDIR)/utils/ralph_home.c))
+$(eval $(call def_test,http_retry,network/test_http_retry,$(LIBDIR)/network/api_error.c $(SRCDIR)/utils/config.c $(SRCDIR)/utils/ralph_home.c))
 
 $(TEST_http_retry_TARGET): $(TEST_http_retry_OBJECTS) $(CJSON_LIB) $(LIBS_MBEDTLS)
 	$(CC) -o $@ $(TEST_http_retry_OBJECTS) $(CJSON_LIB) $(LIBS_MBEDTLS) -lm
@@ -250,7 +250,7 @@ $(TEST_notification_formatter_TARGET): $(TEST_notification_formatter_OBJECTS) $(
 CONV_EXTRA_OBJECTS := $(LIB_DB_SOURCES:.c=.o) $(LIB_DB_CPP_SOURCES:.cpp=.o) \
     $(LIBDIR)/llm/embeddings.o $(LIBDIR)/llm/embeddings_service.o $(LIBDIR)/llm/embedding_provider.o \
     $(LIBDIR)/llm/providers/openai_embedding_provider.o $(LIBDIR)/llm/providers/local_embedding_provider.o \
-    $(SRCDIR)/network/http_client.o $(SRCDIR)/network/embedded_cacert.o $(SRCDIR)/network/api_error.o \
+    $(LIBDIR)/network/http_client.o $(LIBDIR)/network/embedded_cacert.o $(LIBDIR)/network/api_error.o \
     $(LIBDIR)/util/interrupt.o \
     $(SRCDIR)/utils/config.o $(LIBDIR)/util/debug_output.o $(LIBDIR)/util/common_utils.o \
     $(SRCDIR)/utils/ralph_home.o
@@ -273,7 +273,7 @@ $(TEST_tool_calls_not_stored_TARGET): $(TEST_tool_calls_not_stored_OBJECTS) $(AL
 # STANDARD MIXED TESTS (CXX linker with LIBS_STANDARD)
 # =============================================================================
 
-$(eval $(call def_test_mixed,json_output,utils/test_json_output,$(SRCDIR)/network/streaming.c $(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,json_output,utils/test_json_output,$(LIBDIR)/network/streaming.c $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,output,utils/test_output_formatter,$(COMPLEX_DEPS)))
 # test_tools_system includes approval gate integration tests, requires RALPH_CORE_DEPS
 $(eval $(call def_test_mixed,tools_system,tools/test_tools_system,$(RALPH_CORE_DEPS) $(COMPLEX_DEPS)))
@@ -287,9 +287,9 @@ $(eval $(call def_test_mixed,token_manager,session/test_token_manager,$(LIBDIR)/
 $(eval $(call def_test_mixed,conversation_compactor,session/test_conversation_compactor,$(LIBDIR)/session/conversation_compactor.c $(LIBDIR)/session/rolling_summary.c $(LIBDIR)/session/session_manager.c $(LIBDIR)/session/conversation_tracker.c $(LIBDIR)/session/token_manager.c $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,rolling_summary,session/test_rolling_summary,$(LIBDIR)/session/rolling_summary.c $(LIBDIR)/session/session_manager.c $(LIBDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,model_tools,llm/test_model_tools,$(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,openai_streaming,llm/test_openai_streaming,$(SRCDIR)/network/streaming.c $(LIBDIR)/llm/providers/openai_provider.c $(LIBDIR)/llm/providers/anthropic_provider.c $(LIBDIR)/llm/providers/local_ai_provider.c $(SRCDIR)/network/api_common.c $(LIBDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,anthropic_streaming,llm/test_anthropic_streaming,$(SRCDIR)/network/streaming.c $(LIBDIR)/llm/providers/openai_provider.c $(LIBDIR)/llm/providers/anthropic_provider.c $(LIBDIR)/llm/providers/local_ai_provider.c $(SRCDIR)/network/api_common.c $(LIBDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,messages_array_bug,network/test_messages_array_bug,$(SRCDIR)/network/api_common.c $(LIBDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,openai_streaming,llm/test_openai_streaming,$(LIBDIR)/network/streaming.c $(LIBDIR)/llm/providers/openai_provider.c $(LIBDIR)/llm/providers/anthropic_provider.c $(LIBDIR)/llm/providers/local_ai_provider.c $(LIBDIR)/network/api_common.c $(LIBDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,anthropic_streaming,llm/test_anthropic_streaming,$(LIBDIR)/network/streaming.c $(LIBDIR)/llm/providers/openai_provider.c $(LIBDIR)/llm/providers/anthropic_provider.c $(LIBDIR)/llm/providers/local_ai_provider.c $(LIBDIR)/network/api_common.c $(LIBDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,messages_array_bug,network/test_messages_array_bug,$(LIBDIR)/network/api_common.c $(LIBDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,mcp_client,mcp/test_mcp_client,$(RALPH_CORE_DEPS) $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,subagent_tool,tools/test_subagent_tool,$(RALPH_CORE_DEPS) $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,incomplete_task_bug,core/test_incomplete_task_bug,$(RALPH_CORE_DEPS) $(COMPLEX_DEPS)))

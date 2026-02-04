@@ -9,11 +9,6 @@ CORE_SOURCES := \
     $(SRCDIR)/core/streaming_handler.c \
     $(SRCDIR)/core/context_enhancement.c \
     $(SRCDIR)/core/recap.c \
-    $(SRCDIR)/network/http_client.c \
-    $(SRCDIR)/network/embedded_cacert.c \
-    $(SRCDIR)/network/streaming.c \
-    $(SRCDIR)/network/api_common.c \
-    $(SRCDIR)/network/api_error.c \
     $(SRCDIR)/utils/config.c \
     $(SRCDIR)/utils/prompt_loader.c \
     $(SRCDIR)/utils/pdf_processor.c \
@@ -53,9 +48,9 @@ HEADERS := $(wildcard $(SRCDIR)/*/*.h)
 
 # Reusable dependency groups for tests
 NETWORK_DEPS := \
-    $(SRCDIR)/network/http_client.c \
-    $(SRCDIR)/network/embedded_cacert.c \
-    $(SRCDIR)/network/api_error.c \
+    $(LIBDIR)/network/http_client.c \
+    $(LIBDIR)/network/embedded_cacert.c \
+    $(LIBDIR)/network/api_error.c \
     $(LIBDIR)/util/interrupt.c
 
 EMBEDDING_DEPS := \
@@ -109,8 +104,8 @@ RALPH_CORE_DEPS := \
     $(LIBDIR)/session/conversation_compactor.c \
     $(LIBDIR)/session/rolling_summary.c \
     $(LIBDIR)/session/session_manager.c \
-    $(SRCDIR)/network/api_common.c \
-    $(SRCDIR)/network/streaming.c \
+    $(LIBDIR)/network/api_common.c \
+    $(LIBDIR)/network/streaming.c \
     $(LIBDIR)/session/token_manager.c \
     $(LIBDIR)/llm/llm_provider.c \
     $(LIBDIR)/llm/providers/openai_provider.c \

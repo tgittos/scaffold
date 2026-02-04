@@ -1,9 +1,8 @@
 #ifndef API_COMMON_H
 #define API_COMMON_H
 
-#include "ralph.h"
-#include "session/conversation_tracker.h"
-#include "lib/tools/tools_system.h"
+#include "../session/conversation_tracker.h"
+#include "../tools/tools_system.h"
 
 size_t calculate_json_payload_size(const char* model, const char* system_prompt,
                                   const ConversationHistory* conversation,

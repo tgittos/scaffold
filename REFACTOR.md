@@ -12,38 +12,6 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 ---
 
-## Session 16: Network Module
-
-**Move:** HTTP client and API communication layer.
-
-| File | Destination |
-|------|-------------|
-| `src/network/http_client.c/h` | `lib/network/` |
-| `src/network/api_common.c/h` | `lib/network/` |
-| `src/network/api_error.c/h` | `lib/network/` |
-| `src/network/streaming.c/h` | `lib/network/` |
-| `src/network/embedded_cacert.c/h` | `lib/network/` |
-
-**Changes:**
-1. Create `lib/network/` directory
-2. Move files to `lib/network/`
-3. Update includes in moved files (relative paths within lib/)
-4. Update `mk/lib.mk`: Add new `LIB_NETWORK_SOURCES` section:
-   - `$(LIBDIR)/network/http_client.c`
-   - `$(LIBDIR)/network/api_common.c`
-   - `$(LIBDIR)/network/api_error.c`
-   - `$(LIBDIR)/network/streaming.c`
-   - `$(LIBDIR)/network/embedded_cacert.c`
-5. Update `mk/lib.mk`: Add `$(LIB_NETWORK_SOURCES)` to `LIB_C_SOURCES`
-6. Update `mk/sources.mk`: Remove network files from `CORE_SOURCES`
-7. Update `mk/sources.mk`: Update `NETWORK_DEPS` to use `$(LIBDIR)/network/` paths
-8. Update `mk/sources.mk`: Update `RALPH_CORE_DEPS` to use `$(LIBDIR)/network/` paths
-9. Update includes in `src/` files that referenced moved headers
-
-**Verify:** `./scripts/build.sh clean && ./scripts/build.sh && ./scripts/run_tests.sh http`
-
----
-
 ## Session 17: MCP Module
 
 **Move:** Model Context Protocol plugin system.
@@ -281,7 +249,7 @@ Session 14: Policy Gates (tool_args, pattern_generator, gate_prompter, approval_
     ↓
 Session 15: Session Module (token_manager, conversation_tracker, conversation_compactor, rolling_summary, session_manager) ✓ COMPLETE
     ↓
-Session 16: Network Module (http_client, api_common, api_error, streaming, embedded_cacert)
+Session 16: Network Module (http_client, api_common, api_error, streaming, embedded_cacert) ✓ COMPLETE
     ↓
 Session 17: MCP Module (mcp_client, mcp_transport, mcp_transport_stdio, mcp_transport_http)
     ↓

@@ -74,7 +74,7 @@ ralph-python/
 | `src/llm/llm_provider.c` | Provider abstraction with URL-based detection |
 | `lib/session/conversation_tracker.c` | Conversation history with vector DB persistence |
 | `src/db/vector_db.c` | Vector database operations |
-| `src/network/http_client.c` | HTTP client using libcurl |
+| `lib/network/http_client.c` | HTTP client using libcurl |
 
 ## Testing
 

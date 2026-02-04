@@ -5,7 +5,7 @@
 #include "ui/json_output.h"
 #include <cJSON.h>
 #include "util/debug_output.h"
-#include "api_error.h"
+#include "network/api_error.h"
 #include "session/token_manager.h"
 #include "lib/llm/model_capabilities.h"
 #include "../mcp/mcp_client.h"

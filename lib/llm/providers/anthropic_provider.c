@@ -1,6 +1,6 @@
 #include "../llm_provider.h"
-#include "api_common.h"
-#include "streaming.h"
+#include "../../network/api_common.h"
+#include "../../network/streaming.h"
 #include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>

@@ -1,9 +1,9 @@
 #include "http_client.h"
 #include "api_error.h"
 #include "embedded_cacert.h"
-#include "util/interrupt.h"
-#include "../utils/config.h"
-#include "util/debug_output.h"
+#include "../util/interrupt.h"
+#include "../../src/utils/config.h"
+#include "../util/debug_output.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,17 +32,17 @@ static size_t write_callback(void *contents, size_t size, size_t nmemb, void *us
     struct HTTPResponse *response = (struct HTTPResponse *)userp;
     size_t realsize = size * nmemb;
     char *ptr = realloc(response->data, response->size + realsize + 1);
-    
+
     if (ptr == NULL) {
         fprintf(stderr, "Error: Failed to allocate memory for response\n");
         return 0;
     }
-    
+
     response->data = ptr;
     memcpy(&(response->data[response->size]), contents, realsize);
     response->size += realsize;
     response->data[response->size] = '\0';
-    
+
     return realsize;
 }
 

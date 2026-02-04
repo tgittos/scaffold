@@ -75,7 +75,7 @@ INCLUDES := -I. -I$(CURL_DIR)/include -I$(MBEDTLS_DIR)/include -I$(HNSWLIB_DIR) 
     -I$(PDFIO_DIR) -I$(ZLIB_DIR) -I$(CJSON_DIR) -I$(READLINE_DIR) \
     -I$(READLINE_DIR)/readline -I$(NCURSES_DIR)/include -I$(SQLITE_DIR) \
     -I$(OSSP_UUID_DIR) -I$(PYTHON_INCLUDE) \
-    -I$(SRCDIR) -I$(SRCDIR)/core -I$(SRCDIR)/network -I$(SRCDIR)/llm \
+    -I$(SRCDIR) -I$(SRCDIR)/core -I$(SRCDIR)/llm \
     -I$(SRCDIR)/session -I$(SRCDIR)/tools -I$(SRCDIR)/utils -I$(SRCDIR)/db \
     -I$(SRCDIR)/cli
 
@@ -92,7 +92,7 @@ LIBS := -lcurl -lmbedtls -lmbedx509 -lmbedcrypto $(PDFIO_LIB) $(ZLIB_LIB) \
 
 # CA Certificate
 CACERT_PEM := $(BUILDDIR)/cacert.pem
-CACERT_SOURCE := $(SRCDIR)/network/embedded_cacert.c
+CACERT_SOURCE := $(LIBDIR)/network/embedded_cacert.c
 
 # Python paths
 PYTHON_STDLIB_DIR := python/build/results/py-tmp

@@ -1,10 +1,10 @@
 #include "api_common.h"
 #include <cJSON.h>
-#include "lib/llm/model_capabilities.h"
+#include "../llm/model_capabilities.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "util/json_escape.h"
+#include "../util/json_escape.h"
 
 extern ModelRegistry* get_model_registry(void);
 
@@ -70,11 +70,11 @@ int format_openai_message(char* buffer, size_t buffer_size,
     if (strcmp(message->role, "tool") == 0 && message->tool_call_id != NULL) {
         cJSON* json = cJSON_CreateObject();
         if (!json) return -1;
-        
+
         cJSON_AddStringToObject(json, "role", "tool");
         cJSON_AddStringToObject(json, "content", message->content);
         cJSON_AddStringToObject(json, "tool_call_id", message->tool_call_id);
-        
+
         message_json = cJSON_PrintUnformatted(json);
         cJSON_Delete(json);
     } else if (strcmp(message->role, "assistant") == 0 &&
@@ -90,7 +90,7 @@ int format_openai_message(char* buffer, size_t buffer_size,
             cJSON_Delete(json);
         }
     }
-    
+
     if (message_json == NULL) return -1;
 
     int written = 0;
@@ -99,13 +99,13 @@ int format_openai_message(char* buffer, size_t buffer_size,
     } else {
         written = snprintf(buffer, buffer_size, "%s", message_json);
     }
-    
+
     free(message_json);
-    
+
     if (written < 0 || written >= (int)buffer_size) {
         return -1;
     }
-    
+
     return written;
 }
 
@@ -217,10 +217,10 @@ int build_messages_json(char* buffer, size_t buffer_size,
             .tool_call_id = NULL,
             .tool_name = NULL
         };
-        
+
         int written = formatter(current, remaining, &sys_msg, 1);
         if (written < 0) return -1;
-        
+
         current += written;
         remaining -= written;
         message_count++;
@@ -230,10 +230,10 @@ int build_messages_json(char* buffer, size_t buffer_size,
         if (skip_system_in_history && strcmp(conversation->data[i].role, "system") == 0) {
             continue;
         }
-        
+
         int written = formatter(current, remaining, &conversation->data[i], message_count == 0);
         if (written < 0) return -1;
-        
+
         current += written;
         remaining -= written;
         message_count++;
@@ -246,15 +246,15 @@ int build_messages_json(char* buffer, size_t buffer_size,
             .tool_call_id = NULL,
             .tool_name = NULL
         };
-        
+
         int written = formatter(current, remaining, &user_msg, message_count == 0);
         if (written < 0) return -1;
-        
+
         current += written;
         remaining -= written;
         message_count++;
     }
-    
+
     return current - buffer;
 }
 
@@ -288,7 +288,7 @@ char* build_json_payload_common(const char* model, const char* system_prompt,
 
     char* current = json;
     size_t remaining = total_size;
-    
+
     int written = snprintf(current, remaining, "{\"model\": \"%s\", \"messages\": [", model);
     if (written < 0 || written >= (int)remaining) {
         free(json);
@@ -304,7 +304,7 @@ char* build_json_payload_common(const char* model, const char* system_prompt,
                                                conversation, user_message, formatter,
                                                system_at_top_level);
     } else {
-        written = build_messages_json(current, remaining, 
+        written = build_messages_json(current, remaining,
                                      system_prompt,
                                      conversation, user_message, formatter,
                                      system_at_top_level);
@@ -372,7 +372,7 @@ char* build_json_payload_common(const char* model, const char* system_prompt,
         free(json);
         return NULL;
     }
-    
+
     return json;
 }
 

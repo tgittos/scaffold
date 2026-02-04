@@ -7,7 +7,7 @@
 
 #include "mcp_transport.h"
 #include "util/debug_output.h"
-#include "../network/http_client.h"
+#include "network/http_client.h"
 #include <stdlib.h>
 #include <string.h>
 

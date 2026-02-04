@@ -19,13 +19,6 @@ Application-specific code that uses the library layer.
 
 Note: The LLM integration layer has been fully migrated to `lib/llm/`. Model-specific implementations are in `lib/llm/models/` and providers are in `lib/llm/providers/`.
 
-#### `src/network/` - Network Communication
-- **`http_client.c/h`** - HTTP client implementation using libcurl (buffered and streaming)
-- **`api_common.c/h`** - Common API utilities, JSON payload building for OpenAI/Anthropic formats
-- **`streaming.c/h`** - SSE streaming infrastructure for real-time response handling
-- **`api_error.c/h`** - Enhanced API error handling with retry logic
-- **`embedded_cacert.c/h`** - Embedded Mozilla CA certificate bundle for portable SSL/TLS
-
 #### `src/mcp/` - Model Context Protocol
 - **`mcp_client.c/h`** - MCP client implementation and server management
 - **`mcp_transport.c/h`** - Transport abstraction layer using strategy pattern
@@ -173,6 +166,13 @@ Generic, CLI-independent components that can be reused.
 - **`conversation_compactor.c/h`** - Intelligent conversation history compression
 - **`rolling_summary.c/h`** - Rolling conversation summary generation with compaction thresholds
 - **`token_manager.c/h`** - Token counting, allocation, and context window management
+
+#### `lib/network/` - Network Communication
+- **`http_client.c/h`** - HTTP client implementation using libcurl (buffered and streaming)
+- **`api_common.c/h`** - Common API utilities, JSON payload building for OpenAI/Anthropic formats
+- **`streaming.c/h`** - SSE streaming infrastructure for real-time response handling
+- **`api_error.c/h`** - Enhanced API error handling with retry logic
+- **`embedded_cacert.c/h`** - Embedded Mozilla CA certificate bundle for portable SSL/TLS
 
 #### `lib/workflow/` - Task Queue
 - **`workflow.c/h`** - SQLite-backed work queue for asynchronous task processing

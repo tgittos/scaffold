@@ -1,6 +1,6 @@
 #!/bin/bash
 # Generate embedded_cacert.c from cacert.pem
-# Usage: ./scripts/gen_cacert.sh build/cacert.pem src/network/embedded_cacert.c
+# Usage: ./scripts/gen_cacert.sh build/cacert.pem lib/network/embedded_cacert.c
 
 set -e
 

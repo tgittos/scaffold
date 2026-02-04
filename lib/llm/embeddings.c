@@ -1,6 +1,6 @@
 #include "embeddings.h"
 #include "embedding_provider.h"
-#include "network/http_client.h"
+#include "../network/http_client.h"
 #include "util/common_utils.h"
 #include <cJSON.h>
 #include "util/debug_output.h"

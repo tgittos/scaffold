@@ -1,5 +1,5 @@
 #include "pdf_processor.h"
-#include "../network/http_client.h"
+#include "network/http_client.h"
 #include "pdf/pdf_extractor.h"
 #include "util/document_chunker.h"
 #include "llm/embeddings.h"

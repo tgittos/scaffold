@@ -1,7 +1,7 @@
 #ifndef RALPH_H
 #define RALPH_H
 
-#include "http_client.h"
+#include "network/http_client.h"
 #include "session/conversation_tracker.h"
 #include "lib/tools/tools_system.h"
 #include "lib/tools/todo_manager.h"

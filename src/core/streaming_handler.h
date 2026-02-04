@@ -12,7 +12,7 @@
  * display system, and handles the complete streaming message flow including
  * tool execution.
  *
- * The low-level SSE parsing is handled by src/network/streaming.c
+ * The low-level SSE parsing is handled by lib/network/streaming.c
  */
 
 /**

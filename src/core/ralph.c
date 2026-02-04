@@ -10,7 +10,7 @@
 #include "lib/tools/todo_tool.h"
 #include "lib/tools/todo_display.h"
 #include "util/debug_output.h"
-#include "api_common.h"
+#include "network/api_common.h"
 #include "llm/embeddings_service.h"
 #include "session/token_manager.h"
 #include "session/conversation_compactor.h"

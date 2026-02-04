@@ -1,6 +1,6 @@
 #include "unity/unity.h"
 #include "lib/llm/llm_provider.h"
-#include "streaming.h"
+#include "network/streaming.h"
 #include <stdlib.h>
 #include <string.h>
 

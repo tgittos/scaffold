@@ -2,7 +2,7 @@
 #include "ui/json_output.h"
 #include "ui/output_formatter.h"
 #include "lib/tools/tools_system.h"
-#include "streaming.h"
+#include "network/streaming.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
