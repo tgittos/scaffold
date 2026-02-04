@@ -1,6 +1,6 @@
 #include "unity.h"
-#include "conversation_compactor.h"
-#include "conversation_tracker.h"
+#include "session/conversation_compactor.h"
+#include "session/conversation_tracker.h"
 #include "ralph.h"
 #include "db/document_store.h"
 #include <string.h>

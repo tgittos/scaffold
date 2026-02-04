@@ -1,7 +1,7 @@
 #ifndef LLM_PROVIDER_H
 #define LLM_PROVIDER_H
 
-#include "../../src/session/conversation_tracker.h"
+#include "../session/conversation_tracker.h"
 #include "../tools/tools_system.h"
 #include "../../src/network/http_client.h"
 #include "../ui/output_formatter.h"

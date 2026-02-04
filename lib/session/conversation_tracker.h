@@ -1,7 +1,7 @@
 #ifndef CONVERSATION_TRACKER_H
 #define CONVERSATION_TRACKER_H
 
-#include "util/darray.h"
+#include "../util/darray.h"
 
 typedef struct {
     char *role;         // "user", "assistant", or "tool"

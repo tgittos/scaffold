@@ -1,9 +1,9 @@
 #include "rolling_summary.h"
-#include "lib/llm/llm_provider.h"
-#include "http_client.h"
-#include "util/debug_output.h"
+#include "../llm/llm_provider.h"
+#include "../../src/network/http_client.h"
+#include "../util/debug_output.h"
 #include "token_manager.h"
-#include "streaming.h"
+#include "../../src/network/streaming.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

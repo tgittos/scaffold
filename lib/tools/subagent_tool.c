@@ -5,7 +5,7 @@
 #include "../../src/core/ralph.h"
 #include "../util/interrupt.h"
 #include "../policy/subagent_approval.h"
-#include "../../src/session/conversation_tracker.h"
+#include "../session/conversation_tracker.h"
 #include "../ipc/message_store.h"
 #include "messaging_tool.h"
 #include <cJSON.h>

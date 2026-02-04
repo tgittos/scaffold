@@ -26,13 +26,6 @@ Note: The LLM integration layer has been fully migrated to `lib/llm/`. Model-spe
 - **`api_error.c/h`** - Enhanced API error handling with retry logic
 - **`embedded_cacert.c/h`** - Embedded Mozilla CA certificate bundle for portable SSL/TLS
 
-#### `src/session/` - User Session Management
-- **`session_manager.c/h`** - Session data structures and API payload building
-- **`conversation_tracker.c/h`** - Conversation history tracking with vector DB persistence
-- **`conversation_compactor.c/h`** - Intelligent conversation history compression
-- **`rolling_summary.c/h`** - Rolling conversation summary generation with compaction thresholds
-- **`token_manager.c/h`** - Token counting, allocation, and context window management
-
 #### `src/mcp/` - Model Context Protocol
 - **`mcp_client.c/h`** - MCP client implementation and server management
 - **`mcp_transport.c/h`** - Transport abstraction layer using strategy pattern
@@ -174,6 +167,13 @@ Generic, CLI-independent components that can be reused.
 #### `lib/services/` - Service Container
 - **`services.c/h`** - Dependency injection container for service management
 
+#### `lib/session/` - Session Management
+- **`session_manager.c/h`** - Session data structures and API payload building
+- **`conversation_tracker.c/h`** - Conversation history tracking with vector DB persistence
+- **`conversation_compactor.c/h`** - Intelligent conversation history compression
+- **`rolling_summary.c/h`** - Rolling conversation summary generation with compaction thresholds
+- **`token_manager.c/h`** - Token counting, allocation, and context window management
+
 #### `lib/workflow/` - Task Queue
 - **`workflow.c/h`** - SQLite-backed work queue for asynchronous task processing
 
@@ -297,7 +297,7 @@ The `src/db/` directory provides a layered persistence architecture:
 - **Metadata Store**: Separate JSON persistence for chunk metadata
 
 ### 4. Session Management
-The `src/session/` directory handles conversation lifecycle:
+The `lib/session/` directory handles conversation lifecycle:
 - **Conversation Tracker**: History persistence with vector DB integration
 - **Token Manager**: Dynamic token allocation and context trimming
 - **Compactor**: Intelligent conversation compression preserving tool sequences

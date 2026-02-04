@@ -18,11 +18,6 @@ CORE_SOURCES := \
     $(SRCDIR)/utils/prompt_loader.c \
     $(SRCDIR)/utils/pdf_processor.c \
     $(SRCDIR)/utils/context_retriever.c \
-    $(SRCDIR)/session/conversation_tracker.c \
-    $(SRCDIR)/session/conversation_compactor.c \
-    $(SRCDIR)/session/rolling_summary.c \
-    $(SRCDIR)/session/session_manager.c \
-    $(SRCDIR)/session/token_manager.c
 
 # Tool system (Python tools only; core tools in lib/tools/)
 TOOL_SOURCES := \
@@ -110,13 +105,13 @@ RALPH_CORE_DEPS := \
     $(LIBDIR)/policy/verified_file_context.c \
     $(LIBDIR)/policy/verified_file_python.c \
     $(SRCDIR)/utils/prompt_loader.c \
-    $(SRCDIR)/session/conversation_tracker.c \
-    $(SRCDIR)/session/conversation_compactor.c \
-    $(SRCDIR)/session/rolling_summary.c \
-    $(SRCDIR)/session/session_manager.c \
+    $(LIBDIR)/session/conversation_tracker.c \
+    $(LIBDIR)/session/conversation_compactor.c \
+    $(LIBDIR)/session/rolling_summary.c \
+    $(LIBDIR)/session/session_manager.c \
     $(SRCDIR)/network/api_common.c \
     $(SRCDIR)/network/streaming.c \
-    $(SRCDIR)/session/token_manager.c \
+    $(LIBDIR)/session/token_manager.c \
     $(LIBDIR)/llm/llm_provider.c \
     $(LIBDIR)/llm/providers/openai_provider.c \
     $(LIBDIR)/llm/providers/anthropic_provider.c \
@@ -154,7 +149,7 @@ COMPLEX_DEPS := \
     $(LIBDIR)/policy/path_normalize.c
 
 CONV_DEPS := \
-    $(SRCDIR)/session/conversation_tracker.c \
+    $(LIBDIR)/session/conversation_tracker.c \
     $(LIB_DB_SOURCES) \
     $(EMBEDDING_DEPS) \
     $(NETWORK_DEPS) \

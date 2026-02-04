@@ -1,5 +1,5 @@
 #include "../unity/unity.h"
-#include "../../src/session/conversation_tracker.h"
+#include "session/conversation_tracker.h"
 #include "db/document_store.h"
 #include "db/vector_db_service.h"
 #include "../../src/utils/config.h"

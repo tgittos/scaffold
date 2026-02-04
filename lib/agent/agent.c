@@ -7,7 +7,7 @@
 #include "agent.h"
 #include "../ui/repl.h"
 #include "../workflow/workflow.h"
-#include "../../src/session/conversation_tracker.h"
+#include "../session/conversation_tracker.h"
 #include "../util/debug_output.h"
 #include "../ui/output_formatter.h"
 #include "../ui/json_output.h"

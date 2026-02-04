@@ -1,7 +1,7 @@
 #include "unity.h"
-#include "rolling_summary.h"
-#include "session_manager.h"
-#include "conversation_tracker.h"
+#include "session/rolling_summary.h"
+#include "session/session_manager.h"
+#include "session/conversation_tracker.h"
 #include "../src/utils/ralph_home.h"
 #include "db/document_store.h"
 #include <string.h>

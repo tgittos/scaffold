@@ -1,6 +1,6 @@
 #include "unity.h"
-#include "token_manager.h"
-#include "session_manager.h"
+#include "session/token_manager.h"
+#include "session/session_manager.h"
 #include "ralph.h"
 #include <string.h>
 

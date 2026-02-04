@@ -12,36 +12,6 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 ---
 
-## Session 15: Session Module
-
-**Move:** Conversation and session management.
-
-| File | Destination |
-|------|-------------|
-| `src/session/token_manager.c/h` | `lib/session/` |
-| `src/session/conversation_tracker.c/h` | `lib/session/` |
-| `src/session/conversation_compactor.c/h` | `lib/session/` |
-| `src/session/rolling_summary.c/h` | `lib/session/` |
-| `src/session/session_manager.c/h` | `lib/session/` |
-
-**Changes:**
-1. Move files to `lib/session/` (directory already exists)
-2. Update includes in moved files (relative paths within lib/)
-3. Update `mk/lib.mk`: Add to `LIB_SESSION_SOURCES`:
-   - `$(LIBDIR)/session/token_manager.c`
-   - `$(LIBDIR)/session/conversation_tracker.c`
-   - `$(LIBDIR)/session/conversation_compactor.c`
-   - `$(LIBDIR)/session/rolling_summary.c`
-   - `$(LIBDIR)/session/session_manager.c`
-4. Update `mk/sources.mk`: Remove session files from `CORE_SOURCES`
-5. Update `mk/sources.mk`: Update `RALPH_CORE_DEPS` to use `$(LIBDIR)/session/` paths
-6. Update `mk/sources.mk`: Update `CONV_DEPS` to use `$(LIBDIR)/session/` paths
-7. Update includes in `src/` files that referenced moved headers
-
-**Verify:** `./scripts/build.sh clean && ./scripts/build.sh && ./scripts/run_tests.sh conversation_tracker`
-
----
-
 ## Session 16: Network Module
 
 **Move:** HTTP client and API communication layer.
@@ -309,7 +279,7 @@ Policy Advanced (path_normalize, protected_files, atomic_file, verified_file) �
     ↓
 Session 14: Policy Gates (tool_args, pattern_generator, gate_prompter, approval_gate, approval_errors, subagent_approval) ✓ COMPLETE
     ↓
-Session 15: Session Module (token_manager, conversation_tracker, conversation_compactor, rolling_summary, session_manager)
+Session 15: Session Module (token_manager, conversation_tracker, conversation_compactor, rolling_summary, session_manager) ✓ COMPLETE
     ↓
 Session 16: Network Module (http_client, api_common, api_error, streaming, embedded_cacert)
     ↓

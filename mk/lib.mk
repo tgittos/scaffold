@@ -67,7 +67,12 @@ LIB_LLM_SOURCES := \
 LIB_SERVICES_SOURCES := $(LIBDIR)/services/services.c
 
 # Session module
-LIB_SESSION_SOURCES :=
+LIB_SESSION_SOURCES := \
+    $(LIBDIR)/session/token_manager.c \
+    $(LIBDIR)/session/conversation_tracker.c \
+    $(LIBDIR)/session/conversation_compactor.c \
+    $(LIBDIR)/session/rolling_summary.c \
+    $(LIBDIR)/session/session_manager.c
 
 # Policy module (approval gates, shell parsing, file protection)
 LIB_POLICY_SOURCES := \

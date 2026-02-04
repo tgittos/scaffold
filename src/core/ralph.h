@@ -2,12 +2,12 @@
 #define RALPH_H
 
 #include "http_client.h"
-#include "conversation_tracker.h"
+#include "session/conversation_tracker.h"
 #include "lib/tools/tools_system.h"
 #include "lib/tools/todo_manager.h"
 #include "lib/llm/llm_provider.h"
-#include "token_manager.h"
-#include "session_manager.h"
+#include "session/token_manager.h"
+#include "session/session_manager.h"
 #include "../mcp/mcp_client.h"
 #include "lib/tools/subagent_tool.h"
 #include "util/uuid_utils.h"

@@ -255,8 +255,8 @@ CONV_EXTRA_OBJECTS := $(LIB_DB_SOURCES:.c=.o) $(LIB_DB_CPP_SOURCES:.cpp=.o) \
     $(SRCDIR)/utils/config.o $(LIBDIR)/util/debug_output.o $(LIBDIR)/util/common_utils.o \
     $(SRCDIR)/utils/ralph_home.o
 
-$(eval $(call def_test,conversation,session/test_conversation_tracker,$(SRCDIR)/session/conversation_tracker.c $(LIBDIR)/util/json_escape.c))
-$(eval $(call def_test,conversation_vdb,session/test_conversation_vector_db,$(SRCDIR)/session/conversation_tracker.c $(LIBDIR)/util/json_escape.c $(TESTDIR)/mock_api_server.c $(TESTDIR)/mock_embeddings.c $(TESTDIR)/mock_embeddings_server.c))
+$(eval $(call def_test,conversation,session/test_conversation_tracker,$(LIBDIR)/session/conversation_tracker.c $(LIBDIR)/util/json_escape.c))
+$(eval $(call def_test,conversation_vdb,session/test_conversation_vector_db,$(LIBDIR)/session/conversation_tracker.c $(LIBDIR)/util/json_escape.c $(TESTDIR)/mock_api_server.c $(TESTDIR)/mock_embeddings.c $(TESTDIR)/mock_embeddings_server.c))
 $(eval $(call def_test_mixed,tool_calls_not_stored,session/test_tool_calls_not_stored,$(CONV_DEPS)))
 
 $(TEST_conversation_TARGET): $(TEST_conversation_OBJECTS) $(CONV_EXTRA_OBJECTS) $(ALL_LIBS)
@@ -283,13 +283,13 @@ MOCK_EMBEDDINGS_SOURCES := $(TESTDIR)/mock_api_server.c $(TESTDIR)/mock_embeddin
 $(eval $(call def_test_mixed,vector_db_tool,tools/test_vector_db_tool,$(MOCK_EMBEDDINGS_SOURCES) $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,memory_tool,tools/test_memory_tool,$(MOCK_EMBEDDINGS_SOURCES) $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,memory_mgmt,test_memory_management,$(LIBDIR)/ui/memory_commands.c $(LIBDIR)/ui/terminal.c $(LIB_DB_SOURCES) $(EMBEDDING_DEPS) $(SRCDIR)/utils/config.c $(NETWORK_DEPS) $(LIBDIR)/util/common_utils.c $(LIBDIR)/util/debug_output.c $(SRCDIR)/utils/ralph_home.c))
-$(eval $(call def_test_mixed,token_manager,session/test_token_manager,$(SRCDIR)/session/token_manager.c $(SRCDIR)/session/rolling_summary.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,conversation_compactor,session/test_conversation_compactor,$(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/rolling_summary.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/token_manager.c $(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,rolling_summary,session/test_rolling_summary,$(SRCDIR)/session/rolling_summary.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,token_manager,session/test_token_manager,$(LIBDIR)/session/token_manager.c $(LIBDIR)/session/rolling_summary.c $(LIBDIR)/session/session_manager.c $(LIBDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,conversation_compactor,session/test_conversation_compactor,$(LIBDIR)/session/conversation_compactor.c $(LIBDIR)/session/rolling_summary.c $(LIBDIR)/session/session_manager.c $(LIBDIR)/session/conversation_tracker.c $(LIBDIR)/session/token_manager.c $(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,rolling_summary,session/test_rolling_summary,$(LIBDIR)/session/rolling_summary.c $(LIBDIR)/session/session_manager.c $(LIBDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,model_tools,llm/test_model_tools,$(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,openai_streaming,llm/test_openai_streaming,$(SRCDIR)/network/streaming.c $(LIBDIR)/llm/providers/openai_provider.c $(LIBDIR)/llm/providers/anthropic_provider.c $(LIBDIR)/llm/providers/local_ai_provider.c $(SRCDIR)/network/api_common.c $(SRCDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,anthropic_streaming,llm/test_anthropic_streaming,$(SRCDIR)/network/streaming.c $(LIBDIR)/llm/providers/openai_provider.c $(LIBDIR)/llm/providers/anthropic_provider.c $(LIBDIR)/llm/providers/local_ai_provider.c $(SRCDIR)/network/api_common.c $(SRCDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,messages_array_bug,network/test_messages_array_bug,$(SRCDIR)/network/api_common.c $(SRCDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,openai_streaming,llm/test_openai_streaming,$(SRCDIR)/network/streaming.c $(LIBDIR)/llm/providers/openai_provider.c $(LIBDIR)/llm/providers/anthropic_provider.c $(LIBDIR)/llm/providers/local_ai_provider.c $(SRCDIR)/network/api_common.c $(LIBDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,anthropic_streaming,llm/test_anthropic_streaming,$(SRCDIR)/network/streaming.c $(LIBDIR)/llm/providers/openai_provider.c $(LIBDIR)/llm/providers/anthropic_provider.c $(LIBDIR)/llm/providers/local_ai_provider.c $(SRCDIR)/network/api_common.c $(LIBDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
+$(eval $(call def_test_mixed,messages_array_bug,network/test_messages_array_bug,$(SRCDIR)/network/api_common.c $(LIBDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,mcp_client,mcp/test_mcp_client,$(RALPH_CORE_DEPS) $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,subagent_tool,tools/test_subagent_tool,$(RALPH_CORE_DEPS) $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,incomplete_task_bug,core/test_incomplete_task_bug,$(RALPH_CORE_DEPS) $(COMPLEX_DEPS)))
@@ -304,8 +304,8 @@ $$(TEST_$(t)_TARGET): $$(TEST_$(t)_OBJECTS) $$(ALL_LIBS) ; \
 	$$(CXX) -o $$@ $$(TEST_$(t)_OBJECTS) $$(LIBS_STANDARD)))
 
 # test_output needs extra conversation_tracker object (not in its deps)
-$(TEST_output_TARGET): $(TEST_output_OBJECTS) $(SRCDIR)/session/conversation_tracker.o $(ALL_LIBS)
-	$(CXX) -o $@ $(TEST_output_OBJECTS) $(SRCDIR)/session/conversation_tracker.o $(LIBS_STANDARD)
+$(TEST_output_TARGET): $(TEST_output_OBJECTS) $(LIBDIR)/session/conversation_tracker.o $(ALL_LIBS)
+	$(CXX) -o $@ $(TEST_output_OBJECTS) $(LIBDIR)/session/conversation_tracker.o $(LIBS_STANDARD)
 
 # =============================================================================
 # PYTHON TESTS (need stdlib embedding)

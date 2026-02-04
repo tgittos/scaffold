@@ -5,7 +5,7 @@
 #include "http_client.h"
 #include "ui/output_formatter.h"
 #include "util/debug_output.h"
-#include "token_manager.h"
+#include "session/token_manager.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

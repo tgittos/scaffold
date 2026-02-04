@@ -1,6 +1,6 @@
 #include "context_enhancement.h"
 #include "ralph.h"
-#include "rolling_summary.h"
+#include "session/rolling_summary.h"
 #include "lib/tools/todo_tool.h"
 #include "lib/tools/memory_tool.h"
 #include "../utils/context_retriever.h"

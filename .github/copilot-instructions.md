@@ -49,7 +49,7 @@ ralph-python/
 │   │   └── models/         # Model-specific implementations (GPT, Claude, etc.)
 │   ├── tools/              # Tool system (25+ tools)
 │   ├── db/                 # Vector database (HNSWLIB backend)
-│   ├── session/            # Conversation tracking, token management
+│   ├── session/            # (migrated to lib/session/)
 │   ├── network/            # HTTP client (libcurl wrapper)
 │   ├── mcp/                # Model Context Protocol client
 │   ├── pdf/                # PDF extraction (pdfio)
@@ -72,7 +72,7 @@ ralph-python/
 | `src/core/ralph.c` | Core orchestration, LLM communication loop |
 | `src/tools/tools_system.c` | Tool registry and execution framework |
 | `src/llm/llm_provider.c` | Provider abstraction with URL-based detection |
-| `src/session/conversation_tracker.c` | Conversation history with vector DB persistence |
+| `lib/session/conversation_tracker.c` | Conversation history with vector DB persistence |
 | `src/db/vector_db.c` | Vector database operations |
 | `src/network/http_client.c` | HTTP client using libcurl |
 
