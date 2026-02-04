@@ -1,7 +1,7 @@
 #ifndef RESPONSE_PROCESSING_H
 #define RESPONSE_PROCESSING_H
 
-#include "ui/output_formatter.h"
+#include "../model_capabilities.h"
 
 // Named constants for thinking tags
 #define THINK_START_TAG "<think>"

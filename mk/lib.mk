@@ -60,7 +60,13 @@ LIB_LLM_SOURCES := \
     $(LIBDIR)/llm/providers/anthropic_provider.c \
     $(LIBDIR)/llm/providers/local_ai_provider.c \
     $(LIBDIR)/llm/providers/openai_embedding_provider.c \
-    $(LIBDIR)/llm/providers/local_embedding_provider.c
+    $(LIBDIR)/llm/providers/local_embedding_provider.c \
+    $(LIBDIR)/llm/models/response_processing.c \
+    $(LIBDIR)/llm/models/claude_model.c \
+    $(LIBDIR)/llm/models/gpt_model.c \
+    $(LIBDIR)/llm/models/qwen_model.c \
+    $(LIBDIR)/llm/models/deepseek_model.c \
+    $(LIBDIR)/llm/models/default_model.c
 
 # Services module (Phase 6 - Dependency Injection)
 LIB_SERVICES_SOURCES := $(LIBDIR)/services/services.c

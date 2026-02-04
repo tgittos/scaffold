@@ -17,17 +17,7 @@ Application-specific code that uses the library layer.
 - **`streaming_handler.c/h`** - Application-layer streaming orchestration and provider registry management
 - **`tool_executor.c/h`** - Iterative tool-calling state machine for executing tool workflows
 
-#### `src/llm/` - Language Model Integration
-
-##### `src/llm/models/` - Model-Specific Implementations
-- **`claude_model.c`** - Anthropic Claude model integration (200k context)
-- **`gpt_model.c`** - OpenAI GPT/O1/O4 model integration (128k context)
-- **`deepseek_model.c`** - DeepSeek model integration with thinking tags
-- **`qwen_model.c`** - Qwen model integration with thinking tags
-- **`default_model.c`** - Default/fallback model implementation (4k context)
-- **`response_processing.c/h`** - Thinking tag processing for model responses
-
-Note: LLM core functionality (providers, embeddings) has been migrated to `lib/llm/`.
+Note: The LLM integration layer has been fully migrated to `lib/llm/`. Model-specific implementations are in `lib/llm/models/` and providers are in `lib/llm/providers/`.
 
 #### `src/network/` - Network Communication
 - **`http_client.c/h`** - HTTP client implementation using libcurl (buffered and streaming)
@@ -338,7 +328,7 @@ Centralized configuration in `src/utils/config.c`:
 
 1. **Core Logic**: Start with `src/core/main.c` for application flow
 2. **Tool Development**: Add new tools in `lib/tools/` with corresponding tests
-3. **LLM Integration**: Extend providers in `lib/llm/providers/` or models in `src/llm/models/`
+3. **LLM Integration**: Extend providers in `lib/llm/providers/` or models in `lib/llm/models/`
 4. **Utilities**: Generic utilities go in `lib/util/`, application-specific in `src/utils/`
 5. **Testing**: Every module has corresponding tests in the `test/` directory structure
 

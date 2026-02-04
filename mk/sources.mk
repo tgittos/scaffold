@@ -68,14 +68,8 @@ MESSAGING_SOURCES := \
 # See mk/lib.mk for LIB_LLM_SOURCES.
 PROVIDER_SOURCES :=
 
-# Model implementations
-MODEL_SOURCES := \
-    $(SRCDIR)/llm/models/response_processing.c \
-    $(SRCDIR)/llm/models/qwen_model.c \
-    $(SRCDIR)/llm/models/deepseek_model.c \
-    $(SRCDIR)/llm/models/gpt_model.c \
-    $(SRCDIR)/llm/models/claude_model.c \
-    $(SRCDIR)/llm/models/default_model.c
+# Model implementations - migrated to lib/llm/models/. See mk/lib.mk for LIB_LLM_SOURCES.
+MODEL_SOURCES :=
 
 # Database - migrated to lib/db/. See mk/lib.mk for LIB_DB_SOURCES and LIB_DB_CPP_SOURCES.
 # PDF - migrated to lib/pdf/. See mk/lib.mk for LIB_PDF_SOURCES.

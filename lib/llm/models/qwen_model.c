@@ -1,11 +1,9 @@
-#include "lib/llm/model_capabilities.h"
-#include "ui/output_formatter.h"
+#include "../model_capabilities.h"
 #include "response_processing.h"
-#include "lib/tools/tools_system.h"
 
-// DeepSeek model capabilities
-static ModelCapabilities deepseek_model = {
-    .model_pattern = "deepseek",
+// Qwen model capabilities
+static ModelCapabilities qwen_model = {
+    .model_pattern = "qwen",
     .supports_thinking_tags = 1,
     .thinking_start_tag = THINK_START_TAG,
     .thinking_end_tag = THINK_END_TAG,
@@ -15,9 +13,9 @@ static ModelCapabilities deepseek_model = {
     .parse_tool_calls = parse_tool_calls,
     .format_tool_result_message = generate_single_tool_message,
     .format_assistant_tool_message = NULL,
-    .max_context_length = 128000
+    .max_context_length = 32768
 };
 
-int register_deepseek_models(ModelRegistry* registry) {
-    return register_model_capabilities(registry, &deepseek_model);
+int register_qwen_models(ModelRegistry* registry) {
+    return register_model_capabilities(registry, &qwen_model);
 }

@@ -1,5 +1,4 @@
-#include "lib/llm/model_capabilities.h"
-#include "ui/output_formatter.h"
+#include "../model_capabilities.h"
 #include "response_processing.h"
 
 // Default model capabilities

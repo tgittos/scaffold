@@ -12,23 +12,6 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 ---
 
-## Session 13: LLM Models
-
-**Move:** Model capability definitions.
-
-| File | Destination |
-|------|-------------|
-| `src/llm/models/response_processing.c/h` | `lib/llm/models/` |
-| `src/llm/models/claude_model.c` | `lib/llm/models/` |
-| `src/llm/models/gpt_model.c` | `lib/llm/models/` |
-| `src/llm/models/qwen_model.c` | `lib/llm/models/` |
-| `src/llm/models/deepseek_model.c` | `lib/llm/models/` |
-| `src/llm/models/default_model.c` | `lib/llm/models/` |
-
-**Verify:** `./scripts/build.sh && ./scripts/run_tests.sh model_tools`
-
----
-
 ## Session 14: Policy Core
 
 **Move:** Foundational policy utilities.
@@ -205,7 +188,7 @@ Session 11: LLM Embeddings (embeddings, embedding_provider, embeddings_service) 
     ↓
 Session 12: LLM Providers (openai, anthropic, local_ai, embedding providers) ✓ COMPLETE
     ↓
-Session 13: LLM Models
+Session 13: LLM Models (response_processing, claude/gpt/qwen/deepseek/default) ✓ COMPLETE
     ↓
 Session 14-16: Policy (depends on Tools for types)
     ↓
