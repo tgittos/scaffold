@@ -1,11 +1,11 @@
 #include "recap.h"
 #include "streaming_handler.h"
-#include "network/streaming.h"
-#include "lib/llm/llm_provider.h"
-#include "network/http_client.h"
-#include "ui/output_formatter.h"
-#include "util/debug_output.h"
-#include "session/token_manager.h"
+#include "../network/streaming.h"
+#include "../llm/llm_provider.h"
+#include "../network/http_client.h"
+#include "../ui/output_formatter.h"
+#include "../util/debug_output.h"
+#include "../session/token_manager.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

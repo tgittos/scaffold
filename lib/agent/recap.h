@@ -1,7 +1,7 @@
 #ifndef RECAP_H
 #define RECAP_H
 
-#include "ralph.h"
+#include "../../src/core/ralph.h"
 
 /**
  * Recap Generation Module

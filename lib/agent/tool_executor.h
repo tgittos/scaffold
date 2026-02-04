@@ -1,8 +1,8 @@
 #ifndef TOOL_EXECUTOR_H
 #define TOOL_EXECUTOR_H
 
-#include "ralph.h"
-#include "lib/tools/tools_system.h"
+#include "../../src/core/ralph.h"
+#include "../tools/tools_system.h"
 
 /**
  * Tool Executor Module

@@ -43,7 +43,13 @@ LIB_TOOLS_SOURCES := \
     $(LIBDIR)/tools/subagent_process.c
 
 # Agent module
-LIB_AGENT_SOURCES := $(LIBDIR)/agent/agent.c
+LIB_AGENT_SOURCES := \
+    $(LIBDIR)/agent/agent.c \
+    $(LIBDIR)/agent/async_executor.c \
+    $(LIBDIR)/agent/tool_executor.c \
+    $(LIBDIR)/agent/streaming_handler.c \
+    $(LIBDIR)/agent/context_enhancement.c \
+    $(LIBDIR)/agent/recap.c
 
 # LLM module
 LIB_LLM_SOURCES := \

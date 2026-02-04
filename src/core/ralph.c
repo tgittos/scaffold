@@ -1,8 +1,8 @@
 #include "ralph.h"
-#include "context_enhancement.h"
-#include "tool_executor.h"
-#include "streaming_handler.h"
-#include "recap.h"
+#include "lib/agent/context_enhancement.h"
+#include "lib/agent/tool_executor.h"
+#include "lib/agent/streaming_handler.h"
+#include "lib/agent/recap.h"
 #include "util/config.h"
 #include "ui/output_formatter.h"
 #include "ui/json_output.h"
@@ -25,7 +25,7 @@
 #include "lib/tools/messaging_tool.h"
 #include "lib/tools/builtin_tools.h"
 #include "lib/ipc/message_poller.h"
-#include "async_executor.h"
+#include "lib/agent/async_executor.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

@@ -3,12 +3,7 @@
 # Core application sources
 CORE_SOURCES := \
     $(SRCDIR)/core/main.c \
-    $(SRCDIR)/core/ralph.c \
-    $(SRCDIR)/core/async_executor.c \
-    $(SRCDIR)/core/tool_executor.c \
-    $(SRCDIR)/core/streaming_handler.c \
-    $(SRCDIR)/core/context_enhancement.c \
-    $(SRCDIR)/core/recap.c
+    $(SRCDIR)/core/ralph.c
 
 # Tool system (Python tools only; core tools in lib/tools/)
 TOOL_SOURCES := \
@@ -58,11 +53,11 @@ UTIL_DEPS := \
 
 RALPH_CORE_DEPS := \
     $(SRCDIR)/core/ralph.c \
-    $(SRCDIR)/core/async_executor.c \
-    $(SRCDIR)/core/tool_executor.c \
-    $(SRCDIR)/core/streaming_handler.c \
-    $(SRCDIR)/core/context_enhancement.c \
-    $(SRCDIR)/core/recap.c \
+    $(LIBDIR)/agent/async_executor.c \
+    $(LIBDIR)/agent/tool_executor.c \
+    $(LIBDIR)/agent/streaming_handler.c \
+    $(LIBDIR)/agent/context_enhancement.c \
+    $(LIBDIR)/agent/recap.c \
     $(LIBDIR)/ipc/pipe_notifier.c \
     $(LIBDIR)/policy/allowlist.c \
     $(LIBDIR)/policy/approval_gate.c \

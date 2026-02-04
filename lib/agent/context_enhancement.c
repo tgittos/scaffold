@@ -1,10 +1,10 @@
 #include "context_enhancement.h"
-#include "ralph.h"
-#include "session/rolling_summary.h"
-#include "lib/tools/todo_tool.h"
-#include "lib/tools/memory_tool.h"
-#include "util/context_retriever.h"
-#include "util/json_escape.h"
+#include "../../src/core/ralph.h"
+#include "../session/rolling_summary.h"
+#include "../tools/todo_tool.h"
+#include "../tools/memory_tool.h"
+#include "../util/context_retriever.h"
+#include "../util/json_escape.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

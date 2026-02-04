@@ -12,37 +12,6 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 ---
 
-## Session 20: Core Module
-
-**Move:** Core agent execution infrastructure.
-
-| File | Destination |
-|------|-------------|
-| `src/core/async_executor.c/h` | `lib/agent/` |
-| `src/core/tool_executor.c/h` | `lib/agent/` |
-| `src/core/streaming_handler.c/h` | `lib/agent/` |
-| `src/core/context_enhancement.c/h` | `lib/agent/` |
-| `src/core/recap.c/h` | `lib/agent/` |
-
-**Changes:**
-1. Move files to `lib/agent/`
-2. Update includes in moved files (relative paths within lib/)
-3. Update `mk/lib.mk`: Add to `LIB_AGENT_SOURCES`:
-   - `$(LIBDIR)/agent/async_executor.c`
-   - `$(LIBDIR)/agent/tool_executor.c`
-   - `$(LIBDIR)/agent/streaming_handler.c`
-   - `$(LIBDIR)/agent/context_enhancement.c`
-   - `$(LIBDIR)/agent/recap.c`
-4. Update `mk/sources.mk`: Update `CORE_SOURCES` to only contain:
-   - `$(SRCDIR)/core/main.c`
-   - `$(SRCDIR)/core/ralph.c`
-5. Update `mk/sources.mk`: Update `RALPH_CORE_DEPS` to use `$(LIBDIR)/agent/` paths
-6. Update includes in `src/` files that referenced moved headers
-
-**Verify:** `./scripts/build.sh clean && ./scripts/build.sh && ./scripts/run_tests.sh ralph`
-
----
-
 ## Session 21: Final Cleanup
 
 **Remaining in src/ (CLI entry point and proprietary):**
@@ -174,7 +143,7 @@ Session 18: Utils Module (config, prompt_loader, ralph_home, context_retriever, 
     ↓
 Session 19: Messaging Module (notification_formatter) ✓ COMPLETE
     ↓
-Session 20: Core Module (async_executor, tool_executor, streaming_handler, context_enhancement, recap)
+Session 20: Core Module (async_executor, tool_executor, streaming_handler, context_enhancement, recap) ✓ COMPLETE
     ↓
 Session 21: Final Cleanup + Namespace Rename
 ```

@@ -6,7 +6,7 @@
 
 #include "repl.h"
 #include "../util/interrupt.h"
-#include "../../src/core/recap.h"
+#include "../agent/recap.h"
 #include "../util/debug_output.h"
 #include "output_formatter.h"
 #include "json_output.h"

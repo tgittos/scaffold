@@ -1,7 +1,7 @@
 #ifndef CONTEXT_ENHANCEMENT_H
 #define CONTEXT_ENHANCEMENT_H
 
-#include "ralph.h"
+#include "../../src/core/ralph.h"
 
 /**
  * Build a complete prompt with todo state, memory recall, and context retrieval.

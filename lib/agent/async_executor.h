@@ -1,7 +1,7 @@
 #ifndef ASYNC_EXECUTOR_H
 #define ASYNC_EXECUTOR_H
 
-#include "ralph.h"
+#include "../../src/core/ralph.h"
 
 /**
  * Async executor module for non-blocking message processing.

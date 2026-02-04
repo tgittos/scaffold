@@ -1,25 +1,25 @@
 #include "tool_executor.h"
-#include "ralph.h"
-#include "util/interrupt.h"
-#include "ui/output_formatter.h"
-#include "ui/json_output.h"
+#include "../../src/core/ralph.h"
+#include "../util/interrupt.h"
+#include "../ui/output_formatter.h"
+#include "../ui/json_output.h"
 #include <cJSON.h>
-#include "util/debug_output.h"
-#include "network/api_error.h"
-#include "session/token_manager.h"
-#include "lib/llm/model_capabilities.h"
-#include "lib/mcp/mcp_client.h"
-#include "util/ptrarray.h"
-#include "ui/spinner.h"
-#include "policy/approval_gate.h"
-#include "policy/protected_files.h"
-#include "policy/tool_args.h"
-#include "policy/verified_file_context.h"
-#include "policy/pattern_generator.h"
+#include "../util/debug_output.h"
+#include "../network/api_error.h"
+#include "../session/token_manager.h"
+#include "../llm/model_capabilities.h"
+#include "../mcp/mcp_client.h"
+#include "../util/ptrarray.h"
+#include "../ui/spinner.h"
+#include "../policy/approval_gate.h"
+#include "../policy/protected_files.h"
+#include "../policy/tool_args.h"
+#include "../policy/verified_file_context.h"
+#include "../policy/pattern_generator.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "util/json_escape.h"
+#include "../util/json_escape.h"
 
 static int is_file_write_tool(const char *tool_name) {
     if (tool_name == NULL) return 0;
