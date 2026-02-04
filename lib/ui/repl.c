@@ -14,7 +14,7 @@
 #include "memory_commands.h"
 #include "../tools/subagent_tool.h"
 #include "../ipc/message_poller.h"
-#include "../../src/messaging/notification_formatter.h"
+#include "../ipc/notification_formatter.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

@@ -12,27 +12,6 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 ---
 
-## Session 19: Messaging Module
-
-**Move:** Notification formatting for IPC.
-
-| File | Destination |
-|------|-------------|
-| `src/messaging/notification_formatter.c/h` | `lib/ipc/` |
-
-**Changes:**
-1. Move files to `lib/ipc/`
-2. Update includes in moved files (relative paths within lib/)
-3. Update `mk/lib.mk`: Add to `LIB_IPC_SOURCES`:
-   - `$(LIBDIR)/ipc/notification_formatter.c`
-4. Update `mk/sources.mk`: Remove `MESSAGING_SOURCES` section entirely
-5. Update `mk/sources.mk`: Update `RALPH_CORE_DEPS` - remove `$(MESSAGING_SOURCES)`, add explicit path
-6. Update includes in `src/` files that referenced moved headers
-
-**Verify:** `./scripts/build.sh clean && ./scripts/build.sh && ./scripts/run_tests.sh notification_formatter`
-
----
-
 ## Session 20: Core Module
 
 **Move:** Core agent execution infrastructure.
@@ -193,7 +172,7 @@ Session 17: MCP Module (mcp_client, mcp_transport, mcp_transport_stdio, mcp_tran
     ↓
 Session 18: Utils Module (config, prompt_loader, ralph_home, context_retriever, pdf_processor) ✓ COMPLETE
     ↓
-Session 19: Messaging Module (notification_formatter)
+Session 19: Messaging Module (notification_formatter) ✓ COMPLETE
     ↓
 Session 20: Core Module (async_executor, tool_executor, streaming_handler, context_enhancement, recap)
     ↓

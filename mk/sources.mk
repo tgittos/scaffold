@@ -15,18 +15,12 @@ TOOL_SOURCES := \
     $(SRCDIR)/tools/python_tool.c \
     $(SRCDIR)/tools/python_tool_files.c
 
-# MCP system (in lib/mcp/)
-
-# Messaging system
-MESSAGING_SOURCES := \
-    $(SRCDIR)/messaging/notification_formatter.c
-
 # LLM (in lib/llm/)
 PROVIDER_SOURCES :=
 MODEL_SOURCES :=
 
 # Combined sources
-C_SOURCES := $(CORE_SOURCES) $(TOOL_SOURCES) $(MESSAGING_SOURCES) \
+C_SOURCES := $(CORE_SOURCES) $(TOOL_SOURCES) \
     $(PROVIDER_SOURCES) $(MODEL_SOURCES)
 CPP_SOURCES :=
 SOURCES := $(C_SOURCES) $(CPP_SOURCES)
@@ -103,7 +97,7 @@ RALPH_CORE_DEPS := \
     $(LIBDIR)/mcp/mcp_transport_stdio.c \
     $(LIBDIR)/mcp/mcp_transport_http.c \
     $(LIBDIR)/ipc/message_poller.c \
-    $(MESSAGING_SOURCES)
+    $(LIBDIR)/ipc/notification_formatter.c
 
 # Verified file I/O dependencies (needed by Python tools for TOCTOU-safe access)
 # Full set including atomic_file.c and path_normalize.c

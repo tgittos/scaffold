@@ -1,6 +1,6 @@
 #include "notification_formatter.h"
-#include "ipc/message_store.h"
-#include "ui/terminal.h"
+#include "message_store.h"
+#include "../ui/terminal.h"
 #include <cJSON.h>
 #include <stdlib.h>
 #include <string.h>

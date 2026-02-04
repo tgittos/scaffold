@@ -965,8 +965,6 @@ src/
 │       ├── deepseek_model.c
 │       ├── default_model.c
 │       └── response_processing.c/h  # Thinking tag processing
-├── messaging/              # Inter-agent messaging
-│   └── notification_formatter.c/h # LLM notification formatting
 ├── network/                # Network layer
 │   ├── http_client.c/h     # HTTP client (cURL wrapper)
 │   ├── api_common.c/h      # API payload building
@@ -1049,7 +1047,8 @@ lib/
 │   ├── pipe_notifier.c/h   # Thread-safe pipe-based notification
 │   ├── agent_identity.c/h  # Thread-safe agent identity management
 │   ├── message_store.c/h   # SQLite-backed direct and pub/sub messaging
-│   └── message_poller.c/h  # Background message polling
+│   ├── message_poller.c/h  # Background message polling
+│   └── notification_formatter.c/h # LLM notification formatting
 ├── ui/                     # User interface components
 │   ├── terminal.c/h        # Terminal abstraction
 │   ├── spinner.c/h         # Tool execution spinner feedback

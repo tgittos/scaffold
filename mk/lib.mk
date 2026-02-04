@@ -12,7 +12,8 @@ LIB_IPC_SOURCES := \
     $(LIBDIR)/ipc/pipe_notifier.c \
     $(LIBDIR)/ipc/agent_identity.c \
     $(LIBDIR)/ipc/message_store.c \
-    $(LIBDIR)/ipc/message_poller.c
+    $(LIBDIR)/ipc/message_poller.c \
+    $(LIBDIR)/ipc/notification_formatter.c
 
 # UI module
 LIB_UI_SOURCES := \

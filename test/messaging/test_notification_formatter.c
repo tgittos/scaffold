@@ -1,5 +1,5 @@
 #include "unity.h"
-#include "messaging/notification_formatter.h"
+#include "ipc/notification_formatter.h"
 #include "ipc/message_store.h"
 #include "util/ralph_home.h"
 #include <stdlib.h>

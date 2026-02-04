@@ -19,9 +19,6 @@ Application-specific code that uses the library layer.
 
 Note: The LLM integration layer has been fully migrated to `lib/llm/`. Model-specific implementations are in `lib/llm/models/` and providers are in `lib/llm/providers/`.
 
-#### `src/messaging/` - Inter-Agent Messaging
-- **`notification_formatter.c/h`** - Formats messages for LLM context injection
-
 #### `src/db/` - Database Layer
 - **`vector_db.c/h`** - Core vector database with HNSWLIB backend
 - **`vector_db_service.c/h`** - Thread-safe vector database singleton service
@@ -119,6 +116,7 @@ Generic, CLI-independent components that can be reused.
 - **`agent_identity.c/h`** - Thread-safe agent identity management (ID, parent ID, subagent status)
 - **`message_store.c/h`** - SQLite-backed inter-agent messaging storage (direct messages, pub/sub channels)
 - **`message_poller.c/h`** - Background thread for polling new messages with PipeNotifier integration
+- **`notification_formatter.c/h`** - Formats messages for LLM context injection
 
 #### `lib/ui/` - User Interface Components
 - **`terminal.c/h`** - Terminal abstraction with colors, ANSI escapes, and layout helpers
