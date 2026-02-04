@@ -10,8 +10,8 @@
  */
 
 #include "unity.h"
-#include "approval_gate.h"
-#include "subagent_approval.h"
+#include "policy/approval_gate.h"
+#include "policy/subagent_approval.h"
 
 #include <fcntl.h>
 #include <string.h>

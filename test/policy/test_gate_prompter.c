@@ -7,7 +7,7 @@
  */
 
 #include "unity/unity.h"
-#include "../src/policy/gate_prompter.h"
+#include "policy/gate_prompter.h"
 
 void setUp(void) {}
 void tearDown(void) {}

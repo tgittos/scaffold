@@ -1,7 +1,7 @@
 #include "approval_gate.h"
 #include "gate_prompter.h"
 #include "pattern_generator.h"
-#include "policy/shell_parser.h"
+#include "shell_parser.h"
 #include "subagent_approval.h"
 #include "tool_args.h"
 
@@ -15,9 +15,9 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "../tools/python_tool_files.h"
-#include "lib/tools/subagent_tool.h"
-#include "util/debug_output.h"
+#include "../../src/tools/python_tool_files.h"
+#include "../tools/subagent_tool.h"
+#include "../util/debug_output.h"
 
 static const GateAction DEFAULT_CATEGORY_ACTIONS[GATE_CATEGORY_COUNT] = {
     [GATE_CATEGORY_FILE_WRITE] = GATE_ACTION_GATE,

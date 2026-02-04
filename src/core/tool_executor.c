@@ -11,11 +11,11 @@
 #include "../mcp/mcp_client.h"
 #include "util/ptrarray.h"
 #include "ui/spinner.h"
-#include "../policy/approval_gate.h"
+#include "policy/approval_gate.h"
 #include "policy/protected_files.h"
-#include "../policy/tool_args.h"
+#include "policy/tool_args.h"
 #include "policy/verified_file_context.h"
-#include "../policy/pattern_generator.h"
+#include "policy/pattern_generator.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

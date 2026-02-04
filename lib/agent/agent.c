@@ -13,7 +13,7 @@
 #include "../ui/json_output.h"
 #include "../../src/utils/ralph_home.h"
 #include "../ui/spinner.h"
-#include "../../src/policy/approval_gate.h"
+#include "../policy/approval_gate.h"
 #include "../tools/subagent_tool.h"
 #include "../ui/memory_commands.h"
 #include "../ipc/message_poller.h"

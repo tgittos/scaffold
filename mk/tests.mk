@@ -47,23 +47,23 @@ $(eval $(call def_test,darray,test_darray,))
 $(eval $(call def_test,ptrarray,test_ptrarray,))
 $(eval $(call def_test,rate_limiter,policy/test_rate_limiter,$(LIBDIR)/policy/rate_limiter.c))
 $(eval $(call def_test,allowlist,policy/test_allowlist,$(LIBDIR)/policy/allowlist.c $(LIBDIR)/policy/shell_parser.c $(LIBDIR)/policy/shell_parser_cmd.c $(LIBDIR)/policy/shell_parser_ps.c))
-$(eval $(call def_test,tool_args,test_tool_args,$(SRCDIR)/policy/tool_args.c))
-$(eval $(call def_test,gate_prompter,policy/test_gate_prompter,$(SRCDIR)/policy/gate_prompter.c))
+$(eval $(call def_test,tool_args,test_tool_args,$(LIBDIR)/policy/tool_args.c))
+$(eval $(call def_test,gate_prompter,policy/test_gate_prompter,$(LIBDIR)/policy/gate_prompter.c))
 
 # Gate dependencies (used by multiple gate-related tests)
 GATE_DEPS := \
     $(LIBDIR)/policy/allowlist.c \
-    $(SRCDIR)/policy/approval_gate.c \
-    $(SRCDIR)/policy/approval_errors.c \
+    $(LIBDIR)/policy/approval_gate.c \
+    $(LIBDIR)/policy/approval_errors.c \
     $(LIBDIR)/policy/atomic_file.c \
-    $(SRCDIR)/policy/gate_prompter.c \
-    $(SRCDIR)/policy/pattern_generator.c \
+    $(LIBDIR)/policy/gate_prompter.c \
+    $(LIBDIR)/policy/pattern_generator.c \
     $(LIBDIR)/policy/rate_limiter.c \
     $(LIBDIR)/policy/shell_parser.c \
     $(LIBDIR)/policy/shell_parser_cmd.c \
     $(LIBDIR)/policy/shell_parser_ps.c \
-    $(SRCDIR)/policy/subagent_approval.c \
-    $(SRCDIR)/policy/tool_args.c \
+    $(LIBDIR)/policy/subagent_approval.c \
+    $(LIBDIR)/policy/tool_args.c \
     $(LIBDIR)/util/debug_output.c \
     $(SRCDIR)/utils/ralph_home.c \
     $(LIBDIR)/util/json_escape.c \

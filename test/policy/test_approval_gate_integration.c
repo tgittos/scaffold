@@ -16,7 +16,7 @@
  */
 
 #include "../test/unity/unity.h"
-#include "../src/policy/approval_gate.h"
+#include "policy/approval_gate.h"
 #include "policy/protected_files.h"
 #include "policy/rate_limiter.h"
 #include "../src/utils/ralph_home.h"

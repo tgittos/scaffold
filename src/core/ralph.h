@@ -11,7 +11,7 @@
 #include "../mcp/mcp_client.h"
 #include "lib/tools/subagent_tool.h"
 #include "util/uuid_utils.h"
-#include "../policy/approval_gate.h"
+#include "policy/approval_gate.h"
 #include "ipc/message_poller.h"
 
 typedef enum {

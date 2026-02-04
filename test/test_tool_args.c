@@ -3,7 +3,7 @@
  */
 
 #include "unity/unity.h"
-#include "../src/policy/tool_args.h"
+#include "policy/tool_args.h"
 
 #include <stdlib.h>
 

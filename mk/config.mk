@@ -75,7 +75,7 @@ INCLUDES := -I. -I$(CURL_DIR)/include -I$(MBEDTLS_DIR)/include -I$(HNSWLIB_DIR) 
     -I$(PDFIO_DIR) -I$(ZLIB_DIR) -I$(CJSON_DIR) -I$(READLINE_DIR) \
     -I$(READLINE_DIR)/readline -I$(NCURSES_DIR)/include -I$(SQLITE_DIR) \
     -I$(OSSP_UUID_DIR) -I$(PYTHON_INCLUDE) \
-    -I$(SRCDIR) -I$(SRCDIR)/core -I$(SRCDIR)/policy -I$(SRCDIR)/network -I$(SRCDIR)/llm \
+    -I$(SRCDIR) -I$(SRCDIR)/core -I$(SRCDIR)/network -I$(SRCDIR)/llm \
     -I$(SRCDIR)/session -I$(SRCDIR)/tools -I$(SRCDIR)/utils -I$(SRCDIR)/db \
     -I$(SRCDIR)/cli
 

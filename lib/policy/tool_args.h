@@ -11,7 +11,7 @@
  * pattern_generator.c, and other policy modules.
  */
 
-#include "lib/tools/tools_system.h"  /* For ToolCall */
+#include "../tools/tools_system.h"  /* For ToolCall */
 
 /**
  * Get a string argument by key from a tool call's arguments JSON.

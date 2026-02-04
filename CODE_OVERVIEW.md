@@ -50,7 +50,7 @@ Note: The LLM integration layer has been fully migrated to `lib/llm/`. Model-spe
 - **`task_store.c/h`** - SQLite-based persistent task storage with hierarchies and dependencies
 - **`hnswlib_wrapper.cpp/h`** - C++ wrapper for HNSW vector indexing
 
-#### `src/policy/` - Approval Gate System
+#### `lib/policy/` - Approval Gate System
 
 ##### Core Components
 - **`approval_gate.c/h`** - Core orchestration: category lookup, gate checking, config management
@@ -303,7 +303,7 @@ The `src/session/` directory handles conversation lifecycle:
 - **Compactor**: Intelligent conversation compression preserving tool sequences
 
 ### 5. Approval Gate System
-The `src/policy/` directory implements security-aware tool execution control:
+The `lib/policy/` directory implements security-aware tool execution control:
 - **Category-Based Gates**: Tools categorized as file_read, file_write, shell, network, memory, subagent, mcp, python
 - **Allowlist Matching**: Regex patterns for paths/URLs, shell command prefix matching
 - **Protected Files**: Hard-block access to config files via basename, glob, and inode detection

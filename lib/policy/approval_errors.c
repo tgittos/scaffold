@@ -6,7 +6,7 @@
  */
 
 #include "approval_gate.h"
-#include "util/json_escape.h"
+#include "../util/json_escape.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

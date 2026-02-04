@@ -24,15 +24,6 @@ CORE_SOURCES := \
     $(SRCDIR)/session/session_manager.c \
     $(SRCDIR)/session/token_manager.c
 
-# Policy module (approval gates, protected files)
-POLICY_SOURCES := \
-    $(SRCDIR)/policy/approval_gate.c \
-    $(SRCDIR)/policy/approval_errors.c \
-    $(SRCDIR)/policy/gate_prompter.c \
-    $(SRCDIR)/policy/pattern_generator.c \
-    $(SRCDIR)/policy/subagent_approval.c \
-    $(SRCDIR)/policy/tool_args.c
-
 # Tool system (Python tools only; core tools in lib/tools/)
 TOOL_SOURCES := \
     $(SRCDIR)/tools/python_tool.c \
@@ -58,7 +49,7 @@ UTILS_EXTRA_SOURCES := \
     $(SRCDIR)/utils/ralph_home.c
 
 # Combined sources
-C_SOURCES := $(CORE_SOURCES) $(POLICY_SOURCES) $(TOOL_SOURCES) $(MCP_SOURCES) $(MESSAGING_SOURCES) \
+C_SOURCES := $(CORE_SOURCES) $(TOOL_SOURCES) $(MCP_SOURCES) $(MESSAGING_SOURCES) \
     $(PROVIDER_SOURCES) $(MODEL_SOURCES) $(UTILS_EXTRA_SOURCES)
 CPP_SOURCES :=
 SOURCES := $(C_SOURCES) $(CPP_SOURCES)
@@ -103,19 +94,19 @@ RALPH_CORE_DEPS := \
     $(SRCDIR)/core/recap.c \
     $(LIBDIR)/ipc/pipe_notifier.c \
     $(LIBDIR)/policy/allowlist.c \
-    $(SRCDIR)/policy/approval_gate.c \
-    $(SRCDIR)/policy/approval_errors.c \
-    $(SRCDIR)/policy/subagent_approval.c \
+    $(LIBDIR)/policy/approval_gate.c \
+    $(LIBDIR)/policy/approval_errors.c \
+    $(LIBDIR)/policy/subagent_approval.c \
     $(LIBDIR)/policy/atomic_file.c \
-    $(SRCDIR)/policy/gate_prompter.c \
+    $(LIBDIR)/policy/gate_prompter.c \
     $(LIBDIR)/policy/path_normalize.c \
-    $(SRCDIR)/policy/pattern_generator.c \
+    $(LIBDIR)/policy/pattern_generator.c \
     $(LIBDIR)/policy/protected_files.c \
     $(LIBDIR)/policy/rate_limiter.c \
     $(LIBDIR)/policy/shell_parser.c \
     $(LIBDIR)/policy/shell_parser_cmd.c \
     $(LIBDIR)/policy/shell_parser_ps.c \
-    $(SRCDIR)/policy/tool_args.c \
+    $(LIBDIR)/policy/tool_args.c \
     $(LIBDIR)/policy/verified_file_context.c \
     $(LIBDIR)/policy/verified_file_python.c \
     $(SRCDIR)/utils/prompt_loader.c \

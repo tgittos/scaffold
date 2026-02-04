@@ -11,7 +11,7 @@
  * This module provides an opaque type that owns terminal state.
  */
 
-#include "lib/tools/tools_system.h"  /* For ToolCall */
+#include "../tools/tools_system.h"  /* For ToolCall */
 
 /**
  * Opaque gate prompter type.

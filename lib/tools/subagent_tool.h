@@ -3,7 +3,7 @@
 
 #include "tools_system.h"
 #include "../util/darray.h"
-#include "../../src/policy/approval_gate.h"
+#include "../policy/approval_gate.h"
 #include <sys/types.h>
 #include <time.h>
 

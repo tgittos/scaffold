@@ -10,7 +10,7 @@
  * This module is part of the policy subsystem and is used by approval_gate.c
  */
 
-#include "lib/tools/tools_system.h"  /* For ToolCall */
+#include "../tools/tools_system.h"  /* For ToolCall */
 
 /* Forward declaration - ApprovalGateConfig is a typedef so we use struct tag */
 typedef struct ApprovalGateConfig ApprovalGateConfig;

@@ -12,24 +12,7 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 ---
 
-## Next: Policy Gates
-
-**Move:** Approval gate system (security-critical).
-
-| File | Destination |
-|------|-------------|
-| `src/policy/tool_args.c/h` | `lib/policy/` |
-| `src/policy/pattern_generator.c/h` | `lib/policy/` |
-| `src/policy/gate_prompter.c/h` | `lib/policy/` |
-| `src/policy/approval_gate.c/h` | `lib/policy/` |
-| `src/policy/approval_errors.c` | `lib/policy/` |
-| `src/policy/subagent_approval.c/h` | `lib/policy/` |
-
-**Verify:** `./scripts/build.sh && ./scripts/run_tests.sh approval_gate`
-
----
-
-## Session Module
+## Session 15: Session Module
 
 **Move:** Conversation and session management.
 
@@ -42,14 +25,24 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 | `src/session/session_manager.c/h` | `lib/session/` |
 
 **Changes:**
-1. Create `lib/session/` directory
-2. Update `mk/lib.mk`: Add to `LIB_SESSION_SOURCES`
+1. Move files to `lib/session/` (directory already exists)
+2. Update includes in moved files (relative paths within lib/)
+3. Update `mk/lib.mk`: Add to `LIB_SESSION_SOURCES`:
+   - `$(LIBDIR)/session/token_manager.c`
+   - `$(LIBDIR)/session/conversation_tracker.c`
+   - `$(LIBDIR)/session/conversation_compactor.c`
+   - `$(LIBDIR)/session/rolling_summary.c`
+   - `$(LIBDIR)/session/session_manager.c`
+4. Update `mk/sources.mk`: Remove session files from `CORE_SOURCES`
+5. Update `mk/sources.mk`: Update `RALPH_CORE_DEPS` to use `$(LIBDIR)/session/` paths
+6. Update `mk/sources.mk`: Update `CONV_DEPS` to use `$(LIBDIR)/session/` paths
+7. Update includes in `src/` files that referenced moved headers
 
-**Verify:** `./scripts/build.sh && ./scripts/run_tests.sh conversation_tracker`
+**Verify:** `./scripts/build.sh clean && ./scripts/build.sh && ./scripts/run_tests.sh conversation_tracker`
 
 ---
 
-## Network Module
+## Session 16: Network Module
 
 **Move:** HTTP client and API communication layer.
 
@@ -63,13 +56,25 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 **Changes:**
 1. Create `lib/network/` directory
-2. Update `mk/lib.mk`: Add `LIB_NETWORK_SOURCES`
+2. Move files to `lib/network/`
+3. Update includes in moved files (relative paths within lib/)
+4. Update `mk/lib.mk`: Add new `LIB_NETWORK_SOURCES` section:
+   - `$(LIBDIR)/network/http_client.c`
+   - `$(LIBDIR)/network/api_common.c`
+   - `$(LIBDIR)/network/api_error.c`
+   - `$(LIBDIR)/network/streaming.c`
+   - `$(LIBDIR)/network/embedded_cacert.c`
+5. Update `mk/lib.mk`: Add `$(LIB_NETWORK_SOURCES)` to `LIB_C_SOURCES`
+6. Update `mk/sources.mk`: Remove network files from `CORE_SOURCES`
+7. Update `mk/sources.mk`: Update `NETWORK_DEPS` to use `$(LIBDIR)/network/` paths
+8. Update `mk/sources.mk`: Update `RALPH_CORE_DEPS` to use `$(LIBDIR)/network/` paths
+9. Update includes in `src/` files that referenced moved headers
 
-**Verify:** `./scripts/build.sh && ./scripts/run_tests.sh http`
+**Verify:** `./scripts/build.sh clean && ./scripts/build.sh && ./scripts/run_tests.sh http`
 
 ---
 
-## MCP Module
+## Session 17: MCP Module
 
 **Move:** Model Context Protocol plugin system.
 
@@ -82,13 +87,23 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 **Changes:**
 1. Create `lib/mcp/` directory
-2. Update `mk/lib.mk`: Add `LIB_MCP_SOURCES`
+2. Move files to `lib/mcp/`
+3. Update includes in moved files (relative paths within lib/)
+4. Update `mk/lib.mk`: Add new `LIB_MCP_SOURCES` section:
+   - `$(LIBDIR)/mcp/mcp_client.c`
+   - `$(LIBDIR)/mcp/mcp_transport.c`
+   - `$(LIBDIR)/mcp/mcp_transport_stdio.c`
+   - `$(LIBDIR)/mcp/mcp_transport_http.c`
+5. Update `mk/lib.mk`: Add `$(LIB_MCP_SOURCES)` to `LIB_C_SOURCES`
+6. Update `mk/sources.mk`: Remove `MCP_SOURCES` section entirely
+7. Update `mk/sources.mk`: Update `RALPH_CORE_DEPS` to use `$(LIBDIR)/mcp/` paths
+8. Update includes in `src/` files that referenced moved headers
 
-**Verify:** `./scripts/build.sh && ./scripts/run_tests.sh mcp_client`
+**Verify:** `./scripts/build.sh clean && ./scripts/build.sh && ./scripts/run_tests.sh mcp_client`
 
 ---
 
-## Utils Module
+## Session 18: Utils Module
 
 **Move:** Core utilities needed by the agent.
 
@@ -101,13 +116,27 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 | `src/utils/pdf_processor.c/h` | `lib/util/` |
 
 **Changes:**
-1. Update `mk/lib.mk`: Add to `LIB_UTIL_SOURCES`
+1. Move files to `lib/util/`
+2. Update includes in moved files (relative paths within lib/)
+3. Update `mk/lib.mk`: Add to `LIB_UTIL_SOURCES`:
+   - `$(LIBDIR)/util/config.c`
+   - `$(LIBDIR)/util/prompt_loader.c`
+   - `$(LIBDIR)/util/ralph_home.c`
+   - `$(LIBDIR)/util/context_retriever.c`
+   - `$(LIBDIR)/util/pdf_processor.c`
+4. Update `mk/sources.mk`: Remove utils files from `CORE_SOURCES`
+5. Update `mk/sources.mk`: Remove `UTILS_EXTRA_SOURCES` section entirely
+6. Update `mk/sources.mk`: Update `UTIL_DEPS` to use `$(LIBDIR)/util/` paths
+7. Update `mk/sources.mk`: Update `RALPH_CORE_DEPS` to use `$(LIBDIR)/util/` paths
+8. Update `mk/sources.mk`: Update `CONV_DEPS` to use `$(LIBDIR)/util/` paths
+9. Update `mk/sources.mk`: Update `COMPLEX_DEPS` to use `$(LIBDIR)/util/` paths
+10. Update includes in `src/` files that referenced moved headers
 
-**Verify:** `./scripts/build.sh && ./scripts/run_tests.sh config`
+**Verify:** `./scripts/build.sh clean && ./scripts/build.sh && ./scripts/run_tests.sh config`
 
 ---
 
-## Messaging Module
+## Session 19: Messaging Module
 
 **Move:** Notification formatting for IPC.
 
@@ -116,13 +145,19 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 | `src/messaging/notification_formatter.c/h` | `lib/ipc/` |
 
 **Changes:**
-1. Update `mk/lib.mk`: Add to `LIB_IPC_SOURCES`
+1. Move files to `lib/ipc/`
+2. Update includes in moved files (relative paths within lib/)
+3. Update `mk/lib.mk`: Add to `LIB_IPC_SOURCES`:
+   - `$(LIBDIR)/ipc/notification_formatter.c`
+4. Update `mk/sources.mk`: Remove `MESSAGING_SOURCES` section entirely
+5. Update `mk/sources.mk`: Update `RALPH_CORE_DEPS` - remove `$(MESSAGING_SOURCES)`, add explicit path
+6. Update includes in `src/` files that referenced moved headers
 
-**Verify:** `./scripts/build.sh && ./scripts/run_tests.sh notification_formatter`
+**Verify:** `./scripts/build.sh clean && ./scripts/build.sh && ./scripts/run_tests.sh notification_formatter`
 
 ---
 
-## Core Module
+## Session 20: Core Module
 
 **Move:** Core agent execution infrastructure.
 
@@ -135,13 +170,25 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 | `src/core/recap.c/h` | `lib/agent/` |
 
 **Changes:**
-1. Update `mk/lib.mk`: Add to `LIB_AGENT_SOURCES`
+1. Move files to `lib/agent/`
+2. Update includes in moved files (relative paths within lib/)
+3. Update `mk/lib.mk`: Add to `LIB_AGENT_SOURCES`:
+   - `$(LIBDIR)/agent/async_executor.c`
+   - `$(LIBDIR)/agent/tool_executor.c`
+   - `$(LIBDIR)/agent/streaming_handler.c`
+   - `$(LIBDIR)/agent/context_enhancement.c`
+   - `$(LIBDIR)/agent/recap.c`
+4. Update `mk/sources.mk`: Update `CORE_SOURCES` to only contain:
+   - `$(SRCDIR)/core/main.c`
+   - `$(SRCDIR)/core/ralph.c`
+5. Update `mk/sources.mk`: Update `RALPH_CORE_DEPS` to use `$(LIBDIR)/agent/` paths
+6. Update includes in `src/` files that referenced moved headers
 
-**Verify:** `./scripts/build.sh && ./scripts/run_tests.sh ralph`
+**Verify:** `./scripts/build.sh clean && ./scripts/build.sh && ./scripts/run_tests.sh ralph`
 
 ---
 
-## Final Cleanup
+## Session 21: Final Cleanup
 
 **Remaining in src/ (CLI entry point and proprietary):**
 - `src/core/main.c` - CLI entry point
@@ -151,9 +198,14 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 **Tasks:**
 1. Verify all core agent functionality is in lib/
-2. Update `lib/ralph.h` as comprehensive public API
-3. Update `ARCHITECTURE.md` and `CODE_OVERVIEW.md`
-4. Final verification: `./scripts/build.sh && ./scripts/run_tests.sh && make check-valgrind`
+2. Verify `mk/sources.mk` only references:
+   - `src/core/main.c`
+   - `src/core/ralph.c`
+   - `src/tools/python_tool.c`
+   - `src/tools/python_tool_files.c`
+3. Update `lib/ralph.h` as comprehensive public API
+4. Update `ARCHITECTURE.md` and `CODE_OVERVIEW.md`
+5. Final verification: `./scripts/build.sh clean && ./scripts/build.sh && ./scripts/run_tests.sh && make check-valgrind`
 
 **Namespace Rename:** Remove `ralph_` prefix from lib/ identifiers (73 total) and rename public header.
 
@@ -255,21 +307,21 @@ Policy Core (rate_limiter, allowlist, shell_parser) ✓ COMPLETE
     ↓
 Policy Advanced (path_normalize, protected_files, atomic_file, verified_file) ✓ COMPLETE
     ↓
-Policy Gates (approval_gate, tool_args, pattern_generator, gate_prompter, subagent_approval)
+Session 14: Policy Gates (tool_args, pattern_generator, gate_prompter, approval_gate, approval_errors, subagent_approval) ✓ COMPLETE
     ↓
-Session Module (token_manager, conversation_tracker, compactor, rolling_summary, session_manager)
+Session 15: Session Module (token_manager, conversation_tracker, conversation_compactor, rolling_summary, session_manager)
     ↓
-Network Module (http_client, api_common, api_error, streaming, embedded_cacert)
+Session 16: Network Module (http_client, api_common, api_error, streaming, embedded_cacert)
     ↓
-MCP Module (mcp_client, mcp_transport, transports)
+Session 17: MCP Module (mcp_client, mcp_transport, mcp_transport_stdio, mcp_transport_http)
     ↓
-Utils Module (config, prompt_loader, ralph_home, context_retriever, pdf_processor)
+Session 18: Utils Module (config, prompt_loader, ralph_home, context_retriever, pdf_processor)
     ↓
-Messaging Module (notification_formatter)
+Session 19: Messaging Module (notification_formatter)
     ↓
-Core Module (async_executor, tool_executor, streaming_handler, context_enhancement, recap)
+Session 20: Core Module (async_executor, tool_executor, streaming_handler, context_enhancement, recap)
     ↓
-Final Cleanup
+Session 21: Final Cleanup + Namespace Rename
 ```
 
 ---

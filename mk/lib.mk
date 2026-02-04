@@ -80,7 +80,13 @@ LIB_POLICY_SOURCES := \
     $(LIBDIR)/policy/protected_files.c \
     $(LIBDIR)/policy/atomic_file.c \
     $(LIBDIR)/policy/verified_file_context.c \
-    $(LIBDIR)/policy/verified_file_python.c
+    $(LIBDIR)/policy/verified_file_python.c \
+    $(LIBDIR)/policy/tool_args.c \
+    $(LIBDIR)/policy/pattern_generator.c \
+    $(LIBDIR)/policy/gate_prompter.c \
+    $(LIBDIR)/policy/approval_gate.c \
+    $(LIBDIR)/policy/approval_errors.c \
+    $(LIBDIR)/policy/subagent_approval.c
 
 # Util module (generic utilities)
 LIB_UTIL_SOURCES := \
