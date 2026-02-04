@@ -55,7 +55,7 @@ GATE_DEPS := \
     $(LIBDIR)/policy/allowlist.c \
     $(SRCDIR)/policy/approval_gate.c \
     $(SRCDIR)/policy/approval_errors.c \
-    $(SRCDIR)/policy/atomic_file.c \
+    $(LIBDIR)/policy/atomic_file.c \
     $(SRCDIR)/policy/gate_prompter.c \
     $(SRCDIR)/policy/pattern_generator.c \
     $(LIBDIR)/policy/rate_limiter.c \
@@ -71,10 +71,10 @@ GATE_DEPS := \
     $(TESTDIR)/stubs/output_formatter_stub.c
 
 $(eval $(call def_test,approval_gate,policy/test_approval_gate,$(GATE_DEPS)))
-$(eval $(call def_test,atomic_file,policy/test_atomic_file,$(SRCDIR)/policy/atomic_file.c))
-$(eval $(call def_test,path_normalize,policy/test_path_normalize,$(SRCDIR)/policy/path_normalize.c))
-$(eval $(call def_test,verified_file_context,test_verified_file_context,$(SRCDIR)/policy/verified_file_context.c $(SRCDIR)/policy/atomic_file.c $(SRCDIR)/policy/path_normalize.c))
-$(eval $(call def_test,protected_files,policy/test_protected_files,$(SRCDIR)/policy/protected_files.c $(SRCDIR)/policy/path_normalize.c))
+$(eval $(call def_test,atomic_file,policy/test_atomic_file,$(LIBDIR)/policy/atomic_file.c))
+$(eval $(call def_test,path_normalize,policy/test_path_normalize,$(LIBDIR)/policy/path_normalize.c))
+$(eval $(call def_test,verified_file_context,test_verified_file_context,$(LIBDIR)/policy/verified_file_context.c $(LIBDIR)/policy/atomic_file.c $(LIBDIR)/policy/path_normalize.c))
+$(eval $(call def_test,protected_files,policy/test_protected_files,$(LIBDIR)/policy/protected_files.c $(LIBDIR)/policy/path_normalize.c))
 $(eval $(call def_test,shell_parser,policy/test_shell_parser,$(LIBDIR)/policy/shell_parser.c $(LIBDIR)/policy/shell_parser_cmd.c $(LIBDIR)/policy/shell_parser_ps.c))
 $(eval $(call def_test,shell_parser_cmd,policy/test_shell_parser_cmd,$(LIBDIR)/policy/shell_parser_cmd.c $(LIBDIR)/policy/shell_parser.c $(LIBDIR)/policy/shell_parser_ps.c))
 $(eval $(call def_test,shell_parser_ps,policy/test_shell_parser_ps,$(LIBDIR)/policy/shell_parser_ps.c $(LIBDIR)/policy/shell_parser.c $(LIBDIR)/policy/shell_parser_cmd.c))

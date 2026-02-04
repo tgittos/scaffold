@@ -2,7 +2,7 @@
 #include "lib/tools/tools_system.h"
 #include "tools/builtin_tools.h"
 #include "../src/policy/approval_gate.h"
-#include "../src/policy/protected_files.h"
+#include "policy/protected_files.h"
 #include <cJSON.h>
 #include <stdio.h>
 #include <string.h>

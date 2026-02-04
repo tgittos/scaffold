@@ -1,6 +1,6 @@
 #include "python_tool.h"
 #include "python_tool_files.h"
-#include "../policy/verified_file_python.h"
+#include "policy/verified_file_python.h"
 #include <cJSON.h>
 #include <Python.h>
 #include <stdio.h>

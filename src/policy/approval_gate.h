@@ -12,7 +12,7 @@
 
 #include "lib/tools/tools_system.h"
 #include "policy/shell_parser.h"
-#include "atomic_file.h"
+#include "policy/atomic_file.h"
 #include "policy/allowlist.h"
 #include "pattern_generator.h"
 #include "policy/rate_limiter.h"

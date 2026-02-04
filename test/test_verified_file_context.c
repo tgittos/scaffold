@@ -6,8 +6,8 @@
  */
 
 #include "unity.h"
-#include "../src/policy/verified_file_context.h"
-#include "../src/policy/atomic_file.h"
+#include "policy/verified_file_context.h"
+#include "policy/atomic_file.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>

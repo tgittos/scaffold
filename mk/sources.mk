@@ -28,15 +28,10 @@ CORE_SOURCES := \
 POLICY_SOURCES := \
     $(SRCDIR)/policy/approval_gate.c \
     $(SRCDIR)/policy/approval_errors.c \
-    $(SRCDIR)/policy/atomic_file.c \
     $(SRCDIR)/policy/gate_prompter.c \
-    $(SRCDIR)/policy/path_normalize.c \
     $(SRCDIR)/policy/pattern_generator.c \
-    $(SRCDIR)/policy/protected_files.c \
     $(SRCDIR)/policy/subagent_approval.c \
-    $(SRCDIR)/policy/tool_args.c \
-    $(SRCDIR)/policy/verified_file_context.c \
-    $(SRCDIR)/policy/verified_file_python.c
+    $(SRCDIR)/policy/tool_args.c
 
 # Tool system (Python tools only; core tools in lib/tools/)
 TOOL_SOURCES := \
@@ -111,18 +106,18 @@ RALPH_CORE_DEPS := \
     $(SRCDIR)/policy/approval_gate.c \
     $(SRCDIR)/policy/approval_errors.c \
     $(SRCDIR)/policy/subagent_approval.c \
-    $(SRCDIR)/policy/atomic_file.c \
+    $(LIBDIR)/policy/atomic_file.c \
     $(SRCDIR)/policy/gate_prompter.c \
-    $(SRCDIR)/policy/path_normalize.c \
+    $(LIBDIR)/policy/path_normalize.c \
     $(SRCDIR)/policy/pattern_generator.c \
-    $(SRCDIR)/policy/protected_files.c \
+    $(LIBDIR)/policy/protected_files.c \
     $(LIBDIR)/policy/rate_limiter.c \
     $(LIBDIR)/policy/shell_parser.c \
     $(LIBDIR)/policy/shell_parser_cmd.c \
     $(LIBDIR)/policy/shell_parser_ps.c \
     $(SRCDIR)/policy/tool_args.c \
-    $(SRCDIR)/policy/verified_file_context.c \
-    $(SRCDIR)/policy/verified_file_python.c \
+    $(LIBDIR)/policy/verified_file_context.c \
+    $(LIBDIR)/policy/verified_file_python.c \
     $(SRCDIR)/utils/prompt_loader.c \
     $(SRCDIR)/session/conversation_tracker.c \
     $(SRCDIR)/session/conversation_compactor.c \
@@ -145,15 +140,12 @@ RALPH_CORE_DEPS := \
 # Verified file I/O dependencies (needed by Python tools for TOCTOU-safe access)
 # Full set including atomic_file.c and path_normalize.c
 VERIFIED_FILE_DEPS := \
-    $(SRCDIR)/policy/verified_file_context.c \
-    $(SRCDIR)/policy/verified_file_python.c \
-    $(SRCDIR)/policy/atomic_file.c \
-    $(SRCDIR)/policy/path_normalize.c
+    $(LIBDIR)/policy/verified_file_context.c \
+    $(LIBDIR)/policy/verified_file_python.c \
+    $(LIBDIR)/policy/atomic_file.c \
+    $(LIBDIR)/policy/path_normalize.c
 
-# COMPLEX_DEPS only includes verified_file_context.c and verified_file_python.c,
-# NOT atomic_file.c and path_normalize.c which are already in RALPH_CORE_DEPS.
-# Tests that use COMPLEX_DEPS without RALPH_CORE_DEPS and need the full verified
-# file deps should include VERIFIED_FILE_DEPS directly.
+# COMPLEX_DEPS includes verified file I/O dependencies
 COMPLEX_DEPS := \
     $(TOOL_SOURCES) \
     $(LIB_TOOLS_SOURCES) \
@@ -165,10 +157,10 @@ COMPLEX_DEPS := \
     $(EMBEDDING_DEPS) \
     $(LIBDIR)/pdf/pdf_extractor.c \
     $(NETWORK_DEPS) \
-    $(SRCDIR)/policy/verified_file_context.c \
-    $(SRCDIR)/policy/verified_file_python.c \
-    $(SRCDIR)/policy/atomic_file.c \
-    $(SRCDIR)/policy/path_normalize.c
+    $(LIBDIR)/policy/verified_file_context.c \
+    $(LIBDIR)/policy/verified_file_python.c \
+    $(LIBDIR)/policy/atomic_file.c \
+    $(LIBDIR)/policy/path_normalize.c
 
 CONV_DEPS := \
     $(SRCDIR)/session/conversation_tracker.c \

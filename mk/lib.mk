@@ -69,13 +69,18 @@ LIB_SERVICES_SOURCES := $(LIBDIR)/services/services.c
 # Session module
 LIB_SESSION_SOURCES :=
 
-# Policy module (approval gates, shell parsing)
+# Policy module (approval gates, shell parsing, file protection)
 LIB_POLICY_SOURCES := \
     $(LIBDIR)/policy/rate_limiter.c \
     $(LIBDIR)/policy/allowlist.c \
     $(LIBDIR)/policy/shell_parser.c \
     $(LIBDIR)/policy/shell_parser_cmd.c \
-    $(LIBDIR)/policy/shell_parser_ps.c
+    $(LIBDIR)/policy/shell_parser_ps.c \
+    $(LIBDIR)/policy/path_normalize.c \
+    $(LIBDIR)/policy/protected_files.c \
+    $(LIBDIR)/policy/atomic_file.c \
+    $(LIBDIR)/policy/verified_file_context.c \
+    $(LIBDIR)/policy/verified_file_python.c
 
 # Util module (generic utilities)
 LIB_UTIL_SOURCES := \

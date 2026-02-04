@@ -5,30 +5,14 @@
 Complete the migration from monolithic `src/` to library-based `lib/` architecture. Each session is a self-contained unit that leaves the codebase buildable with passing tests.
 
 **Current State:**
-- `lib/`: 105 files (51 .c, 54 .h), ~21k lines
-- `src/`: 91 files (51 .c, 40 .h), ~40k lines
+- `lib/`: 130 files (67 .c, 63 .h)
+- `src/`: 66 files (35 .c, 31 .h)
 
 **Goal:** Move implementations to `lib/`, leaving only entry points in `src/`.
 
 ---
 
-## Next: Policy Advanced
-
-**Move:** File protection and verification.
-
-| File | Destination |
-|------|-------------|
-| `src/policy/path_normalize.c/h` | `lib/policy/` |
-| `src/policy/protected_files.c/h` | `lib/policy/` |
-| `src/policy/atomic_file.c/h` | `lib/policy/` |
-| `src/policy/verified_file_context.c/h` | `lib/policy/` |
-| `src/policy/verified_file_python.c/h` | `lib/policy/` |
-
-**Verify:** `./scripts/build.sh && ./scripts/run_tests.sh path_normalize`
-
----
-
-## Policy Gates
+## Next: Policy Gates
 
 **Move:** Approval gate system (security-critical).
 
@@ -65,14 +49,111 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 ---
 
+## Network Module
+
+**Move:** HTTP client and API communication layer.
+
+| File | Destination |
+|------|-------------|
+| `src/network/http_client.c/h` | `lib/network/` |
+| `src/network/api_common.c/h` | `lib/network/` |
+| `src/network/api_error.c/h` | `lib/network/` |
+| `src/network/streaming.c/h` | `lib/network/` |
+| `src/network/embedded_cacert.c/h` | `lib/network/` |
+
+**Changes:**
+1. Create `lib/network/` directory
+2. Update `mk/lib.mk`: Add `LIB_NETWORK_SOURCES`
+
+**Verify:** `./scripts/build.sh && ./scripts/run_tests.sh http`
+
+---
+
+## MCP Module
+
+**Move:** Model Context Protocol plugin system.
+
+| File | Destination |
+|------|-------------|
+| `src/mcp/mcp_client.c/h` | `lib/mcp/` |
+| `src/mcp/mcp_transport.c/h` | `lib/mcp/` |
+| `src/mcp/mcp_transport_stdio.c` | `lib/mcp/` |
+| `src/mcp/mcp_transport_http.c` | `lib/mcp/` |
+
+**Changes:**
+1. Create `lib/mcp/` directory
+2. Update `mk/lib.mk`: Add `LIB_MCP_SOURCES`
+
+**Verify:** `./scripts/build.sh && ./scripts/run_tests.sh mcp_client`
+
+---
+
+## Utils Module
+
+**Move:** Core utilities needed by the agent.
+
+| File | Destination |
+|------|-------------|
+| `src/utils/config.c/h` | `lib/util/` |
+| `src/utils/prompt_loader.c/h` | `lib/util/` |
+| `src/utils/ralph_home.c/h` | `lib/util/` |
+| `src/utils/context_retriever.c/h` | `lib/util/` |
+| `src/utils/pdf_processor.c/h` | `lib/util/` |
+
+**Changes:**
+1. Update `mk/lib.mk`: Add to `LIB_UTIL_SOURCES`
+
+**Verify:** `./scripts/build.sh && ./scripts/run_tests.sh config`
+
+---
+
+## Messaging Module
+
+**Move:** Notification formatting for IPC.
+
+| File | Destination |
+|------|-------------|
+| `src/messaging/notification_formatter.c/h` | `lib/ipc/` |
+
+**Changes:**
+1. Update `mk/lib.mk`: Add to `LIB_IPC_SOURCES`
+
+**Verify:** `./scripts/build.sh && ./scripts/run_tests.sh notification_formatter`
+
+---
+
+## Core Module
+
+**Move:** Core agent execution infrastructure.
+
+| File | Destination |
+|------|-------------|
+| `src/core/async_executor.c/h` | `lib/agent/` |
+| `src/core/tool_executor.c/h` | `lib/agent/` |
+| `src/core/streaming_handler.c/h` | `lib/agent/` |
+| `src/core/context_enhancement.c/h` | `lib/agent/` |
+| `src/core/recap.c/h` | `lib/agent/` |
+
+**Changes:**
+1. Update `mk/lib.mk`: Add to `LIB_AGENT_SOURCES`
+
+**Verify:** `./scripts/build.sh && ./scripts/run_tests.sh ralph`
+
+---
+
 ## Final Cleanup
 
+**Remaining in src/ (CLI entry point and proprietary):**
+- `src/core/main.c` - CLI entry point
+- `src/core/ralph.c/h` - CLI orchestration layer
+- `src/tools/python_tool.c/h` - Proprietary Python tool system
+- `src/tools/python_tool_files.c/h` - Proprietary Python files
+
 **Tasks:**
-1. Audit remaining `src/` files (main.c, ralph.c, network/, mcp/)
-2. Resolve coupling issues (see "Known Coupling Issues" section)
-3. Update `lib/ralph.h` as comprehensive public API
-4. Update `ARCHITECTURE.md` and `CODE_OVERVIEW.md`
-5. Final verification: `./scripts/build.sh && ./scripts/run_tests.sh && make check-valgrind`
+1. Verify all core agent functionality is in lib/
+2. Update `lib/ralph.h` as comprehensive public API
+3. Update `ARCHITECTURE.md` and `CODE_OVERVIEW.md`
+4. Final verification: `./scripts/build.sh && ./scripts/run_tests.sh && make check-valgrind`
 
 **Namespace Rename:** Remove `ralph_` prefix from lib/ identifiers (73 total) and rename public header.
 
@@ -172,9 +253,21 @@ Session 13: LLM Models (response_processing, claude/gpt/qwen/deepseek/default) �
     ↓
 Policy Core (rate_limiter, allowlist, shell_parser) ✓ COMPLETE
     ↓
-Policy Advanced + Gates (remaining policy files)
+Policy Advanced (path_normalize, protected_files, atomic_file, verified_file) ✓ COMPLETE
     ↓
-Session Module (depends on DB, LLM)
+Policy Gates (approval_gate, tool_args, pattern_generator, gate_prompter, subagent_approval)
+    ↓
+Session Module (token_manager, conversation_tracker, compactor, rolling_summary, session_manager)
+    ↓
+Network Module (http_client, api_common, api_error, streaming, embedded_cacert)
+    ↓
+MCP Module (mcp_client, mcp_transport, transports)
+    ↓
+Utils Module (config, prompt_loader, ralph_home, context_retriever, pdf_processor)
+    ↓
+Messaging Module (notification_formatter)
+    ↓
+Core Module (async_executor, tool_executor, streaming_handler, context_enhancement, recap)
     ↓
 Final Cleanup
 ```
