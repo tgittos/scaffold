@@ -49,8 +49,10 @@ LIB_TOOLS_SOURCES := \
 # Agent module (Phase 5)
 LIB_AGENT_SOURCES := $(LIBDIR)/agent/agent.c
 
-# LLM module (future)
-LIB_LLM_SOURCES :=
+# LLM module (Phase 10+)
+LIB_LLM_SOURCES := \
+    $(LIBDIR)/llm/llm_provider.c \
+    $(LIBDIR)/llm/model_capabilities.c
 
 # Services module (Phase 6 - Dependency Injection)
 LIB_SERVICES_SOURCES := $(LIBDIR)/services/services.c

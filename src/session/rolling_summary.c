@@ -1,5 +1,5 @@
 #include "rolling_summary.h"
-#include "llm_provider.h"
+#include "lib/llm/llm_provider.h"
 #include "http_client.h"
 #include "util/debug_output.h"
 #include "token_manager.h"

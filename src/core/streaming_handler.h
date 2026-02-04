@@ -2,7 +2,7 @@
 #define STREAMING_HANDLER_H
 
 #include "ralph.h"
-#include "llm_provider.h"
+#include "lib/llm/llm_provider.h"
 
 /**
  * Streaming Handler Module

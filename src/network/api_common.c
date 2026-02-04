@@ -1,6 +1,6 @@
 #include "api_common.h"
 #include <cJSON.h>
-#include "model_capabilities.h"
+#include "lib/llm/model_capabilities.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

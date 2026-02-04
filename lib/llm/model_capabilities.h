@@ -3,9 +3,9 @@
 
 #include <stddef.h>
 
-#include "ui/output_formatter.h"
-#include "lib/tools/tools_system.h"
-#include "util/ptrarray.h"
+#include "../ui/output_formatter.h"
+#include "../tools/tools_system.h"
+#include "../util/ptrarray.h"
 
 typedef struct {
     const char* model_pattern;  /* substring match, e.g. "qwen", "deepseek", "claude" */
@@ -13,7 +13,7 @@ typedef struct {
     int supports_thinking_tags;
     const char* thinking_start_tag;
     const char* thinking_end_tag;
-    
+
     int (*process_response)(const char* content, ParsedResponse* result);
 
     int supports_function_calling;
@@ -21,7 +21,7 @@ typedef struct {
     int (*parse_tool_calls)(const char* json_response, ToolCall** tool_calls, int* call_count);
     char* (*format_tool_result_message)(const ToolResult* result);
     char* (*format_assistant_tool_message)(const char* response_content, const ToolCall* tool_calls, int tool_call_count);
-    
+
     int max_context_length;
 } ModelCapabilities;
 
@@ -39,7 +39,7 @@ int register_gpt_models(ModelRegistry* registry);
 int register_default_model(ModelRegistry* registry);
 
 char* generate_model_tools_json(ModelRegistry* registry, const char* model_name, const ToolRegistry* tools);
-int parse_model_tool_calls(ModelRegistry* registry, const char* model_name, 
+int parse_model_tool_calls(ModelRegistry* registry, const char* model_name,
                           const char* json_response, ToolCall** tool_calls, int* call_count);
 char* format_model_tool_result_message(ModelRegistry* registry, const char* model_name, const ToolResult* result);
 char* format_model_assistant_tool_message(ModelRegistry* registry, const char* model_name,

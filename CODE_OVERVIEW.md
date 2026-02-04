@@ -18,8 +18,6 @@ Application-specific code that uses the library layer.
 - **`tool_executor.c/h`** - Iterative tool-calling state machine for executing tool workflows
 
 #### `src/llm/` - Language Model Integration
-- **`llm_provider.c/h`** - LLM provider abstraction layer with registry pattern
-- **`model_capabilities.c/h`** - Model capability detection and management (context windows, features)
 - **`embeddings.c/h`** - Low-level text embedding functionality
 - **`embedding_provider.c/h`** - Embedding provider interface and registry
 - **`embeddings_service.c/h`** - Thread-safe embedding service singleton
@@ -141,6 +139,10 @@ Generic, CLI-independent components that can be reused.
 
 #### `lib/db/` - Database Abstraction
 - **`sqlite_dal.c/h`** - SQLite data access layer with mutex protection, schema initialization, and common query patterns
+
+#### `lib/llm/` - LLM Core Framework
+- **`llm_provider.c/h`** - LLM provider abstraction layer with registry pattern for API providers
+- **`model_capabilities.c/h`** - Model capability detection and management (context windows, features)
 
 #### `lib/ipc/` - Inter-Process Communication
 - **`pipe_notifier.c/h`** - Thread-safe pipe-based notification for async event handling

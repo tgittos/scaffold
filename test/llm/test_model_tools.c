@@ -1,5 +1,5 @@
 #include "unity.h"
-#include "model_capabilities.h"
+#include "lib/llm/model_capabilities.h"
 #include "lib/tools/tools_system.h"
 #include "tools/builtin_tools.h"
 #include "ui/output_formatter.h"

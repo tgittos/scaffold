@@ -1,7 +1,7 @@
 #include "output_formatter.h"
 #include "json_output.h"
 #include "../util/debug_output.h"
-#include "../../src/llm/model_capabilities.h"
+#include "../llm/model_capabilities.h"
 #include "../util/interrupt.h"
 #include "../tools/todo_display.h"
 #include <cJSON.h>

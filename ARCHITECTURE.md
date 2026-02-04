@@ -958,8 +958,6 @@ src/
 │   ├── task_store.c/h      # SQLite-based persistent task storage
 │   └── hnswlib_wrapper.cpp/h # C++ bridge
 ├── llm/                    # LLM integration
-│   ├── llm_provider.c/h    # Provider abstraction
-│   ├── model_capabilities.c/h # Model-specific capabilities
 │   ├── embeddings.c/h      # Low-level embeddings API
 │   ├── embeddings_service.c/h # Embeddings singleton service
 │   ├── embedding_provider.c/h # Embedding provider abstraction
@@ -1043,6 +1041,9 @@ lib/
 │   └── document_chunker.c/h # Text chunking
 ├── db/                     # Database abstraction
 │   └── sqlite_dal.c/h      # SQLite data access layer
+├── llm/                    # LLM core framework
+│   ├── llm_provider.c/h    # Provider abstraction layer
+│   └── model_capabilities.c/h # Model capability detection
 ├── pdf/                    # PDF processing
 │   └── pdf_extractor.c/h   # PDFio-based text extraction
 ├── ipc/                    # Inter-process communication

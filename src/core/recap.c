@@ -1,7 +1,7 @@
 #include "recap.h"
 #include "streaming_handler.h"
 #include "streaming.h"
-#include "llm_provider.h"
+#include "lib/llm/llm_provider.h"
 #include "http_client.h"
 #include "ui/output_formatter.h"
 #include "util/debug_output.h"

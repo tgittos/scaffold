@@ -5,7 +5,7 @@
 #include "conversation_tracker.h"
 #include "lib/tools/tools_system.h"
 #include "lib/tools/todo_manager.h"
-#include "llm_provider.h"
+#include "lib/llm/llm_provider.h"
 #include "token_manager.h"
 #include "session_manager.h"
 #include "../mcp/mcp_client.h"

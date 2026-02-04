@@ -1,5 +1,5 @@
 #include "unity/unity.h"
-#include "llm_provider.h"
+#include "lib/llm/llm_provider.h"
 #include "streaming.h"
 #include <stdlib.h>
 #include <string.h>

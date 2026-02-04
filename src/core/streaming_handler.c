@@ -3,7 +3,7 @@
 #include "util/interrupt.h"
 #include "tool_executor.h"
 #include "streaming.h"
-#include "llm_provider.h"
+#include "lib/llm/llm_provider.h"
 #include "ui/output_formatter.h"
 #include "ui/json_output.h"
 #include "util/debug_output.h"

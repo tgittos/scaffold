@@ -12,23 +12,6 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 ---
 
-## Session 10: LLM Core
-
-**Move:** Provider framework.
-
-| File | Destination |
-|------|-------------|
-| `src/llm/llm_provider.c/h` | `lib/llm/` |
-| `src/llm/model_capabilities.c/h` | `lib/llm/` |
-
-**Changes:**
-1. Create `lib/llm/` directory
-2. Update `mk/lib.mk`: Add to `LIB_LLM_SOURCES`
-
-**Verify:** `./scripts/build.sh && ./scripts/run_tests.sh`
-
----
-
 ## Session 11: LLM Embeddings
 
 **Move:** Embedding infrastructure.
@@ -246,7 +229,9 @@ Session 7b: Utility Migration (fixes lib/tools/ → src/ dependencies) ✓ COMPL
     ↓
 Session 8-9: Vector DB + Services (depends on lib/db/sqlite_dal) ✓ COMPLETE
     ↓
-Session 10-13: LLM (depends on DB for embeddings)
+Session 10: LLM Core (llm_provider, model_capabilities) ✓ COMPLETE
+    ↓
+Session 11-13: LLM (depends on DB for embeddings)
     ↓
 Session 14-16: Policy (depends on Tools for types)
     ↓

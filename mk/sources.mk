@@ -24,8 +24,7 @@ CORE_SOURCES := \
     $(SRCDIR)/session/conversation_compactor.c \
     $(SRCDIR)/session/rolling_summary.c \
     $(SRCDIR)/session/session_manager.c \
-    $(SRCDIR)/session/token_manager.c \
-    $(SRCDIR)/llm/llm_provider.c
+    $(SRCDIR)/session/token_manager.c
 
 # Policy module (approval gates, shell parsing, protected files)
 POLICY_SOURCES := \
@@ -77,7 +76,6 @@ PROVIDER_SOURCES := \
 
 # Model implementations
 MODEL_SOURCES := \
-    $(SRCDIR)/llm/model_capabilities.c \
     $(SRCDIR)/llm/models/response_processing.c \
     $(SRCDIR)/llm/models/qwen_model.c \
     $(SRCDIR)/llm/models/deepseek_model.c \
@@ -161,7 +159,7 @@ RALPH_CORE_DEPS := \
     $(SRCDIR)/network/api_common.c \
     $(SRCDIR)/network/streaming.c \
     $(SRCDIR)/session/token_manager.c \
-    $(SRCDIR)/llm/llm_provider.c \
+    $(LIBDIR)/llm/llm_provider.c \
     $(SRCDIR)/llm/providers/openai_provider.c \
     $(SRCDIR)/llm/providers/anthropic_provider.c \
     $(SRCDIR)/llm/providers/local_ai_provider.c \
@@ -188,6 +186,7 @@ VERIFIED_FILE_DEPS := \
 COMPLEX_DEPS := \
     $(TOOL_SOURCES) \
     $(LIB_TOOLS_SOURCES) \
+    $(LIB_LLM_SOURCES) \
     $(MODEL_SOURCES) \
     $(UTIL_DEPS) \
     $(LIB_DB_SOURCES) \

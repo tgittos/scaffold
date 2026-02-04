@@ -7,7 +7,7 @@
 #include "util/debug_output.h"
 #include "api_error.h"
 #include "token_manager.h"
-#include "model_capabilities.h"
+#include "lib/llm/model_capabilities.h"
 #include "../mcp/mcp_client.h"
 #include "util/ptrarray.h"
 #include "ui/spinner.h"

@@ -1,4 +1,4 @@
-#include "model_capabilities.h"
+#include "lib/llm/model_capabilities.h"
 #include "util/json_escape.h"
 #include "ui/output_formatter.h"
 #include "response_processing.h"
