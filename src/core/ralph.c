@@ -11,7 +11,7 @@
 #include "lib/tools/todo_display.h"
 #include "util/debug_output.h"
 #include "api_common.h"
-#include "../llm/embeddings_service.h"
+#include "llm/embeddings_service.h"
 #include "token_manager.h"
 #include "conversation_compactor.h"
 #include "rolling_summary.h"

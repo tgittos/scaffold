@@ -1,7 +1,6 @@
 #include "embeddings_service.h"
 #include "embedding_provider.h"
 #include "util/common_utils.h"
-#include "../utils/config.h"
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
@@ -20,36 +19,25 @@ static void create_embeddings_instance(void) {
     if (g_embeddings_instance == NULL) {
         return;
     }
-    
+
     memset(g_embeddings_instance, 0, sizeof(embeddings_service_t));
-    
+
     if (pthread_mutex_init(&g_embeddings_instance->mutex, NULL) != 0) {
         free(g_embeddings_instance);
         g_embeddings_instance = NULL;
         return;
     }
-    
-    ralph_config_t *config = config_get();
-    if (config) {
-        const char *api_key = config->openai_api_key;
-        const char *model = config->embedding_model;
-        const char *api_url = config->embedding_api_url ? config->embedding_api_url : config->openai_api_url;
 
-        if (!model) model = "text-embedding-3-small";
+    const char *api_key = getenv("OPENAI_API_KEY");
+    const char *model = getenv("EMBEDDING_MODEL");
+    // Check EMBEDDING_API_URL first, fall back to OPENAI_API_URL
+    const char *api_url = getenv("EMBEDDING_API_URL");
+    if (!api_url) api_url = getenv("OPENAI_API_URL");
 
-        if (api_key && embeddings_init(&g_embeddings_instance->config, model, api_key, api_url) == 0) {
-            g_embeddings_instance->configured = 1;
-        }
-    } else {
-        const char *api_key = getenv("OPENAI_API_KEY");
-        const char *model = getenv("EMBEDDING_MODEL");
-        const char *api_url = getenv("OPENAI_API_URL");
-        
-        if (!model) model = "text-embedding-3-small";
-        
-        if (api_key && embeddings_init(&g_embeddings_instance->config, model, api_key, api_url) == 0) {
-            g_embeddings_instance->configured = 1;
-        }
+    if (!model) model = "text-embedding-3-small";
+
+    if (api_key && embeddings_init(&g_embeddings_instance->config, model, api_key, api_url) == 0) {
+        g_embeddings_instance->configured = 1;
     }
 }
 
@@ -84,21 +72,21 @@ vector_t* embeddings_service_text_to_vector(const char *text) {
     if (text == NULL) {
         return NULL;
     }
-    
+
     embedding_vector_t embedding = {0};
     if (embeddings_service_get_vector(text, &embedding) != 0) {
         return NULL;
     }
-    
+
     vector_t* vector = malloc(sizeof(vector_t));
     if (vector == NULL) {
         embeddings_free_vector(&embedding);
         return NULL;
     }
-    
+
     vector->data = embedding.data;
     vector->dimension = embedding.dimension;
-    
+
     return vector;
 }
 
@@ -128,36 +116,29 @@ int embeddings_service_reinitialize(void) {
     if (service == NULL) {
         return -1;
     }
-    
+
     pthread_mutex_lock(&service->mutex);
-    
+
     if (service->configured) {
         embeddings_cleanup(&service->config);
         service->configured = 0;
     }
-    
-    ralph_config_t *config = config_get();
-    const char *api_key, *model, *api_url;
-    
-    if (config) {
-        api_key = config->openai_api_key;
-        model = config->embedding_model;
-        api_url = config->embedding_api_url ? config->embedding_api_url : config->openai_api_url;
-    } else {
-        api_key = getenv("OPENAI_API_KEY");
-        model = getenv("EMBEDDING_MODEL");
-        api_url = getenv("OPENAI_API_URL");
-    }
-    
+
+    const char *api_key = getenv("OPENAI_API_KEY");
+    const char *model = getenv("EMBEDDING_MODEL");
+    // Check EMBEDDING_API_URL first, fall back to OPENAI_API_URL
+    const char *api_url = getenv("EMBEDDING_API_URL");
+    if (!api_url) api_url = getenv("OPENAI_API_URL");
+
     if (!model) model = "text-embedding-3-small";
-    
+
     if (api_key && embeddings_init(&service->config, model, api_key, api_url) == 0) {
         service->configured = 1;
     }
-    
+
     int result = service->configured ? 0 : -1;
     pthread_mutex_unlock(&service->mutex);
-    
+
     return result;
 }
 

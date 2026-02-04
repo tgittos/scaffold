@@ -15,7 +15,7 @@
 #include "../ipc/message_store.h"
 #include "db/vector_db_service.h"
 #include "db/task_store.h"
-#include "../../src/llm/embeddings_service.h"
+#include "llm/embeddings_service.h"
 
 #ifdef __cplusplus
 extern "C" {

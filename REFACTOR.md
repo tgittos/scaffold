@@ -5,24 +5,10 @@
 Complete the migration from monolithic `src/` to library-based `lib/` architecture. Each session is a self-contained unit that leaves the codebase buildable with passing tests.
 
 **Current State:**
-- `lib/`: 26 files, ~5,500 lines (orchestration layer + database)
-- `src/`: ~170 files, ~17,000 lines (all implementation)
+- `lib/`: 100 files (46 .c, 54 .h), ~20k lines
+- `src/`: 96 files (56 .c, 40 .h), ~41k lines
 
 **Goal:** Move implementations to `lib/`, leaving only entry points in `src/`.
-
----
-
-## Session 11: LLM Embeddings
-
-**Move:** Embedding infrastructure.
-
-| File | Destination |
-|------|-------------|
-| `src/llm/embeddings.c/h` | `lib/llm/` |
-| `src/llm/embedding_provider.c/h` | `lib/llm/` |
-| `src/llm/embeddings_service.c/h` | `lib/llm/` |
-
-**Verify:** `./scripts/build.sh && ./scripts/run_tests.sh`
 
 ---
 
@@ -231,7 +217,9 @@ Session 8-9: Vector DB + Services (depends on lib/db/sqlite_dal) ✓ COMPLETE
     ↓
 Session 10: LLM Core (llm_provider, model_capabilities) ✓ COMPLETE
     ↓
-Session 11-13: LLM (depends on DB for embeddings)
+Session 11: LLM Embeddings (embeddings, embedding_provider, embeddings_service) ✓ COMPLETE
+    ↓
+Session 12-13: LLM Providers and Models
     ↓
 Session 14-16: Policy (depends on Tools for types)
     ↓

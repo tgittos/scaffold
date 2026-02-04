@@ -23,7 +23,7 @@ vector_t* embeddings_service_text_to_vector(const char *text);
 size_t embeddings_service_get_dimension(void);
 void embeddings_service_free_vector(vector_t* vector);
 
-/* Re-reads config/env vars. Useful after loading .env files at runtime. */
+/* Re-reads env vars. Useful after loading .env files at runtime. */
 int embeddings_service_reinitialize(void);
 
 void embeddings_service_cleanup(void);

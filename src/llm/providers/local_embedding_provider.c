@@ -1,4 +1,4 @@
-#include "../embedding_provider.h"
+#include "llm/embedding_provider.h"
 #include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>

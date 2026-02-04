@@ -64,13 +64,11 @@ MESSAGING_SOURCES := \
     $(SRCDIR)/messaging/notification_formatter.c
 
 # LLM providers
+# Note: embeddings.c, embedding_provider.c, embeddings_service.c migrated to lib/llm/
 PROVIDER_SOURCES := \
     $(SRCDIR)/llm/providers/openai_provider.c \
     $(SRCDIR)/llm/providers/anthropic_provider.c \
     $(SRCDIR)/llm/providers/local_ai_provider.c \
-    $(SRCDIR)/llm/embeddings.c \
-    $(SRCDIR)/llm/embeddings_service.c \
-    $(SRCDIR)/llm/embedding_provider.c \
     $(SRCDIR)/llm/providers/openai_embedding_provider.c \
     $(SRCDIR)/llm/providers/local_embedding_provider.c
 
@@ -106,9 +104,9 @@ NETWORK_DEPS := \
     $(LIBDIR)/util/interrupt.c
 
 EMBEDDING_DEPS := \
-    $(SRCDIR)/llm/embeddings.c \
-    $(SRCDIR)/llm/embeddings_service.c \
-    $(SRCDIR)/llm/embedding_provider.c \
+    $(LIBDIR)/llm/embeddings.c \
+    $(LIBDIR)/llm/embeddings_service.c \
+    $(LIBDIR)/llm/embedding_provider.c \
     $(SRCDIR)/llm/providers/openai_embedding_provider.c \
     $(SRCDIR)/llm/providers/local_embedding_provider.c
 

@@ -4,7 +4,7 @@
 #include "hnswlib_wrapper.h"
 #include "../../src/utils/config.h"
 #include "../../src/utils/ralph_home.h"
-#include "../../src/llm/embeddings_service.h"
+#include "llm/embeddings_service.h"
 #include "util/ptrarray.h"
 #include <stdio.h>
 #include <stdlib.h>

@@ -1,7 +1,7 @@
 #include "memory_commands.h"
 #include "db/vector_db_service.h"
 #include "db/metadata_store.h"
-#include "../../src/llm/embeddings_service.h"
+#include "llm/embeddings_service.h"
 #include "terminal.h"
 #include <stdio.h>
 #include <stdlib.h>

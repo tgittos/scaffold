@@ -16,18 +16,18 @@ typedef struct {
 
 typedef struct EmbeddingProvider {
     EmbeddingProviderCapabilities capabilities;
-    
+
     int (*detect_provider)(const char* api_url);
 
     char* (*build_request_json)(const struct EmbeddingProvider* provider,
                                const char* model,
                                const char* text);
-    
+
     int (*build_headers)(const struct EmbeddingProvider* provider,
                         const char* api_key,
                         const char** headers,
                         int max_headers);
-    
+
     int (*parse_response)(const struct EmbeddingProvider* provider,
                          const char* json_response,
                          embedding_vector_t* embedding);

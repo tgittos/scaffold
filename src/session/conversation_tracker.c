@@ -5,7 +5,7 @@
 #include <cJSON.h>
 #include <time.h>
 #include "db/document_store.h"
-#include "../llm/embeddings_service.h"
+#include "llm/embeddings_service.h"
 #include "util/debug_output.h"
 
 #define CONVERSATION_INDEX "conversations"

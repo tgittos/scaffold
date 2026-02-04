@@ -2,7 +2,7 @@
 #include "../network/http_client.h"
 #include "pdf/pdf_extractor.h"
 #include "util/document_chunker.h"
-#include "../llm/embeddings.h"
+#include "llm/embeddings.h"
 #include "config.h"
 #include "util/common_utils.h"
 #include <stdio.h>

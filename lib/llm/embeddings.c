@@ -1,6 +1,6 @@
 #include "embeddings.h"
 #include "embedding_provider.h"
-#include "../network/http_client.h"
+#include "network/http_client.h"
 #include "util/common_utils.h"
 #include <cJSON.h>
 #include "util/debug_output.h"
@@ -49,11 +49,11 @@ int embeddings_init(embeddings_config_t *config, const char *model,
     if (config == NULL) {
         return -1;
     }
-    
+
     if (init_embedding_registry_once() != 0) {
         return -1;
     }
-    
+
     const char *url = api_url ? api_url : "https://api.openai.com/v1/embeddings";
 
     EmbeddingProvider *provider = detect_embedding_provider_for_url(&g_embedding_registry, url);
@@ -61,7 +61,7 @@ int embeddings_init(embeddings_config_t *config, const char *model,
         fprintf(stderr, "Error: No suitable embedding provider found for URL: %s\n", url);
         return -1;
     }
-    
+
     const char *final_model = model;
     if (final_model == NULL && provider->capabilities.default_model) {
         final_model = provider->capabilities.default_model;
@@ -69,23 +69,23 @@ int embeddings_init(embeddings_config_t *config, const char *model,
     if (final_model == NULL) {
         final_model = "text-embedding-3-small";
     }
-    
+
     config->model = safe_strdup(final_model);
     config->api_key = safe_strdup(api_key);
     config->api_url = safe_strdup(url);
     config->provider = provider;
-    
+
     if (config->model == NULL || config->api_url == NULL) {
         embeddings_cleanup(config);
         return -1;
     }
-    
+
     // Warn but don't fail: some providers work without auth in certain configurations
     if (provider->capabilities.requires_auth && (api_key == NULL || strlen(api_key) == 0)) {
         fprintf(stderr, "Warning: Provider %s requires authentication but no API key provided\n",
                 provider->capabilities.name);
     }
-    
+
     return 0;
 }
 
@@ -94,12 +94,12 @@ int embeddings_get_vector(const embeddings_config_t *config, const char *text,
     if (config == NULL || text == NULL || embedding == NULL) {
         return -1;
     }
-    
+
     if (config->provider == NULL) {
         fprintf(stderr, "Error: No embedding provider configured\n");
         return -1;
     }
-    
+
     EmbeddingProvider *provider = config->provider;
 
     if (provider->build_request_json == NULL) {

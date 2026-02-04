@@ -1,9 +1,9 @@
 #include "../../test/unity/unity.h"
-#include "lib/tools/memory_tool.h"
-#include "lib/tools/tools_system.h"
+#include "tools/memory_tool.h"
+#include "tools/tools_system.h"
 #include "db/vector_db.h"
-#include "../../src/llm/embeddings.h"
-#include "../../src/llm/embeddings_service.h"
+#include "llm/embeddings.h"
+#include "llm/embeddings_service.h"
 #include "../../src/utils/config.h"
 #include "../../src/utils/ralph_home.h"
 #include "../mock_api_server.h"
@@ -18,6 +18,8 @@
 #define MOCK_GROUP_GEOGRAPHY  7
 
 static char *saved_ralph_config_backup = NULL;
+static char *saved_openai_api_key = NULL;
+static char *saved_openai_api_url = NULL;
 static MockAPIServer mock_server;
 static MockAPIResponse mock_responses[1];
 
@@ -69,10 +71,18 @@ void setUp(void) {
     mock_api_server_start(&mock_server);
     mock_api_server_wait_ready(&mock_server, 2000);
 
-    // Initialize config system and point to mock server
+    // Save original env vars
+    const char *orig_key = getenv("OPENAI_API_KEY");
+    const char *orig_url = getenv("OPENAI_API_URL");
+    saved_openai_api_key = orig_key ? strdup(orig_key) : NULL;
+    saved_openai_api_url = orig_url ? strdup(orig_url) : NULL;
+
+    // Set env vars to point to mock server
+    setenv("OPENAI_API_URL", "http://127.0.0.1:18892/api.openai.com/v1/embeddings", 1);
+    setenv("OPENAI_API_KEY", "mock-test-key", 1);
+
+    // Initialize config system
     config_init();
-    config_set("embedding_api_url", "http://127.0.0.1:18892/api.openai.com/v1/embeddings");
-    config_set("openai_api_key", "mock-test-key");
 
     // Force embeddings service to pick up mock config
     embeddings_service_reinitialize();
@@ -91,6 +101,22 @@ void tearDown(void) {
         }
         free(saved_ralph_config_backup);
         saved_ralph_config_backup = NULL;
+    }
+
+    // Restore original env vars
+    if (saved_openai_api_key) {
+        setenv("OPENAI_API_KEY", saved_openai_api_key, 1);
+        free(saved_openai_api_key);
+        saved_openai_api_key = NULL;
+    } else {
+        unsetenv("OPENAI_API_KEY");
+    }
+    if (saved_openai_api_url) {
+        setenv("OPENAI_API_URL", saved_openai_api_url, 1);
+        free(saved_openai_api_url);
+        saved_openai_api_url = NULL;
+    } else {
+        unsetenv("OPENAI_API_URL");
     }
 
     mock_api_server_stop(&mock_server);
@@ -162,8 +188,8 @@ void test_remember_tool_missing_content(void) {
 }
 
 void test_remember_tool_no_api_key(void) {
-    // Clear the API key from config to simulate unconfigured state
-    config_set("openai_api_key", NULL);
+    // Clear the API key env var to simulate unconfigured state
+    unsetenv("OPENAI_API_KEY");
     embeddings_service_reinitialize();
 
     ToolCall tool_call = {
@@ -184,7 +210,7 @@ void test_remember_tool_no_api_key(void) {
     free(result.result);
 
     // Restore API key for subsequent tests
-    config_set("openai_api_key", "mock-test-key");
+    setenv("OPENAI_API_KEY", "mock-test-key", 1);
     embeddings_service_reinitialize();
 
     TEST_ASSERT_EQUAL_INT(0, got_exec_result);
@@ -234,8 +260,8 @@ void test_recall_memories_missing_query(void) {
 }
 
 void test_recall_memories_no_api_key(void) {
-    // Clear the API key from config to simulate unconfigured state
-    config_set("openai_api_key", NULL);
+    // Clear the API key env var to simulate unconfigured state
+    unsetenv("OPENAI_API_KEY");
     embeddings_service_reinitialize();
 
     ToolCall tool_call = {
@@ -256,7 +282,7 @@ void test_recall_memories_no_api_key(void) {
     free(result.result);
 
     // Restore API key for subsequent tests
-    config_set("openai_api_key", "mock-test-key");
+    setenv("OPENAI_API_KEY", "mock-test-key", 1);
     embeddings_service_reinitialize();
 
     TEST_ASSERT_EQUAL_INT(0, got_exec_result);

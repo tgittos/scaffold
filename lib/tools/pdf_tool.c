@@ -3,7 +3,7 @@
 #include "../pdf/pdf_extractor.h"
 #include <cJSON.h>
 #include "../util/document_chunker.h"
-#include "../../src/llm/embeddings_service.h"
+#include "llm/embeddings_service.h"
 #include "db/vector_db_service.h"
 #include "../util/common_utils.h"
 #include "vector_db_tool.h"

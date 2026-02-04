@@ -248,7 +248,7 @@ $(TEST_notification_formatter_TARGET): $(TEST_notification_formatter_OBJECTS) $(
 
 # Extra objects needed by conversation test (not in test sources)
 CONV_EXTRA_OBJECTS := $(LIB_DB_SOURCES:.c=.o) $(LIB_DB_CPP_SOURCES:.cpp=.o) \
-    $(SRCDIR)/llm/embeddings.o $(SRCDIR)/llm/embeddings_service.o $(SRCDIR)/llm/embedding_provider.o \
+    $(LIBDIR)/llm/embeddings.o $(LIBDIR)/llm/embeddings_service.o $(LIBDIR)/llm/embedding_provider.o \
     $(SRCDIR)/llm/providers/openai_embedding_provider.o $(SRCDIR)/llm/providers/local_embedding_provider.o \
     $(SRCDIR)/network/http_client.o $(SRCDIR)/network/embedded_cacert.o $(SRCDIR)/network/api_error.o \
     $(LIBDIR)/util/interrupt.o \
