@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 #include <time.h>
-#include "../db/vector_db.h"
+#include "db/vector_db.h"
 
 typedef struct {
     char *url;

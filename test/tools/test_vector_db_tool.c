@@ -1,7 +1,7 @@
 #include "../../test/unity/unity.h"
 #include "lib/tools/vector_db_tool.h"
 #include "lib/tools/tools_system.h"
-#include "../../src/db/vector_db.h"
+#include "db/vector_db.h"
 #include "../../src/utils/config.h"
 #include "../../src/utils/ralph_home.h"
 #include "../mock_api_server.h"

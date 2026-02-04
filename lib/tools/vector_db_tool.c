@@ -1,7 +1,7 @@
 #include "vector_db_tool.h"
 #include "tool_param_dsl.h"
-#include "../../src/db/vector_db_service.h"
-#include "../../src/db/document_store.h"
+#include "db/vector_db_service.h"
+#include "db/document_store.h"
 #include <cJSON.h>
 #include "../util/document_chunker.h"
 #include "../pdf/pdf_extractor.h"

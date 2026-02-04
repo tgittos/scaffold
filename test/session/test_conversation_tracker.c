@@ -1,6 +1,6 @@
 #include "unity.h"
 #include "conversation_tracker.h"
-#include "../src/db/document_store.h"
+#include "db/document_store.h"
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>

@@ -3,7 +3,7 @@
 #include "session_manager.h"
 #include "conversation_tracker.h"
 #include "../src/utils/ralph_home.h"
-#include "../src/db/document_store.h"
+#include "db/document_store.h"
 #include <string.h>
 #include <stdlib.h>
 

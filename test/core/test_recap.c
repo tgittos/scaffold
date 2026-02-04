@@ -1,7 +1,7 @@
 #include "unity.h"
 #include "ralph.h"
 #include "conversation_tracker.h"
-#include "../src/db/document_store.h"
+#include "db/document_store.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

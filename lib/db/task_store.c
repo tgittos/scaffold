@@ -3,9 +3,9 @@
  */
 
 #include "task_store.h"
-#include "db/sqlite_dal.h"
+#include "sqlite_dal.h"
 #include "util/uuid_utils.h"
-#include "../utils/ralph_home.h"
+#include "../../src/utils/ralph_home.h"
 #include "util/ptrarray.h"
 #include <stdio.h>
 #include <stdlib.h>

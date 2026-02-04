@@ -1,6 +1,6 @@
 #include "../unity/unity.h"
-#include "../../src/db/document_store.h"
-#include "../../src/db/vector_db_service.h"
+#include "db/document_store.h"
+#include "db/vector_db_service.h"
 #include "../../src/utils/ralph_home.h"
 #include <stdlib.h>
 #include <string.h>

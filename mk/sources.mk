@@ -85,26 +85,17 @@ MODEL_SOURCES := \
     $(SRCDIR)/llm/models/claude_model.c \
     $(SRCDIR)/llm/models/default_model.c
 
-# Database
-DB_C_SOURCES := \
-    $(SRCDIR)/db/vector_db.c \
-    $(SRCDIR)/db/vector_db_service.c \
-    $(SRCDIR)/db/metadata_store.c \
-    $(SRCDIR)/db/document_store.c \
-    $(SRCDIR)/db/task_store.c
-
-DB_CPP_SOURCES := $(SRCDIR)/db/hnswlib_wrapper.cpp
-
-# PDF - pdf_extractor.c has been migrated to lib/pdf/. See mk/lib.mk for LIB_PDF_SOURCES.
+# Database - migrated to lib/db/. See mk/lib.mk for LIB_DB_SOURCES and LIB_DB_CPP_SOURCES.
+# PDF - migrated to lib/pdf/. See mk/lib.mk for LIB_PDF_SOURCES.
 
 # Utilities
 UTILS_EXTRA_SOURCES := \
     $(SRCDIR)/utils/ralph_home.c
 
-# Combined sources
+# Combined sources (database and PDF are now in lib/, see mk/lib.mk)
 C_SOURCES := $(CORE_SOURCES) $(POLICY_SOURCES) $(TOOL_SOURCES) $(MCP_SOURCES) $(MESSAGING_SOURCES) \
-    $(PROVIDER_SOURCES) $(MODEL_SOURCES) $(DB_C_SOURCES) $(UTILS_EXTRA_SOURCES)
-CPP_SOURCES := $(DB_CPP_SOURCES)
+    $(PROVIDER_SOURCES) $(MODEL_SOURCES) $(UTILS_EXTRA_SOURCES)
+CPP_SOURCES :=
 SOURCES := $(C_SOURCES) $(CPP_SOURCES)
 OBJECTS := $(C_SOURCES:.c=.o) $(CPP_SOURCES:.cpp=.o)
 HEADERS := $(wildcard $(SRCDIR)/*/*.h)
@@ -199,8 +190,7 @@ COMPLEX_DEPS := \
     $(LIB_TOOLS_SOURCES) \
     $(MODEL_SOURCES) \
     $(UTIL_DEPS) \
-    $(DB_C_SOURCES) \
-    $(LIBDIR)/db/sqlite_dal.c \
+    $(LIB_DB_SOURCES) \
     $(LIBDIR)/ipc/message_store.c \
     $(EMBEDDING_DEPS) \
     $(LIBDIR)/pdf/pdf_extractor.c \
@@ -212,8 +202,7 @@ COMPLEX_DEPS := \
 
 CONV_DEPS := \
     $(SRCDIR)/session/conversation_tracker.c \
-    $(DB_C_SOURCES) \
-    $(LIBDIR)/db/sqlite_dal.c \
+    $(LIB_DB_SOURCES) \
     $(EMBEDDING_DEPS) \
     $(NETWORK_DEPS) \
     $(LIBDIR)/util/json_escape.c \

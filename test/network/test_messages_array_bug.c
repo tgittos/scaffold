@@ -1,7 +1,7 @@
 #include "api_common.h"
 #include "conversation_tracker.h"
 #include "unity.h"
-#include "../src/db/document_store.h"
+#include "db/document_store.h"
 #include <stdlib.h>
 #include "../src/utils/ralph_home.h"
 

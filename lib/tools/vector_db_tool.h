@@ -2,7 +2,7 @@
 #define VECTOR_DB_TOOL_H
 
 #include "tools_system.h"
-#include "../../src/db/vector_db.h"
+#include "db/vector_db.h"
 
 int register_vector_db_tool(ToolRegistry *registry);
 

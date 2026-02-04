@@ -1,6 +1,6 @@
 #include "todo_tool.h"
 #include "todo_display.h"
-#include "../../src/db/task_store.h"
+#include "db/task_store.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>

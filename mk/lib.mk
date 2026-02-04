@@ -74,7 +74,16 @@ LIB_UTIL_SOURCES := \
 LIB_PDF_SOURCES := $(LIBDIR)/pdf/pdf_extractor.c
 
 # Database module
-LIB_DB_SOURCES := $(LIBDIR)/db/sqlite_dal.c
+LIB_DB_SOURCES := \
+    $(LIBDIR)/db/sqlite_dal.c \
+    $(LIBDIR)/db/vector_db.c \
+    $(LIBDIR)/db/vector_db_service.c \
+    $(LIBDIR)/db/metadata_store.c \
+    $(LIBDIR)/db/document_store.c \
+    $(LIBDIR)/db/task_store.c
+
+# Database C++ sources
+LIB_DB_CPP_SOURCES := $(LIBDIR)/db/hnswlib_wrapper.cpp
 
 # Workflow module (Phase 7)
 LIB_WORKFLOW_SOURCES := $(LIBDIR)/workflow/workflow.c
@@ -85,7 +94,7 @@ LIB_C_SOURCES := $(LIB_IPC_SOURCES) $(LIB_UI_SOURCES) $(LIB_TOOLS_SOURCES) \
     $(LIB_SESSION_SOURCES) $(LIB_POLICY_SOURCES) $(LIB_DB_SOURCES) \
     $(LIB_WORKFLOW_SOURCES) $(LIB_UTIL_SOURCES) $(LIB_PDF_SOURCES)
 
-LIB_CPP_SOURCES :=
+LIB_CPP_SOURCES := $(LIB_DB_CPP_SOURCES)
 
 LIB_SOURCES := $(LIB_C_SOURCES) $(LIB_CPP_SOURCES)
 LIB_OBJECTS := $(LIB_C_SOURCES:.c=.o) $(LIB_CPP_SOURCES:.cpp=.o)

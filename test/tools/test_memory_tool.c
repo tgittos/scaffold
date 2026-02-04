@@ -1,7 +1,7 @@
 #include "../../test/unity/unity.h"
 #include "lib/tools/memory_tool.h"
 #include "lib/tools/tools_system.h"
-#include "../../src/db/vector_db.h"
+#include "db/vector_db.h"
 #include "../../src/llm/embeddings.h"
 #include "../../src/llm/embeddings_service.h"
 #include "../../src/utils/config.h"

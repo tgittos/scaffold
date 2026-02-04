@@ -2,7 +2,7 @@
 #include "conversation_compactor.h"
 #include "conversation_tracker.h"
 #include "ralph.h"
-#include "../src/db/document_store.h"
+#include "db/document_store.h"
 #include <string.h>
 #include <stdlib.h>
 #include "../src/utils/ralph_home.h"

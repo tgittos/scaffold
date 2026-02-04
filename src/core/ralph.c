@@ -20,7 +20,7 @@
 #include "../tools/python_tool.h"
 #include "llm_provider.h"
 #include "util/uuid_utils.h"
-#include "../db/task_store.h"
+#include "db/task_store.h"
 #include "lib/ipc/message_store.h"
 #include "lib/tools/messaging_tool.h"
 #include "lib/tools/builtin_tools.h"

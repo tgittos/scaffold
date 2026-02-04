@@ -5,43 +5,10 @@
 Complete the migration from monolithic `src/` to library-based `lib/` architecture. Each session is a self-contained unit that leaves the codebase buildable with passing tests.
 
 **Current State:**
-- `lib/`: 18 files, ~2,300 lines (orchestration layer)
-- `src/`: ~180 files, ~20,000 lines (all implementation)
+- `lib/`: 26 files, ~5,500 lines (orchestration layer + database)
+- `src/`: ~170 files, ~17,000 lines (all implementation)
 
 **Goal:** Move implementations to `lib/`, leaving only entry points in `src/`.
-
----
-
-## Session 8: Vector Database
-
-**Move:** Vector database infrastructure (lib/db/ already exists from Session 2).
-
-| File | Destination |
-|------|-------------|
-| `src/db/vector_db.c/h` | `lib/db/` |
-| `src/db/hnswlib_wrapper.cpp/h` | `lib/db/` |
-| `src/db/metadata_store.c/h` | `lib/db/` |
-| `src/db/document_store.c/h` | `lib/db/` |
-
-**Changes:**
-1. Move files to `lib/db/`
-2. Update `mk/lib.mk`: Add to `LIB_DB_SOURCES`, `LIB_CPP_SOURCES`
-3. Update `mk/sources.mk`: Remove from `DB_C_SOURCES`, `DB_CPP_SOURCES`
-
-**Verify:** `./scripts/build.sh && ./scripts/run_tests.sh vector_db`
-
----
-
-## Session 9: Database Services
-
-**Move:** Singleton database services.
-
-| File | Destination |
-|------|-------------|
-| `src/db/vector_db_service.c/h` | `lib/db/` |
-| `src/db/task_store.c/h` | `lib/db/` |
-
-**Verify:** `./scripts/build.sh && ./scripts/run_tests.sh task_store`
 
 ---
 
@@ -277,7 +244,7 @@ Session 8 (was 8-9, 16, 18): Tools System + All Tools (except Python) ✓ COMPLE
     ↓
 Session 7b: Utility Migration (fixes lib/tools/ → src/ dependencies) ✓ COMPLETE
     ↓
-Session 8-9: Vector DB + Services (depends on lib/db/sqlite_dal)
+Session 8-9: Vector DB + Services (depends on lib/db/sqlite_dal) ✓ COMPLETE
     ↓
 Session 10-13: LLM (depends on DB for embeddings)
     ↓

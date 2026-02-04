@@ -22,7 +22,7 @@ endef
 # Uses $(sort) to deduplicate sources when tests use multiple dependency sets
 define def_test_mixed
 TEST_$(1)_SOURCES := $$(sort $$(TESTDIR)/$(2).c $(3) $$(UNITY))
-TEST_$(1)_OBJECTS := $$(TEST_$(1)_SOURCES:.c=.o) $$(DB_CPP_SOURCES:.cpp=.o)
+TEST_$(1)_OBJECTS := $$(TEST_$(1)_SOURCES:.c=.o) $$(LIB_DB_CPP_SOURCES:.cpp=.o)
 TEST_$(1)_TARGET := $$(TESTDIR)/test_$(1)
 ALL_TEST_TARGETS += $$(TEST_$(1)_TARGET)
 endef
@@ -209,7 +209,7 @@ $(TEST_http_retry_TARGET): $(TEST_http_retry_OBJECTS) $(CJSON_LIB) $(LIBS_MBEDTL
 # =============================================================================
 
 $(eval $(call def_test,sqlite_dal,db/test_sqlite_dal,$(LIBDIR)/db/sqlite_dal.c $(SRCDIR)/utils/ralph_home.c))
-$(eval $(call def_test,task_store,db/test_task_store,$(SRCDIR)/db/task_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/uuid_utils.c $(SRCDIR)/utils/ralph_home.c))
+$(eval $(call def_test,task_store,db/test_task_store,$(LIBDIR)/db/task_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/uuid_utils.c $(SRCDIR)/utils/ralph_home.c))
 $(eval $(call def_test,message_store,db/test_message_store,$(LIBDIR)/ipc/message_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/uuid_utils.c $(SRCDIR)/utils/ralph_home.c))
 
 $(TEST_sqlite_dal_TARGET): $(TEST_sqlite_dal_OBJECTS) $(SQLITE_LIB)
@@ -247,7 +247,7 @@ $(TEST_notification_formatter_TARGET): $(TEST_notification_formatter_OBJECTS) $(
 # =============================================================================
 
 # Extra objects needed by conversation test (not in test sources)
-CONV_EXTRA_OBJECTS := $(DB_C_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o) \
+CONV_EXTRA_OBJECTS := $(LIB_DB_SOURCES:.c=.o) $(LIB_DB_CPP_SOURCES:.cpp=.o) \
     $(SRCDIR)/llm/embeddings.o $(SRCDIR)/llm/embeddings_service.o $(SRCDIR)/llm/embedding_provider.o \
     $(SRCDIR)/llm/providers/openai_embedding_provider.o $(SRCDIR)/llm/providers/local_embedding_provider.o \
     $(SRCDIR)/network/http_client.o $(SRCDIR)/network/embedded_cacert.o $(SRCDIR)/network/api_error.o \
@@ -282,7 +282,7 @@ MOCK_EMBEDDINGS_SOURCES := $(TESTDIR)/mock_api_server.c $(TESTDIR)/mock_embeddin
 
 $(eval $(call def_test_mixed,vector_db_tool,tools/test_vector_db_tool,$(MOCK_EMBEDDINGS_SOURCES) $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,memory_tool,tools/test_memory_tool,$(MOCK_EMBEDDINGS_SOURCES) $(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,memory_mgmt,test_memory_management,$(LIBDIR)/ui/memory_commands.c $(LIBDIR)/ui/terminal.c $(DB_C_SOURCES) $(EMBEDDING_DEPS) $(SRCDIR)/utils/config.c $(NETWORK_DEPS) $(LIBDIR)/util/common_utils.c $(LIBDIR)/util/debug_output.c $(SRCDIR)/utils/ralph_home.c))
+$(eval $(call def_test_mixed,memory_mgmt,test_memory_management,$(LIBDIR)/ui/memory_commands.c $(LIBDIR)/ui/terminal.c $(LIB_DB_SOURCES) $(EMBEDDING_DEPS) $(SRCDIR)/utils/config.c $(NETWORK_DEPS) $(LIBDIR)/util/common_utils.c $(LIBDIR)/util/debug_output.c $(SRCDIR)/utils/ralph_home.c))
 $(eval $(call def_test_mixed,token_manager,session/test_token_manager,$(SRCDIR)/session/token_manager.c $(SRCDIR)/session/rolling_summary.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,conversation_compactor,session/test_conversation_compactor,$(SRCDIR)/session/conversation_compactor.c $(SRCDIR)/session/rolling_summary.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/session/conversation_tracker.c $(SRCDIR)/session/token_manager.c $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,rolling_summary,session/test_rolling_summary,$(SRCDIR)/session/rolling_summary.c $(SRCDIR)/session/session_manager.c $(SRCDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
@@ -358,8 +358,8 @@ $(TEST_recap_TARGET): $(TEST_recap_OBJECTS) $(ALL_LIBS)
 # =============================================================================
 
 # Vector DB test - minimal, just hnswlib
-TEST_vector_db_SOURCES := $(TESTDIR)/db/test_vector_db.c $(SRCDIR)/db/vector_db.c $(SRCDIR)/utils/ralph_home.c $(DB_CPP_SOURCES) $(UNITY)
-TEST_vector_db_OBJECTS := $(TESTDIR)/db/test_vector_db.o $(SRCDIR)/db/vector_db.o $(SRCDIR)/utils/ralph_home.o $(SRCDIR)/db/hnswlib_wrapper.o $(TESTDIR)/unity/unity.o
+TEST_vector_db_SOURCES := $(TESTDIR)/db/test_vector_db.c $(LIBDIR)/db/vector_db.c $(SRCDIR)/utils/ralph_home.c $(LIB_DB_CPP_SOURCES) $(UNITY)
+TEST_vector_db_OBJECTS := $(TESTDIR)/db/test_vector_db.o $(LIBDIR)/db/vector_db.o $(SRCDIR)/utils/ralph_home.o $(LIBDIR)/db/hnswlib_wrapper.o $(TESTDIR)/unity/unity.o
 TEST_vector_db_TARGET := $(TESTDIR)/test_vector_db
 ALL_TEST_TARGETS += $(TEST_vector_db_TARGET)
 
@@ -367,8 +367,8 @@ $(TEST_vector_db_TARGET): $(TEST_vector_db_OBJECTS) $(HNSWLIB_DIR)/hnswlib/hnswl
 	$(CXX) -o $@ $(TEST_vector_db_OBJECTS) -lpthread -lm
 
 # Document store test
-TEST_document_store_SOURCES := $(TESTDIR)/db/test_document_store.c $(DB_C_SOURCES) $(LIBDIR)/util/common_utils.c $(SRCDIR)/utils/config.c $(LIBDIR)/util/debug_output.c $(SRCDIR)/utils/ralph_home.c $(EMBEDDING_DEPS) $(NETWORK_DEPS) $(UNITY)
-TEST_document_store_OBJECTS := $(TEST_document_store_SOURCES:.c=.o) $(DB_CPP_SOURCES:.cpp=.o)
+TEST_document_store_SOURCES := $(TESTDIR)/db/test_document_store.c $(LIB_DB_SOURCES) $(LIBDIR)/util/common_utils.c $(SRCDIR)/utils/config.c $(LIBDIR)/util/debug_output.c $(SRCDIR)/utils/ralph_home.c $(EMBEDDING_DEPS) $(NETWORK_DEPS) $(UNITY)
+TEST_document_store_OBJECTS := $(TEST_document_store_SOURCES:.c=.o) $(LIB_DB_CPP_SOURCES:.cpp=.o)
 TEST_document_store_TARGET := $(TESTDIR)/test_document_store
 ALL_TEST_TARGETS += $(TEST_document_store_TARGET)
 

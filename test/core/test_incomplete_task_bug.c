@@ -1,7 +1,7 @@
 #include "unity/unity.h"
 #include "ralph.h"
 #include "lib/tools/todo_manager.h"
-#include "../src/db/task_store.h"
+#include "db/task_store.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

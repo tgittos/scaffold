@@ -2,9 +2,9 @@
 #include "vector_db_service.h"
 #include "metadata_store.h"
 #include "hnswlib_wrapper.h"
-#include "../utils/config.h"
-#include "../utils/ralph_home.h"
-#include "../llm/embeddings_service.h"
+#include "../../src/utils/config.h"
+#include "../../src/utils/ralph_home.h"
+#include "../../src/llm/embeddings_service.h"
 #include "util/ptrarray.h"
 #include <stdio.h>
 #include <stdlib.h>

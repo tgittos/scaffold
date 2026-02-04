@@ -2,7 +2,7 @@
 #define EMBEDDINGS_SERVICE_H
 
 #include "embeddings.h"
-#include "../db/vector_db.h"
+#include "db/vector_db.h"
 
 /*
  * Thread-safe singleton that centralizes embedding generation so all modules

@@ -19,7 +19,7 @@
 #include <time.h>
 
 /* Re-export task store types */
-#include "../../src/db/task_store.h"
+#include "db/task_store.h"
 #include "../ipc/message_store.h"
 
 #ifdef __cplusplus

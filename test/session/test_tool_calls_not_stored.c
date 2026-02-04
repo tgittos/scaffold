@@ -1,6 +1,6 @@
 #include "../unity/unity.h"
 #include "../../src/session/conversation_tracker.h"
-#include "../../src/db/document_store.h"
+#include "db/document_store.h"
 #include "../../src/utils/config.h"
 #include <stdio.h>
 #include <string.h>

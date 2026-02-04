@@ -1,7 +1,7 @@
 #include "vector_db.h"
 #include "hnswlib_wrapper.h"
 #include "util/ptrarray.h"
-#include "../utils/ralph_home.h"
+#include "../../src/utils/ralph_home.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>

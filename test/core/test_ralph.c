@@ -2,7 +2,7 @@
 #include "ralph.h"
 #include "tools/builtin_tools.h"
 #include "mock_api_server.h"
-#include "../src/db/document_store.h"
+#include "db/document_store.h"
 #include "util/json_escape.h"
 #include <stdio.h>
 #include <stdlib.h>
