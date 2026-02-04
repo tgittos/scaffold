@@ -37,7 +37,7 @@ typedef struct {
  * 2. ~/.local/ralph/config.json (if ~/.local/ralph exists)
  * 3. Environment variables (as fallback)
  * 4. Built-in defaults
- * 
+ *
  * @return 0 on success, -1 on error
  */
 int config_init(void);
@@ -45,7 +45,7 @@ int config_init(void);
 /**
  * Get the global configuration instance
  * Must call config_init() first
- * 
+ *
  * @return Pointer to global config, or NULL if not initialized
  */
 ralph_config_t* config_get(void);
@@ -57,7 +57,7 @@ void config_cleanup(void);
 
 /**
  * Load configuration from a JSON file
- * 
+ *
  * @param filepath Path to JSON configuration file
  * @return 0 on success, -1 on error
  */
@@ -65,7 +65,7 @@ int config_load_from_file(const char *filepath);
 
 /**
  * Save current configuration to a JSON file
- * 
+ *
  * @param filepath Path to save JSON configuration file
  * @return 0 on success, -1 on error
  */
@@ -73,7 +73,7 @@ int config_save_to_file(const char *filepath);
 
 /**
  * Set a configuration value by key
- * 
+ *
  * @param key Configuration key
  * @param value Configuration value
  * @return 0 on success, -1 on error
@@ -82,7 +82,7 @@ int config_set(const char *key, const char *value);
 
 /**
  * Get a configuration value by key
- * 
+ *
  * @param key Configuration key
  * @return Configuration value or NULL if not found
  */

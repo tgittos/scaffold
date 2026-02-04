@@ -1,5 +1,5 @@
 #include "../unity/unity.h"
-#include "../../src/utils/ralph_home.h"
+#include "util/ralph_home.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>

@@ -1,11 +1,11 @@
 #include "unity.h"
-#include "prompt_loader.h"
+#include "util/prompt_loader.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
-#include "ralph_home.h"
+#include "util/ralph_home.h"
 
 // Stub for python_get_loaded_tools_description (avoids linking python_tool_files.c)
 char *python_get_loaded_tools_description(void) {

@@ -19,7 +19,7 @@
 #include "policy/approval_gate.h"
 #include "policy/protected_files.h"
 #include "policy/rate_limiter.h"
-#include "../src/utils/ralph_home.h"
+#include "util/ralph_home.h"
 
 #include <fcntl.h>
 #include <stdio.h>

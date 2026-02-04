@@ -100,7 +100,12 @@ LIB_UTIL_SOURCES := \
     $(LIBDIR)/util/json_escape.c \
     $(LIBDIR)/util/debug_output.c \
     $(LIBDIR)/util/document_chunker.c \
-    $(LIBDIR)/util/interrupt.c
+    $(LIBDIR)/util/interrupt.c \
+    $(LIBDIR)/util/config.c \
+    $(LIBDIR)/util/prompt_loader.c \
+    $(LIBDIR)/util/ralph_home.c \
+    $(LIBDIR)/util/context_retriever.c \
+    $(LIBDIR)/util/pdf_processor.c
 
 # PDF module
 LIB_PDF_SOURCES := $(LIBDIR)/pdf/pdf_extractor.c

@@ -2,7 +2,7 @@
 #define CONTEXT_RETRIEVER_H
 
 #include <stddef.h>
-#include "util/darray.h"
+#include "darray.h"
 
 typedef struct {
     char *content;
@@ -19,7 +19,7 @@ typedef struct {
 
 /**
  * Retrieve relevant context for a user message from vector database
- * 
+ *
  * @param user_message The user's message/query
  * @param max_results Maximum number of context items to retrieve
  * @return Context result (caller must free)
@@ -28,7 +28,7 @@ context_result_t* retrieve_relevant_context(const char *user_message, size_t max
 
 /**
  * Format context items into a string suitable for inclusion in system prompt
- * 
+ *
  * @param context_result Context items to format
  * @return Formatted context string (caller must free)
  */
@@ -36,7 +36,7 @@ char* format_context_for_prompt(const context_result_t *context_result);
 
 /**
  * Free context result
- * 
+ *
  * @param result Result to free
  */
 void free_context_result(context_result_t *result);

@@ -5,7 +5,7 @@
 #include "db/document_store.h"
 #include <string.h>
 #include <stdlib.h>
-#include "../src/utils/ralph_home.h"
+#include "util/ralph_home.h"
 
 void setUp(void) {
     ralph_home_init(NULL);

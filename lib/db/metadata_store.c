@@ -7,7 +7,7 @@
 #include <cJSON.h>
 #include "util/common_utils.h"
 #include "util/ptrarray.h"
-#include "../../src/utils/ralph_home.h"
+#include "../util/ralph_home.h"
 
 PTRARRAY_DEFINE(ChunkMetadataArray, ChunkMetadata)
 

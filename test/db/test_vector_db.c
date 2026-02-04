@@ -1,7 +1,7 @@
 #include "unity.h"
 #include "db/vector_db.h"
 #include "db/hnswlib_wrapper.h"
-#include "utils/ralph_home.h"
+#include "util/ralph_home.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>

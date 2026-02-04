@@ -37,8 +37,8 @@ $(eval $(call def_test,interrupt,core/test_interrupt,$(LIBDIR)/util/interrupt.c)
 $(eval $(call def_test,async_executor,core/test_async_executor,$(SRCDIR)/core/async_executor.c $(LIBDIR)/util/interrupt.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/ipc/pipe_notifier.c $(TESTDIR)/stubs/ralph_stub.c))
 $(eval $(call def_test,pipe_notifier,utils/test_pipe_notifier,$(LIBDIR)/ipc/pipe_notifier.c))
 $(eval $(call def_test,agent_identity,core/test_agent_identity,$(LIBDIR)/ipc/agent_identity.c))
-$(eval $(call def_test,prompt,utils/test_prompt_loader,$(SRCDIR)/utils/prompt_loader.c $(SRCDIR)/utils/ralph_home.c))
-$(eval $(call def_test,ralph_home,utils/test_ralph_home,$(SRCDIR)/utils/ralph_home.c))
+$(eval $(call def_test,prompt,utils/test_prompt_loader,$(LIBDIR)/util/prompt_loader.c $(LIBDIR)/util/ralph_home.c))
+$(eval $(call def_test,ralph_home,utils/test_ralph_home,$(LIBDIR)/util/ralph_home.c))
 $(eval $(call def_test,todo_manager,tools/test_todo_manager,$(LIBDIR)/tools/todo_manager.c))
 $(eval $(call def_test_mixed,tool_param_dsl,tools/test_tool_param_dsl,$(COMPLEX_DEPS)))
 $(eval $(call def_test,document_chunker,test_document_chunker,$(LIBDIR)/util/document_chunker.c $(LIBDIR)/util/common_utils.c))
@@ -65,7 +65,7 @@ GATE_DEPS := \
     $(LIBDIR)/policy/subagent_approval.c \
     $(LIBDIR)/policy/tool_args.c \
     $(LIBDIR)/util/debug_output.c \
-    $(SRCDIR)/utils/ralph_home.c \
+    $(LIBDIR)/util/ralph_home.c \
     $(LIBDIR)/util/json_escape.c \
     $(TESTDIR)/stubs/subagent_stub.c \
     $(TESTDIR)/stubs/output_formatter_stub.c
@@ -169,7 +169,7 @@ $(TEST_approval_gate_integration_TARGET): $(TEST_approval_gate_integration_OBJEC
 # CJSON TESTS
 # =============================================================================
 
-$(eval $(call def_test,config,utils/test_config,$(SRCDIR)/utils/config.c $(SRCDIR)/utils/ralph_home.c))
+$(eval $(call def_test,config,utils/test_config,$(LIBDIR)/util/config.c $(LIBDIR)/util/ralph_home.c))
 $(eval $(call def_test,debug_output,utils/test_debug_output,$(LIBDIR)/util/debug_output.c))
 $(eval $(call def_test,spinner,utils/test_spinner,$(LIBDIR)/ui/terminal.c $(LIBDIR)/ui/spinner.c $(TESTDIR)/stubs/output_formatter_stub.c))
 $(eval $(call def_test,terminal,utils/test_terminal,$(LIBDIR)/ui/terminal.c $(TESTDIR)/stubs/output_formatter_stub.c))
@@ -199,7 +199,7 @@ $(TEST_pdf_extractor_TARGET): $(TEST_pdf_extractor_OBJECTS) $(PDFIO_LIB) $(ZLIB_
 # HTTP RETRY TEST
 # =============================================================================
 
-$(eval $(call def_test,http_retry,network/test_http_retry,$(LIBDIR)/network/api_error.c $(SRCDIR)/utils/config.c $(SRCDIR)/utils/ralph_home.c))
+$(eval $(call def_test,http_retry,network/test_http_retry,$(LIBDIR)/network/api_error.c $(LIBDIR)/util/config.c $(LIBDIR)/util/ralph_home.c))
 
 $(TEST_http_retry_TARGET): $(TEST_http_retry_OBJECTS) $(CJSON_LIB) $(LIBS_MBEDTLS)
 	$(CC) -o $@ $(TEST_http_retry_OBJECTS) $(CJSON_LIB) $(LIBS_MBEDTLS) -lm
@@ -208,9 +208,9 @@ $(TEST_http_retry_TARGET): $(TEST_http_retry_OBJECTS) $(CJSON_LIB) $(LIBS_MBEDTL
 # SQLITE TESTS
 # =============================================================================
 
-$(eval $(call def_test,sqlite_dal,db/test_sqlite_dal,$(LIBDIR)/db/sqlite_dal.c $(SRCDIR)/utils/ralph_home.c))
-$(eval $(call def_test,task_store,db/test_task_store,$(LIBDIR)/db/task_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/uuid_utils.c $(SRCDIR)/utils/ralph_home.c))
-$(eval $(call def_test,message_store,db/test_message_store,$(LIBDIR)/ipc/message_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/uuid_utils.c $(SRCDIR)/utils/ralph_home.c))
+$(eval $(call def_test,sqlite_dal,db/test_sqlite_dal,$(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/ralph_home.c))
+$(eval $(call def_test,task_store,db/test_task_store,$(LIBDIR)/db/task_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/uuid_utils.c $(LIBDIR)/util/ralph_home.c))
+$(eval $(call def_test,message_store,db/test_message_store,$(LIBDIR)/ipc/message_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/uuid_utils.c $(LIBDIR)/util/ralph_home.c))
 
 $(TEST_sqlite_dal_TARGET): $(TEST_sqlite_dal_OBJECTS) $(SQLITE_LIB)
 	$(CC) -o $@ $(TEST_sqlite_dal_OBJECTS) $(SQLITE_LIB) -lpthread -lm
@@ -228,7 +228,7 @@ MESSAGING_DEPS := \
     $(LIBDIR)/ipc/message_store.c \
     $(LIBDIR)/db/sqlite_dal.c \
     $(LIBDIR)/util/uuid_utils.c \
-    $(SRCDIR)/utils/ralph_home.c \
+    $(LIBDIR)/util/ralph_home.c \
     $(LIBDIR)/ipc/pipe_notifier.c \
     $(LIBDIR)/ui/terminal.c \
     $(TESTDIR)/stubs/output_formatter_stub.c
@@ -252,8 +252,8 @@ CONV_EXTRA_OBJECTS := $(LIB_DB_SOURCES:.c=.o) $(LIB_DB_CPP_SOURCES:.cpp=.o) \
     $(LIBDIR)/llm/providers/openai_embedding_provider.o $(LIBDIR)/llm/providers/local_embedding_provider.o \
     $(LIBDIR)/network/http_client.o $(LIBDIR)/network/embedded_cacert.o $(LIBDIR)/network/api_error.o \
     $(LIBDIR)/util/interrupt.o \
-    $(SRCDIR)/utils/config.o $(LIBDIR)/util/debug_output.o $(LIBDIR)/util/common_utils.o \
-    $(SRCDIR)/utils/ralph_home.o
+    $(LIBDIR)/util/config.o $(LIBDIR)/util/debug_output.o $(LIBDIR)/util/common_utils.o \
+    $(LIBDIR)/util/ralph_home.o
 
 $(eval $(call def_test,conversation,session/test_conversation_tracker,$(LIBDIR)/session/conversation_tracker.c $(LIBDIR)/util/json_escape.c))
 $(eval $(call def_test,conversation_vdb,session/test_conversation_vector_db,$(LIBDIR)/session/conversation_tracker.c $(LIBDIR)/util/json_escape.c $(TESTDIR)/mock_api_server.c $(TESTDIR)/mock_embeddings.c $(TESTDIR)/mock_embeddings_server.c))
@@ -282,7 +282,7 @@ MOCK_EMBEDDINGS_SOURCES := $(TESTDIR)/mock_api_server.c $(TESTDIR)/mock_embeddin
 
 $(eval $(call def_test_mixed,vector_db_tool,tools/test_vector_db_tool,$(MOCK_EMBEDDINGS_SOURCES) $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,memory_tool,tools/test_memory_tool,$(MOCK_EMBEDDINGS_SOURCES) $(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,memory_mgmt,test_memory_management,$(LIBDIR)/ui/memory_commands.c $(LIBDIR)/ui/terminal.c $(LIB_DB_SOURCES) $(EMBEDDING_DEPS) $(SRCDIR)/utils/config.c $(NETWORK_DEPS) $(LIBDIR)/util/common_utils.c $(LIBDIR)/util/debug_output.c $(SRCDIR)/utils/ralph_home.c))
+$(eval $(call def_test_mixed,memory_mgmt,test_memory_management,$(LIBDIR)/ui/memory_commands.c $(LIBDIR)/ui/terminal.c $(LIB_DB_SOURCES) $(EMBEDDING_DEPS) $(LIBDIR)/util/config.c $(NETWORK_DEPS) $(LIBDIR)/util/common_utils.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/util/ralph_home.c))
 $(eval $(call def_test_mixed,token_manager,session/test_token_manager,$(LIBDIR)/session/token_manager.c $(LIBDIR)/session/rolling_summary.c $(LIBDIR)/session/session_manager.c $(LIBDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,conversation_compactor,session/test_conversation_compactor,$(LIBDIR)/session/conversation_compactor.c $(LIBDIR)/session/rolling_summary.c $(LIBDIR)/session/session_manager.c $(LIBDIR)/session/conversation_tracker.c $(LIBDIR)/session/token_manager.c $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,rolling_summary,session/test_rolling_summary,$(LIBDIR)/session/rolling_summary.c $(LIBDIR)/session/session_manager.c $(LIBDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
@@ -358,8 +358,8 @@ $(TEST_recap_TARGET): $(TEST_recap_OBJECTS) $(ALL_LIBS)
 # =============================================================================
 
 # Vector DB test - minimal, just hnswlib
-TEST_vector_db_SOURCES := $(TESTDIR)/db/test_vector_db.c $(LIBDIR)/db/vector_db.c $(SRCDIR)/utils/ralph_home.c $(LIB_DB_CPP_SOURCES) $(UNITY)
-TEST_vector_db_OBJECTS := $(TESTDIR)/db/test_vector_db.o $(LIBDIR)/db/vector_db.o $(SRCDIR)/utils/ralph_home.o $(LIBDIR)/db/hnswlib_wrapper.o $(TESTDIR)/unity/unity.o
+TEST_vector_db_SOURCES := $(TESTDIR)/db/test_vector_db.c $(LIBDIR)/db/vector_db.c $(LIBDIR)/util/ralph_home.c $(LIB_DB_CPP_SOURCES) $(UNITY)
+TEST_vector_db_OBJECTS := $(TESTDIR)/db/test_vector_db.o $(LIBDIR)/db/vector_db.o $(LIBDIR)/util/ralph_home.o $(LIBDIR)/db/hnswlib_wrapper.o $(TESTDIR)/unity/unity.o
 TEST_vector_db_TARGET := $(TESTDIR)/test_vector_db
 ALL_TEST_TARGETS += $(TEST_vector_db_TARGET)
 
@@ -367,7 +367,7 @@ $(TEST_vector_db_TARGET): $(TEST_vector_db_OBJECTS) $(HNSWLIB_DIR)/hnswlib/hnswl
 	$(CXX) -o $@ $(TEST_vector_db_OBJECTS) -lpthread -lm
 
 # Document store test
-TEST_document_store_SOURCES := $(TESTDIR)/db/test_document_store.c $(LIB_DB_SOURCES) $(LIBDIR)/util/common_utils.c $(SRCDIR)/utils/config.c $(LIBDIR)/util/debug_output.c $(SRCDIR)/utils/ralph_home.c $(EMBEDDING_DEPS) $(NETWORK_DEPS) $(UNITY)
+TEST_document_store_SOURCES := $(TESTDIR)/db/test_document_store.c $(LIB_DB_SOURCES) $(LIBDIR)/util/common_utils.c $(LIBDIR)/util/config.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/util/ralph_home.c $(EMBEDDING_DEPS) $(NETWORK_DEPS) $(UNITY)
 TEST_document_store_OBJECTS := $(TEST_document_store_SOURCES:.c=.o) $(LIB_DB_CPP_SOURCES:.cpp=.o)
 TEST_document_store_TARGET := $(TESTDIR)/test_document_store
 ALL_TEST_TARGETS += $(TEST_document_store_TARGET)

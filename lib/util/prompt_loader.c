@@ -1,5 +1,5 @@
 #include "prompt_loader.h"
-#include "../tools/python_tool_files.h"
+#include "../../src/tools/python_tool_files.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

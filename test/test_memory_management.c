@@ -2,7 +2,7 @@
 #include "db/metadata_store.h"
 #include "ui/memory_commands.h"
 #include "db/vector_db_service.h"
-#include "../src/utils/ralph_home.h"
+#include "util/ralph_home.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

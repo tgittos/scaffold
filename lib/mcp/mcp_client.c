@@ -2,7 +2,7 @@
 #include "mcp_transport.h"
 #include <cJSON.h>
 #include "util/debug_output.h"
-#include "src/utils/ralph_home.h"
+#include "../util/ralph_home.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

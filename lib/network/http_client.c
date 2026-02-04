@@ -2,7 +2,7 @@
 #include "api_error.h"
 #include "embedded_cacert.h"
 #include "../util/interrupt.h"
-#include "../../src/utils/config.h"
+#include "../util/config.h"
 #include "../util/debug_output.h"
 #include <stdio.h>
 #include <stdlib.h>

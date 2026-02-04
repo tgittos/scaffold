@@ -12,39 +12,6 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 ---
 
-## Session 18: Utils Module
-
-**Move:** Core utilities needed by the agent.
-
-| File | Destination |
-|------|-------------|
-| `src/utils/config.c/h` | `lib/util/` |
-| `src/utils/prompt_loader.c/h` | `lib/util/` |
-| `src/utils/ralph_home.c/h` | `lib/util/` |
-| `src/utils/context_retriever.c/h` | `lib/util/` |
-| `src/utils/pdf_processor.c/h` | `lib/util/` |
-
-**Changes:**
-1. Move files to `lib/util/`
-2. Update includes in moved files (relative paths within lib/)
-3. Update `mk/lib.mk`: Add to `LIB_UTIL_SOURCES`:
-   - `$(LIBDIR)/util/config.c`
-   - `$(LIBDIR)/util/prompt_loader.c`
-   - `$(LIBDIR)/util/ralph_home.c`
-   - `$(LIBDIR)/util/context_retriever.c`
-   - `$(LIBDIR)/util/pdf_processor.c`
-4. Update `mk/sources.mk`: Remove utils files from `CORE_SOURCES`
-5. Update `mk/sources.mk`: Remove `UTILS_EXTRA_SOURCES` section entirely
-6. Update `mk/sources.mk`: Update `UTIL_DEPS` to use `$(LIBDIR)/util/` paths
-7. Update `mk/sources.mk`: Update `RALPH_CORE_DEPS` to use `$(LIBDIR)/util/` paths
-8. Update `mk/sources.mk`: Update `CONV_DEPS` to use `$(LIBDIR)/util/` paths
-9. Update `mk/sources.mk`: Update `COMPLEX_DEPS` to use `$(LIBDIR)/util/` paths
-10. Update includes in `src/` files that referenced moved headers
-
-**Verify:** `./scripts/build.sh clean && ./scripts/build.sh && ./scripts/run_tests.sh config`
-
----
-
 ## Session 19: Messaging Module
 
 **Move:** Notification formatting for IPC.
@@ -224,7 +191,7 @@ Session 16: Network Module (http_client, api_common, api_error, streaming, embed
     ↓
 Session 17: MCP Module (mcp_client, mcp_transport, mcp_transport_stdio, mcp_transport_http) ✓ COMPLETE
     ↓
-Session 18: Utils Module (config, prompt_loader, ralph_home, context_retriever, pdf_processor)
+Session 18: Utils Module (config, prompt_loader, ralph_home, context_retriever, pdf_processor) ✓ COMPLETE
     ↓
 Session 19: Messaging Module (notification_formatter)
     ↓

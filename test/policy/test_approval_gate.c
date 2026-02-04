@@ -9,7 +9,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-#include "../src/utils/ralph_home.h"
+#include "util/ralph_home.h"
 
 /*
  * Stub implementations for Python tool functions.

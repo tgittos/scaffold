@@ -7,7 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-#include "ralph_home.h"
+#include "util/ralph_home.h"
 
 void setUp(void) {
     ralph_home_init(NULL);

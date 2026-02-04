@@ -5,7 +5,7 @@
  */
 
 #include "workflow.h"
-#include "../../src/utils/ralph_home.h"
+#include "../util/ralph_home.h"
 #include "util/uuid_utils.h"
 #include <sqlite3.h>
 #include <stdio.h>

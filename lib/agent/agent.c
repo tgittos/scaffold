@@ -11,7 +11,7 @@
 #include "../util/debug_output.h"
 #include "../ui/output_formatter.h"
 #include "../ui/json_output.h"
-#include "../../src/utils/ralph_home.h"
+#include "../util/ralph_home.h"
 #include "../ui/spinner.h"
 #include "../policy/approval_gate.h"
 #include "../tools/subagent_tool.h"

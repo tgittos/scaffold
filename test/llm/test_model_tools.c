@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include "ralph_home.h"
+#include "util/ralph_home.h"
 
 // Test globals
 static ModelRegistry* test_registry = NULL;

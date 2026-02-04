@@ -2,8 +2,8 @@
 #include "lib/tools/subagent_tool.h"
 #include "lib/tools/messaging_tool.h"
 #include "lib/ipc/message_store.h"
-#include "../../src/utils/config.h"
-#include "../../src/utils/ralph_home.h"
+#include "util/config.h"
+#include "util/ralph_home.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

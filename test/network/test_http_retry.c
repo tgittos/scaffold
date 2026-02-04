@@ -1,6 +1,6 @@
 #include "../unity/unity.h"
 #include "network/api_error.h"
-#include "../../src/utils/config.h"
+#include "util/config.h"
 #include <string.h>
 #include <curl/curl.h>
 

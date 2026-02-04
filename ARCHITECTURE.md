@@ -1009,12 +1009,6 @@ src/
 │       ├── apply_delta.py
 │       ├── shell.py
 │       └── web_fetch.py
-├── utils/                  # Utilities
-│   ├── config.c/h          # Configuration management
-│   ├── prompt_loader.c/h   # System prompt loading
-│   ├── pdf_processor.c/h   # PDF download/processing
-│   ├── context_retriever.c/h # Vector context retrieval
-│   └── ralph_home.c/h      # Centralized home directory management
 lib/
 ├── util/                   # Generic utilities
 │   ├── darray.h            # Type-safe dynamic array macros
@@ -1024,7 +1018,12 @@ lib/
 │   ├── common_utils.c/h    # General utilities
 │   ├── json_escape.c/h     # JSON escaping
 │   ├── debug_output.c/h    # Debug logging
-│   └── document_chunker.c/h # Text chunking
+│   ├── document_chunker.c/h # Text chunking
+│   ├── config.c/h          # Configuration management
+│   ├── prompt_loader.c/h   # System prompt loading
+│   ├── pdf_processor.c/h   # PDF download/processing
+│   ├── context_retriever.c/h # Vector context retrieval
+│   └── ralph_home.c/h      # Centralized home directory management
 ├── db/                     # Database abstraction
 │   └── sqlite_dal.c/h      # SQLite data access layer
 ├── llm/                    # LLM core framework

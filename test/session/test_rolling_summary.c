@@ -2,7 +2,7 @@
 #include "session/rolling_summary.h"
 #include "session/session_manager.h"
 #include "session/conversation_tracker.h"
-#include "../src/utils/ralph_home.h"
+#include "util/ralph_home.h"
 #include "db/document_store.h"
 #include <string.h>
 #include <stdlib.h>

@@ -73,13 +73,6 @@ Note: The LLM integration layer has been fully migrated to `lib/llm/`. Model-spe
 - **`shell.py`** - Shell command execution with timeout
 - **`web_fetch.py`** - Fetch and process web content
 
-#### `src/utils/` - Application Utilities
-- **`config.c/h`** - Configuration management with cascading priority (local → user → env → defaults)
-- **`prompt_loader.c/h`** - System prompt loading (core + PROMPT.md)
-- **`context_retriever.c/h`** - Vector database context retrieval for prompts
-- **`pdf_processor.c/h`** - PDF download, extraction, chunking, and indexing pipeline
-- **`ralph_home.c/h`** - Centralized Ralph home directory management (~/.local/ralph/)
-
 ---
 
 ### `lib/` - Reusable Library Layer
@@ -95,6 +88,11 @@ Generic, CLI-independent components that can be reused.
 - **`json_escape.c/h`** - JSON string escaping utilities
 - **`debug_output.c/h`** - Conditional debug logging with ANSI colors
 - **`document_chunker.c/h`** - Intelligent text chunking for embeddings
+- **`config.c/h`** - Configuration management with cascading priority (local → user → env → defaults)
+- **`prompt_loader.c/h`** - System prompt loading (core + AGENTS.md)
+- **`context_retriever.c/h`** - Vector database context retrieval for prompts
+- **`pdf_processor.c/h`** - PDF download, extraction, chunking, and indexing pipeline
+- **`ralph_home.c/h`** - Centralized Ralph home directory management (~/.local/ralph/)
 
 #### `lib/pdf/` - PDF Processing
 - **`pdf_extractor.c/h`** - PDF text extraction using PDFio library
@@ -317,7 +315,7 @@ The `lib/mcp/` directory provides Model Context Protocol support:
 - **Namespaced Tools**: Registered as `mcp_{servername}_{toolname}`
 
 ### 7. Configuration System
-Centralized configuration in `src/utils/config.c`:
+Centralized configuration in `lib/util/config.c`:
 - **Priority**: Local `ralph.config.json` → User config → Environment → Defaults
 - **Auto-Generation**: Creates config from environment variables
 - **MCP Config**: Server definitions in `mcpServers` section
@@ -329,7 +327,7 @@ Centralized configuration in `src/utils/config.c`:
 1. **Core Logic**: Start with `src/core/main.c` for application flow
 2. **Tool Development**: Add new tools in `lib/tools/` with corresponding tests
 3. **LLM Integration**: Extend providers in `lib/llm/providers/` or models in `lib/llm/models/`
-4. **Utilities**: Generic utilities go in `lib/util/`, application-specific in `src/utils/`
+4. **Utilities**: Generic utilities go in `lib/util/`
 5. **Testing**: Every module has corresponding tests in the `test/` directory structure
 
 ## Build System

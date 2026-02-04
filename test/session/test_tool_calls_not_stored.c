@@ -1,13 +1,13 @@
 #include "../unity/unity.h"
 #include "session/conversation_tracker.h"
 #include "db/document_store.h"
-#include "../../src/utils/config.h"
+#include "util/config.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <cJSON.h>
-#include "../../src/utils/ralph_home.h"
+#include "util/ralph_home.h"
 
 #define TEST_HOME_DIR "/tmp/test_tool_calls_not_stored_home"
 

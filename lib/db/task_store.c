@@ -5,7 +5,7 @@
 #include "task_store.h"
 #include "sqlite_dal.h"
 #include "util/uuid_utils.h"
-#include "../../src/utils/ralph_home.h"
+#include "../util/ralph_home.h"
 #include "util/ptrarray.h"
 #include <stdio.h>
 #include <stdlib.h>

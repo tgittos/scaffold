@@ -1,7 +1,7 @@
 #include "unity.h"
 #include "db/task_store.h"
 #include "util/uuid_utils.h"
-#include "utils/ralph_home.h"
+#include "util/ralph_home.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>

@@ -17,7 +17,7 @@
 #include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include "ralph_home.h"
+#include "util/ralph_home.h"
 
 /* =============================================================================
  * Stubs for Python tool functions (not linked in unit tests)

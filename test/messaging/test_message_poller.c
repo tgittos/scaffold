@@ -1,7 +1,7 @@
 #include "unity.h"
 #include "ipc/message_poller.h"
 #include "ipc/message_store.h"
-#include "utils/ralph_home.h"
+#include "util/ralph_home.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>

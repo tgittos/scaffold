@@ -3,7 +3,7 @@
 
 #include <stddef.h>
 #include <time.h>
-#include "db/vector_db.h"
+#include "../db/vector_db.h"
 
 typedef struct {
     char *url;
@@ -22,7 +22,7 @@ typedef struct {
 
 /**
  * Download and process a PDF from a URL
- * 
+ *
  * @param url The URL to download the PDF from
  * @param vector_db Vector database to store chunks in
  * @param index_name Name of the vector index to use
@@ -32,7 +32,7 @@ pdf_processing_result_t* process_pdf_from_url(const char *url, vector_db_t *vect
 
 /**
  * Process an already downloaded PDF binary data
- * 
+ *
  * @param pdf_data Binary PDF data
  * @param data_size Size of PDF data
  * @param metadata Metadata about the PDF
@@ -46,14 +46,14 @@ pdf_processing_result_t* process_pdf_data(const unsigned char *pdf_data, size_t 
 
 /**
  * Free PDF processing result
- * 
+ *
  * @param result Result to free
  */
 void free_pdf_processing_result(pdf_processing_result_t *result);
 
 /**
  * Free PDF metadata
- * 
+ *
  * @param metadata Metadata to free
  */
 void free_pdf_metadata(pdf_metadata_t *metadata);

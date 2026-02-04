@@ -1,8 +1,8 @@
 #include "context_retriever.h"
-#include "db/vector_db_service.h"
-#include "db/metadata_store.h"
-#include "llm/embeddings_service.h"
-#include "util/common_utils.h"
+#include "../db/vector_db_service.h"
+#include "../db/metadata_store.h"
+#include "../llm/embeddings_service.h"
+#include "common_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,23 +43,23 @@ context_result_t* retrieve_relevant_context(const char *user_message, size_t max
     if (!vector_db_has_index(vector_db, "documents")) {
         return create_empty_result();
     }
-    
+
     if (!embeddings_service_is_configured()) {
         return create_error_result("Embeddings not configured");
     }
-    
+
     vector_t *query_vector = embeddings_service_text_to_vector(user_message);
     if (!query_vector) {
         return create_error_result("Failed to generate embedding for query");
     }
-    
+
     search_results_t *search_results = vector_db_search(vector_db, "documents", query_vector, max_results);
-    
+
     if (!search_results) {
         embeddings_service_free_vector(query_vector);
         return create_error_result("Vector search failed");
     }
-    
+
     context_result_t *result = malloc(sizeof(context_result_t));
     if (!result) {
         vector_db_free_search_results(search_results);
@@ -120,7 +120,7 @@ context_result_t* retrieve_relevant_context(const char *user_message, size_t max
             return create_error_result("Memory allocation failed");
         }
     }
-    
+
     vector_db_free_search_results(search_results);
     embeddings_service_free_vector(query_vector);
     return result;

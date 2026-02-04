@@ -1,5 +1,5 @@
 #include "../../test/unity/unity.h"
-#include "../../src/utils/config.h"
+#include "util/config.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>

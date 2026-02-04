@@ -85,11 +85,11 @@ static int ensure_directory_exists(const char *path)
     if (stat(path, &st) == 0) {
         return S_ISDIR(st.st_mode) ? 0 : -1;
     }
-    
+
     // Create directory with parents
     char *path_copy = strdup(path);
     if (!path_copy) return -1;
-    
+
     char *p = path_copy;
     while (*p) {
         if (*p == '/' && p != path_copy) {
@@ -99,7 +99,7 @@ static int ensure_directory_exists(const char *path)
         }
         p++;
     }
-    
+
     int result = mkdir(path_copy, 0755);
     free(path_copy);
     return (result == 0 || errno == EEXIST) ? 0 : -1;
@@ -130,7 +130,7 @@ static void config_generate_default_file(void)
             return;
         }
     }
-    
+
     // Fall back to user config directory
     char *user_config_dir = get_user_config_dir();
     if (user_config_dir) {
@@ -138,7 +138,7 @@ static void config_generate_default_file(void)
             char *user_config_file = malloc(strlen(user_config_dir) + strlen("/config.json") + 1);
             if (user_config_file) {
                 sprintf(user_config_file, "%s/config.json", user_config_dir);
-                
+
                 if (config_save_to_file(user_config_file) == 0) {
                     fprintf(stderr, "[Config] Created %s with API keys from environment\n\n", user_config_file);
                 }
@@ -153,7 +153,7 @@ static void config_generate_default_file(void)
 int config_load_from_file(const char *filepath)
 {
     if (!g_config || !filepath) return -1;
-    
+
     FILE *file = fopen(filepath, "r");
     if (!file) {
         return -1;
@@ -162,30 +162,30 @@ int config_load_from_file(const char *filepath)
     fseek(file, 0, SEEK_END);
     long file_size = ftell(file);
     fseek(file, 0, SEEK_SET);
-    
+
     if (file_size <= 0) {
         fclose(file);
         return -1;
     }
-    
+
     char *json_content = malloc(file_size + 1);
     if (!json_content) {
         fclose(file);
         return -1;
     }
-    
+
     size_t bytes_read = fread(json_content, 1, file_size, file);
     json_content[bytes_read] = '\0';
     fclose(file);
-    
+
     cJSON *json = cJSON_Parse(json_content);
     free(json_content);
-    
+
     if (!json) {
         fprintf(stderr, "Error: Invalid JSON in config file %s\n", filepath);
         return -1;
     }
-    
+
     // strdup failures are non-fatal -- we keep the previous value
     cJSON *item;
     char *new_val;
@@ -261,12 +261,12 @@ int config_load_from_file(const char *filepath)
             g_config->system_prompt = new_val;
         }
     }
-    
+
     item = cJSON_GetObjectItem(json, "context_window");
     if (cJSON_IsNumber(item) && item->valueint > 0) {
         g_config->context_window = item->valueint;
     }
-    
+
     item = cJSON_GetObjectItem(json, "max_tokens");
     if (cJSON_IsNumber(item)) {
         g_config->max_tokens = item->valueint;
@@ -319,19 +319,19 @@ int config_load_from_file(const char *filepath)
 int config_save_to_file(const char *filepath)
 {
     if (!g_config || !filepath) return -1;
-    
+
     cJSON *json = cJSON_CreateObject();
     if (!json) return -1;
-    
+
     if (g_config->api_url)
         cJSON_AddStringToObject(json, "api_url", g_config->api_url);
     if (g_config->model)
         cJSON_AddStringToObject(json, "model", g_config->model);
-    
+
     // Both key fields are always written so users see them in the config file
     cJSON_AddStringToObject(json, "anthropic_api_key", g_config->anthropic_api_key ? g_config->anthropic_api_key : "");
     cJSON_AddStringToObject(json, "openai_api_key", g_config->openai_api_key ? g_config->openai_api_key : "");
-    
+
     if (g_config->openai_api_url)
         cJSON_AddStringToObject(json, "openai_api_url", g_config->openai_api_url);
     if (g_config->embedding_api_url)
@@ -340,7 +340,7 @@ int config_save_to_file(const char *filepath)
         cJSON_AddStringToObject(json, "embedding_model", g_config->embedding_model);
     if (g_config->system_prompt)
         cJSON_AddStringToObject(json, "system_prompt", g_config->system_prompt);
-    
+
     cJSON_AddNumberToObject(json, "context_window", g_config->context_window);
     cJSON_AddNumberToObject(json, "max_tokens", g_config->max_tokens);
 
@@ -355,19 +355,19 @@ int config_save_to_file(const char *filepath)
 
     char *json_string = cJSON_Print(json);
     cJSON_Delete(json);
-    
+
     if (!json_string) return -1;
-    
+
     FILE *file = fopen(filepath, "w");
     if (!file) {
         free(json_string);
         return -1;
     }
-    
+
     size_t written = fwrite(json_string, 1, strlen(json_string), file);
     fclose(file);
     free(json_string);
-    
+
     return (written > 0) ? 0 : -1;
 }
 
@@ -450,7 +450,7 @@ ralph_config_t* config_get(void)
 void config_cleanup(void)
 {
     if (!g_config) return;
-    
+
     free(g_config->api_url);
     free(g_config->model);
     free(g_config->api_key);
@@ -461,7 +461,7 @@ void config_cleanup(void)
     free(g_config->embedding_model);
     free(g_config->system_prompt);
     free(g_config->config_file_path);
-    
+
     free(g_config);
     g_config = NULL;
 }
@@ -532,7 +532,7 @@ int config_set(const char *key, const char *value)
 const char* config_get_string(const char *key)
 {
     if (!g_config || !key) return NULL;
-    
+
     if (strcmp(key, "api_url") == 0) {
         return g_config->api_url;
     } else if (strcmp(key, "model") == 0) {
@@ -552,7 +552,7 @@ const char* config_get_string(const char *key)
     } else if (strcmp(key, "system_prompt") == 0) {
         return g_config->system_prompt;
     }
-    
+
     return NULL;
 }
 

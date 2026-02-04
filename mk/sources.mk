@@ -8,11 +8,7 @@ CORE_SOURCES := \
     $(SRCDIR)/core/tool_executor.c \
     $(SRCDIR)/core/streaming_handler.c \
     $(SRCDIR)/core/context_enhancement.c \
-    $(SRCDIR)/core/recap.c \
-    $(SRCDIR)/utils/config.c \
-    $(SRCDIR)/utils/prompt_loader.c \
-    $(SRCDIR)/utils/pdf_processor.c \
-    $(SRCDIR)/utils/context_retriever.c \
+    $(SRCDIR)/core/recap.c
 
 # Tool system (Python tools only; core tools in lib/tools/)
 TOOL_SOURCES := \
@@ -29,13 +25,9 @@ MESSAGING_SOURCES := \
 PROVIDER_SOURCES :=
 MODEL_SOURCES :=
 
-# Utilities
-UTILS_EXTRA_SOURCES := \
-    $(SRCDIR)/utils/ralph_home.c
-
 # Combined sources
 C_SOURCES := $(CORE_SOURCES) $(TOOL_SOURCES) $(MESSAGING_SOURCES) \
-    $(PROVIDER_SOURCES) $(MODEL_SOURCES) $(UTILS_EXTRA_SOURCES)
+    $(PROVIDER_SOURCES) $(MODEL_SOURCES)
 CPP_SOURCES :=
 SOURCES := $(C_SOURCES) $(CPP_SOURCES)
 OBJECTS := $(C_SOURCES:.c=.o) $(CPP_SOURCES:.cpp=.o)
@@ -62,11 +54,11 @@ UTIL_DEPS := \
     $(LIBDIR)/util/debug_output.c \
     $(LIBDIR)/util/common_utils.c \
     $(LIBDIR)/util/document_chunker.c \
-    $(SRCDIR)/utils/pdf_processor.c \
-    $(SRCDIR)/utils/context_retriever.c \
-    $(SRCDIR)/utils/config.c \
+    $(LIBDIR)/util/pdf_processor.c \
+    $(LIBDIR)/util/context_retriever.c \
+    $(LIBDIR)/util/config.c \
     $(LIBDIR)/util/uuid_utils.c \
-    $(SRCDIR)/utils/ralph_home.c \
+    $(LIBDIR)/util/ralph_home.c \
     $(LIBDIR)/ui/terminal.c \
     $(LIBDIR)/ui/spinner.c
 
@@ -94,7 +86,7 @@ RALPH_CORE_DEPS := \
     $(LIBDIR)/policy/tool_args.c \
     $(LIBDIR)/policy/verified_file_context.c \
     $(LIBDIR)/policy/verified_file_python.c \
-    $(SRCDIR)/utils/prompt_loader.c \
+    $(LIBDIR)/util/prompt_loader.c \
     $(LIBDIR)/session/conversation_tracker.c \
     $(LIBDIR)/session/conversation_compactor.c \
     $(LIBDIR)/session/rolling_summary.c \
@@ -144,7 +136,7 @@ CONV_DEPS := \
     $(EMBEDDING_DEPS) \
     $(NETWORK_DEPS) \
     $(LIBDIR)/util/json_escape.c \
-    $(SRCDIR)/utils/config.c \
+    $(LIBDIR)/util/config.c \
     $(LIBDIR)/util/debug_output.c \
     $(LIBDIR)/util/common_utils.c \
-    $(SRCDIR)/utils/ralph_home.c
+    $(LIBDIR)/util/ralph_home.c
