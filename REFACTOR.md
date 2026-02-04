@@ -5,26 +5,10 @@
 Complete the migration from monolithic `src/` to library-based `lib/` architecture. Each session is a self-contained unit that leaves the codebase buildable with passing tests.
 
 **Current State:**
-- `lib/`: 100 files (46 .c, 54 .h), ~20k lines
-- `src/`: 96 files (56 .c, 40 .h), ~41k lines
+- `lib/`: 105 files (51 .c, 54 .h), ~21k lines
+- `src/`: 91 files (51 .c, 40 .h), ~40k lines
 
 **Goal:** Move implementations to `lib/`, leaving only entry points in `src/`.
-
----
-
-## Session 12: LLM Providers
-
-**Move:** Provider implementations.
-
-| File | Destination |
-|------|-------------|
-| `src/llm/providers/openai_provider.c` | `lib/llm/providers/` |
-| `src/llm/providers/anthropic_provider.c` | `lib/llm/providers/` |
-| `src/llm/providers/local_ai_provider.c` | `lib/llm/providers/` |
-| `src/llm/providers/openai_embedding_provider.c` | `lib/llm/providers/` |
-| `src/llm/providers/local_embedding_provider.c` | `lib/llm/providers/` |
-
-**Verify:** `./scripts/build.sh && ./scripts/run_tests.sh openai_streaming`
 
 ---
 
@@ -219,7 +203,9 @@ Session 10: LLM Core (llm_provider, model_capabilities) ✓ COMPLETE
     ↓
 Session 11: LLM Embeddings (embeddings, embedding_provider, embeddings_service) ✓ COMPLETE
     ↓
-Session 12-13: LLM Providers and Models
+Session 12: LLM Providers (openai, anthropic, local_ai, embedding providers) ✓ COMPLETE
+    ↓
+Session 13: LLM Models
     ↓
 Session 14-16: Policy (depends on Tools for types)
     ↓

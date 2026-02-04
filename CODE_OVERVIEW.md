@@ -18,9 +18,6 @@ Application-specific code that uses the library layer.
 - **`tool_executor.c/h`** - Iterative tool-calling state machine for executing tool workflows
 
 #### `src/llm/` - Language Model Integration
-- **`embeddings.c/h`** - Low-level text embedding functionality
-- **`embedding_provider.c/h`** - Embedding provider interface and registry
-- **`embeddings_service.c/h`** - Thread-safe embedding service singleton
 
 ##### `src/llm/models/` - Model-Specific Implementations
 - **`claude_model.c`** - Anthropic Claude model integration (200k context)
@@ -30,12 +27,7 @@ Application-specific code that uses the library layer.
 - **`default_model.c`** - Default/fallback model implementation (4k context)
 - **`response_processing.c/h`** - Thinking tag processing for model responses
 
-##### `src/llm/providers/` - API Provider Implementations
-- **`anthropic_provider.c`** - Anthropic API client (Messages format)
-- **`openai_provider.c`** - OpenAI API client (Chat completions)
-- **`local_ai_provider.c`** - Local AI server integration (LM Studio, Ollama)
-- **`openai_embedding_provider.c`** - OpenAI embedding API provider
-- **`local_embedding_provider.c`** - Local embedding service provider
+Note: LLM core functionality (providers, embeddings) has been migrated to `lib/llm/`.
 
 #### `src/network/` - Network Communication
 - **`http_client.c/h`** - HTTP client implementation using libcurl (buffered and streaming)
@@ -143,6 +135,16 @@ Generic, CLI-independent components that can be reused.
 #### `lib/llm/` - LLM Core Framework
 - **`llm_provider.c/h`** - LLM provider abstraction layer with registry pattern for API providers
 - **`model_capabilities.c/h`** - Model capability detection and management (context windows, features)
+- **`embeddings.c/h`** - Low-level text embedding functionality
+- **`embedding_provider.c/h`** - Embedding provider interface and registry
+- **`embeddings_service.c/h`** - Thread-safe embedding service singleton
+
+##### `lib/llm/providers/` - API Provider Implementations
+- **`anthropic_provider.c`** - Anthropic API client (Messages format)
+- **`openai_provider.c`** - OpenAI API client (Chat completions)
+- **`local_ai_provider.c`** - Local AI server integration (LM Studio, Ollama)
+- **`openai_embedding_provider.c`** - OpenAI embedding API provider
+- **`local_embedding_provider.c`** - Local embedding service provider
 
 #### `lib/ipc/` - Inter-Process Communication
 - **`pipe_notifier.c/h`** - Thread-safe pipe-based notification for async event handling
@@ -336,7 +338,7 @@ Centralized configuration in `src/utils/config.c`:
 
 1. **Core Logic**: Start with `src/core/main.c` for application flow
 2. **Tool Development**: Add new tools in `lib/tools/` with corresponding tests
-3. **LLM Integration**: Extend providers in `src/llm/providers/` or models in `src/llm/models/`
+3. **LLM Integration**: Extend providers in `lib/llm/providers/` or models in `src/llm/models/`
 4. **Utilities**: Generic utilities go in `lib/util/`, application-specific in `src/utils/`
 5. **Testing**: Every module has corresponding tests in the `test/` directory structure
 

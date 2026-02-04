@@ -63,14 +63,10 @@ MCP_SOURCES := \
 MESSAGING_SOURCES := \
     $(SRCDIR)/messaging/notification_formatter.c
 
-# LLM providers
-# Note: embeddings.c, embedding_provider.c, embeddings_service.c migrated to lib/llm/
-PROVIDER_SOURCES := \
-    $(SRCDIR)/llm/providers/openai_provider.c \
-    $(SRCDIR)/llm/providers/anthropic_provider.c \
-    $(SRCDIR)/llm/providers/local_ai_provider.c \
-    $(SRCDIR)/llm/providers/openai_embedding_provider.c \
-    $(SRCDIR)/llm/providers/local_embedding_provider.c
+# LLM providers - migrated to lib/llm/providers/
+# Note: All LLM providers and embeddings have been migrated to lib/llm/.
+# See mk/lib.mk for LIB_LLM_SOURCES.
+PROVIDER_SOURCES :=
 
 # Model implementations
 MODEL_SOURCES := \
@@ -107,8 +103,8 @@ EMBEDDING_DEPS := \
     $(LIBDIR)/llm/embeddings.c \
     $(LIBDIR)/llm/embeddings_service.c \
     $(LIBDIR)/llm/embedding_provider.c \
-    $(SRCDIR)/llm/providers/openai_embedding_provider.c \
-    $(SRCDIR)/llm/providers/local_embedding_provider.c
+    $(LIBDIR)/llm/providers/openai_embedding_provider.c \
+    $(LIBDIR)/llm/providers/local_embedding_provider.c
 
 UTIL_DEPS := \
     $(LIBDIR)/util/json_escape.c \
@@ -158,9 +154,9 @@ RALPH_CORE_DEPS := \
     $(SRCDIR)/network/streaming.c \
     $(SRCDIR)/session/token_manager.c \
     $(LIBDIR)/llm/llm_provider.c \
-    $(SRCDIR)/llm/providers/openai_provider.c \
-    $(SRCDIR)/llm/providers/anthropic_provider.c \
-    $(SRCDIR)/llm/providers/local_ai_provider.c \
+    $(LIBDIR)/llm/providers/openai_provider.c \
+    $(LIBDIR)/llm/providers/anthropic_provider.c \
+    $(LIBDIR)/llm/providers/local_ai_provider.c \
     $(SRCDIR)/mcp/mcp_client.c \
     $(SRCDIR)/mcp/mcp_transport.c \
     $(SRCDIR)/mcp/mcp_transport_stdio.c \

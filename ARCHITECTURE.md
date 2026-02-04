@@ -957,23 +957,14 @@ src/
 │   ├── metadata_store.c/h  # Chunk metadata storage
 │   ├── task_store.c/h      # SQLite-based persistent task storage
 │   └── hnswlib_wrapper.cpp/h # C++ bridge
-├── llm/                    # LLM integration
-│   ├── embeddings.c/h      # Low-level embeddings API
-│   ├── embeddings_service.c/h # Embeddings singleton service
-│   ├── embedding_provider.c/h # Embedding provider abstraction
-│   ├── models/             # Model implementations
-│   │   ├── claude_model.c
-│   │   ├── gpt_model.c
-│   │   ├── qwen_model.c
-│   │   ├── deepseek_model.c
-│   │   ├── default_model.c
-│   │   └── response_processing.c/h  # Thinking tag processing
-│   └── providers/          # Provider implementations
-│       ├── anthropic_provider.c
-│       ├── openai_provider.c
-│       ├── local_ai_provider.c
-│       ├── openai_embedding_provider.c
-│       └── local_embedding_provider.c
+├── llm/                    # LLM integration (models only; core in lib/llm/)
+│   └── models/             # Model implementations
+│       ├── claude_model.c
+│       ├── gpt_model.c
+│       ├── qwen_model.c
+│       ├── deepseek_model.c
+│       ├── default_model.c
+│       └── response_processing.c/h  # Thinking tag processing
 ├── mcp/                    # Model Context Protocol
 │   ├── mcp_client.c/h      # MCP client implementation
 │   ├── mcp_transport.c/h   # Transport abstraction layer
@@ -1043,7 +1034,16 @@ lib/
 │   └── sqlite_dal.c/h      # SQLite data access layer
 ├── llm/                    # LLM core framework
 │   ├── llm_provider.c/h    # Provider abstraction layer
-│   └── model_capabilities.c/h # Model capability detection
+│   ├── model_capabilities.c/h # Model capability detection
+│   ├── embeddings.c/h      # Low-level embeddings API
+│   ├── embedding_provider.c/h # Embedding provider abstraction
+│   ├── embeddings_service.c/h # Embeddings singleton service
+│   └── providers/          # API provider implementations
+│       ├── anthropic_provider.c  # Anthropic API client
+│       ├── openai_provider.c     # OpenAI API client
+│       ├── local_ai_provider.c   # Local AI server integration
+│       ├── openai_embedding_provider.c  # OpenAI embeddings
+│       └── local_embedding_provider.c   # Local embeddings
 ├── pdf/                    # PDF processing
 │   └── pdf_extractor.c/h   # PDFio-based text extraction
 ├── ipc/                    # Inter-process communication

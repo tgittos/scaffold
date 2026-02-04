@@ -1,4 +1,4 @@
-#include "lib/llm/llm_provider.h"
+#include "../llm_provider.h"
 #include "api_common.h"
 #include "streaming.h"
 #include <cJSON.h>

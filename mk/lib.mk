@@ -55,7 +55,12 @@ LIB_LLM_SOURCES := \
     $(LIBDIR)/llm/model_capabilities.c \
     $(LIBDIR)/llm/embeddings.c \
     $(LIBDIR)/llm/embedding_provider.c \
-    $(LIBDIR)/llm/embeddings_service.c
+    $(LIBDIR)/llm/embeddings_service.c \
+    $(LIBDIR)/llm/providers/openai_provider.c \
+    $(LIBDIR)/llm/providers/anthropic_provider.c \
+    $(LIBDIR)/llm/providers/local_ai_provider.c \
+    $(LIBDIR)/llm/providers/openai_embedding_provider.c \
+    $(LIBDIR)/llm/providers/local_embedding_provider.c
 
 # Services module (Phase 6 - Dependency Injection)
 LIB_SERVICES_SOURCES := $(LIBDIR)/services/services.c
