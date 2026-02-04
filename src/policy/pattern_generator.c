@@ -1,6 +1,6 @@
 #include "pattern_generator.h"
 #include "approval_gate.h"
-#include "shell_parser.h"
+#include "policy/shell_parser.h"
 #include "tool_args.h"
 
 #include <stdio.h>

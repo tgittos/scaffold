@@ -12,27 +12,7 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 ---
 
-## Session 14: Policy Core
-
-**Move:** Foundational policy utilities.
-
-| File | Destination |
-|------|-------------|
-| `src/policy/rate_limiter.c/h` | `lib/policy/` |
-| `src/policy/allowlist.c/h` | `lib/policy/` |
-| `src/policy/shell_parser.c/h` | `lib/policy/` |
-| `src/policy/shell_parser_cmd.c` | `lib/policy/` |
-| `src/policy/shell_parser_ps.c` | `lib/policy/` |
-
-**Changes:**
-1. Create `lib/policy/` directory
-2. Update `mk/lib.mk`: Add to `LIB_POLICY_SOURCES`
-
-**Verify:** `./scripts/build.sh && ./scripts/run_tests.sh shell_parser`
-
----
-
-## Session 15: Policy Advanced
+## Next: Policy Advanced
 
 **Move:** File protection and verification.
 
@@ -48,7 +28,7 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 ---
 
-## Session 16: Policy Gates
+## Policy Gates
 
 **Move:** Approval gate system (security-critical).
 
@@ -65,7 +45,7 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 ---
 
-## Session 17: Session Module
+## Session Module
 
 **Move:** Conversation and session management.
 
@@ -85,7 +65,7 @@ Complete the migration from monolithic `src/` to library-based `lib/` architectu
 
 ---
 
-## Session 18: Final Cleanup
+## Final Cleanup
 
 **Tasks:**
 1. Audit remaining `src/` files (main.c, ralph.c, network/, mcp/)
@@ -190,11 +170,13 @@ Session 12: LLM Providers (openai, anthropic, local_ai, embedding providers) ✓
     ↓
 Session 13: LLM Models (response_processing, claude/gpt/qwen/deepseek/default) ✓ COMPLETE
     ↓
-Session 14-16: Policy (depends on Tools for types)
+Policy Core (rate_limiter, allowlist, shell_parser) ✓ COMPLETE
     ↓
-Session 17: Session (depends on DB, LLM)
+Policy Advanced + Gates (remaining policy files)
     ↓
-Session 18: Cleanup
+Session Module (depends on DB, LLM)
+    ↓
+Final Cleanup
 ```
 
 ---

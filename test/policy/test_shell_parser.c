@@ -6,7 +6,7 @@
  */
 
 #include "unity.h"
-#include "shell_parser.h"
+#include "policy/shell_parser.h"
 
 #include <stdlib.h>
 #include <string.h>

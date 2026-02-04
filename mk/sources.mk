@@ -1,8 +1,6 @@
 # Source file definitions for ralph
 
 # Core application sources
-# Note: interrupt.c, common_utils.c, json_escape.c, debug_output.c, document_chunker.c
-# have been migrated to lib/util/. See mk/lib.mk for LIB_UTIL_SOURCES.
 CORE_SOURCES := \
     $(SRCDIR)/core/main.c \
     $(SRCDIR)/core/ralph.c \
@@ -26,9 +24,8 @@ CORE_SOURCES := \
     $(SRCDIR)/session/session_manager.c \
     $(SRCDIR)/session/token_manager.c
 
-# Policy module (approval gates, shell parsing, protected files)
+# Policy module (approval gates, protected files)
 POLICY_SOURCES := \
-    $(SRCDIR)/policy/allowlist.c \
     $(SRCDIR)/policy/approval_gate.c \
     $(SRCDIR)/policy/approval_errors.c \
     $(SRCDIR)/policy/atomic_file.c \
@@ -36,18 +33,12 @@ POLICY_SOURCES := \
     $(SRCDIR)/policy/path_normalize.c \
     $(SRCDIR)/policy/pattern_generator.c \
     $(SRCDIR)/policy/protected_files.c \
-    $(SRCDIR)/policy/rate_limiter.c \
-    $(SRCDIR)/policy/shell_parser.c \
-    $(SRCDIR)/policy/shell_parser_cmd.c \
-    $(SRCDIR)/policy/shell_parser_ps.c \
     $(SRCDIR)/policy/subagent_approval.c \
     $(SRCDIR)/policy/tool_args.c \
     $(SRCDIR)/policy/verified_file_context.c \
     $(SRCDIR)/policy/verified_file_python.c
 
-# Tool system
-# Note: Core tool infrastructure and built-in tools have been migrated to lib/tools/
-# See mk/lib.mk for LIB_TOOLS_SOURCES. Only Python tools remain in src/tools/.
+# Tool system (Python tools only; core tools in lib/tools/)
 TOOL_SOURCES := \
     $(SRCDIR)/tools/python_tool.c \
     $(SRCDIR)/tools/python_tool_files.c
@@ -63,22 +54,15 @@ MCP_SOURCES := \
 MESSAGING_SOURCES := \
     $(SRCDIR)/messaging/notification_formatter.c
 
-# LLM providers - migrated to lib/llm/providers/
-# Note: All LLM providers and embeddings have been migrated to lib/llm/.
-# See mk/lib.mk for LIB_LLM_SOURCES.
+# LLM (in lib/llm/)
 PROVIDER_SOURCES :=
-
-# Model implementations - migrated to lib/llm/models/. See mk/lib.mk for LIB_LLM_SOURCES.
 MODEL_SOURCES :=
-
-# Database - migrated to lib/db/. See mk/lib.mk for LIB_DB_SOURCES and LIB_DB_CPP_SOURCES.
-# PDF - migrated to lib/pdf/. See mk/lib.mk for LIB_PDF_SOURCES.
 
 # Utilities
 UTILS_EXTRA_SOURCES := \
     $(SRCDIR)/utils/ralph_home.c
 
-# Combined sources (database and PDF are now in lib/, see mk/lib.mk)
+# Combined sources
 C_SOURCES := $(CORE_SOURCES) $(POLICY_SOURCES) $(TOOL_SOURCES) $(MCP_SOURCES) $(MESSAGING_SOURCES) \
     $(PROVIDER_SOURCES) $(MODEL_SOURCES) $(UTILS_EXTRA_SOURCES)
 CPP_SOURCES :=
@@ -123,7 +107,7 @@ RALPH_CORE_DEPS := \
     $(SRCDIR)/core/context_enhancement.c \
     $(SRCDIR)/core/recap.c \
     $(LIBDIR)/ipc/pipe_notifier.c \
-    $(SRCDIR)/policy/allowlist.c \
+    $(LIBDIR)/policy/allowlist.c \
     $(SRCDIR)/policy/approval_gate.c \
     $(SRCDIR)/policy/approval_errors.c \
     $(SRCDIR)/policy/subagent_approval.c \
@@ -132,10 +116,10 @@ RALPH_CORE_DEPS := \
     $(SRCDIR)/policy/path_normalize.c \
     $(SRCDIR)/policy/pattern_generator.c \
     $(SRCDIR)/policy/protected_files.c \
-    $(SRCDIR)/policy/rate_limiter.c \
-    $(SRCDIR)/policy/shell_parser.c \
-    $(SRCDIR)/policy/shell_parser_cmd.c \
-    $(SRCDIR)/policy/shell_parser_ps.c \
+    $(LIBDIR)/policy/rate_limiter.c \
+    $(LIBDIR)/policy/shell_parser.c \
+    $(LIBDIR)/policy/shell_parser_cmd.c \
+    $(LIBDIR)/policy/shell_parser_ps.c \
     $(SRCDIR)/policy/tool_args.c \
     $(SRCDIR)/policy/verified_file_context.c \
     $(SRCDIR)/policy/verified_file_python.c \
@@ -170,7 +154,6 @@ VERIFIED_FILE_DEPS := \
 # NOT atomic_file.c and path_normalize.c which are already in RALPH_CORE_DEPS.
 # Tests that use COMPLEX_DEPS without RALPH_CORE_DEPS and need the full verified
 # file deps should include VERIFIED_FILE_DEPS directly.
-# Note: LIB_TOOLS_SOURCES defined in lib.mk must be included for tool system core.
 COMPLEX_DEPS := \
     $(TOOL_SOURCES) \
     $(LIB_TOOLS_SOURCES) \

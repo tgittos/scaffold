@@ -11,11 +11,11 @@
 #endif
 
 #include "lib/tools/tools_system.h"
-#include "shell_parser.h"
+#include "policy/shell_parser.h"
 #include "atomic_file.h"
-#include "allowlist.h"
+#include "policy/allowlist.h"
 #include "pattern_generator.h"
-#include "rate_limiter.h"
+#include "policy/rate_limiter.h"
 
 /**
  * Approval Gates Module

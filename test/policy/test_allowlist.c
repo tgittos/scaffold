@@ -3,7 +3,7 @@
  */
 
 #include "unity/unity.h"
-#include "../src/policy/allowlist.h"
+#include "policy/allowlist.h"
 
 void setUp(void) {}
 void tearDown(void) {}

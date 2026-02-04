@@ -45,23 +45,23 @@ $(eval $(call def_test,document_chunker,test_document_chunker,$(LIBDIR)/util/doc
 $(eval $(call def_test,streaming,network/test_streaming,$(SRCDIR)/network/streaming.c))
 $(eval $(call def_test,darray,test_darray,))
 $(eval $(call def_test,ptrarray,test_ptrarray,))
-$(eval $(call def_test,rate_limiter,policy/test_rate_limiter,$(SRCDIR)/policy/rate_limiter.c))
-$(eval $(call def_test,allowlist,policy/test_allowlist,$(SRCDIR)/policy/allowlist.c $(SRCDIR)/policy/shell_parser.c $(SRCDIR)/policy/shell_parser_cmd.c $(SRCDIR)/policy/shell_parser_ps.c))
+$(eval $(call def_test,rate_limiter,policy/test_rate_limiter,$(LIBDIR)/policy/rate_limiter.c))
+$(eval $(call def_test,allowlist,policy/test_allowlist,$(LIBDIR)/policy/allowlist.c $(LIBDIR)/policy/shell_parser.c $(LIBDIR)/policy/shell_parser_cmd.c $(LIBDIR)/policy/shell_parser_ps.c))
 $(eval $(call def_test,tool_args,test_tool_args,$(SRCDIR)/policy/tool_args.c))
 $(eval $(call def_test,gate_prompter,policy/test_gate_prompter,$(SRCDIR)/policy/gate_prompter.c))
 
 # Gate dependencies (used by multiple gate-related tests)
 GATE_DEPS := \
-    $(SRCDIR)/policy/allowlist.c \
+    $(LIBDIR)/policy/allowlist.c \
     $(SRCDIR)/policy/approval_gate.c \
     $(SRCDIR)/policy/approval_errors.c \
     $(SRCDIR)/policy/atomic_file.c \
     $(SRCDIR)/policy/gate_prompter.c \
     $(SRCDIR)/policy/pattern_generator.c \
-    $(SRCDIR)/policy/rate_limiter.c \
-    $(SRCDIR)/policy/shell_parser.c \
-    $(SRCDIR)/policy/shell_parser_cmd.c \
-    $(SRCDIR)/policy/shell_parser_ps.c \
+    $(LIBDIR)/policy/rate_limiter.c \
+    $(LIBDIR)/policy/shell_parser.c \
+    $(LIBDIR)/policy/shell_parser_cmd.c \
+    $(LIBDIR)/policy/shell_parser_ps.c \
     $(SRCDIR)/policy/subagent_approval.c \
     $(SRCDIR)/policy/tool_args.c \
     $(LIBDIR)/util/debug_output.c \
@@ -75,9 +75,9 @@ $(eval $(call def_test,atomic_file,policy/test_atomic_file,$(SRCDIR)/policy/atom
 $(eval $(call def_test,path_normalize,policy/test_path_normalize,$(SRCDIR)/policy/path_normalize.c))
 $(eval $(call def_test,verified_file_context,test_verified_file_context,$(SRCDIR)/policy/verified_file_context.c $(SRCDIR)/policy/atomic_file.c $(SRCDIR)/policy/path_normalize.c))
 $(eval $(call def_test,protected_files,policy/test_protected_files,$(SRCDIR)/policy/protected_files.c $(SRCDIR)/policy/path_normalize.c))
-$(eval $(call def_test,shell_parser,policy/test_shell_parser,$(SRCDIR)/policy/shell_parser.c $(SRCDIR)/policy/shell_parser_cmd.c $(SRCDIR)/policy/shell_parser_ps.c))
-$(eval $(call def_test,shell_parser_cmd,policy/test_shell_parser_cmd,$(SRCDIR)/policy/shell_parser_cmd.c $(SRCDIR)/policy/shell_parser.c $(SRCDIR)/policy/shell_parser_ps.c))
-$(eval $(call def_test,shell_parser_ps,policy/test_shell_parser_ps,$(SRCDIR)/policy/shell_parser_ps.c $(SRCDIR)/policy/shell_parser.c $(SRCDIR)/policy/shell_parser_cmd.c))
+$(eval $(call def_test,shell_parser,policy/test_shell_parser,$(LIBDIR)/policy/shell_parser.c $(LIBDIR)/policy/shell_parser_cmd.c $(LIBDIR)/policy/shell_parser_ps.c))
+$(eval $(call def_test,shell_parser_cmd,policy/test_shell_parser_cmd,$(LIBDIR)/policy/shell_parser_cmd.c $(LIBDIR)/policy/shell_parser.c $(LIBDIR)/policy/shell_parser_ps.c))
+$(eval $(call def_test,shell_parser_ps,policy/test_shell_parser_ps,$(LIBDIR)/policy/shell_parser_ps.c $(LIBDIR)/policy/shell_parser.c $(LIBDIR)/policy/shell_parser_cmd.c))
 $(eval $(call def_test,subagent_approval,policy/test_subagent_approval,$(GATE_DEPS)))
 $(eval $(call def_test,approval_gate_integration,policy/test_approval_gate_integration,$(GATE_DEPS) $(TESTDIR)/stubs/python_tool_stub.c))
 
@@ -249,7 +249,7 @@ $(TEST_notification_formatter_TARGET): $(TEST_notification_formatter_OBJECTS) $(
 # Extra objects needed by conversation test (not in test sources)
 CONV_EXTRA_OBJECTS := $(LIB_DB_SOURCES:.c=.o) $(LIB_DB_CPP_SOURCES:.cpp=.o) \
     $(LIBDIR)/llm/embeddings.o $(LIBDIR)/llm/embeddings_service.o $(LIBDIR)/llm/embedding_provider.o \
-    $(SRCDIR)/llm/providers/openai_embedding_provider.o $(SRCDIR)/llm/providers/local_embedding_provider.o \
+    $(LIBDIR)/llm/providers/openai_embedding_provider.o $(LIBDIR)/llm/providers/local_embedding_provider.o \
     $(SRCDIR)/network/http_client.o $(SRCDIR)/network/embedded_cacert.o $(SRCDIR)/network/api_error.o \
     $(LIBDIR)/util/interrupt.o \
     $(SRCDIR)/utils/config.o $(LIBDIR)/util/debug_output.o $(LIBDIR)/util/common_utils.o \

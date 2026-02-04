@@ -3,7 +3,7 @@
  */
 
 #include "unity/unity.h"
-#include "../src/policy/rate_limiter.h"
+#include "policy/rate_limiter.h"
 
 #include <stdlib.h>
 #include <string.h>

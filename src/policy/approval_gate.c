@@ -1,7 +1,7 @@
 #include "approval_gate.h"
 #include "gate_prompter.h"
 #include "pattern_generator.h"
-#include "shell_parser.h"
+#include "policy/shell_parser.h"
 #include "subagent_approval.h"
 #include "tool_args.h"
 

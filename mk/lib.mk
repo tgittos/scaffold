@@ -1,6 +1,4 @@
 # Library build configuration for libralph
-# This file defines the library sources and build rules
-# Note: LIBDIR is defined in config.mk
 
 # Library output
 LIBRALPH := $(BUILDDIR)/libralph.a
@@ -9,9 +7,6 @@ LIBRALPH := $(BUILDDIR)/libralph.a
 # LIBRARY SOURCES
 # =============================================================================
 
-# Phase 1: Initial structure with stubs
-# These will be populated as modules are migrated from src/
-
 # IPC module
 LIB_IPC_SOURCES := \
     $(LIBDIR)/ipc/pipe_notifier.c \
@@ -19,7 +14,7 @@ LIB_IPC_SOURCES := \
     $(LIBDIR)/ipc/message_store.c \
     $(LIBDIR)/ipc/message_poller.c
 
-# UI module (Phase 3)
+# UI module
 LIB_UI_SOURCES := \
     $(LIBDIR)/ui/terminal.c \
     $(LIBDIR)/ui/spinner.c \
@@ -28,7 +23,7 @@ LIB_UI_SOURCES := \
     $(LIBDIR)/ui/json_output.c \
     $(LIBDIR)/ui/memory_commands.c
 
-# Tools module (Phase 4)
+# Tools module
 LIB_TOOLS_SOURCES := \
     $(LIBDIR)/tools/tools_system.c \
     $(LIBDIR)/tools/tool_format_openai.c \
@@ -46,10 +41,10 @@ LIB_TOOLS_SOURCES := \
     $(LIBDIR)/tools/subagent_tool.c \
     $(LIBDIR)/tools/subagent_process.c
 
-# Agent module (Phase 5)
+# Agent module
 LIB_AGENT_SOURCES := $(LIBDIR)/agent/agent.c
 
-# LLM module (Phase 10+)
+# LLM module
 LIB_LLM_SOURCES := \
     $(LIBDIR)/llm/llm_provider.c \
     $(LIBDIR)/llm/model_capabilities.c \
@@ -68,14 +63,19 @@ LIB_LLM_SOURCES := \
     $(LIBDIR)/llm/models/deepseek_model.c \
     $(LIBDIR)/llm/models/default_model.c
 
-# Services module (Phase 6 - Dependency Injection)
+# Services module
 LIB_SERVICES_SOURCES := $(LIBDIR)/services/services.c
 
-# Session module (future)
+# Session module
 LIB_SESSION_SOURCES :=
 
-# Policy module (future)
-LIB_POLICY_SOURCES :=
+# Policy module (approval gates, shell parsing)
+LIB_POLICY_SOURCES := \
+    $(LIBDIR)/policy/rate_limiter.c \
+    $(LIBDIR)/policy/allowlist.c \
+    $(LIBDIR)/policy/shell_parser.c \
+    $(LIBDIR)/policy/shell_parser_cmd.c \
+    $(LIBDIR)/policy/shell_parser_ps.c
 
 # Util module (generic utilities)
 LIB_UTIL_SOURCES := \
@@ -101,7 +101,7 @@ LIB_DB_SOURCES := \
 # Database C++ sources
 LIB_DB_CPP_SOURCES := $(LIBDIR)/db/hnswlib_wrapper.cpp
 
-# Workflow module (Phase 7)
+# Workflow module
 LIB_WORKFLOW_SOURCES := $(LIBDIR)/workflow/workflow.c
 
 # Combined library sources
@@ -132,13 +132,11 @@ $(LIBDIR)/%.o: $(LIBDIR)/%.cpp $(LIB_HEADERS) | $(COMPILE_DEPS)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) $(LIB_INCLUDES) -c $< -o $@
 
 # Build the library archive
-# Note: Currently empty until Phase 2 adds sources
 $(LIBRALPH): $(LIB_OBJECTS)
 	@mkdir -p $(BUILDDIR)
 	@if [ -n "$(LIB_OBJECTS)" ]; then \
 		$(AR) rcs $@ $(LIB_OBJECTS); \
 	else \
-		echo "Note: libralph is empty (Phase 1 - structure only)"; \
 		touch $@; \
 	fi
 
