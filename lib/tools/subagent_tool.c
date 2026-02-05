@@ -4,7 +4,6 @@
 #include "../util/debug_output.h"
 #include "../util/interrupt.h"
 #include "../policy/subagent_approval.h"
-#include "../session/conversation_tracker.h"
 #include "../ipc/message_store.h"
 #include "messaging_tool.h"
 #include <cJSON.h>

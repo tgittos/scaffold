@@ -5,7 +5,6 @@
 #include <cJSON.h>
 #include <time.h>
 #include "../db/document_store.h"
-#include "../llm/embeddings_service.h"
 #include "../services/services.h"
 #include "../util/debug_output.h"
 
