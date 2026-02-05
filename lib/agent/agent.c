@@ -39,7 +39,6 @@ int agent_init(Agent* agent, const AgentConfig* config) {
 
     memset(agent, 0, sizeof(Agent));
 
-    /* Copy configuration */
     if (config != NULL) {
         agent->config = *config;
     } else {
@@ -51,18 +50,17 @@ int agent_init(Agent* agent, const AgentConfig* config) {
         return -1;
     }
 
-    /* Set up services container (after ralph_home is initialized) */
     if (agent->config.services != NULL) {
-        /* Use provided services */
         agent->services = agent->config.services;
         agent->owns_services = false;
     } else {
-        /* Create default services using singletons */
         agent->services = services_create_default();
+        if (agent->services == NULL) {
+            return -1;
+        }
         agent->owns_services = true;
     }
 
-    /* Initialize debug mode */
     debug_init(agent->config.debug);
 
     /* For BACKGROUND mode (subagent), set env var BEFORE session init
@@ -71,19 +69,19 @@ int agent_init(Agent* agent, const AgentConfig* config) {
         setenv("RALPH_IS_SUBAGENT", "1", 1);
     }
 
-    /* Initialize session */
     if (session_init(&agent->session) != 0) {
         return -1;
     }
 
-    /* Mark as subagent process after session init */
+    agent->session.services = agent->services;
+    agent->session.tools.services = agent->services;
+
     if (agent->config.mode == AGENT_MODE_BACKGROUND) {
         agent->session.subagent_manager.is_subagent_process = 1;
     }
 
     agent->initialized = true;
 
-    /* Apply polling configuration */
     if (agent->config.no_auto_messages) {
         agent->session.polling_config.auto_poll_enabled = 0;
     }
@@ -103,13 +101,11 @@ int agent_load_config(Agent* agent) {
         return -1;
     }
 
-    /* Apply CLI overrides for approval gate */
     if (agent->config.yolo) {
         approval_gate_enable_yolo(&agent->session.gate_config);
         debug_printf("Approval gates disabled (yolo mode)\n");
     }
 
-    /* Apply category allowances */
     for (int i = 0; i < agent->config.allow_category_count; i++) {
         if (approval_gate_set_category_action(&agent->session.gate_config,
                                               agent->config.allow_categories[i],
@@ -118,7 +114,6 @@ int agent_load_config(Agent* agent) {
         }
     }
 
-    /* Apply allow entries */
     for (int i = 0; i < agent->config.allow_entry_count; i++) {
         if (approval_gate_add_cli_allow(&agent->session.gate_config,
                                         agent->config.allow_entries[i]) != 0) {
@@ -126,12 +121,10 @@ int agent_load_config(Agent* agent) {
         }
     }
 
-    /* Apply streaming setting */
     if (agent->config.no_stream) {
         agent->session.session_data.config.enable_streaming = false;
     }
 
-    /* Apply JSON mode */
     if (agent->config.json_mode) {
         agent->session.session_data.config.json_output_mode = true;
         set_json_output_mode(true);
@@ -152,7 +145,6 @@ int agent_run(Agent* agent) {
             if (agent->config.initial_message == NULL) {
                 return -1;
             }
-            /* For single-shot, disable auto polling */
             agent->session.polling_config.auto_poll_enabled = 0;
             return session_process_message(&agent->session, agent->config.initial_message);
 
@@ -161,14 +153,12 @@ int agent_run(Agent* agent) {
                 return -1;
             }
 
-            /* Initialize approval channel for IPC with parent */
             subagent_init_approval_channel();
 
             /* Subagents run with fresh context, not parent conversation history */
             cleanup_conversation_history(&agent->session.session_data.conversation);
             init_conversation_history(&agent->session.session_data.conversation);
 
-            /* Build message with optional context */
             char* message = NULL;
             const char* task = agent->config.subagent_task;
             const char* context = agent->config.subagent_context;
@@ -189,7 +179,6 @@ int agent_run(Agent* agent) {
                 return -1;
             }
 
-            /* Process the task */
             int result = session_process_message(&agent->session, message);
 
             free(message);
@@ -203,7 +192,6 @@ int agent_run(Agent* agent) {
                 return -1;
             }
 
-            /* Set up signal handlers for graceful shutdown */
             struct sigaction sa;
             sa.sa_handler = worker_signal_handler;
             sigemptyset(&sa.sa_mask);
@@ -211,7 +199,6 @@ int agent_run(Agent* agent) {
             sigaction(SIGTERM, &sa, NULL);
             sigaction(SIGINT, &sa, NULL);
 
-            /* Open the work queue */
             WorkQueue* queue = work_queue_create(agent->config.worker_queue_name);
             if (queue == NULL) {
                 fprintf(stderr, "Error: Failed to open queue '%s'\n",
@@ -224,20 +211,16 @@ int agent_run(Agent* agent) {
             int items_processed = 0;
             int errors = 0;
 
-            /* Worker loop */
             while (g_worker_running) {
-                /* Claim next work item */
                 WorkItem* item = work_queue_claim(queue, agent->session.session_id);
                 if (item == NULL) {
-                    /* Queue empty, wait briefly then check again */
-                    usleep(1000000);  /* 1 second */
+                    usleep(1000000);
                     continue;
                 }
 
                 debug_printf("Worker claimed item %s: %s\n", item->id,
                              item->task_description ? item->task_description : "(no description)");
 
-                /* Build the message to process */
                 char* message = NULL;
                 if (item->context != NULL && strlen(item->context) > 0) {
                     size_t len = strlen(item->task_description) + strlen(item->context) + 32;
@@ -257,11 +240,9 @@ int agent_run(Agent* agent) {
                     continue;
                 }
 
-                /* Reset conversation for fresh context per task */
                 cleanup_conversation_history(&agent->session.session_data.conversation);
                 init_conversation_history(&agent->session.session_data.conversation);
 
-                /* Process the work item */
                 int result = session_process_message(&agent->session, message);
                 free(message);
 
@@ -270,7 +251,6 @@ int agent_run(Agent* agent) {
                     items_processed++;
                     debug_printf("Worker completed item %s\n", item->id);
                 } else if (result == -2) {
-                    /* Interrupted by user - not a failure, just cancelled */
                     work_queue_complete(queue, item->id, "Task interrupted by user");
                     debug_printf("Worker item %s interrupted by user\n", item->id);
                 } else {
@@ -294,26 +274,20 @@ int agent_run(Agent* agent) {
 
         case AGENT_MODE_INTERACTIVE:
         default: {
-            /* Print banner */
             if (!agent->config.json_mode) {
                 printf(TERM_BOLD "Ralph" TERM_RESET " - AI Assistant\n");
                 printf("Commands: quit, exit | Ctrl+D to end\n\n");
             }
 
-            /* Show greeting or recap */
             repl_show_greeting(&agent->session, agent->config.json_mode);
 
-            /* Initialize readline history and memory commands */
             using_history();
             memory_commands_init();
 
-            /* Start message polling */
             session_start_message_polling(&agent->session);
 
-            /* Run the REPL */
             int result = repl_run_session(&agent->session, agent->config.json_mode);
 
-            /* Cleanup */
             session_stop_message_polling(&agent->session);
             memory_commands_cleanup();
             spinner_cleanup();
@@ -328,7 +302,6 @@ int agent_process_message(Agent* agent, const char* message) {
         return -1;
     }
 
-    /* Ensure config is loaded */
     if (!agent->config_loaded) {
         if (agent_load_config(agent) != 0) {
             return -1;
@@ -349,7 +322,6 @@ void agent_cleanup(Agent* agent) {
         agent->config_loaded = false;
     }
 
-    /* Clean up services if we own them */
     if (agent->owns_services && agent->services != NULL) {
         services_destroy(agent->services);
         agent->services = NULL;

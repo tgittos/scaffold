@@ -19,6 +19,7 @@
 #include "../tools/subagent_tool.h"
 #include "../policy/approval_gate.h"
 #include "../ipc/message_poller.h"
+#include "../services/services.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -63,6 +64,7 @@ typedef struct AgentSession {
     ApprovalGateConfig gate_config;     /**< Approval gates configuration */
     message_poller_t* message_poller;   /**< Background message poller thread */
     SessionPollingConfig polling_config;/**< Polling configuration */
+    Services* services;                 /**< Dependency injection container */
 } AgentSession;
 
 /* =============================================================================

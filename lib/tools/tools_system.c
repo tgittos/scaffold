@@ -30,6 +30,7 @@ void init_tool_registry(ToolRegistry *registry) {
         return;
     }
     ToolFunctionArray_init(&registry->functions);
+    registry->services = NULL;
 }
 
 int register_tool(ToolRegistry *registry, const char *name, const char *description,
@@ -165,7 +166,7 @@ int execute_tool_call(const ToolRegistry *registry, const ToolCall *tool_call, T
     }
 
     result->tool_call_id = strdup(tool_call->id);
-    result->success = 0; // Default to failure
+    result->success = 0;
     result->result = NULL;
 
     if (result->tool_call_id == NULL) {

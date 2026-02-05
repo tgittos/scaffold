@@ -5,6 +5,8 @@
 #include "../util/darray.h"
 #include "../types.h"
 
+typedef struct Services Services;
+
 /**
  * Structure representing a tool parameter
  */
@@ -39,6 +41,7 @@ DARRAY_DECLARE(ToolFunctionArray, ToolFunction)
  */
 typedef struct {
     ToolFunctionArray functions;
+    Services* services;
 } ToolRegistry;
 
 /**
