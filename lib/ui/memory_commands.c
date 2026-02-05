@@ -1,6 +1,5 @@
 #include "memory_commands.h"
 #include "db/vector_db_service.h"
-#include "db/metadata_store.h"
 #include "llm/embeddings_service.h"
 #include "services/services.h"
 #include "terminal.h"
@@ -114,7 +113,7 @@ static int cmd_list(const char* args) {
         index_name = args;
     }
 
-    metadata_store_t* store = metadata_store_get_instance();
+    metadata_store_t* store = services_get_metadata_store(g_services);
     if (store == NULL) {
         printf("❌ Failed to access metadata store\n");
         return -1;
@@ -146,7 +145,7 @@ static int cmd_search(const char* args) {
         return -1;
     }
 
-    metadata_store_t* store = metadata_store_get_instance();
+    metadata_store_t* store = services_get_metadata_store(g_services);
     if (store == NULL) {
         printf("❌ Failed to access metadata store\n");
         return -1;
@@ -188,7 +187,7 @@ static int cmd_show(const char* args) {
     }
     size_t chunk_id = (size_t)parsed;
 
-    metadata_store_t* store = metadata_store_get_instance();
+    metadata_store_t* store = services_get_metadata_store(g_services);
     if (store == NULL) {
         printf("❌ Failed to access metadata store\n");
         return -1;
@@ -248,7 +247,7 @@ static int cmd_edit(const char* args) {
     }
     size_t chunk_id = (size_t)parsed;
 
-    metadata_store_t* store = metadata_store_get_instance();
+    metadata_store_t* store = services_get_metadata_store(g_services);
     if (store == NULL) {
         printf("❌ Failed to access metadata store\n");
         free(args_copy);
@@ -411,7 +410,7 @@ static int cmd_stats(const char* args) {
     size_t size = vector_db_get_index_size(db, index_name);
     size_t capacity = vector_db_get_index_capacity(db, index_name);
 
-    metadata_store_t* store = metadata_store_get_instance();
+    metadata_store_t* store = services_get_metadata_store(g_services);
     size_t metadata_count = 0;
     if (store != NULL) {
         ChunkMetadata** chunks = metadata_store_list(store, index_name, &metadata_count);
@@ -487,10 +486,7 @@ int process_memory_command(const char* command) {
 }
 
 void memory_commands_init(void) {
-    // Side effect: initializes the singleton metadata store if not yet created
-    metadata_store_get_instance();
 }
 
 void memory_commands_cleanup(void) {
-    // Cleanup will be handled by the singleton destructor
 }

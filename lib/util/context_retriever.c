@@ -1,6 +1,5 @@
 #include "context_retriever.h"
 #include "../db/vector_db_service.h"
-#include "../db/metadata_store.h"
 #include "../llm/embeddings_service.h"
 #include "../services/services.h"
 #include "common_utils.h"
@@ -86,7 +85,7 @@ context_result_t* retrieve_relevant_context(const char *user_message, size_t max
     }
 
     // Vector DB stores embeddings only; actual text lives in the metadata store
-    metadata_store_t *meta_store = metadata_store_get_instance();
+    metadata_store_t *meta_store = services_get_metadata_store(g_services);
 
     for (size_t i = 0; i < search_results->count; i++) {
         search_result_t *search_item = &search_results->results[i];

@@ -15,6 +15,7 @@
 #include "db/vector_db_service.h"
 #include "db/task_store.h"
 #include "db/document_store.h"
+#include "db/metadata_store.h"
 #include "llm/embeddings_service.h"
 
 #ifdef __cplusplus
@@ -45,6 +46,9 @@ typedef struct Services {
 
     /** Document store for vector-backed document storage */
     document_store_t* document_store;
+
+    /** Metadata store for chunk metadata */
+    metadata_store_t* metadata_store;
 
     /** Reserved for future use */
     bool use_singletons;
@@ -121,6 +125,14 @@ task_store_t* services_get_task_store(Services* services);
  * @return Document store instance, or NULL if services is NULL
  */
 document_store_t* services_get_document_store(Services* services);
+
+/**
+ * Get the metadata store from a services container.
+ *
+ * @param services Services container (may be NULL)
+ * @return Metadata store instance, or NULL if services is NULL
+ */
+metadata_store_t* services_get_metadata_store(Services* services);
 
 #ifdef __cplusplus
 }

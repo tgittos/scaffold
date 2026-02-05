@@ -15,8 +15,6 @@ struct metadata_store {
     char* base_path;
 };
 
-static metadata_store_t* singleton_instance = NULL;
-
 static char* get_metadata_path(metadata_store_t* store, const char* index_name) {
     if (store == NULL || index_name == NULL) return NULL;
     
@@ -66,20 +64,8 @@ metadata_store_t* metadata_store_create(const char* base_path) {
 
 void metadata_store_destroy(metadata_store_t* store) {
     if (store == NULL) return;
-
-    if (store == singleton_instance) {
-        singleton_instance = NULL;
-    }
-
     free(store->base_path);
     free(store);
-}
-
-metadata_store_t* metadata_store_get_instance(void) {
-    if (singleton_instance == NULL) {
-        singleton_instance = metadata_store_create(NULL);
-    }
-    return singleton_instance;
 }
 
 int metadata_store_save(metadata_store_t* store, const ChunkMetadata* metadata) {

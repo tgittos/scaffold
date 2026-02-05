@@ -16,6 +16,8 @@ Services* services_create_default(void) {
     services->embeddings = embeddings_service_create();
     services->task_store = task_store_create(NULL);
 
+    services->metadata_store = metadata_store_create(NULL);
+
     document_store_set_services(services);
     services->document_store = document_store_create(NULL);
 
@@ -35,6 +37,7 @@ Services* services_create_empty(void) {
     services->embeddings = NULL;
     services->task_store = NULL;
     services->document_store = NULL;
+    services->metadata_store = NULL;
     services->use_singletons = false;
 
     return services;
@@ -60,6 +63,9 @@ void services_destroy(Services* services) {
     if (services->document_store != NULL) {
         document_store_destroy(services->document_store);
     }
+    if (services->metadata_store != NULL) {
+        metadata_store_destroy(services->metadata_store);
+    }
 
     free(services);
 }
@@ -82,4 +88,8 @@ task_store_t* services_get_task_store(Services* services) {
 
 document_store_t* services_get_document_store(Services* services) {
     return (services != NULL) ? services->document_store : NULL;
+}
+
+metadata_store_t* services_get_metadata_store(Services* services) {
+    return (services != NULL) ? services->metadata_store : NULL;
 }

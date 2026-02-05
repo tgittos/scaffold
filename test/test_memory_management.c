@@ -1,13 +1,15 @@
 #include "../test/unity/unity.h"
 #include "db/metadata_store.h"
 #include "ui/memory_commands.h"
-#include "db/vector_db_service.h"
+#include "services/services.h"
 #include "util/ralph_home.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
+
+static metadata_store_t* test_store = NULL;
 
 void setUp(void) {
     ralph_home_init(NULL);
@@ -19,9 +21,16 @@ void setUp(void) {
         snprintf(cmd, sizeof(cmd), "rm -rf %s/.local/ralph/metadata/test_index 2>/dev/null", home);
         system(cmd);
     }
+
+    test_store = metadata_store_create(NULL);
 }
 
 void tearDown(void) {
+    if (test_store != NULL) {
+        metadata_store_destroy(test_store);
+        test_store = NULL;
+    }
+
     // Clean up test data
     const char* home = getenv("HOME");
     if (home != NULL) {
@@ -43,7 +52,7 @@ void test_metadata_store_create_and_destroy(void) {
 void test_metadata_store_save_and_get(void) {
     setUp();  // Ensure clean state
     
-    metadata_store_t* store = metadata_store_get_instance();
+    metadata_store_t* store = test_store;
     TEST_ASSERT_NOT_NULL(store);
     
     ChunkMetadata metadata = {
@@ -76,7 +85,7 @@ void test_metadata_store_save_and_get(void) {
 void test_metadata_store_delete(void) {
     setUp();  // Ensure clean state
     
-    metadata_store_t* store = metadata_store_get_instance();
+    metadata_store_t* store = test_store;
     TEST_ASSERT_NOT_NULL(store);
     
     ChunkMetadata metadata = {
@@ -120,7 +129,7 @@ void test_metadata_store_list(void) {
         system(cmd);
     }
     
-    metadata_store_t* store = metadata_store_get_instance();
+    metadata_store_t* store = test_store;
     TEST_ASSERT_NOT_NULL(store);
     
     // Add multiple chunks
@@ -168,7 +177,7 @@ void test_metadata_store_list(void) {
 void test_metadata_store_search(void) {
     setUp();  // Ensure clean state
     
-    metadata_store_t* store = metadata_store_get_instance();
+    metadata_store_t* store = test_store;
     TEST_ASSERT_NOT_NULL(store);
     
     // Add chunks with different content
@@ -232,7 +241,7 @@ void test_metadata_store_search(void) {
 void test_metadata_store_update(void) {
     setUp();  // Ensure clean state
     
-    metadata_store_t* store = metadata_store_get_instance();
+    metadata_store_t* store = test_store;
     TEST_ASSERT_NOT_NULL(store);
     
     ChunkMetadata metadata = {
@@ -307,7 +316,7 @@ void test_memory_edit_invalid_chunk_id(void) {
 
 int main(void) {
     UNITY_BEGIN();
-    
+
     // Metadata store tests
     RUN_TEST(test_metadata_store_create_and_destroy);
     RUN_TEST(test_metadata_store_save_and_get);
@@ -315,11 +324,17 @@ int main(void) {
     RUN_TEST(test_metadata_store_list);
     RUN_TEST(test_metadata_store_search);
     RUN_TEST(test_metadata_store_update);
-    
-    // Memory command tests
+
+    // Wire Services for memory command tests
+    Services* svc = services_create_empty();
+    svc->metadata_store = metadata_store_create(NULL);
+    memory_commands_set_services(svc);
+
     RUN_TEST(test_memory_command_parsing);
     RUN_TEST(test_memory_show_invalid_chunk_id);
     RUN_TEST(test_memory_edit_invalid_chunk_id);
+
+    services_destroy(svc);
 
     return UNITY_END();
 }

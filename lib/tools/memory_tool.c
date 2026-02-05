@@ -1,6 +1,5 @@
 #include "memory_tool.h"
 #include "db/vector_db_service.h"
-#include "db/metadata_store.h"
 #include "llm/embeddings_service.h"
 #include "services/services.h"
 #include "../util/common_utils.h"
@@ -151,7 +150,7 @@ int execute_remember_tool_call(const ToolCall *tool_call, ToolResult *result) {
     vector_db_error_t err = vector_db_add_vector(db, MEMORY_INDEX_NAME, vector, memory_id);
     
     if (err == VECTOR_DB_OK) {
-        metadata_store_t* meta_store = metadata_store_get_instance();
+        metadata_store_t* meta_store = services_get_metadata_store(g_services);
         if (meta_store != NULL) {
             ChunkMetadata chunk = {
                 .chunk_id = memory_id,
@@ -227,7 +226,7 @@ int execute_forget_memory_tool_call(const ToolCall *tool_call, ToolResult *resul
         return 0;
     }
 
-    metadata_store_t* meta_store = metadata_store_get_instance();
+    metadata_store_t* meta_store = services_get_metadata_store(g_services);
     if (meta_store == NULL) {
         tool_result_builder_set_error(builder, "Failed to access metadata store");
         ToolResult* temp_result = tool_result_builder_finalize(builder);
@@ -329,7 +328,7 @@ int execute_recall_memories_tool_call(const ToolCall *tool_call, ToolResult *res
         return 0;
     }
 
-    metadata_store_t* meta_store = metadata_store_get_instance();
+    metadata_store_t* meta_store = services_get_metadata_store(g_services);
     if (meta_store == NULL) {
         tool_result_builder_set_error(builder, "Failed to access metadata store");
         ToolResult* temp_result = tool_result_builder_finalize(builder);

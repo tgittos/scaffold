@@ -1,6 +1,5 @@
 #include "document_store.h"
 #include "vector_db_service.h"
-#include "metadata_store.h"
 #include "hnswlib_wrapper.h"
 #include "../util/ralph_home.h"
 #include "llm/embeddings_service.h"
@@ -20,7 +19,6 @@ DARRAY_DEFINE(DocumentResultArray, document_result_t)
 struct document_store {
     char* base_path;
     vector_db_t* vector_db;
-    metadata_store_t* metadata;
 };
 
 static Services* g_services = NULL;
@@ -107,7 +105,6 @@ document_store_t* document_store_create(const char* base_path) {
 
     vector_db_service_t* vdb_service = services_get_vector_db(g_services);
     store->vector_db = vector_db_service_get_database(vdb_service);
-    store->metadata = metadata_store_get_instance();
 
     return store;
 }

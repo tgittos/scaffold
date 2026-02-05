@@ -17,6 +17,7 @@
 #include "../policy/approval_gate.h"
 #include "../tools/subagent_tool.h"
 #include "../ui/memory_commands.h"
+#include "../util/context_retriever.h"
 #include "../ipc/message_poller.h"
 #include <stdio.h>
 #include <string.h>
@@ -78,6 +79,8 @@ int agent_init(Agent* agent, const AgentConfig* config) {
     agent->session.tools.services = agent->services;
     document_store_set_services(agent->services);
     conversation_tracker_set_services(agent->services);
+    memory_commands_set_services(agent->services);
+    context_retriever_set_services(agent->services);
 
     if (agent->config.mode == AGENT_MODE_BACKGROUND) {
         agent->session.subagent_manager.is_subagent_process = 1;

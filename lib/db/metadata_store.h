@@ -37,6 +37,4 @@ int metadata_store_update(metadata_store_t* store, const ChunkMetadata* metadata
 void metadata_store_free_chunk(ChunkMetadata* metadata);
 void metadata_store_free_chunks(ChunkMetadata** chunks, size_t count);
 
-metadata_store_t* metadata_store_get_instance(void);
-
 #endif // METADATA_STORE_H

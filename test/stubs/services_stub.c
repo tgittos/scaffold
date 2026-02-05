@@ -31,6 +31,7 @@ Services* services_create_empty(void) {
     services->embeddings = NULL;
     services->task_store = NULL;
     services->document_store = NULL;
+    services->metadata_store = NULL;
     services->use_singletons = false;
 
     return services;
@@ -68,6 +69,13 @@ task_store_t* services_get_task_store(Services* services) {
 document_store_t* services_get_document_store(Services* services) {
     if (services != NULL && services->document_store != NULL) {
         return services->document_store;
+    }
+    return NULL;
+}
+
+metadata_store_t* services_get_metadata_store(Services* services) {
+    if (services != NULL && services->metadata_store != NULL) {
+        return services->metadata_store;
     }
     return NULL;
 }

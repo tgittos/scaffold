@@ -18,7 +18,7 @@ Pure deletions, no behavioral change.
 
 ---
 
-## Phase 2: Add metadata_store to Services DI (7+ call sites)
+## Phase 2: Add metadata_store to Services DI (7+ call sites) ✅ COMPLETE
 
 metadata_store is the only DB singleton not in the DI container. All callers use `metadata_store_get_instance()` directly.
 
