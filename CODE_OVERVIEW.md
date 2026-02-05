@@ -6,26 +6,87 @@ This document provides a comprehensive overview of Ralph's codebase structure an
 
 ### `src/` - Application Layer
 
-Application-specific code that uses the library layer.
+Application-specific code that uses the library layer. This is a thin wrapper around lib/.
 
-#### `src/core/` - Core Application Logic
-- **`main.c`** - Application entry point with CLI argument parsing (--debug, --json, --yolo, --subagent modes)
-- **`ralph.c/h`** - Session orchestration: initialization, message processing, LLM API communication, tool workflow execution
+#### `src/core/` - CLI Entry Point
+- **`main.c`** - Application entry point with CLI argument parsing (--debug, --json, --yolo, --subagent modes). Thin wrapper that invokes lib/agent/agent.h API.
+- **`ralph.c/h`** - Re-exports lib/agent/session.h and lib/agent/agent.h for backward compatibility
+
+#### `src/tools/` - Python Tool Integration
+- **`python_tool.c/h`** - Embedded Python interpreter execution
+- **`python_tool_files.c/h`** - Python file-based tool loading system
+- **`python_extension.c/h`** - Tool extension interface for Python tools integration with lib/
+
+##### Python Default Tools (in `python_defaults/`)
+- **`read_file.py`** - Read file contents
+- **`write_file.py`** - Write content to file
+- **`append_file.py`** - Append content to file
+- **`file_info.py`** - Get file metadata
+- **`list_dir.py`** - List directory contents with filtering
+- **`search_files.py`** - Search files by content or pattern
+- **`apply_delta.py`** - Apply unified diff patches
+- **`shell.py`** - Shell command execution with timeout
+- **`web_fetch.py`** - Fetch and process web content
+
+---
+
+### `lib/` - Reusable Library Layer
+
+Generic, CLI-independent components that can be reused. The ralph CLI is a thin wrapper around this library.
+
+#### `lib/agent/` - Agent Abstraction and Session Management
+- **`agent.c/h`** - Agent lifecycle management, mode selection (interactive/background/worker), configuration
+- **`session.c/h`** - AgentSession structure aggregating all agent components (tools, MCP, subagents, approval gates, message polling)
 - **`async_executor.c/h`** - Non-blocking message processing using background thread with pipe notification
 - **`context_enhancement.c/h`** - Prompt enhancement with todo state, memory recall, and context retrieval
 - **`recap.c/h`** - Conversation recap generation (one-shot LLM calls without history persistence)
 - **`streaming_handler.c/h`** - Application-layer streaming orchestration and provider registry management
 - **`tool_executor.c/h`** - Iterative tool-calling state machine for executing tool workflows
 
-Note: The LLM integration layer has been fully migrated to `lib/llm/`. Model-specific implementations are in `lib/llm/models/` and providers are in `lib/llm/providers/`.
+#### `lib/session/` - Session Data Management
+- **`session_manager.c/h`** - Session data structures (SessionData with config, conversation, model info)
+- **`conversation_tracker.c/h`** - Conversation history tracking with vector DB persistence
+- **`conversation_compactor.c/h`** - Intelligent conversation history compression
+- **`rolling_summary.c/h`** - Rolling conversation summary generation with compaction thresholds
+- **`token_manager.c/h`** - Token counting, allocation, and context window management
 
-#### `src/db/` - Database Layer
+#### `lib/db/` - Database Layer
 - **`vector_db.c/h`** - Core vector database with HNSWLIB backend
 - **`vector_db_service.c/h`** - Thread-safe vector database singleton service
 - **`document_store.c/h`** - High-level document storage with embeddings and JSON persistence
 - **`metadata_store.c/h`** - Chunk metadata storage layer (separate from vectors)
 - **`task_store.c/h`** - SQLite-based persistent task storage with hierarchies and dependencies
+- **`sqlite_dal.c/h`** - SQLite data access layer with mutex protection, schema initialization, and common query patterns
 - **`hnswlib_wrapper.cpp/h`** - C++ wrapper for HNSW vector indexing
+
+#### `lib/llm/` - LLM Core Framework
+- **`llm_provider.c/h`** - LLM provider abstraction layer with registry pattern for API providers
+- **`model_capabilities.c/h`** - Model capability detection and management (context windows, features)
+- **`embeddings.c/h`** - Low-level text embedding functionality
+- **`embedding_provider.c/h`** - Embedding provider interface and registry
+- **`embeddings_service.c/h`** - Thread-safe embedding service singleton
+
+##### `lib/llm/models/` - Model Capability Implementations
+- **`claude_model.c`** - Claude model capabilities (Anthropic)
+- **`gpt_model.c`** - GPT model capabilities (OpenAI)
+- **`qwen_model.c`** - Qwen model capabilities
+- **`deepseek_model.c`** - DeepSeek model capabilities
+- **`default_model.c`** - Default fallback model
+- **`response_processing.c/h`** - Thinking tag processing for reasoning models
+
+##### `lib/llm/providers/` - API Provider Implementations
+- **`anthropic_provider.c`** - Anthropic API client (Messages format)
+- **`openai_provider.c`** - OpenAI API client (Chat completions)
+- **`local_ai_provider.c`** - Local AI server integration (LM Studio, Ollama)
+- **`openai_embedding_provider.c`** - OpenAI embedding API provider
+- **`local_embedding_provider.c`** - Local embedding service provider
+
+#### `lib/network/` - Network Communication
+- **`http_client.c/h`** - HTTP client implementation using libcurl (buffered and streaming)
+- **`api_common.c/h`** - Common API utilities, JSON payload building for OpenAI/Anthropic formats
+- **`streaming.c/h`** - SSE streaming infrastructure for real-time response handling
+- **`api_error.c/h`** - Enhanced API error handling with retry logic
+- **`embedded_cacert.c/h`** - Embedded Mozilla CA certificate bundle for portable SSL/TLS
 
 #### `lib/policy/` - Approval Gate System
 
@@ -55,84 +116,15 @@ Note: The LLM integration layer has been fully migrated to `lib/llm/`. Model-spe
 - **`subagent_approval.c/h`** - IPC-based approval proxying for child processes
 - **`approval_errors.c`** - JSON error message formatting for approval gate denials
 
-#### `src/tools/` - Python Tool Integration
-- **`python_tool.c/h`** - Embedded Python interpreter execution
-- **`python_tool_files.c/h`** - Python file-based tool loading system
-
-##### Python Default Tools (in `python_defaults/`)
-- **`read_file.py`** - Read file contents
-- **`write_file.py`** - Write content to file
-- **`append_file.py`** - Append content to file
-- **`file_info.py`** - Get file metadata
-- **`list_dir.py`** - List directory contents with filtering
-- **`search_files.py`** - Search files by content or pattern
-- **`apply_delta.py`** - Apply unified diff patches
-- **`shell.py`** - Shell command execution with timeout
-- **`web_fetch.py`** - Fetch and process web content
-
----
-
-### `lib/` - Reusable Library Layer
-
-Generic, CLI-independent components that can be reused.
-
-#### `lib/util/` - Generic Utilities
-- **`darray.h`** - Type-safe dynamic array macros (header-only)
-- **`ptrarray.h`** - Type-safe dynamic pointer array with ownership semantics (header-only)
-- **`uuid_utils.c/h`** - UUID v4 generation and validation
-- **`interrupt.c/h`** - Cooperative Ctrl+C cancellation with signal handling
-- **`common_utils.c/h`** - General utility functions (string ops, JSON extraction)
-- **`json_escape.c/h`** - JSON string escaping utilities
-- **`debug_output.c/h`** - Conditional debug logging with ANSI colors
-- **`document_chunker.c/h`** - Intelligent text chunking for embeddings
-- **`config.c/h`** - Configuration management with cascading priority (local → user → env → defaults)
-- **`prompt_loader.c/h`** - System prompt loading (core + AGENTS.md)
-- **`context_retriever.c/h`** - Vector database context retrieval for prompts
-- **`pdf_processor.c/h`** - PDF download, extraction, chunking, and indexing pipeline
-- **`ralph_home.c/h`** - Centralized Ralph home directory management (~/.local/ralph/)
-
-#### `lib/pdf/` - PDF Processing
-- **`pdf_extractor.c/h`** - PDF text extraction using PDFio library
-
-#### `lib/db/` - Database Abstraction
-- **`sqlite_dal.c/h`** - SQLite data access layer with mutex protection, schema initialization, and common query patterns
-
-#### `lib/llm/` - LLM Core Framework
-- **`llm_provider.c/h`** - LLM provider abstraction layer with registry pattern for API providers
-- **`model_capabilities.c/h`** - Model capability detection and management (context windows, features)
-- **`embeddings.c/h`** - Low-level text embedding functionality
-- **`embedding_provider.c/h`** - Embedding provider interface and registry
-- **`embeddings_service.c/h`** - Thread-safe embedding service singleton
-
-##### `lib/llm/providers/` - API Provider Implementations
-- **`anthropic_provider.c`** - Anthropic API client (Messages format)
-- **`openai_provider.c`** - OpenAI API client (Chat completions)
-- **`local_ai_provider.c`** - Local AI server integration (LM Studio, Ollama)
-- **`openai_embedding_provider.c`** - OpenAI embedding API provider
-- **`local_embedding_provider.c`** - Local embedding service provider
-
-#### `lib/ipc/` - Inter-Process Communication
-- **`pipe_notifier.c/h`** - Thread-safe pipe-based notification for async event handling
-- **`agent_identity.c/h`** - Thread-safe agent identity management (ID, parent ID, subagent status)
-- **`message_store.c/h`** - SQLite-backed inter-agent messaging storage (direct messages, pub/sub channels)
-- **`message_poller.c/h`** - Background thread for polling new messages with PipeNotifier integration
-- **`notification_formatter.c/h`** - Formats messages for LLM context injection
-
-#### `lib/ui/` - User Interface Components
-- **`terminal.c/h`** - Terminal abstraction with colors, ANSI escapes, and layout helpers
-- **`spinner.c/h`** - Pulsing spinner for tool execution visual feedback
-- **`output_formatter.c/h`** - Response formatting and display for LLM responses
-- **`json_output.c/h`** - JSON output mode for programmatic integration (--json flag)
-- **`memory_commands.c/h`** - Interactive `/memory` slash commands for direct memory management
-- **`repl.c/h`** - Read-Eval-Print-Loop implementation with readline
-
 #### `lib/tools/` - Tool System
 - **`tools_system.c/h`** - Core tool registry and execution framework
+- **`tools.h`** - Public tools API header
 - **`tool_result_builder.c/h`** - Standardized tool result construction (builder pattern)
 - **`tool_param_dsl.c/h`** - Declarative table-driven tool parameter registration
 - **`tool_format.h`** - Provider-specific tool format strategy interface
 - **`tool_format_anthropic.c`** - Anthropic Messages API tool format
 - **`tool_format_openai.c`** - OpenAI Chat Completions tool format
+- **`tool_extension.c/h`** - Extension interface for external tool systems (e.g., Python)
 - **`builtin_tools.c/h`** - Registration of built-in tools
 - **`memory_tool.c/h`** - Persistent semantic memory (remember, recall_memories, forget_memory)
 - **`pdf_tool.c/h`** - PDF processing and vector indexing
@@ -144,34 +136,57 @@ Generic, CLI-independent components that can be reused.
 - **`todo_tool.c/h`** - Todo tool call handler
 - **`todo_display.c/h`** - Todo console visualization
 
-#### `lib/agent/` - Agent Abstraction
-- **`agent.c/h`** - Agent lifecycle management, mode selection (interactive/background), signal handling
+#### `lib/ipc/` - Inter-Process Communication
+- **`ipc.h`** - Public IPC API header
+- **`pipe_notifier.c/h`** - Thread-safe pipe-based notification for async event handling
+- **`agent_identity.c/h`** - Thread-safe agent identity management (ID, parent ID, subagent status)
+- **`message_store.c/h`** - SQLite-backed inter-agent messaging storage (direct messages, pub/sub channels)
+- **`message_poller.c/h`** - Background thread for polling new messages with PipeNotifier integration
+- **`notification_formatter.c/h`** - Formats messages for LLM context injection
 
-#### `lib/services/` - Service Container
-- **`services.c/h`** - Dependency injection container for service management
+#### `lib/ui/` - User Interface Components
+- **`ui.h`** - Public UI API header
+- **`output.h`** - Output formatting header
+- **`terminal.c/h`** - Terminal abstraction with colors, ANSI escapes, and layout helpers
+- **`spinner.c/h`** - Pulsing spinner for tool execution visual feedback
+- **`output_formatter.c/h`** - Response formatting and display for LLM responses
+- **`json_output.c/h`** - JSON output mode for programmatic integration (--json flag)
+- **`memory_commands.c/h`** - Interactive `/memory` slash commands for direct memory management
+- **`repl.c/h`** - Read-Eval-Print-Loop implementation with readline
 
-#### `lib/session/` - Session Management
-- **`session_manager.c/h`** - Session data structures and API payload building
-- **`conversation_tracker.c/h`** - Conversation history tracking with vector DB persistence
-- **`conversation_compactor.c/h`** - Intelligent conversation history compression
-- **`rolling_summary.c/h`** - Rolling conversation summary generation with compaction thresholds
-- **`token_manager.c/h`** - Token counting, allocation, and context window management
+#### `lib/util/` - Generic Utilities
+- **`darray.h`** - Type-safe dynamic array macros (header-only)
+- **`ptrarray.h`** - Type-safe dynamic pointer array with ownership semantics (header-only)
+- **`uuid_utils.c/h`** - UUID v4 generation and validation
+- **`interrupt.c/h`** - Cooperative Ctrl+C cancellation with signal handling
+- **`common_utils.c/h`** - General utility functions (string ops, JSON extraction)
+- **`json_escape.c/h`** - JSON string escaping utilities
+- **`debug_output.c/h`** - Conditional debug logging with ANSI colors
+- **`document_chunker.c/h`** - Intelligent text chunking for embeddings
+- **`config.c/h`** - Configuration management with cascading priority (local -> user -> env -> defaults)
+- **`prompt_loader.c/h`** - System prompt loading (core + AGENTS.md)
+- **`context_retriever.c/h`** - Vector database context retrieval for prompts
+- **`pdf_processor.c/h`** - PDF download, extraction, chunking, and indexing pipeline
+- **`ralph_home.c/h`** - Centralized Ralph home directory management (~/.local/ralph/)
 
-#### `lib/network/` - Network Communication
-- **`http_client.c/h`** - HTTP client implementation using libcurl (buffered and streaming)
-- **`api_common.c/h`** - Common API utilities, JSON payload building for OpenAI/Anthropic formats
-- **`streaming.c/h`** - SSE streaming infrastructure for real-time response handling
-- **`api_error.c/h`** - Enhanced API error handling with retry logic
-- **`embedded_cacert.c/h`** - Embedded Mozilla CA certificate bundle for portable SSL/TLS
-
-#### `lib/workflow/` - Task Queue
-- **`workflow.c/h`** - SQLite-backed work queue for asynchronous task processing
+#### `lib/pdf/` - PDF Processing
+- **`pdf_extractor.c/h`** - PDF text extraction using PDFio library
 
 #### `lib/mcp/` - Model Context Protocol
 - **`mcp_client.c/h`** - MCP client implementation and server management
 - **`mcp_transport.c/h`** - Transport abstraction layer using strategy pattern
 - **`mcp_transport_stdio.c`** - STDIO transport for local MCP processes
 - **`mcp_transport_http.c`** - HTTP transport for remote MCP servers
+
+#### `lib/services/` - Service Container
+- **`services.c/h`** - Dependency injection container for service management (message store, vector DB, embeddings, task store)
+
+#### `lib/workflow/` - Task Queue
+- **`workflow.c/h`** - SQLite-backed work queue for asynchronous task processing and worker management
+
+#### Top-Level Library Headers
+- **`lib/libagent.h`** - Public API for the agent library (includes all major subsystems)
+- **`lib/types.h`** - Shared types (ToolCall, ToolResult, StreamingToolUse)
 
 ---
 
@@ -272,49 +287,65 @@ The test directory mirrors the source structure:
 
 ## Key Architectural Components
 
-### 1. Multi-Provider LLM System
-The `src/llm/` directory implements a flexible provider system using the registry pattern:
+### 1. Library-First Architecture
+The codebase follows a library-first design where all core functionality lives in `lib/`:
+- **libagent.h**: Public API header that exposes the entire library
+- **src/core/main.c**: Thin CLI wrapper that parses arguments and invokes lib/agent/agent.h
+- This enables embedding ralph functionality in other programs
+
+### 2. Agent Abstraction (lib/agent/)
+The agent module provides a clean lifecycle API:
+- **Agent**: High-level wrapper with mode-based execution (interactive, single-shot, background, worker)
+- **AgentSession**: Aggregates all components (tools, MCP, subagents, approval gates, message polling)
+- **AgentConfig**: Configuration struct with dependency injection support
+
+### 3. Multi-Provider LLM System (lib/llm/)
+Flexible provider system using the registry pattern:
 - **Provider Registry**: URL-based detection for Anthropic, OpenAI, and local servers
 - **Model Registry**: Pattern-based model capability detection
 - **Embedding Provider Registry**: Parallel system for embedding APIs
 
-### 2. Tool System
-The `lib/tools/` directory implements a safe, extensible tool execution framework:
+### 4. Tool System (lib/tools/)
+Safe, extensible tool execution framework:
 - **Tool Registry**: Dynamic tool registration and JSON-based execution
+- **Tool Extensions**: Plugin system for external tools (e.g., Python from src/)
 - **Result Builder**: Standardized response formatting
-- **Python Tools**: File ops, shell, web fetch loaded from Python files in `src/tools/python_defaults/`
-- **Native Tools**: Memory, todos, PDFs, vector DB, subagents implemented in C
-- **Extensibility**: Custom Python tools can be added to `~/.local/ralph/tools/`
+- **Native Tools**: Memory, todos, PDFs, vector DB, subagents, messaging
 
-### 3. Vector Database Integration
-The `src/db/` directory provides a layered persistence architecture:
+### 5. Vector Database Integration (lib/db/)
+Layered persistence architecture:
 - **Vector DB**: HNSWLIB-based similarity search with thread-safe access
 - **Document Store**: High-level document management with embedding integration
 - **Metadata Store**: Separate JSON persistence for chunk metadata
 
-### 4. Session Management
-The `lib/session/` directory handles conversation lifecycle:
+### 6. Session Management (lib/session/)
+Conversation lifecycle handling:
 - **Conversation Tracker**: History persistence with vector DB integration
 - **Token Manager**: Dynamic token allocation and context trimming
 - **Compactor**: Intelligent conversation compression preserving tool sequences
 
-### 5. Approval Gate System
-The `lib/policy/` directory implements security-aware tool execution control:
+### 7. Approval Gate System (lib/policy/)
+Security-aware tool execution control:
 - **Category-Based Gates**: Tools categorized as file_read, file_write, shell, network, memory, subagent, mcp, python
 - **Allowlist Matching**: Regex patterns for paths/URLs, shell command prefix matching
 - **Protected Files**: Hard-block access to config files via basename, glob, and inode detection
 - **Rate Limiting**: Exponential backoff after repeated denials
 - **Subagent Proxy**: IPC-based approval forwarding for child processes
 
-### 6. MCP Protocol Integration
-The `lib/mcp/` directory provides Model Context Protocol support:
+### 8. Service Container (lib/services/)
+Dependency injection for testability:
+- **Services**: Container holding message store, vector DB, embeddings, task store
+- Supports both singleton instances and custom injected services
+
+### 9. MCP Protocol Integration (lib/mcp/)
+Model Context Protocol support:
 - **Multi-Transport**: STDIO (local processes), HTTP, and SSE connections
 - **Dynamic Discovery**: Tools fetched via JSON-RPC at connection time
 - **Namespaced Tools**: Registered as `mcp_{servername}_{toolname}`
 
-### 7. Configuration System
-Centralized configuration in `lib/util/config.c`:
-- **Priority**: Local `ralph.config.json` → User config → Environment → Defaults
+### 10. Configuration System (lib/util/config.c)
+Centralized configuration:
+- **Priority**: Local `ralph.config.json` -> User config -> Environment -> Defaults
 - **Auto-Generation**: Creates config from environment variables
 - **MCP Config**: Server definitions in `mcpServers` section
 
@@ -322,11 +353,12 @@ Centralized configuration in `lib/util/config.c`:
 
 ## Development Workflow
 
-1. **Core Logic**: Start with `src/core/main.c` for application flow
-2. **Tool Development**: Add new tools in `lib/tools/` with corresponding tests
-3. **LLM Integration**: Extend providers in `lib/llm/providers/` or models in `lib/llm/models/`
-4. **Utilities**: Generic utilities go in `lib/util/`
-5. **Testing**: Every module has corresponding tests in the `test/` directory structure
+1. **Core Logic**: Start with `lib/agent/agent.h` for agent lifecycle
+2. **CLI Integration**: See `src/core/main.c` for argument parsing
+3. **Tool Development**: Add new tools in `lib/tools/` with corresponding tests
+4. **LLM Integration**: Extend providers in `lib/llm/providers/` or models in `lib/llm/models/`
+5. **Python Tools**: Add to `src/tools/python_defaults/` or user's `~/.local/ralph/tools/`
+6. **Testing**: Every module has corresponding tests in the `test/` directory structure
 
 ## Build System
 

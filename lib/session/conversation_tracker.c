@@ -6,7 +6,14 @@
 #include <time.h>
 #include "../db/document_store.h"
 #include "../llm/embeddings_service.h"
+#include "../services/services.h"
 #include "../util/debug_output.h"
+
+static Services* g_services = NULL;
+
+void conversation_tracker_set_services(Services* services) {
+    g_services = services;
+}
 
 #define CONVERSATION_INDEX "conversations"
 #define CONVERSATION_EMBEDDING_DIM 1536
@@ -75,7 +82,7 @@ static void ConversationTurn_destroy(ConversationTurn* turn) {
 // Loads whole conversation turns (user + assistant + tool messages) to avoid
 // splitting a tool call sequence across the boundary, which would confuse the LLM.
 static int load_complete_conversation_turns(ConversationHistory* history, time_t start_time, time_t end_time, size_t max_turns) {
-    document_store_t* store = document_store_get_instance();
+    document_store_t* store = services_get_document_store(g_services);
     if (!store) return -1;
 
     // Fetch all messages (limit=0) so we can group into complete turns before truncating
@@ -339,7 +346,7 @@ static int add_message_to_history(ConversationHistory *history, const char *role
         }
 
         if (!skip_storage) {
-            document_store_t* store = document_store_get_instance();
+            document_store_t* store = services_get_document_store(g_services);
             if (store != NULL) {
                 int index_result = document_store_ensure_index(store, CONVERSATION_INDEX, CONVERSATION_EMBEDDING_DIM, 10000);
                 if (index_result != 0) {
@@ -377,7 +384,7 @@ int load_conversation_history(ConversationHistory *history) {
     
     init_conversation_history(history);
     
-    document_store_t* store = document_store_get_instance();
+    document_store_t* store = services_get_document_store(g_services);
     if (store == NULL) {
         return 0;
     }
@@ -430,7 +437,7 @@ int load_extended_conversation_history(ConversationHistory *history, int days_ba
     
     init_conversation_history(history);
     
-    document_store_t* store = document_store_get_instance();
+    document_store_t* store = services_get_document_store(g_services);
     if (store == NULL) {
         return -1;
     }
@@ -457,7 +464,7 @@ ConversationHistory* search_conversation_history(const char *query, size_t max_r
         return NULL;
     }
     
-    document_store_t* store = document_store_get_instance();
+    document_store_t* store = services_get_document_store(g_services);
     if (store == NULL) {
         return NULL;
     }

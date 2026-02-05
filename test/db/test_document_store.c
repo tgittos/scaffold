@@ -2,6 +2,7 @@
 #include "db/document_store.h"
 #include "db/vector_db_service.h"
 #include "db/hnswlib_wrapper.h"
+#include "services/services.h"
 #include "util/ralph_home.h"
 #include <stdlib.h>
 #include <string.h>
@@ -9,6 +10,8 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <sys/stat.h>
+
+static Services* g_test_services = NULL;
 
 static void rmdir_recursive(const char* path) {
     DIR* dir = opendir(path);
@@ -36,15 +39,24 @@ static void rmdir_recursive(const char* path) {
 
 void setUp(void) {
     ralph_home_init(NULL);
-    // Clear all hnswlib indexes to ensure clean state between tests
     hnswlib_clear_all();
-    // Clean up any leftover test files
     rmdir_recursive("/tmp/test_doc_store");
+
+    g_test_services = services_create_empty();
+    if (g_test_services) {
+        g_test_services->vector_db = vector_db_service_create();
+    }
+    document_store_set_services(g_test_services);
 }
 
 void tearDown(void) {
-    // Reset singleton if it was created
-    document_store_reset_instance();
+    hnswlib_clear_all();
+    rmdir_recursive("/tmp/test_doc_store");
+    document_store_set_services(NULL);
+    if (g_test_services) {
+        services_destroy(g_test_services);
+        g_test_services = NULL;
+    }
     ralph_home_cleanup();
 }
 
@@ -55,12 +67,17 @@ void test_document_store_create_and_destroy(void) {
     document_store_destroy(store);
 }
 
-void test_document_store_singleton(void) {
-    document_store_t* store1 = document_store_get_instance();
-    TEST_ASSERT_NOT_NULL(store1);
-    
-    document_store_t* store2 = document_store_get_instance();
-    TEST_ASSERT_EQUAL_PTR(store1, store2);
+void test_document_store_services_accessor(void) {
+    g_test_services->document_store = document_store_create(NULL);
+    TEST_ASSERT_NOT_NULL(g_test_services->document_store);
+
+    document_store_t* from_accessor = services_get_document_store(g_test_services);
+    TEST_ASSERT_EQUAL_PTR(g_test_services->document_store, from_accessor);
+
+    TEST_ASSERT_NULL(services_get_document_store(NULL));
+
+    document_store_destroy(g_test_services->document_store);
+    g_test_services->document_store = NULL;
 }
 
 void test_document_store_add_and_get(void) {
@@ -311,7 +328,7 @@ int main(void) {
     UNITY_BEGIN();
     
     RUN_TEST(test_document_store_create_and_destroy);
-    RUN_TEST(test_document_store_singleton);
+    RUN_TEST(test_document_store_services_accessor);
     RUN_TEST(test_document_store_add_and_get);
     RUN_TEST(test_document_store_search);
     RUN_TEST(test_document_store_search_by_time);

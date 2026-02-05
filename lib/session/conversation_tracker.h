@@ -3,6 +3,8 @@
 
 #include "../util/darray.h"
 
+typedef struct Services Services;
+
 typedef struct {
     char *role;         // "user", "assistant", or "tool"
     char *content;
@@ -11,6 +13,8 @@ typedef struct {
 } ConversationMessage;
 
 DARRAY_DECLARE(ConversationHistory, ConversationMessage)
+
+void conversation_tracker_set_services(Services* services);
 
 int load_conversation_history(ConversationHistory *history);
 int append_conversation_message(ConversationHistory *history, const char *role, const char *content);

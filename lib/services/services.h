@@ -2,8 +2,7 @@
  * lib/services/services.h - Service container for dependency injection
  *
  * Provides a container for injecting service dependencies into agents,
- * enabling testability and flexible configuration. Services can be
- * either the default singletons or custom implementations.
+ * enabling testability and flexible configuration.
  */
 
 #ifndef LIB_SERVICES_SERVICES_H
@@ -11,10 +10,11 @@
 
 #include <stdbool.h>
 
-/* Re-export singleton types from src/ */
+/* Service types */
 #include "../ipc/message_store.h"
 #include "db/vector_db_service.h"
 #include "db/task_store.h"
+#include "db/document_store.h"
 #include "llm/embeddings_service.h"
 
 #ifdef __cplusplus
@@ -28,10 +28,7 @@ extern "C" {
 /**
  * Service container for dependency injection.
  * Holds references to services that can be injected into agents.
- *
- * When using singletons, services are NOT owned by this container
- * and should not be destroyed when the container is destroyed.
- * When using custom services, ownership depends on the use_singletons flag.
+ * The container owns its services and destroys them on cleanup.
  */
 typedef struct Services {
     /** Message store for inter-agent communication */
@@ -46,7 +43,10 @@ typedef struct Services {
     /** Task store for persistent todos */
     task_store_t* task_store;
 
-    /** Flag indicating if services are singletons (don't destroy on cleanup) */
+    /** Document store for vector-backed document storage */
+    document_store_t* document_store;
+
+    /** Reserved for future use */
     bool use_singletons;
 } Services;
 
@@ -55,11 +55,9 @@ typedef struct Services {
  * ============================================================================= */
 
 /**
- * Create a services container using default singleton instances.
- * The singletons are initialized on first use and shared across
- * all agents using this container.
+ * Create a services container with default service instances.
  *
- * @return New services container with singleton references, or NULL on failure.
+ * @return New services container, or NULL on failure.
  *         Caller must free with services_destroy().
  */
 Services* services_create_default(void);
@@ -74,10 +72,7 @@ Services* services_create_default(void);
 Services* services_create_empty(void);
 
 /**
- * Destroy a services container.
- *
- * NOTE: If use_singletons is true, the individual services are NOT destroyed
- * since they are shared singletons. Only the container itself is freed.
+ * Destroy a services container and all owned services.
  *
  * @param services Services to destroy (may be NULL)
  */
@@ -88,36 +83,44 @@ void services_destroy(Services* services);
  * ============================================================================= */
 
 /**
- * Get the message store from a services container, or the singleton if NULL.
+ * Get the message store from a services container.
  *
  * @param services Services container (may be NULL)
- * @return Message store instance
+ * @return Message store instance, or NULL if services is NULL
  */
 message_store_t* services_get_message_store(Services* services);
 
 /**
- * Get the vector DB service from a services container, or the singleton if NULL.
+ * Get the vector DB service from a services container.
  *
  * @param services Services container (may be NULL)
- * @return Vector DB service instance
+ * @return Vector DB service instance, or NULL if services is NULL
  */
 vector_db_service_t* services_get_vector_db(Services* services);
 
 /**
- * Get the embeddings service from a services container, or the singleton if NULL.
+ * Get the embeddings service from a services container.
  *
  * @param services Services container (may be NULL)
- * @return Embeddings service instance
+ * @return Embeddings service instance, or NULL if services is NULL
  */
 embeddings_service_t* services_get_embeddings(Services* services);
 
 /**
- * Get the task store from a services container, or the singleton if NULL.
+ * Get the task store from a services container.
  *
  * @param services Services container (may be NULL)
- * @return Task store instance
+ * @return Task store instance, or NULL if services is NULL
  */
 task_store_t* services_get_task_store(Services* services);
+
+/**
+ * Get the document store from a services container.
+ *
+ * @param services Services container (may be NULL)
+ * @return Document store instance, or NULL if services is NULL
+ */
+document_store_t* services_get_document_store(Services* services);
 
 #ifdef __cplusplus
 }

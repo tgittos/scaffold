@@ -3,13 +3,11 @@
 #include "session/session_manager.h"
 #include "session/conversation_tracker.h"
 #include "util/ralph_home.h"
-#include "db/document_store.h"
 #include <string.h>
 #include <stdlib.h>
 
 void setUp(void) {
     ralph_home_init(NULL);
-    document_store_clear_conversations();
 }
 
 void tearDown(void) {

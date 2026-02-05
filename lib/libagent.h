@@ -106,7 +106,6 @@ typedef struct OutputConfig OutputConfig;
  *   agent_identity_is_subagent()
  *
  * MessageStore - SQLite-backed messaging (direct + pub/sub)
- *   message_store_get_instance()
  *   message_store_create()
  *   message_store_destroy()
  *   message_send_direct()

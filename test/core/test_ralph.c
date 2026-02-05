@@ -2,7 +2,7 @@
 #include "ralph.h"
 #include "tools/builtin_tools.h"
 #include "mock_api_server.h"
-#include "db/document_store.h"
+#include "db/hnswlib_wrapper.h"
 #include "util/json_escape.h"
 #include "network/api_common.h"
 #include <stdio.h>
@@ -13,8 +13,7 @@
 
 void setUp(void) {
     ralph_home_init(NULL);
-    // Reset document store completely to ensure clean state between tests
-    document_store_reset_instance();
+    hnswlib_clear_all();
 }
 void tearDown(void) {
     ralph_home_cleanup();

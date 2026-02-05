@@ -2,6 +2,7 @@
 #include "db/vector_db_service.h"
 #include "db/metadata_store.h"
 #include "llm/embeddings_service.h"
+#include "services/services.h"
 #include "../util/common_utils.h"
 #include "../util/json_escape.h"
 #include "../util/debug_output.h"
@@ -14,16 +15,19 @@
 
 #define MEMORY_INDEX_NAME "long_term_memory"
 
+static Services* g_services = NULL;
 static size_t next_memory_id = 0;
 
 static vector_db_error_t ensure_memory_index(void) {
-    size_t dimension = embeddings_service_get_dimension();
+    embeddings_service_t* embeddings = services_get_embeddings(g_services);
+    size_t dimension = embeddings_service_get_dimension(embeddings);
     if (dimension == 0) {
         return VECTOR_DB_ERROR_INVALID_PARAM;
     }
-    
+
     index_config_t config = vector_db_service_get_memory_config(dimension);
-    vector_db_error_t result = vector_db_service_ensure_index(MEMORY_INDEX_NAME, &config);
+    vector_db_service_t* vdb_service = services_get_vector_db(g_services);
+    vector_db_error_t result = vector_db_service_ensure_index(vdb_service, MEMORY_INDEX_NAME, &config);
     
     free(config.metric);
     return result;
@@ -84,7 +88,8 @@ int execute_remember_tool_call(const ToolCall *tool_call, ToolResult *result) {
         goto cleanup;
     }
     
-    if (!embeddings_service_is_configured()) {
+    embeddings_service_t* embeddings = services_get_embeddings(g_services);
+    if (!embeddings_service_is_configured(embeddings)) {
         tool_result_builder_set_error(builder, "Embeddings service not configured. OPENAI_API_KEY environment variable required");
         ToolResult* temp_result = tool_result_builder_finalize(builder);
         if (temp_result) {
@@ -93,10 +98,10 @@ int execute_remember_tool_call(const ToolCall *tool_call, ToolResult *result) {
         }
         goto cleanup;
     }
-    
+
     vector_db_error_t index_err = ensure_memory_index();
     if (index_err != VECTOR_DB_OK) {
-        tool_result_builder_set_error(builder, "Failed to initialize memory index: %s", 
+        tool_result_builder_set_error(builder, "Failed to initialize memory index: %s",
                                     vector_db_error_string(index_err));
         ToolResult* temp_result = tool_result_builder_finalize(builder);
         if (temp_result) {
@@ -105,8 +110,8 @@ int execute_remember_tool_call(const ToolCall *tool_call, ToolResult *result) {
         }
         goto cleanup;
     }
-    
-    vector_t* vector = embeddings_service_text_to_vector(content);
+
+    vector_t* vector = embeddings_service_text_to_vector(embeddings, content);
     if (vector == NULL) {
         tool_result_builder_set_error(builder, "Failed to generate embedding for content");
         ToolResult* temp_result = tool_result_builder_finalize(builder);
@@ -116,8 +121,9 @@ int execute_remember_tool_call(const ToolCall *tool_call, ToolResult *result) {
         }
         goto cleanup;
     }
-    
-    vector_db_t *db = vector_db_service_get_database();
+
+    vector_db_service_t* vdb_service = services_get_vector_db(g_services);
+    vector_db_t *db = vector_db_service_get_database(vdb_service);
     if (db == NULL) {
         tool_result_builder_set_error(builder, "Failed to access vector database");
         ToolResult* temp_result = tool_result_builder_finalize(builder);
@@ -208,8 +214,9 @@ int execute_forget_memory_tool_call(const ToolCall *tool_call, ToolResult *resul
     }
     
     size_t memory_id = (size_t)memory_id_num;
-    
-    vector_db_t *db = vector_db_service_get_database();
+
+    vector_db_service_t* vdb_service = services_get_vector_db(g_services);
+    vector_db_t *db = vector_db_service_get_database(vdb_service);
     if (db == NULL) {
         tool_result_builder_set_error(builder, "Failed to access vector database");
         ToolResult* temp_result = tool_result_builder_finalize(builder);
@@ -310,7 +317,8 @@ int execute_recall_memories_tool_call(const ToolCall *tool_call, ToolResult *res
         return 0;
     }
 
-    if (!embeddings_service_is_configured()) {
+    embeddings_service_t* embeddings = services_get_embeddings(g_services);
+    if (!embeddings_service_is_configured(embeddings)) {
         tool_result_builder_set_error(builder, "Embeddings service not configured. OPENAI_API_KEY environment variable required");
         ToolResult* temp_result = tool_result_builder_finalize(builder);
         if (temp_result) {
@@ -332,15 +340,16 @@ int execute_recall_memories_tool_call(const ToolCall *tool_call, ToolResult *res
         free(query);
         return 0;
     }
-    
+
     size_t text_count = 0;
     ChunkMetadata** text_results = metadata_store_search(meta_store, MEMORY_INDEX_NAME, query, &text_count);
 
     search_results_t *vector_results = NULL;
-    if (embeddings_service_is_configured()) {
-        vector_t* query_vector = embeddings_service_text_to_vector(query);
+    if (embeddings_service_is_configured(embeddings)) {
+        vector_t* query_vector = embeddings_service_text_to_vector(embeddings, query);
         if (query_vector != NULL) {
-            vector_db_t *db = vector_db_service_get_database();
+            vector_db_service_t* vdb_service = services_get_vector_db(g_services);
+            vector_db_t *db = vector_db_service_get_database(vdb_service);
             if (db != NULL) {
                 // Fetch 2x results to allow deduplication with text search hits
                 vector_results = vector_db_search(db, MEMORY_INDEX_NAME, query_vector, (size_t)(k * 2));
@@ -491,6 +500,7 @@ recall_cleanup:
 
 int register_memory_tools(ToolRegistry *registry) {
     if (registry == NULL) return -1;
+    g_services = registry->services;
     int result;
     
     ToolParameter remember_parameters[4];

@@ -43,7 +43,6 @@ static void print_help(const char *program_name) {
 }
 
 int main(int argc, char *argv[]) {
-    /* Handle --version and --help before anything else */
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-v") == 0) {
             print_version();
@@ -55,7 +54,6 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    /* Parse command-line arguments into agent config */
     AgentConfig config = agent_config_default();
 
     const char *cli_allow_entries[MAX_CLI_ALLOW_ENTRIES];
@@ -118,13 +116,11 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    /* Set up allow lists */
     config.allow_entries = cli_allow_entries;
     config.allow_entry_count = cli_allow_count;
     config.allow_categories = cli_allow_categories;
     config.allow_category_count = cli_allow_category_count;
 
-    /* Determine mode */
     if (worker_mode) {
         if (worker_queue == NULL) {
             fprintf(stderr, "Error: --worker requires --queue argument\n");
@@ -147,12 +143,10 @@ int main(int argc, char *argv[]) {
         config.mode = AGENT_MODE_INTERACTIVE;
     }
 
-    /* Register tool extensions before agent initialization */
     if (python_extension_register() != 0) {
         fprintf(stderr, "Warning: Failed to register Python extension\n");
     }
 
-    /* Create and run agent */
     Agent agent;
     if (agent_init(&agent, &config) != 0) {
         fprintf(stderr, "Error: Failed to initialize Ralph agent\n");

@@ -8,6 +8,8 @@
 #include "util/ptrarray.h"
 #include "util/darray.h"
 
+typedef struct Services Services;
+
 typedef struct {
     size_t id;
     char* content;
@@ -34,9 +36,11 @@ typedef struct {
 
 typedef struct document_store document_store_t;
 
+/** Set the Services container for document store operations. */
+void document_store_set_services(Services* services);
+
 document_store_t* document_store_create(const char* base_path);
 void document_store_destroy(document_store_t* store);
-document_store_t* document_store_get_instance(void);
 
 int document_store_add(document_store_t* store, const char* index_name,
                        const char* content, const float* embedding, 
@@ -80,10 +84,6 @@ int document_store_ensure_index(document_store_t* store, const char* index_name,
 
 char** document_store_list_indices(document_store_t* store, size_t* count);
 
-// Reset the singleton instance (useful for tests)
-void document_store_reset_instance(void);
-
-// Clear only conversation data (useful for individual tests)
-void document_store_clear_conversations(void);
+void document_store_clear_conversations(document_store_t* store);
 
 #endif

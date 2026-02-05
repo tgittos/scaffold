@@ -5,22 +5,16 @@
 #include "task_store.h"
 #include "sqlite_dal.h"
 #include "util/uuid_utils.h"
-#include "../util/ralph_home.h"
 #include "util/ptrarray.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <pthread.h>
-#include <unistd.h>
 
 PTRARRAY_DEFINE(TaskArray, Task)
 
 struct task_store {
     sqlite_dal_t *dal;
 };
-
-static task_store_t *g_store_instance = NULL;
-static pthread_once_t g_store_once = PTHREAD_ONCE_INIT;
 
 static const char *SCHEMA_SQL =
     "CREATE TABLE IF NOT EXISTS tasks ("
@@ -118,39 +112,10 @@ task_store_t *task_store_create(const char *db_path) {
     return store;
 }
 
-static void create_store_instance(void) {
-    g_store_instance = task_store_create(NULL);
-}
-
-task_store_t *task_store_get_instance(void) {
-    pthread_once(&g_store_once, create_store_instance);
-    return g_store_instance;
-}
-
 void task_store_destroy(task_store_t *store) {
     if (store == NULL) return;
     sqlite_dal_destroy(store->dal);
     free(store);
-}
-
-void task_store_reset_instance(void) {
-    if (g_store_instance != NULL) {
-        const char *path = sqlite_dal_get_path(g_store_instance->dal);
-        char *path_copy = path ? strdup(path) : NULL;
-        task_store_destroy(g_store_instance);
-        g_store_instance = NULL;
-        if (path_copy) {
-            unlink(path_copy);
-            free(path_copy);
-        }
-    } else {
-        char *default_path = ralph_home_path("tasks.db");
-        if (default_path) {
-            unlink(default_path);
-            free(default_path);
-        }
-    }
-    g_store_once = (pthread_once_t)PTHREAD_ONCE_INIT;
 }
 
 /* Task operations */

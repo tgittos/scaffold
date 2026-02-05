@@ -2,6 +2,7 @@
 #include "db/vector_db_service.h"
 #include "db/metadata_store.h"
 #include "llm/embeddings_service.h"
+#include "services/services.h"
 #include "terminal.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,6 +10,12 @@
 #include <time.h>
 #include <ctype.h>
 #include <errno.h>
+
+static Services* g_services = NULL;
+
+void memory_commands_set_services(Services* services) {
+    g_services = services;
+}
 
 static void print_help(void) {
     printf("\n" TERM_BOLD "Memory Management Commands" TERM_RESET "\n");
@@ -307,12 +314,14 @@ static int cmd_edit(const char* args) {
         chunk->content = new_value;
 
         // Content changes require re-embedding to keep vector search consistent
-        if (embeddings_service_is_configured()) {
-            vector_t* new_vector = embeddings_service_text_to_vector(value);
+        embeddings_service_t* embeddings = services_get_embeddings(g_services);
+        if (embeddings_service_is_configured(embeddings)) {
+            vector_t* new_vector = embeddings_service_text_to_vector(embeddings, value);
             if (new_vector == NULL) {
                 printf("⚠️  Warning: Failed to create embedding for updated content\n");
             } else {
-                vector_db_t* db = vector_db_service_get_database();
+                vector_db_service_t* vdb_service = services_get_vector_db(g_services);
+                vector_db_t* db = vector_db_service_get_database(vdb_service);
                 if (db == NULL || vector_db_update_vector(db, index_name, new_vector, chunk_id) != 0) {
                     printf("⚠️  Warning: Failed to update vector embedding\n");
                 }
@@ -342,7 +351,8 @@ static int cmd_edit(const char* args) {
 static int cmd_indices(const char* args) {
     (void)args; // Unused
 
-    vector_db_t* db = vector_db_service_get_database();
+    vector_db_service_t* vdb_service = services_get_vector_db(g_services);
+    vector_db_t* db = vector_db_service_get_database(vdb_service);
     if (db == NULL) {
         printf("❌ Failed to access vector database\n");
         return -1;
@@ -386,7 +396,8 @@ static int cmd_stats(const char* args) {
         index_name = args;
     }
 
-    vector_db_t* db = vector_db_service_get_database();
+    vector_db_service_t* vdb_service = services_get_vector_db(g_services);
+    vector_db_t* db = vector_db_service_get_database(vdb_service);
     if (db == NULL) {
         printf("❌ Failed to access vector database\n");
         return -1;

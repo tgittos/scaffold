@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include "darray.h"
 
+typedef struct Services Services;
+
 typedef struct {
     char *content;
     double relevance_score;
@@ -16,6 +18,12 @@ typedef struct {
     ContextItemArray items;
     char *error;
 } context_result_t;
+
+/**
+ * Set the Services container for context retrieval.
+ * Must be called before using retrieve_relevant_context.
+ */
+void context_retriever_set_services(Services* services);
 
 /**
  * Retrieve relevant context for a user message from vector database

@@ -9,8 +9,6 @@
 
 void setUp(void) {
     ralph_home_init(NULL);
-    // Reset task store to ensure clean state between tests
-    task_store_reset_instance();
 }
 
 void tearDown(void) {

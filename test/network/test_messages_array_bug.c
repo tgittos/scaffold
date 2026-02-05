@@ -1,17 +1,11 @@
 #include "network/api_common.h"
 #include "session/conversation_tracker.h"
 #include "unity.h"
-#include "db/document_store.h"
 #include <stdlib.h>
 #include "util/ralph_home.h"
 
-// Test that reproduces the "messages array misformatted" bug
-// The bug occurs when conversation history contains messages with NULL role or content
-
 void setUp(void) {
     ralph_home_init(NULL);
-    // Clear conversation data to ensure test isolation
-    document_store_clear_conversations();
 }
 
 void tearDown(void) {

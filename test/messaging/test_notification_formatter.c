@@ -6,18 +6,47 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <dirent.h>
+#include <sys/stat.h>
 
 static message_store_t* g_store = NULL;
 
+static void rmdir_recursive(const char* path) {
+    DIR* dir = opendir(path);
+    if (dir == NULL) return;
+
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+        char full_path[1024] = {0};
+        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
+        struct stat st;
+        if (stat(full_path, &st) == 0) {
+            if (S_ISDIR(st.st_mode)) {
+                rmdir_recursive(full_path);
+            } else {
+                unlink(full_path);
+            }
+        }
+    }
+    closedir(dir);
+    rmdir(path);
+}
+
 void setUp(void) {
+    // Clean up any leftover test data
+    rmdir_recursive("/tmp/test_formatter_home");
     ralph_home_init("/tmp/test_formatter_home");
-    message_store_reset_instance_for_testing();
-    g_store = message_store_get_instance();
+    g_store = message_store_create(NULL);
 }
 
 void tearDown(void) {
-    message_store_reset_instance_for_testing();
-    g_store = NULL;
+    if (g_store) {
+        message_store_destroy(g_store);
+        g_store = NULL;
+    }
     ralph_home_cleanup();
 }
 
@@ -57,11 +86,17 @@ void test_bundle_with_direct_messages(void) {
     message_send_direct(g_store, "sender-1", agent_id, "Message one", 0, msg_id);
     message_send_direct(g_store, "sender-2", agent_id, "Message two", 0, msg_id);
 
-    notification_bundle_t* bundle = notification_bundle_create(agent_id, NULL);
+    Services* svc = services_create_empty();
+    TEST_ASSERT_NOT_NULL(svc);
+    svc->message_store = g_store;
+
+    notification_bundle_t* bundle = notification_bundle_create(agent_id, svc);
     TEST_ASSERT_NOT_NULL(bundle);
     TEST_ASSERT_EQUAL(2, notification_bundle_total_count(bundle));
 
     notification_bundle_destroy(bundle);
+    svc->message_store = NULL;
+    services_destroy(svc);
 }
 
 void test_bundle_with_channel_messages(void) {
@@ -73,11 +108,17 @@ void test_bundle_with_channel_messages(void) {
     char msg_id[40] = {0};
     channel_publish(g_store, "format-channel", "publisher", "Channel message", msg_id);
 
-    notification_bundle_t* bundle = notification_bundle_create(agent_id, NULL);
+    Services* svc = services_create_empty();
+    TEST_ASSERT_NOT_NULL(svc);
+    svc->message_store = g_store;
+
+    notification_bundle_t* bundle = notification_bundle_create(agent_id, svc);
     TEST_ASSERT_NOT_NULL(bundle);
     TEST_ASSERT_EQUAL(1, notification_bundle_total_count(bundle));
 
     notification_bundle_destroy(bundle);
+    svc->message_store = NULL;
+    services_destroy(svc);
 }
 
 void test_bundle_with_mixed_messages(void) {
@@ -90,11 +131,17 @@ void test_bundle_with_mixed_messages(void) {
     channel_subscribe(g_store, "mixed-channel", agent_id);
     channel_publish(g_store, "mixed-channel", "publisher", "Channel message", msg_id);
 
-    notification_bundle_t* bundle = notification_bundle_create(agent_id, NULL);
+    Services* svc = services_create_empty();
+    TEST_ASSERT_NOT_NULL(svc);
+    svc->message_store = g_store;
+
+    notification_bundle_t* bundle = notification_bundle_create(agent_id, svc);
     TEST_ASSERT_NOT_NULL(bundle);
     TEST_ASSERT_EQUAL(2, notification_bundle_total_count(bundle));
 
     notification_bundle_destroy(bundle);
+    svc->message_store = NULL;
+    services_destroy(svc);
 }
 
 void test_format_for_llm_null_bundle(void) {
@@ -122,7 +169,11 @@ void test_format_for_llm_with_messages(void) {
     channel_subscribe(g_store, "llm-channel", agent_id);
     channel_publish(g_store, "llm-channel", "channel-sender", "Channel broadcast", msg_id);
 
-    notification_bundle_t* bundle = notification_bundle_create(agent_id, NULL);
+    Services* svc = services_create_empty();
+    TEST_ASSERT_NOT_NULL(svc);
+    svc->message_store = g_store;
+
+    notification_bundle_t* bundle = notification_bundle_create(agent_id, svc);
     TEST_ASSERT_NOT_NULL(bundle);
 
     char* formatted = notification_format_for_llm(bundle);
@@ -137,6 +188,8 @@ void test_format_for_llm_with_messages(void) {
 
     free(formatted);
     notification_bundle_destroy(bundle);
+    svc->message_store = NULL;
+    services_destroy(svc);
 }
 
 void test_bundle_total_count_null(void) {

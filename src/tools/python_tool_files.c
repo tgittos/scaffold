@@ -41,7 +41,7 @@ static int mkdir_recursive(const char *path) {
     }
 
     char *p = path_copy;
-    if (*p == '/') p++;  // Skip leading slash
+    if (*p == '/') p++;
 
     while (*p != '\0') {
         while (*p != '/' && *p != '\0') p++;
@@ -616,8 +616,7 @@ int execute_python_file_tool_call(const ToolCall *tool_call, ToolResult *result)
         if (cJSON_IsNull(item)) {
             continue;
         }
-        // Add space for ", " separator
-        kwargs_size_needed += 4; // ", " plus some margin
+        kwargs_size_needed += 4;
         // Add space for "name="
         kwargs_size_needed += strlen(item->string) + 1;
 

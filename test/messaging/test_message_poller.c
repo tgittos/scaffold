@@ -13,13 +13,14 @@ static message_store_t* g_store = NULL;
 
 void setUp(void) {
     ralph_home_init("/tmp/test_poller_home");
-    message_store_reset_instance_for_testing();
-    g_store = message_store_get_instance();
+    g_store = message_store_create(NULL);
 }
 
 void tearDown(void) {
-    message_store_reset_instance_for_testing();
-    g_store = NULL;
+    if (g_store) {
+        message_store_destroy(g_store);
+        g_store = NULL;
+    }
     ralph_home_cleanup();
 }
 
@@ -134,7 +135,11 @@ void test_poller_detects_pending_direct_message(void) {
     int rc = message_send_direct(g_store, "sender", agent_id, "Hello poller!", 0, msg_id);
     TEST_ASSERT_EQUAL(0, rc);
 
-    message_poller_t* poller = message_poller_create(agent_id, 50, NULL);
+    Services* svc = services_create_empty();
+    TEST_ASSERT_NOT_NULL(svc);
+    svc->message_store = g_store;
+
+    message_poller_t* poller = message_poller_create(agent_id, 50, svc);
     TEST_ASSERT_NOT_NULL(poller);
 
     rc = message_poller_start(poller);
@@ -160,6 +165,8 @@ void test_poller_detects_pending_direct_message(void) {
 
     message_poller_stop(poller);
     message_poller_destroy(poller);
+    svc->message_store = NULL;  // Don't let services_destroy free g_store
+    services_destroy(svc);
 }
 
 void test_poller_detects_pending_channel_message(void) {
@@ -171,7 +178,11 @@ void test_poller_detects_pending_channel_message(void) {
     char msg_id[40] = {0};
     channel_publish(g_store, "poller-channel", "publisher", "Channel message", msg_id);
 
-    message_poller_t* poller = message_poller_create(agent_id, 50, NULL);
+    Services* svc = services_create_empty();
+    TEST_ASSERT_NOT_NULL(svc);
+    svc->message_store = g_store;
+
+    message_poller_t* poller = message_poller_create(agent_id, 50, svc);
     TEST_ASSERT_NOT_NULL(poller);
 
     int rc = message_poller_start(poller);
@@ -195,6 +206,8 @@ void test_poller_detects_pending_channel_message(void) {
 
     message_poller_stop(poller);
     message_poller_destroy(poller);
+    svc->message_store = NULL;
+    services_destroy(svc);
 }
 
 int main(void) {

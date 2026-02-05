@@ -9,6 +9,3 @@
  */
 
 #include "ralph.h"
-
-/* This file intentionally left mostly empty.
- * All functionality has been moved to lib/agent/session.c */

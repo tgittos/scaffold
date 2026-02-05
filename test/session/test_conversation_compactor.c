@@ -2,15 +2,12 @@
 #include "session/conversation_compactor.h"
 #include "session/conversation_tracker.h"
 #include "ralph.h"
-#include "db/document_store.h"
 #include <string.h>
 #include <stdlib.h>
 #include "util/ralph_home.h"
 
 void setUp(void) {
     ralph_home_init(NULL);
-    // Clear conversation data to ensure test isolation
-    document_store_clear_conversations();
 }
 
 void tearDown(void) {

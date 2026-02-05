@@ -1,43 +1,89 @@
 #include "../unity/unity.h"
 #include "session/conversation_tracker.h"
 #include "db/document_store.h"
-#include "util/config.h"
+#include "db/vector_db_service.h"
+#include "services/services.h"
+#include "llm/embeddings_service.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <cJSON.h>
 #include "util/ralph_home.h"
+#include "../mock_api_server.h"
+#include "../mock_embeddings.h"
+#include "../mock_embeddings_server.h"
 
-#define TEST_HOME_DIR "/tmp/test_tool_calls_not_stored_home"
-
-static void cleanup_test_dir(void) {
-    /* Remove test directory to ensure clean state */
-    system("rm -rf " TEST_HOME_DIR);
-}
+static Services* g_test_services = NULL;
+static MockAPIServer mock_server;
+static MockAPIResponse mock_responses[1];
+static char* saved_api_key = NULL;
+static char* saved_api_url = NULL;
 
 void setUp(void) {
-    /* Clean up any leftover state from previous runs */
-    cleanup_test_dir();
+    ralph_home_init(NULL);
 
-    /* Use a unique test directory to avoid interference with other tests */
-    ralph_home_init(TEST_HOME_DIR);
-    // Initialize config to load API key from environment
-    config_init();
-    // Clear any existing conversation data
-    document_store_clear_conversations();
+    mock_embeddings_init_test_groups();
+
+    memset(&mock_server, 0, sizeof(mock_server));
+    mock_server.port = 18893;
+    mock_responses[0] = mock_embeddings_server_response();
+    mock_server.responses = mock_responses;
+    mock_server.response_count = 1;
+    mock_api_server_start(&mock_server);
+    mock_api_server_wait_ready(&mock_server, 2000);
+
+    // Save and set env vars so embeddings_service_create() picks them up
+    const char* key = getenv("OPENAI_API_KEY");
+    const char* url = getenv("EMBEDDING_API_URL");
+    saved_api_key = key ? strdup(key) : NULL;
+    saved_api_url = url ? strdup(url) : NULL;
+    setenv("OPENAI_API_KEY", "mock-test-key", 1);
+    setenv("EMBEDDING_API_URL", "http://127.0.0.1:18893/v1/embeddings", 1);
+
+    g_test_services = services_create_empty();
+    if (g_test_services) {
+        g_test_services->vector_db = vector_db_service_create();
+        g_test_services->embeddings = embeddings_service_create();
+        document_store_set_services(g_test_services);
+        g_test_services->document_store = document_store_create(NULL);
+    }
+    conversation_tracker_set_services(g_test_services);
+
+    document_store_clear_conversations(services_get_document_store(g_test_services));
 }
 
 void tearDown(void) {
-    // Clear conversation data after each test to prevent interference
-    document_store_clear_conversations();
-    // Cleanup config
-    config_cleanup();
+    document_store_clear_conversations(services_get_document_store(g_test_services));
+
+    conversation_tracker_set_services(NULL);
+    document_store_set_services(NULL);
+
+    if (g_test_services) {
+        services_destroy(g_test_services);
+        g_test_services = NULL;
+    }
+
+    mock_api_server_stop(&mock_server);
+    mock_embeddings_cleanup();
+
+    // Restore env vars
+    if (saved_api_key) {
+        setenv("OPENAI_API_KEY", saved_api_key, 1);
+        free(saved_api_key);
+        saved_api_key = NULL;
+    } else {
+        unsetenv("OPENAI_API_KEY");
+    }
+    if (saved_api_url) {
+        setenv("EMBEDDING_API_URL", saved_api_url, 1);
+        free(saved_api_url);
+        saved_api_url = NULL;
+    } else {
+        unsetenv("EMBEDDING_API_URL");
+    }
 
     ralph_home_cleanup();
-
-    /* Clean up test directory */
-    cleanup_test_dir();
 }
 
 /**

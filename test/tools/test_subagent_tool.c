@@ -2,6 +2,7 @@
 #include "lib/tools/subagent_tool.h"
 #include "lib/tools/messaging_tool.h"
 #include "lib/ipc/message_store.h"
+#include "services/services.h"
 #include "util/config.h"
 #include "util/ralph_home.h"
 #include <stdio.h>
@@ -9,6 +10,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/wait.h>
+
+static message_store_t* g_store = NULL;
 
 /**
  * Helper: Create a mock subagent that exits quickly without real LLM calls.
@@ -75,13 +78,17 @@ void setUp(void) {
     // Initialize config for each test
     config_init();
     ralph_home_init(NULL);
+    g_store = message_store_create(NULL);
 }
 
 void tearDown(void) {
     // Clean up config after each test
     config_cleanup();
     messaging_tool_cleanup();
-    message_store_reset_instance_for_testing();
+    if (g_store) {
+        message_store_destroy(g_store);
+        g_store = NULL;
+    }
     ralph_home_cleanup();
 }
 
@@ -1087,13 +1094,19 @@ void test_execute_subagent_status_tool_call_with_wait(void) {
 // =========================================================================
 
 void test_subagent_completion_sends_message_to_parent(void) {
-    // Set up message store singleton and agent ID (parent agent)
-    message_store_t* store = message_store_get_instance();
+    // Set up message store and agent ID (parent agent)
+    message_store_t* store = g_store;
     TEST_ASSERT_NOT_NULL(store);
     messaging_tool_set_agent_id("parent-agent-123");
 
+    // Create services container with message store
+    Services* svc = services_create_empty();
+    TEST_ASSERT_NOT_NULL(svc);
+    svc->message_store = g_store;
+
     SubagentManager manager;
     subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
+    manager.services = svc;
     char id[SUBAGENT_ID_LENGTH + 1];
 
     // Spawn a mock subagent that completes successfully
@@ -1124,16 +1137,24 @@ void test_subagent_completion_sends_message_to_parent(void) {
     if (error_str) free(error_str);
 
     subagent_manager_cleanup(&manager);
+    svc->message_store = NULL;
+    services_destroy(svc);
 }
 
 void test_subagent_failure_sends_message_to_parent(void) {
-    // Set up message store singleton and agent ID (parent agent)
-    message_store_t* store = message_store_get_instance();
+    // Set up message store and agent ID (parent agent)
+    message_store_t* store = g_store;
     TEST_ASSERT_NOT_NULL(store);
     messaging_tool_set_agent_id("parent-agent-456");
 
+    // Create services container with message store
+    Services* svc = services_create_empty();
+    TEST_ASSERT_NOT_NULL(svc);
+    svc->message_store = g_store;
+
     SubagentManager manager;
     subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
+    manager.services = svc;
     char id[SUBAGENT_ID_LENGTH + 1];
 
     // Spawn a mock subagent that fails (non-zero exit code)
@@ -1163,17 +1184,25 @@ void test_subagent_failure_sends_message_to_parent(void) {
     if (error_str) free(error_str);
 
     subagent_manager_cleanup(&manager);
+    svc->message_store = NULL;
+    services_destroy(svc);
 }
 
 void test_subagent_timeout_sends_message_to_parent(void) {
-    // Set up message store singleton and agent ID (parent agent)
-    message_store_t* store = message_store_get_instance();
+    // Set up message store and agent ID (parent agent)
+    message_store_t* store = g_store;
     TEST_ASSERT_NOT_NULL(store);
     messaging_tool_set_agent_id("parent-agent-789");
+
+    // Create services container with message store
+    Services* svc = services_create_empty();
+    TEST_ASSERT_NOT_NULL(svc);
+    svc->message_store = g_store;
 
     SubagentManager manager;
     // Set a very short timeout (1 second) for testing
     subagent_manager_init_with_config(&manager, 5, 1);
+    manager.services = svc;
     char id[SUBAGENT_ID_LENGTH + 1];
 
     // Spawn a mock subagent that takes longer than the timeout
@@ -1203,11 +1232,13 @@ void test_subagent_timeout_sends_message_to_parent(void) {
     direct_message_free_list(msgs, msg_count);
 
     subagent_manager_cleanup(&manager);
+    svc->message_store = NULL;
+    services_destroy(svc);
 }
 
 void test_subagent_no_notification_without_parent_id(void) {
     // Set up message store singleton but DON'T set agent ID (simulating no parent)
-    message_store_t* store = message_store_get_instance();
+    message_store_t* store = g_store;
     TEST_ASSERT_NOT_NULL(store);
     messaging_tool_cleanup();  // Ensure no agent ID is set
 

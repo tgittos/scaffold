@@ -2,6 +2,8 @@
 #include "lib/tools/vector_db_tool.h"
 #include "lib/tools/tools_system.h"
 #include "db/vector_db.h"
+#include "db/document_store.h"
+#include "services/services.h"
 #include "util/config.h"
 #include "util/ralph_home.h"
 #include "../mock_api_server.h"
@@ -16,9 +18,11 @@
 static char *saved_ralph_config_backup = NULL;
 static MockAPIServer mock_server;
 static MockAPIResponse mock_responses[1];
+static Services* test_services = NULL;
+static char* saved_api_key = NULL;
+static char* saved_api_url = NULL;
 
 void setUp(void) {
-    // Initialize ralph home directory (required for document store)
     ralph_home_init(NULL);
 
     // Back up existing ralph.config.json file if it exists
@@ -34,13 +38,11 @@ void setUp(void) {
             saved_ralph_config_backup[file_size] = '\0';
         }
         fclose(ralph_config_file);
-        remove("ralph.config.json");  // Remove temporarily
+        remove("ralph.config.json");
     }
 
-    // Initialize mock embeddings with semantic groups
     mock_embeddings_init_test_groups();
 
-    // Set up mock embeddings server
     memset(&mock_server, 0, sizeof(mock_server));
     mock_server.port = 18890;
     mock_responses[0] = mock_embeddings_server_response();
@@ -50,20 +52,31 @@ void setUp(void) {
     mock_api_server_start(&mock_server);
     mock_api_server_wait_ready(&mock_server, 2000);
 
-    // Initialize config system first
+    // Save and set env vars so embeddings_service_create() picks them up
+    const char* key = getenv("OPENAI_API_KEY");
+    const char* url = getenv("EMBEDDING_API_URL");
+    saved_api_key = key ? strdup(key) : NULL;
+    saved_api_url = url ? strdup(url) : NULL;
+    setenv("OPENAI_API_KEY", "mock-test-key", 1);
+    setenv("EMBEDDING_API_URL", "http://127.0.0.1:18890/v1/embeddings", 1);
+
     config_init();
 
-    // Set mock embedding API URL and API key via config system
-    config_set("embedding_api_url", "http://127.0.0.1:18890/api.openai.com/v1/embeddings");
-    config_set("openai_api_key", "mock-test-key");
+    test_services = services_create_default();
+
+    document_store_set_services(test_services);
+
+    ToolRegistry registry = {0};
+    init_tool_registry(&registry);
+    registry.services = test_services;
+    register_vector_db_tool(&registry);
+    cleanup_tool_registry(&registry);
 }
 
 void tearDown(void) {
-    // Clean up after each test
     config_cleanup();
     remove("ralph.config.json");
 
-    // Restore backed up ralph.config.json file if it existed
     if (saved_ralph_config_backup) {
         FILE *ralph_config_file = fopen("ralph.config.json", "w");
         if (ralph_config_file) {
@@ -74,13 +87,32 @@ void tearDown(void) {
         saved_ralph_config_backup = NULL;
     }
 
-    // Stop mock server
     mock_api_server_stop(&mock_server);
-
-    // Cleanup mock embeddings
     mock_embeddings_cleanup();
 
-    // Cleanup ralph home
+    document_store_set_services(NULL);
+
+    if (test_services) {
+        services_destroy(test_services);
+        test_services = NULL;
+    }
+
+    // Restore env vars
+    if (saved_api_key) {
+        setenv("OPENAI_API_KEY", saved_api_key, 1);
+        free(saved_api_key);
+        saved_api_key = NULL;
+    } else {
+        unsetenv("OPENAI_API_KEY");
+    }
+    if (saved_api_url) {
+        setenv("EMBEDDING_API_URL", saved_api_url, 1);
+        free(saved_api_url);
+        saved_api_url = NULL;
+    } else {
+        unsetenv("EMBEDDING_API_URL");
+    }
+
     ralph_home_cleanup();
 }
 

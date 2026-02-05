@@ -8,6 +8,7 @@
 #include "../ui/repl.h"
 #include "../workflow/workflow.h"
 #include "../session/conversation_tracker.h"
+#include "../db/document_store.h"
 #include "../util/debug_output.h"
 #include "../ui/output_formatter.h"
 #include "../ui/json_output.h"
@@ -75,6 +76,8 @@ int agent_init(Agent* agent, const AgentConfig* config) {
 
     agent->session.services = agent->services;
     agent->session.tools.services = agent->services;
+    document_store_set_services(agent->services);
+    conversation_tracker_set_services(agent->services);
 
     if (agent->config.mode == AGENT_MODE_BACKGROUND) {
         agent->session.subagent_manager.is_subagent_process = 1;

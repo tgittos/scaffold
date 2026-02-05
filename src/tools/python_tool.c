@@ -251,7 +251,7 @@ int parse_python_arguments(const char *json_args, PythonExecutionParams *params)
         params->timeout_seconds = PYTHON_MAX_TIMEOUT_SECONDS;
     }
 
-    params->capture_stderr = 1;  // Always capture stderr separately
+    params->capture_stderr = 1;
 
     return 0;
 }
@@ -552,7 +552,6 @@ char* format_python_result_json(const PythonExecutionResult *exec_result) {
         return NULL;
     }
 
-    /* Build JSON using cJSON for proper escaping and formatting */
     cJSON *json_obj = cJSON_CreateObject();
     if (json_obj == NULL) {
         return NULL;

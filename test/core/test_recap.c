@@ -1,7 +1,7 @@
 #include "unity.h"
 #include "ralph.h"
 #include "session/conversation_tracker.h"
-#include "db/document_store.h"
+#include "db/hnswlib_wrapper.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,8 +9,7 @@
 
 void setUp(void) {
     ralph_home_init(NULL);
-    // Reset document store to ensure clean state between tests
-    document_store_reset_instance();
+    hnswlib_clear_all();
 }
 
 void tearDown(void) {

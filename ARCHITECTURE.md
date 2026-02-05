@@ -938,33 +938,72 @@ graph TB
 - **Automatic Initialization**: Services initialize automatically on first use
 - **Rich Metadata**: Timestamps, content types, and classification for all stored vectors
 
+
 ## Directory Structure
 
 ```
 src/
-├── core/                   # Core application
+├── core/                   # CLI Entry Point (thin wrapper around lib/)
 │   ├── main.c              # Entry point (CLI interface, --json, --subagent modes)
-│   ├── ralph.c/h           # Core orchestration logic
+│   └── ralph.c/h           # Re-exports lib/agent/session.h and lib/agent/agent.h
+├── tools/                  # Python tool integration
+│   ├── python_tool.c/h     # Embedded Python interpreter
+│   ├── python_tool_files.c/h # Python file-based tools
+│   ├── python_extension.c/h  # Tool extension interface for Python
+│   └── python_defaults/    # Default Python tool files
+│       ├── read_file.py
+│       ├── write_file.py
+│       ├── append_file.py
+│       ├── file_info.py
+│       ├── list_dir.py
+│       ├── search_files.py
+│       ├── apply_delta.py
+│       ├── shell.py
+│       └── web_fetch.py
+lib/
+├── libagent.h              # Public API for the agent library
+├── types.h                 # Shared types (ToolCall, ToolResult, StreamingToolUse)
+├── agent/                  # Agent abstraction and session management
+│   ├── agent.c/h           # Agent lifecycle (init, run, cleanup)
+│   ├── session.c/h         # AgentSession aggregating all components
 │   ├── async_executor.c/h  # Non-blocking message processing thread
 │   ├── context_enhancement.c/h  # Prompt enhancement with memory/context
 │   ├── recap.c/h           # Conversation recap generation
 │   ├── streaming_handler.c/h   # Streaming orchestration layer
 │   └── tool_executor.c/h   # Tool-calling state machine
+├── session/                # Session data management
+│   ├── session_manager.c/h # Session data structures
+│   ├── conversation_tracker.c/h # Conversation persistence
+│   ├── token_manager.c/h   # Token counting/allocation
+│   ├── conversation_compactor.c/h # Context trimming
+│   └── rolling_summary.c/h # Rolling conversation summary generation
 ├── db/                     # Database layer
 │   ├── vector_db.c/h       # Low-level HNSWLIB wrapper
 │   ├── vector_db_service.c/h # Thread-safe singleton service
 │   ├── document_store.c/h  # High-level document storage
 │   ├── metadata_store.c/h  # Chunk metadata storage
 │   ├── task_store.c/h      # SQLite-based persistent task storage
+│   ├── sqlite_dal.c/h      # SQLite data access layer
 │   └── hnswlib_wrapper.cpp/h # C++ bridge
-├── llm/                    # LLM integration (models only; core in lib/llm/)
-│   └── models/             # Model implementations
-│       ├── claude_model.c
-│       ├── gpt_model.c
-│       ├── qwen_model.c
-│       ├── deepseek_model.c
-│       ├── default_model.c
-│       └── response_processing.c/h  # Thinking tag processing
+├── llm/                    # LLM core framework
+│   ├── llm_provider.c/h    # Provider abstraction layer
+│   ├── model_capabilities.c/h # Model capability detection
+│   ├── embeddings.c/h      # Low-level embeddings API
+│   ├── embedding_provider.c/h # Embedding provider abstraction
+│   ├── embeddings_service.c/h # Embeddings singleton service
+│   ├── models/             # Model capability implementations
+│   │   ├── claude_model.c
+│   │   ├── gpt_model.c
+│   │   ├── qwen_model.c
+│   │   ├── deepseek_model.c
+│   │   ├── default_model.c
+│   │   └── response_processing.c/h  # Thinking tag processing
+│   └── providers/          # API provider implementations
+│       ├── anthropic_provider.c  # Anthropic API client
+│       ├── openai_provider.c     # OpenAI API client
+│       ├── local_ai_provider.c   # Local AI server integration
+│       ├── openai_embedding_provider.c  # OpenAI embeddings
+│       └── local_embedding_provider.c   # Local embeddings
 ├── network/                # Network layer
 │   ├── http_client.c/h     # HTTP client (cURL wrapper)
 │   ├── api_common.c/h      # API payload building
@@ -988,26 +1027,50 @@ src/
 │   ├── approval_errors.c   # Approval gate error formatting
 │   ├── verified_file_context.c/h # Thread-local verified file context
 │   └── verified_file_python.c/h  # Python extension for verified I/O
-├── session/                # Session management
-│   ├── session_manager.c/h # Session data structures
-│   ├── conversation_tracker.c/h # Conversation persistence
-│   ├── token_manager.c/h   # Token counting/allocation
-│   ├── conversation_compactor.c/h # Context trimming
-│   └── rolling_summary.c/h # Rolling conversation summary generation
-├── tools/                  # Python tool integration
-│   ├── python_tool.c/h     # Embedded Python interpreter
-│   ├── python_tool_files.c/h # Python file-based tools
-│   └── python_defaults/    # Default Python tool files
-│       ├── read_file.py
-│       ├── write_file.py
-│       ├── append_file.py
-│       ├── file_info.py
-│       ├── list_dir.py
-│       ├── search_files.py
-│       ├── apply_delta.py
-│       ├── shell.py
-│       └── web_fetch.py
-lib/
+├── mcp/                    # Model Context Protocol
+│   ├── mcp_client.c/h      # MCP client implementation
+│   ├── mcp_transport.c/h   # Transport abstraction layer
+│   ├── mcp_transport_stdio.c   # STDIO transport implementation
+│   └── mcp_transport_http.c    # HTTP transport implementation
+├── pdf/                    # PDF processing
+│   └── pdf_extractor.c/h   # PDFio-based text extraction
+├── ipc/                    # Inter-process communication
+│   ├── ipc.h               # Public IPC API header
+│   ├── pipe_notifier.c/h   # Thread-safe pipe-based notification
+│   ├── agent_identity.c/h  # Thread-safe agent identity management
+│   ├── message_store.c/h   # SQLite-backed direct and pub/sub messaging
+│   ├── message_poller.c/h  # Background message polling
+│   └── notification_formatter.c/h # LLM notification formatting
+├── ui/                     # User interface components
+│   ├── ui.h                # Public UI API header
+│   ├── output.h            # Output formatting header
+│   ├── terminal.c/h        # Terminal abstraction
+│   ├── spinner.c/h         # Tool execution spinner feedback
+│   ├── output_formatter.c/h # Response formatting
+│   ├── json_output.c/h     # JSON output mode
+│   ├── memory_commands.c/h # Interactive /memory slash commands
+│   └── repl.c/h            # Read-Eval-Print-Loop implementation
+├── tools/                  # Tool system
+│   ├── tools.h             # Public tools API header
+│   ├── tools_system.c/h    # Tool registry and execution
+│   ├── tool_result_builder.c/h # Result formatting
+│   ├── tool_param_dsl.c/h  # Table-driven parameter DSL
+│   ├── tool_format.h       # Tool format strategy pattern
+│   ├── tool_format_anthropic.c # Anthropic tool format
+│   ├── tool_format_openai.c    # OpenAI tool format
+│   ├── tool_extension.c/h  # Extension interface for external tools
+│   ├── builtin_tools.c/h   # Built-in tool registration
+│   ├── memory_tool.c/h     # Semantic memory (remember, recall_memories, forget_memory)
+│   ├── pdf_tool.c/h        # PDF processing tool
+│   ├── vector_db_tool.c/h  # Vector DB operations (13 tools)
+│   ├── subagent_tool.c/h   # Subagent process spawning
+│   ├── subagent_process.c/h    # Subagent I/O and lifecycle
+│   ├── messaging_tool.c/h  # Inter-agent messaging (6 tools)
+│   ├── todo_manager.c/h    # Todo data structures
+│   ├── todo_tool.c/h       # Todo tool call handler
+│   └── todo_display.c/h    # Todo visualization
+├── services/               # Service container
+│   └── services.c/h        # Dependency injection container
 ├── util/                   # Generic utilities
 │   ├── darray.h            # Type-safe dynamic array macros
 │   ├── ptrarray.h          # Type-safe dynamic pointer array with ownership
@@ -1022,56 +1085,8 @@ lib/
 │   ├── pdf_processor.c/h   # PDF download/processing
 │   ├── context_retriever.c/h # Vector context retrieval
 │   └── ralph_home.c/h      # Centralized home directory management
-├── db/                     # Database abstraction
-│   └── sqlite_dal.c/h      # SQLite data access layer
-├── llm/                    # LLM core framework
-│   ├── llm_provider.c/h    # Provider abstraction layer
-│   ├── model_capabilities.c/h # Model capability detection
-│   ├── embeddings.c/h      # Low-level embeddings API
-│   ├── embedding_provider.c/h # Embedding provider abstraction
-│   ├── embeddings_service.c/h # Embeddings singleton service
-│   └── providers/          # API provider implementations
-│       ├── anthropic_provider.c  # Anthropic API client
-│       ├── openai_provider.c     # OpenAI API client
-│       ├── local_ai_provider.c   # Local AI server integration
-│       ├── openai_embedding_provider.c  # OpenAI embeddings
-│       └── local_embedding_provider.c   # Local embeddings
-├── mcp/                    # Model Context Protocol
-│   ├── mcp_client.c/h      # MCP client implementation
-│   ├── mcp_transport.c/h   # Transport abstraction layer
-│   ├── mcp_transport_stdio.c   # STDIO transport implementation
-│   └── mcp_transport_http.c    # HTTP transport implementation
-├── pdf/                    # PDF processing
-│   └── pdf_extractor.c/h   # PDFio-based text extraction
-├── ipc/                    # Inter-process communication
-│   ├── pipe_notifier.c/h   # Thread-safe pipe-based notification
-│   ├── agent_identity.c/h  # Thread-safe agent identity management
-│   ├── message_store.c/h   # SQLite-backed direct and pub/sub messaging
-│   ├── message_poller.c/h  # Background message polling
-│   └── notification_formatter.c/h # LLM notification formatting
-├── ui/                     # User interface components
-│   ├── terminal.c/h        # Terminal abstraction
-│   ├── spinner.c/h         # Tool execution spinner feedback
-│   ├── output_formatter.c/h # Response formatting
-│   ├── json_output.c/h     # JSON output mode
-│   ├── memory_commands.c/h # Interactive /memory slash commands
-│   └── repl.c/h            # Read-Eval-Print-Loop implementation
-└── tools/                  # Tool system
-    ├── tools_system.c/h    # Tool registry and execution
-    ├── tool_result_builder.c/h # Result formatting
-    ├── tool_param_dsl.c/h  # Table-driven parameter DSL
-    ├── tool_format.h       # Tool format strategy pattern
-    ├── tool_format_anthropic.c # Anthropic tool format
-    ├── tool_format_openai.c    # OpenAI tool format
-    ├── builtin_tools.c/h   # Built-in tool registration
-    ├── memory_tool.c/h     # Semantic memory (remember, recall_memories, forget_memory)
-    ├── pdf_tool.c/h        # PDF processing tool
-    ├── vector_db_tool.c/h  # Vector DB operations (13 tools)
-    ├── subagent_tool.c/h   # Subagent process spawning
-    ├── subagent_process.c/h    # Subagent I/O and lifecycle
-    ├── messaging_tool.c/h  # Inter-agent messaging (6 tools)
-    ├── todo_manager.c/h    # Todo data structures
-    ├── todo_tool.c/h       # Todo tool call handler
-    └── todo_display.c/h    # Todo visualization
+└── workflow/               # Task queue
+    └── workflow.c/h        # SQLite-backed work queue
 ```
 
+```

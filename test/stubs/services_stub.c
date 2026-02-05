@@ -30,6 +30,7 @@ Services* services_create_empty(void) {
     services->vector_db = NULL;
     services->embeddings = NULL;
     services->task_store = NULL;
+    services->document_store = NULL;
     services->use_singletons = false;
 
     return services;
@@ -40,10 +41,7 @@ void services_destroy(Services* services) {
 }
 
 message_store_t* services_get_message_store(Services* services) {
-    if (services != NULL && services->message_store != NULL) {
-        return services->message_store;
-    }
-    return message_store_get_instance();
+    return (services != NULL) ? services->message_store : NULL;
 }
 
 vector_db_service_t* services_get_vector_db(Services* services) {
@@ -63,6 +61,13 @@ embeddings_service_t* services_get_embeddings(Services* services) {
 task_store_t* services_get_task_store(Services* services) {
     if (services != NULL && services->task_store != NULL) {
         return services->task_store;
+    }
+    return NULL;
+}
+
+document_store_t* services_get_document_store(Services* services) {
+    if (services != NULL && services->document_store != NULL) {
+        return services->document_store;
     }
     return NULL;
 }

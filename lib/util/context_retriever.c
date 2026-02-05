@@ -2,10 +2,17 @@
 #include "../db/vector_db_service.h"
 #include "../db/metadata_store.h"
 #include "../llm/embeddings_service.h"
+#include "../services/services.h"
 #include "common_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+static Services* g_services = NULL;
+
+void context_retriever_set_services(Services* services) {
+    g_services = services;
+}
 
 DARRAY_DEFINE(ContextItemArray, context_item_t)
 
@@ -35,7 +42,8 @@ context_result_t* retrieve_relevant_context(const char *user_message, size_t max
         return create_empty_result();
     }
 
-    vector_db_t *vector_db = vector_db_service_get_database();
+    vector_db_service_t* vdb_service = services_get_vector_db(g_services);
+    vector_db_t *vector_db = vector_db_service_get_database(vdb_service);
     if (!vector_db) {
         return create_error_result("Vector database not available");
     }
@@ -44,11 +52,12 @@ context_result_t* retrieve_relevant_context(const char *user_message, size_t max
         return create_empty_result();
     }
 
-    if (!embeddings_service_is_configured()) {
+    embeddings_service_t* embeddings = services_get_embeddings(g_services);
+    if (!embeddings_service_is_configured(embeddings)) {
         return create_error_result("Embeddings not configured");
     }
 
-    vector_t *query_vector = embeddings_service_text_to_vector(user_message);
+    vector_t *query_vector = embeddings_service_text_to_vector(embeddings, user_message);
     if (!query_vector) {
         return create_error_result("Failed to generate embedding for query");
     }

@@ -11,12 +11,15 @@ Services* services_create_default(void) {
         return NULL;
     }
 
-    /* Get singleton instances */
-    services->message_store = message_store_get_instance();
-    services->vector_db = vector_db_service_get_instance();
-    services->embeddings = embeddings_service_get_instance();
-    services->task_store = task_store_get_instance();
-    services->use_singletons = true;
+    services->message_store = message_store_create(NULL);
+    services->vector_db = vector_db_service_create();
+    services->embeddings = embeddings_service_create();
+    services->task_store = task_store_create(NULL);
+
+    document_store_set_services(services);
+    services->document_store = document_store_create(NULL);
+
+    services->use_singletons = false;
 
     return services;
 }
@@ -31,6 +34,7 @@ Services* services_create_empty(void) {
     services->vector_db = NULL;
     services->embeddings = NULL;
     services->task_store = NULL;
+    services->document_store = NULL;
     services->use_singletons = false;
 
     return services;
@@ -41,36 +45,41 @@ void services_destroy(Services* services) {
         return;
     }
 
-    /* Only free the container, not the services themselves.
-     * Services are either singletons (shared, managed globally)
-     * or custom (caller manages their lifecycle). */
+    if (services->message_store != NULL) {
+        message_store_destroy(services->message_store);
+    }
+    if (services->vector_db != NULL) {
+        vector_db_service_destroy(services->vector_db);
+    }
+    if (services->embeddings != NULL) {
+        embeddings_service_destroy(services->embeddings);
+    }
+    if (services->task_store != NULL) {
+        task_store_destroy(services->task_store);
+    }
+    if (services->document_store != NULL) {
+        document_store_destroy(services->document_store);
+    }
+
     free(services);
 }
 
 message_store_t* services_get_message_store(Services* services) {
-    if (services != NULL && services->message_store != NULL) {
-        return services->message_store;
-    }
-    return message_store_get_instance();
+    return (services != NULL) ? services->message_store : NULL;
 }
 
 vector_db_service_t* services_get_vector_db(Services* services) {
-    if (services != NULL && services->vector_db != NULL) {
-        return services->vector_db;
-    }
-    return vector_db_service_get_instance();
+    return (services != NULL) ? services->vector_db : NULL;
 }
 
 embeddings_service_t* services_get_embeddings(Services* services) {
-    if (services != NULL && services->embeddings != NULL) {
-        return services->embeddings;
-    }
-    return embeddings_service_get_instance();
+    return (services != NULL) ? services->embeddings : NULL;
 }
 
 task_store_t* services_get_task_store(Services* services) {
-    if (services != NULL && services->task_store != NULL) {
-        return services->task_store;
-    }
-    return task_store_get_instance();
+    return (services != NULL) ? services->task_store : NULL;
+}
+
+document_store_t* services_get_document_store(Services* services) {
+    return (services != NULL) ? services->document_store : NULL;
 }

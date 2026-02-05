@@ -105,7 +105,7 @@ static void scan_protected_paths_in_dir(const char *base_dir) {
     };
 
     char full_path[PROTECTED_PATH_BUFSIZE];
-    memset(full_path, 0, sizeof(full_path)); /* Initialize to silence valgrind */
+    memset(full_path, 0, sizeof(full_path));
 
     for (int i = 0; SCAN_FILENAMES[i]; i++) {
         if (build_path(base_dir, SCAN_FILENAMES[i], full_path, sizeof(full_path)) == 0) {
@@ -220,7 +220,6 @@ void clear_protected_inode_cache(void) {
         inode_cache.inodes[i].original_path = NULL;
     }
     inode_cache.count = 0;
-    /* Keep allocated capacity for reuse */
 }
 
 void cleanup_protected_inode_cache(void) {
@@ -318,25 +317,16 @@ int matches_protected_glob(const char *path) {
         return 0;
     }
 
-    /*
-     * Custom glob matching for recursive patterns.
-     * Standard fnmatch doesn't support double-star for recursive directory matching.
-     *
-     * For patterns like "star-star/foo.txt", we check if path ends with "/foo.txt"
-     * or the basename matches "foo.txt".
-     */
+    /* fnmatch doesn't support ** for recursive directory matching */
     for (int i = 0; PROTECTED_GLOB_PATTERNS[i]; i++) {
         const char *pattern = PROTECTED_GLOB_PATTERNS[i];
 
-        /* Handle recursive patterns (starting with star-star-slash) */
         if (pattern[0] == '*' && pattern[1] == '*' && pattern[2] == '/') {
-            /* Pattern is recursive - check if path matches the suffix */
-            const char *suffix = pattern + 3; /* Skip the first 3 chars */
+            const char *suffix = pattern + 3;
             if (path_matches_recursive_pattern(path, suffix)) {
                 return 1;
             }
         } else {
-            /* Use standard fnmatch for other patterns */
             int flags = FNM_PATHNAME;
             if (fnmatch(pattern, path, flags) == 0) {
                 return 1;

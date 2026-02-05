@@ -1,6 +1,5 @@
 #include "unity.h"
 #include "session/conversation_tracker.h"
-#include "db/document_store.h"
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -9,8 +8,6 @@
 
 void setUp(void) {
     ralph_home_init(NULL);
-    // Clear conversation data to ensure test isolation
-    document_store_clear_conversations();
 }
 
 void tearDown(void) {
@@ -249,9 +246,6 @@ void test_append_tool_message_with_null_parameters(void) {
 
 
 void test_conversation_persistence_with_tool_messages(void) {
-    // Clear any existing conversation data to avoid interference with other tests
-    document_store_clear_conversations();
-    
     ConversationHistory history1, history2;
     
     // Create initial conversation with tool messages

@@ -17,8 +17,7 @@ void setUp(void) {
     // Clean up any leftover test database
     unlink(TEST_DB_PATH);
 
-    // Reset singleton and create fresh store for each test
-    task_store_reset_instance();
+    // Create fresh store for each test
     g_store = task_store_create(TEST_DB_PATH);
 
     // Generate a unique session ID for tests
@@ -83,24 +82,14 @@ void test_task_store_create_destroy(void) {
     // tearDown will destroy it
 }
 
-void test_task_store_singleton(void) {
-    // Reset instance first
-    task_store_destroy(g_store);
-    g_store = NULL;
-    task_store_reset_instance();
+void test_task_store_multiple_instances(void) {
+    // Can create separate instances with different paths
+    task_store_t* store2 = task_store_create("/tmp/test_tasks2.db");
+    TEST_ASSERT_NOT_NULL(store2);
+    TEST_ASSERT_NOT_EQUAL(g_store, store2);
 
-    // Get singleton instance
-    task_store_t* store1 = task_store_get_instance();
-    TEST_ASSERT_NOT_NULL(store1);
-
-    task_store_t* store2 = task_store_get_instance();
-    TEST_ASSERT_EQUAL_PTR(store1, store2);
-
-    // Clean up singleton for next test
-    task_store_reset_instance();
-
-    // Recreate test store
-    g_store = task_store_create(TEST_DB_PATH);
+    task_store_destroy(store2);
+    unlink("/tmp/test_tasks2.db");
 }
 
 // =============================================================================
@@ -784,7 +773,7 @@ int main(void) {
 
     // Task Store Basic Tests
     RUN_TEST(test_task_store_create_destroy);
-    RUN_TEST(test_task_store_singleton);
+    RUN_TEST(test_task_store_multiple_instances);
 
     // CRUD Tests
     RUN_TEST(test_task_store_create_task);

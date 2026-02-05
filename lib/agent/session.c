@@ -252,7 +252,10 @@ int session_load_config(AgentSession* session) {
         return -1;
     }
 
-    embeddings_service_reinitialize();
+    embeddings_service_t* embeddings = services_get_embeddings(session->services);
+    if (embeddings) {
+        embeddings_service_reinitialize(embeddings);
+    }
     load_system_prompt(&session->session_data.config.system_prompt);
 
     if (config->api_url) {

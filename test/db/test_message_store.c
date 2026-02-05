@@ -18,7 +18,6 @@ void setUp(void) {
     snprintf(g_test_home_dir, sizeof(g_test_home_dir), "/tmp/test_message_store_home_%d", getpid());
     ralph_home_init(g_test_home_dir);
     unlink(g_test_db_path);
-    message_store_reset_instance_for_testing();
     g_store = message_store_create(g_test_db_path);
 }
 
@@ -35,19 +34,16 @@ void test_message_store_create_destroy(void) {
     TEST_ASSERT_NOT_NULL(g_store);
 }
 
-void test_message_store_singleton(void) {
-    message_store_destroy(g_store);
-    g_store = NULL;
-    message_store_reset_instance_for_testing();
+void test_message_store_multiple_instances(void) {
+    // Can create separate instances with different paths
+    char other_path[256];
+    snprintf(other_path, sizeof(other_path), "/tmp/test_messages_other_%d.db", getpid());
+    message_store_t* store2 = message_store_create(other_path);
+    TEST_ASSERT_NOT_NULL(store2);
+    TEST_ASSERT_NOT_EQUAL(g_store, store2);
 
-    message_store_t* store1 = message_store_get_instance();
-    TEST_ASSERT_NOT_NULL(store1);
-
-    message_store_t* store2 = message_store_get_instance();
-    TEST_ASSERT_EQUAL_PTR(store1, store2);
-
-    message_store_reset_instance_for_testing();
-    g_store = message_store_create(g_test_db_path);
+    message_store_destroy(store2);
+    unlink(other_path);
 }
 
 void test_send_direct_message(void) {
@@ -477,7 +473,7 @@ int main(void) {
     UNITY_BEGIN();
 
     RUN_TEST(test_message_store_create_destroy);
-    RUN_TEST(test_message_store_singleton);
+    RUN_TEST(test_message_store_multiple_instances);
 
     RUN_TEST(test_send_direct_message);
     RUN_TEST(test_send_direct_message_null_params);

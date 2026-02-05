@@ -4,6 +4,7 @@
 #include "db/vector_db.h"
 #include "llm/embeddings.h"
 #include "llm/embeddings_service.h"
+#include "services/services.h"
 #include "util/config.h"
 #include "util/ralph_home.h"
 #include "../mock_api_server.h"
@@ -22,6 +23,7 @@ static char *saved_openai_api_key = NULL;
 static char *saved_openai_api_url = NULL;
 static MockAPIServer mock_server;
 static MockAPIResponse mock_responses[1];
+static Services* test_services = NULL;
 
 void setUp(void) {
     ralph_home_init(NULL);
@@ -84,8 +86,21 @@ void setUp(void) {
     // Initialize config system
     config_init();
 
+    // Create services container
+    test_services = services_create_default();
+
     // Force embeddings service to pick up mock config
-    embeddings_service_reinitialize();
+    embeddings_service_t* embeddings = services_get_embeddings(test_services);
+    if (embeddings) {
+        embeddings_service_reinitialize(embeddings);
+    }
+
+    // Register memory tools so g_services is set for execute_* functions
+    ToolRegistry registry = {0};
+    init_tool_registry(&registry);
+    registry.services = test_services;
+    register_memory_tools(&registry);
+    cleanup_tool_registry(&registry);
 }
 
 void tearDown(void) {
@@ -122,11 +137,17 @@ void tearDown(void) {
     mock_api_server_stop(&mock_server);
     mock_embeddings_cleanup();
     ralph_home_cleanup();
+
+    if (test_services) {
+        services_destroy(test_services);
+        test_services = NULL;
+    }
 }
 
 void test_register_memory_tools(void) {
     ToolRegistry registry = {0};
     init_tool_registry(&registry);
+    registry.services = test_services;
 
     int initial_count = registry.functions.count;
     int result = register_memory_tools(&registry);
@@ -190,7 +211,8 @@ void test_remember_tool_missing_content(void) {
 void test_remember_tool_no_api_key(void) {
     // Clear the API key env var to simulate unconfigured state
     unsetenv("OPENAI_API_KEY");
-    embeddings_service_reinitialize();
+    embeddings_service_t* embeddings = services_get_embeddings(test_services);
+    if (embeddings) embeddings_service_reinitialize(embeddings);
 
     ToolCall tool_call = {
         .id = "test_id",
@@ -211,7 +233,7 @@ void test_remember_tool_no_api_key(void) {
 
     // Restore API key for subsequent tests
     setenv("OPENAI_API_KEY", "mock-test-key", 1);
-    embeddings_service_reinitialize();
+    if (embeddings) embeddings_service_reinitialize(embeddings);
 
     TEST_ASSERT_EQUAL_INT(0, got_exec_result);
     TEST_ASSERT_TRUE(got_result_not_null);
@@ -262,7 +284,8 @@ void test_recall_memories_missing_query(void) {
 void test_recall_memories_no_api_key(void) {
     // Clear the API key env var to simulate unconfigured state
     unsetenv("OPENAI_API_KEY");
-    embeddings_service_reinitialize();
+    embeddings_service_t* embeddings = services_get_embeddings(test_services);
+    if (embeddings) embeddings_service_reinitialize(embeddings);
 
     ToolCall tool_call = {
         .id = "test_id",
@@ -283,7 +306,7 @@ void test_recall_memories_no_api_key(void) {
 
     // Restore API key for subsequent tests
     setenv("OPENAI_API_KEY", "mock-test-key", 1);
-    embeddings_service_reinitialize();
+    if (embeddings) embeddings_service_reinitialize(embeddings);
 
     TEST_ASSERT_EQUAL_INT(0, got_exec_result);
     TEST_ASSERT_TRUE(got_result_not_null);

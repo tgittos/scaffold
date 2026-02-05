@@ -39,10 +39,8 @@ PTRARRAY_DECLARE(TaskArray, Task)
 
 typedef struct task_store task_store_t;
 
-task_store_t* task_store_get_instance(void);
-void task_store_destroy(task_store_t* store);
-void task_store_reset_instance(void);
 task_store_t* task_store_create(const char* db_path);
+void task_store_destroy(task_store_t* store);
 
 // out_id must be at least 40 bytes. Pass NULL parent_id for root tasks.
 int task_store_create_task(task_store_t* store, const char* session_id,

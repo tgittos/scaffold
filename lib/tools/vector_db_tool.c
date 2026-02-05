@@ -2,6 +2,7 @@
 #include "tool_param_dsl.h"
 #include "db/vector_db_service.h"
 #include "db/document_store.h"
+#include "services/services.h"
 #include <cJSON.h>
 #include "../util/document_chunker.h"
 #include "../pdf/pdf_extractor.h"
@@ -11,8 +12,11 @@
 #include <string.h>
 #include <errno.h>
 
+static Services* g_services = NULL;
+
 vector_db_t *get_global_vector_db(void) {
-    return vector_db_service_get_database();
+    vector_db_service_t* vdb_service = services_get_vector_db(g_services);
+    return vector_db_service_get_database(vdb_service);
 }
 
 static char *document_results_to_json(document_search_results_t *search_results) {
@@ -177,6 +181,7 @@ int register_vector_db_tool(ToolRegistry *registry) {
     if (registry == NULL) {
         return -1;
     }
+    g_services = registry->services;
     int registered = register_tools_from_defs(registry, VECTOR_DB_TOOLS, VECTOR_DB_TOOL_COUNT);
     return (registered == VECTOR_DB_TOOL_COUNT) ? 0 : -1;
 }
@@ -202,7 +207,8 @@ int execute_vector_db_create_index_tool_call(const ToolCall *tool_call, ToolResu
         return 0;
     }
     
-    vector_db_t *db = vector_db_service_get_database();
+    vector_db_service_t* vdb_service = services_get_vector_db(g_services);
+    vector_db_t *db = vector_db_service_get_database(vdb_service);
     if (db == NULL) {
         result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to create vector database\"}");
         result->success = 0;
@@ -254,7 +260,8 @@ int execute_vector_db_delete_index_tool_call(const ToolCall *tool_call, ToolResu
         return 0;
     }
     
-    vector_db_t *db = vector_db_service_get_database();
+    vector_db_service_t* vdb_service = services_get_vector_db(g_services);
+    vector_db_t *db = vector_db_service_get_database(vdb_service);
     vector_db_error_t err = vector_db_delete_index(db, index_name);
 
     char response[512] = {0};
@@ -281,7 +288,8 @@ int execute_vector_db_list_indices_tool_call(const ToolCall *tool_call, ToolResu
     result->tool_call_id = safe_strdup(tool_call->id);
     if (result->tool_call_id == NULL) return -1;
     
-    vector_db_t *db = vector_db_service_get_database();
+    vector_db_service_t* vdb_service = services_get_vector_db(g_services);
+    vector_db_t *db = vector_db_service_get_database(vdb_service);
     size_t count = 0;
     char **indices = vector_db_list_indices(db, &count);
     
@@ -342,7 +350,8 @@ int execute_vector_db_add_vector_tool_call(const ToolCall *tool_call, ToolResult
         .dimension = dimension
     };
     
-    vector_db_t *db = vector_db_service_get_database();
+    vector_db_service_t* vdb_service = services_get_vector_db(g_services);
+    vector_db_t *db = vector_db_service_get_database(vdb_service);
     
     size_t label = vector_db_get_index_size(db, index_name);
     
@@ -390,7 +399,8 @@ int execute_vector_db_update_vector_tool_call(const ToolCall *tool_call, ToolRes
         .dimension = dimension
     };
     
-    vector_db_t *db = vector_db_service_get_database();
+    vector_db_service_t* vdb_service = services_get_vector_db(g_services);
+    vector_db_t *db = vector_db_service_get_database(vdb_service);
     vector_db_error_t err = vector_db_update_vector(db, index_name, &vec, (size_t)label);
     
     char response[512] = {0};
@@ -427,7 +437,8 @@ int execute_vector_db_delete_vector_tool_call(const ToolCall *tool_call, ToolRes
         return 0;
     }
     
-    vector_db_t *db = vector_db_service_get_database();
+    vector_db_service_t* vdb_service = services_get_vector_db(g_services);
+    vector_db_t *db = vector_db_service_get_database(vdb_service);
     vector_db_error_t err = vector_db_delete_vector(db, index_name, (size_t)label);
     
     char response[512] = {0};
@@ -463,7 +474,8 @@ int execute_vector_db_get_vector_tool_call(const ToolCall *tool_call, ToolResult
         return 0;
     }
     
-    vector_db_t *db = vector_db_service_get_database();
+    vector_db_service_t* vdb_service = services_get_vector_db(g_services);
+    vector_db_t *db = vector_db_service_get_database(vdb_service);
     
     // Pre-allocate at a default dimension; vector_db_get_vector will update if needed
     size_t dimension = 512;
@@ -542,7 +554,8 @@ int execute_vector_db_search_tool_call(const ToolCall *tool_call, ToolResult *re
         .dimension = dimension
     };
     
-    vector_db_t *db = vector_db_service_get_database();
+    vector_db_service_t* vdb_service = services_get_vector_db(g_services);
+    vector_db_t *db = vector_db_service_get_database(vdb_service);
     search_results_t *results = vector_db_search(db, index_name, &query, (size_t)k);
     
     if (results != NULL) {
@@ -601,7 +614,7 @@ int execute_vector_db_add_text_tool_call(const ToolCall *tool_call, ToolResult *
         return 0;
     }
     
-    document_store_t *doc_store = document_store_get_instance();
+    document_store_t *doc_store = services_get_document_store(g_services);
 
     if (document_store_ensure_index(doc_store, index_name, 1536, 10000) != 0) {
         result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to ensure index exists\"}");
@@ -613,10 +626,11 @@ int execute_vector_db_add_text_tool_call(const ToolCall *tool_call, ToolResult *
     }
     
     int add_result = document_store_add_text(doc_store, index_name, text, "text", "api", metadata);
-    
+
     char response[1024] = {0};
     if (add_result == 0) {
-        size_t doc_count = vector_db_get_index_size(vector_db_service_get_database(), index_name);
+        vector_db_service_t* vdb_svc = services_get_vector_db(g_services);
+        size_t doc_count = vector_db_get_index_size(vector_db_service_get_database(vdb_svc), index_name);
         snprintf(response, sizeof(response), 
                 "{\"success\": true, \"id\": %zu, \"message\": \"Text embedded and stored successfully\", \"text_preview\": \"%.50s...\"}", 
                 doc_count - 1, text);
@@ -676,7 +690,7 @@ int execute_vector_db_add_chunked_text_tool_call(const ToolCall *tool_call, Tool
         return 0;
     }
     
-    document_store_t *doc_store = document_store_get_instance();
+    document_store_t *doc_store = services_get_document_store(g_services);
 
     if (document_store_ensure_index(doc_store, index_name, 1536, 10000) != 0) {
         result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to ensure index exists\"}");
@@ -786,7 +800,7 @@ int execute_vector_db_add_pdf_document_tool_call(const ToolCall *tool_call, Tool
         return 0;
     }
     
-    document_store_t *doc_store = document_store_get_instance();
+    document_store_t *doc_store = services_get_document_store(g_services);
 
     if (document_store_ensure_index(doc_store, index_name, 1536, 10000) != 0) {
         result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to ensure index exists\"}");
@@ -859,7 +873,7 @@ int execute_vector_db_search_text_tool_call(const ToolCall *tool_call, ToolResul
         return 0;
     }
     
-    document_store_t *doc_store = document_store_get_instance();
+    document_store_t *doc_store = services_get_document_store(g_services);
     document_search_results_t *search_results = document_store_search_text(doc_store, index_name, query_text, (size_t)k);
     
     if (search_results != NULL) {
@@ -897,7 +911,7 @@ int execute_vector_db_search_by_time_tool_call(const ToolCall *tool_call, ToolRe
         return 0;
     }
 
-    document_store_t *doc_store = document_store_get_instance();
+    document_store_t *doc_store = services_get_document_store(g_services);
     document_search_results_t *search_results = document_store_search_by_time(doc_store, index_name,
                                                                              (time_t)start_time, (time_t)end_time, (size_t)limit);
 
