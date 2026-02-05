@@ -254,22 +254,34 @@ CONV_EXTRA_OBJECTS := $(LIB_DB_SOURCES:.c=.o) $(LIB_DB_CPP_SOURCES:.cpp=.o) \
     $(LIBDIR)/llm/providers/openai_embedding_provider.o $(LIBDIR)/llm/providers/local_embedding_provider.o \
     $(LIBDIR)/network/http_client.o $(LIBDIR)/network/embedded_cacert.o $(LIBDIR)/network/api_error.o \
     $(LIBDIR)/util/interrupt.o \
+    $(LIBDIR)/services/services.o \
+    $(LIBDIR)/ipc/message_store.o \
+    $(LIBDIR)/util/uuid_utils.o \
     $(LIBDIR)/util/config.o $(LIBDIR)/util/debug_output.o $(LIBDIR)/util/common_utils.o \
     $(LIBDIR)/util/ralph_home.o
 
 $(eval $(call def_test,conversation,session/test_conversation_tracker,$(LIBDIR)/session/conversation_tracker.c $(LIBDIR)/util/json_escape.c))
-$(eval $(call def_test,conversation_vdb,session/test_conversation_vector_db,$(LIBDIR)/session/conversation_tracker.c $(LIBDIR)/util/json_escape.c $(TESTDIR)/mock_api_server.c $(TESTDIR)/mock_embeddings.c $(TESTDIR)/mock_embeddings_server.c))
-$(eval $(call def_test_mixed,tool_calls_not_stored,session/test_tool_calls_not_stored,$(CONV_DEPS)))
+$(eval $(call def_test,conversation_vdb,session/test_conversation_vector_db,$(LIBDIR)/session/conversation_tracker.c $(LIBDIR)/util/json_escape.c $(TESTDIR)/mock_embeddings.c $(TESTDIR)/mock_embeddings_service.c))
+$(eval $(call def_test_mixed,tool_calls_not_stored,session/test_tool_calls_not_stored,$(TESTDIR)/mock_api_server.c $(TESTDIR)/mock_embeddings.c $(TESTDIR)/mock_embeddings_server.c $(CONV_DEPS)))
 
 $(TEST_conversation_TARGET): $(TEST_conversation_OBJECTS) $(CONV_EXTRA_OBJECTS) $(ALL_LIBS)
 	$(CXX) -o $@ $(TEST_conversation_OBJECTS) $(CONV_EXTRA_OBJECTS) \
-		$(LIBS_MBEDTLS) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
+		$(LIBS_MBEDTLS) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(SQLITE_LIB) $(OSSP_UUID_LIB) -lm -lpthread
 
-$(TEST_conversation_vdb_TARGET): $(TEST_conversation_vdb_OBJECTS) $(CONV_EXTRA_OBJECTS) $(ALL_LIBS)
-	$(CXX) -o $@ $(TEST_conversation_vdb_OBJECTS) $(CONV_EXTRA_OBJECTS) $(LIBS_MBEDTLS) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
+# Mock embeddings service replaces real embeddings + HTTP stack
+CONV_VDB_EXTRA_OBJECTS := $(LIB_DB_SOURCES:.c=.o) $(LIB_DB_CPP_SOURCES:.cpp=.o) \
+    $(LIBDIR)/services/services.o \
+    $(LIBDIR)/ipc/message_store.o \
+    $(LIBDIR)/util/uuid_utils.o \
+    $(LIBDIR)/util/common_utils.o \
+    $(LIBDIR)/util/debug_output.o \
+    $(LIBDIR)/util/ralph_home.o
+
+$(TEST_conversation_vdb_TARGET): $(TEST_conversation_vdb_OBJECTS) $(CONV_VDB_EXTRA_OBJECTS) $(ALL_LIBS)
+	$(CXX) -o $@ $(TEST_conversation_vdb_OBJECTS) $(CONV_VDB_EXTRA_OBJECTS) $(CJSON_LIB) $(SQLITE_LIB) $(OSSP_UUID_LIB) -lm -lpthread
 
 $(TEST_tool_calls_not_stored_TARGET): $(TEST_tool_calls_not_stored_OBJECTS) $(ALL_LIBS)
-	$(CXX) -o $@ $(TEST_tool_calls_not_stored_OBJECTS) $(LIBS_MBEDTLS) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) -lm -lpthread
+	$(CXX) -o $@ $(TEST_tool_calls_not_stored_OBJECTS) $(LIBS_MBEDTLS) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(SQLITE_LIB) $(OSSP_UUID_LIB) -lm -lpthread
 
 # =============================================================================
 # STANDARD MIXED TESTS (CXX linker with LIBS_STANDARD)
@@ -284,7 +296,7 @@ MOCK_EMBEDDINGS_SOURCES := $(TESTDIR)/mock_api_server.c $(TESTDIR)/mock_embeddin
 
 $(eval $(call def_test_mixed,vector_db_tool,tools/test_vector_db_tool,$(MOCK_EMBEDDINGS_SOURCES) $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,memory_tool,tools/test_memory_tool,$(MOCK_EMBEDDINGS_SOURCES) $(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,memory_mgmt,test_memory_management,$(LIBDIR)/ui/memory_commands.c $(LIBDIR)/ui/terminal.c $(LIB_DB_SOURCES) $(EMBEDDING_DEPS) $(LIBDIR)/util/config.c $(NETWORK_DEPS) $(LIBDIR)/util/common_utils.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/util/ralph_home.c))
+$(eval $(call def_test_mixed,memory_mgmt,test_memory_management,$(LIBDIR)/ui/memory_commands.c $(LIBDIR)/ui/terminal.c $(LIB_DB_SOURCES) $(EMBEDDING_DEPS) $(LIBDIR)/util/config.c $(NETWORK_DEPS) $(LIBDIR)/services/services.c $(LIBDIR)/ipc/message_store.c $(LIBDIR)/util/uuid_utils.c $(LIBDIR)/util/common_utils.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/util/ralph_home.c))
 $(eval $(call def_test_mixed,token_manager,session/test_token_manager,$(LIBDIR)/session/token_manager.c $(LIBDIR)/session/rolling_summary.c $(LIBDIR)/session/session_manager.c $(LIBDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,conversation_compactor,session/test_conversation_compactor,$(LIBDIR)/session/conversation_compactor.c $(LIBDIR)/session/rolling_summary.c $(LIBDIR)/session/session_manager.c $(LIBDIR)/session/conversation_tracker.c $(LIBDIR)/session/token_manager.c $(COMPLEX_DEPS)))
 $(eval $(call def_test_mixed,rolling_summary,session/test_rolling_summary,$(LIBDIR)/session/rolling_summary.c $(LIBDIR)/session/session_manager.c $(LIBDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
@@ -369,7 +381,7 @@ $(TEST_vector_db_TARGET): $(TEST_vector_db_OBJECTS) $(HNSWLIB_DIR)/hnswlib/hnswl
 	$(CXX) -o $@ $(TEST_vector_db_OBJECTS) -lpthread -lm
 
 # Document store test
-TEST_document_store_SOURCES := $(TESTDIR)/db/test_document_store.c $(LIB_DB_SOURCES) $(LIBDIR)/util/common_utils.c $(LIBDIR)/util/config.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/util/ralph_home.c $(EMBEDDING_DEPS) $(NETWORK_DEPS) $(UNITY)
+TEST_document_store_SOURCES := $(TESTDIR)/db/test_document_store.c $(LIB_DB_SOURCES) $(LIBDIR)/util/common_utils.c $(LIBDIR)/util/config.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/util/ralph_home.c $(LIBDIR)/services/services.c $(LIBDIR)/ipc/message_store.c $(LIBDIR)/util/uuid_utils.c $(EMBEDDING_DEPS) $(NETWORK_DEPS) $(UNITY)
 TEST_document_store_OBJECTS := $(TEST_document_store_SOURCES:.c=.o) $(LIB_DB_CPP_SOURCES:.cpp=.o)
 TEST_document_store_TARGET := $(TESTDIR)/test_document_store
 ALL_TEST_TARGETS += $(TEST_document_store_TARGET)

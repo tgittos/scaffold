@@ -8,9 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <pthread.h>
 #include <sys/time.h>
-#include <unistd.h>
 
 static int64_t get_time_millis(void) {
     struct timeval tv;
@@ -21,9 +19,6 @@ static int64_t get_time_millis(void) {
 struct message_store {
     sqlite_dal_t *dal;
 };
-
-static message_store_t *g_store_instance = NULL;
-static pthread_once_t g_store_once = PTHREAD_ONCE_INIT;
 
 static const char *SCHEMA_SQL =
     "CREATE TABLE IF NOT EXISTS direct_messages ("
@@ -82,11 +77,11 @@ static void *map_direct_message(sqlite3_stmt *stmt, void *user_data) {
         if (!msg->content) { free(msg); return NULL; }
     }
 
-    msg->created_at = (time_t)(sqlite3_column_int64(stmt, 4) / 1000);
+    msg->created_at = sqlite3_column_int64(stmt, 4);
     msg->read_at = sqlite3_column_type(stmt, 5) != SQLITE_NULL
-                   ? (time_t)(sqlite3_column_int64(stmt, 5) / 1000) : 0;
+                   ? sqlite3_column_int64(stmt, 5) : 0;
     msg->expires_at = sqlite3_column_type(stmt, 6) != SQLITE_NULL
-                      ? (time_t)(sqlite3_column_int64(stmt, 6) / 1000) : 0;
+                      ? sqlite3_column_int64(stmt, 6) : 0;
     return msg;
 }
 
@@ -103,7 +98,7 @@ static void *map_channel(sqlite3_stmt *stmt, void *user_data) {
     if (description) ch->description = strdup(description);
     if (creator_id) strncpy(ch->creator_id, creator_id, sizeof(ch->creator_id) - 1);
 
-    ch->created_at = (time_t)(sqlite3_column_int64(stmt, 3) / 1000);
+    ch->created_at = sqlite3_column_int64(stmt, 3);
     ch->is_persistent = sqlite3_column_int(stmt, 4);
     return ch;
 }
@@ -126,7 +121,7 @@ static void *map_channel_message(sqlite3_stmt *stmt, void *user_data) {
         if (!msg->content) { free(msg); return NULL; }
     }
 
-    msg->created_at = (time_t)(sqlite3_column_int64(stmt, 4) / 1000);
+    msg->created_at = sqlite3_column_int64(stmt, 4);
     return msg;
 }
 
@@ -173,33 +168,10 @@ message_store_t *message_store_create(const char *db_path) {
     return store;
 }
 
-static void create_store_instance(void) {
-    g_store_instance = message_store_create(NULL);
-}
-
-message_store_t *message_store_get_instance(void) {
-    pthread_once(&g_store_once, create_store_instance);
-    return g_store_instance;
-}
-
 void message_store_destroy(message_store_t *store) {
     if (store == NULL) return;
     sqlite_dal_destroy(store->dal);
     free(store);
-}
-
-void message_store_reset_instance_for_testing(void) {
-    if (g_store_instance != NULL) {
-        const char *path = sqlite_dal_get_path(g_store_instance->dal);
-        char *path_copy = path ? strdup(path) : NULL;
-        message_store_destroy(g_store_instance);
-        g_store_instance = NULL;
-        if (path_copy) {
-            unlink(path_copy);
-            free(path_copy);
-        }
-    }
-    g_store_once = (pthread_once_t)PTHREAD_ONCE_INIT;
 }
 
 /* Direct message operations */
@@ -484,8 +456,10 @@ ChannelMessage **channel_receive(message_store_t *store, const char *channel_nam
 
     if (rc != 0 || count == 0) return NULL;
 
-    /* Mark as read */
-    BindInt64Text2 mark_params = { get_time_millis(), channel_name, agent_id };
+    /* Set last_read_at to the latest message's timestamp, not wall clock.
+     * Using wall clock could miss messages published in the same millisecond. */
+    ChannelMessage *last = (ChannelMessage *)items[count - 1];
+    BindInt64Text2 mark_params = { last->created_at, channel_name, agent_id };
     sqlite_dal_exec_p(store->dal,
         "UPDATE channel_subscriptions SET last_read_at = ? WHERE channel_id = ? AND agent_id = ?;",
         bind_int64_text2, &mark_params);
@@ -514,8 +488,9 @@ ChannelMessage **channel_receive_all(message_store_t *store, const char *agent_i
 
     if (rc != 0 || count == 0) return NULL;
 
-    /* Mark as read */
-    BindInt64Text mark_params = { get_time_millis(), agent_id };
+    /* Set last_read_at to the latest message's timestamp, not wall clock. */
+    ChannelMessage *last = (ChannelMessage *)items[count - 1];
+    BindInt64Text mark_params = { last->created_at, agent_id };
     sqlite_dal_exec_p(store->dal,
         "UPDATE channel_subscriptions SET last_read_at = ? WHERE agent_id = ?;",
         bind_int64_text, &mark_params);

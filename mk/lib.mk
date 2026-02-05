@@ -113,8 +113,7 @@ LIB_UTIL_SOURCES := \
     $(LIBDIR)/util/config.c \
     $(LIBDIR)/util/prompt_loader.c \
     $(LIBDIR)/util/ralph_home.c \
-    $(LIBDIR)/util/context_retriever.c \
-    $(LIBDIR)/util/pdf_processor.c
+    $(LIBDIR)/util/context_retriever.c
 
 # PDF module
 LIB_PDF_SOURCES := $(LIBDIR)/pdf/pdf_extractor.c

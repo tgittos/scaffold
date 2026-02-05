@@ -9,31 +9,31 @@
 #define LIB_IPC_MESSAGE_STORE_H
 
 #include <stddef.h>
-#include <time.h>
+#include <stdint.h>
 
 typedef struct {
     char id[40];
     char sender_id[64];
     char recipient_id[64];
     char* content;
-    time_t created_at;
-    time_t read_at;
-    time_t expires_at;
+    int64_t created_at;
+    int64_t read_at;
+    int64_t expires_at;
 } DirectMessage;
 
 typedef struct {
     char id[64];
     char* description;
     char creator_id[64];
-    time_t created_at;
+    int64_t created_at;
     int is_persistent;
 } Channel;
 
 typedef struct {
     char channel_id[64];
     char agent_id[64];
-    time_t subscribed_at;
-    time_t last_read_at;
+    int64_t subscribed_at;
+    int64_t last_read_at;
 } Subscription;
 
 typedef struct {
@@ -41,24 +41,13 @@ typedef struct {
     char channel_id[64];
     char sender_id[64];
     char* content;
-    time_t created_at;
+    int64_t created_at;
 } ChannelMessage;
 
 typedef struct message_store message_store_t;
 
-message_store_t* message_store_get_instance(void);
-void message_store_destroy(message_store_t* store);
 message_store_t* message_store_create(const char* db_path);
-
-/**
- * Reset the global singleton instance for testing.
- *
- * WARNING: This function is NOT thread-safe and should ONLY be called from
- * single-threaded test code during teardown. It resets pthread_once_t which
- * is undefined behavior per POSIX if called while other threads may be
- * accessing the singleton.
- */
-void message_store_reset_instance_for_testing(void);
+void message_store_destroy(message_store_t* store);
 
 /* Direct messaging */
 /* out_id must be at least 40 bytes. Pass 0 for ttl_seconds to disable expiry. */

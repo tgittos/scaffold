@@ -44,7 +44,6 @@ UTIL_DEPS := \
     $(LIBDIR)/util/debug_output.c \
     $(LIBDIR)/util/common_utils.c \
     $(LIBDIR)/util/document_chunker.c \
-    $(LIBDIR)/util/pdf_processor.c \
     $(LIBDIR)/util/context_retriever.c \
     $(LIBDIR)/util/config.c \
     $(LIBDIR)/util/uuid_utils.c \
@@ -128,6 +127,9 @@ CONV_DEPS := \
     $(LIB_DB_SOURCES) \
     $(EMBEDDING_DEPS) \
     $(NETWORK_DEPS) \
+    $(LIBDIR)/services/services.c \
+    $(LIBDIR)/ipc/message_store.c \
+    $(LIBDIR)/util/uuid_utils.c \
     $(LIBDIR)/util/json_escape.c \
     $(LIBDIR)/util/config.c \
     $(LIBDIR)/util/debug_output.c \

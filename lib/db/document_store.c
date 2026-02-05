@@ -2,9 +2,9 @@
 #include "vector_db_service.h"
 #include "metadata_store.h"
 #include "hnswlib_wrapper.h"
-#include "../util/config.h"
 #include "../util/ralph_home.h"
 #include "llm/embeddings_service.h"
+#include "../services/services.h"
 #include "util/ptrarray.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,7 +23,11 @@ struct document_store {
     metadata_store_t* metadata;
 };
 
-static document_store_t* singleton_instance = NULL;
+static Services* g_services = NULL;
+
+void document_store_set_services(Services* services) {
+    g_services = services;
+}
 
 static int rmdir_recursive(const char* path) {
     DIR* dir = opendir(path);
@@ -101,7 +105,8 @@ document_store_t* document_store_create(const char* base_path) {
         }
     }
 
-    store->vector_db = vector_db_service_get_database();
+    vector_db_service_t* vdb_service = services_get_vector_db(g_services);
+    store->vector_db = vector_db_service_get_database(vdb_service);
     store->metadata = metadata_store_get_instance();
 
     return store;
@@ -109,56 +114,21 @@ document_store_t* document_store_create(const char* base_path) {
 
 void document_store_destroy(document_store_t* store) {
     if (store == NULL) return;
-
-    if (store == singleton_instance) {
-        singleton_instance = NULL;
-    }
-
     free(store->base_path);
     free(store);
 }
 
-document_store_t* document_store_get_instance(void) {
-    if (singleton_instance == NULL) {
-        singleton_instance = document_store_create(NULL);
-    }
-    return singleton_instance;
-}
-
-void document_store_reset_instance(void) {
-    if (singleton_instance != NULL && singleton_instance->base_path != NULL) {
-        char docs_path[512] = {0};
-        snprintf(docs_path, sizeof(docs_path), "%s/documents", singleton_instance->base_path);
-        rmdir_recursive(docs_path);
-
-        char metadata_path[512] = {0};
-        snprintf(metadata_path, sizeof(metadata_path), "%s/metadata", singleton_instance->base_path);
-        rmdir_recursive(metadata_path);
-
-        char index_path[512] = {0};
-        snprintf(index_path, sizeof(index_path), "%s/indexes", singleton_instance->base_path);
-        rmdir_recursive(index_path);
-    }
-    
-    if (singleton_instance != NULL) {
-        document_store_destroy(singleton_instance);
-        singleton_instance = NULL;
-    }
-    
-    hnswlib_clear_all();
-}
-
-void document_store_clear_conversations(void) {
-    if (singleton_instance == NULL) return;
+void document_store_clear_conversations(document_store_t* store) {
+    if (store == NULL) return;
 
     char conv_path[512] = {0};
-    if (singleton_instance->base_path != NULL) {
-        snprintf(conv_path, sizeof(conv_path), "%s/documents/conversations", singleton_instance->base_path);
+    if (store->base_path != NULL) {
+        snprintf(conv_path, sizeof(conv_path), "%s/documents/conversations", store->base_path);
         rmdir_recursive(conv_path);
     }
-    
-    if (singleton_instance->vector_db != NULL) {
-        vector_db_delete_index(singleton_instance->vector_db, "conversations");
+
+    if (store->vector_db != NULL) {
+        vector_db_delete_index(store->vector_db, "conversations");
     }
 }
 
@@ -347,25 +317,12 @@ int document_store_add_text(document_store_t* store, const char* index_name,
                            const char* text, const char* type,
                            const char* source, const char* metadata_json) {
     if (store == NULL || index_name == NULL || text == NULL) return -1;
-    
-    agent_config_t* config = config_get();
-    const char* api_key = NULL;
-    const char* api_url = NULL;
 
-    if (config) {
-        api_key = config->openai_api_key;
-        api_url = config->embedding_api_url ? config->embedding_api_url : config->openai_api_url;
-    }
-
-    if (!api_key) {
-        // Fall back to a zero-vector so environments without network access
-        // (CI, tests) can still persist documents without embedding services.
+    embeddings_service_t* emb = services_get_embeddings(g_services);
+    if (!embeddings_service_is_configured(emb)) {
         size_t fallback_dim = 1536;
-
         float *zero_embedding = calloc(fallback_dim, sizeof(float));
-        if (zero_embedding == NULL) {
-            return -1;
-        }
+        if (zero_embedding == NULL) return -1;
 
         int result = document_store_add(store, index_name, text, zero_embedding,
                                        fallback_dim, type, source, metadata_json);
@@ -373,23 +330,15 @@ int document_store_add_text(document_store_t* store, const char* index_name,
         return result;
     }
 
-    embeddings_config_t embeddings_config;
-    if (embeddings_init(&embeddings_config, "text-embedding-3-small", api_key, api_url) != 0) {
-        return -1;
-    }
-    
     embedding_vector_t embedding;
-    if (embeddings_get_vector(&embeddings_config, text, &embedding) != 0) {
-        embeddings_cleanup(&embeddings_config);
+    if (embeddings_service_get_vector(emb, text, &embedding) != 0) {
         return -1;
     }
-    
-    int result = document_store_add(store, index_name, text, embedding.data, 
+
+    int result = document_store_add(store, index_name, text, embedding.data,
                                    embedding.dimension, type, source, metadata_json);
-    
-    embeddings_free_vector(&embedding);
-    embeddings_cleanup(&embeddings_config);
-    
+
+    embeddings_service_free_embedding(&embedding);
     return result;
 }
 
@@ -453,37 +402,21 @@ document_search_results_t* document_store_search_text(document_store_t* store,
                                                      const char* query_text,
                                                      size_t k) {
     if (store == NULL || index_name == NULL || query_text == NULL) return NULL;
-    
-    agent_config_t* config = config_get();
-    const char* api_key = NULL;
-    const char* api_url = NULL;
 
-    if (config) {
-        api_key = config->openai_api_key;
-        api_url = config->embedding_api_url ? config->embedding_api_url : config->openai_api_url;
-    }
-
-    if (!api_key) {
+    embeddings_service_t* emb = services_get_embeddings(g_services);
+    if (!embeddings_service_is_configured(emb)) {
         return NULL;
     }
 
-    embeddings_config_t embeddings_config;
-    if (embeddings_init(&embeddings_config, "text-embedding-3-small", api_key, api_url) != 0) {
-        return NULL;
-    }
-    
     embedding_vector_t embedding;
-    if (embeddings_get_vector(&embeddings_config, query_text, &embedding) != 0) {
-        embeddings_cleanup(&embeddings_config);
+    if (embeddings_service_get_vector(emb, query_text, &embedding) != 0) {
         return NULL;
     }
-    
+
     document_search_results_t* results = document_store_search(store, index_name,
                                                               embedding.data, embedding.dimension, k);
-    
-    embeddings_free_vector(&embedding);
-    embeddings_cleanup(&embeddings_config);
-    
+
+    embeddings_service_free_embedding(&embedding);
     return results;
 }
 
@@ -679,7 +612,8 @@ int document_store_ensure_index(document_store_t* store, const char* index_name,
         .metric = "cosine"
     };
     
-    return vector_db_service_ensure_index(index_name, &config);
+    vector_db_service_t* vdb_service = services_get_vector_db(g_services);
+    return vector_db_service_ensure_index(vdb_service, index_name, &config);
 }
 
 char** document_store_list_indices(document_store_t* store, size_t* count) {

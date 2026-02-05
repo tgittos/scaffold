@@ -5,6 +5,7 @@
 #include "../util/document_chunker.h"
 #include "llm/embeddings_service.h"
 #include "db/vector_db_service.h"
+#include "services/services.h"
 #include "../util/common_utils.h"
 #include "vector_db_tool.h"
 #include <stdio.h>
@@ -13,33 +14,15 @@
 #include <sys/stat.h>
 #include <time.h>
 
-
-
-static embeddings_config_t* get_embeddings_config(void) {
-    static embeddings_config_t config = {0};
-    static int initialized = 0;
-    
-    if (!initialized) {
-        const char *api_key = getenv("OPENAI_API_KEY");
-        const char *model = getenv("EMBEDDING_MODEL");
-        const char *api_url = getenv("OPENAI_API_URL");
-        
-        if (!model) model = "text-embedding-3-small";
-        
-        if (embeddings_init(&config, model, api_key, api_url) == 0) {
-            initialized = 1;
-        }
-    }
-    
-    return initialized ? &config : NULL;
-}
+static Services* g_services = NULL;
 
 static void auto_process_pdf_for_vector_storage(const char *file_path, const char *extracted_text) {
     if (!file_path || !extracted_text || strlen(extracted_text) == 0) {
         return;
     }
 
-    vector_db_t *vector_db = vector_db_service_get_database();
+    vector_db_service_t* vdb_service = services_get_vector_db(g_services);
+    vector_db_t *vector_db = vector_db_service_get_database(vdb_service);
     if (!vector_db) {
         return;
     }
@@ -65,8 +48,8 @@ static void auto_process_pdf_for_vector_storage(const char *file_path, const cha
         return;
     }
 
-    embeddings_config_t *embed_config = get_embeddings_config();
-    if (!embed_config) {
+    embeddings_service_t* embeddings = services_get_embeddings(g_services);
+    if (!embeddings_service_is_configured(embeddings)) {
         free_chunking_result(chunks);
         return;
     }
@@ -74,9 +57,9 @@ static void auto_process_pdf_for_vector_storage(const char *file_path, const cha
     size_t vectors_stored = 0;
     for (size_t i = 0; i < chunks->chunks.count; i++) {
         document_chunk_t *chunk = &chunks->chunks.data[i];
-        
+
         embedding_vector_t embedding = {0};
-        if (embeddings_get_vector(embed_config, chunk->text, &embedding) != 0) {
+        if (embeddings_service_get_vector(embeddings, chunk->text, &embedding) != 0) {
             continue;
         }
 
@@ -100,7 +83,7 @@ static void auto_process_pdf_for_vector_storage(const char *file_path, const cha
         
         // Ownership of embedding.data transferred to vector_db; avoid double-free
         embedding.data = NULL;
-        embeddings_free_vector(&embedding);
+        embeddings_service_free_embedding(&embedding);
     }
     
     free_chunking_result(chunks);
@@ -188,7 +171,8 @@ int register_pdf_tool(ToolRegistry *registry) {
     if (registry == NULL) {
         return -1;
     }
-    
+    g_services = registry->services;
+
     ToolParameter parameters[3];
     memset(parameters, 0, sizeof(parameters));
 

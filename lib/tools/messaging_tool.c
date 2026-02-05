@@ -7,6 +7,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
+#include <inttypes.h>
 #include <pthread.h>
 
 static char* g_agent_id = NULL;
@@ -265,11 +267,11 @@ int execute_check_messages_tool_call(const ToolCall *tool_call, ToolResult *resu
         }
 
         p += snprintf(p, required_size - (p - response),
-                     "{\"id\": \"%s\", \"sender\": \"%s\", \"content\": \"%s\", \"created_at\": %ld}",
+                     "{\"id\": \"%s\", \"sender\": \"%s\", \"content\": \"%s\", \"created_at\": %" PRId64 "}",
                      msgs[i]->id,
                      msgs[i]->sender_id,
                      escaped_contents[i] ? escaped_contents[i] : "",
-                     (long)msgs[i]->created_at);
+                     msgs[i]->created_at);
         free(escaped_contents[i]);
     }
     free(escaped_contents);
@@ -566,12 +568,12 @@ int execute_check_channel_messages_tool_call(const ToolCall *tool_call, ToolResu
         }
 
         p += snprintf(p, required_size - (p - response),
-                     "{\"id\": \"%s\", \"channel\": \"%s\", \"sender\": \"%s\", \"content\": \"%s\", \"created_at\": %ld}",
+                     "{\"id\": \"%s\", \"channel\": \"%s\", \"sender\": \"%s\", \"content\": \"%s\", \"created_at\": %" PRId64 "}",
                      msgs[i]->id,
                      msgs[i]->channel_id,
                      msgs[i]->sender_id,
                      escaped_contents[i] ? escaped_contents[i] : "",
-                     (long)msgs[i]->created_at);
+                     msgs[i]->created_at);
         free(escaped_contents[i]);
     }
     free(escaped_contents);
