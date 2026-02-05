@@ -90,6 +90,15 @@ static void on_subagent_spawn(void *user_data) {
 int session_init(AgentSession* session) {
     if (session == NULL) return -1;
 
+    /* Initialize services pointer to NULL before any use.
+     * This allows safe use of services_get_* which fall back to singletons.
+     * The actual services will be set by agent_init after session_init returns.
+     *
+     * Note: Tools registered below receive NULL services and rely on
+     * singleton fallbacks. This is a known limitation - proper DI would
+     * require restructuring init order or adding a post-init setup phase. */
+    session->services = NULL;
+
     if (uuid_generate_v4(session->session_id) != 0) {
         fprintf(stderr, "Warning: Failed to generate session ID, using fallback\n");
         snprintf(session->session_id, sizeof(session->session_id), "fallback-%ld", (long)time(NULL));
@@ -99,13 +108,14 @@ int session_init(AgentSession* session) {
     session->polling_config.poll_interval_ms = MESSAGE_POLLER_DEFAULT_INTERVAL_MS;
     session->message_poller = NULL;
 
-    if (task_store_get_instance() == NULL) {
+    if (services_get_task_store(session->services) == NULL) {
         fprintf(stderr, "Warning: Task store unavailable, using in-memory tasks only\n");
     }
 
-    if (message_store_get_instance() == NULL) {
+    if (services_get_message_store(session->services) == NULL) {
         fprintf(stderr, "Warning: Message store unavailable, messaging disabled\n");
     } else {
+        messaging_tool_set_services(session->services);
         messaging_tool_set_agent_id(session->session_id);
         const char* parent_id = getenv(RALPH_PARENT_AGENT_ID_ENV);
         if (parent_id != NULL && parent_id[0] != '\0') {
@@ -125,7 +135,6 @@ int session_init(AgentSession* session) {
         fprintf(stderr, "Warning: Failed to register built-in tools\n");
     }
 
-    /* Initialize tool extensions (Python tools registered via callback) */
     if (tool_extension_init_all(&session->tools) != 0) {
         fprintf(stderr, "Warning: Some tool extensions failed to initialize\n");
     }
@@ -137,7 +146,7 @@ int session_init(AgentSession* session) {
         return -1;
     }
 
-    if (register_todo_tool(&session->tools, &session->todo_list) != 0) {
+    if (register_todo_tool(&session->tools, &session->todo_list, session->services) != 0) {
         fprintf(stderr, "Warning: Failed to register todo tools\n");
     }
 
@@ -211,7 +220,6 @@ void session_cleanup(AgentSession* session) {
 
     streaming_handler_cleanup();
 
-    /* Shutdown tool extensions (including Python interpreter) */
     tool_extension_shutdown_all();
 
     approval_gate_cleanup(&session->gate_config);
@@ -312,7 +320,7 @@ int session_start_message_polling(AgentSession* session) {
         return 0;
     }
 
-    if (message_store_get_instance() == NULL) {
+    if (services_get_message_store(session->services) == NULL) {
         debug_printf("Message store unavailable, skipping message polling\n");
         return 0;
     }
@@ -355,7 +363,6 @@ void session_stop_message_polling(AgentSession* session) {
  * ============================================================================= */
 
 int session_generate_recap(AgentSession* session, int max_messages) {
-    /* Delegate to the recap module */
     return recap_generate(session, max_messages);
 }
 

@@ -1,5 +1,6 @@
 #include "messaging_tool.h"
 #include "../ipc/message_store.h"
+#include "../services/services.h"
 #include "../util/common_utils.h"
 #include "../util/json_escape.h"
 #include "tool_result_builder.h"
@@ -10,6 +11,7 @@
 
 static char* g_agent_id = NULL;
 static char* g_parent_agent_id = NULL;
+static Services* g_services = NULL;
 static pthread_mutex_t g_agent_mutex;
 static pthread_once_t g_mutex_init_once = PTHREAD_ONCE_INIT;
 
@@ -43,6 +45,12 @@ void messaging_tool_set_parent_agent_id(const char* parent_id) {
     free(g_parent_agent_id);
     g_parent_agent_id = parent_id ? strdup(parent_id) : NULL;
     pthread_mutex_unlock(&g_agent_mutex);
+}
+
+void messaging_tool_set_services(Services* services) {
+    /* Note: Services must be set during single-threaded initialization.
+     * No mutex needed since this is called once at startup before tool execution. */
+    g_services = services;
 }
 
 char* messaging_tool_get_parent_agent_id(void) {
@@ -136,7 +144,7 @@ int execute_send_message_tool_call(const ToolCall *tool_call, ToolResult *result
         return 0;
     }
 
-    message_store_t* store = message_store_get_instance();
+    message_store_t* store = services_get_message_store(g_services);
     if (store == NULL) {
         tool_result_builder_set_error(builder, "Failed to access message store");
         ToolResult* temp = tool_result_builder_finalize(builder);
@@ -197,7 +205,7 @@ int execute_check_messages_tool_call(const ToolCall *tool_call, ToolResult *resu
         return 0;
     }
 
-    message_store_t* store = message_store_get_instance();
+    message_store_t* store = services_get_message_store(g_services);
     if (store == NULL) {
         tool_result_builder_set_error(builder, "Failed to access message store");
         ToolResult* temp = tool_result_builder_finalize(builder);
@@ -316,7 +324,7 @@ int execute_subscribe_channel_tool_call(const ToolCall *tool_call, ToolResult *r
         return 0;
     }
 
-    message_store_t* store = message_store_get_instance();
+    message_store_t* store = services_get_message_store(g_services);
     if (store == NULL) {
         tool_result_builder_set_error(builder, "Failed to access message store");
         ToolResult* temp = tool_result_builder_finalize(builder);
@@ -425,7 +433,7 @@ int execute_publish_channel_tool_call(const ToolCall *tool_call, ToolResult *res
         return 0;
     }
 
-    message_store_t* store = message_store_get_instance();
+    message_store_t* store = services_get_message_store(g_services);
     if (store == NULL) {
         tool_result_builder_set_error(builder, "Failed to access message store");
         ToolResult* temp = tool_result_builder_finalize(builder);
@@ -488,7 +496,7 @@ int execute_check_channel_messages_tool_call(const ToolCall *tool_call, ToolResu
         return 0;
     }
 
-    message_store_t* store = message_store_get_instance();
+    message_store_t* store = services_get_message_store(g_services);
     if (store == NULL) {
         tool_result_builder_set_error(builder, "Failed to access message store");
         ToolResult* temp = tool_result_builder_finalize(builder);

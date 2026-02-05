@@ -1,11 +1,17 @@
 #include "todo_tool.h"
 #include "todo_display.h"
 #include "db/task_store.h"
+#include "../services/services.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 
 static TodoList* g_todo_list = NULL;
+
+/* Services container for DI. Set during single-threaded initialization,
+ * read during tool execution. No mutex needed since it doesn't change
+ * after initialization. Falls back to singletons if NULL. */
+static Services* g_services = NULL;
 
 // Tasks persist across all ralph invocations using a fixed session key
 static const char* GLOBAL_SESSION_ID = "global";
@@ -16,7 +22,7 @@ static void sync_todolist_from_store(void) {
         return;
     }
 
-    task_store_t* store = task_store_get_instance();
+    task_store_t* store = services_get_task_store(g_services);
     if (store == NULL) {
         return;  // SQLite unavailable, keep in-memory only
     }
@@ -145,7 +151,7 @@ int execute_todo_tool_call(const ToolCall *tool_call, ToolResult *result) {
         if (tool_call->arguments) {
             char *todos_json = extract_json_array_parameter(tool_call->arguments, "todos");
             if (todos_json) {
-                task_store_t* store = task_store_get_instance();
+                task_store_t* store = services_get_task_store(g_services);
                 int use_sqlite = (store != NULL);
 
                 Task* bulk_tasks = NULL;
@@ -370,12 +376,13 @@ void clear_todo_tool_reference(void) {
     g_todo_list = NULL;
 }
 
-int register_todo_tool(ToolRegistry* registry, TodoList* todo_list) {
+int register_todo_tool(ToolRegistry* registry, TodoList* todo_list, Services* services) {
     if (registry == NULL || todo_list == NULL) {
         return -1;
     }
 
     g_todo_list = todo_list;
+    g_services = services;
 
     // Hydrate in-memory list from SQLite for cross-session persistence
     sync_todolist_from_store();

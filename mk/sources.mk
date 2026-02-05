@@ -114,6 +114,7 @@ COMPLEX_DEPS := \
     $(UTIL_DEPS) \
     $(LIB_DB_SOURCES) \
     $(LIBDIR)/ipc/message_store.c \
+    $(LIBDIR)/services/services.c \
     $(EMBEDDING_DEPS) \
     $(LIBDIR)/pdf/pdf_extractor.c \
     $(NETWORK_DEPS) \

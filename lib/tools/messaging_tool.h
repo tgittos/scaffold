@@ -2,6 +2,7 @@
 #define MESSAGING_TOOL_H
 
 #include "tools_system.h"
+#include "../services/services.h"
 
 #define RALPH_PARENT_AGENT_ID_ENV "RALPH_PARENT_AGENT_ID"
 
@@ -14,6 +15,7 @@ int execute_publish_channel_tool_call(const ToolCall *tool_call, ToolResult *res
 int execute_check_channel_messages_tool_call(const ToolCall *tool_call, ToolResult *result);
 int execute_get_agent_info_tool_call(const ToolCall *tool_call, ToolResult *result);
 
+void messaging_tool_set_services(Services* services);
 void messaging_tool_set_agent_id(const char* agent_id);
 
 /**
