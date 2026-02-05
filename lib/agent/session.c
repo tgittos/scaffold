@@ -330,7 +330,8 @@ int session_start_message_polling(AgentSession* session) {
     }
 
     session->message_poller = message_poller_create(session->session_id,
-                                                     session->polling_config.poll_interval_ms);
+                                                     session->polling_config.poll_interval_ms,
+                                                     session->services);
     if (session->message_poller == NULL) {
         fprintf(stderr, "Warning: Failed to create message poller\n");
         return -1;

@@ -1,6 +1,8 @@
 #ifndef MESSAGE_POLLER_H
 #define MESSAGE_POLLER_H
 
+#include "../services/services.h"
+
 #define MESSAGE_POLLER_DEFAULT_INTERVAL_MS 2000
 
 typedef struct message_poller message_poller_t;
@@ -10,7 +12,7 @@ typedef struct {
     int channel_count;
 } pending_message_counts_t;
 
-message_poller_t* message_poller_create(const char* agent_id, int poll_interval_ms);
+message_poller_t* message_poller_create(const char* agent_id, int poll_interval_ms, Services* services);
 void message_poller_destroy(message_poller_t* poller);
 
 int message_poller_start(message_poller_t* poller);

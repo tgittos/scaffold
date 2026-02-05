@@ -127,7 +127,7 @@ static int bundle_add_message(notification_bundle_t* bundle, const char* sender_
     return 0;
 }
 
-notification_bundle_t* notification_bundle_create(const char* agent_id) {
+notification_bundle_t* notification_bundle_create(const char* agent_id, Services* services) {
     if (agent_id == NULL) {
         return NULL;
     }
@@ -145,7 +145,7 @@ notification_bundle_t* notification_bundle_create(const char* agent_id) {
     bundle->capacity = INITIAL_CAPACITY;
     bundle->count = 0;
 
-    message_store_t* store = message_store_get_instance();
+    message_store_t* store = services_get_message_store(services);
     if (store == NULL) {
         return bundle;
     }

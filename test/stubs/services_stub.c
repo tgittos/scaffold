@@ -1,0 +1,68 @@
+/**
+ * test/stubs/services_stub.c - Minimal services stub for messaging tests
+ *
+ * Provides only the accessor functions needed by message_poller and
+ * notification_formatter tests, avoiding the full dependency chain of
+ * services_create_default().
+ *
+ * NOTE: Unlike the real services.c implementation, this stub returns NULL
+ * for non-message-store services (vector_db, embeddings, task_store) when
+ * the services pointer is NULL. The real implementation would return the
+ * singleton instance. This keeps test dependencies minimal but means tests
+ * using this stub cannot rely on singleton fallback for those services.
+ */
+
+#include "services/services.h"
+#include "ipc/message_store.h"
+#include <stdlib.h>
+
+Services* services_create_default(void) {
+    return NULL;
+}
+
+Services* services_create_empty(void) {
+    Services* services = malloc(sizeof(Services));
+    if (services == NULL) {
+        return NULL;
+    }
+
+    services->message_store = NULL;
+    services->vector_db = NULL;
+    services->embeddings = NULL;
+    services->task_store = NULL;
+    services->use_singletons = false;
+
+    return services;
+}
+
+void services_destroy(Services* services) {
+    free(services);
+}
+
+message_store_t* services_get_message_store(Services* services) {
+    if (services != NULL && services->message_store != NULL) {
+        return services->message_store;
+    }
+    return message_store_get_instance();
+}
+
+vector_db_service_t* services_get_vector_db(Services* services) {
+    if (services != NULL && services->vector_db != NULL) {
+        return services->vector_db;
+    }
+    return NULL;
+}
+
+embeddings_service_t* services_get_embeddings(Services* services) {
+    if (services != NULL && services->embeddings != NULL) {
+        return services->embeddings;
+    }
+    return NULL;
+}
+
+task_store_t* services_get_task_store(Services* services) {
+    if (services != NULL && services->task_store != NULL) {
+        return services->task_store;
+    }
+    return NULL;
+}

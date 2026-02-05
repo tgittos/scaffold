@@ -2,6 +2,7 @@
 #define NOTIFICATION_FORMATTER_H
 
 #include <stddef.h>
+#include "../services/services.h"
 
 typedef struct {
     char* sender_id;
@@ -16,7 +17,7 @@ typedef struct {
     size_t capacity;
 } notification_bundle_t;
 
-notification_bundle_t* notification_bundle_create(const char* agent_id);
+notification_bundle_t* notification_bundle_create(const char* agent_id, Services* services);
 void notification_bundle_destroy(notification_bundle_t* bundle);
 
 char* notification_format_for_llm(const notification_bundle_t* bundle);

@@ -160,7 +160,7 @@ int repl_run_session(AgentSession* session, bool json_mode) {
             fflush(stdout);
 
             message_poller_clear_notification(session->message_poller);
-            notification_bundle_t* bundle = notification_bundle_create(session->session_id);
+            notification_bundle_t* bundle = notification_bundle_create(session->session_id, session->services);
             if (bundle != NULL) {
                 int total_count = notification_bundle_total_count(bundle);
                 if (total_count > 0) {

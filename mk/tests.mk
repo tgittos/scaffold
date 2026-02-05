@@ -232,6 +232,7 @@ MESSAGING_DEPS := \
     $(LIBDIR)/util/ralph_home.c \
     $(LIBDIR)/ipc/pipe_notifier.c \
     $(LIBDIR)/ui/terminal.c \
+    $(TESTDIR)/stubs/services_stub.c \
     $(TESTDIR)/stubs/output_formatter_stub.c
 
 $(eval $(call def_test,message_poller,messaging/test_message_poller,$(MESSAGING_DEPS)))

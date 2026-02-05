@@ -1,6 +1,7 @@
 #include "unity.h"
 #include "ipc/message_poller.h"
 #include "ipc/message_store.h"
+#include "services/services.h"
 #include "util/ralph_home.h"
 #include <stdlib.h>
 #include <string.h>
@@ -23,24 +24,40 @@ void tearDown(void) {
 }
 
 void test_poller_create_destroy(void) {
-    message_poller_t* poller = message_poller_create("test-agent", 100);
+    message_poller_t* poller = message_poller_create("test-agent", 100, NULL);
     TEST_ASSERT_NOT_NULL(poller);
     message_poller_destroy(poller);
 }
 
+void test_poller_create_with_injected_services(void) {
+    Services* svc = services_create_empty();
+    TEST_ASSERT_NOT_NULL(svc);
+    svc->message_store = g_store;
+
+    message_poller_t* poller = message_poller_create("test-agent", 100, svc);
+    TEST_ASSERT_NOT_NULL(poller);
+
+    int rc = message_poller_start(poller);
+    TEST_ASSERT_EQUAL(0, rc);
+
+    message_poller_stop(poller);
+    message_poller_destroy(poller);
+    services_destroy(svc);
+}
+
 void test_poller_create_null_agent_id(void) {
-    message_poller_t* poller = message_poller_create(NULL, 100);
+    message_poller_t* poller = message_poller_create(NULL, 100, NULL);
     TEST_ASSERT_NULL(poller);
 }
 
 void test_poller_create_default_interval(void) {
-    message_poller_t* poller = message_poller_create("test-agent", 0);
+    message_poller_t* poller = message_poller_create("test-agent", 0, NULL);
     TEST_ASSERT_NOT_NULL(poller);
     message_poller_destroy(poller);
 }
 
 void test_poller_get_notify_fd(void) {
-    message_poller_t* poller = message_poller_create("test-agent", 100);
+    message_poller_t* poller = message_poller_create("test-agent", 100, NULL);
     TEST_ASSERT_NOT_NULL(poller);
 
     int fd = message_poller_get_notify_fd(poller);
@@ -55,7 +72,7 @@ void test_poller_get_notify_fd_null(void) {
 }
 
 void test_poller_start_stop(void) {
-    message_poller_t* poller = message_poller_create("test-agent", 100);
+    message_poller_t* poller = message_poller_create("test-agent", 100, NULL);
     TEST_ASSERT_NOT_NULL(poller);
 
     int rc = message_poller_start(poller);
@@ -66,7 +83,7 @@ void test_poller_start_stop(void) {
 }
 
 void test_poller_start_twice(void) {
-    message_poller_t* poller = message_poller_create("test-agent", 100);
+    message_poller_t* poller = message_poller_create("test-agent", 100, NULL);
     TEST_ASSERT_NOT_NULL(poller);
 
     int rc1 = message_poller_start(poller);
@@ -80,7 +97,7 @@ void test_poller_start_twice(void) {
 }
 
 void test_poller_stop_without_start(void) {
-    message_poller_t* poller = message_poller_create("test-agent", 100);
+    message_poller_t* poller = message_poller_create("test-agent", 100, NULL);
     TEST_ASSERT_NOT_NULL(poller);
 
     message_poller_stop(poller);
@@ -88,7 +105,7 @@ void test_poller_stop_without_start(void) {
 }
 
 void test_poller_get_pending_no_messages(void) {
-    message_poller_t* poller = message_poller_create("test-agent", 100);
+    message_poller_t* poller = message_poller_create("test-agent", 100, NULL);
     TEST_ASSERT_NOT_NULL(poller);
 
     pending_message_counts_t counts = {0};
@@ -101,7 +118,7 @@ void test_poller_get_pending_no_messages(void) {
 }
 
 void test_poller_clear_notification(void) {
-    message_poller_t* poller = message_poller_create("test-agent", 100);
+    message_poller_t* poller = message_poller_create("test-agent", 100, NULL);
     TEST_ASSERT_NOT_NULL(poller);
 
     int rc = message_poller_clear_notification(poller);
@@ -117,7 +134,7 @@ void test_poller_detects_pending_direct_message(void) {
     int rc = message_send_direct(g_store, "sender", agent_id, "Hello poller!", 0, msg_id);
     TEST_ASSERT_EQUAL(0, rc);
 
-    message_poller_t* poller = message_poller_create(agent_id, 50);
+    message_poller_t* poller = message_poller_create(agent_id, 50, NULL);
     TEST_ASSERT_NOT_NULL(poller);
 
     rc = message_poller_start(poller);
@@ -154,7 +171,7 @@ void test_poller_detects_pending_channel_message(void) {
     char msg_id[40] = {0};
     channel_publish(g_store, "poller-channel", "publisher", "Channel message", msg_id);
 
-    message_poller_t* poller = message_poller_create(agent_id, 50);
+    message_poller_t* poller = message_poller_create(agent_id, 50, NULL);
     TEST_ASSERT_NOT_NULL(poller);
 
     int rc = message_poller_start(poller);
@@ -184,6 +201,7 @@ int main(void) {
     UNITY_BEGIN();
 
     RUN_TEST(test_poller_create_destroy);
+    RUN_TEST(test_poller_create_with_injected_services);
     RUN_TEST(test_poller_create_null_agent_id);
     RUN_TEST(test_poller_create_default_interval);
     RUN_TEST(test_poller_get_notify_fd);

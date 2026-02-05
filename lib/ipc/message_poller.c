@@ -18,6 +18,7 @@ struct message_poller {
     atomic_int has_pending;
     pending_message_counts_t last_counts;
     pthread_mutex_t counts_mutex;
+    Services* services;
 };
 
 static void* poller_thread_func(void* arg) {
@@ -35,8 +36,7 @@ static void* poller_thread_func(void* arg) {
             break;
         }
 
-        /* Re-fetch store each iteration to handle singleton reset */
-        message_store_t* store = message_store_get_instance();
+        message_store_t* store = services_get_message_store(poller->services);
         if (store == NULL) {
             continue;
         }
@@ -62,7 +62,7 @@ static void* poller_thread_func(void* arg) {
     return NULL;
 }
 
-message_poller_t* message_poller_create(const char* agent_id, int poll_interval_ms) {
+message_poller_t* message_poller_create(const char* agent_id, int poll_interval_ms, Services* services) {
     if (agent_id == NULL) {
         return NULL;
     }
@@ -81,6 +81,7 @@ message_poller_t* message_poller_create(const char* agent_id, int poll_interval_
     poller->poll_interval_ms = (poll_interval_ms > 0) ? poll_interval_ms : MESSAGE_POLLER_DEFAULT_INTERVAL_MS;
     poller->notifier.read_fd = -1;
     poller->notifier.write_fd = -1;
+    poller->services = services;
     atomic_store(&poller->running, 0);
     atomic_store(&poller->has_pending, 0);
 
