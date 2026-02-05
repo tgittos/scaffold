@@ -8,6 +8,7 @@
 #include "subagent_process.h"
 #include "messaging_tool.h"
 #include "../ipc/message_store.h"
+#include "../services/services.h"
 #include "../util/debug_output.h"
 
 #include <cJSON.h>
@@ -73,7 +74,7 @@ void generate_subagent_id(char *id_out) {
  * for approval_channel FDs to avoid closing stdin/stdout/stderr (0,1,2) when
  * the struct was zero-initialized with memset.
  */
-void cleanup_subagent(Subagent *sub) {
+void cleanup_subagent(Subagent *sub, Services *services) {
     if (sub == NULL) {
         return;
     }
@@ -123,7 +124,7 @@ void cleanup_subagent(Subagent *sub) {
     sub->status = SUBAGENT_STATUS_PENDING;
 
     if (sub->id[0] != '\0') {
-        message_store_t* msg_store = message_store_get_instance();
+        message_store_t* msg_store = services_get_message_store(services);
         if (msg_store != NULL) {
             message_cleanup_agent(msg_store, sub->id);
         }
@@ -271,7 +272,7 @@ void subagent_handle_process_exit(Subagent *sub, int proc_status) {
     }
 }
 
-void subagent_notify_parent(const Subagent* sub) {
+void subagent_notify_parent(const Subagent* sub, Services *services) {
     if (sub == NULL) {
         return;
     }
@@ -283,7 +284,7 @@ void subagent_notify_parent(const Subagent* sub) {
         return;
     }
 
-    message_store_t* store = message_store_get_instance();
+    message_store_t* store = services_get_message_store(services);
     if (store == NULL) {
         debug_printf("subagent_notify_parent: message store unavailable\n");
         free(parent_id);

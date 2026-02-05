@@ -218,7 +218,7 @@ void test_subagent_status_to_string(void) {
 
 void test_cleanup_subagent_null(void) {
     // Should not crash
-    cleanup_subagent(NULL);
+    cleanup_subagent(NULL, NULL);
 }
 
 void test_cleanup_subagent_empty(void) {
@@ -228,7 +228,7 @@ void test_cleanup_subagent_empty(void) {
     sub.stdout_pipe[1] = -1;
 
     // Should handle empty subagent gracefully
-    cleanup_subagent(&sub);
+    cleanup_subagent(&sub, NULL);
 
     TEST_ASSERT_NULL(sub.task);
     TEST_ASSERT_NULL(sub.context);
@@ -252,7 +252,7 @@ void test_cleanup_subagent_with_data(void) {
     sub.error = strdup("test error");
 
     // Clean up
-    cleanup_subagent(&sub);
+    cleanup_subagent(&sub, NULL);
 
     TEST_ASSERT_NULL(sub.task);
     TEST_ASSERT_NULL(sub.context);
@@ -340,7 +340,7 @@ void test_read_subagent_output_from_pipe(void) {
     TEST_ASSERT_EQUAL_STRING(test_data, sub.output);
     TEST_ASSERT_EQUAL_INT(strlen(test_data), sub.output_len);
 
-    cleanup_subagent(&sub);
+    cleanup_subagent(&sub, NULL);
 }
 
 // =========================================================================

@@ -136,6 +136,7 @@ int subagent_manager_init_with_config(SubagentManager *manager, int max_subagent
     manager->gate_config = NULL;
     manager->spawn_callback = NULL;
     manager->spawn_callback_data = NULL;
+    manager->services = NULL;
 
     return 0;
 }
@@ -152,6 +153,12 @@ void subagent_manager_set_spawn_callback(SubagentManager *manager,
     if (manager != NULL) {
         manager->spawn_callback = callback;
         manager->spawn_callback_data = user_data;
+    }
+}
+
+void subagent_manager_set_services(SubagentManager *manager, Services *services) {
+    if (manager != NULL) {
+        manager->services = services;
     }
 }
 
@@ -180,7 +187,7 @@ void subagent_manager_cleanup(SubagentManager *manager) {
             }
         }
 
-        cleanup_subagent(sub);
+        cleanup_subagent(sub, manager->services);
     }
 
     SubagentArray_destroy(&manager->subagents);
@@ -225,7 +232,7 @@ int subagent_poll_all(SubagentManager *manager) {
             read_subagent_output(sub);
             sub->status = SUBAGENT_STATUS_TIMEOUT;
             sub->error = strdup("Subagent execution timed out");
-            subagent_notify_parent(sub);
+            subagent_notify_parent(sub, manager->services);
             changed++;
             continue;
         }
@@ -237,12 +244,12 @@ int subagent_poll_all(SubagentManager *manager) {
 
         if (result == sub->pid) {
             subagent_handle_process_exit(sub, proc_status);
-            subagent_notify_parent(sub);
+            subagent_notify_parent(sub, manager->services);
             changed++;
         } else if (result == -1 && errno != ECHILD) {
             sub->status = SUBAGENT_STATUS_FAILED;
             sub->error = strdup("Failed to check subagent status");
-            subagent_notify_parent(sub);
+            subagent_notify_parent(sub, manager->services);
             changed++;
         }
         // result == 0 means still running, no change
@@ -475,7 +482,7 @@ int subagent_get_status(SubagentManager *manager, const char *subagent_id, int w
             read_subagent_output(sub);
             sub->status = SUBAGENT_STATUS_TIMEOUT;
             sub->error = strdup("Subagent execution timed out");
-            subagent_notify_parent(sub);
+            subagent_notify_parent(sub, manager->services);
             RETURN_CURRENT_STATE();
         }
 
@@ -486,11 +493,11 @@ int subagent_get_status(SubagentManager *manager, const char *subagent_id, int w
 
         if (waitpid_result == sub->pid) {
             subagent_handle_process_exit(sub, proc_status);
-            subagent_notify_parent(sub);
+            subagent_notify_parent(sub, manager->services);
         } else if (waitpid_result == -1 && errno != ECHILD) {
             sub->status = SUBAGENT_STATUS_FAILED;
             sub->error = strdup("Failed to check subagent status");
-            subagent_notify_parent(sub);
+            subagent_notify_parent(sub, manager->services);
         }
         RETURN_CURRENT_STATE();
     }
@@ -512,7 +519,7 @@ int subagent_get_status(SubagentManager *manager, const char *subagent_id, int w
             }
 
             read_subagent_output(sub);
-            subagent_notify_parent(sub);
+            subagent_notify_parent(sub, manager->services);
             break;
         }
 
@@ -524,7 +531,7 @@ int subagent_get_status(SubagentManager *manager, const char *subagent_id, int w
             read_subagent_output(sub);
             sub->status = SUBAGENT_STATUS_TIMEOUT;
             sub->error = strdup("Subagent execution timed out");
-            subagent_notify_parent(sub);
+            subagent_notify_parent(sub, manager->services);
             break;
         }
 
@@ -544,12 +551,12 @@ int subagent_get_status(SubagentManager *manager, const char *subagent_id, int w
 
         if (waitpid_result == sub->pid) {
             subagent_handle_process_exit(sub, proc_status);
-            subagent_notify_parent(sub);
+            subagent_notify_parent(sub, manager->services);
             break;
         } else if (waitpid_result == -1 && errno != ECHILD) {
             sub->status = SUBAGENT_STATUS_FAILED;
             sub->error = strdup("Failed to check subagent status");
-            subagent_notify_parent(sub);
+            subagent_notify_parent(sub, manager->services);
             break;
         }
 
@@ -637,6 +644,7 @@ int register_subagent_tool(ToolRegistry *registry, SubagentManager *manager) {
     }
 
     g_subagent_manager = manager;
+    manager->services = registry->services;
 
     ToolParameter parameters[2];
     memset(parameters, 0, sizeof(parameters));
@@ -701,6 +709,7 @@ int register_subagent_status_tool(ToolRegistry *registry, SubagentManager *manag
     }
 
     g_subagent_manager = manager;
+    manager->services = registry->services;
 
     ToolParameter parameters[2];
     memset(parameters, 0, sizeof(parameters));

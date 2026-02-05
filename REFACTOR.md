@@ -37,70 +37,6 @@ lib/agent/
 
 ---
 
-## Session 4: Convert Remaining Singleton Calls
-
-**Goal**: Replace all remaining singleton calls with Services accessors.
-
-### Files to Modify
-
-#### 4.1 lib/agent/session.c
-
-Replace direct singleton calls at lines 102, 106, 313:
-
-```c
-// Change from:
-if (task_store_get_instance() == NULL) { ... }
-if (message_store_get_instance() == NULL) { ... }
-
-// Change to:
-if (services_get_task_store(session->services) == NULL) { ... }
-if (services_get_message_store(session->services) == NULL) { ... }
-```
-
-#### 4.2 lib/tools/subagent_process.h
-
-Update function signatures:
-
-```c
-// Change from:
-void cleanup_subagent(Subagent *sub);
-void subagent_notify_parent(const Subagent* sub);
-
-// Change to:
-void cleanup_subagent(Subagent *sub, Services* services);
-void subagent_notify_parent(const Subagent* sub, Services* services);
-```
-
-#### 4.3 lib/tools/subagent_process.c
-
-Add Services parameter and use it at lines 126, 286:
-
-```c
-void cleanup_subagent(Subagent *sub, Services* services) {
-    // Replace message_store_get_instance() with:
-    message_store_t* store = services_get_message_store(services);
-    // ... rest of code
-}
-```
-
-#### 4.4 lib/tools/subagent_tool.c
-
-Update calls to pass services:
-
-```c
-cleanup_subagent(sub, registry->services);
-subagent_notify_parent(sub, registry->services);
-```
-
-### Verification
-
-```bash
-./scripts/build.sh && ./scripts/run_tests.sh
-./ralph "what files are in this directory"  # Tests subagent tool
-```
-
----
-
 ## Session 5: Remove Singleton Getters
 
 **Goal**: Delete all `*_get_instance()` functions and remove fallback from Services accessors.
@@ -671,9 +607,9 @@ make check-valgrind
 - [ ] `lib/tools/todo_tool.c` - Use Services accessor
 - [ ] `lib/tools/messaging_tool.h` - Add Services setter
 - [ ] `lib/tools/messaging_tool.c` - Use Services accessor
-- [ ] `lib/tools/subagent_process.h` - Add Services parameter
-- [ ] `lib/tools/subagent_process.c` - Use Services accessor
-- [ ] `lib/tools/subagent_tool.c` - Pass Services
+- [x] `lib/tools/subagent_process.h` - Add Services parameter
+- [x] `lib/tools/subagent_process.c` - Use Services accessor
+- [x] `lib/tools/subagent_tool.c` - Pass Services
 - [ ] `lib/ipc/message_poller.h` - Add Services to create
 - [ ] `lib/ipc/message_poller.c` - Store and use Services
 - [ ] `lib/ipc/notification_formatter.h` - Add Services parameter

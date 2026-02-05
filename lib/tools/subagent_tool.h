@@ -7,6 +7,8 @@
 #include <sys/types.h>
 #include <time.h>
 
+typedef struct Services Services;
+
 #define SUBAGENT_MAX_DEFAULT 5
 #define SUBAGENT_TIMEOUT_DEFAULT 300
 #define SUBAGENT_ID_LENGTH 16
@@ -58,6 +60,7 @@ typedef struct {
     ApprovalGateConfig *gate_config;   // Parent's approval config for proxying requests
     SubagentSpawnCallback spawn_callback;  // Called when subagent spawns (optional)
     void *spawn_callback_data;             // User data for spawn callback
+    Services *services;                // Dependency injection container
 } SubagentManager;
 
 int subagent_manager_init_with_config(SubagentManager *manager, int max_subagents, int timeout_seconds);
@@ -69,6 +72,9 @@ void subagent_manager_set_gate_config(SubagentManager *manager, ApprovalGateConf
 void subagent_manager_set_spawn_callback(SubagentManager *manager,
                                          SubagentSpawnCallback callback,
                                          void *user_data);
+
+/** Set the Services container for dependency injection. */
+void subagent_manager_set_services(SubagentManager *manager, Services *services);
 
 /** Kills any running subagents and frees all memory. */
 void subagent_manager_cleanup(SubagentManager *manager);
@@ -100,7 +106,7 @@ int read_subagent_output_nonblocking(Subagent *sub);
 /** Blocking read of remaining output after subagent exit. */
 int read_subagent_output(Subagent *sub);
 
-void cleanup_subagent(Subagent *sub);
+void cleanup_subagent(Subagent *sub, Services *services);
 
 /** Returns index of first subagent with a pending approval request, or -1. */
 int subagent_poll_approval_requests(SubagentManager *manager, int timeout_ms);

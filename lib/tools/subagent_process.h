@@ -27,8 +27,9 @@ int read_subagent_output(Subagent *sub);
 /*
  * Clean up resources for a single subagent.
  * Closes pipes and frees allocated strings.
+ * Requires Services for message store access.
  */
-void cleanup_subagent(Subagent *sub);
+void cleanup_subagent(Subagent *sub, Services *services);
 
 /*
  * Generate a unique subagent ID using random hex characters.
@@ -51,8 +52,9 @@ void subagent_handle_process_exit(Subagent *sub, int proc_status);
 /*
  * Send a completion message to the parent agent.
  * Called by the harness when subagent state changes.
+ * Requires Services for message store access.
  */
-void subagent_notify_parent(const Subagent *sub);
+void subagent_notify_parent(const Subagent *sub, Services *services);
 
 /*
  * Get the path to the current executable.
