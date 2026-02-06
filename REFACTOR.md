@@ -46,73 +46,16 @@ Architecture violations addressed in separate audit (REARCHITECTURE_PLAN.md, now
 
 ---
 
-## Session 6: Extract tool_orchestration.c
+## Session 6: Extract tool_orchestration.c ✅ COMPLETE
 
 **Goal**: Extract approval and deduplication logic from `tool_executor.c`.
 
-### New File: lib/agent/tool_orchestration.h
+Extracted `is_file_write_tool`, `is_file_tool`, `check_tool_approval`, `is_tool_already_executed`,
+`add_executed_tool`, and subagent duplicate prevention into `lib/agent/tool_orchestration.c`.
 
-```c
-#ifndef LIB_AGENT_TOOL_ORCHESTRATION_H
-#define LIB_AGENT_TOOL_ORCHESTRATION_H
-
-#include "../services/services.h"
-#include "../policy/approval_gate.h"
-#include "../types.h"
-#include "../util/ptrarray.h"
-
-typedef struct {
-    Services* services;
-    ApprovalGateConfig* gate_config;
-    StringArray* executed_tracker;
-    int subagent_spawned;
-} ToolOrchestrationContext;
-
-void tool_orchestration_init(ToolOrchestrationContext* ctx,
-                             Services* services,
-                             ApprovalGateConfig* gate_config);
-void tool_orchestration_cleanup(ToolOrchestrationContext* ctx);
-
-int tool_orchestration_check_approval(ToolOrchestrationContext* ctx,
-                                      const ToolCall* call,
-                                      ToolResult* result);
-
-int tool_orchestration_is_duplicate(ToolOrchestrationContext* ctx,
-                                    const char* tool_call_id);
-
-void tool_orchestration_mark_executed(ToolOrchestrationContext* ctx,
-                                      const char* tool_call_id);
-
-int tool_orchestration_can_spawn_subagent(ToolOrchestrationContext* ctx,
-                                          const char* tool_name);
-
-#endif
-```
-
-### New File: lib/agent/tool_orchestration.c
-
-Extract from `tool_executor.c`:
-- `is_file_write_tool()` (lines 25-30)
-- `is_file_tool()` (lines 32-38)
-- `check_tool_approval()` (lines 44-138)
-- `is_tool_already_executed()` (lines 235-242)
-- `add_executed_tool()` (lines 244-260)
-- Subagent duplicate prevention logic
-
-### Update lib/agent/tool_executor.c
-
-Replace extracted functions with calls to `tool_orchestration_*()`.
-
-### Update mk/lib.mk
-
-Add `lib/agent/tool_orchestration.c` to `LIB_AGENT_SRC`.
-
-### Verification
-
-```bash
-./scripts/build.sh && ./scripts/run_tests.sh
-./ralph "write hello to test.txt"  # Tests approval
-```
+The `ToolOrchestrationContext` owns the dedup tracker and subagent flag. A single context is
+created in `tool_executor_run_workflow` and shared with `tool_executor_run_loop`, so dedup
+tracking spans the full workflow (initial batch IDs are seeded before entering the loop).
 
 ---
 
@@ -489,8 +432,8 @@ make check-valgrind
 ## File Checklist
 
 ### New Files (16)
-- [ ] `lib/agent/tool_orchestration.h`
-- [ ] `lib/agent/tool_orchestration.c`
+- [x] `lib/agent/tool_orchestration.h`
+- [x] `lib/agent/tool_orchestration.c`
 - [ ] `lib/agent/conversation_state.h`
 - [ ] `lib/agent/conversation_state.c`
 - [ ] `lib/agent/api_round_trip.h`
@@ -510,7 +453,7 @@ make check-valgrind
 - [ ] `lib/agent/session.h` - Add Services* field
 - [ ] `lib/agent/session.c` - Extract modules, use Services
 - [ ] `lib/agent/agent.c` - Connect Services
-- [ ] `lib/agent/tool_executor.c` - Slim to entry point
+- [x] `lib/agent/tool_executor.c` - Slim to entry point
 - [ ] `lib/tools/tools_system.h` - Add Services* to ToolRegistry
 - [ ] `lib/tools/tools_system.c` - Initialize Services
 - [ ] `lib/tools/todo_tool.h` - Add Services parameter
@@ -525,7 +468,7 @@ make check-valgrind
 - [ ] `lib/ipc/notification_formatter.h` - Add Services parameter
 - [ ] `lib/ipc/notification_formatter.c` - Use Services accessor
 - [x] `lib/services/services.c` - Remove fallback
-- [ ] `mk/lib.mk` - Add new source files
+- [x] `mk/lib.mk` - Add new source files
 
 ### Deleted Code
 - [x] `message_store_get_instance()` from message_store.c/h

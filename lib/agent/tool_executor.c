@@ -1,5 +1,6 @@
 #include "tool_executor.h"
 #include "session.h"
+#include "tool_orchestration.h"
 #include "../util/interrupt.h"
 #include "../ui/output_formatter.h"
 #include "../ui/json_output.h"
@@ -10,132 +11,13 @@
 #include "../session/token_manager.h"
 #include "../llm/model_capabilities.h"
 #include "../mcp/mcp_client.h"
-#include "../util/ptrarray.h"
 #include "../ui/spinner.h"
-#include "../policy/approval_gate.h"
 #include "../policy/protected_files.h"
-#include "../policy/tool_args.h"
 #include "../policy/verified_file_context.h"
-#include "../policy/pattern_generator.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "../util/json_escape.h"
-
-static int is_file_write_tool(const char *tool_name) {
-    if (tool_name == NULL) return 0;
-    return (strcmp(tool_name, "write_file") == 0 ||
-            strcmp(tool_name, "append_file") == 0 ||
-            strcmp(tool_name, "apply_delta") == 0);
-}
-
-static int is_file_tool(const char *tool_name) {
-    if (tool_name == NULL) return 0;
-    return (strcmp(tool_name, "write_file") == 0 ||
-            strcmp(tool_name, "append_file") == 0 ||
-            strcmp(tool_name, "apply_delta") == 0 ||
-            strcmp(tool_name, "read_file") == 0);
-}
-
-/**
- * Check approval gates and protected files before tool execution.
- * Returns 0 to allow, -1 if blocked (result populated with error), -2 if user aborted.
- */
-static int check_tool_approval(AgentSession *session, const ToolCall *tool_call,
-                               ToolResult *result) {
-    if (session == NULL || tool_call == NULL || result == NULL) {
-        return 0;
-    }
-
-    // Protected files are hard-blocked regardless of gate config or allowlist
-    if (is_file_write_tool(tool_call->name)) {
-        char *path = tool_args_get_path(tool_call);
-        if (path != NULL) {
-            if (is_protected_file(path)) {
-                result->tool_call_id = tool_call->id ? strdup(tool_call->id) : NULL;
-                result->result = format_protected_file_error(path);
-                result->success = 0;
-                free(path);
-                return -1; // Blocked
-            }
-            free(path);
-        }
-    }
-
-    if (!session->gate_config.enabled) {
-        return 0;
-    }
-
-    ApprovedPath approved_path;
-    init_approved_path(&approved_path);
-
-    ApprovalResult approval = check_approval_gate(&session->gate_config,
-                                                   tool_call,
-                                                   &approved_path);
-
-    switch (approval) {
-        case APPROVAL_ALLOWED_ALWAYS: {
-            GeneratedPattern gen_pattern = {0};
-            if (generate_allowlist_pattern(tool_call, &gen_pattern) == 0) {
-                apply_generated_pattern(&session->gate_config, tool_call->name, &gen_pattern);
-                free_generated_pattern(&gen_pattern);
-            }
-        }
-        /* fallthrough */
-        case APPROVAL_ALLOWED:
-            // Set up verified file context for TOCTOU-safe file operations.
-            // Tools use this context to access pre-resolved file descriptors
-            // instead of re-opening paths that could have changed since approval.
-            if (approved_path.resolved_path != NULL && is_file_tool(tool_call->name)) {
-                if (verified_file_context_set(&approved_path) != 0) {
-                    VerifyResult verify = verify_approved_path(&approved_path);
-                    if (verify != VERIFY_OK) {
-                        result->tool_call_id = tool_call->id ? strdup(tool_call->id) : NULL;
-                        result->result = format_verify_error(verify, approved_path.resolved_path);
-                        result->success = 0;
-                        free_approved_path(&approved_path);
-                        return -1; // Blocked
-                    }
-                }
-                // verified_file_context_set() deep-copies ApprovedPath, so our local
-                // copy is freed here; the context's copy is freed after tool execution
-            }
-            free_approved_path(&approved_path);
-            return 0; // Proceed with execution
-
-        case APPROVAL_DENIED:
-            track_denial(&session->gate_config, tool_call);
-            result->tool_call_id = tool_call->id ? strdup(tool_call->id) : NULL;
-            result->result = format_denial_error(tool_call);
-            result->success = 0;
-            free_approved_path(&approved_path);
-            return -1; // Blocked
-
-        case APPROVAL_RATE_LIMITED:
-            result->tool_call_id = tool_call->id ? strdup(tool_call->id) : NULL;
-            result->result = format_rate_limit_error(&session->gate_config, tool_call);
-            result->success = 0;
-            free_approved_path(&approved_path);
-            return -1; // Blocked
-
-        case APPROVAL_NON_INTERACTIVE_DENIED:
-            // Environmental denial (no TTY), not a user decision -- skip rate limit tracking
-            result->tool_call_id = tool_call->id ? strdup(tool_call->id) : NULL;
-            result->result = format_non_interactive_error(tool_call);
-            result->success = 0;
-            free_approved_path(&approved_path);
-            return -1; // Blocked
-
-        case APPROVAL_ABORTED:
-            free_approved_path(&approved_path);
-            return -2;
-    }
-
-    // Catch-all for future ApprovalResult values
-    debug_printf("Warning: Unhandled approval result %d, defaulting to allow\n", approval);
-    free_approved_path(&approved_path);
-    return 0; // Default: allow
-}
 
 char* construct_openai_assistant_message_with_tools(const char* content,
                                                     const ToolCall* tool_calls,
@@ -232,36 +114,9 @@ char* construct_openai_assistant_message_with_tools(const char* content,
     return message;
 }
 
-static int is_tool_already_executed(const StringArray* tracker, const char* tool_call_id) {
-    for (size_t i = 0; i < tracker->count; i++) {
-        if (strcmp(tracker->data[i], tool_call_id) == 0) {
-            return 1;
-        }
-    }
-    return 0;
-}
-
-static int add_executed_tool(StringArray* tracker, const char* tool_call_id) {
-    if (tracker == NULL || tool_call_id == NULL) {
-        return -1;
-    }
-
-    char* dup = strdup(tool_call_id);
-    if (dup == NULL) {
-        return -1;
-    }
-
-    if (StringArray_push(tracker, dup) != 0) {
-        free(dup);
-        return -1;
-    }
-
-    return 0;
-}
-
 static int tool_executor_run_loop(AgentSession* session, const char* user_message,
-                                  int max_tokens) {
-    if (session == NULL) {
+                                  int max_tokens, ToolOrchestrationContext* ctx) {
+    if (session == NULL || ctx == NULL) {
         return -1;
     }
 
@@ -269,15 +124,12 @@ static int tool_executor_run_loop(AgentSession* session, const char* user_messag
     (void)max_tokens;
 
     int loop_count = 0;
-    StringArray tracker;
-    if (StringArray_init(&tracker, free) != 0) {
-        return -1;
-    }
 
     debug_printf("Starting iterative tool calling loop\n");
 
     while (1) {
         loop_count++;
+        tool_orchestration_reset_batch(ctx);
         debug_printf("Tool calling loop iteration %d\n", loop_count);
 
         TokenConfig token_config;
@@ -285,7 +137,6 @@ static int tool_executor_run_loop(AgentSession* session, const char* user_messag
         TokenUsage token_usage;
         if (manage_conversation_tokens(session, "", &token_config, &token_usage) != 0) {
             fprintf(stderr, "Error: Failed to calculate token allocation for tool loop iteration %d\n", loop_count);
-            StringArray_destroy(&tracker);
             return -1;
         }
 
@@ -301,7 +152,6 @@ static int tool_executor_run_loop(AgentSession* session, const char* user_messag
 
         if (post_data == NULL) {
             fprintf(stderr, "Error: Failed to build JSON payload for tool loop iteration %d\n", loop_count);
-            StringArray_destroy(&tracker);
             return -1;
         }
 
@@ -332,7 +182,6 @@ static int tool_executor_run_loop(AgentSession* session, const char* user_messag
                         err.http_status, err.error_message);
 
             free(post_data);
-            StringArray_destroy(&tracker);
             return -1;
         }
 
@@ -344,7 +193,6 @@ static int tool_executor_run_loop(AgentSession* session, const char* user_messag
             fprintf(stderr, "Error: Empty response from API in tool loop iteration %d\n", loop_count);
             cleanup_response(&response);
             free(post_data);
-            StringArray_destroy(&tracker);
             return -1;
         }
 
@@ -378,7 +226,6 @@ static int tool_executor_run_loop(AgentSession* session, const char* user_messag
             }
             cleanup_response(&response);
             free(post_data);
-            StringArray_destroy(&tracker);
             return -1;
         }
 
@@ -476,7 +323,6 @@ static int tool_executor_run_loop(AgentSession* session, const char* user_messag
             debug_printf("No more tool calls found - ending tool loop after %d iterations\n", loop_count);
             print_formatted_response_improved(&parsed_response);
             cleanup_parsed_response(&parsed_response);
-            StringArray_destroy(&tracker);
             return 0;
         }
 
@@ -485,7 +331,7 @@ static int tool_executor_run_loop(AgentSession* session, const char* user_messag
         // Deduplicate to prevent infinite loops when the LLM re-emits the same tool call IDs
         int new_tool_calls = 0;
         for (int i = 0; i < call_count; i++) {
-            if (!is_tool_already_executed(&tracker, tool_calls[i].id)) {
+            if (!tool_orchestration_is_duplicate(ctx, tool_calls[i].id)) {
                 new_tool_calls++;
             }
         }
@@ -493,7 +339,6 @@ static int tool_executor_run_loop(AgentSession* session, const char* user_messag
         if (new_tool_calls == 0) {
             debug_printf("All %d tool calls already executed - ending loop to prevent infinite iteration\n", call_count);
             cleanup_tool_calls(tool_calls, call_count);
-            StringArray_destroy(&tracker);
             return 0;
         }
 
@@ -503,7 +348,6 @@ static int tool_executor_run_loop(AgentSession* session, const char* user_messag
         ToolResult *results = calloc(call_count, sizeof(ToolResult));
         if (results == NULL) {
             cleanup_tool_calls(tool_calls, call_count);
-            StringArray_destroy(&tracker);
             return -1;
         }
 
@@ -511,14 +355,10 @@ static int tool_executor_run_loop(AgentSession* session, const char* user_messag
         if (tool_call_indices == NULL) {
             free(results);
             cleanup_tool_calls(tool_calls, call_count);
-            StringArray_destroy(&tracker);
             return -1;
         }
 
         force_protected_inode_refresh();
-
-        // Track subagent spawns per iteration to prevent duplicates within a single batch
-        int subagent_already_spawned = 0;
 
         int executed_count = 0;
         int loop_aborted = 0;
@@ -531,7 +371,7 @@ static int tool_executor_run_loop(AgentSession* session, const char* user_messag
                 debug_printf("Tool execution interrupted by user at tool %d of %d\n", i + 1, call_count);
                 display_cancellation_message(i, call_count, session->session_data.config.json_output_mode);
                 for (int j = i; j < call_count; j++) {
-                    if (!is_tool_already_executed(&tracker, tool_calls[j].id)) {
+                    if (!tool_orchestration_is_duplicate(ctx, tool_calls[j].id)) {
                         results[executed_count].tool_call_id = tool_calls[j].id ? strdup(tool_calls[j].id) : NULL;
                         results[executed_count].result = strdup("{\"error\": \"interrupted\", \"message\": \"Cancelled by user\"}");
                         results[executed_count].success = 0;
@@ -545,44 +385,41 @@ static int tool_executor_run_loop(AgentSession* session, const char* user_messag
                 break;
             }
 
-            if (is_tool_already_executed(&tracker, tool_calls[i].id)) {
+            if (tool_orchestration_is_duplicate(ctx, tool_calls[i].id)) {
                 debug_printf("Skipping already executed tool: %s (ID: %s)\n",
                            tool_calls[i].name, tool_calls[i].id);
                 continue;
             }
 
             // Skip execution if tracking fails to prevent duplicate runs in later iterations
-            if (add_executed_tool(&tracker, tool_calls[i].id) != 0) {
+            if (tool_orchestration_mark_executed(ctx, tool_calls[i].id) != 0) {
                 debug_printf("Warning: Failed to track tool call ID %s, skipping execution\n", tool_calls[i].id);
                 continue;
             }
 
             tool_call_indices[executed_count] = i;
 
-            // Prevent duplicate subagent spawns within the same loop iteration
-            if (strcmp(tool_calls[i].name, "subagent") == 0) {
-                if (subagent_already_spawned) {
-                    debug_printf("Skipping duplicate subagent call %d in loop iteration %d (ID: %s)\n",
-                                 i, loop_count, tool_calls[i].id);
-                    results[executed_count].tool_call_id = tool_calls[i].id ? strdup(tool_calls[i].id) : NULL;
-                    results[executed_count].result = strdup("{\"error\": \"duplicate_subagent\", \"message\": "
-                                                            "\"Only one subagent can be spawned per turn. "
-                                                            "A subagent was already spawned in this batch.\"}");
-                    results[executed_count].success = 0;
-                    if (!session->session_data.config.json_output_mode) {
-                        log_tool_execution_improved(tool_calls[i].name, tool_calls[i].arguments, 0,
-                                                    "Duplicate subagent blocked");
-                    } else {
-                        json_output_tool_result(tool_calls[i].id, results[executed_count].result, 1);
-                    }
-                    executed_count++;
-                    continue;
+            if (!tool_orchestration_can_spawn_subagent(ctx, tool_calls[i].name)) {
+                debug_printf("Skipping duplicate subagent call %d in loop iteration %d (ID: %s)\n",
+                             i, loop_count, tool_calls[i].id);
+                results[executed_count].tool_call_id = tool_calls[i].id ? strdup(tool_calls[i].id) : NULL;
+                results[executed_count].result = strdup("{\"error\": \"duplicate_subagent\", \"message\": "
+                                                        "\"Only one subagent can be spawned per turn. "
+                                                        "A subagent was already spawned in this batch.\"}");
+                results[executed_count].success = 0;
+                if (!session->session_data.config.json_output_mode) {
+                    log_tool_execution_improved(tool_calls[i].name, tool_calls[i].arguments, 0,
+                                                "Duplicate subagent blocked");
+                } else {
+                    json_output_tool_result(tool_calls[i].id, results[executed_count].result, 1);
                 }
-                subagent_already_spawned = 1;
+                executed_count++;
+                continue;
+            } else if (strcmp(tool_calls[i].name, "subagent") == 0) {
                 debug_printf("First subagent call in loop iteration %d (ID: %s)\n", loop_count, tool_calls[i].id);
             }
 
-            int approval_check = check_tool_approval(session, &tool_calls[i], &results[executed_count]);
+            int approval_check = tool_orchestration_check_approval(ctx, &tool_calls[i], &results[executed_count]);
             if (approval_check == -2) {
                 loop_aborted = 1;
                 debug_printf("User aborted tool execution in loop iteration %d\n", loop_count);
@@ -619,7 +456,6 @@ static int tool_executor_run_loop(AgentSession* session, const char* user_messag
                 results[executed_count].tool_call_id = tool_calls[i].id ? strdup(tool_calls[i].id) : NULL;
                 results[executed_count].result = strdup("Tool execution failed");
                 results[executed_count].success = 0;
-                // NULL from strdup is handled gracefully downstream
             } else {
                 debug_printf("Executed tool: %s (ID: %s) in iteration %d\n",
                            tool_calls[i].name, tool_calls[i].id, loop_count);
@@ -655,7 +491,6 @@ static int tool_executor_run_loop(AgentSession* session, const char* user_messag
             free(tool_call_indices);
             cleanup_tool_results(results, executed_count);
             cleanup_tool_calls(tool_calls, call_count);
-            StringArray_destroy(&tracker);
             return loop_interrupted ? -2 : -1;
         }
 
@@ -685,17 +520,18 @@ int tool_executor_run_workflow(AgentSession* session, ToolCall* tool_calls, int 
 
     (void)user_message; // Saved by caller; passed through for the follow-up loop
 
+    ToolOrchestrationContext ctx;
+    if (tool_orchestration_init(&ctx, &session->gate_config) != 0) {
+        return -1;
+    }
+
     ToolResult *results = calloc(call_count, sizeof(ToolResult));
     if (results == NULL) {
+        tool_orchestration_cleanup(&ctx);
         return -1;
     }
 
     force_protected_inode_refresh();
-
-    // Track subagent spawns to prevent duplicates within a single batch.
-    // LLMs sometimes generate multiple parallel subagent calls for what should
-    // be a single task, resulting in duplicate approval prompts and wasted work.
-    int subagent_already_spawned = 0;
 
     int aborted = 0;
     int interrupted = 0;
@@ -717,29 +553,26 @@ int tool_executor_run_workflow(AgentSession* session, ToolCall* tool_calls, int 
             break;
         }
 
-        // Prevent duplicate subagent spawns within the same tool call batch
-        if (strcmp(tool_calls[i].name, "subagent") == 0) {
-            if (subagent_already_spawned) {
-                debug_printf("Skipping duplicate subagent call %d in batch (ID: %s)\n",
-                             i, tool_calls[i].id);
-                results[i].tool_call_id = tool_calls[i].id ? strdup(tool_calls[i].id) : NULL;
-                results[i].result = strdup("{\"error\": \"duplicate_subagent\", \"message\": "
-                                           "\"Only one subagent can be spawned per turn. "
-                                           "A subagent was already spawned in this batch.\"}");
-                results[i].success = 0;
-                if (!session->session_data.config.json_output_mode) {
-                    log_tool_execution_improved(tool_calls[i].name, tool_calls[i].arguments, 0,
-                                                "Duplicate subagent blocked");
-                } else {
-                    json_output_tool_result(tool_calls[i].id, results[i].result, 1);
-                }
-                continue;
+        if (!tool_orchestration_can_spawn_subagent(&ctx, tool_calls[i].name)) {
+            debug_printf("Skipping duplicate subagent call %d in batch (ID: %s)\n",
+                         i, tool_calls[i].id);
+            results[i].tool_call_id = tool_calls[i].id ? strdup(tool_calls[i].id) : NULL;
+            results[i].result = strdup("{\"error\": \"duplicate_subagent\", \"message\": "
+                                       "\"Only one subagent can be spawned per turn. "
+                                       "A subagent was already spawned in this batch.\"}");
+            results[i].success = 0;
+            if (!session->session_data.config.json_output_mode) {
+                log_tool_execution_improved(tool_calls[i].name, tool_calls[i].arguments, 0,
+                                            "Duplicate subagent blocked");
+            } else {
+                json_output_tool_result(tool_calls[i].id, results[i].result, 1);
             }
-            subagent_already_spawned = 1;
+            continue;
+        } else if (strcmp(tool_calls[i].name, "subagent") == 0) {
             debug_printf("First subagent call in batch (ID: %s)\n", tool_calls[i].id);
         }
 
-        int approval_check = check_tool_approval(session, &tool_calls[i], &results[i]);
+        int approval_check = tool_orchestration_check_approval(&ctx, &tool_calls[i], &results[i]);
         if (approval_check == -2) {
             aborted = 1;
             debug_printf("User aborted tool execution at tool %d of %d\n", i + 1, call_count);
@@ -789,7 +622,6 @@ int tool_executor_run_workflow(AgentSession* session, ToolCall* tool_calls, int 
                                         results[i].success, results[i].result);
         }
 
-        // Clear per-tool file context to prevent leaking to subsequent calls
         verified_file_context_clear();
 
         if (session->session_data.config.json_output_mode) {
@@ -805,11 +637,18 @@ int tool_executor_run_workflow(AgentSession* session, ToolCall* tool_calls, int 
 
     if (aborted || interrupted) {
         cleanup_tool_results(results, call_count);
+        tool_orchestration_cleanup(&ctx);
         return -2;
     }
 
+    // Seed the tracker with IDs from the initial batch so the follow-up loop
+    // can detect re-emitted IDs and avoid duplicate execution.
+    for (int i = 0; i < call_count; i++) {
+        tool_orchestration_mark_executed(&ctx, tool_calls[i].id);
+    }
+
     // Continue the agentic loop: the LLM may request additional tool calls
-    int result = tool_executor_run_loop(session, user_message, max_tokens);
+    int result = tool_executor_run_loop(session, user_message, max_tokens, &ctx);
 
     // Treat follow-up loop failure as non-fatal since initial tools already executed
     if (result != 0) {
@@ -818,5 +657,6 @@ int tool_executor_run_workflow(AgentSession* session, ToolCall* tool_calls, int 
     }
 
     cleanup_tool_results(results, call_count);
+    tool_orchestration_cleanup(&ctx);
     return result;
 }
