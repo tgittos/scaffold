@@ -8,7 +8,6 @@
 #include "repl.h"
 #include "../workflow/workflow.h"
 #include "../session/conversation_tracker.h"
-#include "../db/document_store.h"
 #include "../util/debug_output.h"
 #include "../ui/output_formatter.h"
 #include "../ui/json_output.h"

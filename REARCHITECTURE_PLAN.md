@@ -154,7 +154,7 @@ Several non-UI modules include `terminal.h` for TERM_* string constants.
 
 ---
 
-## Phase 7: Direct HTTP Calls (4 violations, HIGH risk)
+## Phase 7: Direct HTTP Calls (4 violations, HIGH risk) ✅ COMPLETE
 
 `session.c`, `tool_executor.c`, `recap.c`, `rolling_summary.c` all call `http_post_with_headers()` / `http_post_streaming()` directly.
 
@@ -176,7 +176,7 @@ Encapsulates: header construction + HTTP call. Does NOT build payloads or parse 
 
 ---
 
-## Phase 8: Agent Layer Cleanup (3 violations)
+## Phase 8: Agent Layer Cleanup (3 violations) ✅ COMPLETE
 
 After earlier phases, remaining cleanup:
 

@@ -43,8 +43,6 @@
 /* Configuration functions from lib/util/config.h */
 #include "../util/config.h"
 #include "../util/prompt_loader.h"
-#include "../db/task_store.h"
-#include "../llm/embeddings_service.h"
 
 /* =============================================================================
  * CLEANUP HOOKS
@@ -99,6 +97,7 @@ int session_init(AgentSession* session) {
      * singleton fallbacks. This is a known limitation - proper DI would
      * require restructuring init order or adding a post-init setup phase. */
     session->services = NULL;
+    session->model_registry = NULL;
 
     if (uuid_generate_v4(session->session_id) != 0) {
         fprintf(stderr, "Warning: Failed to generate session ID, using fallback\n");
@@ -259,6 +258,8 @@ int session_load_config(AgentSession* session) {
         return -1;
     }
 
+    session->model_registry = get_model_registry();
+
     embeddings_service_t* embeddings = services_get_embeddings(session->services);
     if (embeddings) {
         embeddings_service_reinitialize(embeddings);
@@ -300,7 +301,7 @@ int session_load_config(AgentSession* session) {
 
     /* 8192 is the fallback context window; upgrade to model-specific size when available */
     if (session->session_data.config.context_window == 8192) {
-        ModelRegistry* registry = get_model_registry();
+        ModelRegistry* registry = session->model_registry;
         if (registry && session->session_data.config.model) {
             ModelCapabilities* model = detect_model_capabilities(registry, session->session_data.config.model);
             if (model && model->max_context_length > 0) {
@@ -625,13 +626,12 @@ int session_process_message(AgentSession* session, const char* user_message) {
         int raw_call_count = 0;
         int tool_parse_result;
 
-        ModelRegistry* model_registry = get_model_registry();
-        tool_parse_result = parse_model_tool_calls(model_registry, session->session_data.config.model,
+        tool_parse_result = parse_model_tool_calls(session->model_registry, session->session_data.config.model,
                                                    response.data, &raw_tool_calls, &raw_call_count);
 
         /* Fallback: some models (e.g., LM Studio) embed tool calls in message content */
         if (tool_parse_result != 0 || raw_call_count == 0) {
-            if (message_content != NULL && parse_model_tool_calls(model_registry, session->session_data.config.model,
+            if (message_content != NULL && parse_model_tool_calls(session->model_registry, session->session_data.config.model,
                                                                    message_content, &raw_tool_calls, &raw_call_count) == 0 && raw_call_count > 0) {
                 tool_parse_result = 0;
                 debug_printf("Found %d tool calls in message content (custom format)\n", raw_call_count);

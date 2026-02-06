@@ -21,6 +21,9 @@
 #include "../ipc/message_poller.h"
 #include "../services/services.h"
 
+/* Forward declaration — full definition in llm/model_capabilities.h */
+typedef struct ModelRegistry ModelRegistry;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -65,6 +68,7 @@ typedef struct AgentSession {
     message_poller_t* message_poller;   /**< Background message poller thread */
     SessionPollingConfig polling_config;/**< Polling configuration */
     Services* services;                 /**< Dependency injection container */
+    ModelRegistry* model_registry;      /**< Model capability registry */
 } AgentSession;
 
 /* =============================================================================

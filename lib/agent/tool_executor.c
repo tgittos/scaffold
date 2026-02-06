@@ -392,8 +392,7 @@ static int tool_executor_run_loop(AgentSession* session, const char* user_messag
         int call_count = 0;
         int tool_parse_result;
 
-        ModelRegistry* model_registry = get_model_registry();
-        tool_parse_result = parse_model_tool_calls(model_registry, session->session_data.config.model,
+        tool_parse_result = parse_model_tool_calls(session->model_registry, session->session_data.config.model,
                                                   response.data, &tool_calls, &call_count);
 
         const char* assistant_content = parsed_response.response_content ?
@@ -401,7 +400,7 @@ static int tool_executor_run_loop(AgentSession* session, const char* user_messag
                                        parsed_response.thinking_content;
         // Some models embed tool calls in message content rather than the standard location
         if (tool_parse_result != 0 || call_count == 0) {
-            if (assistant_content != NULL && parse_model_tool_calls(model_registry, session->session_data.config.model,
+            if (assistant_content != NULL && parse_model_tool_calls(session->model_registry, session->session_data.config.model,
                                                                     assistant_content, &tool_calls, &call_count) == 0 && call_count > 0) {
                 tool_parse_result = 0;
                 debug_printf("Found %d tool calls in message content (custom format)\n", call_count);
@@ -428,7 +427,7 @@ static int tool_executor_run_loop(AgentSession* session, const char* user_messag
             }
 
             // Use parsed content, not raw response.data which includes the full API envelope
-            char* formatted_message = format_model_assistant_tool_message(model_registry,
+            char* formatted_message = format_model_assistant_tool_message(session->model_registry,
                                                                          session->session_data.config.model,
                                                                          assistant_content, tool_calls, call_count);
             if (formatted_message) {
