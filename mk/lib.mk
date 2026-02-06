@@ -161,8 +161,6 @@ LIB_CPP_SOURCES := $(LIB_DB_CPP_SOURCES)
 
 LIB_SOURCES := $(LIB_C_SOURCES) $(LIB_CPP_SOURCES)
 LIB_OBJECTS := $(LIB_C_SOURCES:.c=.o) $(LIB_CPP_SOURCES:.cpp=.o)
-LIB_HEADERS := $(wildcard $(LIBDIR)/*.h) $(wildcard $(LIBDIR)/*/*.h)
-
 # =============================================================================
 # LIBRARY BUILD RULES
 # =============================================================================
@@ -171,11 +169,11 @@ LIB_HEADERS := $(wildcard $(LIBDIR)/*.h) $(wildcard $(LIBDIR)/*/*.h)
 LIB_INCLUDES := -I$(LIBDIR)
 
 # Compile library C files
-$(LIBDIR)/%.o: $(LIBDIR)/%.c $(LIB_HEADERS) | $(COMPILE_DEPS)
+$(LIBDIR)/%.o: $(LIBDIR)/%.c | $(COMPILE_DEPS)
 	$(CC) $(CFLAGS) $(INCLUDES) $(LIB_INCLUDES) -c $< -o $@
 
 # Compile library C++ files
-$(LIBDIR)/%.o: $(LIBDIR)/%.cpp $(LIB_HEADERS) | $(COMPILE_DEPS)
+$(LIBDIR)/%.o: $(LIBDIR)/%.cpp | $(COMPILE_DEPS)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) $(LIB_INCLUDES) -c $< -o $@
 
 # Build the library archive
@@ -198,6 +196,7 @@ libralph: $(LIBRALPH)
 libralph-clean:
 	rm -f $(LIB_OBJECTS) $(LIBRALPH)
 	find $(LIBDIR) -name "*.o" -delete 2>/dev/null || true
+	find $(LIBDIR) -name "*.o.d" -delete 2>/dev/null || true
 
 # =============================================================================
 # INTEGRATION WITH MAIN BUILD

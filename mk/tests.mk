@@ -18,11 +18,13 @@ TEST_$(1)_TARGET := $$(TESTDIR)/test_$(1)
 ALL_TEST_TARGETS += $$(TEST_$(1)_TARGET)
 endef
 
-# Template for mixed C/C++ test (adds CPP objects)
-# Uses $(sort) to deduplicate sources when tests use multiple dependency sets
-define def_test_mixed
-TEST_$(1)_SOURCES := $$(sort $$(TESTDIR)/$(2).c $(3) $$(UNITY))
-TEST_$(1)_OBJECTS := $$(TEST_$(1)_SOURCES:.c=.o) $$(LIB_DB_CPP_SOURCES:.cpp=.o)
+# Template for libralph-linked test (test .c + optional extras, linked against libralph.a)
+# $(1) = test name (lowercase, no prefix)
+# $(2) = test file path (relative to TESTDIR, no .c)
+# $(3) = additional source files (mocks, stubs — listed BEFORE libralph.a to win symbol resolution)
+define def_test_lib
+TEST_$(1)_SOURCES := $$(TESTDIR)/$(2).c $(3) $$(UNITY)
+TEST_$(1)_OBJECTS := $$(TEST_$(1)_SOURCES:.c=.o)
 TEST_$(1)_TARGET := $$(TESTDIR)/test_$(1)
 ALL_TEST_TARGETS += $$(TEST_$(1)_TARGET)
 endef
@@ -40,7 +42,6 @@ $(eval $(call def_test,agent_identity,core/test_agent_identity,$(LIBDIR)/ipc/age
 $(eval $(call def_test,prompt,utils/test_prompt_loader,$(LIBDIR)/util/prompt_loader.c $(LIBDIR)/util/ralph_home.c))
 $(eval $(call def_test,ralph_home,utils/test_ralph_home,$(LIBDIR)/util/ralph_home.c))
 $(eval $(call def_test,todo_manager,tools/test_todo_manager,$(LIBDIR)/tools/todo_manager.c))
-$(eval $(call def_test_mixed,tool_param_dsl,tools/test_tool_param_dsl,$(COMPLEX_DEPS)))
 $(eval $(call def_test,document_chunker,test_document_chunker,$(LIBDIR)/util/document_chunker.c $(LIBDIR)/util/common_utils.c))
 $(eval $(call def_test,streaming,network/test_streaming,$(LIBDIR)/network/streaming.c))
 $(eval $(call def_test,darray,test_darray,))
@@ -80,82 +81,79 @@ $(eval $(call def_test,subagent_approval,policy/test_subagent_approval,$(GATE_DE
 $(eval $(call def_test,approval_gate_integration,policy/test_approval_gate_integration,$(GATE_DEPS) $(TESTDIR)/stubs/python_tool_stub.c))
 
 $(TEST_main_TARGET): $(TEST_main_OBJECTS)
-	$(CC) -o $@ $^
+	$(CC) -o $@ $(TEST_main_OBJECTS)
 
 $(TEST_cli_flags_TARGET): $(TEST_cli_flags_OBJECTS) ralph
 	$(CC) -o $@ $(TEST_cli_flags_OBJECTS)
 
 $(TEST_interrupt_TARGET): $(TEST_interrupt_OBJECTS)
-	$(CC) -o $@ $^
+	$(CC) -o $@ $(TEST_interrupt_OBJECTS)
 
 $(TEST_async_executor_TARGET): $(TEST_async_executor_OBJECTS) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_async_executor_OBJECTS) $(CJSON_LIB) -lpthread
 
 $(TEST_pipe_notifier_TARGET): $(TEST_pipe_notifier_OBJECTS)
-	$(CC) -o $@ $^
+	$(CC) -o $@ $(TEST_pipe_notifier_OBJECTS)
 
 $(TEST_agent_identity_TARGET): $(TEST_agent_identity_OBJECTS)
-	$(CC) -o $@ $^ -lpthread
+	$(CC) -o $@ $(TEST_agent_identity_OBJECTS) -lpthread
 
 $(TEST_prompt_TARGET): $(TEST_prompt_OBJECTS)
-	$(CC) -o $@ $^
+	$(CC) -o $@ $(TEST_prompt_OBJECTS)
 
 $(TEST_ralph_home_TARGET): $(TEST_ralph_home_OBJECTS)
-	$(CC) -o $@ $^
+	$(CC) -o $@ $(TEST_ralph_home_OBJECTS)
 
 $(TEST_todo_manager_TARGET): $(TEST_todo_manager_OBJECTS)
-	$(CC) -o $@ $^
-
-$(TEST_tool_param_dsl_TARGET): $(TEST_tool_param_dsl_OBJECTS) $(ALL_LIBS)
-	$(CXX) -o $@ $(TEST_tool_param_dsl_OBJECTS) $(LIBS_STANDARD)
+	$(CC) -o $@ $(TEST_todo_manager_OBJECTS)
 
 $(TEST_document_chunker_TARGET): $(TEST_document_chunker_OBJECTS)
-	$(CC) -o $@ $^
+	$(CC) -o $@ $(TEST_document_chunker_OBJECTS)
 
 $(TEST_streaming_TARGET): $(TEST_streaming_OBJECTS)
-	$(CC) -o $@ $^
+	$(CC) -o $@ $(TEST_streaming_OBJECTS)
 
 $(TEST_darray_TARGET): $(TEST_darray_OBJECTS)
-	$(CC) -o $@ $^
+	$(CC) -o $@ $(TEST_darray_OBJECTS)
 
 $(TEST_ptrarray_TARGET): $(TEST_ptrarray_OBJECTS)
-	$(CC) -o $@ $^
+	$(CC) -o $@ $(TEST_ptrarray_OBJECTS)
 
 $(TEST_rate_limiter_TARGET): $(TEST_rate_limiter_OBJECTS)
-	$(CC) -o $@ $^
+	$(CC) -o $@ $(TEST_rate_limiter_OBJECTS)
 
 $(TEST_allowlist_TARGET): $(TEST_allowlist_OBJECTS)
-	$(CC) -o $@ $^
+	$(CC) -o $@ $(TEST_allowlist_OBJECTS)
 
 $(TEST_tool_args_TARGET): $(TEST_tool_args_OBJECTS) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_tool_args_OBJECTS) $(CJSON_LIB)
 
 $(TEST_gate_prompter_TARGET): $(TEST_gate_prompter_OBJECTS)
-	$(CC) -o $@ $^
+	$(CC) -o $@ $(TEST_gate_prompter_OBJECTS)
 
 $(TEST_approval_gate_TARGET): $(TEST_approval_gate_OBJECTS) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_approval_gate_OBJECTS) $(CJSON_LIB)
 
 $(TEST_atomic_file_TARGET): $(TEST_atomic_file_OBJECTS)
-	$(CC) -o $@ $^
+	$(CC) -o $@ $(TEST_atomic_file_OBJECTS)
 
 $(TEST_path_normalize_TARGET): $(TEST_path_normalize_OBJECTS)
-	$(CC) -o $@ $^
+	$(CC) -o $@ $(TEST_path_normalize_OBJECTS)
 
 $(TEST_protected_files_TARGET): $(TEST_protected_files_OBJECTS)
-	$(CC) -o $@ $^
+	$(CC) -o $@ $(TEST_protected_files_OBJECTS)
 
 $(TEST_verified_file_context_TARGET): $(TEST_verified_file_context_OBJECTS)
-	$(CC) -o $@ $^
+	$(CC) -o $@ $(TEST_verified_file_context_OBJECTS)
 
 $(TEST_shell_parser_TARGET): $(TEST_shell_parser_OBJECTS)
-	$(CC) -o $@ $^
+	$(CC) -o $@ $(TEST_shell_parser_OBJECTS)
 
 $(TEST_shell_parser_cmd_TARGET): $(TEST_shell_parser_cmd_OBJECTS)
-	$(CC) -o $@ $^
+	$(CC) -o $@ $(TEST_shell_parser_cmd_OBJECTS)
 
 $(TEST_shell_parser_ps_TARGET): $(TEST_shell_parser_ps_OBJECTS)
-	$(CC) -o $@ $^
+	$(CC) -o $@ $(TEST_shell_parser_ps_OBJECTS)
 
 $(TEST_subagent_approval_TARGET): $(TEST_subagent_approval_OBJECTS) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_subagent_approval_OBJECTS) $(CJSON_LIB)
@@ -182,7 +180,7 @@ $(TEST_spinner_TARGET): $(TEST_spinner_OBJECTS) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_spinner_OBJECTS) $(CJSON_LIB) -lpthread
 
 $(TEST_terminal_TARGET): $(TEST_terminal_OBJECTS)
-	$(CC) -o $@ $^
+	$(CC) -o $@ $(TEST_terminal_OBJECTS)
 
 # =============================================================================
 # PDF TEST
@@ -219,7 +217,7 @@ $(TEST_task_store_TARGET): $(TEST_task_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_
 $(TEST_message_store_TARGET): $(TEST_message_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB)
 	$(CC) -o $@ $(TEST_message_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) -lpthread -lm
 
-# Messaging deps
+# Messaging deps (use stubs that conflict with libralph.a symbols)
 MESSAGING_DEPS := \
     $(LIBDIR)/ipc/message_poller.c \
     $(LIBDIR)/ipc/notification_formatter.c \
@@ -242,88 +240,73 @@ $(TEST_notification_formatter_TARGET): $(TEST_notification_formatter_OBJECTS) $(
 	$(CC) -o $@ $(TEST_notification_formatter_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) $(CJSON_LIB) -lpthread -lm
 
 # =============================================================================
-# CONVERSATION TESTS (special linking)
+# VECTOR DB TEST (minimal, just hnswlib)
 # =============================================================================
 
-# Extra objects needed by conversation test (not in test sources)
-CONV_EXTRA_OBJECTS := $(LIB_DB_SOURCES:.c=.o) $(LIB_DB_CPP_SOURCES:.cpp=.o) \
-    $(LIBDIR)/llm/embeddings.o $(LIBDIR)/llm/embeddings_service.o $(LIBDIR)/llm/embedding_provider.o \
-    $(LIBDIR)/llm/providers/openai_embedding_provider.o $(LIBDIR)/llm/providers/local_embedding_provider.o \
-    $(LIBDIR)/network/http_client.o $(LIBDIR)/network/embedded_cacert.o $(LIBDIR)/network/api_error.o \
-    $(LIBDIR)/util/interrupt.o \
-    $(LIBDIR)/services/services.o \
-    $(LIBDIR)/ipc/message_store.o \
-    $(LIBDIR)/util/uuid_utils.o \
-    $(LIBDIR)/util/config.o $(LIBDIR)/util/debug_output.o $(LIBDIR)/util/common_utils.o \
-    $(LIBDIR)/util/ralph_home.o
+TEST_vector_db_SOURCES := $(TESTDIR)/db/test_vector_db.c $(LIBDIR)/db/vector_db.c $(LIBDIR)/util/ralph_home.c $(LIB_DB_CPP_SOURCES) $(UNITY)
+TEST_vector_db_OBJECTS := $(TESTDIR)/db/test_vector_db.o $(LIBDIR)/db/vector_db.o $(LIBDIR)/util/ralph_home.o $(LIBDIR)/db/hnswlib_wrapper.o $(TESTDIR)/unity/unity.o
+TEST_vector_db_TARGET := $(TESTDIR)/test_vector_db
+ALL_TEST_TARGETS += $(TEST_vector_db_TARGET)
 
-$(eval $(call def_test,conversation,session/test_conversation_tracker,$(LIBDIR)/session/conversation_tracker.c $(LIBDIR)/util/json_escape.c))
-$(eval $(call def_test,conversation_vdb,session/test_conversation_vector_db,$(LIBDIR)/session/conversation_tracker.c $(LIBDIR)/util/json_escape.c $(TESTDIR)/mock_embeddings.c $(TESTDIR)/mock_embeddings_service.c))
-$(eval $(call def_test_mixed,tool_calls_not_stored,session/test_tool_calls_not_stored,$(TESTDIR)/mock_api_server.c $(TESTDIR)/mock_embeddings.c $(TESTDIR)/mock_embeddings_server.c $(CONV_DEPS)))
-
-$(TEST_conversation_TARGET): $(TEST_conversation_OBJECTS) $(CONV_EXTRA_OBJECTS) $(ALL_LIBS)
-	$(CXX) -o $@ $(TEST_conversation_OBJECTS) $(CONV_EXTRA_OBJECTS) \
-		$(LIBS_MBEDTLS) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(SQLITE_LIB) $(OSSP_UUID_LIB) -lm -lpthread
-
-# Mock embeddings service replaces real embeddings + HTTP stack
-CONV_VDB_EXTRA_OBJECTS := $(LIB_DB_SOURCES:.c=.o) $(LIB_DB_CPP_SOURCES:.cpp=.o) \
-    $(LIBDIR)/services/services.o \
-    $(LIBDIR)/ipc/message_store.o \
-    $(LIBDIR)/util/uuid_utils.o \
-    $(LIBDIR)/util/common_utils.o \
-    $(LIBDIR)/util/debug_output.o \
-    $(LIBDIR)/util/ralph_home.o
-
-$(TEST_conversation_vdb_TARGET): $(TEST_conversation_vdb_OBJECTS) $(CONV_VDB_EXTRA_OBJECTS) $(ALL_LIBS)
-	$(CXX) -o $@ $(TEST_conversation_vdb_OBJECTS) $(CONV_VDB_EXTRA_OBJECTS) $(CJSON_LIB) $(SQLITE_LIB) $(OSSP_UUID_LIB) -lm -lpthread
-
-$(TEST_tool_calls_not_stored_TARGET): $(TEST_tool_calls_not_stored_OBJECTS) $(ALL_LIBS)
-	$(CXX) -o $@ $(TEST_tool_calls_not_stored_OBJECTS) $(LIBS_MBEDTLS) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(SQLITE_LIB) $(OSSP_UUID_LIB) -lm -lpthread
+$(TEST_vector_db_TARGET): $(TEST_vector_db_OBJECTS) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
+	$(CXX) -o $@ $(TEST_vector_db_OBJECTS) -lpthread -lm
 
 # =============================================================================
-# STANDARD MIXED TESTS (CXX linker with LIBS_STANDARD)
+# LIBRALPH-LINKED TESTS
 # =============================================================================
 
-$(eval $(call def_test_mixed,json_output,utils/test_json_output,$(LIBDIR)/network/streaming.c $(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,output,utils/test_output_formatter,$(COMPLEX_DEPS)))
-# test_tools_system includes approval gate integration tests, requires RALPH_CORE_DEPS
-$(eval $(call def_test_mixed,tools_system,tools/test_tools_system,$(RALPH_CORE_DEPS) $(COMPLEX_DEPS)))
 # Mock embeddings sources for tests that need mocked embedding API
 MOCK_EMBEDDINGS_SOURCES := $(TESTDIR)/mock_api_server.c $(TESTDIR)/mock_embeddings.c $(TESTDIR)/mock_embeddings_server.c
 
-$(eval $(call def_test_mixed,vector_db_tool,tools/test_vector_db_tool,$(MOCK_EMBEDDINGS_SOURCES) $(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,memory_tool,tools/test_memory_tool,$(MOCK_EMBEDDINGS_SOURCES) $(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,memory_mgmt,test_memory_management,$(LIBDIR)/ui/memory_commands.c $(LIBDIR)/ui/terminal.c $(LIB_DB_SOURCES) $(EMBEDDING_DEPS) $(LIBDIR)/util/config.c $(NETWORK_DEPS) $(LIBDIR)/services/services.c $(LIBDIR)/ipc/message_store.c $(LIBDIR)/util/uuid_utils.c $(LIBDIR)/util/common_utils.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/util/ralph_home.c))
-$(eval $(call def_test_mixed,token_manager,session/test_token_manager,$(LIBDIR)/session/token_manager.c $(LIBDIR)/session/rolling_summary.c $(LIBDIR)/session/session_manager.c $(LIBDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,conversation_compactor,session/test_conversation_compactor,$(LIBDIR)/session/conversation_compactor.c $(LIBDIR)/session/rolling_summary.c $(LIBDIR)/session/session_manager.c $(LIBDIR)/session/conversation_tracker.c $(LIBDIR)/session/token_manager.c $(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,rolling_summary,session/test_rolling_summary,$(LIBDIR)/session/rolling_summary.c $(LIBDIR)/session/session_manager.c $(LIBDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,model_tools,llm/test_model_tools,$(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,openai_streaming,llm/test_openai_streaming,$(LIBDIR)/network/streaming.c $(LIBDIR)/llm/providers/openai_provider.c $(LIBDIR)/llm/providers/anthropic_provider.c $(LIBDIR)/llm/providers/local_ai_provider.c $(LIBDIR)/network/api_common.c $(LIBDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,anthropic_streaming,llm/test_anthropic_streaming,$(LIBDIR)/network/streaming.c $(LIBDIR)/llm/providers/openai_provider.c $(LIBDIR)/llm/providers/anthropic_provider.c $(LIBDIR)/llm/providers/local_ai_provider.c $(LIBDIR)/network/api_common.c $(LIBDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,messages_array_bug,network/test_messages_array_bug,$(LIBDIR)/network/api_common.c $(LIBDIR)/session/conversation_tracker.c $(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,mcp_client,mcp/test_mcp_client,$(RALPH_CORE_DEPS) $(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,subagent_tool,tools/test_subagent_tool,$(RALPH_CORE_DEPS) $(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,incomplete_task_bug,core/test_incomplete_task_bug,$(RALPH_CORE_DEPS) $(COMPLEX_DEPS)))
+$(eval $(call def_test_lib,tool_param_dsl,tools/test_tool_param_dsl,))
+$(eval $(call def_test_lib,json_output,utils/test_json_output,))
+$(eval $(call def_test_lib,output,utils/test_output_formatter,))
+$(eval $(call def_test_lib,tools_system,tools/test_tools_system,))
+$(eval $(call def_test_lib,vector_db_tool,tools/test_vector_db_tool,$(MOCK_EMBEDDINGS_SOURCES)))
+$(eval $(call def_test_lib,memory_tool,tools/test_memory_tool,$(MOCK_EMBEDDINGS_SOURCES)))
+$(eval $(call def_test_lib,memory_mgmt,test_memory_management,))
+$(eval $(call def_test_lib,token_manager,session/test_token_manager,))
+$(eval $(call def_test_lib,conversation_compactor,session/test_conversation_compactor,))
+$(eval $(call def_test_lib,rolling_summary,session/test_rolling_summary,))
+$(eval $(call def_test_lib,model_tools,llm/test_model_tools,))
+$(eval $(call def_test_lib,openai_streaming,llm/test_openai_streaming,))
+$(eval $(call def_test_lib,anthropic_streaming,llm/test_anthropic_streaming,))
+$(eval $(call def_test_lib,messages_array_bug,network/test_messages_array_bug,))
+$(eval $(call def_test_lib,mcp_client,mcp/test_mcp_client,))
+$(eval $(call def_test_lib,subagent_tool,tools/test_subagent_tool,))
+$(eval $(call def_test_lib,incomplete_task_bug,core/test_incomplete_task_bug,))
+$(eval $(call def_test_lib,conversation,session/test_conversation_tracker,))
+$(eval $(call def_test_lib,conversation_vdb,session/test_conversation_vector_db,$(TESTDIR)/mock_embeddings.c $(TESTDIR)/mock_embeddings_service.c))
+$(eval $(call def_test_lib,tool_calls_not_stored,session/test_tool_calls_not_stored,$(TESTDIR)/mock_api_server.c $(TESTDIR)/mock_embeddings.c $(TESTDIR)/mock_embeddings_server.c))
+$(eval $(call def_test_lib,document_store,db/test_document_store,))
+$(eval $(call def_test_lib,http,network/test_http_client,))
+$(eval $(call def_test_lib,ralph,core/test_ralph,$(TESTDIR)/mock_api_server.c))
+$(eval $(call def_test_lib,recap,core/test_recap,))
+$(eval $(call def_test_lib,python_tool,tools/test_python_tool,$(TOOL_SOURCES)))
+$(eval $(call def_test_lib,python_integration,tools/test_python_integration,$(TOOL_SOURCES)))
 
-# Batch link rule for standard tests
-STANDARD_TESTS := json_output tools_system vector_db_tool memory_tool memory_mgmt \
-    token_manager conversation_compactor rolling_summary model_tools openai_streaming \
-    anthropic_streaming messages_array_bug mcp_client subagent_tool incomplete_task_bug
+# Batch link rule for libralph-linked tests
+LIBRALPH_TESTS := tool_param_dsl json_output output tools_system vector_db_tool memory_tool \
+    memory_mgmt token_manager conversation_compactor rolling_summary model_tools \
+    openai_streaming anthropic_streaming messages_array_bug mcp_client subagent_tool \
+    incomplete_task_bug conversation conversation_vdb tool_calls_not_stored document_store \
+    recap
 
-$(foreach t,$(STANDARD_TESTS),$(eval \
-$$(TEST_$(t)_TARGET): $$(TEST_$(t)_OBJECTS) $$(ALL_LIBS) ; \
-	$$(CXX) -o $$@ $$(TEST_$(t)_OBJECTS) $$(LIBS_STANDARD)))
+$(foreach t,$(LIBRALPH_TESTS),$(eval \
+$$(TEST_$(t)_TARGET): $$(TEST_$(t)_OBJECTS) $$(LIBRALPH) $$(ALL_LIBS) ; \
+	$$(CXX) -o $$@ $$(TEST_$(t)_OBJECTS) $$(LIBRALPH) $$(LIBS_STANDARD)))
 
-# test_output needs extra conversation_tracker object (not in its deps)
-$(TEST_output_TARGET): $(TEST_output_OBJECTS) $(LIBDIR)/session/conversation_tracker.o $(ALL_LIBS)
-	$(CXX) -o $@ $(TEST_output_OBJECTS) $(LIBDIR)/session/conversation_tracker.o $(LIBS_STANDARD)
+# http test needs LDFLAGS for library search paths
+$(TEST_http_TARGET): $(TEST_http_OBJECTS) $(LIBRALPH) $(ALL_LIBS)
+	$(CXX) $(LDFLAGS) -o $@ $(TEST_http_OBJECTS) $(LIBRALPH) $(LIBS) -lpthread
+
+# ralph test needs LDFLAGS and mock_api_server
+$(TEST_ralph_TARGET): $(TEST_ralph_OBJECTS) $(LIBRALPH) $(ALL_LIBS)
+	$(CXX) $(LDFLAGS) -o $@ $(TEST_ralph_OBJECTS) $(LIBRALPH) $(LIBS) -lpthread
 
 # =============================================================================
 # PYTHON TESTS (need stdlib embedding)
 # =============================================================================
-
-$(eval $(call def_test_mixed,python_tool,tools/test_python_tool,$(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,python_integration,tools/test_python_integration,$(COMPLEX_DEPS)))
 
 define PYTHON_TEST_EMBED
 	@set -e; \
@@ -339,80 +322,21 @@ define PYTHON_TEST_EMBED
 	rm -f $(BUILDDIR)/python-test-embed.zip
 endef
 
-$(TEST_python_tool_TARGET): $(TEST_python_tool_OBJECTS) $(ALL_LIBS)
-	$(CXX) -o $@ $(TEST_python_tool_OBJECTS) $(LIBS_STANDARD)
+$(TEST_python_tool_TARGET): $(TEST_python_tool_OBJECTS) $(LIBRALPH) $(ALL_LIBS)
+	$(CXX) -o $@ $(TEST_python_tool_OBJECTS) $(LIBRALPH) $(LIBS_STANDARD)
 	$(PYTHON_TEST_EMBED)
 
-$(TEST_python_integration_TARGET): $(TEST_python_integration_OBJECTS) $(ALL_LIBS)
-	$(CXX) -o $@ $(TEST_python_integration_OBJECTS) $(LIBS_STANDARD)
+$(TEST_python_integration_TARGET): $(TEST_python_integration_OBJECTS) $(LIBRALPH) $(ALL_LIBS)
+	$(CXX) -o $@ $(TEST_python_integration_OBJECTS) $(LIBRALPH) $(LIBS_STANDARD)
 	$(PYTHON_TEST_EMBED)
-
-# =============================================================================
-# FULL INTEGRATION TESTS
-# =============================================================================
-
-$(eval $(call def_test_mixed,http,network/test_http_client,$(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,ralph,core/test_ralph,$(TESTDIR)/mock_api_server.c $(RALPH_CORE_DEPS) $(COMPLEX_DEPS)))
-$(eval $(call def_test_mixed,recap,core/test_recap,$(RALPH_CORE_DEPS) $(COMPLEX_DEPS)))
-
-$(TEST_http_TARGET): $(TEST_http_OBJECTS) $(ALL_LIBS)
-	$(CC) $(LDFLAGS) -o $@ $(TEST_http_OBJECTS) $(LIBS)
-
-$(TEST_ralph_TARGET): $(TEST_ralph_OBJECTS) $(ALL_LIBS)
-	$(CXX) $(LDFLAGS) -o $@ $(TEST_ralph_OBJECTS) $(LIBS) -lpthread
-
-$(TEST_recap_TARGET): $(TEST_recap_OBJECTS) $(ALL_LIBS)
-	$(CXX) $(LDFLAGS) -o $@ $(TEST_recap_OBJECTS) $(LIBS) -lpthread
-
-# =============================================================================
-# SPECIAL TESTS (unique structure)
-# =============================================================================
-
-# Vector DB test - minimal, just hnswlib
-TEST_vector_db_SOURCES := $(TESTDIR)/db/test_vector_db.c $(LIBDIR)/db/vector_db.c $(LIBDIR)/util/ralph_home.c $(LIB_DB_CPP_SOURCES) $(UNITY)
-TEST_vector_db_OBJECTS := $(TESTDIR)/db/test_vector_db.o $(LIBDIR)/db/vector_db.o $(LIBDIR)/util/ralph_home.o $(LIBDIR)/db/hnswlib_wrapper.o $(TESTDIR)/unity/unity.o
-TEST_vector_db_TARGET := $(TESTDIR)/test_vector_db
-ALL_TEST_TARGETS += $(TEST_vector_db_TARGET)
-
-$(TEST_vector_db_TARGET): $(TEST_vector_db_OBJECTS) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
-	$(CXX) -o $@ $(TEST_vector_db_OBJECTS) -lpthread -lm
-
-# Document store test
-TEST_document_store_SOURCES := $(TESTDIR)/db/test_document_store.c $(LIB_DB_SOURCES) $(LIBDIR)/util/common_utils.c $(LIBDIR)/util/config.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/util/ralph_home.c $(LIBDIR)/services/services.c $(LIBDIR)/ipc/message_store.c $(LIBDIR)/util/uuid_utils.c $(EMBEDDING_DEPS) $(NETWORK_DEPS) $(UNITY)
-TEST_document_store_OBJECTS := $(TEST_document_store_SOURCES:.c=.o) $(LIB_DB_CPP_SOURCES:.cpp=.o)
-TEST_document_store_TARGET := $(TESTDIR)/test_document_store
-ALL_TEST_TARGETS += $(TEST_document_store_TARGET)
-
-$(TEST_document_store_TARGET): $(TEST_document_store_OBJECTS) $(ALL_LIBS)
-	$(CXX) -o $@ $(TEST_document_store_OBJECTS) $(LIBS_MBEDTLS) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(SQLITE_LIB) $(OSSP_UUID_LIB) -lm -lpthread
 
 # =============================================================================
 # TEST EXECUTION
 # =============================================================================
 
-TEST_EXECUTION_ORDER := \
-    $(TEST_main_TARGET) $(TEST_cli_flags_TARGET) $(TEST_interrupt_TARGET) $(TEST_async_executor_TARGET) $(TEST_darray_TARGET) $(TEST_ptrarray_TARGET) \
-    $(TEST_rate_limiter_TARGET) $(TEST_allowlist_TARGET) $(TEST_tool_args_TARGET) $(TEST_gate_prompter_TARGET) \
-    $(TEST_ralph_home_TARGET) $(TEST_http_TARGET) $(TEST_http_retry_TARGET) \
-    $(TEST_streaming_TARGET) $(TEST_openai_streaming_TARGET) $(TEST_anthropic_streaming_TARGET) \
-    $(TEST_output_TARGET) $(TEST_prompt_TARGET) $(TEST_debug_output_TARGET) $(TEST_terminal_TARGET) \
-    $(TEST_conversation_TARGET) $(TEST_conversation_vdb_TARGET) $(TEST_tools_system_TARGET) \
-    $(TEST_ralph_TARGET) $(TEST_todo_manager_TARGET) $(TEST_tool_param_dsl_TARGET) \
-    $(TEST_vector_db_tool_TARGET) $(TEST_memory_tool_TARGET) $(TEST_python_tool_TARGET) \
-    $(TEST_python_integration_TARGET) $(TEST_token_manager_TARGET) $(TEST_model_tools_TARGET) \
-    $(TEST_conversation_compactor_TARGET) $(TEST_rolling_summary_TARGET) $(TEST_incomplete_task_bug_TARGET) \
-    $(TEST_messages_array_bug_TARGET) $(TEST_mcp_client_TARGET) $(TEST_vector_db_TARGET) \
-    $(TEST_document_store_TARGET) $(TEST_task_store_TARGET) $(TEST_message_store_TARGET) \
-    $(TEST_message_poller_TARGET) $(TEST_notification_formatter_TARGET) $(TEST_sqlite_dal_TARGET) \
-    $(TEST_pdf_extractor_TARGET) $(TEST_document_chunker_TARGET) $(TEST_approval_gate_TARGET) \
-    $(TEST_atomic_file_TARGET) $(TEST_path_normalize_TARGET) $(TEST_protected_files_TARGET) \
-    $(TEST_shell_parser_TARGET) $(TEST_shell_parser_cmd_TARGET) $(TEST_shell_parser_ps_TARGET) \
-    $(TEST_subagent_approval_TARGET) $(TEST_subagent_tool_TARGET) $(TEST_json_output_TARGET) \
-    $(TEST_verified_file_context_TARGET) $(TEST_approval_gate_integration_TARGET)
-
 test: all
 	@echo "Running all tests..."
-	@for t in $(TEST_EXECUTION_ORDER); do \
+	@for t in $(ALL_TEST_TARGETS); do \
 		./$$t || exit 1; \
 	done
 	@echo "All tests completed"
@@ -426,29 +350,20 @@ check: test
 # VALGRIND
 # =============================================================================
 
-# Excluded: HTTP (network), Python (embedded stdlib, including tools_system and ralph which call python_interpreter_init), subagent (fork/exec), message_poller (threads), async_executor (threads)
-VALGRIND_TESTS := \
-    $(TEST_main_TARGET) $(TEST_cli_flags_TARGET) $(TEST_interrupt_TARGET) $(TEST_darray_TARGET) $(TEST_ptrarray_TARGET) \
-    $(TEST_rate_limiter_TARGET) $(TEST_allowlist_TARGET) $(TEST_tool_args_TARGET) $(TEST_gate_prompter_TARGET) \
-    $(TEST_ralph_home_TARGET) $(TEST_http_retry_TARGET) $(TEST_streaming_TARGET) \
-    $(TEST_openai_streaming_TARGET) $(TEST_anthropic_streaming_TARGET) \
-    $(TEST_output_TARGET) $(TEST_prompt_TARGET) $(TEST_terminal_TARGET) $(TEST_conversation_TARGET) \
-    $(TEST_conversation_vdb_TARGET) \
-    $(TEST_todo_manager_TARGET) $(TEST_tool_param_dsl_TARGET) $(TEST_vector_db_tool_TARGET) \
-    $(TEST_memory_tool_TARGET) $(TEST_token_manager_TARGET) $(TEST_conversation_compactor_TARGET) $(TEST_rolling_summary_TARGET) \
-    $(TEST_model_tools_TARGET) $(TEST_vector_db_TARGET) $(TEST_sqlite_dal_TARGET) $(TEST_task_store_TARGET) \
-    $(TEST_message_store_TARGET) $(TEST_notification_formatter_TARGET) \
-    $(TEST_pdf_extractor_TARGET) $(TEST_document_chunker_TARGET) \
-    $(TEST_approval_gate_TARGET) $(TEST_atomic_file_TARGET) $(TEST_path_normalize_TARGET) \
-    $(TEST_protected_files_TARGET) $(TEST_shell_parser_TARGET) $(TEST_shell_parser_cmd_TARGET) \
-    $(TEST_shell_parser_ps_TARGET) $(TEST_subagent_approval_TARGET) $(TEST_json_output_TARGET) \
-    $(TEST_verified_file_context_TARGET) $(TEST_approval_gate_integration_TARGET)
+# Excluded: HTTP (network), Python (embedded stdlib/init), subagent (fork/exec),
+# threads (message_poller, async_executor), tools_system/ralph (python_interpreter_init),
+# recap (uses timeout + SIGPIPE)
+VALGRIND_EXCLUDED := $(TEST_http_TARGET) $(TEST_python_tool_TARGET) $(TEST_python_integration_TARGET) \
+    $(TEST_tools_system_TARGET) $(TEST_ralph_TARGET) $(TEST_recap_TARGET) \
+    $(TEST_subagent_tool_TARGET) $(TEST_message_poller_TARGET) $(TEST_async_executor_TARGET)
+
+VALGRIND_TESTS := $(filter-out $(VALGRIND_EXCLUDED),$(ALL_TEST_TARGETS))
 
 check-valgrind: $(ALL_TEST_TARGETS)
-	@echo "Running valgrind tests (excluding HTTP and Python tests)..."
+	@echo "Running valgrind tests (excluding HTTP, Python, subagent, and thread tests)..."
 	@for t in $(VALGRIND_TESTS); do \
 		valgrind $(VALGRIND_FLAGS) ./$$t.aarch64.elf || exit 1; \
 	done
-	@echo "Valgrind tests completed (subagent tests excluded - see AGENTS.md)"
+	@echo "Valgrind tests completed"
 
 .PHONY: test check check-valgrind build-tests

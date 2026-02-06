@@ -44,13 +44,13 @@ python: $(PYTHON_LIB)
 
 # COMPILE_DEPS is defined in mk/config.mk (must be before lib.mk is included)
 
-$(SRCDIR)/%.o: $(SRCDIR)/%.c $(HEADERS) | $(COMPILE_DEPS)
+$(SRCDIR)/%.o: $(SRCDIR)/%.c | $(COMPILE_DEPS)
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
-$(SRCDIR)/%.o: $(SRCDIR)/%.cpp $(HEADERS) | $(COMPILE_DEPS)
+$(SRCDIR)/%.o: $(SRCDIR)/%.cpp | $(COMPILE_DEPS)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
-$(TESTDIR)/%.o: $(TESTDIR)/%.c $(HEADERS) | $(COMPILE_DEPS)
+$(TESTDIR)/%.o: $(TESTDIR)/%.c | $(COMPILE_DEPS)
 	$(CC) $(CFLAGS) $(TEST_INCLUDES) -c $< -o $@
 
 $(TESTDIR)/unity/%.o: $(TESTDIR)/unity/%.c
@@ -63,6 +63,7 @@ $(TESTDIR)/unity/%.o: $(TESTDIR)/unity/%.c
 clean:
 	rm -f $(OBJECTS) $(TARGET) $(ALL_TEST_TARGETS)
 	rm -f src/*.o src/*/*.o test/*.o test/*/*.o test/unity/*.o
+	rm -f src/*.o.d src/*/*.o.d test/*.o.d test/*/*.o.d test/unity/*.o.d lib/*.o.d lib/*/*.o.d lib/*/*/*.o.d
 	rm -f *.aarch64.elf *.com.dbg *.dbg
 	rm -f src/*.aarch64.elf src/*/*.aarch64.elf src/*.com.dbg src/*/*.com.dbg src/*.dbg src/*/*.dbg
 	rm -f test/*.aarch64.elf test/*/*.aarch64.elf test/*.com.dbg test/*/*.com.dbg test/*.dbg test/*/*.dbg
@@ -83,5 +84,18 @@ distclean: clean
 # =============================================================================
 # PHONY TARGETS
 # =============================================================================
+
+# =============================================================================
+# AUTOMATIC DEPENDENCY TRACKING
+# =============================================================================
+
+# .mk file changes trigger rebuilds (no more "rm stale binary" workaround)
+$(OBJECTS): Makefile mk/config.mk mk/sources.mk
+$(LIB_OBJECTS): Makefile mk/config.mk mk/lib.mk
+$(ALL_TEST_TARGETS): mk/tests.mk mk/config.mk
+
+# Include compiler-generated header dependencies (.o.d files from -MMD -MP)
+-include $(wildcard src/*.o.d src/*/*.o.d lib/*.o.d lib/*/*.o.d lib/*/*/*.o.d test/*.o.d test/*/*.o.d test/unity/*.o.d \
+    src/*/.aarch64/*.o.d lib/*/.aarch64/*.o.d lib/*/*/.aarch64/*.o.d test/*/.aarch64/*.o.d test/unity/.aarch64/*.o.d)
 
 .PHONY: all test check check-valgrind clean clean-python distclean python embed-python update-cacert
