@@ -320,8 +320,7 @@ static int cmd_edit(const char* args) {
                 printf("⚠️  Warning: Failed to create embedding for updated content\n");
             } else {
                 vector_db_service_t* vdb_service = services_get_vector_db(g_services);
-                vector_db_t* db = vector_db_service_get_database(vdb_service);
-                if (db == NULL || vector_db_update_vector(db, index_name, new_vector, chunk_id) != 0) {
+                if (vdb_service == NULL || vector_db_service_update_vector(vdb_service, index_name, new_vector, chunk_id) != 0) {
                     printf("⚠️  Warning: Failed to update vector embedding\n");
                 }
                 embeddings_service_free_vector(new_vector);
@@ -348,17 +347,16 @@ static int cmd_edit(const char* args) {
 }
 
 static int cmd_indices(const char* args) {
-    (void)args; // Unused
+    (void)args;
 
     vector_db_service_t* vdb_service = services_get_vector_db(g_services);
-    vector_db_t* db = vector_db_service_get_database(vdb_service);
-    if (db == NULL) {
+    if (vdb_service == NULL) {
         printf("❌ Failed to access vector database\n");
         return -1;
     }
 
     size_t count = 0;
-    char** indices = vector_db_list_indices(db, &count);
+    char** indices = vector_db_service_list_indices(vdb_service, &count);
 
     if (indices == NULL || count == 0) {
         printf("📭 No indices found\n");
@@ -369,8 +367,8 @@ static int cmd_indices(const char* args) {
     printf(TERM_SEP_HEAVY_40 "\n");
 
     for (size_t i = 0; i < count; i++) {
-        size_t size = vector_db_get_index_size(db, indices[i]);
-        size_t capacity = vector_db_get_index_capacity(db, indices[i]);
+        size_t size = vector_db_service_get_index_size(vdb_service, indices[i]);
+        size_t capacity = vector_db_service_get_index_capacity(vdb_service, indices[i]);
 
         printf(TERM_BOLD "%s" TERM_RESET "\n", indices[i]);
         printf("   Vectors: %zu / %zu", size, capacity);
@@ -396,19 +394,18 @@ static int cmd_stats(const char* args) {
     }
 
     vector_db_service_t* vdb_service = services_get_vector_db(g_services);
-    vector_db_t* db = vector_db_service_get_database(vdb_service);
-    if (db == NULL) {
+    if (vdb_service == NULL) {
         printf("❌ Failed to access vector database\n");
         return -1;
     }
 
-    if (!vector_db_has_index(db, index_name)) {
+    if (!vector_db_service_has_index(vdb_service, index_name)) {
         printf("❌ Index '%s' not found\n", index_name);
         return -1;
     }
 
-    size_t size = vector_db_get_index_size(db, index_name);
-    size_t capacity = vector_db_get_index_capacity(db, index_name);
+    size_t size = vector_db_service_get_index_size(vdb_service, index_name);
+    size_t capacity = vector_db_service_get_index_capacity(vdb_service, index_name);
 
     metadata_store_t* store = services_get_metadata_store(g_services);
     size_t metadata_count = 0;

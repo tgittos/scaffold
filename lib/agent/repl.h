@@ -1,13 +1,13 @@
 /**
- * lib/ui/repl.h - REPL (Read-Eval-Print Loop) abstraction
+ * lib/agent/repl.h - REPL (Read-Eval-Print Loop) abstraction
  *
  * Provides a callback-based REPL that can be used by agents in interactive mode.
  */
 
-#ifndef LIB_UI_REPL_H
-#define LIB_UI_REPL_H
+#ifndef LIB_AGENT_REPL_H
+#define LIB_AGENT_REPL_H
 
-#include "../agent/session.h"
+#include "session.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -41,4 +41,4 @@ void repl_show_greeting(AgentSession* session, bool json_mode);
 }
 #endif
 
-#endif /* LIB_UI_REPL_H */
+#endif /* LIB_AGENT_REPL_H */

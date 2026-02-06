@@ -19,7 +19,6 @@ LIB_IPC_SOURCES := \
 LIB_UI_SOURCES := \
     $(LIBDIR)/ui/terminal.c \
     $(LIBDIR)/ui/spinner.c \
-    $(LIBDIR)/ui/repl.c \
     $(LIBDIR)/ui/output_formatter.c \
     $(LIBDIR)/ui/json_output.c \
     $(LIBDIR)/ui/memory_commands.c
@@ -51,7 +50,8 @@ LIB_AGENT_SOURCES := \
     $(LIBDIR)/agent/tool_executor.c \
     $(LIBDIR)/agent/streaming_handler.c \
     $(LIBDIR)/agent/context_enhancement.c \
-    $(LIBDIR)/agent/recap.c
+    $(LIBDIR)/agent/recap.c \
+    $(LIBDIR)/agent/repl.c
 
 # LLM module
 LIB_LLM_SOURCES := \

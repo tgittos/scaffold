@@ -33,4 +33,11 @@ document_search_results_t* vector_db_service_search_text(Services* services,
                                                          const char* query_text,
                                                          size_t k);
 
+char** vector_db_service_list_indices(vector_db_service_t* service, size_t* count);
+size_t vector_db_service_get_index_size(vector_db_service_t* service, const char* index_name);
+size_t vector_db_service_get_index_capacity(vector_db_service_t* service, const char* index_name);
+bool vector_db_service_has_index(vector_db_service_t* service, const char* index_name);
+vector_db_error_t vector_db_service_update_vector(vector_db_service_t* service, const char* index_name,
+                                                   const vector_t* vector, size_t label);
+
 #endif // VECTOR_DB_SERVICE_H

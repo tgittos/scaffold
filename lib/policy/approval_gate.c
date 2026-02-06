@@ -15,9 +15,21 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "../tools/tool_extension.h"
-#include "../tools/subagent_tool.h"
 #include "../util/debug_output.h"
+
+static ApprovalGateCallbacks g_gate_callbacks = {0};
+
+void approval_gate_set_callbacks(const ApprovalGateCallbacks *callbacks) {
+    if (callbacks != NULL) {
+        g_gate_callbacks = *callbacks;
+    } else {
+        memset(&g_gate_callbacks, 0, sizeof(g_gate_callbacks));
+    }
+}
+
+const ApprovalGateCallbacks* approval_gate_get_callbacks(void) {
+    return &g_gate_callbacks;
+}
 
 static const GateAction DEFAULT_CATEGORY_ACTIONS[GATE_CATEGORY_COUNT] = {
     [GATE_CATEGORY_FILE_WRITE] = GATE_ACTION_GATE,
@@ -569,17 +581,6 @@ GateCategory get_tool_category(const char *tool_name) {
         return GATE_CATEGORY_PYTHON;
     }
 
-    /* Python file tools may declare their category via Gate: directive */
-    if (tool_extension_is_extension_tool(tool_name)) {
-        const char *gate_category = tool_extension_get_gate_category(tool_name);
-        if (gate_category != NULL) {
-            GateCategory category;
-            if (parse_gate_category(gate_category, &category) == 0) {
-                return category;
-            }
-        }
-    }
-
     if (strcmp(tool_name, "remember") == 0 ||
         strcmp(tool_name, "recall_memories") == 0 ||
         strcmp(tool_name, "forget_memory") == 0 ||
@@ -636,6 +637,19 @@ GateCategory get_tool_category(const char *tool_name) {
 
     if (strcmp(tool_name, "web_fetch") == 0) {
         return GATE_CATEGORY_NETWORK;
+    }
+
+    if (g_gate_callbacks.is_extension_tool &&
+        g_gate_callbacks.is_extension_tool(tool_name)) {
+        const char *gate_cat = g_gate_callbacks.get_gate_category
+                             ? g_gate_callbacks.get_gate_category(tool_name)
+                             : NULL;
+        if (gate_cat != NULL) {
+            GateCategory category;
+            if (parse_gate_category(gate_cat, &category) == 0) {
+                return category;
+            }
+        }
     }
 
     return GATE_CATEGORY_PYTHON;
@@ -774,8 +788,11 @@ static char *extract_match_target(const char *tool_name, const char *arguments_j
         return NULL;
     }
 
-    if (tool_extension_is_extension_tool(tool_name)) {
-        const char *match_arg = tool_extension_get_match_arg(tool_name);
+    if (g_gate_callbacks.is_extension_tool &&
+        g_gate_callbacks.is_extension_tool(tool_name)) {
+        const char *match_arg = g_gate_callbacks.get_match_arg
+                              ? g_gate_callbacks.get_match_arg(tool_name)
+                              : NULL;
         if (match_arg != NULL) {
             cJSON *args = cJSON_Parse(arguments_json);
             if (args != NULL) {
@@ -1092,7 +1109,9 @@ ApprovalResult check_approval_gate(ApprovalGateConfig *config,
         case 1:
             {
                 /* Subagents request approval from parent via IPC instead of prompting */
-                ApprovalChannel *channel = subagent_get_approval_channel();
+                ApprovalChannel *channel = g_gate_callbacks.get_approval_channel
+                                         ? g_gate_callbacks.get_approval_channel()
+                                         : NULL;
                 if (channel != NULL) {
                     return subagent_request_approval(channel, tool_call, out_path);
                 }

@@ -10,12 +10,30 @@
 #include <windows.h>
 #endif
 
-#include "../tools/tools_system.h"
+struct ToolCall;
+typedef struct ToolCall ToolCall;
+
 #include "shell_parser.h"
 #include "atomic_file.h"
 #include "allowlist.h"
 #include "pattern_generator.h"
 #include "rate_limiter.h"
+
+/**
+ * Callbacks for querying tool metadata and accessing subagent approval channels.
+ * Injected at startup so the policy layer never imports tools or UI headers.
+ */
+typedef struct {
+    int (*is_extension_tool)(const char *name);
+    const char* (*get_gate_category)(const char *name);
+    const char* (*get_match_arg)(const char *name);
+    struct ApprovalChannel* (*get_approval_channel)(void);
+    void (*log_approval)(const char *subagent_id, const char *tool_name,
+                         const char *summary, int result);
+} ApprovalGateCallbacks;
+
+void approval_gate_set_callbacks(const ApprovalGateCallbacks *callbacks);
+const ApprovalGateCallbacks* approval_gate_get_callbacks(void);
 
 /**
  * Approval Gates Module

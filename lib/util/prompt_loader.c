@@ -1,5 +1,4 @@
 #include "prompt_loader.h"
-#include "../tools/tool_extension.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -266,7 +265,7 @@ static char *expand_file_references(const char *content) {
     return result;
 }
 
-int load_system_prompt(char **prompt_content) {
+int load_system_prompt(char **prompt_content, const char *tools_description) {
     if (prompt_content == NULL) {
         return -1;
     }
@@ -309,8 +308,7 @@ int load_system_prompt(char **prompt_content) {
         fclose(file);
     }
 
-    char *tools_desc = tool_extension_get_tools_description();
-    size_t tools_len = tools_desc ? strlen(tools_desc) : 0;
+    size_t tools_len = tools_description ? strlen(tools_description) : 0;
 
     char *platform_info = get_platform_info();
     size_t platform_len = platform_info ? strlen(platform_info) : 0;
@@ -323,7 +321,6 @@ int load_system_prompt(char **prompt_content) {
     char *combined_prompt = malloc(total_len);
     if (combined_prompt == NULL) {
         free(user_prompt);
-        free(tools_desc);
         free(platform_info);
         return -1;
     }
@@ -335,9 +332,8 @@ int load_system_prompt(char **prompt_content) {
         free(platform_info);
     }
 
-    if (tools_desc != NULL) {
-        strcat(combined_prompt, tools_desc);
-        free(tools_desc);
+    if (tools_description != NULL) {
+        strcat(combined_prompt, tools_description);
     }
 
     strcat(combined_prompt, SYSTEM_PROMPT_PART2);

@@ -5,7 +5,7 @@
  */
 
 #include "agent.h"
-#include "../ui/repl.h"
+#include "repl.h"
 #include "../workflow/workflow.h"
 #include "../session/conversation_tracker.h"
 #include "../db/document_store.h"
@@ -16,6 +16,7 @@
 #include "../ui/spinner.h"
 #include "../policy/approval_gate.h"
 #include "../tools/subagent_tool.h"
+#include "../tools/tool_extension.h"
 #include "../ui/memory_commands.h"
 #include "../util/context_retriever.h"
 #include "../ipc/message_poller.h"
@@ -74,6 +75,16 @@ int agent_init(Agent* agent, const AgentConfig* config) {
     if (session_init(&agent->session) != 0) {
         return -1;
     }
+
+    /* Wire policy→tools callbacks so the policy layer never imports tools headers */
+    ApprovalGateCallbacks gate_cbs = {
+        .is_extension_tool = tool_extension_is_extension_tool,
+        .get_gate_category = tool_extension_get_gate_category,
+        .get_match_arg     = tool_extension_get_match_arg,
+        .get_approval_channel = subagent_get_approval_channel,
+        .log_approval      = log_subagent_approval,
+    };
+    approval_gate_set_callbacks(&gate_cbs);
 
     agent->session.services = agent->services;
     agent->session.tools.services = agent->services;

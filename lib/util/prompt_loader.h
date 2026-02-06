@@ -11,7 +11,7 @@
  * @param prompt_content Pointer to store the loaded prompt content (caller must free)
  * @return 0 on success, -1 on failure (memory allocation error)
  */
-int load_system_prompt(char **prompt_content);
+int load_system_prompt(char **prompt_content, const char *tools_description);
 
 /**
  * Free memory allocated for prompt content

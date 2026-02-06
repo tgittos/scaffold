@@ -256,7 +256,9 @@ int session_load_config(AgentSession* session) {
     if (embeddings) {
         embeddings_service_reinitialize(embeddings);
     }
-    load_system_prompt(&session->session_data.config.system_prompt);
+    char *tools_desc = tool_extension_get_tools_description();
+    load_system_prompt(&session->session_data.config.system_prompt, tools_desc);
+    free(tools_desc);
 
     if (config->api_url) {
         session->session_data.config.api_url = strdup(config->api_url);

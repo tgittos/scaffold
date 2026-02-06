@@ -1,17 +1,17 @@
 /**
- * lib/ui/repl.c - REPL implementation
+ * lib/agent/repl.c - REPL implementation
  *
  * Extracted from src/core/main.c for use by the agent abstraction.
  */
 
 #include "repl.h"
+#include "recap.h"
 #include "../util/interrupt.h"
-#include "../agent/recap.h"
 #include "../util/debug_output.h"
-#include "output_formatter.h"
-#include "json_output.h"
-#include "spinner.h"
-#include "memory_commands.h"
+#include "../ui/output_formatter.h"
+#include "../ui/json_output.h"
+#include "../ui/spinner.h"
+#include "../ui/memory_commands.h"
 #include "../tools/subagent_tool.h"
 #include "../ipc/message_poller.h"
 #include "../ipc/notification_formatter.h"

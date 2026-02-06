@@ -17,6 +17,5 @@
 #include "output.h"
 #include "spinner.h"
 #include "json_output.h"
-#include "repl.h"
 
 #endif /* LIB_UI_UI_H */

@@ -13,8 +13,6 @@
 #include <unistd.h>
 
 #include "../util/debug_output.h"
-#include "../ui/output_formatter.h"
-#include "../tools/subagent_tool.h"
 
 #define DEBUG_PRINT(...) debug_printf(__VA_ARGS__)
 #define DEBUG_ERROR(...) fprintf(stderr, __VA_ARGS__), fprintf(stderr, "\n")
@@ -386,7 +384,10 @@ int handle_subagent_approval_request(ApprovalGateConfig *config,
 
     /* Forward up the chain if we're a nested subagent; only the root
      * process owns the TTY and can prompt the user. */
-    ApprovalChannel *our_channel = subagent_get_approval_channel();
+    const ApprovalGateCallbacks *cbs = approval_gate_get_callbacks();
+    ApprovalChannel *our_channel = (cbs && cbs->get_approval_channel)
+                                 ? cbs->get_approval_channel()
+                                 : NULL;
     if (our_channel != NULL) {
         DEBUG_PRINT("Nested subagent: forwarding request to grandparent");
         result = subagent_request_approval(our_channel, &synthetic_call, &approved_path);
@@ -394,10 +395,9 @@ int handle_subagent_approval_request(ApprovalGateConfig *config,
         result = approval_gate_prompt(config, &synthetic_call, &approved_path);
     }
 
-    /* Log the approval decision persistently */
-    if (subagent_id != NULL) {
-        log_subagent_approval(subagent_id, req.tool_name,
-                              req.display_summary, (int)result);
+    if (subagent_id != NULL && cbs && cbs->log_approval) {
+        cbs->log_approval(subagent_id, req.tool_name,
+                          req.display_summary, (int)result);
     }
 
     ApprovalResponse resp = {

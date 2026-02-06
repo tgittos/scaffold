@@ -124,7 +124,7 @@ Several non-UI modules include `terminal.h` for TERM_* string constants.
 
 ---
 
-## Phase 6: Upward Dependencies (8-10 violations)
+## Phase 6: Upward Dependencies (8-10 violations) ✅ COMPLETE
 
 ### 6a: Policy -> Tools (dependency inversion)
 

@@ -210,10 +210,8 @@ typedef struct OutputConfig OutputConfig;
 #include "workflow/workflow.h"
 
 /* Note: UI types (OutputConfig, ReplConfig, ReplCallbacks) are defined
- * in lib/ui/ui.h and lib/ui/repl.h. Include those headers for the actual API.
- *
- * The REPL is run via repl_run_session() which takes an AgentSession*.
- * See lib/ui/repl.h for the full interface.
+ * in lib/ui/ui.h. The REPL is run via repl_run_session() which takes
+ * an AgentSession*. See lib/agent/repl.h for the full interface.
  */
 
 #ifdef __cplusplus

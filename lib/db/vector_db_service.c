@@ -130,3 +130,32 @@ document_search_results_t* vector_db_service_search_text(Services* services,
     embeddings_service_free_embedding(&embedding);
     return results;
 }
+
+char** vector_db_service_list_indices(vector_db_service_t* service, size_t* count) {
+    if (service == NULL || service->database == NULL) {
+        if (count) *count = 0;
+        return NULL;
+    }
+    return vector_db_list_indices(service->database, count);
+}
+
+size_t vector_db_service_get_index_size(vector_db_service_t* service, const char* index_name) {
+    if (service == NULL || service->database == NULL) return 0;
+    return vector_db_get_index_size(service->database, index_name);
+}
+
+size_t vector_db_service_get_index_capacity(vector_db_service_t* service, const char* index_name) {
+    if (service == NULL || service->database == NULL) return 0;
+    return vector_db_get_index_capacity(service->database, index_name);
+}
+
+bool vector_db_service_has_index(vector_db_service_t* service, const char* index_name) {
+    if (service == NULL || service->database == NULL) return false;
+    return vector_db_has_index(service->database, index_name);
+}
+
+vector_db_error_t vector_db_service_update_vector(vector_db_service_t* service, const char* index_name,
+                                                   const vector_t* vector, size_t label) {
+    if (service == NULL || service->database == NULL) return VECTOR_DB_ERROR_INVALID_PARAM;
+    return vector_db_update_vector(service->database, index_name, vector, label);
+}
