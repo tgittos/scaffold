@@ -5,7 +5,7 @@
 
 typedef struct Services Services;
 
-typedef struct {
+typedef struct ConversationMessage {
     char *role;         // "user", "assistant", or "tool"
     char *content;
     char *tool_call_id; // nullable, only set for "tool" role

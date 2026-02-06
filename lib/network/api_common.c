@@ -1,6 +1,8 @@
 #include "api_common.h"
 #include <cJSON.h>
 #include "../llm/model_capabilities.h"
+#include "../session/conversation_tracker.h"
+#include "../tools/tools_system.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

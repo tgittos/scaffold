@@ -1,4 +1,5 @@
 #include "../model_capabilities.h"
+#include "../../tools/tools_system.h"
 #include "response_processing.h"
 
 // DeepSeek model capabilities

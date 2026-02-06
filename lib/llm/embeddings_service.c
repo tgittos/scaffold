@@ -1,5 +1,6 @@
 #include "embeddings_service.h"
 #include "embedding_provider.h"
+#include "db/vector_db.h"
 #include "util/common_utils.h"
 #include <stdlib.h>
 #include <string.h>

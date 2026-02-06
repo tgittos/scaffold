@@ -1,6 +1,9 @@
 #include "../llm_provider.h"
 #include "../../network/api_common.h"
 #include "../../network/streaming.h"
+#include "../../session/conversation_tracker.h"
+#include "../../tools/tools_system.h"
+#include "../../ui/output_formatter.h"
 #include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>

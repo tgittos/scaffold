@@ -2,7 +2,9 @@
 #define EMBEDDINGS_SERVICE_H
 
 #include "embeddings.h"
-#include "db/vector_db.h"
+
+/* Forward declaration to break LLM -> DB layer dependency */
+typedef struct vector_t vector_t;
 
 /*
  * Centralizes embedding generation so all modules share a single provider

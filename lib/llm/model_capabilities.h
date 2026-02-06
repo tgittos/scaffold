@@ -3,9 +3,12 @@
 
 #include <stddef.h>
 
-#include "../ui/output_formatter.h"
-#include "../tools/tools_system.h"
+#include "../types.h"
 #include "../util/ptrarray.h"
+
+/* Forward declarations to break cross-layer header dependencies */
+typedef struct ParsedResponse ParsedResponse;
+typedef struct ToolRegistry ToolRegistry;
 
 typedef struct {
     const char* model_pattern;  /* substring match, e.g. "qwen", "deepseek", "claude" */

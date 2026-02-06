@@ -1,5 +1,6 @@
 #include "../model_capabilities.h"
 #include "response_processing.h"
+#include "../../tools/tools_system.h"
 #include <stdlib.h>
 #include <string.h>
 

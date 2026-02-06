@@ -1,5 +1,6 @@
 #include "../model_capabilities.h"
 #include "../../util/json_escape.h"
+#include "../../tools/tools_system.h"
 #include "response_processing.h"
 #include <stdio.h>
 #include <stdlib.h>

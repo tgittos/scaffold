@@ -1,12 +1,14 @@
 #ifndef LLM_PROVIDER_H
 #define LLM_PROVIDER_H
 
-#include "../session/conversation_tracker.h"
-#include "../tools/tools_system.h"
 #include "../network/http_client.h"
-#include "../ui/output_formatter.h"
 #include "../network/streaming.h"
 #include "../util/ptrarray.h"
+
+/* Forward declarations to break cross-layer header dependencies */
+typedef struct ConversationHistory ConversationHistory;
+typedef struct ToolRegistry ToolRegistry;
+typedef struct ParsedResponse ParsedResponse;
 
 struct LLMProvider;
 

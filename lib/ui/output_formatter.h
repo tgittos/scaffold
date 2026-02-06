@@ -23,7 +23,7 @@ bool get_json_output_mode(void);
 
 #include "terminal.h"
 
-typedef struct {
+typedef struct ParsedResponse {
     char *thinking_content;  /* Content inside <think> tags (optional) */
     char *response_content;  /* Actual response content */
     int prompt_tokens;

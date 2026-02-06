@@ -1,4 +1,5 @@
 #include "response_processing.h"
+#include "../../ui/output_formatter.h"
 #include <stdlib.h>
 #include <string.h>
 

@@ -68,7 +68,7 @@ Remove direct `#include "db/metadata_store.h"` from files that get it transitive
 
 ---
 
-## Phase 4: Header-Level Type Coupling (9 CRITICAL violations)
+## Phase 4: Header-Level Type Coupling (9 CRITICAL violations) ✅ COMPLETE
 
 Three headers bake in cross-layer type dependencies via `#include`. Since all uses are through pointers in function signatures, forward declarations or type extraction can break the chains.
 

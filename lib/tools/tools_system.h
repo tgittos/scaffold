@@ -39,7 +39,7 @@ DARRAY_DECLARE(ToolFunctionArray, ToolFunction)
 /**
  * Structure containing all available tools
  */
-typedef struct {
+typedef struct ToolRegistry {
     ToolFunctionArray functions;
     Services* services;
 } ToolRegistry;

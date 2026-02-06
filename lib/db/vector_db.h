@@ -7,7 +7,7 @@
 
 typedef struct vector_db vector_db_t;
 
-typedef struct {
+typedef struct vector_t {
     float* data;
     size_t dimension;
 } vector_t;
