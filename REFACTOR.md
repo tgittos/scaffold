@@ -37,102 +37,12 @@ lib/agent/
 
 ---
 
-## Session 5: Remove Singleton Getters
+## Session 5: Remove Singleton Getters ✅ COMPLETE
 
 **Goal**: Delete all `*_get_instance()` functions and remove fallback from Services accessors.
 
-### Files to Modify
-
-#### 5.1 lib/ipc/message_store.h
-
-Remove declaration:
-
-```c
-// DELETE THIS LINE:
-message_store_t* message_store_get_instance(void);
-```
-
-#### 5.2 lib/ipc/message_store.c
-
-Remove implementation (around lines 180-183):
-
-```c
-// DELETE THIS FUNCTION:
-message_store_t* message_store_get_instance(void) {
-    pthread_once(&g_store_once, create_store_instance);
-    return g_store_instance;
-}
-```
-
-#### 5.3 lib/db/task_store.h
-
-Remove declaration:
-
-```c
-// DELETE THIS LINE:
-task_store_t* task_store_get_instance(void);
-```
-
-#### 5.4 lib/db/task_store.c
-
-Remove implementation (around lines 125-128).
-
-#### 5.5 lib/db/vector_db_service.h
-
-Remove declaration:
-
-```c
-// DELETE THIS LINE:
-vector_db_service_t* vector_db_service_get_instance(void);
-```
-
-#### 5.6 lib/db/vector_db_service.c
-
-Remove implementation (around lines 36-39).
-
-#### 5.7 lib/llm/embeddings_service.h
-
-Remove declaration:
-
-```c
-// DELETE THIS LINE:
-embeddings_service_t* embeddings_service_get_instance(void);
-```
-
-#### 5.8 lib/llm/embeddings_service.c
-
-Remove implementation (around lines 44-46).
-
-#### 5.9 lib/services/services.c
-
-Remove fallback from accessors. Change:
-
-```c
-message_store_t* services_get_message_store(Services* services) {
-    if (services != NULL && services->message_store != NULL) {
-        return services->message_store;
-    }
-    return message_store_get_instance();  // DELETE THIS FALLBACK
-}
-```
-
-To:
-
-```c
-message_store_t* services_get_message_store(Services* services) {
-    return (services != NULL) ? services->message_store : NULL;
-}
-```
-
-Apply same change to all four accessors.
-
-### Verification
-
-```bash
-./scripts/build.sh  # Should compile with no undefined references
-./scripts/run_tests.sh
-./ralph "hello"
-```
+All singleton getters removed, services accessors cleaned to simple ternary (no fallback).
+Architecture violations addressed in separate audit (REARCHITECTURE_PLAN.md, now deleted).
 
 ---
 
@@ -614,12 +524,12 @@ make check-valgrind
 - [ ] `lib/ipc/message_poller.c` - Store and use Services
 - [ ] `lib/ipc/notification_formatter.h` - Add Services parameter
 - [ ] `lib/ipc/notification_formatter.c` - Use Services accessor
-- [ ] `lib/services/services.c` - Remove fallback
+- [x] `lib/services/services.c` - Remove fallback
 - [ ] `mk/lib.mk` - Add new source files
 
 ### Deleted Code
-- [ ] `message_store_get_instance()` from message_store.c/h
-- [ ] `task_store_get_instance()` from task_store.c/h
-- [ ] `vector_db_service_get_instance()` from vector_db_service.c/h
-- [ ] `embeddings_service_get_instance()` from embeddings_service.c/h
-- [ ] Singleton fallback from `services_get_*()` functions
+- [x] `message_store_get_instance()` from message_store.c/h
+- [x] `task_store_get_instance()` from task_store.c/h
+- [x] `vector_db_service_get_instance()` from vector_db_service.c/h
+- [x] `embeddings_service_get_instance()` from embeddings_service.c/h
+- [x] Singleton fallback from `services_get_*()` functions
