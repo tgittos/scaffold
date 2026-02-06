@@ -75,4 +75,7 @@ int register_openai_provider(ProviderRegistry* registry);
 int register_anthropic_provider(ProviderRegistry* registry);
 int register_local_ai_provider(ProviderRegistry* registry);
 
+ProviderRegistry* get_provider_registry(void);
+void provider_registry_cleanup(void);
+
 #endif // LLM_PROVIDER_H

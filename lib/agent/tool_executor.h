@@ -36,15 +36,13 @@
  * @param call_count Number of tool calls in the array
  * @param user_message The original user message (for context in follow-ups)
  * @param max_tokens Maximum tokens for response generation
- * @param headers HTTP headers for API requests (including auth)
  * @return 0 on success, -1 on failure, -2 if user aborted (Ctrl+C)
  */
 int tool_executor_run_workflow(AgentSession* session,
                                ToolCall* tool_calls,
                                int call_count,
                                const char* user_message,
-                               int max_tokens,
-                               const char** headers);
+                               int max_tokens);
 
 /**
  * Construct an OpenAI-format assistant message with tool calls.

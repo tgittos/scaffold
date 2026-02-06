@@ -7,35 +7,11 @@
 #include "../ui/output_formatter.h"
 #include "../ui/json_output.h"
 #include "../util/debug_output.h"
-#include "../network/http_client.h"
+#include "../llm/llm_client.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
-
-static ProviderRegistry* g_provider_registry = NULL;
-
-ProviderRegistry* streaming_get_provider_registry(void) {
-    if (g_provider_registry == NULL) {
-        g_provider_registry = malloc(sizeof(ProviderRegistry));
-        if (g_provider_registry != NULL) {
-            if (init_provider_registry(g_provider_registry) == 0) {
-                register_openai_provider(g_provider_registry);
-                register_anthropic_provider(g_provider_registry);
-                register_local_ai_provider(g_provider_registry);
-            }
-        }
-    }
-    return g_provider_registry;
-}
-
-void streaming_handler_cleanup(void) {
-    if (g_provider_registry != NULL) {
-        cleanup_provider_registry(g_provider_registry);
-        free(g_provider_registry);
-        g_provider_registry = NULL;
-    }
-}
 
 typedef struct {
     StreamingContext* ctx;
@@ -103,12 +79,12 @@ static size_t stream_http_callback(const char* data, size_t size, void* user_dat
 }
 
 int streaming_process_message(AgentSession* session, const char* user_message,
-                              int max_tokens, const char** headers) {
+                              int max_tokens) {
     if (session == NULL || user_message == NULL) {
         return -1;
     }
 
-    ProviderRegistry* registry = streaming_get_provider_registry();
+    ProviderRegistry* registry = get_provider_registry();
     if (registry == NULL) {
         fprintf(stderr, "Error: Failed to get provider registry\n");
         return -1;
@@ -174,10 +150,10 @@ int streaming_process_message(AgentSession* session, const char* user_message,
         .low_speed_time = 30
     };
 
-    int result = http_post_streaming(
+    int result = llm_client_send_streaming(
         session->session_data.config.api_url,
+        session->session_data.config.api_key,
         post_data,
-        headers,
         &streaming_config
     );
 
@@ -234,7 +210,7 @@ int streaming_process_message(AgentSession* session, const char* user_message,
             }
 
             result = session_execute_tool_workflow(session, tool_calls, call_count,
-                                                 user_message, max_tokens, headers);
+                                                 user_message, max_tokens);
 
             cleanup_tool_calls(tool_calls, call_count);
         } else {

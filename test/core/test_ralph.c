@@ -195,30 +195,29 @@ void test_ralph_config_parameter_selection(void) {
 void test_session_execute_tool_workflow_null_parameters(void) {
     AgentSession session = {0};
     ToolCall tool_calls[1];
-    const char* headers[2] = {NULL, NULL};
 
     // Initialize valid tool call for testing (use C-based tool that doesn't require Python)
     tool_calls[0].id = "test_id";
     tool_calls[0].name = "vector_db_list_indices";
     tool_calls[0].arguments = "{}";
-    
+
     session_init(&session);
     session_load_config(&session);
-    
+
     // Test null session
-    int result1 = session_execute_tool_workflow(NULL, tool_calls, 1, "test", 100, headers);
+    int result1 = session_execute_tool_workflow(NULL, tool_calls, 1, "test", 100);
     TEST_ASSERT_EQUAL_INT(-1, result1);
-    
+
     // Test null tool_calls
-    int result2 = session_execute_tool_workflow(&session, NULL, 1, "test", 100, headers);
+    int result2 = session_execute_tool_workflow(&session, NULL, 1, "test", 100);
     TEST_ASSERT_EQUAL_INT(-1, result2);
-    
+
     // Test zero call_count
-    int result3 = session_execute_tool_workflow(&session, tool_calls, 0, "test", 100, headers);
+    int result3 = session_execute_tool_workflow(&session, tool_calls, 0, "test", 100);
     TEST_ASSERT_EQUAL_INT(-1, result3);
-    
+
     // Test negative call_count
-    int result4 = session_execute_tool_workflow(&session, tool_calls, -1, "test", 100, headers);
+    int result4 = session_execute_tool_workflow(&session, tool_calls, -1, "test", 100);
     TEST_ASSERT_EQUAL_INT(-1, result4);
     
     session_cleanup(&session);
@@ -249,7 +248,7 @@ void test_session_execute_tool_workflow_api_failure_resilience(void) {
 
     AgentSession session = {0};
     ToolCall tool_calls[1];
-    const char* headers[2] = {"Content-Type: application/json", NULL};
+
 
     // Initialize with a C-based tool call that will succeed (doesn't require Python)
     tool_calls[0].id = "test_tool_id_123";
@@ -264,7 +263,7 @@ void test_session_execute_tool_workflow_api_failure_resilience(void) {
     // 2. Tool results are added to conversation history
     // 3. Follow-up API request fails (mock server drops connection)
     // 4. Function returns 0 anyway because tools executed successfully
-    int result = session_execute_tool_workflow(&session, tool_calls, 1, "list vector indices", 100, headers);
+    int result = session_execute_tool_workflow(&session, tool_calls, 1, "list vector indices", 100);
 
     // The key assertion: even though API follow-up fails, workflow returns success (0)
     // because the actual tool execution was successful
@@ -362,7 +361,7 @@ void test_tool_execution_without_api_server(void) {
 
     AgentSession session = {0};
     ToolCall tool_calls[1];
-    const char* headers[2] = {"Content-Type: application/json", NULL};
+
 
     // Setup C-based tool call that will succeed locally (doesn't require Python)
     tool_calls[0].id = "test_no_api_123";
@@ -373,7 +372,7 @@ void test_tool_execution_without_api_server(void) {
     session_load_config(&session);
 
     // Execute tool workflow - should succeed despite unreachable API
-    int result = session_execute_tool_workflow(&session, tool_calls, 1, "test without api", 100, headers);
+    int result = session_execute_tool_workflow(&session, tool_calls, 1, "test without api", 100);
 
     // Tool execution should succeed even when API is unreachable
     TEST_ASSERT_EQUAL_INT(0, result);
@@ -427,7 +426,7 @@ void test_tool_execution_with_network_timeout(void) {
 
     AgentSession session = {0};
     ToolCall tool_calls[1];
-    const char* headers[2] = {"Content-Type: application/json", NULL};
+
 
     // Setup C-based tool call (doesn't require Python)
     tool_calls[0].id = "timeout_test_123";
@@ -438,7 +437,7 @@ void test_tool_execution_with_network_timeout(void) {
     session_load_config(&session);
 
     // Execute - should succeed because tool executes locally, API timeout doesn't matter
-    int result = session_execute_tool_workflow(&session, tool_calls, 1, "timeout test", 100, headers);
+    int result = session_execute_tool_workflow(&session, tool_calls, 1, "timeout test", 100);
 
     // Tool workflow should succeed despite API timeout
     TEST_ASSERT_EQUAL_INT(0, result);
@@ -480,7 +479,7 @@ void test_tool_execution_with_auth_failure(void) {
 
     AgentSession session = {0};
     ToolCall tool_calls[1];
-    const char* headers[2] = {"Content-Type: application/json", NULL};
+
 
     // Use C-based tool (doesn't require Python)
     tool_calls[0].id = "auth_fail_test_123";
@@ -491,7 +490,7 @@ void test_tool_execution_with_auth_failure(void) {
     session_load_config(&session);
 
     // Execute - tool should succeed even with API auth failure
-    int result = session_execute_tool_workflow(&session, tool_calls, 1, "auth test", 100, headers);
+    int result = session_execute_tool_workflow(&session, tool_calls, 1, "auth test", 100);
 
     TEST_ASSERT_EQUAL_INT(0, result);
     TEST_ASSERT_TRUE(session.session_data.conversation.count > 0);
@@ -530,7 +529,7 @@ void test_graceful_degradation_on_api_errors(void) {
 
     AgentSession session = {0};
     ToolCall tool_calls[1];
-    const char* headers[2] = {"Content-Type: application/json", NULL};
+
 
     // Use C-based tool (doesn't require Python)
     tool_calls[0].id = "server_error_test_123";
@@ -541,7 +540,7 @@ void test_graceful_degradation_on_api_errors(void) {
     session_load_config(&session);
 
     // Execute tool workflow
-    int result = session_execute_tool_workflow(&session, tool_calls, 1, "server error test", 100, headers);
+    int result = session_execute_tool_workflow(&session, tool_calls, 1, "server error test", 100);
 
     // Should succeed because tools execute locally regardless of API errors
     TEST_ASSERT_EQUAL_INT(0, result);
@@ -604,7 +603,7 @@ void test_sequential_tool_execution(void) {
 
     AgentSession session = {0};
     ToolCall tool_calls[2];
-    const char* headers[2] = {"Content-Type: application/json", NULL};
+
 
     // Setup first C-based tool call (doesn't require Python)
     tool_calls[0].id = "seq_test_1";
@@ -624,7 +623,7 @@ void test_sequential_tool_execution(void) {
     session.session_data.config.api_url = strdup("http://192.0.2.1:99999/v1/chat/completions");
 
     // Execute multiple tools
-    int result = session_execute_tool_workflow(&session, tool_calls, 2, "sequential test", 100, headers);
+    int result = session_execute_tool_workflow(&session, tool_calls, 2, "sequential test", 100);
 
     TEST_ASSERT_EQUAL_INT(0, result);
 
@@ -687,7 +686,7 @@ void test_tool_name_hardcoded_bug_fixed(void) {
 
     AgentSession session = {0};
     ToolCall tool_calls[1];
-    const char* headers[2] = {"Content-Type: application/json", NULL};
+
 
     // Setup C-based tool call - this should now have tool_name "vector_db_list_indices" not "tool_name"
     tool_calls[0].id = "toolu_01DdpdffBNXNqfWFDUCtY7Jc";  // Same ID from CONVERSATION.md
@@ -702,7 +701,7 @@ void test_tool_name_hardcoded_bug_fixed(void) {
     session.session_data.config.api_url = strdup("http://192.0.2.1:99999/v1/chat/completions");
 
     // Execute tool workflow which will eventually call the fixed ralph_execute_tool_loop
-    int result = session_execute_tool_workflow(&session, tool_calls, 1, "list indices", 100, headers);
+    int result = session_execute_tool_workflow(&session, tool_calls, 1, "list indices", 100);
 
     // Tool execution should succeed
     TEST_ASSERT_EQUAL_INT(0, result);

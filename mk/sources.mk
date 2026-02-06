@@ -28,6 +28,8 @@ NETWORK_DEPS := \
     $(LIBDIR)/network/http_client.c \
     $(LIBDIR)/network/embedded_cacert.c \
     $(LIBDIR)/network/api_error.c \
+    $(LIBDIR)/network/api_common.c \
+    $(LIBDIR)/network/streaming.c \
     $(LIBDIR)/util/interrupt.c
 
 EMBEDDING_DEPS := \
@@ -86,6 +88,7 @@ RALPH_CORE_DEPS := \
     $(LIBDIR)/network/streaming.c \
     $(LIBDIR)/session/token_manager.c \
     $(LIBDIR)/llm/llm_provider.c \
+    $(LIBDIR)/llm/llm_client.c \
     $(LIBDIR)/llm/providers/openai_provider.c \
     $(LIBDIR)/llm/providers/anthropic_provider.c \
     $(LIBDIR)/llm/providers/local_ai_provider.c \

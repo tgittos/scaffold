@@ -1,8 +1,7 @@
 #include "recap.h"
-#include "streaming_handler.h"
 #include "../network/streaming.h"
 #include "../llm/llm_provider.h"
-#include "../network/http_client.h"
+#include "../llm/llm_client.h"
 #include "../ui/output_formatter.h"
 #include "../util/debug_output.h"
 #include "../session/token_manager.h"
@@ -160,7 +159,7 @@ int recap_generate(AgentSession* session, int max_messages) {
 
     debug_printf("Generating recap with prompt: %s\n", recap_prompt);
 
-    ProviderRegistry* registry = streaming_get_provider_registry();
+    ProviderRegistry* registry = get_provider_registry();
     if (registry == NULL) {
         fprintf(stderr, "Error: Failed to get provider registry for recap\n");
         free(recap_prompt);
@@ -198,34 +197,6 @@ int recap_generate(AgentSession* session, int max_messages) {
     debug_printf("Making recap streaming API request to %s\n", session->session_data.config.api_url);
     debug_printf("POST data: %s\n\n", post_data);
 
-    char auth_header[512];
-    char anthropic_version[128] = "anthropic-version: 2023-06-01";
-    char content_type[64] = "Content-Type: application/json";
-    const char *headers[4] = {NULL, NULL, NULL, NULL};
-    int header_count = 0;
-
-    if (session->session_data.config.api_key != NULL) {
-        if (session->session_data.config.api_type == API_TYPE_ANTHROPIC) {
-            int ret = snprintf(auth_header, sizeof(auth_header), "x-api-key: %s",
-                             session->session_data.config.api_key);
-            if (ret < 0 || ret >= (int)sizeof(auth_header)) {
-                free(post_data);
-                return -1;
-            }
-            headers[header_count++] = auth_header;
-            headers[header_count++] = anthropic_version;
-            headers[header_count++] = content_type;
-        } else {
-            int ret = snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s",
-                             session->session_data.config.api_key);
-            if (ret < 0 || ret >= (int)sizeof(auth_header)) {
-                free(post_data);
-                return -1;
-            }
-            headers[header_count++] = auth_header;
-        }
-    }
-
     StreamingContext* ctx = streaming_context_create();
     if (ctx == NULL) {
         free(post_data);
@@ -255,10 +226,10 @@ int recap_generate(AgentSession* session, int max_messages) {
         .low_speed_time = 30
     };
 
-    int result = http_post_streaming(
+    int result = llm_client_send_streaming(
         session->session_data.config.api_url,
+        session->session_data.config.api_key,
         post_data,
-        headers,
         &streaming_config
     );
 

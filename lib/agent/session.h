@@ -208,12 +208,11 @@ char* session_build_anthropic_json_payload(const AgentSession* session,
  * @param call_count Number of tool calls
  * @param user_message Original user message (for continuation)
  * @param max_tokens Max tokens for continuation responses
- * @param headers HTTP headers for API calls
  * @return 0 on success, non-zero on error
  */
 int session_execute_tool_workflow(AgentSession* session, ToolCall* tool_calls,
                                    int call_count, const char* user_message,
-                                   int max_tokens, const char** headers);
+                                   int max_tokens);
 
 /* =============================================================================
  * TOKEN MANAGEMENT

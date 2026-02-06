@@ -33,6 +33,7 @@
 #include "../ipc/message_store.h"
 #include "../llm/model_capabilities.h"
 #include "../llm/llm_provider.h"
+#include "../llm/llm_client.h"
 #include "async_executor.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -191,6 +192,11 @@ int session_init(AgentSession* session) {
         }
     }
 
+    if (llm_client_init() != 0) {
+        fprintf(stderr, "Error: Failed to initialize LLM HTTP subsystem\n");
+        return -1;
+    }
+
     if (approval_gate_init(&session->gate_config) != 0) {
         fprintf(stderr, "Warning: Failed to initialize approval gates\n");
     } else {
@@ -218,7 +224,8 @@ void session_cleanup(AgentSession* session) {
         session->message_poller = NULL;
     }
 
-    streaming_handler_cleanup();
+    provider_registry_cleanup();
+    llm_client_cleanup();
 
     tool_extension_shutdown_all();
 
@@ -378,9 +385,9 @@ int session_generate_recap(AgentSession* session, int max_messages) {
 
 int session_execute_tool_workflow(AgentSession* session, ToolCall* tool_calls,
                                    int call_count, const char* user_message,
-                                   int max_tokens, const char** headers) {
+                                   int max_tokens) {
     return tool_executor_run_workflow(session, tool_calls, call_count,
-                                      user_message, max_tokens, headers);
+                                      user_message, max_tokens);
 }
 
 /* =============================================================================
@@ -495,10 +502,8 @@ int manage_conversation_tokens(AgentSession* session, const char* user_message,
  * MESSAGE PROCESSING
  * ============================================================================= */
 
-#include "../network/http_client.h"
 #include "../ui/output_formatter.h"
 #include "../ui/json_output.h"
-#include <curl/curl.h>
 
 int session_process_message(AgentSession* session, const char* user_message) {
     if (session == NULL || user_message == NULL) return -1;
@@ -531,35 +536,7 @@ int session_process_message(AgentSession* session, const char* user_message) {
         return -1;
     }
 
-    char auth_header[512];
-    char anthropic_version[128] = "anthropic-version: 2023-06-01";
-    char content_type[64] = "Content-Type: application/json";
-    const char *headers[4] = {NULL, NULL, NULL, NULL};
-    int header_count = 0;
-
-    if (session->session_data.config.api_key != NULL) {
-        if (session->session_data.config.api_type == API_TYPE_ANTHROPIC) {
-            int ret = snprintf(auth_header, sizeof(auth_header), "x-api-key: %s", session->session_data.config.api_key);
-            if (ret < 0 || ret >= (int)sizeof(auth_header)) {
-                fprintf(stderr, "Error: Authorization header too long\n");
-                free(post_data);
-                return -1;
-            }
-            headers[header_count++] = auth_header;
-            headers[header_count++] = anthropic_version;
-            headers[header_count++] = content_type;
-        } else {
-            int ret = snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", session->session_data.config.api_key);
-            if (ret < 0 || ret >= (int)sizeof(auth_header)) {
-                fprintf(stderr, "Error: Authorization header too long\n");
-                free(post_data);
-                return -1;
-            }
-            headers[header_count++] = auth_header;
-        }
-    }
-
-    ProviderRegistry* provider_registry = streaming_get_provider_registry();
+    ProviderRegistry* provider_registry = get_provider_registry();
     LLMProvider* provider = NULL;
     if (provider_registry != NULL) {
         provider = detect_provider_for_url(provider_registry, session->session_data.config.api_url);
@@ -575,11 +552,7 @@ int session_process_message(AgentSession* session, const char* user_message) {
     if (streaming_enabled && provider_supports_streaming) {
         debug_printf("Using streaming mode for provider: %s\n", provider->capabilities.name);
         free(post_data);  /* Streaming path builds its own payload */
-
-        curl_global_init(CURL_GLOBAL_DEFAULT);
-        int result = streaming_process_message(session, user_message, max_tokens, headers);
-        curl_global_cleanup();
-        return result;
+        return streaming_process_message(session, user_message, max_tokens);
     }
 
     if (!streaming_enabled) {
@@ -587,8 +560,6 @@ int session_process_message(AgentSession* session, const char* user_message) {
     } else {
         debug_printf("Using buffered mode (provider does not support streaming)\n");
     }
-
-    curl_global_init(CURL_GLOBAL_DEFAULT);
 
     debug_printf("Making API request to %s\n", session->session_data.config.api_url);
     debug_printf("POST data: %s\n\n", post_data);
@@ -601,12 +572,11 @@ int session_process_message(AgentSession* session, const char* user_message) {
     struct HTTPResponse response = {0};
     int result = -1;
 
-    if (http_post_with_headers(session->session_data.config.api_url, post_data, headers, &response) == 0) {
+    if (llm_client_send(session->session_data.config.api_url, session->session_data.config.api_key, post_data, &response) == 0) {
         if (response.data == NULL) {
             fprintf(stderr, "Error: Empty response from API\n");
             cleanup_response(&response);
             free(post_data);
-            curl_global_cleanup();
             return -1;
         }
 
@@ -639,7 +609,6 @@ int session_process_message(AgentSession* session, const char* user_message) {
             }
             cleanup_response(&response);
             free(post_data);
-            curl_global_cleanup();
             return -1;
         }
 
@@ -714,7 +683,7 @@ int session_process_message(AgentSession* session, const char* user_message) {
 
                 free(constructed_message);
                 free(results);
-                result = session_execute_tool_workflow(session, raw_tool_calls, raw_call_count, user_message, max_tokens, headers);
+                result = session_execute_tool_workflow(session, raw_tool_calls, raw_call_count, user_message, max_tokens);
             }
             cleanup_tool_calls(raw_tool_calls, raw_call_count);
         } else {
@@ -727,7 +696,7 @@ int session_process_message(AgentSession* session, const char* user_message) {
                 if (append_conversation_message(&session->session_data.conversation, "user", user_message) != 0) {
                     fprintf(stderr, "Warning: Failed to save user message to conversation history\n");
                 }
-                result = session_execute_tool_workflow(session, tool_calls, call_count, user_message, max_tokens, headers);
+                result = session_execute_tool_workflow(session, tool_calls, call_count, user_message, max_tokens);
                 cleanup_tool_calls(tool_calls, call_count);
             } else {
                 debug_printf("No tool calls path - response_content: [%s]\n",
@@ -763,6 +732,5 @@ int session_process_message(AgentSession* session, const char* user_message) {
 
     cleanup_response(&response);
     free(post_data);
-    curl_global_cleanup();
     return result;
 }

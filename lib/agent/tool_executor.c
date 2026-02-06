@@ -6,7 +6,7 @@
 #include <cJSON.h>
 #include "../util/debug_output.h"
 #include "../network/api_error.h"
-#include "../network/http_client.h"
+#include "../llm/llm_client.h"
 #include "../session/token_manager.h"
 #include "../llm/model_capabilities.h"
 #include "../mcp/mcp_client.h"
@@ -260,7 +260,7 @@ static int add_executed_tool(StringArray* tracker, const char* tool_call_id) {
 }
 
 static int tool_executor_run_loop(AgentSession* session, const char* user_message,
-                                  int max_tokens, const char** headers) {
+                                  int max_tokens) {
     if (session == NULL) {
         return -1;
     }
@@ -313,7 +313,7 @@ static int tool_executor_run_loop(AgentSession* session, const char* user_messag
             fflush(stdout);
         }
 
-        if (http_post_with_headers(session->session_data.config.api_url, post_data, headers, &response) != 0) {
+        if (llm_client_send(session->session_data.config.api_url, session->session_data.config.api_key, post_data, &response) != 0) {
             if (!session->session_data.config.json_output_mode) {
                 fprintf(stdout, TERM_CLEAR_LINE);
                 fflush(stdout);
@@ -677,7 +677,7 @@ static int tool_executor_run_loop(AgentSession* session, const char* user_messag
 }
 
 int tool_executor_run_workflow(AgentSession* session, ToolCall* tool_calls, int call_count,
-                               const char* user_message, int max_tokens, const char** headers) {
+                               const char* user_message, int max_tokens) {
     if (session == NULL || tool_calls == NULL || call_count <= 0) {
         return -1;
     }
@@ -810,7 +810,7 @@ int tool_executor_run_workflow(AgentSession* session, ToolCall* tool_calls, int 
     }
 
     // Continue the agentic loop: the LLM may request additional tool calls
-    int result = tool_executor_run_loop(session, user_message, max_tokens, headers);
+    int result = tool_executor_run_loop(session, user_message, max_tokens);
 
     // Treat follow-up loop failure as non-fatal since initial tools already executed
     if (result != 0) {

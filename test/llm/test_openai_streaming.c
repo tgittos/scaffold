@@ -1,4 +1,5 @@
 #include "unity/unity.h"
+#include "session/conversation_tracker.h"
 #include "lib/llm/llm_provider.h"
 #include "network/streaming.h"
 #include <stdlib.h>

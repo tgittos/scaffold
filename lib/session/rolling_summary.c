@@ -1,6 +1,6 @@
 #include "rolling_summary.h"
 #include "../llm/llm_provider.h"
-#include "../network/http_client.h"
+#include "../llm/llm_client.h"
 #include "../util/debug_output.h"
 #include "token_manager.h"
 #include "../network/streaming.h"
@@ -221,34 +221,8 @@ int generate_rolling_summary(
 
     debug_printf("Summary API request: %s\n", post_data);
 
-    char auth_header[512] = {0};
-    char anthropic_version[128] = "anthropic-version: 2023-06-01";
-    char content_type[64] = "Content-Type: application/json";
-    const char* headers[4] = {NULL, NULL, NULL, NULL};
-    int header_count = 0;
-
-    if (api_key != NULL) {
-        if (api_type == 1) {
-            int ret = snprintf(auth_header, sizeof(auth_header), "x-api-key: %s", api_key);
-            if (ret < 0 || ret >= (int)sizeof(auth_header)) {
-                free(post_data);
-                return -1;
-            }
-            headers[header_count++] = auth_header;
-            headers[header_count++] = anthropic_version;
-            headers[header_count++] = content_type;
-        } else {
-            int ret = snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", api_key);
-            if (ret < 0 || ret >= (int)sizeof(auth_header)) {
-                free(post_data);
-                return -1;
-            }
-            headers[header_count++] = auth_header;
-        }
-    }
-
     struct HTTPResponse response = {0};
-    int result = http_post_with_headers(api_url, post_data, headers, &response);
+    int result = llm_client_send(api_url, api_key, post_data, &response);
     free(post_data);
 
     if (result != 0) {

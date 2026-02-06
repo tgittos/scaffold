@@ -4,6 +4,7 @@
  * Calls mock_embeddings_get_vector() directly. No HTTP, no env vars, no config.
  */
 
+#include "db/vector_db.h"
 #include "llm/embeddings_service.h"
 #include "mock_embeddings.h"
 #include <stdlib.h>

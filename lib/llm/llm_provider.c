@@ -32,3 +32,27 @@ LLMProvider* detect_provider_for_url(ProviderRegistry* registry, const char* api
 void cleanup_provider_registry(ProviderRegistry* registry) {
     ProviderRegistry_destroy(registry);
 }
+
+static ProviderRegistry* g_provider_registry = NULL;
+
+ProviderRegistry* get_provider_registry(void) {
+    if (g_provider_registry == NULL) {
+        g_provider_registry = malloc(sizeof(ProviderRegistry));
+        if (g_provider_registry != NULL) {
+            if (init_provider_registry(g_provider_registry) == 0) {
+                register_openai_provider(g_provider_registry);
+                register_anthropic_provider(g_provider_registry);
+                register_local_ai_provider(g_provider_registry);
+            }
+        }
+    }
+    return g_provider_registry;
+}
+
+void provider_registry_cleanup(void) {
+    if (g_provider_registry != NULL) {
+        cleanup_provider_registry(g_provider_registry);
+        free(g_provider_registry);
+        g_provider_registry = NULL;
+    }
+}

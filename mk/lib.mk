@@ -56,6 +56,7 @@ LIB_AGENT_SOURCES := \
 # LLM module
 LIB_LLM_SOURCES := \
     $(LIBDIR)/llm/llm_provider.c \
+    $(LIBDIR)/llm/llm_client.c \
     $(LIBDIR)/llm/model_capabilities.c \
     $(LIBDIR)/llm/embeddings.c \
     $(LIBDIR)/llm/embedding_provider.c \
