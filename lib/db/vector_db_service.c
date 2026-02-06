@@ -73,23 +73,13 @@ vector_db_error_t vector_db_service_ensure_index(vector_db_service_t* service, c
     return result;
 }
 
-index_config_t vector_db_service_get_memory_config(size_t dimension) {
-    index_config_t config = {
-        .dimension = dimension,
-        .max_elements = 100000,
-        .M = 16,
-        .ef_construction = 200,
-        .random_seed = 42,
-        .metric = safe_strdup("cosine")
-    };
-    return config;
-}
+int vector_db_service_add_text(Services* services, const char* index_name,
+                               const char* text, const char* type,
+                               const char* source, const char* metadata_json) {
+    if (services == NULL || index_name == NULL || text == NULL) return -1;
 
-int vector_db_service_add_text(Services* services, document_store_t* store,
-                               const char* index_name, const char* text,
-                               const char* type, const char* source,
-                               const char* metadata_json) {
-    if (store == NULL || index_name == NULL || text == NULL) return -1;
+    document_store_t* store = services_get_document_store(services);
+    if (store == NULL) return -1;
 
     embeddings_service_t* emb = services_get_embeddings(services);
     if (!embeddings_service_is_configured(emb)) {
@@ -116,11 +106,13 @@ int vector_db_service_add_text(Services* services, document_store_t* store,
 }
 
 document_search_results_t* vector_db_service_search_text(Services* services,
-                                                         document_store_t* store,
                                                          const char* index_name,
                                                          const char* query_text,
                                                          size_t k) {
-    if (store == NULL || index_name == NULL || query_text == NULL) return NULL;
+    if (services == NULL || index_name == NULL || query_text == NULL) return NULL;
+
+    document_store_t* store = services_get_document_store(services);
+    if (store == NULL) return NULL;
 
     embeddings_service_t* emb = services_get_embeddings(services);
     if (!embeddings_service_is_configured(emb)) {

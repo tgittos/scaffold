@@ -3,8 +3,8 @@
 #include "../pdf/pdf_extractor.h"
 #include <cJSON.h>
 #include "../util/document_chunker.h"
-#include "llm/embeddings_service.h"
 #include "db/vector_db_service.h"
+#include "db/document_store.h"
 #include "services/services.h"
 #include "../util/common_utils.h"
 #include "vector_db_tool.h"
@@ -14,6 +14,9 @@
 #include <sys/stat.h>
 #include <time.h>
 
+#define PDF_DOCUMENTS_INDEX "documents"
+#define PDF_EMBEDDING_DIM 1536
+
 static Services* g_services = NULL;
 
 static void auto_process_pdf_for_vector_storage(const char *file_path, const char *extracted_text) {
@@ -21,25 +24,15 @@ static void auto_process_pdf_for_vector_storage(const char *file_path, const cha
         return;
     }
 
-    vector_db_service_t* vdb_service = services_get_vector_db(g_services);
-    vector_db_t *vector_db = vector_db_service_get_database(vdb_service);
-    if (!vector_db) {
+    document_store_t* doc_store = services_get_document_store(g_services);
+    if (doc_store == NULL) {
         return;
     }
 
-    if (!vector_db_has_index(vector_db, "documents")) {
-        index_config_t index_config = {
-            .dimension = 1536,  // text-embedding-3-small output dimension
-            .max_elements = 10000,
-            .M = 16,
-            .ef_construction = 200,
-            .random_seed = 100,
-            .metric = "cosine"
-        };
-        
-        vector_db_create_index(vector_db, "documents", &index_config);
+    if (document_store_ensure_index(doc_store, PDF_DOCUMENTS_INDEX, PDF_EMBEDDING_DIM, 10000) != 0) {
+        return;
     }
-    
+
     chunking_config_t chunk_config = chunker_get_pdf_config();
     chunking_result_t *chunks = chunk_document(extracted_text, &chunk_config);
 
@@ -48,89 +41,59 @@ static void auto_process_pdf_for_vector_storage(const char *file_path, const cha
         return;
     }
 
-    embeddings_service_t* embeddings = services_get_embeddings(g_services);
-    if (!embeddings_service_is_configured(embeddings)) {
-        free_chunking_result(chunks);
-        return;
-    }
+    char metadata_json[512];
+    snprintf(metadata_json, sizeof(metadata_json),
+             "{\"source\": \"pdf\", \"file\": \"%s\"}", file_path);
 
-    size_t vectors_stored = 0;
     for (size_t i = 0; i < chunks->chunks.count; i++) {
         document_chunk_t *chunk = &chunks->chunks.data[i];
-
-        embedding_vector_t embedding = {0};
-        if (embeddings_service_get_vector(embeddings, chunk->text, &embedding) != 0) {
-            continue;
-        }
-
-        vector_t vector = {
-            .data = embedding.data,
-            .dimension = embedding.dimension
-        };
-        
-        // Derive a deterministic label from file path + chunk index
-        size_t label = 0;
-        const char *path = file_path;
-        for (const char *p = path; *p; p++) {
-            label = label * 31 + *p;
-        }
-        label = label * 1000 + i;
-
-        vector_db_error_t db_error = vector_db_add_vector(vector_db, "documents", &vector, label);
-        if (db_error == VECTOR_DB_OK) {
-            vectors_stored++;
-        }
-        
-        // Ownership of embedding.data transferred to vector_db; avoid double-free
-        embedding.data = NULL;
-        embeddings_service_free_embedding(&embedding);
+        vector_db_service_add_text(g_services, PDF_DOCUMENTS_INDEX,
+                                   chunk->text, "pdf_chunk", "pdf", metadata_json);
     }
-    
+
     free_chunking_result(chunks);
-    // Vector storage is silent; the caller gets the extracted text while content
-    // becomes searchable in the background via the vector database.
 }
 
 int execute_pdf_extract_text_tool_call(const ToolCall *tool_call, ToolResult *result) {
     if (!tool_call || !result) return -1;
-    
+
     result->tool_call_id = safe_strdup(tool_call->id);
     result->success = 0;
     result->result = NULL;
-    
+
     if (!result->tool_call_id) return -1;
-    
+
     char *file_path = extract_string_param(tool_call->arguments, "file_path");
     int start_page = (int)extract_number_param(tool_call->arguments, "start_page", -1);
     int end_page = (int)extract_number_param(tool_call->arguments, "end_page", -1);
-    
+
     if (!file_path) {
         result->result = safe_strdup("{\"success\": false, \"error\": \"Missing required parameter: file_path\"}");
         return 0;
     }
-    
+
     if (pdf_extractor_init() != 0) {
         result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to initialize PDF extractor\"}");
         free(file_path);
         return 0;
     }
-    
+
     pdf_extraction_config_t config = pdf_get_default_config();
     config.start_page = start_page;
     config.end_page = end_page;
-    
+
     pdf_extraction_result_t *extraction_result = pdf_extract_text_with_config(file_path, &config);
-    
+
     if (!extraction_result) {
         result->result = safe_strdup("{\"success\": false, \"error\": \"PDF extraction failed - out of memory\"}");
         free(file_path);
         return 0;
     }
-    
+
     if (extraction_result->error) {
         char error_response[1024];
-        snprintf(error_response, sizeof(error_response), 
-                "{\"success\": false, \"error\": \"PDF extraction failed: %s\"}", 
+        snprintf(error_response, sizeof(error_response),
+                "{\"success\": false, \"error\": \"PDF extraction failed: %s\"}",
                 extraction_result->error);
         result->result = safe_strdup(error_response);
         result->success = 0;
@@ -138,7 +101,7 @@ int execute_pdf_extract_text_tool_call(const ToolCall *tool_call, ToolResult *re
         if (extraction_result->text && extraction_result->length > 0) {
             auto_process_pdf_for_vector_storage(file_path, extraction_result->text);
         }
-        
+
         size_t response_size = extraction_result->length + 512;
         char *response = malloc(response_size);
         if (response) {
@@ -160,10 +123,10 @@ int execute_pdf_extract_text_tool_call(const ToolCall *tool_call, ToolResult *re
             result->success = 0;
         }
     }
-    
+
     pdf_free_extraction_result(extraction_result);
     free(file_path);
-    
+
     return 0;
 }
 
@@ -219,6 +182,6 @@ int register_pdf_tool(ToolRegistry *registry) {
         free(parameters[i].type);
         free(parameters[i].description);
     }
-    
+
     return result;
 }

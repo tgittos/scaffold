@@ -1,5 +1,6 @@
 #include "memory_tool.h"
 #include "db/vector_db_service.h"
+#include "db/document_store.h"
 #include "llm/embeddings_service.h"
 #include "services/services.h"
 #include "../util/common_utils.h"
@@ -13,61 +14,39 @@
 #include <errno.h>
 
 #define MEMORY_INDEX_NAME "long_term_memory"
+#define MEMORY_EMBEDDING_DIM 1536
 
 static Services* g_services = NULL;
-static size_t next_memory_id = 0;
 
-static vector_db_error_t ensure_memory_index(void) {
-    embeddings_service_t* embeddings = services_get_embeddings(g_services);
-    size_t dimension = embeddings_service_get_dimension(embeddings);
-    if (dimension == 0) {
-        return VECTOR_DB_ERROR_INVALID_PARAM;
-    }
-
-    index_config_t config = vector_db_service_get_memory_config(dimension);
-    vector_db_service_t* vdb_service = services_get_vector_db(g_services);
-    vector_db_error_t result = vector_db_service_ensure_index(vdb_service, MEMORY_INDEX_NAME, &config);
-    
-    free(config.metric);
-    return result;
-}
-
-static char* get_current_timestamp(void) {
-    time_t now = time(NULL);
-    struct tm *tm_info = localtime(&now);
-    char *timestamp = malloc(64);
-    if (timestamp == NULL) return NULL;
-    
-    strftime(timestamp, 64, "%Y-%m-%d %H:%M:%S", tm_info);
-    return timestamp;
+static int ensure_memory_index(Services* services) {
+    document_store_t* store = services_get_document_store(services);
+    if (store == NULL) return -1;
+    return document_store_ensure_index(store, MEMORY_INDEX_NAME, MEMORY_EMBEDDING_DIM, 100000);
 }
 
 static char* create_memory_metadata(const char *memory_type, const char *source, const char *importance) {
-    char *timestamp = get_current_timestamp();
-    if (timestamp == NULL) return NULL;
-    
+    time_t now = time(NULL);
+    struct tm *tm_info = localtime(&now);
+    char timestamp[64];
+    strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", tm_info);
+
     char *metadata = malloc(1024);
-    if (metadata == NULL) {
-        free(timestamp);
-        return NULL;
-    }
-    
-    snprintf(metadata, 1024, 
-        "{\"timestamp\": \"%s\", \"type\": \"%s\", \"source\": \"%s\", \"importance\": \"%s\", \"memory_id\": %zu}",
+    if (metadata == NULL) return NULL;
+
+    snprintf(metadata, 1024,
+        "{\"timestamp\": \"%s\", \"memory_type\": \"%s\", \"source\": \"%s\", \"importance\": \"%s\"}",
         timestamp,
         memory_type ? memory_type : "general",
         source ? source : "conversation",
-        importance ? importance : "normal",
-        next_memory_id++
+        importance ? importance : "normal"
     );
-    
-    free(timestamp);
+
     return metadata;
 }
 
 int execute_remember_tool_call(const ToolCall *tool_call, ToolResult *result) {
     if (tool_call == NULL || result == NULL) return -1;
-    
+
     tool_result_builder_t* builder = tool_result_builder_create(tool_call->id);
     if (builder == NULL) return -1;
 
@@ -75,8 +54,7 @@ int execute_remember_tool_call(const ToolCall *tool_call, ToolResult *result) {
     char *memory_type = extract_string_param(tool_call->arguments, "type");
     char *source = extract_string_param(tool_call->arguments, "source");
     char *importance = extract_string_param(tool_call->arguments, "importance");
-    
-    
+
     if (content == NULL) {
         tool_result_builder_set_error(builder, "Missing required parameter: content");
         ToolResult* temp_result = tool_result_builder_finalize(builder);
@@ -86,7 +64,7 @@ int execute_remember_tool_call(const ToolCall *tool_call, ToolResult *result) {
         }
         goto cleanup;
     }
-    
+
     embeddings_service_t* embeddings = services_get_embeddings(g_services);
     if (!embeddings_service_is_configured(embeddings)) {
         tool_result_builder_set_error(builder, "Embeddings service not configured. OPENAI_API_KEY environment variable required");
@@ -98,39 +76,13 @@ int execute_remember_tool_call(const ToolCall *tool_call, ToolResult *result) {
         goto cleanup;
     }
 
-    vector_db_error_t index_err = ensure_memory_index();
-    if (index_err != VECTOR_DB_OK) {
-        tool_result_builder_set_error(builder, "Failed to initialize memory index: %s",
-                                    vector_db_error_string(index_err));
+    if (ensure_memory_index(g_services) != 0) {
+        tool_result_builder_set_error(builder, "Failed to initialize memory index");
         ToolResult* temp_result = tool_result_builder_finalize(builder);
         if (temp_result) {
             *result = *temp_result;
             free(temp_result);
         }
-        goto cleanup;
-    }
-
-    vector_t* vector = embeddings_service_text_to_vector(embeddings, content);
-    if (vector == NULL) {
-        tool_result_builder_set_error(builder, "Failed to generate embedding for content");
-        ToolResult* temp_result = tool_result_builder_finalize(builder);
-        if (temp_result) {
-            *result = *temp_result;
-            free(temp_result);
-        }
-        goto cleanup;
-    }
-
-    vector_db_service_t* vdb_service = services_get_vector_db(g_services);
-    vector_db_t *db = vector_db_service_get_database(vdb_service);
-    if (db == NULL) {
-        tool_result_builder_set_error(builder, "Failed to access vector database");
-        ToolResult* temp_result = tool_result_builder_finalize(builder);
-        if (temp_result) {
-            *result = *temp_result;
-            free(temp_result);
-        }
-        embeddings_service_free_vector(vector);
         goto cleanup;
     }
 
@@ -142,66 +94,48 @@ int execute_remember_tool_call(const ToolCall *tool_call, ToolResult *result) {
             *result = *temp_result;
             free(temp_result);
         }
-        embeddings_service_free_vector(vector);
         goto cleanup;
     }
-    
-    size_t memory_id = next_memory_id - 1;
-    vector_db_error_t err = vector_db_add_vector(db, MEMORY_INDEX_NAME, vector, memory_id);
-    
-    if (err == VECTOR_DB_OK) {
-        metadata_store_t* meta_store = services_get_metadata_store(g_services);
-        if (meta_store != NULL) {
-            ChunkMetadata chunk = {
-                .chunk_id = memory_id,
-                .content = content,
-                .index_name = (char*)MEMORY_INDEX_NAME,
-                .type = memory_type ? memory_type : "general",
-                .source = source ? source : "conversation",
-                .importance = importance ? importance : "normal",
-                .timestamp = time(NULL),
-                .custom_metadata = metadata
-            };
-            
-            if (metadata_store_save(meta_store, &chunk) != 0) {
-                debug_printf("Warning: Failed to store metadata for memory %zu\n", memory_id);
-            }
-        }
-        
-        tool_result_builder_set_success(builder, 
+
+    int add_result = vector_db_service_add_text(g_services, MEMORY_INDEX_NAME,
+                                                 content, "memory", "memory_tool", metadata);
+
+    if (add_result == 0) {
+        vector_db_service_t* vdb_svc = services_get_vector_db(g_services);
+        size_t memory_id = vector_db_get_index_size(vector_db_service_get_database(vdb_svc), MEMORY_INDEX_NAME) - 1;
+
+        tool_result_builder_set_success(builder,
             "{\"success\": true, \"memory_id\": %zu, \"message\": \"Memory stored successfully\", \"metadata\": %s}",
             memory_id, metadata);
     } else {
-        tool_result_builder_set_error(builder, "Failed to store memory: %s", 
-                                    vector_db_error_string(err));
+        tool_result_builder_set_error(builder, "Failed to store memory");
     }
-    
+
     ToolResult* temp_result = tool_result_builder_finalize(builder);
     if (temp_result) {
         *result = *temp_result;
         free(temp_result);
     }
-    
-    embeddings_service_free_vector(vector);
+
     free(metadata);
-    
+
 cleanup:
     free(content);
     free(memory_type);
     free(source);
     free(importance);
-    
+
     return 0;
 }
 
 int execute_forget_memory_tool_call(const ToolCall *tool_call, ToolResult *result) {
     if (tool_call == NULL || result == NULL) return -1;
-    
+
     tool_result_builder_t* builder = tool_result_builder_create(tool_call->id);
     if (builder == NULL) return -1;
 
     double memory_id_num = extract_number_param(tool_call->arguments, "memory_id", -1);
-    
+
     if (memory_id_num < 0) {
         tool_result_builder_set_error(builder, "Missing or invalid required parameter: memory_id");
         ToolResult* temp_result = tool_result_builder_finalize(builder);
@@ -211,13 +145,12 @@ int execute_forget_memory_tool_call(const ToolCall *tool_call, ToolResult *resul
         }
         return 0;
     }
-    
+
     size_t memory_id = (size_t)memory_id_num;
 
-    vector_db_service_t* vdb_service = services_get_vector_db(g_services);
-    vector_db_t *db = vector_db_service_get_database(vdb_service);
-    if (db == NULL) {
-        tool_result_builder_set_error(builder, "Failed to access vector database");
+    document_store_t* doc_store = services_get_document_store(g_services);
+    if (doc_store == NULL) {
+        tool_result_builder_set_error(builder, "Failed to access document store");
         ToolResult* temp_result = tool_result_builder_finalize(builder);
         if (temp_result) {
             *result = *temp_result;
@@ -226,19 +159,8 @@ int execute_forget_memory_tool_call(const ToolCall *tool_call, ToolResult *resul
         return 0;
     }
 
-    metadata_store_t* meta_store = services_get_metadata_store(g_services);
-    if (meta_store == NULL) {
-        tool_result_builder_set_error(builder, "Failed to access metadata store");
-        ToolResult* temp_result = tool_result_builder_finalize(builder);
-        if (temp_result) {
-            *result = *temp_result;
-            free(temp_result);
-        }
-        return 0;
-    }
-    
-    ChunkMetadata* chunk = metadata_store_get(meta_store, MEMORY_INDEX_NAME, memory_id);
-    if (chunk == NULL) {
+    document_t* doc = document_store_get(doc_store, MEMORY_INDEX_NAME, memory_id);
+    if (doc == NULL) {
         tool_result_builder_set_error(builder, "Memory with ID %zu not found", memory_id);
         ToolResult* temp_result = tool_result_builder_finalize(builder);
         if (temp_result) {
@@ -247,65 +169,54 @@ int execute_forget_memory_tool_call(const ToolCall *tool_call, ToolResult *resul
         }
         return 0;
     }
-    
-    char* memory_type = chunk->type ? strdup(chunk->type) : strdup("unknown");
+
     char* content_preview = NULL;
-    if (chunk->content) {
-        size_t len = strlen(chunk->content);
+    if (doc->content) {
+        size_t len = strlen(doc->content);
         if (len > 50) {
             content_preview = malloc(54);
             if (content_preview) {
-                strncpy(content_preview, chunk->content, 50);
+                strncpy(content_preview, doc->content, 50);
                 strcpy(content_preview + 50, "...");
             }
         } else {
-            content_preview = strdup(chunk->content);
+            content_preview = strdup(doc->content);
         }
     }
-    metadata_store_free_chunk(chunk);
-    
-    vector_db_error_t err = vector_db_delete_vector(db, MEMORY_INDEX_NAME, memory_id);
-    bool vector_deleted = (err == VECTOR_DB_OK || err == VECTOR_DB_ERROR_ELEMENT_NOT_FOUND);
-    bool metadata_deleted = (metadata_store_delete(meta_store, MEMORY_INDEX_NAME, memory_id) == 0);
-    
-    if (vector_deleted && metadata_deleted) {
+    document_store_free_document(doc);
+
+    int delete_result = document_store_delete(doc_store, MEMORY_INDEX_NAME, memory_id);
+
+    if (delete_result == 0) {
         char response[1024];
         snprintf(response, sizeof(response),
-            "{\"success\": true, \"memory_id\": %zu, \"message\": \"Memory deleted successfully\", \"deleted\": {\"type\": \"%s\", \"preview\": \"%s\"}}",
-            memory_id, memory_type, content_preview ? content_preview : "");
-        tool_result_builder_set_success_json(builder, response);
-    } else if (metadata_deleted) {
-        // Metadata deleted but vector might have already been missing
-        char response[1024];
-        snprintf(response, sizeof(response),
-            "{\"success\": true, \"memory_id\": %zu, \"message\": \"Memory metadata deleted (vector was already absent)\", \"deleted\": {\"type\": \"%s\"}}",
-            memory_id, memory_type);
+            "{\"success\": true, \"memory_id\": %zu, \"message\": \"Memory deleted successfully\", \"deleted\": {\"preview\": \"%s\"}}",
+            memory_id, content_preview ? content_preview : "");
         tool_result_builder_set_success_json(builder, response);
     } else {
         tool_result_builder_set_error(builder, "Failed to delete memory with ID %zu", memory_id);
     }
-    
+
     ToolResult* temp_result = tool_result_builder_finalize(builder);
     if (temp_result) {
         *result = *temp_result;
         free(temp_result);
     }
-    
-    free(memory_type);
+
     free(content_preview);
-    
+
     return 0;
 }
 
 int execute_recall_memories_tool_call(const ToolCall *tool_call, ToolResult *result) {
     if (tool_call == NULL || result == NULL) return -1;
-    
+
     tool_result_builder_t* builder = tool_result_builder_create(tool_call->id);
     if (builder == NULL) return -1;
 
     char *query = extract_string_param(tool_call->arguments, "query");
     double k = extract_number_param(tool_call->arguments, "k", 5);
-    
+
     if (query == NULL) {
         tool_result_builder_set_error(builder, "Missing required parameter: query");
         ToolResult* temp_result = tool_result_builder_finalize(builder);
@@ -328,172 +239,74 @@ int execute_recall_memories_tool_call(const ToolCall *tool_call, ToolResult *res
         return 0;
     }
 
-    metadata_store_t* meta_store = services_get_metadata_store(g_services);
-    if (meta_store == NULL) {
-        tool_result_builder_set_error(builder, "Failed to access metadata store");
+    document_search_results_t* search_results = vector_db_service_search_text(
+        g_services, MEMORY_INDEX_NAME, query, (size_t)k);
+
+    if (search_results == NULL || search_results->results.count == 0) {
+        tool_result_builder_set_success_json(builder,
+            "{\"success\": true, \"memories\": [], \"message\": \"No relevant memories found\"}");
+        if (search_results) document_store_free_results(search_results);
+        goto recall_done;
+    }
+
+    char* response = malloc(65536);
+    if (response == NULL) {
+        tool_result_builder_set_error(builder, "Memory allocation failed");
+        document_store_free_results(search_results);
+        goto recall_done;
+    }
+
+    strcpy(response, "{\"success\": true, \"memories\": [");
+    char *p = response + strlen(response);
+
+    for (size_t i = 0; i < search_results->results.count; i++) {
+        document_result_t* res = &search_results->results.data[i];
+        if (res->document == NULL) continue;
+
+        if (i > 0) {
+            p += sprintf(p, ", ");
+        }
+
+        float similarity = 1.0f - res->distance;
+        p += sprintf(p, "{\"memory_id\": %zu, \"score\": %.4f",
+                     res->document->id, similarity);
+
+        if (res->document->content != NULL) {
+            char* escaped_content = json_escape_string(res->document->content);
+            if (escaped_content != NULL) {
+                p += sprintf(p, ", \"content\": \"%s\"", escaped_content);
+                free(escaped_content);
+            }
+        }
+
+        if (res->document->type != NULL) {
+            p += sprintf(p, ", \"type\": \"%s\"", res->document->type);
+        }
+
+        if (res->document->metadata_json != NULL) {
+            p += sprintf(p, ", \"metadata\": %s", res->document->metadata_json);
+        }
+
+        p += sprintf(p, "}");
+    }
+
+    strcat(response, "], \"message\": \"Found relevant memories\"}");
+    tool_result_builder_set_success_json(builder, response);
+    free(response);
+
+    document_store_free_results(search_results);
+
+recall_done:
+    {
         ToolResult* temp_result = tool_result_builder_finalize(builder);
         if (temp_result) {
             *result = *temp_result;
             free(temp_result);
         }
-        free(query);
-        return 0;
     }
 
-    size_t text_count = 0;
-    ChunkMetadata** text_results = metadata_store_search(meta_store, MEMORY_INDEX_NAME, query, &text_count);
-
-    search_results_t *vector_results = NULL;
-    if (embeddings_service_is_configured(embeddings)) {
-        vector_t* query_vector = embeddings_service_text_to_vector(embeddings, query);
-        if (query_vector != NULL) {
-            vector_db_service_t* vdb_service = services_get_vector_db(g_services);
-            vector_db_t *db = vector_db_service_get_database(vdb_service);
-            if (db != NULL) {
-                // Fetch 2x results to allow deduplication with text search hits
-                vector_results = vector_db_search(db, MEMORY_INDEX_NAME, query_vector, (size_t)(k * 2));
-            }
-            embeddings_service_free_vector(query_vector);
-        }
-    }
-    
-    // Hybrid search: merge text-exact and vector-similarity results with scoring
-    typedef struct {
-        size_t memory_id;
-        float score;
-        ChunkMetadata* chunk;
-        bool from_text_search;
-    } ScoredResult;
-    
-    size_t max_results = (text_count + (vector_results ? vector_results->count : 0));
-    ScoredResult* scored_results = calloc(max_results, sizeof(ScoredResult));
-    if (scored_results == NULL) {
-        tool_result_builder_set_error(builder, "Memory allocation failed");
-        goto recall_cleanup;
-    }
-    
-    size_t result_count = 0;
-    
-    for (size_t i = 0; i < text_count && i < (size_t)k; i++) {
-        scored_results[result_count].memory_id = text_results[i]->chunk_id;
-        scored_results[result_count].score = 1.0; // Perfect score for text matches
-        scored_results[result_count].chunk = text_results[i];
-        scored_results[result_count].from_text_search = true;
-        result_count++;
-    }
-    
-    if (vector_results != NULL) {
-        for (size_t i = 0; i < vector_results->count; i++) {
-            size_t memory_id = vector_results->results[i].label;
-            float similarity = 1.0 - vector_results->results[i].distance;
-            
-            bool is_duplicate = false;
-            for (size_t j = 0; j < result_count; j++) {
-                if (scored_results[j].memory_id == memory_id) {
-                    // Boost: appearing in both text and vector search implies higher relevance
-                    scored_results[j].score = (scored_results[j].score + similarity) / 2.0 + 0.1;
-                    is_duplicate = true;
-                    break;
-                }
-            }
-            
-            if (!is_duplicate && result_count < (size_t)k) {
-                scored_results[result_count].memory_id = memory_id;
-                scored_results[result_count].score = similarity;
-                scored_results[result_count].chunk = metadata_store_get(meta_store, MEMORY_INDEX_NAME, memory_id);
-                scored_results[result_count].from_text_search = false;
-                result_count++;
-            }
-        }
-    }
-    
-    for (size_t i = 0; result_count > 0 && i < result_count - 1; i++) {
-        for (size_t j = i + 1; j < result_count; j++) {
-            if (scored_results[j].score > scored_results[i].score) {
-                ScoredResult temp = scored_results[i];
-                scored_results[i] = scored_results[j];
-                scored_results[j] = temp;
-            }
-        }
-    }
-    
-    if (result_count == 0) {
-        tool_result_builder_set_success_json(builder, 
-            "{\"success\": true, \"memories\": [], \"message\": \"No relevant memories found\"}");
-    } else {
-        char* response = malloc(65536); // Allocate more space for content
-        if (response == NULL) {
-            tool_result_builder_set_error(builder, "Memory allocation failed");
-            goto recall_cleanup_scored;
-        }
-        
-        strcpy(response, "{\"success\": true, \"memories\": [");
-        char *p = response + strlen(response);
-        
-        size_t output_count = result_count > (size_t)k ? (size_t)k : result_count;
-        for (size_t i = 0; i < output_count; i++) {
-            if (i > 0) {
-                p += sprintf(p, ", ");
-            }
-            
-            p += sprintf(p, "{\"memory_id\": %zu, \"score\": %.4f, \"match_type\": \"%s\"", 
-                         scored_results[i].memory_id, 
-                         scored_results[i].score,
-                         scored_results[i].from_text_search ? "text" : "semantic");
-            
-            ChunkMetadata* chunk = scored_results[i].chunk;
-            if (chunk != NULL && chunk->content != NULL) {
-                char* escaped_content = json_escape_string(chunk->content);
-                if (escaped_content != NULL) {
-                    p += sprintf(p, ", \"content\": \"%s\"", escaped_content);
-                    free(escaped_content);
-                }
-                
-                if (chunk->type != NULL) {
-                    p += sprintf(p, ", \"type\": \"%s\"", chunk->type);
-                }
-                
-                if (chunk->source != NULL) {
-                    p += sprintf(p, ", \"source\": \"%s\"", chunk->source);
-                }
-                
-                if (chunk->importance != NULL) {
-                    p += sprintf(p, ", \"importance\": \"%s\"", chunk->importance);
-                }
-            }
-            
-            p += sprintf(p, "}");
-        }
-        
-        strcat(response, "], \"message\": \"Found relevant memories using hybrid search\"}");
-        tool_result_builder_set_success_json(builder, response);
-        free(response);
-    }
-    
-recall_cleanup_scored:
-    for (size_t i = 0; i < result_count; i++) {
-        if (!scored_results[i].from_text_search && scored_results[i].chunk != NULL) {
-            metadata_store_free_chunk(scored_results[i].chunk);
-        }
-    }
-    free(scored_results);
-    
-recall_cleanup:
-    
-    ToolResult* temp_result = tool_result_builder_finalize(builder);
-    if (temp_result) {
-        *result = *temp_result;
-        free(temp_result);
-    }
-    
-    if (text_results != NULL) {
-        metadata_store_free_chunks(text_results, text_count);
-    }
-    if (vector_results != NULL) {
-        vector_db_free_search_results(vector_results);
-    }
     free(query);
-    
+
     return 0;
 }
 
@@ -501,7 +314,7 @@ int register_memory_tools(ToolRegistry *registry) {
     if (registry == NULL) return -1;
     g_services = registry->services;
     int result;
-    
+
     ToolParameter remember_parameters[4];
     memset(remember_parameters, 0, sizeof(remember_parameters));
 
@@ -511,30 +324,30 @@ int register_memory_tools(ToolRegistry *registry) {
     remember_parameters[0].enum_values = NULL;
     remember_parameters[0].enum_count = 0;
     remember_parameters[0].required = 1;
-    
+
     remember_parameters[1].name = strdup("type");
     remember_parameters[1].type = strdup("string");
     remember_parameters[1].description = strdup("Type of memory (e.g., 'user_preference', 'fact', 'instruction', 'correction')");
     remember_parameters[1].enum_values = NULL;
     remember_parameters[1].enum_count = 0;
     remember_parameters[1].required = 0;
-    
+
     remember_parameters[2].name = strdup("source");
     remember_parameters[2].type = strdup("string");
     remember_parameters[2].description = strdup("Source of the memory (e.g., 'conversation', 'web', 'file')");
     remember_parameters[2].enum_values = NULL;
     remember_parameters[2].enum_count = 0;
     remember_parameters[2].required = 0;
-    
+
     remember_parameters[3].name = strdup("importance");
     remember_parameters[3].type = strdup("string");
     remember_parameters[3].description = strdup("Importance level: 'low', 'normal', 'high', 'critical'");
     remember_parameters[3].enum_values = NULL;
     remember_parameters[3].enum_count = 0;
     remember_parameters[3].required = 0;
-    
-    for (int i = 0; i <4; i++) {
-        if (remember_parameters[i].name == NULL || 
+
+    for (int i = 0; i < 4; i++) {
+        if (remember_parameters[i].name == NULL ||
             remember_parameters[i].type == NULL ||
             remember_parameters[i].description == NULL) {
             for (int j = 0; j <= i; j++) {
@@ -545,19 +358,19 @@ int register_memory_tools(ToolRegistry *registry) {
             return -1;
         }
     }
-    
-    result = register_tool(registry, "remember", 
+
+    result = register_tool(registry, "remember",
                           "Store important information in long-term memory for future reference",
                           remember_parameters, 4, execute_remember_tool_call);
-    
+
     for (int i = 0; i < 4; i++) {
         free(remember_parameters[i].name);
         free(remember_parameters[i].type);
         free(remember_parameters[i].description);
     }
-    
+
     if (result != 0) return -1;
-    
+
     ToolParameter recall_parameters[2];
     memset(recall_parameters, 0, sizeof(recall_parameters));
 
@@ -567,16 +380,16 @@ int register_memory_tools(ToolRegistry *registry) {
     recall_parameters[0].enum_values = NULL;
     recall_parameters[0].enum_count = 0;
     recall_parameters[0].required = 1;
-    
+
     recall_parameters[1].name = strdup("k");
     recall_parameters[1].type = strdup("number");
     recall_parameters[1].description = strdup("Number of memories to retrieve (default: 5)");
     recall_parameters[1].enum_values = NULL;
     recall_parameters[1].enum_count = 0;
     recall_parameters[1].required = 0;
-    
-    for (int i = 0; i <2; i++) {
-        if (recall_parameters[i].name == NULL || 
+
+    for (int i = 0; i < 2; i++) {
+        if (recall_parameters[i].name == NULL ||
             recall_parameters[i].type == NULL ||
             recall_parameters[i].description == NULL) {
             for (int j = 0; j <= i; j++) {
@@ -587,19 +400,19 @@ int register_memory_tools(ToolRegistry *registry) {
             return -1;
         }
     }
-    
-    result = register_tool(registry, "recall_memories", 
+
+    result = register_tool(registry, "recall_memories",
                           "Search and retrieve relevant memories based on a query",
                           recall_parameters, 2, execute_recall_memories_tool_call);
-    
+
     for (int i = 0; i < 2; i++) {
         free(recall_parameters[i].name);
         free(recall_parameters[i].type);
         free(recall_parameters[i].description);
     }
-    
+
     if (result != 0) return -1;
-    
+
     ToolParameter forget_parameters[1];
     memset(forget_parameters, 0, sizeof(forget_parameters));
 
@@ -609,7 +422,7 @@ int register_memory_tools(ToolRegistry *registry) {
     forget_parameters[0].enum_values = NULL;
     forget_parameters[0].enum_count = 0;
     forget_parameters[0].required = 1;
-    
+
     if (forget_parameters[0].name == NULL ||
         forget_parameters[0].type == NULL ||
         forget_parameters[0].description == NULL) {
@@ -618,14 +431,14 @@ int register_memory_tools(ToolRegistry *registry) {
         free(forget_parameters[0].description);
         return -1;
     }
-    
-    result = register_tool(registry, "forget_memory", 
+
+    result = register_tool(registry, "forget_memory",
                           "Delete a specific memory from long-term storage by its ID",
                           forget_parameters, 1, execute_forget_memory_tool_call);
-    
+
     free(forget_parameters[0].name);
     free(forget_parameters[0].type);
     free(forget_parameters[0].description);
-    
+
     return result;
 }

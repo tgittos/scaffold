@@ -625,7 +625,7 @@ int execute_vector_db_add_text_tool_call(const ToolCall *tool_call, ToolResult *
         return 0;
     }
     
-    int add_result = vector_db_service_add_text(g_services, doc_store, index_name, text, "text", "api", metadata);
+    int add_result = vector_db_service_add_text(g_services, index_name, text, "text", "api", metadata);
 
     char response[1024] = {0};
     if (add_result == 0) {
@@ -706,7 +706,7 @@ int execute_vector_db_add_chunked_text_tool_call(const ToolCall *tool_call, Tool
     size_t failed_chunks = 0;
 
     for (size_t i = 0; i < chunks->chunks.count; i++) {
-        int add_result = vector_db_service_add_text(g_services, doc_store, index_name,
+        int add_result = vector_db_service_add_text(g_services, index_name,
                                                     chunks->chunks.data[i].text,
                                                     "chunk", "api", metadata);
 
@@ -821,7 +821,7 @@ int execute_vector_db_add_pdf_document_tool_call(const ToolCall *tool_call, Tool
                 "{\"source\": \"pdf\", \"file\": \"%s\", \"page_count\": %d}",
                 pdf_path, pdf_result->page_count);
 
-        int add_result = vector_db_service_add_text(g_services, doc_store, index_name,
+        int add_result = vector_db_service_add_text(g_services, index_name,
                                                     chunks->chunks.data[i].text,
                                                     "pdf_chunk", "pdf", metadata_json);
 
@@ -831,7 +831,7 @@ int execute_vector_db_add_pdf_document_tool_call(const ToolCall *tool_call, Tool
             failed_chunks++;
         }
     }
-    
+
     char response[1024] = {0};
     if (successful_chunks > 0) {
         snprintf(response, sizeof(response),
@@ -873,8 +873,7 @@ int execute_vector_db_search_text_tool_call(const ToolCall *tool_call, ToolResul
         return 0;
     }
     
-    document_store_t *doc_store = services_get_document_store(g_services);
-    document_search_results_t *search_results = vector_db_service_search_text(g_services, doc_store, index_name, query_text, (size_t)k);
+    document_search_results_t *search_results = vector_db_service_search_text(g_services, index_name, query_text, (size_t)k);
     
     if (search_results != NULL) {
         result->result = document_results_to_json(search_results);
