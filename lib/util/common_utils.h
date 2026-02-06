@@ -50,4 +50,13 @@ int extract_array_numbers(const char *json, const char *param_name, float **out_
  */
 char* create_error_message(const char *format, ...);
 
-#endif // COMMON_UTILS_H
+/**
+ * Strip ANSI escape codes from a string.
+ *
+ * @param str  Input string (may contain ANSI codes)
+ * @return     Newly allocated string with ANSI codes removed.
+ *             Caller must free. Returns NULL if str is NULL or on allocation failure.
+ */
+char *strip_ansi(const char *str);
+
+#endif /* COMMON_UTILS_H */

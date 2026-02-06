@@ -1,6 +1,6 @@
 #include "notification_formatter.h"
 #include "message_store.h"
-#include "../ui/terminal.h"
+#include "../util/common_utils.h"
 #include <cJSON.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,10 +43,10 @@ static char* format_subagent_completion(const char* content) {
     char* clean_result = NULL;
     char* clean_error = NULL;
     if (cJSON_IsString(result) && result->valuestring) {
-        clean_result = terminal_strip_ansi(result->valuestring);
+        clean_result = strip_ansi(result->valuestring);
     }
     if (cJSON_IsString(error) && error->valuestring) {
-        clean_error = terminal_strip_ansi(error->valuestring);
+        clean_error = strip_ansi(error->valuestring);
     }
 
     /* Build formatted output */

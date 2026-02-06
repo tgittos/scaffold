@@ -172,8 +172,8 @@ $(TEST_approval_gate_integration_TARGET): $(TEST_approval_gate_integration_OBJEC
 
 $(eval $(call def_test,config,utils/test_config,$(LIBDIR)/util/config.c $(LIBDIR)/util/ralph_home.c))
 $(eval $(call def_test,debug_output,utils/test_debug_output,$(LIBDIR)/util/debug_output.c))
-$(eval $(call def_test,spinner,utils/test_spinner,$(LIBDIR)/ui/terminal.c $(LIBDIR)/ui/spinner.c $(TESTDIR)/stubs/output_formatter_stub.c))
-$(eval $(call def_test,terminal,utils/test_terminal,$(LIBDIR)/ui/terminal.c $(TESTDIR)/stubs/output_formatter_stub.c))
+$(eval $(call def_test,spinner,utils/test_spinner,$(LIBDIR)/ui/terminal.c $(LIBDIR)/ui/spinner.c $(LIBDIR)/util/common_utils.c $(TESTDIR)/stubs/output_formatter_stub.c))
+$(eval $(call def_test,terminal,utils/test_terminal,$(LIBDIR)/ui/terminal.c $(LIBDIR)/util/common_utils.c $(TESTDIR)/stubs/output_formatter_stub.c))
 
 $(TEST_config_TARGET): $(TEST_config_OBJECTS) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_config_OBJECTS) $(CJSON_LIB)
@@ -230,8 +230,8 @@ MESSAGING_DEPS := \
     $(LIBDIR)/db/sqlite_dal.c \
     $(LIBDIR)/util/uuid_utils.c \
     $(LIBDIR)/util/ralph_home.c \
+    $(LIBDIR)/util/common_utils.c \
     $(LIBDIR)/ipc/pipe_notifier.c \
-    $(LIBDIR)/ui/terminal.c \
     $(TESTDIR)/stubs/services_stub.c \
     $(TESTDIR)/stubs/output_formatter_stub.c
 

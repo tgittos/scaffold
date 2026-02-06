@@ -1,5 +1,6 @@
 #include "terminal.h"
 #include "output_formatter.h"
+#include "../util/common_utils.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -192,51 +193,5 @@ void terminal_clear_line(FILE *out) {
 }
 
 char *terminal_strip_ansi(const char *str) {
-    if (str == NULL) {
-        return NULL;
-    }
-
-    size_t len = strlen(str);
-    char *result = malloc(len + 1);
-    if (result == NULL) {
-        return NULL;
-    }
-
-    size_t j = 0;
-    for (size_t i = 0; i < len; i++) {
-        if (str[i] == '\033' || str[i] == '\x1b') {
-            /* Skip ESC [ <params> <intermediate> <final> sequences (CSI)
-             * Parameters: 0x30-0x3F (0-9:;<=>?)
-             * Intermediate: 0x20-0x2F (space !"#$%&'()*+,-./)
-             * Final: 0x40-0x7E (@A-Z[\]^_`a-z{|}~)
-             */
-            if (i + 1 < len && str[i + 1] == '[') {
-                i += 2;
-                /* Skip parameter bytes: 0-9 : ; < = > ? */
-                while (i < len && ((unsigned char)str[i] >= 0x30 &&
-                                   (unsigned char)str[i] <= 0x3F)) {
-                    i++;
-                }
-                /* Skip intermediate bytes: space through / */
-                while (i < len && ((unsigned char)str[i] >= 0x20 &&
-                                   (unsigned char)str[i] <= 0x2F)) {
-                    i++;
-                }
-                /* Skip final byte: @ through ~ */
-                if (i < len && ((unsigned char)str[i] >= 0x40 &&
-                                (unsigned char)str[i] <= 0x7E)) {
-                    continue;
-                }
-                /* Malformed sequence - back up one so outer loop handles it */
-                if (i > 0) i--;
-                continue;
-            }
-        } else if (str[i] == '\r') {
-            /* Skip carriage returns (often used with line clearing) */
-            continue;
-        }
-        result[j++] = str[i];
-    }
-    result[j] = '\0';
-    return result;
+    return strip_ansi(str);
 }

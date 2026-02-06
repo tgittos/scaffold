@@ -1,5 +1,5 @@
 #include "todo_display.h"
-#include "../ui/terminal.h"
+#include "../util/ansi_codes.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

@@ -1,4 +1,5 @@
 #include "output_formatter.h"
+#include "terminal.h"
 #include "json_output.h"
 #include "../util/debug_output.h"
 #include "../llm/model_capabilities.h"

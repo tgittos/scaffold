@@ -106,7 +106,7 @@ Three headers bake in cross-layer type dependencies via `#include`. Since all us
 
 ---
 
-## Phase 5: Extract ANSI Constants (5 terminal.h violations)
+## Phase 5: Extract ANSI Constants (5 terminal.h violations) ✅ COMPLETE
 
 Several non-UI modules include `terminal.h` for TERM_* string constants.
 

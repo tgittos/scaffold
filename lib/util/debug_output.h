@@ -3,7 +3,7 @@
 
 #include <stdio.h>
 #include <stdbool.h>
-#include "../ui/terminal.h"
+#include "ansi_codes.h"
 
 #define DEBUG_COLOR_YELLOW TERM_BRIGHT_YELLOW
 #define DEBUG_COLOR_RESET  TERM_RESET
