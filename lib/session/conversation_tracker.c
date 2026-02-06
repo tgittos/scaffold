@@ -5,6 +5,7 @@
 #include <cJSON.h>
 #include <time.h>
 #include "../db/document_store.h"
+#include "../db/vector_db_service.h"
 #include "../services/services.h"
 #include "../util/debug_output.h"
 
@@ -359,7 +360,7 @@ static int add_message_to_history(ConversationHistory *history, const char *role
                 cJSON_Delete(metadata);
 
                 if (metadata_json) {
-                    int add_result = document_store_add_text(store, CONVERSATION_INDEX, content_to_store, "conversation", role, metadata_json);
+                    int add_result = vector_db_service_add_text(g_services, store, CONVERSATION_INDEX, content_to_store, "conversation", role, metadata_json);
                     if (add_result != 0) {
                         debug_printf("Warning: Failed to add conversation message to document store\n");
                     }
@@ -470,8 +471,8 @@ ConversationHistory* search_conversation_history(const char *query, size_t max_r
     
     document_store_ensure_index(store, CONVERSATION_INDEX, CONVERSATION_EMBEDDING_DIM, 10000);
 
-    document_search_results_t* results = document_store_search_text(
-        store, CONVERSATION_INDEX, query, max_results);
+    document_search_results_t* results = vector_db_service_search_text(
+        g_services, store, CONVERSATION_INDEX, query, max_results);
     
     if (results == NULL || results->results.count == 0) {
         if (results) document_store_free_results(results);

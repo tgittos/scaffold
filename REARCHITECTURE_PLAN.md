@@ -45,7 +45,7 @@ Remove direct `#include "db/metadata_store.h"` from files that get it transitive
 
 ---
 
-## Phase 3: Decouple document_store from Embeddings (1 CRITICAL)
+## Phase 3: Decouple document_store from Embeddings (1 CRITICAL) ✅ COMPLETE
 
 `lib/db/document_store.c` includes `llm/embeddings_service.h` and calls `embeddings_service_get_vector()` directly (lines 321-341, 406-419). DB layer should not depend on LLM layer.
 

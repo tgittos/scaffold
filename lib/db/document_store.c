@@ -2,7 +2,6 @@
 #include "vector_db_service.h"
 #include "hnswlib_wrapper.h"
 #include "../util/ralph_home.h"
-#include "llm/embeddings_service.h"
 #include "../services/services.h"
 #include "util/ptrarray.h"
 #include <stdio.h>
@@ -310,35 +309,6 @@ int document_store_add(document_store_t* store, const char* index_name,
     return 0;
 }
 
-int document_store_add_text(document_store_t* store, const char* index_name,
-                           const char* text, const char* type,
-                           const char* source, const char* metadata_json) {
-    if (store == NULL || index_name == NULL || text == NULL) return -1;
-
-    embeddings_service_t* emb = services_get_embeddings(g_services);
-    if (!embeddings_service_is_configured(emb)) {
-        size_t fallback_dim = 1536;
-        float *zero_embedding = calloc(fallback_dim, sizeof(float));
-        if (zero_embedding == NULL) return -1;
-
-        int result = document_store_add(store, index_name, text, zero_embedding,
-                                       fallback_dim, type, source, metadata_json);
-        free(zero_embedding);
-        return result;
-    }
-
-    embedding_vector_t embedding;
-    if (embeddings_service_get_vector(emb, text, &embedding) != 0) {
-        return -1;
-    }
-
-    int result = document_store_add(store, index_name, text, embedding.data,
-                                   embedding.dimension, type, source, metadata_json);
-
-    embeddings_service_free_embedding(&embedding);
-    return result;
-}
-
 document_search_results_t* document_store_search(document_store_t* store, 
                                                const char* index_name,
                                                const float* query_embedding,
@@ -391,29 +361,6 @@ document_search_results_t* document_store_search(document_store_t* store,
     }
 
     vector_db_free_search_results(vector_results);
-    return results;
-}
-
-document_search_results_t* document_store_search_text(document_store_t* store,
-                                                     const char* index_name,
-                                                     const char* query_text,
-                                                     size_t k) {
-    if (store == NULL || index_name == NULL || query_text == NULL) return NULL;
-
-    embeddings_service_t* emb = services_get_embeddings(g_services);
-    if (!embeddings_service_is_configured(emb)) {
-        return NULL;
-    }
-
-    embedding_vector_t embedding;
-    if (embeddings_service_get_vector(emb, query_text, &embedding) != 0) {
-        return NULL;
-    }
-
-    document_search_results_t* results = document_store_search(store, index_name,
-                                                              embedding.data, embedding.dimension, k);
-
-    embeddings_service_free_embedding(&embedding);
     return results;
 }
 
