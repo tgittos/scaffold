@@ -317,11 +317,12 @@ define PYTHON_TEST_EMBED
 		exit 1; \
 	fi; \
 	echo "Embedding Python stdlib into test binary..."; \
-	rm -f $(BUILDDIR)/python-test-embed.zip; \
-	cd $(PYTHON_STDLIB_DIR) && zip -qr $(CURDIR)/$(BUILDDIR)/python-test-embed.zip lib/; \
-	cd $(CURDIR)/$(SRCDIR)/tools && zip -qr $(CURDIR)/$(BUILDDIR)/python-test-embed.zip python_defaults/; \
-	zipcopy $(CURDIR)/$(BUILDDIR)/python-test-embed.zip $(CURDIR)/$@; \
-	rm -f $(BUILDDIR)/python-test-embed.zip
+	EMBED_ZIP=$(CURDIR)/$(BUILDDIR)/python-embed-$$(basename $@).zip; \
+	rm -f $$EMBED_ZIP; \
+	cd $(PYTHON_STDLIB_DIR) && zip -qr $$EMBED_ZIP lib/; \
+	cd $(CURDIR)/$(SRCDIR)/tools && zip -qr $$EMBED_ZIP python_defaults/; \
+	zipcopy $$EMBED_ZIP $(CURDIR)/$@; \
+	rm -f $$EMBED_ZIP
 endef
 
 $(TEST_python_tool_TARGET): $(TEST_python_tool_OBJECTS) $(LIBRALPH) $(ALL_LIBS)
