@@ -1,6 +1,7 @@
 #include "tool_executor.h"
 #include "session.h"
 #include "tool_orchestration.h"
+#include "conversation_state.h"
 #include "../util/interrupt.h"
 #include "../ui/output_formatter.h"
 #include "../ui/json_output.h"
@@ -17,102 +18,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "../util/json_escape.h"
-
-char* construct_openai_assistant_message_with_tools(const char* content,
-                                                    const ToolCall* tool_calls,
-                                                    int call_count) {
-    if (call_count <= 0 || tool_calls == NULL) {
-        return content ? strdup(content) : NULL;
-    }
-
-    size_t base_size = 200;
-    size_t content_len = content ? strlen(content) : 0;
-
-    if (content_len > SIZE_MAX / 2 - 50) {
-        return NULL;
-    }
-    size_t content_size = content_len * 2 + 50; // worst-case JSON escaping
-
-    if (call_count > 0 && (size_t)call_count > SIZE_MAX / 200) {
-        return NULL;
-    }
-    size_t tools_size = (size_t)call_count * 200;
-
-    if (base_size > SIZE_MAX - content_size ||
-        base_size + content_size > SIZE_MAX - tools_size) {
-        return NULL;
-    }
-
-    char* message = malloc(base_size + content_size + tools_size);
-    if (message == NULL) {
-        return NULL;
-    }
-
-    char* escaped_content = json_escape_string(content ? content : "");
-    if (escaped_content == NULL) {
-        free(message);
-        return NULL;
-    }
-
-    int written = snprintf(message, base_size + content_size + tools_size,
-                          "{\"role\": \"assistant\", \"content\": \"%s\", \"tool_calls\": [",
-                          escaped_content);
-    free(escaped_content);
-
-    if (written < 0) {
-        free(message);
-        return NULL;
-    }
-
-    for (int i = 0; i < call_count; i++) {
-        char* escaped_args = json_escape_string(tool_calls[i].arguments ? tool_calls[i].arguments : "{}");
-        if (escaped_args == NULL) {
-            free(message);
-            return NULL;
-        }
-
-        const char* id = tool_calls[i].id ? tool_calls[i].id : "";
-        const char* name = tool_calls[i].name ? tool_calls[i].name : "";
-        size_t tool_json_size = strlen(id) + strlen(name) + strlen(escaped_args) + 100;
-        char* tool_call_json = malloc(tool_json_size);
-        if (tool_call_json == NULL) {
-            free(escaped_args);
-            free(message);
-            return NULL;
-        }
-
-        int tool_written = snprintf(tool_call_json, tool_json_size,
-                                   "%s{\"id\": \"%s\", \"type\": \"function\", \"function\": {\"name\": \"%s\", \"arguments\": \"%s\"}}",
-                                   i > 0 ? ", " : "",
-                                   id, name, escaped_args);
-        free(escaped_args);
-
-        if (tool_written < 0 || tool_written >= (int)tool_json_size) {
-            free(tool_call_json);
-            free(message);
-            return NULL;
-        }
-
-        size_t current_len = strlen(message);
-        size_t needed_len = current_len + strlen(tool_call_json) + 3; // +3 for "]}" and null
-        if (needed_len > base_size + content_size + tools_size) {
-            char* new_message = realloc(message, needed_len + 100);
-            if (new_message == NULL) {
-                free(tool_call_json);
-                free(message);
-                return NULL;
-            }
-            message = new_message;
-        }
-
-        strcat(message, tool_call_json);
-        free(tool_call_json);
-    }
-
-    strcat(message, "]}");
-    return message;
-}
 
 static int tool_executor_run_loop(AgentSession* session, const char* user_message,
                                   int max_tokens, ToolOrchestrationContext* ctx) {
@@ -273,46 +178,14 @@ static int tool_executor_run_loop(AgentSession* session, const char* user_messag
                                                           parsed_response.completion_tokens);
             }
 
-            // Use parsed content, not raw response.data which includes the full API envelope
-            char* formatted_message = format_model_assistant_tool_message(session->model_registry,
-                                                                         session->session_data.config.model,
-                                                                         assistant_content, tool_calls, call_count);
-            if (formatted_message) {
-                if (append_conversation_message(&session->session_data.conversation, "assistant", formatted_message) != 0) {
-                    fprintf(stderr, "Warning: Failed to save assistant response with tool calls to conversation history\n");
-                }
-                free(formatted_message);
-            } else {
-                char* simple_message = malloc(256);
-                if (simple_message) {
-                    snprintf(simple_message, 256, "Used tools: ");
-                    for (int i = 0; i < call_count; i++) {
-                        if (i > 0) {
-                            strncat(simple_message, ", ", 255 - strlen(simple_message));
-                        }
-                        strncat(simple_message, tool_calls[i].name, 255 - strlen(simple_message));
-                    }
-                    if (append_conversation_message(&session->session_data.conversation, "assistant", simple_message) != 0) {
-                        fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
-                    }
-                    free(simple_message);
-                } else {
-                    if (append_conversation_message(&session->session_data.conversation, "assistant", "Executed tool calls") != 0) {
-                        fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
-                    }
-                }
-            }
+            conversation_append_assistant(session, assistant_content, tool_calls, call_count);
         } else {
-            if (assistant_content != NULL) {
-                if (append_conversation_message(&session->session_data.conversation, "assistant", assistant_content) != 0) {
-                    fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
-                }
+            conversation_append_assistant(session, assistant_content, NULL, 0);
 
-                if (session->session_data.config.json_output_mode) {
-                    json_output_assistant_text(assistant_content,
-                                               parsed_response.prompt_tokens,
-                                               parsed_response.completion_tokens);
-                }
+            if (assistant_content != NULL && session->session_data.config.json_output_mode) {
+                json_output_assistant_text(assistant_content,
+                                           parsed_response.prompt_tokens,
+                                           parsed_response.completion_tokens);
             }
         }
 
@@ -479,28 +352,14 @@ static int tool_executor_run_loop(AgentSession* session, const char* user_messag
             executed_count++;
         }
 
+        conversation_append_tool_results(session, results, executed_count,
+                                         tool_calls, tool_call_indices);
+
         if (loop_aborted || loop_interrupted) {
-            for (int i = 0; i < executed_count; i++) {
-                int tool_call_index = tool_call_indices[i];
-                const char* tool_name = tool_calls[tool_call_index].name;
-                if (append_tool_message(&session->session_data.conversation, results[i].result,
-                                       results[i].tool_call_id, tool_name) != 0) {
-                    fprintf(stderr, "Warning: Failed to save tool result to conversation history\n");
-                }
-            }
             free(tool_call_indices);
             cleanup_tool_results(results, executed_count);
             cleanup_tool_calls(tool_calls, call_count);
             return loop_interrupted ? -2 : -1;
-        }
-
-        for (int i = 0; i < executed_count; i++) {
-            int tool_call_index = tool_call_indices[i];
-            const char* tool_name = tool_calls[tool_call_index].name;
-            if (append_tool_message(&session->session_data.conversation, results[i].result,
-                                   results[i].tool_call_id, tool_name) != 0) {
-                fprintf(stderr, "Warning: Failed to save tool result to conversation history\n");
-            }
         }
 
         free(tool_call_indices);
@@ -629,11 +488,7 @@ int tool_executor_run_workflow(AgentSession* session, ToolCall* tool_calls, int 
         }
     }
 
-    for (int i = 0; i < call_count; i++) {
-        if (append_tool_message(&session->session_data.conversation, results[i].result, tool_calls[i].id, tool_calls[i].name) != 0) {
-            fprintf(stderr, "Warning: Failed to save tool result to conversation history\n");
-        }
-    }
+    conversation_append_tool_results(session, results, call_count, tool_calls, NULL);
 
     if (aborted || interrupted) {
         cleanup_tool_results(results, call_count);

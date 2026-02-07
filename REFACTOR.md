@@ -59,50 +59,20 @@ tracking spans the full workflow (initial batch IDs are seeded before entering t
 
 ---
 
-## Session 7: Extract conversation_state.c
+## Session 7: Extract conversation_state.c ✅ COMPLETE
 
 **Goal**: Extract conversation history management from `tool_executor.c`.
 
-### New File: lib/agent/conversation_state.h
+Extracted three functions into `lib/agent/conversation_state.c`:
+- `conversation_build_assistant_tool_message` — renamed from `construct_openai_assistant_message_with_tools`,
+  builds OpenAI-format assistant JSON with tool_calls array.
+- `conversation_append_assistant` — appends assistant message to conversation history,
+  using model registry formatting with fallback to tool-name summary.
+- `conversation_append_tool_results` — appends tool results to conversation history,
+  supporting both direct 1:1 mapping and indexed mapping via `call_indices` parameter.
 
-```c
-#ifndef LIB_AGENT_CONVERSATION_STATE_H
-#define LIB_AGENT_CONVERSATION_STATE_H
-
-#include "session.h"
-#include "../types.h"
-
-char* conversation_build_assistant_tool_message(const ToolCall* calls,
-                                                int count,
-                                                const char* content);
-
-int conversation_append_assistant(AgentSession* session,
-                                  const char* content,
-                                  const ToolCall* calls,
-                                  int count);
-
-int conversation_append_tool_results(AgentSession* session,
-                                     const ToolResult* results,
-                                     int count);
-
-#endif
-```
-
-### New File: lib/agent/conversation_state.c
-
-Extract from `tool_executor.c`:
-- `construct_openai_assistant_message_with_tools()` (lines 140-233)
-- Tool result appending logic (lines 435-458, 649-670, 801-805)
-
-### Update mk/lib.mk
-
-Add `lib/agent/conversation_state.c` to `LIB_AGENT_SRC`.
-
-### Verification
-
-```bash
-./scripts/build.sh && ./scripts/run_tests.sh
-```
+`session.c` and `streaming_handler.c` updated to call the renamed builder function.
+Full migration of those callers to `conversation_append_assistant` deferred to Sessions 11-13.
 
 ---
 
@@ -434,8 +404,8 @@ make check-valgrind
 ### New Files (16)
 - [x] `lib/agent/tool_orchestration.h`
 - [x] `lib/agent/tool_orchestration.c`
-- [ ] `lib/agent/conversation_state.h`
-- [ ] `lib/agent/conversation_state.c`
+- [x] `lib/agent/conversation_state.h`
+- [x] `lib/agent/conversation_state.c`
 - [ ] `lib/agent/api_round_trip.h`
 - [ ] `lib/agent/api_round_trip.c`
 - [ ] `lib/agent/tool_batch_executor.h`

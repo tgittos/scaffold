@@ -2,6 +2,7 @@
 #include "context_enhancement.h"
 #include "../util/interrupt.h"
 #include "tool_executor.h"
+#include "conversation_state.h"
 #include "../network/streaming.h"
 #include "../llm/llm_provider.h"
 #include "../ui/output_formatter.h"
@@ -193,7 +194,7 @@ int streaming_process_message(AgentSession* session, const char* user_message,
             }
 
             // OpenAI conversation format requires assistant messages to include the tool_calls array
-            char* constructed_message = construct_openai_assistant_message_with_tools(
+            char* constructed_message = conversation_build_assistant_tool_message(
                 ctx->text_content, tool_calls, call_count);
             if (constructed_message != NULL) {
                 if (append_conversation_message(&session->session_data.conversation, "assistant", constructed_message) != 0) {

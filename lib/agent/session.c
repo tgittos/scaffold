@@ -17,6 +17,7 @@
 #include "session.h"
 #include "context_enhancement.h"
 #include "tool_executor.h"
+#include "conversation_state.h"
 #include "streaming_handler.h"
 #include "recap.h"
 #include "../tools/todo_tool.h"
@@ -670,7 +671,7 @@ int session_process_message(AgentSession* session, const char* user_message) {
                 if (session->session_data.config.api_type == API_TYPE_ANTHROPIC) {
                     content_to_save = response.data;
                 } else {
-                    constructed_message = construct_openai_assistant_message_with_tools(
+                    constructed_message = conversation_build_assistant_tool_message(
                         parsed_response.response_content, raw_tool_calls, raw_call_count);
                     content_to_save = constructed_message;
                 }

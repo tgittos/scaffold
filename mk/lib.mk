@@ -48,6 +48,7 @@ LIB_AGENT_SOURCES := \
     $(LIBDIR)/agent/session.c \
     $(LIBDIR)/agent/async_executor.c \
     $(LIBDIR)/agent/tool_executor.c \
+    $(LIBDIR)/agent/conversation_state.c \
     $(LIBDIR)/agent/tool_orchestration.c \
     $(LIBDIR)/agent/streaming_handler.c \
     $(LIBDIR)/agent/context_enhancement.c \

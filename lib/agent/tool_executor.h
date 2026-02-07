@@ -16,6 +16,9 @@
  * 2. Saves tool results to conversation history
  * 3. Makes follow-up API calls if the LLM requests more tools
  * 4. Continues until the LLM returns a non-tool response
+ *
+ * Conversation history management (building assistant messages,
+ * appending tool results) is delegated to conversation_state.h.
  */
 
 /**
@@ -43,20 +46,5 @@ int tool_executor_run_workflow(AgentSession* session,
                                int call_count,
                                const char* user_message,
                                int max_tokens);
-
-/**
- * Construct an OpenAI-format assistant message with tool calls.
- *
- * Creates a JSON string representing an assistant message that includes
- * both text content and tool_calls array, suitable for OpenAI API format.
- *
- * @param content The text content of the assistant message (can be NULL)
- * @param tool_calls Array of tool calls made by the assistant
- * @param call_count Number of tool calls
- * @return Allocated JSON string, or NULL on failure. Caller must free.
- */
-char* construct_openai_assistant_message_with_tools(const char* content,
-                                                    const ToolCall* tool_calls,
-                                                    int call_count);
 
 #endif // TOOL_EXECUTOR_H
