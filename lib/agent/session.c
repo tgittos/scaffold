@@ -418,3 +418,37 @@ int session_process_message(AgentSession* session, const char* user_message) {
     api_round_trip_cleanup(&rt);
     return result;
 }
+
+int session_continue(AgentSession* session) {
+    if (session == NULL) return -1;
+
+    TokenConfig token_config;
+    token_config_init(&token_config, session->session_data.config.context_window);
+
+    TokenUsage token_usage;
+    if (manage_conversation_tokens(session, NULL, &token_config, &token_usage) != 0) {
+        fprintf(stderr, "Error: Failed to calculate token allocation\n");
+        return -1;
+    }
+
+    int max_tokens = session->session_data.config.max_tokens;
+    if (max_tokens == -1) {
+        max_tokens = token_usage.available_response_tokens;
+    }
+
+    debug_printf("session_continue: triggering LLM with current conversation\n");
+
+    DispatchDecision dispatch = message_dispatcher_select_mode(session);
+    if (dispatch.mode == DISPATCH_STREAMING) {
+        return streaming_process_message(session, dispatch.provider, NULL, max_tokens);
+    }
+
+    LLMRoundTripResult rt;
+    if (api_round_trip_execute(session, NULL, max_tokens, &rt) != 0) {
+        return -1;
+    }
+
+    int result = message_processor_handle_response(session, &rt, NULL, max_tokens);
+    api_round_trip_cleanup(&rt);
+    return result;
+}

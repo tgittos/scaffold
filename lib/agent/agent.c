@@ -69,9 +69,12 @@ int agent_init(Agent* agent, const AgentConfig* config) {
         return -1;
     }
 
-    /* Wire services after session_init so store availability checks see real services */
+    /* Wire services after session_init so store availability checks see real services.
+     * SubagentManager.services must also be set here — register_subagent_tool() copied
+     * registry->services during session_init when it was still NULL. */
     agent->session.services = agent->services;
     agent->session.tools.services = agent->services;
+    subagent_manager_set_services(&agent->session.subagent_manager, agent->services);
     document_store_set_services(agent->services);
     conversation_tracker_set_services(agent->services);
     memory_commands_set_services(agent->services);

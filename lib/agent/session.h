@@ -114,6 +114,16 @@ int session_load_config(AgentSession* session);
 int session_process_message(AgentSession* session, const char* user_message);
 
 /**
+ * Continue the conversation without a new user message.
+ * Triggers an LLM round-trip using the current conversation history as-is.
+ * Use this after injecting a system message into conversation history.
+ *
+ * @param session The active session
+ * @return 0 on success, -1 on error, -2 if interrupted by user (Ctrl+C)
+ */
+int session_continue(AgentSession* session);
+
+/**
  * Start background message polling for the session.
  * Only starts if auto_poll_enabled is set in polling_config.
  *

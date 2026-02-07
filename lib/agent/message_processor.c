@@ -33,8 +33,10 @@ int message_processor_handle_response(AgentSession* session,
 
     print_formatted_response_improved(&result->parsed);
 
-    if (append_conversation_message(&session->session_data.conversation, "user", user_message) != 0) {
-        fprintf(stderr, "Warning: Failed to save user message to conversation history\n");
+    if (user_message != NULL && strlen(user_message) > 0) {
+        if (append_conversation_message(&session->session_data.conversation, "user", user_message) != 0) {
+            fprintf(stderr, "Warning: Failed to save user message to conversation history\n");
+        }
     }
 
     int rc;

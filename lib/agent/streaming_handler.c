@@ -80,7 +80,7 @@ static size_t stream_http_callback(const char* data, size_t size, void* user_dat
 
 int streaming_process_message(AgentSession* session, LLMProvider* provider,
                               const char* user_message, int max_tokens) {
-    if (session == NULL || provider == NULL || user_message == NULL) {
+    if (session == NULL || provider == NULL) {
         return -1;
     }
 
@@ -159,8 +159,10 @@ int streaming_process_message(AgentSession* session, LLMProvider* provider,
     int input_tokens = ctx->input_tokens;
     int output_tokens = ctx->output_tokens;
 
-    if (append_conversation_message(&session->session_data.conversation, "user", user_message) != 0) {
-        fprintf(stderr, "Warning: Failed to save user message to conversation history\n");
+    if (user_message != NULL && strlen(user_message) > 0) {
+        if (append_conversation_message(&session->session_data.conversation, "user", user_message) != 0) {
+            fprintf(stderr, "Warning: Failed to save user message to conversation history\n");
+        }
     }
 
     if (ctx->tool_uses.count > 0) {

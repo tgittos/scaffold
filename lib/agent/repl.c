@@ -9,6 +9,7 @@
 #include "../tools/subagent_tool.h"
 #include "../ipc/message_poller.h"
 #include "../ipc/notification_formatter.h"
+#include "../session/conversation_tracker.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -60,6 +61,28 @@ static void repl_line_callback(char* line) {
     printf("\n");
 
     free(line);
+}
+
+static void process_pending_notifications(AgentSession* session) {
+    notification_bundle_t* bundle = notification_bundle_create(session->session_id, session->services);
+    if (bundle == NULL) {
+        return;
+    }
+    int total_count = notification_bundle_total_count(bundle);
+    if (total_count > 0) {
+        display_message_notification(total_count);
+        char* notification_text = notification_format_for_llm(bundle);
+        if (notification_text != NULL) {
+            debug_printf("Processing %d incoming messages\n", total_count);
+            append_conversation_message(&session->session_data.conversation,
+                                        "system", notification_text);
+            session_continue(session);
+            free(notification_text);
+        } else {
+            display_message_notification_clear();
+        }
+    }
+    notification_bundle_destroy(bundle);
 }
 
 int repl_run_session(AgentSession* session, bool json_mode) {
@@ -124,8 +147,18 @@ int repl_run_session(AgentSession* session, bool json_mode) {
             break;
         }
 
+        int subagent_changes = subagent_poll_all(mgr);
+        if (subagent_changes > 0) {
+            rl_callback_handler_remove();
+            printf(TERM_CLEAR_LINE);
+            fflush(stdout);
+            process_pending_notifications(session);
+            if (g_repl_running) {
+                rl_callback_handler_install("> ", repl_line_callback);
+            }
+        }
+
         if (ready == 0) {
-            subagent_poll_all(mgr);
             continue;
         }
 
@@ -154,22 +187,7 @@ int repl_run_session(AgentSession* session, bool json_mode) {
             fflush(stdout);
 
             message_poller_clear_notification(session->message_poller);
-            notification_bundle_t* bundle = notification_bundle_create(session->session_id, session->services);
-            if (bundle != NULL) {
-                int total_count = notification_bundle_total_count(bundle);
-                if (total_count > 0) {
-                    display_message_notification(total_count);
-                    char* notification_text = notification_format_for_llm(bundle);
-                    if (notification_text != NULL) {
-                        debug_printf("Processing %d incoming messages\n", total_count);
-                        session_process_message(session, notification_text);
-                        free(notification_text);
-                    } else {
-                        display_message_notification_clear();
-                    }
-                }
-                notification_bundle_destroy(bundle);
-            }
+            process_pending_notifications(session);
 
             if (g_repl_running) {
                 rl_callback_handler_install("> ", repl_line_callback);
