@@ -3,6 +3,9 @@
 
 #include "tools_system.h"
 
+typedef struct Services Services;
+
+void memory_tool_set_services(Services* services);
 int register_memory_tools(ToolRegistry *registry);
 
 int execute_remember_tool_call(const ToolCall *tool_call, ToolResult *result);

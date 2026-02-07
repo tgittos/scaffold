@@ -85,7 +85,7 @@ vector_db_t* vector_db_create(void) {
     
     char* default_dir = vector_db_get_default_directory();
     if (default_dir) {
-        vector_db_enable_auto_flush(db, 100, default_dir, NULL, NULL); // 100ms auto-flush
+        vector_db_enable_auto_flush(db, 100, default_dir, NULL, NULL);
         free(default_dir);
     }
     
@@ -658,11 +658,7 @@ vector_db_error_t vector_db_load_all(vector_db_t* db, const char* directory) {
             char file_path[4096] = {0};
             snprintf(file_path, sizeof(file_path), "%s/%s", directory, entry->d_name);
             
-            vector_db_error_t err = vector_db_load_index(db, index_name, file_path);
-            if (err != VECTOR_DB_OK) {
-                closedir(dir);
-                return err;
-            }
+            vector_db_load_index(db, index_name, file_path);
         }
     }
     

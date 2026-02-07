@@ -18,6 +18,10 @@
 
 static Services* g_services = NULL;
 
+void memory_tool_set_services(Services* services) {
+    g_services = services;
+}
+
 static int ensure_memory_index(Services* services) {
     document_store_t* store = services_get_document_store(services);
     if (store == NULL) return -1;

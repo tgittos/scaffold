@@ -25,6 +25,12 @@ vector_db_service_t* vector_db_service_create(void) {
         return NULL;
     }
 
+    char* default_dir = vector_db_get_default_directory();
+    if (default_dir) {
+        vector_db_load_all(service->database, default_dir);
+        free(default_dir);
+    }
+
     if (pthread_mutex_init(&service->mutex, NULL) != 0) {
         vector_db_destroy(service->database);
         free(service);

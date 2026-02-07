@@ -11,6 +11,7 @@
 #include "../tools/subagent_tool.h"
 #include "../tools/tool_extension.h"
 #include "../ui/memory_commands.h"
+#include "../tools/memory_tool.h"
 #include "../util/context_retriever.h"
 #include "../ipc/message_poller.h"
 #include <stdio.h>
@@ -65,19 +66,22 @@ int agent_init(Agent* agent, const AgentConfig* config) {
         setenv("RALPH_IS_SUBAGENT", "1", 1);
     }
 
+    /* conversation_tracker needs services before session_init because
+     * load_conversation_history() is called during session_init. */
+    conversation_tracker_set_services(agent->services);
+
     if (session_init(&agent->session) != 0) {
         return -1;
     }
 
-    /* Wire services after session_init so store availability checks see real services.
-     * SubagentManager.services must also be set here — register_subagent_tool() copied
+    /* Wire remaining services after session_init — register_subagent_tool() copied
      * registry->services during session_init when it was still NULL. */
     agent->session.services = agent->services;
     agent->session.tools.services = agent->services;
     subagent_manager_set_services(&agent->session.subagent_manager, agent->services);
     document_store_set_services(agent->services);
-    conversation_tracker_set_services(agent->services);
     memory_commands_set_services(agent->services);
+    memory_tool_set_services(agent->services);
     context_retriever_set_services(agent->services);
     session_wire_services(&agent->session);
 
