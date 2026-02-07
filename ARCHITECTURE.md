@@ -970,7 +970,8 @@ lib/
 │   ├── context_enhancement.c/h  # Prompt enhancement with memory/context
 │   ├── recap.c/h           # Conversation recap generation
 │   ├── streaming_handler.c/h   # Streaming orchestration layer
-│   └── tool_executor.c/h   # Tool-calling state machine
+│   ├── tool_executor.c/h   # Tool execution entry point
+│   └── iterative_loop.c/h  # Iterative tool-calling loop
 ├── session/                # Session data management
 │   ├── session_manager.c/h # Session data structures
 │   ├── conversation_tracker.c/h # Conversation persistence

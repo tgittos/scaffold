@@ -1,150 +1,11 @@
 #include "tool_executor.h"
 #include "session.h"
-#include "api_round_trip.h"
 #include "tool_orchestration.h"
 #include "tool_batch_executor.h"
 #include "conversation_state.h"
-#include "../util/interrupt.h"
-#include "../ui/output_formatter.h"
-#include "../ui/json_output.h"
+#include "iterative_loop.h"
 #include "../util/debug_output.h"
-#include "../session/token_manager.h"
-#include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-
-static int tool_executor_run_loop(AgentSession* session, const char* user_message,
-                                  int max_tokens, ToolOrchestrationContext* ctx) {
-    if (session == NULL || ctx == NULL) {
-        return -1;
-    }
-
-    (void)user_message;
-    (void)max_tokens;
-
-    int loop_count = 0;
-
-    debug_printf("Starting iterative tool calling loop\n");
-
-    while (1) {
-        loop_count++;
-        tool_orchestration_reset_batch(ctx);
-        debug_printf("Tool calling loop iteration %d\n", loop_count);
-
-        TokenConfig token_config;
-        token_config_init(&token_config, session->session_data.config.context_window);
-        TokenUsage token_usage;
-        if (manage_conversation_tokens(session, "", &token_config, &token_usage) != 0) {
-            fprintf(stderr, "Error: Failed to calculate token allocation for tool loop iteration %d\n", loop_count);
-            return -1;
-        }
-
-        int iteration_max_tokens = token_usage.available_response_tokens;
-        debug_printf("Using %d max_tokens for tool loop iteration %d\n", iteration_max_tokens, loop_count);
-
-        LLMRoundTripResult rt;
-        debug_printf("Making API request for tool loop iteration %d\n", loop_count);
-        if (api_round_trip_execute(session, "", iteration_max_tokens, &rt) != 0) {
-            return -1;
-        }
-
-        const char* assistant_content = rt.parsed.response_content ?
-                                        rt.parsed.response_content :
-                                        rt.parsed.thinking_content;
-
-        ToolCall *tool_calls = rt.tool_calls;
-        int call_count = rt.tool_call_count;
-        rt.tool_calls = NULL;
-        rt.tool_call_count = 0;
-
-        if (call_count > 0) {
-            if (rt.parsed.response_content != NULL && strlen(rt.parsed.response_content) > 0) {
-                if (!session->session_data.config.json_output_mode) {
-                    printf("%s\n", rt.parsed.response_content);
-                    fflush(stdout);
-                } else {
-                    json_output_assistant_text(rt.parsed.response_content,
-                                               rt.parsed.prompt_tokens,
-                                               rt.parsed.completion_tokens);
-                }
-            }
-
-            if (session->session_data.config.json_output_mode) {
-                json_output_assistant_tool_calls_buffered(tool_calls, call_count,
-                                                          rt.parsed.prompt_tokens,
-                                                          rt.parsed.completion_tokens);
-            }
-
-            conversation_append_assistant(session, assistant_content, tool_calls, call_count);
-        } else {
-            conversation_append_assistant(session, assistant_content, NULL, 0);
-
-            if (assistant_content != NULL && session->session_data.config.json_output_mode) {
-                json_output_assistant_text(assistant_content,
-                                           rt.parsed.prompt_tokens,
-                                           rt.parsed.completion_tokens);
-            }
-        }
-
-        if (call_count == 0) {
-            debug_printf("No more tool calls found - ending tool loop after %d iterations\n", loop_count);
-            print_formatted_response_improved(&rt.parsed);
-            api_round_trip_cleanup(&rt);
-            return 0;
-        }
-
-        api_round_trip_cleanup(&rt);
-        assistant_content = NULL;
-
-        int new_tool_calls = 0;
-        for (int i = 0; i < call_count; i++) {
-            if (!tool_orchestration_is_duplicate(ctx, tool_calls[i].id)) {
-                new_tool_calls++;
-            }
-        }
-
-        if (new_tool_calls == 0) {
-            debug_printf("All %d tool calls already executed - ending loop to prevent infinite iteration\n", call_count);
-            cleanup_tool_calls(tool_calls, call_count);
-            return 0;
-        }
-
-        debug_printf("Found %d new tool calls (out of %d total) in iteration %d - executing them\n",
-                    new_tool_calls, call_count, loop_count);
-
-        ToolResult *results = calloc(call_count, sizeof(ToolResult));
-        if (results == NULL) {
-            cleanup_tool_calls(tool_calls, call_count);
-            return -1;
-        }
-
-        int *tool_call_indices = malloc(call_count * sizeof(int));
-        if (tool_call_indices == NULL) {
-            free(results);
-            cleanup_tool_calls(tool_calls, call_count);
-            return -1;
-        }
-
-        ToolBatchContext batch_ctx = { .session = session, .orchestration = ctx };
-        int executed_count = 0;
-        int batch_status = tool_batch_execute(&batch_ctx, tool_calls, call_count,
-                                               results, tool_call_indices, &executed_count);
-
-        conversation_append_tool_results(session, results, executed_count,
-                                         tool_calls, tool_call_indices);
-
-        if (batch_status != 0) {
-            free(tool_call_indices);
-            cleanup_tool_results(results, executed_count);
-            cleanup_tool_calls(tool_calls, call_count);
-            return batch_status;
-        }
-
-        free(tool_call_indices);
-        cleanup_tool_results(results, executed_count);
-        cleanup_tool_calls(tool_calls, call_count);
-    }
-}
 
 int tool_executor_run_workflow(AgentSession* session, ToolCall* tool_calls, int call_count,
                                const char* user_message, int max_tokens) {
@@ -152,9 +13,10 @@ int tool_executor_run_workflow(AgentSession* session, ToolCall* tool_calls, int 
         return -1;
     }
 
-    debug_printf("Executing %d tool call(s)...\n", call_count);
-
     (void)user_message;
+    (void)max_tokens;
+
+    debug_printf("Executing %d tool call(s)...\n", call_count);
 
     ToolOrchestrationContext ctx;
     if (tool_orchestration_init(&ctx, &session->gate_config) != 0) {
@@ -180,16 +42,15 @@ int tool_executor_run_workflow(AgentSession* session, ToolCall* tool_calls, int 
         return -2;
     }
 
-    // Seed the tracker with IDs from the initial batch so the follow-up loop
+    // Seed the tracker with IDs from the initial batch so the iterative loop
     // can detect re-emitted IDs and avoid duplicate execution.
     for (int i = 0; i < call_count; i++) {
         tool_orchestration_mark_executed(&ctx, tool_calls[i].id);
     }
 
-    // Continue the agentic loop: the LLM may request additional tool calls
-    int result = tool_executor_run_loop(session, user_message, max_tokens, &ctx);
+    int result = iterative_loop_run(session, &ctx);
 
-    // Treat follow-up loop failure as non-fatal since initial tools already executed
+    // Follow-up loop failure is non-fatal since initial tools already executed
     if (result != 0) {
         debug_printf("Follow-up tool loop failed, but initial tools executed successfully\n");
         result = 0;

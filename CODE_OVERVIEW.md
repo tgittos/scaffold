@@ -41,7 +41,8 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`context_enhancement.c/h`** - Prompt enhancement with todo state, memory recall, and context retrieval
 - **`recap.c/h`** - Conversation recap generation (one-shot LLM calls without history persistence)
 - **`streaming_handler.c/h`** - Application-layer streaming orchestration and provider registry management
-- **`tool_executor.c/h`** - Iterative tool-calling state machine for executing tool workflows
+- **`tool_executor.c/h`** - Thin entry point for tool execution workflow (init, initial batch, hand-off)
+- **`iterative_loop.c/h`** - Iterative tool-calling loop for follow-up LLM rounds
 
 #### `lib/session/` - Session Data Management
 - **`session_manager.c/h`** - Session data structures (SessionData with config, conversation, model info)

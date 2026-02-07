@@ -51,6 +51,7 @@ LIB_AGENT_SOURCES := \
     $(LIBDIR)/agent/tool_batch_executor.c \
     $(LIBDIR)/agent/api_round_trip.c \
     $(LIBDIR)/agent/conversation_state.c \
+    $(LIBDIR)/agent/iterative_loop.c \
     $(LIBDIR)/agent/tool_orchestration.c \
     $(LIBDIR)/agent/streaming_handler.c \
     $(LIBDIR)/agent/context_enhancement.c \

@@ -5,20 +5,12 @@
 #include "../tools/tools_system.h"
 
 /**
- * Tool Executor Module
+ * Tool Executor — Entry Point
  *
- * This module handles the iterative tool-calling state machine for ralph.
- * It executes tool calls, manages the conversation flow with tool results,
- * and continues making API calls until no more tool calls are returned.
- *
- * The main entry point is tool_executor_run_workflow() which:
- * 1. Executes the initial set of tool calls
- * 2. Saves tool results to conversation history
- * 3. Makes follow-up API calls if the LLM requests more tools
- * 4. Continues until the LLM returns a non-tool response
- *
- * Conversation history management (building assistant messages,
- * appending tool results) is delegated to conversation_state.h.
+ * Thin orchestrator that wires together the tool execution pipeline:
+ * 1. Initializes the orchestration context (approval + dedup)
+ * 2. Executes the initial batch via tool_batch_executor
+ * 3. Hands off to iterative_loop for follow-up LLM rounds
  */
 
 /**

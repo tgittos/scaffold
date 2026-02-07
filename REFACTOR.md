@@ -108,53 +108,16 @@ before failing, and the error handler overwrote it without freeing.
 
 ---
 
-## Session 10: Extract iterative_loop.c and Finalize tool_executor.c
+## Session 10: Extract iterative_loop.c and Finalize tool_executor.c ✅ COMPLETE
 
 **Goal**: Extract main agentic loop and slim `tool_executor.c` to thin entry point.
 
-### New File: lib/agent/iterative_loop.h
-
-```c
-#ifndef LIB_AGENT_ITERATIVE_LOOP_H
-#define LIB_AGENT_ITERATIVE_LOOP_H
-
-#include "session.h"
-#include "../types.h"
-
-int iterative_loop_run(AgentSession* session,
-                       const char* user_message,
-                       int max_tokens,
-                       const char** headers,
-                       ToolResult* initial_results,
-                       int initial_count);
-
-#endif
-```
-
-### New File: lib/agent/iterative_loop.c
-
-Extract from `tool_executor.c`:
-- Main `while(1)` loop (lines 262-676)
-- Token management per iteration
-- Termination condition checking
-
-### Update lib/agent/tool_executor.c
-
-Slim to ~50 line entry point that:
-1. Creates contexts
-2. Calls `tool_batch_execute()` for initial batch
-3. Calls `iterative_loop_run()` for follow-ups
-
-### Update mk/lib.mk
-
-Add `lib/agent/iterative_loop.c` to `LIB_AGENT_SRC`.
-
-### Verification
-
-```bash
-./scripts/build.sh && ./scripts/run_tests.sh
-./ralph "create a file called test.txt with hello world, then read it back"
-```
+Extracted the `while(1)` loop (token management, API round trips, dedup, batch execution,
+termination detection) into `lib/agent/iterative_loop.c`. The interface is minimal:
+`iterative_loop_run(session, ctx)` — the planned `user_message`/`max_tokens` parameters
+were already unused (`(void)`'d) and dropped. `tool_executor.c` is now a 62-line entry
+point that initializes orchestration, runs the initial batch, seeds the dedup tracker,
+and hands off to `iterative_loop_run`.
 
 ---
 
@@ -339,8 +302,8 @@ make check-valgrind
 - [x] `lib/agent/api_round_trip.c`
 - [x] `lib/agent/tool_batch_executor.h`
 - [x] `lib/agent/tool_batch_executor.c`
-- [ ] `lib/agent/iterative_loop.h`
-- [ ] `lib/agent/iterative_loop.c`
+- [x] `lib/agent/iterative_loop.h`
+- [x] `lib/agent/iterative_loop.c`
 - [ ] `lib/agent/session_configurator.h`
 - [ ] `lib/agent/session_configurator.c`
 - [ ] `lib/agent/message_dispatcher.h`
