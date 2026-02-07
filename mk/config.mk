@@ -10,6 +10,11 @@ CXXFLAGS := -Wall -Wextra -Werror -O2 -std=c++14 -Wno-unused-parameter -Wno-unus
 
 TARGET := ralph
 
+# Project version (single source of truth — build/version.h is generated from these)
+RALPH_VERSION_MAJOR := 0
+RALPH_VERSION_MINOR := 1
+RALPH_VERSION_PATCH := 0
+
 # Directory structure
 SRCDIR := src
 LIBDIR := lib

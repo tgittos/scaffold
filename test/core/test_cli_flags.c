@@ -2,8 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-
-#define RALPH_VERSION "0.1.0"
+#include "build/version.h"
 
 void setUp(void) {}
 

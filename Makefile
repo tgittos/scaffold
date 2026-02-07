@@ -12,6 +12,24 @@ include mk/deps.mk
 include mk/tests.mk
 
 # =============================================================================
+# VERSION HEADER
+# =============================================================================
+
+VERSION_HEADER := $(BUILDDIR)/version.h
+
+# Always run gen_version.sh, but the script only touches the file when content
+# changes (compare-and-swap), so unchanged builds don't trigger recompilation.
+# After the first build, compiler-generated .o.d files track version.h as a
+# dependency of any .o that includes it — so only those files recompile.
+$(VERSION_HEADER): FORCE
+	@scripts/gen_version.sh "$(RALPH_VERSION_MAJOR)" "$(RALPH_VERSION_MINOR)" "$(RALPH_VERSION_PATCH)" "$@"
+
+FORCE:
+
+# Ensure version header exists before any source file compiles
+COMPILE_DEPS += $(VERSION_HEADER)
+
+# =============================================================================
 # PRIMARY TARGETS
 # =============================================================================
 

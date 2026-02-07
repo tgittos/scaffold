@@ -19,12 +19,10 @@ extern "C" {
 #endif
 
 /* =============================================================================
- * VERSION
+ * VERSION (generated at build time — see build/version.h)
  * ============================================================================= */
 
-#define LIBAGENT_VERSION_MAJOR 0
-#define LIBAGENT_VERSION_MINOR 1
-#define LIBAGENT_VERSION_PATCH 0
+#include "build/version.h"
 
 /* =============================================================================
  * FORWARD DECLARATIONS

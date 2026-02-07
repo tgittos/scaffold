@@ -1,0 +1,87 @@
+# Release workflow for ralph
+# Triggered when a version tag (v*) is pushed to master.
+# Builds the binary and creates a GitHub Release with it.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  UV_VERSION: "0.5.14"
+
+jobs:
+  release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build devcontainer image
+        uses: docker/build-push-action@v5
+        with:
+          context: .devcontainer
+          load: true
+          tags: ralph-dev:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps/
+            build/
+            python/build/
+          key: deps-${{ hashFiles('mk/config.mk', 'mk/deps.mk', 'python/Makefile') }}
+          restore-keys: |
+            deps-
+          save-always: true
+
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/bin/uv
+          key: uv-${{ env.UV_VERSION }}-linux
+
+      - name: Install uv
+        run: |
+          if [ ! -f "$HOME/.local/bin/uv" ]; then
+            curl -LsSf https://astral.sh/uv/${{ env.UV_VERSION }}/install.sh | sh
+          fi
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Build and test
+        run: |
+          docker run --rm --privileged \
+            -v ${{ github.workspace }}:/workspaces/ralph \
+            -v $HOME/.local/bin:/uv-bin:ro \
+            -w /workspaces/ralph \
+            -e PATH="/uv-bin:/opt/cosmos/bin:$PATH" \
+            ralph-dev:latest \
+            bash -c "make -j$(nproc) && ./scripts/run_tests.sh"
+
+      - name: Fix permissions
+        if: always()
+        run: sudo chown -R $(id -u):$(id -g) deps/ build/ python/build/ 2>/dev/null || true
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ralph v${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          files: ralph

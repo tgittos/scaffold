@@ -11,13 +11,13 @@
 #include "../../lib/agent/agent.h"
 #include "../tools/python_extension.h"
 #include "util/debug_output.h"
+#include "build/version.h"
 
-#define RALPH_VERSION "0.1.0"
 #define MAX_CLI_ALLOW_ENTRIES 64
 #define MAX_CLI_ALLOW_CATEGORIES 16
 
 static void print_version(void) {
-    printf("ralph %s\n", RALPH_VERSION);
+    printf("ralph %s (%s)\n", RALPH_VERSION, RALPH_GIT_HASH);
 }
 
 static void print_help(const char *program_name) {

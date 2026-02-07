@@ -78,6 +78,20 @@ valgrind --leak-check=full ./test/test_foo.aarch64.elf  # ARM64
 valgrind --leak-check=full ./test/test_foo.com.dbg      # x86_64
 ```
 
+## Versioning & Releases
+
+**Single source of truth**: `mk/config.mk` defines `RALPH_VERSION_MAJOR/MINOR/PATCH`. The build generates `build/version.h` (gitignored) with version string, git hash, and dirty flag. All source files include this generated header.
+
+**Bump version and release**:
+```bash
+scripts/bump_version.sh patch   # 0.1.0 -> 0.1.1 (also: minor, major)
+git push origin master --tags   # Tag push triggers release workflow
+```
+
+The bump script updates `mk/config.mk`, commits, and creates an annotated `v*` tag. The release workflow (`.github/workflows/release.yml`) builds, tests, and publishes the binary to GitHub Releases.
+
+**Build-time version header** (`build/version.h`): Provides `RALPH_VERSION`, `RALPH_GIT_HASH`, `RALPH_GIT_DIRTY`, `RALPH_BUILD_VERSION`. Uses compare-and-swap to avoid unnecessary recompilation.
+
 ## Technology
 
 C compiled with Cosmopolitan in Docker devcontainer. Libraries: mbedtls (TLS), unity (testing), SQLite (storage), HNSWLIB (vectors), PDFio (PDF), cJSON (JSON), ossp-uuid (UUIDs). Debug tools: valgrind, gdb.
