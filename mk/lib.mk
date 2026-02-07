@@ -48,6 +48,7 @@ LIB_AGENT_SOURCES := \
     $(LIBDIR)/agent/session.c \
     $(LIBDIR)/agent/session_configurator.c \
     $(LIBDIR)/agent/message_dispatcher.c \
+    $(LIBDIR)/agent/message_processor.c \
     $(LIBDIR)/agent/async_executor.c \
     $(LIBDIR)/agent/tool_executor.c \
     $(LIBDIR)/agent/tool_batch_executor.c \

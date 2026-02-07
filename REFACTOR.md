@@ -158,54 +158,33 @@ disabled, OpenAI/Anthropic/local AI provider streaming, NULL URL fallback, and N
 
 ---
 
-## Session 13: Extract message_processor.c and Finalize session.c
+## Session 13: Extract message_processor.c and Finalize session.c ✅ COMPLETE
 
 **Goal**: Extract response handling and slim `session.c` to orchestrator.
 
-### New File: lib/agent/message_processor.h
+Extracted response handling into `lib/agent/message_processor.c` with a single function:
+- `message_processor_handle_response(session, result, user_message, max_tokens)` — takes an
+  `LLMRoundTripResult` from `api_round_trip_execute`, handles conversation persistence
+  (user + assistant messages), tool call extraction with generic fallback, and tool
+  executor dispatch.
 
-```c
-#ifndef LIB_AGENT_MESSAGE_PROCESSOR_H
-#define LIB_AGENT_MESSAGE_PROCESSOR_H
+The function takes ownership of tool calls from the round-trip result (sets to NULL);
+the caller still calls `api_round_trip_cleanup` for the `ParsedResponse`.
 
-#include "session.h"
+`session_process_message` is now a thin orchestrator: token management, dispatch decision,
+then delegates to `api_round_trip_execute` + `message_processor_handle_response`. This
+eliminated ~180 lines of duplicated HTTP+parse+tool-extract code that `api_round_trip.c`
+already handles for the iterative loop path.
 
-int message_processor_handle_response(AgentSession* session,
-                                      const char* response_data,
-                                      const char* user_message,
-                                      int max_tokens,
-                                      const char** headers);
+Two consistency fixes vs. the old code:
+- Initial-message path now uses `conversation_append_assistant` (model-registry formatting)
+  instead of manual Anthropic/OpenAI branching, matching the iterative loop behavior.
+- JSON output mode now emits `json_output_assistant_tool_calls_buffered` for the initial
+  message (was already emitted for follow-up iterations).
 
-#endif
-```
-
-### New File: lib/agent/message_processor.c
-
-Extract from `session.c` lines 597-741:
-- Response parsing
-- Tool call extraction (model-level vs message-embedded)
-- Conversation persistence
-- Tool executor dispatch
-
-### Update lib/agent/session.c
-
-Slim to orchestrator (~300 lines) that:
-- Handles lifecycle (`session_init`, `session_cleanup`)
-- Delegates to `message_dispatcher` and `message_processor`
-- Provides public API stubs
-
-### Update mk/lib.mk
-
-Add `lib/agent/message_processor.c` to `LIB_AGENT_SRC`.
-
-### Verification
-
-```bash
-./scripts/build.sh && ./scripts/run_tests.sh
-./ralph "what is the weather"
-./ralph "create a todo and list todos"
-make check-valgrind
-```
+`session.c` went from 642 to 464 lines. Unit tests added in `test/core/test_message_processor.c`
+covering NULL parameters, ownership transfer, plain text conversation, thinking fallback,
+and empty response handling.
 
 ---
 
@@ -250,12 +229,12 @@ make check-valgrind
 - [x] `lib/agent/session_configurator.c`
 - [x] `lib/agent/message_dispatcher.h`
 - [x] `lib/agent/message_dispatcher.c`
-- [ ] `lib/agent/message_processor.h`
-- [ ] `lib/agent/message_processor.c`
+- [x] `lib/agent/message_processor.h`
+- [x] `lib/agent/message_processor.c`
 
 ### Modified Files (17)
 - [ ] `lib/agent/session.h` - Add Services* field
-- [ ] `lib/agent/session.c` - Extract modules, use Services
+- [x] `lib/agent/session.c` - Extract modules, use Services
 - [ ] `lib/agent/agent.c` - Connect Services
 - [x] `lib/agent/tool_executor.c` - Slim to entry point
 - [ ] `lib/tools/tools_system.h` - Add Services* to ToolRegistry

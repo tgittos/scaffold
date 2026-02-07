@@ -17,9 +17,9 @@
 #include "session.h"
 #include "session_configurator.h"
 #include "message_dispatcher.h"
+#include "message_processor.h"
 #include "context_enhancement.h"
 #include "tool_executor.h"
-#include "conversation_state.h"
 #include "streaming_handler.h"
 #include "recap.h"
 #include "../tools/todo_tool.h"
@@ -30,19 +30,18 @@
 #include "../util/debug_output.h"
 #include "../util/uuid_utils.h"
 #include "../session/conversation_tracker.h"
-#include "../session/token_manager.h"
 #include "../session/session_manager.h"
 #include "../ipc/message_store.h"
-#include "../llm/model_capabilities.h"
+#include "../network/api_common.h"
+#include "../session/conversation_compactor.h"
 #include "../llm/llm_provider.h"
 #include "../llm/llm_client.h"
 #include "async_executor.h"
+#include "../util/config.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-
-#include "../util/config.h"
 
 /* =============================================================================
  * CLEANUP HOOKS
@@ -325,10 +324,6 @@ int session_execute_tool_workflow(AgentSession* session, ToolCall* tool_calls,
  * PAYLOAD BUILDING
  * ============================================================================= */
 
-#include "../network/api_common.h"
-#include "../session/conversation_compactor.h"
-#include "../util/json_escape.h"
-
 char* session_build_json_payload(const AgentSession* session,
                                   const char* user_message, int max_tokens) {
     if (session == NULL) return NULL;
@@ -433,9 +428,6 @@ int manage_conversation_tokens(AgentSession* session, const char* user_message,
  * MESSAGE PROCESSING
  * ============================================================================= */
 
-#include "../ui/output_formatter.h"
-#include "../ui/json_output.h"
-
 int session_process_message(AgentSession* session, const char* user_message) {
     if (session == NULL || user_message == NULL) return -1;
 
@@ -461,181 +453,12 @@ int session_process_message(AgentSession* session, const char* user_message) {
         return streaming_process_message(session, dispatch.provider, user_message, max_tokens);
     }
 
-    char* post_data = message_dispatcher_build_payload(session, user_message, max_tokens);
-    if (post_data == NULL) {
-        fprintf(stderr, "Error: Failed to build JSON payload\n");
+    LLMRoundTripResult rt;
+    if (api_round_trip_execute(session, user_message, max_tokens, &rt) != 0) {
         return -1;
     }
 
-    debug_printf("Making API request to %s\n", session->session_data.config.api_url);
-    debug_printf("POST data: %s\n\n", post_data);
-
-    if (!session->session_data.config.json_output_mode) {
-        fprintf(stdout, TERM_CYAN TERM_SYM_ACTIVE TERM_RESET " ");
-        fflush(stdout);
-    }
-
-    struct HTTPResponse response = {0};
-    int result = -1;
-
-    if (llm_client_send(session->session_data.config.api_url, session->session_data.config.api_key, post_data, &response) == 0) {
-        if (response.data == NULL) {
-            fprintf(stderr, "Error: Empty response from API\n");
-            cleanup_response(&response);
-            free(post_data);
-            return -1;
-        }
-
-        debug_printf_json("Got API response: ", response.data);
-        ParsedResponse parsed_response;
-        int parse_result;
-        if (session->session_data.config.api_type == API_TYPE_ANTHROPIC) {
-            parse_result = parse_anthropic_response(response.data, &parsed_response);
-        } else {
-            parse_result = parse_api_response(response.data, &parsed_response);
-        }
-
-        if (parse_result != 0) {
-            fprintf(stdout, TERM_CLEAR_LINE);
-            fflush(stdout);
-
-            if (strstr(response.data, "didn't provide an API key") != NULL ||
-                strstr(response.data, "Incorrect API key") != NULL ||
-                strstr(response.data, "invalid_api_key") != NULL) {
-                fprintf(stderr, "API key missing or invalid.\n");
-                fprintf(stderr, "   Please add your API key to ralph.config.json\n");
-            } else if (strstr(response.data, "\"error\"") != NULL) {
-                fprintf(stderr, "API request failed. Check your configuration.\n");
-                if (debug_enabled) {
-                    fprintf(stderr, "Debug: %s\n", response.data);
-                }
-            } else {
-                fprintf(stderr, "Error: Failed to parse API response\n");
-                printf("%s\n", response.data);
-            }
-            cleanup_response(&response);
-            free(post_data);
-            return -1;
-        }
-
-        if (!session->session_data.config.json_output_mode) {
-            fprintf(stdout, TERM_CLEAR_LINE);
-            fflush(stdout);
-        }
-
-        const char* message_content = parsed_response.response_content ?
-                                      parsed_response.response_content :
-                                      parsed_response.thinking_content;
-
-        ToolCall *raw_tool_calls = NULL;
-        int raw_call_count = 0;
-        int tool_parse_result;
-
-        tool_parse_result = parse_model_tool_calls(session->model_registry, session->session_data.config.model,
-                                                   response.data, &raw_tool_calls, &raw_call_count);
-
-        /* Fallback: some models (e.g., LM Studio) embed tool calls in message content */
-        if (tool_parse_result != 0 || raw_call_count == 0) {
-            if (message_content != NULL && parse_model_tool_calls(session->model_registry, session->session_data.config.model,
-                                                                   message_content, &raw_tool_calls, &raw_call_count) == 0 && raw_call_count > 0) {
-                tool_parse_result = 0;
-                debug_printf("Found %d tool calls in message content (custom format)\n", raw_call_count);
-            }
-        }
-
-        if (tool_parse_result == 0 && raw_call_count > 0) {
-            debug_printf("Found %d tool calls in raw response\n", raw_call_count);
-            debug_printf("Response content before display: [%s]\n",
-                         parsed_response.response_content ? parsed_response.response_content : "NULL");
-
-            print_formatted_response_improved(&parsed_response);
-
-            /* Message ordering is protocol-required: user -> assistant (with tool_calls) -> tool results */
-            if (append_conversation_message(&session->session_data.conversation, "user", user_message) != 0) {
-                fprintf(stderr, "Warning: Failed to save user message to conversation history\n");
-            }
-
-            /* Must save both assistant tool_calls and tool results together; orphaned calls break the API */
-            ToolResult *results = malloc(raw_call_count * sizeof(ToolResult));
-            if (results == NULL) {
-                const char* assistant_content = parsed_response.response_content ?
-                                                parsed_response.response_content :
-                                                parsed_response.thinking_content;
-                if (assistant_content != NULL) {
-                    if (append_conversation_message(&session->session_data.conversation, "assistant", assistant_content) != 0) {
-                        fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
-                    }
-                }
-                result = -1;
-            } else {
-                const char* content_to_save = NULL;
-                char* constructed_message = NULL;
-
-                /* Anthropic requires raw JSON; OpenAI requires structured tool_calls array */
-                if (session->session_data.config.api_type == API_TYPE_ANTHROPIC) {
-                    content_to_save = response.data;
-                } else {
-                    constructed_message = conversation_build_assistant_tool_message(
-                        parsed_response.response_content, raw_tool_calls, raw_call_count);
-                    content_to_save = constructed_message;
-                }
-
-                if (content_to_save != NULL) {
-                    if (append_conversation_message(&session->session_data.conversation, "assistant", content_to_save) != 0) {
-                        fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
-                    }
-                }
-
-                free(constructed_message);
-                free(results);
-                result = session_execute_tool_workflow(session, raw_tool_calls, raw_call_count, user_message, max_tokens);
-            }
-            cleanup_tool_calls(raw_tool_calls, raw_call_count);
-        } else {
-            debug_printf("No tool calls found in raw response (result: %d, count: %d)\n", tool_parse_result, raw_call_count);
-            ToolCall *tool_calls = NULL;
-            int call_count = 0;
-            if (message_content != NULL && parse_tool_calls(message_content, &tool_calls, &call_count) == 0 && call_count > 0) {
-                print_formatted_response_improved(&parsed_response);
-
-                if (append_conversation_message(&session->session_data.conversation, "user", user_message) != 0) {
-                    fprintf(stderr, "Warning: Failed to save user message to conversation history\n");
-                }
-                result = session_execute_tool_workflow(session, tool_calls, call_count, user_message, max_tokens);
-                cleanup_tool_calls(tool_calls, call_count);
-            } else {
-                debug_printf("No tool calls path - response_content: [%s]\n",
-                             parsed_response.response_content ? parsed_response.response_content : "NULL");
-                print_formatted_response_improved(&parsed_response);
-
-                if (append_conversation_message(&session->session_data.conversation, "user", user_message) != 0) {
-                    fprintf(stderr, "Warning: Failed to save user message to conversation history\n");
-                }
-
-                const char* assistant_content = parsed_response.response_content ?
-                                                parsed_response.response_content :
-                                                parsed_response.thinking_content;
-                if (assistant_content != NULL) {
-                    if (append_conversation_message(&session->session_data.conversation, "assistant", assistant_content) != 0) {
-                        fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
-                    }
-
-                    if (session->session_data.config.json_output_mode) {
-                        json_output_assistant_text(assistant_content,
-                                                   parsed_response.prompt_tokens,
-                                                   parsed_response.completion_tokens);
-                    }
-                }
-                result = 0;
-            }
-        }
-
-        cleanup_parsed_response(&parsed_response);
-    } else {
-        fprintf(stderr, "API request failed\n");
-    }
-
-    cleanup_response(&response);
-    free(post_data);
+    int result = message_processor_handle_response(session, &rt, user_message, max_tokens);
+    api_round_trip_cleanup(&rt);
     return result;
 }
