@@ -88,54 +88,23 @@ cleanup, since tool calls outlive the parsed response.
 
 ---
 
-## Session 9: Extract tool_batch_executor.c
+## Session 9: Extract tool_batch_executor.c ✅ COMPLETE
 
 **Goal**: Extract single-batch tool execution from `tool_executor.c`.
 
-### New File: lib/agent/tool_batch_executor.h
+Extracted the duplicated batch execution loops from `tool_executor_run_workflow` (initial batch)
+and `tool_executor_run_loop` (follow-up iterations) into a unified `tool_batch_execute` function
+in `lib/agent/tool_batch_executor.c`.
 
-```c
-#ifndef LIB_AGENT_TOOL_BATCH_EXECUTOR_H
-#define LIB_AGENT_TOOL_BATCH_EXECUTOR_H
+The function supports two indexing modes controlled by the `call_indices` parameter:
+- **Direct mode** (`call_indices == NULL`): For the initial batch. Direct 1:1 result-to-call
+  mapping. All slots are filled on abort/interrupt. No dedup.
+- **Compact mode** (`call_indices != NULL`): For loop iterations. Dedup via orchestration
+  context. Sparse result mapping with `call_indices`. Only the aborting tool is added on abort;
+  remaining non-duplicates get results on interrupt.
 
-#include "session.h"
-#include "tool_orchestration.h"
-#include "../types.h"
-
-typedef struct {
-    AgentSession* session;
-    ToolOrchestrationContext* orchestration;
-    int allow_subagent;
-} ToolBatchContext;
-
-int tool_batch_execute(ToolBatchContext* ctx,
-                       ToolCall* calls,
-                       int call_count,
-                       ToolResult* results,
-                       int* executed_count);
-
-#endif
-```
-
-### New File: lib/agent/tool_batch_executor.c
-
-Extract from `tool_executor.c`:
-- Tool iteration loop
-- Approval checking (via tool_orchestration)
-- Tool execution (native or MCP)
-- Interrupt handling
-- Result logging
-
-### Update mk/lib.mk
-
-Add `lib/agent/tool_batch_executor.c` to `LIB_AGENT_SRC`.
-
-### Verification
-
-```bash
-./scripts/build.sh && ./scripts/run_tests.sh
-./ralph "read the file README.md"
-```
+Also fixed a pre-existing memory leak where `execute_tool_call` sets `result->tool_call_id`
+before failing, and the error handler overwrote it without freeing.
 
 ---
 
@@ -368,8 +337,8 @@ make check-valgrind
 - [x] `lib/agent/conversation_state.c`
 - [x] `lib/agent/api_round_trip.h`
 - [x] `lib/agent/api_round_trip.c`
-- [ ] `lib/agent/tool_batch_executor.h`
-- [ ] `lib/agent/tool_batch_executor.c`
+- [x] `lib/agent/tool_batch_executor.h`
+- [x] `lib/agent/tool_batch_executor.c`
 - [ ] `lib/agent/iterative_loop.h`
 - [ ] `lib/agent/iterative_loop.c`
 - [ ] `lib/agent/session_configurator.h`
