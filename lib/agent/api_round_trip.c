@@ -1,4 +1,5 @@
 #include "api_round_trip.h"
+#include "message_dispatcher.h"
 #include "../util/debug_output.h"
 #include "../network/api_error.h"
 #include "../llm/llm_client.h"
@@ -16,12 +17,7 @@ int api_round_trip_execute(AgentSession* session, const char* user_message,
 
     memset(result, 0, sizeof(*result));
 
-    char* post_data = NULL;
-    if (session->session_data.config.api_type == API_TYPE_ANTHROPIC) {
-        post_data = session_build_anthropic_json_payload(session, user_message, max_tokens);
-    } else {
-        post_data = session_build_json_payload(session, user_message, max_tokens);
-    }
+    char* post_data = message_dispatcher_build_payload(session, user_message, max_tokens);
 
     if (post_data == NULL) {
         return -1;

@@ -4,7 +4,6 @@
 #include "tool_executor.h"
 #include "conversation_state.h"
 #include "../network/streaming.h"
-#include "../llm/llm_provider.h"
 #include "../ui/output_formatter.h"
 #include "../ui/json_output.h"
 #include "../util/debug_output.h"
@@ -79,21 +78,9 @@ static size_t stream_http_callback(const char* data, size_t size, void* user_dat
     return size;
 }
 
-int streaming_process_message(AgentSession* session, const char* user_message,
-                              int max_tokens) {
-    if (session == NULL || user_message == NULL) {
-        return -1;
-    }
-
-    ProviderRegistry* registry = get_provider_registry();
-    if (registry == NULL) {
-        fprintf(stderr, "Error: Failed to get provider registry\n");
-        return -1;
-    }
-
-    LLMProvider* provider = detect_provider_for_url(registry, session->session_data.config.api_url);
-    if (provider == NULL) {
-        fprintf(stderr, "Error: No provider found for URL: %s\n", session->session_data.config.api_url);
+int streaming_process_message(AgentSession* session, LLMProvider* provider,
+                              const char* user_message, int max_tokens) {
+    if (session == NULL || provider == NULL || user_message == NULL) {
         return -1;
     }
 

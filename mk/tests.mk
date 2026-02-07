@@ -281,6 +281,7 @@ $(eval $(call def_test_lib,tool_calls_not_stored,session/test_tool_calls_not_sto
 $(eval $(call def_test_lib,document_store,db/test_document_store,))
 $(eval $(call def_test_lib,http,network/test_http_client,))
 $(eval $(call def_test_lib,ralph,core/test_ralph,$(TESTDIR)/mock_api_server.c))
+$(eval $(call def_test_lib,message_dispatcher,core/test_message_dispatcher,))
 $(eval $(call def_test_lib,recap,core/test_recap,))
 $(eval $(call def_test_lib,python_tool,tools/test_python_tool,$(TOOL_SOURCES)))
 $(eval $(call def_test_lib,python_integration,tools/test_python_integration,$(TOOL_SOURCES)))
@@ -290,7 +291,7 @@ LIBRALPH_TESTS := tool_param_dsl json_output output tools_system vector_db_tool 
     memory_mgmt token_manager conversation_compactor rolling_summary model_tools \
     openai_streaming anthropic_streaming messages_array_bug mcp_client subagent_tool \
     incomplete_task_bug conversation conversation_vdb tool_calls_not_stored document_store \
-    recap
+    message_dispatcher recap
 
 $(foreach t,$(LIBRALPH_TESTS),$(eval \
 $$(TEST_$(t)_TARGET): $$(TEST_$(t)_OBJECTS) $$(LIBRALPH) $$(ALL_LIBS) ; \

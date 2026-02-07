@@ -16,6 +16,7 @@
 
 #include "session.h"
 #include "session_configurator.h"
+#include "message_dispatcher.h"
 #include "context_enhancement.h"
 #include "tool_executor.h"
 #include "conversation_state.h"
@@ -455,40 +456,15 @@ int session_process_message(AgentSession* session, const char* user_message) {
     debug_printf("Using token allocation - Response tokens: %d, Safety buffer: %d, Context window: %d\n",
                  max_tokens, token_usage.safety_buffer_used, token_usage.context_window_used);
 
-    char* post_data = NULL;
-    if (session->session_data.config.api_type == API_TYPE_ANTHROPIC) {
-        post_data = session_build_anthropic_json_payload(session, user_message, max_tokens);
-    } else {
-        post_data = session_build_json_payload(session, user_message, max_tokens);
+    DispatchDecision dispatch = message_dispatcher_select_mode(session);
+    if (dispatch.mode == DISPATCH_STREAMING) {
+        return streaming_process_message(session, dispatch.provider, user_message, max_tokens);
     }
+
+    char* post_data = message_dispatcher_build_payload(session, user_message, max_tokens);
     if (post_data == NULL) {
         fprintf(stderr, "Error: Failed to build JSON payload\n");
         return -1;
-    }
-
-    ProviderRegistry* provider_registry = get_provider_registry();
-    LLMProvider* provider = NULL;
-    if (provider_registry != NULL) {
-        provider = detect_provider_for_url(provider_registry, session->session_data.config.api_url);
-    }
-
-    bool streaming_enabled = session->session_data.config.enable_streaming;
-    bool provider_supports_streaming = provider != NULL &&
-                                       provider->supports_streaming != NULL &&
-                                       provider->supports_streaming(provider) &&
-                                       provider->build_streaming_request_json != NULL &&
-                                       provider->parse_stream_event != NULL;
-
-    if (streaming_enabled && provider_supports_streaming) {
-        debug_printf("Using streaming mode for provider: %s\n", provider->capabilities.name);
-        free(post_data);  /* Streaming path builds its own payload */
-        return streaming_process_message(session, user_message, max_tokens);
-    }
-
-    if (!streaming_enabled) {
-        debug_printf("Using buffered mode (streaming disabled via configuration)\n");
-    } else {
-        debug_printf("Using buffered mode (provider does not support streaming)\n");
     }
 
     debug_printf("Making API request to %s\n", session->session_data.config.api_url);

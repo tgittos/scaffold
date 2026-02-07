@@ -137,55 +137,24 @@ Extracted `session_load_config` internals into `lib/agent/session_configurator.c
 
 ---
 
-## Session 12: Extract message_dispatcher.c
+## Session 12: Extract message_dispatcher.c ✅ COMPLETE
 
 **Goal**: Extract dispatch path selection from `session.c`.
 
-### New File: lib/agent/message_dispatcher.h
+Extracted two functions into `lib/agent/message_dispatcher.c`:
+- `message_dispatcher_select_mode(session)` — detects provider via registry, checks streaming
+  config and provider capabilities, returns `DispatchDecision` with mode and resolved
+  `LLMProvider*` (eliminates redundant re-detection in the streaming path).
+- `message_dispatcher_build_payload(session, user_message, max_tokens)` — selects OpenAI vs
+  Anthropic payload builder based on API type.
 
-```c
-#ifndef LIB_AGENT_MESSAGE_DISPATCHER_H
-#define LIB_AGENT_MESSAGE_DISPATCHER_H
+`session_process_message` dispatch block replaced with two calls. `api_round_trip.c` also
+updated to use `message_dispatcher_build_payload` (DRY — same dispatch was duplicated).
+`streaming_process_message` signature updated to accept `LLMProvider*` directly, avoiding
+the double provider detection that existed in the original code.
 
-#include "session.h"
-
-typedef enum {
-    DISPATCH_STREAMING,
-    DISPATCH_BUFFERED
-} DispatchMode;
-
-DispatchMode message_dispatcher_select_mode(const AgentSession* session);
-
-int message_dispatcher_build_headers(const AgentSession* session,
-                                     char*** headers,
-                                     int* count);
-
-void message_dispatcher_free_headers(char** headers, int count);
-
-#endif
-```
-
-### New File: lib/agent/message_dispatcher.c
-
-Extract from `session.c` lines 518-573:
-- Streaming vs buffered decision
-- HTTP header construction
-- Provider-specific header setup
-
-### Update lib/agent/session.c
-
-Replace extracted code with calls to `message_dispatcher_*()`.
-
-### Update mk/lib.mk
-
-Add `lib/agent/message_dispatcher.c` to `LIB_AGENT_SRC`.
-
-### Verification
-
-```bash
-./scripts/build.sh && ./scripts/run_tests.sh
-./ralph --debug "hello"  # Check headers in debug output
-```
+Unit tests added in `test/core/test_message_dispatcher.c` covering NULL session, streaming
+disabled, OpenAI/Anthropic/local AI provider streaming, NULL URL fallback, and NULL payload.
 
 ---
 
@@ -279,8 +248,8 @@ make check-valgrind
 - [x] `lib/agent/iterative_loop.c`
 - [x] `lib/agent/session_configurator.h`
 - [x] `lib/agent/session_configurator.c`
-- [ ] `lib/agent/message_dispatcher.h`
-- [ ] `lib/agent/message_dispatcher.c`
+- [x] `lib/agent/message_dispatcher.h`
+- [x] `lib/agent/message_dispatcher.c`
 - [ ] `lib/agent/message_processor.h`
 - [ ] `lib/agent/message_processor.c`
 
