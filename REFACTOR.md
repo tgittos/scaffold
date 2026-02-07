@@ -121,46 +121,19 @@ and hands off to `iterative_loop_run`.
 
 ---
 
-## Session 11: Extract session_configurator.c
+## Session 11: Extract session_configurator.c ✅ COMPLETE
 
 **Goal**: Extract configuration loading from `session.c`.
 
-### New File: lib/agent/session_configurator.h
+Extracted `session_load_config` internals into `lib/agent/session_configurator.c` with two functions:
+- `session_configurator_load(AgentSession*)` — config init, API settings copy, embeddings
+  reinitialization, system prompt loading, API type detection, context window auto-config.
+- `session_configurator_detect_api_type(const char*)` — pure function returning APIType from
+  URL string, with NULL safety.
 
-```c
-#ifndef LIB_AGENT_SESSION_CONFIGURATOR_H
-#define LIB_AGENT_SESSION_CONFIGURATOR_H
-
-#include "session.h"
-#include "../services/services.h"
-
-int session_configurator_load(AgentSession* session, Services* services);
-APIType session_configurator_detect_api_type(const char* api_url);
-
-#endif
-```
-
-### New File: lib/agent/session_configurator.c
-
-Extract from `session.c` lines 231-297:
-- API settings loading
-- API type detection from URL
-- Embeddings service initialization
-- System prompt loading
-
-### Update lib/agent/session.c
-
-Replace extracted code with call to `session_configurator_load()`.
-
-### Update mk/lib.mk
-
-Add `lib/agent/session_configurator.c` to `LIB_AGENT_SRC`.
-
-### Verification
-
-```bash
-./scripts/build.sh && ./scripts/run_tests.sh
-```
+`session_load_config` is now a 3-line delegation wrapper. Unused `ralph_home.h` and
+`prompt_loader.h` includes removed from `session.c`. Existing test updated to call
+`session_configurator_detect_api_type` directly (including NULL input case).
 
 ---
 
@@ -304,8 +277,8 @@ make check-valgrind
 - [x] `lib/agent/tool_batch_executor.c`
 - [x] `lib/agent/iterative_loop.h`
 - [x] `lib/agent/iterative_loop.c`
-- [ ] `lib/agent/session_configurator.h`
-- [ ] `lib/agent/session_configurator.c`
+- [x] `lib/agent/session_configurator.h`
+- [x] `lib/agent/session_configurator.c`
 - [ ] `lib/agent/message_dispatcher.h`
 - [ ] `lib/agent/message_dispatcher.c`
 - [ ] `lib/agent/message_processor.h`

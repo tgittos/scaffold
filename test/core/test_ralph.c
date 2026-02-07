@@ -1,5 +1,6 @@
 #include "unity.h"
 #include "agent/session.h"
+#include "agent/session_configurator.h"
 #include "agent/agent.h"
 #include "tools/builtin_tools.h"
 #include "mock_api_server.h"
@@ -809,61 +810,14 @@ void test_build_anthropic_json_payload_with_tools(void) {
 }
 
 void test_ralph_api_type_detection(void) {
-    // Test API type detection logic directly without going through load_config
-    // which might load from .env file
-    
-    // Test OpenAI detection
-    const char* openai_url = "https://api.openai.com/v1/chat/completions";
-    APIType api_type;
-    const char* max_tokens_param;
-    
-    if (strstr(openai_url, "api.openai.com") != NULL) {
-        api_type = API_TYPE_OPENAI;
-        max_tokens_param = "max_completion_tokens";
-    } else if (strstr(openai_url, "api.anthropic.com") != NULL) {
-        api_type = API_TYPE_ANTHROPIC;
-        max_tokens_param = "max_tokens";
-    } else {
-        api_type = API_TYPE_LOCAL;
-        max_tokens_param = "max_tokens";
-    }
-    
-    TEST_ASSERT_EQUAL(API_TYPE_OPENAI, api_type);
-    TEST_ASSERT_EQUAL_STRING("max_completion_tokens", max_tokens_param);
-    
-    // Test Anthropic detection
-    const char* anthropic_url = "https://api.anthropic.com/v1/messages";
-    
-    if (strstr(anthropic_url, "api.openai.com") != NULL) {
-        api_type = API_TYPE_OPENAI;
-        max_tokens_param = "max_completion_tokens";
-    } else if (strstr(anthropic_url, "api.anthropic.com") != NULL) {
-        api_type = API_TYPE_ANTHROPIC;
-        max_tokens_param = "max_tokens";
-    } else {
-        api_type = API_TYPE_LOCAL;
-        max_tokens_param = "max_tokens";
-    }
-    
-    TEST_ASSERT_EQUAL(API_TYPE_ANTHROPIC, api_type);
-    TEST_ASSERT_EQUAL_STRING("max_tokens", max_tokens_param);
-    
-    // Test local server detection
-    const char* local_url = "http://localhost:1234/v1/chat/completions";
-    
-    if (strstr(local_url, "api.openai.com") != NULL) {
-        api_type = API_TYPE_OPENAI;
-        max_tokens_param = "max_completion_tokens";
-    } else if (strstr(local_url, "api.anthropic.com") != NULL) {
-        api_type = API_TYPE_ANTHROPIC;
-        max_tokens_param = "max_tokens";
-    } else {
-        api_type = API_TYPE_LOCAL;
-        max_tokens_param = "max_tokens";
-    }
-    
-    TEST_ASSERT_EQUAL(API_TYPE_LOCAL, api_type);
-    TEST_ASSERT_EQUAL_STRING("max_tokens", max_tokens_param);
+    TEST_ASSERT_EQUAL(API_TYPE_OPENAI,
+                      session_configurator_detect_api_type("https://api.openai.com/v1/chat/completions"));
+    TEST_ASSERT_EQUAL(API_TYPE_ANTHROPIC,
+                      session_configurator_detect_api_type("https://api.anthropic.com/v1/messages"));
+    TEST_ASSERT_EQUAL(API_TYPE_LOCAL,
+                      session_configurator_detect_api_type("http://localhost:1234/v1/chat/completions"));
+    TEST_ASSERT_EQUAL(API_TYPE_LOCAL,
+                      session_configurator_detect_api_type(NULL));
 }
 
 int main(void) {

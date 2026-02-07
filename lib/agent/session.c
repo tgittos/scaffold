@@ -15,6 +15,7 @@
  */
 
 #include "session.h"
+#include "session_configurator.h"
 #include "context_enhancement.h"
 #include "tool_executor.h"
 #include "conversation_state.h"
@@ -26,7 +27,6 @@
 #include "../tools/tool_extension.h"
 #include "../tools/messaging_tool.h"
 #include "../util/debug_output.h"
-#include "../util/ralph_home.h"
 #include "../util/uuid_utils.h"
 #include "../session/conversation_tracker.h"
 #include "../session/token_manager.h"
@@ -41,9 +41,7 @@
 #include <string.h>
 #include <time.h>
 
-/* Configuration functions from lib/util/config.h */
 #include "../util/config.h"
-#include "../util/prompt_loader.h"
 
 /* =============================================================================
  * CLEANUP HOOKS
@@ -247,77 +245,7 @@ void session_cleanup(AgentSession* session) {
 
 int session_load_config(AgentSession* session) {
     if (session == NULL) return -1;
-
-    if (config_init() != 0) {
-        fprintf(stderr, "Error: Failed to initialize configuration system\n");
-        return -1;
-    }
-
-    agent_config_t *config = config_get();
-    if (!config) {
-        fprintf(stderr, "Error: Failed to get configuration instance\n");
-        return -1;
-    }
-
-    session->model_registry = get_model_registry();
-
-    embeddings_service_t* embeddings = services_get_embeddings(session->services);
-    if (embeddings) {
-        embeddings_service_reinitialize(embeddings);
-    }
-    char *tools_desc = tool_extension_get_tools_description();
-    load_system_prompt(&session->session_data.config.system_prompt, tools_desc);
-    free(tools_desc);
-
-    if (config->api_url) {
-        session->session_data.config.api_url = strdup(config->api_url);
-        if (session->session_data.config.api_url == NULL) return -1;
-    }
-
-    if (config->model) {
-        session->session_data.config.model = strdup(config->model);
-        if (session->session_data.config.model == NULL) return -1;
-    }
-
-    if (config->api_key) {
-        session->session_data.config.api_key = strdup(config->api_key);
-        if (session->session_data.config.api_key == NULL) return -1;
-    }
-
-    session->session_data.config.context_window = config->context_window;
-    session->session_data.config.max_tokens = config->max_tokens;
-    session->session_data.config.enable_streaming = config->enable_streaming;
-
-    /* Provider-specific max tokens field: OpenAI uses "max_completion_tokens", others use "max_tokens" */
-    if (strstr(session->session_data.config.api_url, "api.openai.com") != NULL) {
-        session->session_data.config.api_type = API_TYPE_OPENAI;
-        session->session_data.config.max_tokens_param = "max_completion_tokens";
-    } else if (strstr(session->session_data.config.api_url, "api.anthropic.com") != NULL) {
-        session->session_data.config.api_type = API_TYPE_ANTHROPIC;
-        session->session_data.config.max_tokens_param = "max_tokens";
-    } else {
-        session->session_data.config.api_type = API_TYPE_LOCAL;
-        session->session_data.config.max_tokens_param = "max_tokens";
-    }
-
-    /* 8192 is the fallback context window; upgrade to model-specific size when available */
-    if (session->session_data.config.context_window == 8192) {
-        ModelRegistry* registry = session->model_registry;
-        if (registry && session->session_data.config.model) {
-            ModelCapabilities* model = detect_model_capabilities(registry, session->session_data.config.model);
-            if (model && model->max_context_length > 0) {
-                session->session_data.config.context_window = model->max_context_length;
-                debug_printf("Auto-configured context window from model capabilities: %d tokens for model %s\n",
-                            model->max_context_length, session->session_data.config.model);
-            } else {
-                debug_printf("Using default context window (%d tokens) - no model capabilities found for model %s\n",
-                            session->session_data.config.context_window,
-                            session->session_data.config.model ? session->session_data.config.model : "unknown");
-            }
-        }
-    }
-
-    return 0;
+    return session_configurator_load(session);
 }
 
 /* =============================================================================
