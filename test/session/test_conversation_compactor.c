@@ -1,7 +1,8 @@
 #include "unity.h"
 #include "session/conversation_compactor.h"
 #include "session/conversation_tracker.h"
-#include "ralph.h"
+#include "agent/session.h"
+#include "agent/agent.h"
 #include <string.h>
 #include <stdlib.h>
 #include "util/ralph_home.h"

@@ -1,5 +1,6 @@
 #include "unity.h"
-#include "ralph.h"
+#include "agent/session.h"
+#include "agent/agent.h"
 #include "session/conversation_tracker.h"
 #include "db/hnswlib_wrapper.h"
 #include <stdio.h>

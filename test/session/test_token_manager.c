@@ -1,7 +1,8 @@
 #include "unity.h"
 #include "session/token_manager.h"
 #include "session/session_manager.h"
-#include "ralph.h"
+#include "agent/session.h"
+#include "agent/agent.h"
 #include <string.h>
 
 void setUp(void) {

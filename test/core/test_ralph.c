@@ -1,5 +1,6 @@
 #include "unity.h"
-#include "ralph.h"
+#include "agent/session.h"
+#include "agent/agent.h"
 #include "tools/builtin_tools.h"
 #include "mock_api_server.h"
 #include "db/hnswlib_wrapper.h"

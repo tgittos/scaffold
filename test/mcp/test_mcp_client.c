@@ -1,6 +1,7 @@
 #include "../unity/unity.h"
 #include "mcp/mcp_client.h"
-#include "../../src/core/ralph.h"
+#include "agent/session.h"
+#include "agent/agent.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
