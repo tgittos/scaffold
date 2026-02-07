@@ -76,55 +76,15 @@ Full migration of those callers to `conversation_append_assistant` deferred to S
 
 ---
 
-## Session 8: Extract api_round_trip.c
+## Session 8: Extract api_round_trip.c ✅ COMPLETE
 
 **Goal**: Extract LLM communication logic from `tool_executor.c`.
 
-### New File: lib/agent/api_round_trip.h
-
-```c
-#ifndef LIB_AGENT_API_ROUND_TRIP_H
-#define LIB_AGENT_API_ROUND_TRIP_H
-
-#include "session.h"
-#include "../types.h"
-
-typedef struct {
-    char* content;
-    ToolCall* tool_calls;
-    int tool_call_count;
-    int needs_continuation;
-} LLMRoundTripResult;
-
-int api_round_trip_execute(AgentSession* session,
-                           const char* user_message,
-                           int max_tokens,
-                           const char** headers,
-                           LLMRoundTripResult* result);
-
-void api_round_trip_cleanup(LLMRoundTripResult* result);
-
-#endif
-```
-
-### New File: lib/agent/api_round_trip.c
-
-Extract from `tool_executor.c`:
-- Payload building (calls to `session_build_*_json_payload`)
-- HTTP POST execution (lines 308-357)
-- Response parsing (lines 351-410)
-- Tool call extraction
-
-### Update mk/lib.mk
-
-Add `lib/agent/api_round_trip.c` to `LIB_AGENT_SRC`.
-
-### Verification
-
-```bash
-./scripts/build.sh && ./scripts/run_tests.sh
-./ralph "what is 2+2"
-```
+Extracted payload building, HTTP send, response parsing, and tool call extraction into
+`lib/agent/api_round_trip.c`. The `LLMRoundTripResult` struct embeds `ParsedResponse` directly
+(giving callers access to response_content, thinking_content, and token counts) plus extracted
+tool calls. `tool_executor_run_loop` transfers tool call ownership out of the result before
+cleanup, since tool calls outlive the parsed response.
 
 ---
 
@@ -406,8 +366,8 @@ make check-valgrind
 - [x] `lib/agent/tool_orchestration.c`
 - [x] `lib/agent/conversation_state.h`
 - [x] `lib/agent/conversation_state.c`
-- [ ] `lib/agent/api_round_trip.h`
-- [ ] `lib/agent/api_round_trip.c`
+- [x] `lib/agent/api_round_trip.h`
+- [x] `lib/agent/api_round_trip.c`
 - [ ] `lib/agent/tool_batch_executor.h`
 - [ ] `lib/agent/tool_batch_executor.c`
 - [ ] `lib/agent/iterative_loop.h`

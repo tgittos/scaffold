@@ -1,16 +1,13 @@
 #include "tool_executor.h"
 #include "session.h"
+#include "api_round_trip.h"
 #include "tool_orchestration.h"
 #include "conversation_state.h"
 #include "../util/interrupt.h"
 #include "../ui/output_formatter.h"
 #include "../ui/json_output.h"
-#include <cJSON.h>
 #include "../util/debug_output.h"
-#include "../network/api_error.h"
-#include "../llm/llm_client.h"
 #include "../session/token_manager.h"
-#include "../llm/model_capabilities.h"
 #include "../mcp/mcp_client.h"
 #include "../ui/spinner.h"
 #include "../policy/protected_files.h"
@@ -48,134 +45,37 @@ static int tool_executor_run_loop(AgentSession* session, const char* user_messag
         int iteration_max_tokens = token_usage.available_response_tokens;
         debug_printf("Using %d max_tokens for tool loop iteration %d\n", iteration_max_tokens, loop_count);
 
-        char* post_data = NULL;
-        if (session->session_data.config.api_type == API_TYPE_ANTHROPIC) {
-            post_data = session_build_anthropic_json_payload(session, "", iteration_max_tokens);
-        } else {
-            post_data = session_build_json_payload(session, "", iteration_max_tokens);
-        }
-
-        if (post_data == NULL) {
-            fprintf(stderr, "Error: Failed to build JSON payload for tool loop iteration %d\n", loop_count);
-            return -1;
-        }
-
-        struct HTTPResponse response = {0};
+        LLMRoundTripResult rt;
         debug_printf("Making API request for tool loop iteration %d\n", loop_count);
-
-        if (!session->session_data.config.json_output_mode) {
-            fprintf(stdout, TERM_CYAN TERM_SYM_ACTIVE TERM_RESET " ");
-            fflush(stdout);
-        }
-
-        if (llm_client_send(session->session_data.config.api_url, session->session_data.config.api_key, post_data, &response) != 0) {
-            if (!session->session_data.config.json_output_mode) {
-                fprintf(stdout, TERM_CLEAR_LINE);
-                fflush(stdout);
-            }
-
-            APIError err;
-            get_last_api_error(&err);
-
-            fprintf(stderr, "%s\n", api_error_user_message(&err));
-
-            if (err.attempts_made > 1) {
-                fprintf(stderr, "   (Retried %d times)\n", err.attempts_made);
-            }
-
-            debug_printf("HTTP status: %ld, Error: %s\n",
-                        err.http_status, err.error_message);
-
-            free(post_data);
+        if (api_round_trip_execute(session, "", iteration_max_tokens, &rt) != 0) {
             return -1;
         }
 
-        if (response.data == NULL) {
-            if (!session->session_data.config.json_output_mode) {
-                fprintf(stdout, TERM_CLEAR_LINE);
-                fflush(stdout);
-            }
-            fprintf(stderr, "Error: Empty response from API in tool loop iteration %d\n", loop_count);
-            cleanup_response(&response);
-            free(post_data);
-            return -1;
-        }
+        const char* assistant_content = rt.parsed.response_content ?
+                                        rt.parsed.response_content :
+                                        rt.parsed.thinking_content;
 
-        ParsedResponse parsed_response;
-        int parse_result;
-        if (session->session_data.config.api_type == API_TYPE_ANTHROPIC) {
-            parse_result = parse_anthropic_response(response.data, &parsed_response);
-        } else {
-            parse_result = parse_api_response(response.data, &parsed_response);
-        }
+        ToolCall *tool_calls = rt.tool_calls;
+        int call_count = rt.tool_call_count;
+        rt.tool_calls = NULL;
+        rt.tool_call_count = 0;
 
-        if (parse_result != 0) {
-            if (!session->session_data.config.json_output_mode) {
-                fprintf(stdout, TERM_CLEAR_LINE);
-                fflush(stdout);
-            }
-
-            if (strstr(response.data, "didn't provide an API key") != NULL ||
-                strstr(response.data, "Incorrect API key") != NULL ||
-                strstr(response.data, "invalid_api_key") != NULL) {
-                fprintf(stderr, "API key missing or invalid.\n");
-                fprintf(stderr, "   Please add your API key to ralph.config.json\n");
-            } else if (strstr(response.data, "\"error\"") != NULL) {
-                fprintf(stderr, "API request failed during tool execution.\n");
-                if (debug_enabled) {
-                    fprintf(stderr, "Debug: %s\n", response.data);
-                }
-            } else {
-                fprintf(stderr, "Error: Failed to parse API response for tool loop iteration %d\n", loop_count);
-                printf("%s\n", response.data);
-            }
-            cleanup_response(&response);
-            free(post_data);
-            return -1;
-        }
-
-        if (!session->session_data.config.json_output_mode) {
-            fprintf(stdout, TERM_CLEAR_LINE);
-            fflush(stdout);
-        }
-
-        // Response display is deferred until we know whether this iteration has tool calls
-        ToolCall *tool_calls = NULL;
-        int call_count = 0;
-        int tool_parse_result;
-
-        tool_parse_result = parse_model_tool_calls(session->model_registry, session->session_data.config.model,
-                                                  response.data, &tool_calls, &call_count);
-
-        const char* assistant_content = parsed_response.response_content ?
-                                       parsed_response.response_content :
-                                       parsed_response.thinking_content;
-        // Some models embed tool calls in message content rather than the standard location
-        if (tool_parse_result != 0 || call_count == 0) {
-            if (assistant_content != NULL && parse_model_tool_calls(session->model_registry, session->session_data.config.model,
-                                                                    assistant_content, &tool_calls, &call_count) == 0 && call_count > 0) {
-                tool_parse_result = 0;
-                debug_printf("Found %d tool calls in message content (custom format)\n", call_count);
-            }
-        }
-
-        if (tool_parse_result == 0 && call_count > 0) {
-            // Display text content before tool execution so reasoning appears interleaved
-            if (parsed_response.response_content != NULL && strlen(parsed_response.response_content) > 0) {
+        if (call_count > 0) {
+            if (rt.parsed.response_content != NULL && strlen(rt.parsed.response_content) > 0) {
                 if (!session->session_data.config.json_output_mode) {
-                    printf("%s\n", parsed_response.response_content);
+                    printf("%s\n", rt.parsed.response_content);
                     fflush(stdout);
                 } else {
-                    json_output_assistant_text(parsed_response.response_content,
-                                               parsed_response.prompt_tokens,
-                                               parsed_response.completion_tokens);
+                    json_output_assistant_text(rt.parsed.response_content,
+                                               rt.parsed.prompt_tokens,
+                                               rt.parsed.completion_tokens);
                 }
             }
 
             if (session->session_data.config.json_output_mode) {
                 json_output_assistant_tool_calls_buffered(tool_calls, call_count,
-                                                          parsed_response.prompt_tokens,
-                                                          parsed_response.completion_tokens);
+                                                          rt.parsed.prompt_tokens,
+                                                          rt.parsed.completion_tokens);
             }
 
             conversation_append_assistant(session, assistant_content, tool_calls, call_count);
@@ -184,22 +84,20 @@ static int tool_executor_run_loop(AgentSession* session, const char* user_messag
 
             if (assistant_content != NULL && session->session_data.config.json_output_mode) {
                 json_output_assistant_text(assistant_content,
-                                           parsed_response.prompt_tokens,
-                                           parsed_response.completion_tokens);
+                                           rt.parsed.prompt_tokens,
+                                           rt.parsed.completion_tokens);
             }
         }
 
-        cleanup_response(&response);
-        free(post_data);
-
-        if (tool_parse_result != 0 || call_count == 0) {
+        if (call_count == 0) {
             debug_printf("No more tool calls found - ending tool loop after %d iterations\n", loop_count);
-            print_formatted_response_improved(&parsed_response);
-            cleanup_parsed_response(&parsed_response);
+            print_formatted_response_improved(&rt.parsed);
+            api_round_trip_cleanup(&rt);
             return 0;
         }
 
-        cleanup_parsed_response(&parsed_response);
+        api_round_trip_cleanup(&rt);
+        assistant_content = NULL;
 
         // Deduplicate to prevent infinite loops when the LLM re-emits the same tool call IDs
         int new_tool_calls = 0;
