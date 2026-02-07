@@ -84,6 +84,14 @@ int session_init(AgentSession* session);
 void session_cleanup(AgentSession* session);
 
 /**
+ * Wire services into the session and check store availability.
+ * Must be called after setting session->services and after session_init.
+ *
+ * @param session The session with services already set
+ */
+void session_wire_services(AgentSession* session);
+
+/**
  * Load configuration for a session.
  * Loads API settings, system prompt, and model configuration.
  *

@@ -28,6 +28,8 @@ int api_round_trip_execute(AgentSession* session, const char* user_message,
         fflush(stdout);
     }
 
+    debug_printf("POST data length: %zu\n", strlen(post_data));
+
     struct HTTPResponse response = {0};
 
     if (llm_client_send(session->session_data.config.api_url,
@@ -48,7 +50,11 @@ int api_round_trip_execute(AgentSession* session, const char* user_message,
 
         debug_printf("HTTP status: %ld, Error: %s\n",
                     err.http_status, err.error_message);
+        if (response.data != NULL) {
+            debug_printf("Response body: %s\n", response.data);
+        }
 
+        cleanup_response(&response);
         free(post_data);
         return -1;
     }

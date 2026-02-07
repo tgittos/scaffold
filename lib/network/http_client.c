@@ -181,7 +181,9 @@ int http_post_with_config(const char *url, const char *post_data, const char **h
         }
 
         curl_easy_setopt(curl, CURLOPT_URL, url);
+        curl_easy_setopt(curl, CURLOPT_POST, 1L);
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_data);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)strlen(post_data));
         curl_easy_setopt(curl, CURLOPT_HTTPHEADER, curl_headers);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, response);
@@ -193,6 +195,9 @@ int http_post_with_config(const char *url, const char *post_data, const char **h
         curl_easy_setopt(curl, CURLOPT_MAXREDIRS, config->max_redirects);
         curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, interrupt_progress_callback);
         curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+        if (debug_enabled) {
+            curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+        }
 
         res = curl_easy_perform(curl);
 

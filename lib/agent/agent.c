@@ -69,6 +69,15 @@ int agent_init(Agent* agent, const AgentConfig* config) {
         return -1;
     }
 
+    /* Wire services after session_init so store availability checks see real services */
+    agent->session.services = agent->services;
+    agent->session.tools.services = agent->services;
+    document_store_set_services(agent->services);
+    conversation_tracker_set_services(agent->services);
+    memory_commands_set_services(agent->services);
+    context_retriever_set_services(agent->services);
+    session_wire_services(&agent->session);
+
     /* Wire policy→tools callbacks so the policy layer never imports tools headers */
     ApprovalGateCallbacks gate_cbs = {
         .is_extension_tool = tool_extension_is_extension_tool,
@@ -78,13 +87,6 @@ int agent_init(Agent* agent, const AgentConfig* config) {
         .log_approval      = log_subagent_approval,
     };
     approval_gate_set_callbacks(&gate_cbs);
-
-    agent->session.services = agent->services;
-    agent->session.tools.services = agent->services;
-    document_store_set_services(agent->services);
-    conversation_tracker_set_services(agent->services);
-    memory_commands_set_services(agent->services);
-    context_retriever_set_services(agent->services);
 
     if (agent->config.mode == AGENT_MODE_BACKGROUND) {
         agent->session.subagent_manager.is_subagent_process = 1;

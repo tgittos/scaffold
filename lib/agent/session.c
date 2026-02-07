@@ -61,13 +61,6 @@ static void on_subagent_spawn(void *user_data) {
 int session_init(AgentSession* session) {
     if (session == NULL) return -1;
 
-    /* Initialize services pointer to NULL before any use.
-     * This allows safe use of services_get_* which fall back to singletons.
-     * The actual services will be set by agent_init after session_init returns.
-     *
-     * Note: Tools registered below receive NULL services and rely on
-     * singleton fallbacks. This is a known limitation - proper DI would
-     * require restructuring init order or adding a post-init setup phase. */
     session->services = NULL;
     session->model_registry = NULL;
 
@@ -79,21 +72,6 @@ int session_init(AgentSession* session) {
     session->polling_config.auto_poll_enabled = 1;
     session->polling_config.poll_interval_ms = MESSAGE_POLLER_DEFAULT_INTERVAL_MS;
     session->message_poller = NULL;
-
-    if (services_get_task_store(session->services) == NULL) {
-        fprintf(stderr, "Warning: Task store unavailable, using in-memory tasks only\n");
-    }
-
-    if (services_get_message_store(session->services) == NULL) {
-        fprintf(stderr, "Warning: Message store unavailable, messaging disabled\n");
-    } else {
-        messaging_tool_set_services(session->services);
-        messaging_tool_set_agent_id(session->session_id);
-        const char* parent_id = getenv(RALPH_PARENT_AGENT_ID_ENV);
-        if (parent_id != NULL && parent_id[0] != '\0') {
-            messaging_tool_set_parent_agent_id(parent_id);
-        }
-    }
 
     session_data_init(&session->session_data);
 
@@ -224,6 +202,25 @@ void session_cleanup(AgentSession* session) {
     cleanup_tool_registry(&session->tools);
     session_data_cleanup(&session->session_data);
     config_cleanup();
+}
+
+void session_wire_services(AgentSession* session) {
+    if (session == NULL) return;
+
+    if (services_get_task_store(session->services) == NULL) {
+        fprintf(stderr, "Warning: Task store unavailable, using in-memory tasks only\n");
+    }
+
+    if (services_get_message_store(session->services) == NULL) {
+        fprintf(stderr, "Warning: Message store unavailable, messaging disabled\n");
+    } else {
+        messaging_tool_set_services(session->services);
+        messaging_tool_set_agent_id(session->session_id);
+        const char* parent_id = getenv(RALPH_PARENT_AGENT_ID_ENV);
+        if (parent_id != NULL && parent_id[0] != '\0') {
+            messaging_tool_set_parent_agent_id(parent_id);
+        }
+    }
 }
 
 int session_load_config(AgentSession* session) {
