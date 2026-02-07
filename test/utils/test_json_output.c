@@ -251,10 +251,23 @@ void test_json_output_tool_calls_multiple(void) {
     json_output_assistant_tool_calls_buffered(tool_calls, 2, 300, 150);
     end_stdout_capture();
 
+    // Should produce two separate JSONL lines (one per tool call)
+    char* first_newline = strchr(captured_output, '\n');
+    TEST_ASSERT_NOT_NULL_MESSAGE(first_newline, "Expected at least one newline");
+    char* second_line = first_newline + 1;
+    TEST_ASSERT_TRUE_MESSAGE(strlen(second_line) > 1, "Expected a second JSONL line");
+
+    // First line has call_1, second has call_2
+    *first_newline = '\0';
     TEST_ASSERT_NOT_NULL(strstr(captured_output, "\"id\":\"call_1\""));
-    TEST_ASSERT_NOT_NULL(strstr(captured_output, "\"id\":\"call_2\""));
     TEST_ASSERT_NOT_NULL(strstr(captured_output, "\"name\":\"tool_a\""));
-    TEST_ASSERT_NOT_NULL(strstr(captured_output, "\"name\":\"tool_b\""));
+    TEST_ASSERT_NULL_MESSAGE(strstr(captured_output, "\"input_tokens\""),
+        "Usage should not appear on first tool call line");
+
+    TEST_ASSERT_NOT_NULL(strstr(second_line, "\"id\":\"call_2\""));
+    TEST_ASSERT_NOT_NULL(strstr(second_line, "\"name\":\"tool_b\""));
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(second_line, "\"input_tokens\":300"),
+        "Usage should appear on last tool call line");
 }
 
 void test_json_output_tool_calls_null_array(void) {

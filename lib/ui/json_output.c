@@ -58,6 +58,80 @@ typedef struct {
     const char* arguments;
 } ToolCallFields;
 
+static int emit_single_tool_call_json(ToolCallFields fields, bool include_usage, int input_tokens, int output_tokens) {
+    if (fields.id == NULL || fields.name == NULL) {
+        fprintf(stderr, "json_output: skipping tool call with NULL id or name\n");
+        return -1;
+    }
+
+    cJSON *root = cJSON_CreateObject();
+    if (root == NULL) {
+        log_alloc_failure("emit_single_tool_call_json root");
+        return -1;
+    }
+
+    cJSON_AddStringToObject(root, "type", JSON_TYPE_ASSISTANT);
+
+    cJSON *message = cJSON_CreateObject();
+    if (message == NULL) {
+        log_alloc_failure("emit_single_tool_call_json message");
+        cJSON_Delete(root);
+        return -1;
+    }
+
+    cJSON *content = cJSON_CreateArray();
+    if (content == NULL) {
+        log_alloc_failure("emit_single_tool_call_json content");
+        cJSON_Delete(message);
+        cJSON_Delete(root);
+        return -1;
+    }
+
+    cJSON *tool_use = cJSON_CreateObject();
+    if (tool_use == NULL) {
+        log_alloc_failure("emit_single_tool_call_json tool_use");
+        cJSON_Delete(content);
+        cJSON_Delete(message);
+        cJSON_Delete(root);
+        return -1;
+    }
+
+    cJSON_AddStringToObject(tool_use, "type", JSON_CONTENT_TOOL_USE);
+    cJSON_AddStringToObject(tool_use, "id", fields.id);
+    cJSON_AddStringToObject(tool_use, "name", fields.name);
+
+    if (fields.arguments != NULL) {
+        cJSON *input = cJSON_Parse(fields.arguments);
+        if (input != NULL) {
+            cJSON_AddItemToObject(tool_use, "input", input);
+        } else {
+            cJSON *empty = cJSON_CreateObject();
+            if (empty != NULL) {
+                cJSON_AddItemToObject(tool_use, "input", empty);
+            }
+        }
+    } else {
+        cJSON *empty = cJSON_CreateObject();
+        if (empty != NULL) {
+            cJSON_AddItemToObject(tool_use, "input", empty);
+        }
+    }
+
+    cJSON_AddItemToArray(content, tool_use);
+    cJSON_AddItemToObject(message, "content", content);
+
+    if (include_usage) {
+        cJSON *usage = create_usage_object(input_tokens, output_tokens);
+        if (usage != NULL) {
+            cJSON_AddItemToObject(message, "usage", usage);
+        }
+    }
+
+    cJSON_AddItemToObject(root, "message", message);
+
+    return print_and_free_json(root);
+}
+
 static int build_assistant_tool_calls_json(
     int count,
     ToolCallFields (*get_fields)(void* tools, int index),
@@ -65,82 +139,15 @@ static int build_assistant_tool_calls_json(
     int input_tokens,
     int output_tokens
 ) {
-    cJSON *root = cJSON_CreateObject();
-    if (root == NULL) {
-        log_alloc_failure("build_assistant_tool_calls_json root");
-        return -1;
-    }
-
-    if (cJSON_AddStringToObject(root, "type", JSON_TYPE_ASSISTANT) == NULL) {
-        log_alloc_failure("build_assistant_tool_calls_json type");
-        cJSON_Delete(root);
-        return -1;
-    }
-
-    cJSON *message = cJSON_CreateObject();
-    if (message == NULL) {
-        log_alloc_failure("build_assistant_tool_calls_json message");
-        cJSON_Delete(root);
-        return -1;
-    }
-
-    cJSON *content = cJSON_CreateArray();
-    if (content == NULL) {
-        log_alloc_failure("build_assistant_tool_calls_json content");
-        cJSON_Delete(message);
-        cJSON_Delete(root);
-        return -1;
-    }
-
+    int result = 0;
     for (int i = 0; i < count; i++) {
         ToolCallFields fields = get_fields(tools, i);
-
-        cJSON *tool_use = cJSON_CreateObject();
-        if (tool_use == NULL) {
-            log_alloc_failure("build_assistant_tool_calls_json tool_use");
-            continue;  /* Skip this tool but try to output others */
+        bool last = (i == count - 1);
+        if (emit_single_tool_call_json(fields, last, input_tokens, output_tokens) != 0) {
+            result = -1;
         }
-
-        if (fields.id == NULL || fields.name == NULL) {
-            fprintf(stderr, "json_output: skipping tool call with NULL id or name\n");
-            cJSON_Delete(tool_use);
-            continue;
-        }
-
-        cJSON_AddStringToObject(tool_use, "type", JSON_CONTENT_TOOL_USE);
-        cJSON_AddStringToObject(tool_use, "id", fields.id);
-        cJSON_AddStringToObject(tool_use, "name", fields.name);
-
-        if (fields.arguments != NULL) {
-            cJSON *input = cJSON_Parse(fields.arguments);
-            if (input != NULL) {
-                cJSON_AddItemToObject(tool_use, "input", input);
-            } else {
-                cJSON *empty = cJSON_CreateObject();
-                if (empty != NULL) {
-                    cJSON_AddItemToObject(tool_use, "input", empty);
-                }
-            }
-        } else {
-            cJSON *empty = cJSON_CreateObject();
-            if (empty != NULL) {
-                cJSON_AddItemToObject(tool_use, "input", empty);
-            }
-        }
-
-        cJSON_AddItemToArray(content, tool_use);
     }
-
-    cJSON_AddItemToObject(message, "content", content);
-
-    cJSON *usage = create_usage_object(input_tokens, output_tokens);
-    if (usage != NULL) {
-        cJSON_AddItemToObject(message, "usage", usage);
-    }
-
-    cJSON_AddItemToObject(root, "message", message);
-
-    return print_and_free_json(root);
+    return result;
 }
 
 static ToolCallFields get_streaming_tool_fields(void* tools, int index) {
