@@ -14,11 +14,37 @@ extern void document_store_clear_conversations(document_store_t* store);
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <dirent.h>
+#include <sys/stat.h>
 
 static Services* g_test_services = NULL;
+static char g_test_home[256];
+
+static void rmdir_recursive(const char* path) {
+    DIR* dir = opendir(path);
+    if (dir == NULL) return;
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+        char full_path[1024] = {0};
+        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
+        struct stat st;
+        if (stat(full_path, &st) == 0) {
+            if (S_ISDIR(st.st_mode)) {
+                rmdir_recursive(full_path);
+            } else {
+                unlink(full_path);
+            }
+        }
+    }
+    closedir(dir);
+    rmdir(path);
+}
 
 void setUp(void) {
-    ralph_home_init(NULL);
+    snprintf(g_test_home, sizeof(g_test_home), "/tmp/test_conv_vdb_XXXXXX");
+    TEST_ASSERT_NOT_NULL(mkdtemp(g_test_home));
+    ralph_home_init(g_test_home);
 
     mock_embeddings_init_test_groups();
 
@@ -37,18 +63,16 @@ void setUp(void) {
 }
 
 void tearDown(void) {
-    document_store_clear_conversations(services_get_document_store(g_test_services));
-
-    hnswlib_clear_all();
-
     conversation_tracker_set_services(NULL);
     document_store_set_services(NULL);
     if (g_test_services) {
         services_destroy(g_test_services);
         g_test_services = NULL;
     }
+    hnswlib_clear_all();
 
     mock_embeddings_cleanup();
+    rmdir_recursive(g_test_home);
     ralph_home_cleanup();
 }
 
@@ -62,8 +86,6 @@ void test_conversation_stored_in_vector_db(void) {
     TEST_ASSERT_EQUAL(0, result1);
     TEST_ASSERT_EQUAL(0, result2);
     TEST_ASSERT_EQUAL(2, history.count);
-
-    usleep(100000);
 
     cleanup_conversation_history(&history);
 
@@ -93,8 +115,6 @@ void test_conversation_stored_in_vector_db(void) {
     TEST_ASSERT_TRUE(found_assistant_msg);
 
     cleanup_conversation_history(&loaded_history);
-
-    document_store_clear_conversations(services_get_document_store(g_test_services));
 }
 
 void test_extended_conversation_history(void) {
@@ -118,7 +138,6 @@ void test_extended_conversation_history(void) {
 
     cleanup_conversation_history(&extended_history);
 
-    document_store_clear_conversations(services_get_document_store(g_test_services));
 }
 
 void test_search_conversation_history(void) {
@@ -151,7 +170,6 @@ void test_search_conversation_history(void) {
         free(search_results);
     }
 
-    document_store_clear_conversations(services_get_document_store(g_test_services));
 }
 
 void test_sliding_window_retrieval(void) {
@@ -176,7 +194,6 @@ void test_sliding_window_retrieval(void) {
 
     cleanup_conversation_history(&windowed_history);
 
-    document_store_clear_conversations(services_get_document_store(g_test_services));
 }
 
 int main(void) {
