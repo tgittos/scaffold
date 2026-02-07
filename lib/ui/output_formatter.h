@@ -200,4 +200,22 @@ void log_subagent_approval(const char *subagent_id,
  */
 void display_cancellation_message(int tools_completed, int tools_total, bool json_mode);
 
+/**
+ * Display notification that subagents were launched.
+ * Shows tree-style listing of agent tasks.
+ *
+ * @param count Number of agents launched
+ * @param tasks Array of task description strings
+ */
+void display_agents_launched(int count, const char **tasks);
+
+/**
+ * Display notification that a subagent completed.
+ *
+ * @param task Task description of the completed agent
+ * @param elapsed_secs Seconds the agent ran
+ * @param success Whether the agent completed successfully
+ */
+void display_agent_completed(const char *task, int elapsed_secs, bool success);
+
 #endif /* OUTPUT_FORMATTER_H */

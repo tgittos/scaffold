@@ -1027,7 +1027,6 @@ ApprovalResult approval_gate_prompt(ApprovalGateConfig *config,
     ApprovalResult result = APPROVAL_DENIED;
 
     for (;;) {
-        fprintf(stderr, "\n");
         gate_prompter_show_single(gp, tool_call, command_arg, path_arg);
 
         int response = gate_prompter_read_key(gp);
@@ -1212,7 +1211,6 @@ ApprovalResult approval_gate_prompt_batch(ApprovalGateConfig *config,
     ApprovalResult result = APPROVAL_DENIED;
 
     for (;;) {
-        fprintf(stderr, "\n");
         gate_prompter_show_batch(gp, tool_calls, count,
                                  pending_count < count ? statuses : NULL);
 

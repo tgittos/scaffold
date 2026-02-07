@@ -1,4 +1,5 @@
 #include "output_formatter.h"
+#include "status_line.h"
 #include "terminal.h"
 #include "json_output.h"
 #include "../util/debug_output.h"
@@ -466,16 +467,10 @@ void print_formatted_response_improved(const ParsedResponse *response) {
     if (response->response_content) {
         printf("%s\n", response->response_content);
 
+        status_line_add_tokens(response->prompt_tokens, response->completion_tokens);
         if (response->total_tokens > 0) {
-            if (response->prompt_tokens > 0 && response->completion_tokens > 0) {
-                printf(TERM_DIM "    └─ %d tokens (%d prompt + %d completion)\n" TERM_RESET,
-                       response->total_tokens, response->prompt_tokens, response->completion_tokens);
-            } else {
-                printf(TERM_DIM "    └─ %d tokens\n" TERM_RESET, response->total_tokens);
-            }
+            status_line_set_last_response_tokens(response->total_tokens);
         }
-
-        printf("\n");
     }
 }
 
@@ -580,6 +575,14 @@ char* extract_arg_summary(const char *tool_name, const char *arguments) {
     } else if (text && cJSON_IsString(text)) {
         value = cJSON_GetStringValue(text);
         label = "text: ";
+    }
+
+    if (value == NULL) {
+        cJSON *task = cJSON_GetObjectItem(json, "task");
+        if (task && cJSON_IsString(task)) {
+            value = cJSON_GetStringValue(task);
+            label = "";
+        }
     }
 
     if (value == NULL) {
@@ -689,7 +692,7 @@ void log_tool_execution_improved(const char *tool_name, const char *arguments, b
             snprintf(summary, sizeof(summary), "updated");
         }
 
-        printf(TERM_GREEN "✓" TERM_RESET " TodoWrite" TERM_DIM " (%s)" TERM_RESET "\n\n", summary);
+        printf(TERM_GREEN "✓" TERM_RESET " TodoWrite" TERM_DIM " (%s)" TERM_RESET "\n", summary);
         fflush(stdout);
         return;
     }
@@ -708,19 +711,17 @@ void log_tool_execution_improved(const char *tool_name, const char *arguments, b
     }
 
     if (success) {
-        printf(TERM_GREEN "✓" TERM_RESET " %s" TERM_DIM "%s" TERM_RESET "\n\n", tool_name, context);
+        printf(TERM_GREEN "✓" TERM_RESET " %s" TERM_DIM "%s" TERM_RESET "\n", tool_name, context);
     } else if (is_info_check) {
-        printf(TERM_YELLOW "◦" TERM_RESET " %s" TERM_DIM "%s" TERM_RESET "\n\n", tool_name, context);
+        printf(TERM_YELLOW "◦" TERM_RESET " %s" TERM_DIM "%s" TERM_RESET "\n", tool_name, context);
     } else {
         printf(TERM_RED "✗" TERM_RESET " %s" TERM_DIM "%s" TERM_RESET "\n", tool_name, context);
         if (result && strlen(result) > 0) {
             if (strlen(result) > 70) {
-                printf(TERM_RED "  └─ Error: %.67s..." TERM_RESET "\n\n", result);
+                printf(TERM_RED "  └─ Error: %.67s..." TERM_RESET "\n", result);
             } else {
-                printf(TERM_RED "  └─ Error: %s" TERM_RESET "\n\n", result);
+                printf(TERM_RED "  └─ Error: %s" TERM_RESET "\n", result);
             }
-        } else {
-            printf("\n");
         }
     }
 
@@ -836,13 +837,12 @@ void display_streaming_complete(int input_tokens, int output_tokens) {
         return;
     }
 
-    if (input_tokens > 0 || output_tokens > 0) {
-        int total_tokens = input_tokens + output_tokens;
-        printf("\n" TERM_DIM "    └─ %d tokens", total_tokens);
-        if (input_tokens > 0 && output_tokens > 0) {
-            printf(" (%d prompt + %d completion)", input_tokens, output_tokens);
-        }
-        printf(TERM_RESET "\n");
+    printf("\n");
+
+    status_line_add_tokens(input_tokens, output_tokens);
+    int total = input_tokens + output_tokens;
+    if (total > 0) {
+        status_line_set_last_response_tokens(total);
     }
 
     fflush(stdout);
@@ -932,6 +932,32 @@ void log_subagent_approval(const char *subagent_id,
 
     printf(TERM_DIM TERM_GRAY "  ↳ [%s] %s%s → %s" TERM_RESET "\n",
            short_id, tool_name, detail, result_text);
+    fflush(stdout);
+}
+
+void display_agents_launched(int count, const char **tasks) {
+    if (g_json_output_mode || count <= 0 || !tasks) return;
+
+    printf(TERM_CYAN TERM_SYM_ACTIVE TERM_RESET " %d agent%s launched\n",
+           count, count > 1 ? "s" : "");
+    for (int i = 0; i < count; i++) {
+        const char *connector = (i == count - 1) ? TERM_TREE_LAST : TERM_TREE_BRANCH;
+        printf(TERM_DIM "  %s " TERM_RESET "%s\n", connector, tasks[i] ? tasks[i] : "");
+    }
+    printf("\n");
+    fflush(stdout);
+}
+
+void display_agent_completed(const char *task, int elapsed_secs, bool success) {
+    if (g_json_output_mode) return;
+
+    if (success) {
+        printf(TERM_CYAN TERM_SYM_ACTIVE TERM_RESET " Agent \"%s\" completed (%ds)\n\n",
+               task ? task : "unknown", elapsed_secs);
+    } else {
+        printf(TERM_RED TERM_SYM_ACTIVE TERM_RESET " Agent \"%s\" failed (%ds)\n\n",
+               task ? task : "unknown", elapsed_secs);
+    }
     fflush(stdout);
 }
 

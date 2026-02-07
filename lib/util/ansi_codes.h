@@ -53,4 +53,8 @@
 #define TERM_CLEAR_SCREEN   "\033[J"    /* clear from cursor to end of screen */
 #define TERM_CURSOR_UP_FMT  "\033[%dA"  /* move cursor up N lines (use with printf) */
 
+/* Readline invisible-char markers (wrap ANSI codes so readline ignores their width) */
+#define TERM_RL_START       "\001"
+#define TERM_RL_END         "\002"
+
 #endif /* ANSI_CODES_H */

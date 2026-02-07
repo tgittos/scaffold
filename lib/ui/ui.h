@@ -17,5 +17,6 @@
 #include "output.h"
 #include "spinner.h"
 #include "json_output.h"
+#include "status_line.h"
 
 #endif /* LIB_UI_UI_H */

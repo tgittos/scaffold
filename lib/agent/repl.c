@@ -5,6 +5,7 @@
 #include "../ui/output_formatter.h"
 #include "../ui/json_output.h"
 #include "../ui/spinner.h"
+#include "../ui/status_line.h"
 #include "../ui/memory_commands.h"
 #include "../tools/subagent_tool.h"
 #include "../ipc/message_poller.h"
@@ -21,6 +22,45 @@
 /* Global state for readline callbacks */
 static volatile int g_repl_running = 1;
 static AgentSession* g_repl_session = NULL;
+static char* g_current_prompt = NULL;
+
+static void repl_line_callback(char* line);
+
+static char* repl_get_prompt(void) {
+    char *p = status_line_build_prompt();
+    return p ? p : strdup("> ");
+}
+
+static void repl_clear_prompt_area(void) {
+    printf(TERM_CLEAR_LINE);
+    printf("\033[A" TERM_CLEAR_LINE);
+    status_line_clear_rendered();
+    fflush(stdout);
+}
+
+static void repl_install_prompt(void) {
+    status_line_render_info();
+    printf("\n");
+    free(g_current_prompt);
+    g_current_prompt = repl_get_prompt();
+    rl_callback_handler_install(g_current_prompt, repl_line_callback);
+}
+
+static void repl_update_agent_status(SubagentManager *mgr) {
+    StatusAgentInfo infos[8];
+    int n = 0;
+    for (size_t i = 0; i < mgr->subagents.count && n < 8; i++) {
+        Subagent *sub = &mgr->subagents.data[i];
+        if (sub->status == SUBAGENT_STATUS_RUNNING) {
+            infos[n].id = sub->id;
+            infos[n].task = sub->task;
+            infos[n].start_time = sub->start_time;
+            n++;
+        }
+    }
+    status_line_update_agents(n, infos);
+}
+
 
 static void repl_line_callback(char* line) {
     if (line == NULL) {
@@ -57,10 +97,13 @@ static void repl_line_callback(char* line) {
     if (result == -1) {
         fprintf(stderr, "Error: Failed to process message\n");
     }
-    // result == -2 (interrupted): cancellation message already shown by tool_executor
-    printf("\n");
 
     free(line);
+
+    if (g_repl_running) {
+        rl_callback_handler_remove();
+        repl_install_prompt();
+    }
 }
 
 static void process_pending_notifications(AgentSession* session) {
@@ -94,7 +137,8 @@ int repl_run_session(AgentSession* session, bool json_mode) {
         fprintf(stderr, "Warning: Failed to initialize interrupt handling\n");
     }
 
-    rl_callback_handler_install("> ", repl_line_callback);
+    status_line_init();
+    repl_install_prompt();
 
     int notify_fd = -1;
     if (session->message_poller != NULL) {
@@ -138,7 +182,8 @@ int repl_run_session(AgentSession* session, bool json_mode) {
         if (ready < 0) {
             if (interrupt_pending()) {
                 interrupt_clear();
-                printf("\n");
+                rl_replace_line("", 0);
+                rl_redisplay();
                 continue;
             }
             if (g_repl_running) {
@@ -149,12 +194,12 @@ int repl_run_session(AgentSession* session, bool json_mode) {
 
         int subagent_changes = subagent_poll_all(mgr);
         if (subagent_changes > 0) {
+            repl_update_agent_status(mgr);
             rl_callback_handler_remove();
-            printf(TERM_CLEAR_LINE);
-            fflush(stdout);
+            repl_clear_prompt_area();
             process_pending_notifications(session);
             if (g_repl_running) {
-                rl_callback_handler_install("> ", repl_line_callback);
+                repl_install_prompt();
             }
         }
 
@@ -168,11 +213,12 @@ int repl_run_session(AgentSession* session, bool json_mode) {
                 sub->approval_channel.request_fd > 2 &&
                 FD_ISSET(sub->approval_channel.request_fd, &read_fds)) {
                 rl_callback_handler_remove();
+                repl_clear_prompt_area();
 
                 subagent_handle_approval_request(mgr, (int)i, &session->gate_config);
 
                 if (g_repl_running) {
-                    rl_callback_handler_install("> ", repl_line_callback);
+                    repl_install_prompt();
                 }
             }
         }
@@ -183,19 +229,21 @@ int repl_run_session(AgentSession* session, bool json_mode) {
 
         if (notify_fd >= 0 && FD_ISSET(notify_fd, &read_fds)) {
             rl_callback_handler_remove();
-            printf(TERM_CLEAR_LINE);
-            fflush(stdout);
+            repl_clear_prompt_area();
 
             message_poller_clear_notification(session->message_poller);
             process_pending_notifications(session);
 
             if (g_repl_running) {
-                rl_callback_handler_install("> ", repl_line_callback);
+                repl_install_prompt();
             }
         }
     }
 
     rl_callback_handler_remove();
+    free(g_current_prompt);
+    g_current_prompt = NULL;
+    status_line_cleanup();
     interrupt_cleanup();
     return 0;
 }

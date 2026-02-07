@@ -166,6 +166,11 @@ int tool_batch_execute(ToolBatchContext* ctx,
         count++;
     }
 
+    if (!json_mode && count > 0) {
+        printf("\n");
+        fflush(stdout);
+    }
+
     *executed_count = count;
     return status;
 }

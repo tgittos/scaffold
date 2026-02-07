@@ -171,13 +171,12 @@ void gate_prompter_clear_prompt(GatePrompter *gp) {
     if (gp == NULL) {
         return;
     }
-    /* Move cursor up 3 lines and clear to end of screen.
+    /* Move cursor up 2 lines and clear to end of screen.
      * The prompt consists of:
-     *   1. Empty line (from approval_gate_prompt)
-     *   2. "● tool detail" line
-     *   3. "  └─ Allow? [y/n/a/?] <response>" line
+     *   1. "● tool detail" line
+     *   2. "  └─ Allow? [y/n/a/?] <response>" line
      */
-    fprintf(stderr, TERM_CURSOR_UP_FMT TERM_CLEAR_SCREEN, 3);
+    fprintf(stderr, TERM_CURSOR_UP_FMT TERM_CLEAR_SCREEN, 2);
     fflush(stderr);
 }
 
@@ -185,14 +184,13 @@ void gate_prompter_clear_batch_prompt(GatePrompter *gp, int count) {
     if (gp == NULL || count <= 0) {
         return;
     }
-    /* Move cursor up (count + 3) lines and clear to end of screen.
+    /* Move cursor up (count + 2) lines and clear to end of screen.
      * The batch prompt consists of:
-     *   1. Empty line (from approval_gate_prompt_batch)
-     *   2. "● N operations" header line
-     *   3-N+2. One line per operation
-     *   N+3. "  └─ Allow all? [y/n/1-N] <response>" line
+     *   1. "● N operations" header line
+     *   2-N+1. One line per operation
+     *   N+2. "  └─ Allow all? [y/n/1-N] <response>" line
      */
-    int lines_to_clear = count + 3;
+    int lines_to_clear = count + 2;
     fprintf(stderr, TERM_CURSOR_UP_FMT TERM_CLEAR_SCREEN, lines_to_clear);
     fflush(stderr);
 }

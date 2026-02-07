@@ -52,7 +52,7 @@ DARRAY_DECLARE(SubagentArray, Subagent)
  */
 typedef void (*SubagentSpawnCallback)(void *user_data);
 
-typedef struct {
+typedef struct SubagentManager {
     SubagentArray subagents;           // Dynamic array of subagents
     int max_subagents;                 // Maximum allowed concurrent subagents
     int timeout_seconds;               // Timeout for each subagent execution

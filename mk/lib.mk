@@ -21,7 +21,8 @@ LIB_UI_SOURCES := \
     $(LIBDIR)/ui/spinner.c \
     $(LIBDIR)/ui/output_formatter.c \
     $(LIBDIR)/ui/json_output.c \
-    $(LIBDIR)/ui/memory_commands.c
+    $(LIBDIR)/ui/memory_commands.c \
+    $(LIBDIR)/ui/status_line.c
 
 # Tools module
 LIB_TOOLS_SOURCES := \
