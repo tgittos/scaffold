@@ -77,7 +77,7 @@ find_tests() {
 
     # Use make to print the actual test paths
     local make_output
-    make_output=$(make -C "$PROJECT_DIR" -n test 2>/dev/null | grep -oE '\./test/test_[a-zA-Z0-9_]+' | sed 's|^\./||' | uniq)
+    make_output=$(make -C "$PROJECT_DIR" -n test 2>/dev/null | grep -oE 'test/test_[a-zA-Z0-9_]+' | uniq)
 
     if [ -n "$make_output" ]; then
         while IFS= read -r test_path; do

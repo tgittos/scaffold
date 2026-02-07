@@ -4,7 +4,6 @@
     "allow": [
       "Bash(make:*)",
       "Bash(cosmocc:*)",
-      "Bash(./test:*)",
       "Bash(./ralph:*)",
       "Bash(valgrind:*)",
       "Bash(git add:*)",
@@ -17,7 +16,6 @@
       "Bash(grep:*)",
       "Bash(gcc:*)",
       "Bash(kill:*)",
-      "Bash(true)",
       "Bash(cosmoc++:*)",
       "Bash(git:*)",
       "Bash(cat:*)",

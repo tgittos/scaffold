@@ -32,6 +32,7 @@ ENV CXX="cosmoc++ -I/opt/cosmos/include -L/opt/cosmos/lib"
 ENV PKG_CONFIG="pkg-config --with-path=/opt/cosmos/lib/pkgconfig"
 ENV INSTALL="cosmoinstall"
 ENV AR="cosmoar"
+ENV CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
 
 # Copy and set up entrypoint for APE binfmt_misc registration
 COPY entrypoint.sh /entrypoint.sh
