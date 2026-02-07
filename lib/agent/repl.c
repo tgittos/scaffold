@@ -1,9 +1,3 @@
-/**
- * lib/agent/repl.c - REPL implementation
- *
- * Extracted from src/core/main.c for use by the agent abstraction.
- */
-
 #include "repl.h"
 #include "recap.h"
 #include "../util/interrupt.h"

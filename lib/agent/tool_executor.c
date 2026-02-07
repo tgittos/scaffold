@@ -13,8 +13,8 @@ int tool_executor_run_workflow(AgentSession* session, ToolCall* tool_calls, int 
         return -1;
     }
 
-    (void)user_message;
-    (void)max_tokens;
+    (void)user_message;  /* reserved for future context-aware tool execution */
+    (void)max_tokens;    /* reserved for future token-budget-aware execution */
 
     debug_printf("Executing %d tool call(s)...\n", call_count);
 

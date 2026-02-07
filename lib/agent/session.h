@@ -1,14 +1,4 @@
-/**
- * lib/agent/session.h - Agent Session Definition
- *
- * Defines the AgentSession structure which aggregates all the components
- * needed for an agent: session data, tools, MCP client, subagent manager,
- * approval gates, and message polling.
- *
- * This header is internal to lib/ and allows lib/ to be fully independent
- * of src/. External code should use lib/agent/agent.h instead.
- */
-
+/* Internal to lib/. External code should use agent.h. */
 #ifndef LIB_AGENT_SESSION_H
 #define LIB_AGENT_SESSION_H
 
@@ -28,35 +18,17 @@ typedef struct ModelRegistry ModelRegistry;
 extern "C" {
 #endif
 
-/**
- * API type for provider detection.
- */
 typedef enum {
     API_TYPE_OPENAI = 0,
     API_TYPE_ANTHROPIC = 1,
     API_TYPE_LOCAL = 2
 } APIType;
 
-/**
- * Configuration for message polling in the session.
- */
 typedef struct {
     int auto_poll_enabled;      /**< Whether to automatically poll for messages */
     int poll_interval_ms;       /**< Polling interval in milliseconds */
 } SessionPollingConfig;
 
-/**
- * The core session structure that holds all agent state.
- *
- * All constituent types are defined in lib/:
- * - SessionData: lib/session/session_manager.h
- * - TodoList: lib/tools/todo_manager.h
- * - ToolRegistry: lib/tools/tools_system.h
- * - MCPClient: lib/mcp/mcp_client.h
- * - SubagentManager: lib/tools/subagent_tool.h
- * - ApprovalGateConfig: lib/policy/approval_gate.h
- * - message_poller_t: lib/ipc/message_poller.h
- */
 typedef struct AgentSession {
     char session_id[40];                /**< UUID for this session */
     SessionData session_data;           /**< Configuration and conversation history */
@@ -71,11 +43,7 @@ typedef struct AgentSession {
     ModelRegistry* model_registry;      /**< Model capability registry */
 } AgentSession;
 
-/* =============================================================================
- * CLEANUP HOOKS
- * Allows external code to register cleanup functions without lib/ knowing
- * about the specifics (e.g., Python interpreter shutdown).
- * ============================================================================= */
+/* Cleanup hooks: external code registers shutdown functions (e.g. Python interpreter). */
 
 /**
  * Cleanup hook function signature.
@@ -97,10 +65,6 @@ int session_register_cleanup_hook(SessionCleanupHook hook);
  * Called during final cleanup or testing.
  */
 void session_unregister_all_hooks(void);
-
-/* =============================================================================
- * SESSION LIFECYCLE
- * ============================================================================= */
 
 /**
  * Initialize an agent session.
@@ -141,10 +105,6 @@ int session_load_config(AgentSession* session);
  */
 int session_process_message(AgentSession* session, const char* user_message);
 
-/* =============================================================================
- * MESSAGE POLLING
- * ============================================================================= */
-
 /**
  * Start background message polling for the session.
  * Only starts if auto_poll_enabled is set in polling_config.
@@ -161,10 +121,6 @@ int session_start_message_polling(AgentSession* session);
  */
 void session_stop_message_polling(AgentSession* session);
 
-/* =============================================================================
- * RECAP GENERATION
- * ============================================================================= */
-
 /**
  * Generate a recap/summary of recent conversation for session greeting.
  *
@@ -173,10 +129,6 @@ void session_stop_message_polling(AgentSession* session);
  * @return 0 on success, -1 on failure
  */
 int session_generate_recap(AgentSession* session, int max_messages);
-
-/* =============================================================================
- * PAYLOAD BUILDING
- * ============================================================================= */
 
 /**
  * Build JSON payload for OpenAI-compatible APIs.
@@ -200,10 +152,6 @@ char* session_build_json_payload(const AgentSession* session,
 char* session_build_anthropic_json_payload(const AgentSession* session,
                                             const char* user_message, int max_tokens);
 
-/* =============================================================================
- * TOOL WORKFLOW
- * ============================================================================= */
-
 /**
  * Execute a tool workflow (tool calls from LLM response).
  *
@@ -217,10 +165,6 @@ char* session_build_anthropic_json_payload(const AgentSession* session,
 int session_execute_tool_workflow(AgentSession* session, ToolCall* tool_calls,
                                    int call_count, const char* user_message,
                                    int max_tokens);
-
-/* =============================================================================
- * TOKEN MANAGEMENT
- * ============================================================================= */
 
 #include "../session/token_manager.h"
 

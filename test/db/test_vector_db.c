@@ -2,6 +2,8 @@
 #include "db/vector_db.h"
 #include "db/hnswlib_wrapper.h"
 #include "util/ralph_home.h"
+
+extern void hnswlib_clear_all(void);
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>

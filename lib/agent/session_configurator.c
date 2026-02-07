@@ -1,11 +1,3 @@
-/**
- * lib/agent/session_configurator.c - Session Configuration Loading
- *
- * Extracts configuration loading logic from session.c: API settings,
- * API type detection, embeddings reinitialization, system prompt loading,
- * and context window auto-configuration from model capabilities.
- */
-
 #include "session_configurator.h"
 #include "../util/config.h"
 #include "../util/prompt_loader.h"

@@ -5,19 +5,6 @@
 #include "../types.h"
 
 /**
- * Build an OpenAI-format assistant message JSON string that includes
- * both text content and a tool_calls array.
- *
- * @param content  Text content of the assistant message (may be NULL)
- * @param calls    Array of tool calls made by the assistant
- * @param count    Number of tool calls
- * @return Allocated JSON string, or NULL on failure. Caller must free.
- */
-char* conversation_build_assistant_tool_message(const char* content,
-                                                const ToolCall* calls,
-                                                int count);
-
-/**
  * Append an assistant message to the conversation history.
  *
  * When tool calls are present (count > 0), the message is formatted using

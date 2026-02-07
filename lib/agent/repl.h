@@ -1,9 +1,4 @@
-/**
- * lib/agent/repl.h - REPL (Read-Eval-Print Loop) abstraction
- *
- * Provides a callback-based REPL that can be used by agents in interactive mode.
- */
-
+/* Callback-based REPL for interactive agent mode. */
 #ifndef LIB_AGENT_REPL_H
 #define LIB_AGENT_REPL_H
 

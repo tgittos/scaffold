@@ -3,6 +3,8 @@
 #include "db/document_store.h"
 #include "db/vector_db_service.h"
 #include "services/services.h"
+
+extern void document_store_clear_conversations(document_store_t* store);
 #include "llm/embeddings_service.h"
 #include <stdio.h>
 #include <string.h>

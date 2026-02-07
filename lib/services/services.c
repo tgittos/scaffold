@@ -1,7 +1,3 @@
-/**
- * lib/services/services.c - Service container implementation
- */
-
 #include "services.h"
 #include <stdlib.h>
 

@@ -2,8 +2,11 @@
 #include <string.h>
 #include <stdio.h>
 
-// Not actually thread-local; safe only because ralph is single-threaded
+#ifdef __STDC_NO_THREADS__
 static APIError g_last_api_error = {0};
+#else
+static _Thread_local APIError g_last_api_error = {0};
+#endif
 
 void api_error_init(APIError *err)
 {

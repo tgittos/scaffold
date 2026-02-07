@@ -10,7 +10,6 @@ Application-specific code that uses the library layer. This is a thin wrapper ar
 
 #### `src/core/` - CLI Entry Point
 - **`main.c`** - Application entry point with CLI argument parsing (--debug, --json, --yolo, --subagent modes). Thin wrapper that invokes lib/agent/agent.h API.
-- **`ralph.c/h`** - Re-exports lib/agent/session.h and lib/agent/agent.h for backward compatibility
 
 #### `src/tools/` - Python Tool Integration
 - **`python_tool.c/h`** - Embedded Python interpreter execution
@@ -36,7 +35,15 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 
 #### `lib/agent/` - Agent Abstraction and Session Management
 - **`agent.c/h`** - Agent lifecycle management, mode selection (interactive/background/worker), configuration
-- **`session.c/h`** - AgentSession structure aggregating all agent components (tools, MCP, subagents, approval gates, message polling)
+- **`session.c/h`** - Thin coordinator delegating to extracted modules below
+- **`session_configurator.c/h`** - Configuration loading: API settings, type detection, system prompt, context window
+- **`message_dispatcher.c/h`** - Dispatch path selection (streaming vs buffered) based on provider capabilities
+- **`message_processor.c/h`** - Buffered (non-streaming) response handling and tool call extraction
+- **`api_round_trip.c/h`** - Single LLM request-response cycle (payload build, HTTP, parse)
+- **`conversation_state.c/h`** - Conversation history append helpers (assistant messages, tool results)
+- **`tool_batch_executor.c/h`** - Batch tool execution with approval gate integration
+- **`tool_orchestration.c/h`** - Tool call deduplication and per-batch tracking
+- **`repl.c/h`** - Read-Eval-Print-Loop for interactive mode with readline and async processing
 - **`async_executor.c/h`** - Non-blocking message processing using background thread with pipe notification
 - **`context_enhancement.c/h`** - Prompt enhancement with todo state, memory recall, and context retrieval
 - **`recap.c/h`** - Conversation recap generation (one-shot LLM calls without history persistence)
@@ -66,6 +73,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`embeddings.c/h`** - Low-level text embedding functionality
 - **`embedding_provider.c/h`** - Embedding provider interface and registry
 - **`embeddings_service.c/h`** - Thread-safe embedding service singleton
+- **`llm_client.c/h`** - LLM HTTP client abstraction wrapping http_client for API calls
 
 ##### `lib/llm/models/` - Model Capability Implementations
 - **`claude_model.c`** - Claude model capabilities (Anthropic)
@@ -153,7 +161,6 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`output_formatter.c/h`** - Response formatting and display for LLM responses
 - **`json_output.c/h`** - JSON output mode for programmatic integration (--json flag)
 - **`memory_commands.c/h`** - Interactive `/memory` slash commands for direct memory management
-- **`repl.c/h`** - Read-Eval-Print-Loop implementation with readline
 
 #### `lib/util/` - Generic Utilities
 - **`darray.h`** - Type-safe dynamic array macros (header-only)
@@ -167,7 +174,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`config.c/h`** - Configuration management with cascading priority (local -> user -> env -> defaults)
 - **`prompt_loader.c/h`** - System prompt loading (core + AGENTS.md)
 - **`context_retriever.c/h`** - Vector database context retrieval for prompts
-- **`pdf_processor.c/h`** - PDF download, extraction, chunking, and indexing pipeline
+- **`ansi_codes.h`** - Terminal color codes, box-drawing characters, and status symbols
 - **`ralph_home.c/h`** - Centralized Ralph home directory management (~/.local/ralph/)
 
 #### `lib/pdf/` - PDF Processing
@@ -203,15 +210,19 @@ The test directory mirrors the source structure:
 - **`test_async_executor.c`** - Async executor background thread tests
 - **`test_interrupt.c`** - Cooperative Ctrl+C cancellation tests
 - **`test_agent_identity.c`** - Agent identity thread-safety tests
+- **`test_incomplete_task_bug.c`** - Incomplete task handling regression tests
+- **`test_message_dispatcher.c`** - Dispatch path selection tests
+- **`test_message_processor.c`** - Buffered response processing tests
 
 #### `test/llm/` - LLM System Tests
 - **`test_model_tools.c`** - Model and tool integration tests
+- **`test_anthropic_streaming.c`** - Anthropic provider streaming tests
+- **`test_openai_streaming.c`** - OpenAI provider streaming tests
 
 #### `test/network/` - Network Layer Tests
 - **`test_http_client.c`** - HTTP client functionality tests
 - **`test_messages_array_bug.c`** - Message handling regression tests
-- **`test_streaming.c`** - Streaming infrastructure tests
-- **`test_anthropic_streaming.c`** & **`test_openai_streaming.c`** - Provider streaming tests
+- **`test_streaming.c`** - SSE streaming infrastructure tests
 - **`test_http_retry.c`** - HTTP retry logic tests
 
 #### `test/session/` - Session Management Tests
@@ -219,6 +230,8 @@ The test directory mirrors the source structure:
 - **`test_conversation_compactor.c`** - History compression tests
 - **`test_token_manager.c`** - Token management tests
 - **`test_rolling_summary.c`** - Rolling summary generation tests
+- **`test_conversation_vector_db.c`** - Conversation vector DB integration tests
+- **`test_tool_calls_not_stored.c`** - Tool call storage filtering tests
 
 #### `test/tools/` - Tool System Tests
 - **`test_tools_system.c`** - Core tool system tests
@@ -255,6 +268,7 @@ The test directory mirrors the source structure:
 - **`test_ralph_home.c`** - Ralph home directory management tests
 - **`test_pipe_notifier.c`** - Pipe notifier async notification tests
 - **`test_spinner.c`** - Tool execution spinner tests
+- **`test_terminal.c`** - Terminal abstraction tests
 
 #### `test/policy/` - Policy Tests (Approval Gates)
 - **`test_approval_gate.c`** - Gate config initialization, category lookup, non-interactive mode
@@ -281,8 +295,10 @@ The test directory mirrors the source structure:
 #### Test Infrastructure
 - **`test/unity/`** - Unity testing framework (vendored)
 - **`mock_api_server.c/h`** - Mock API server for testing
-- **`mock_embeddings.c`** - Mock embeddings for testing
-- **`test/stubs/`** - Test stubs for isolated unit testing
+- **`mock_embeddings.c/h`** - Mock embeddings for deterministic vector testing
+- **`mock_embeddings_server.c/h`** - Mock embeddings HTTP server
+- **`mock_embeddings_service.c/h`** - Mock embeddings service for DI
+- **`test/stubs/`** - Test stubs for isolated unit testing (ralph_stub, services_stub, output_formatter_stub, python_tool_stub, subagent_stub)
 
 ---
 

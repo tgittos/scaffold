@@ -116,6 +116,6 @@ void todo_display_update(const TodoList* todo_list) {
 }
 
 void todo_display_cleanup(void) {
-    // No dynamic resources to clean up currently
+    /* Reset display configuration state */
     g_display_config.enabled = false;
 }

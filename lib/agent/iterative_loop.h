@@ -4,6 +4,8 @@
 #include "session.h"
 #include "tool_orchestration.h"
 
+#define ITERATIVE_LOOP_MAX_ITERATIONS 200
+
 /**
  * Run the iterative tool-calling loop.
  *

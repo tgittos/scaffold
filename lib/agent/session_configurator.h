@@ -14,12 +14,6 @@
  */
 int session_configurator_load(AgentSession* session);
 
-/**
- * Detect API type from a URL string.
- *
- * @param api_url The API endpoint URL
- * @return API_TYPE_OPENAI, API_TYPE_ANTHROPIC, or API_TYPE_LOCAL
- */
 APIType session_configurator_detect_api_type(const char* api_url);
 
 #endif

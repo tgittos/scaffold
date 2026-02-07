@@ -1,19 +1,4 @@
-/**
- * lib/agent/session.c - Agent Session Implementation
- *
- * Implements the session lifecycle functions. This file lives in lib/ and
- * coordinates the various subsystems without depending on src/.
- *
- * The heavy lifting is done by:
- * - lib/session/session_manager.c - SessionData management
- * - lib/tools/tools_system.c - Tool registry
- * - lib/tools/builtin_tools.c - Built-in tool registration
- * - lib/tools/tool_extension.c - External tool extensions (Python)
- * - lib/mcp/mcp_client.c - MCP server management
- * - lib/policy/approval_gate.c - Approval gates
- * - lib/ipc/message_poller.c - Background message polling
- */
-
+/* lib/ boundary: this file must not depend on src/. */
 #include "session.h"
 #include "session_configurator.h"
 #include "message_dispatcher.h"
@@ -43,10 +28,6 @@
 #include <string.h>
 #include <time.h>
 
-/* =============================================================================
- * CLEANUP HOOKS
- * ============================================================================= */
-
 #define MAX_CLEANUP_HOOKS 8
 static SessionCleanupHook g_cleanup_hooks[MAX_CLEANUP_HOOKS];
 static int g_cleanup_hook_count = 0;
@@ -67,10 +48,6 @@ void session_unregister_all_hooks(void) {
     g_cleanup_hook_count = 0;
 }
 
-/* =============================================================================
- * INTERNAL: SUBAGENT SPAWN CALLBACK
- * ============================================================================= */
-
 /**
  * Callback invoked when a subagent spawns to notify the async executor's select loop.
  * This allows the main thread to immediately rebuild its fd_set to include the new
@@ -80,10 +57,6 @@ static void on_subagent_spawn(void *user_data) {
     (void)user_data;
     async_executor_notify_subagent_spawned(async_executor_get_active());
 }
-
-/* =============================================================================
- * SESSION LIFECYCLE
- * ============================================================================= */
 
 int session_init(AgentSession* session) {
     if (session == NULL) return -1;
@@ -126,7 +99,7 @@ int session_init(AgentSession* session) {
 
     if (load_conversation_history(&session->session_data.conversation) != 0) {
         fprintf(stderr, "Error: Failed to load conversation history\n");
-        return -1;
+        goto cleanup_session_data;
     }
 
     init_tool_registry(&session->tools);
@@ -140,9 +113,7 @@ int session_init(AgentSession* session) {
 
     if (todo_list_init(&session->todo_list) != 0) {
         fprintf(stderr, "Error: Failed to initialize todo list\n");
-        cleanup_conversation_history(&session->session_data.conversation);
-        cleanup_tool_registry(&session->tools);
-        return -1;
+        goto cleanup_tools;
     }
 
     if (register_todo_tool(&session->tools, &session->todo_list, session->services) != 0) {
@@ -192,7 +163,7 @@ int session_init(AgentSession* session) {
 
     if (llm_client_init() != 0) {
         fprintf(stderr, "Error: Failed to initialize LLM HTTP subsystem\n");
-        return -1;
+        goto cleanup_subsystems;
     }
 
     if (approval_gate_init(&session->gate_config) != 0) {
@@ -204,12 +175,24 @@ int session_init(AgentSession* session) {
     }
 
     return 0;
+
+cleanup_subsystems:
+    subagent_manager_cleanup(&session->subagent_manager);
+    mcp_client_cleanup(&session->mcp_client);
+    clear_todo_tool_reference();
+    todo_display_cleanup();
+    todo_list_destroy(&session->todo_list);
+cleanup_tools:
+    tool_extension_shutdown_all();
+    cleanup_tool_registry(&session->tools);
+cleanup_session_data:
+    session_data_cleanup(&session->session_data);
+    return -1;
 }
 
 void session_cleanup(AgentSession* session) {
     if (session == NULL) return;
 
-    /* Call cleanup hooks in LIFO order */
     for (int i = g_cleanup_hook_count - 1; i >= 0; i--) {
         if (g_cleanup_hooks[i] != NULL) {
             g_cleanup_hooks[i](session);
@@ -247,10 +230,6 @@ int session_load_config(AgentSession* session) {
     if (session == NULL) return -1;
     return session_configurator_load(session);
 }
-
-/* =============================================================================
- * MESSAGE POLLING
- * ============================================================================= */
 
 int session_start_message_polling(AgentSession* session) {
     if (session == NULL) {
@@ -301,17 +280,9 @@ void session_stop_message_polling(AgentSession* session) {
     debug_printf("Message polling stopped\n");
 }
 
-/* =============================================================================
- * RECAP GENERATION
- * ============================================================================= */
-
 int session_generate_recap(AgentSession* session, int max_messages) {
     return recap_generate(session, max_messages);
 }
-
-/* =============================================================================
- * TOOL WORKFLOW
- * ============================================================================= */
 
 int session_execute_tool_workflow(AgentSession* session, ToolCall* tool_calls,
                                    int call_count, const char* user_message,
@@ -319,10 +290,6 @@ int session_execute_tool_workflow(AgentSession* session, ToolCall* tool_calls,
     return tool_executor_run_workflow(session, tool_calls, call_count,
                                       user_message, max_tokens);
 }
-
-/* =============================================================================
- * PAYLOAD BUILDING
- * ============================================================================= */
 
 char* session_build_json_payload(const AgentSession* session,
                                   const char* user_message, int max_tokens) {
@@ -357,10 +324,6 @@ char* session_build_anthropic_json_payload(const AgentSession* session,
     free(final_prompt);
     return result;
 }
-
-/* =============================================================================
- * TOKEN MANAGEMENT
- * ============================================================================= */
 
 int manage_conversation_tokens(AgentSession* session, const char* user_message,
                                TokenConfig* config, TokenUsage* usage) {
@@ -423,10 +386,6 @@ int manage_conversation_tokens(AgentSession* session, const char* user_message,
 
     return 0;
 }
-
-/* =============================================================================
- * MESSAGE PROCESSING
- * ============================================================================= */
 
 int session_process_message(AgentSession* session, const char* user_message) {
     if (session == NULL || user_message == NULL) return -1;

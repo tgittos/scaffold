@@ -1,9 +1,3 @@
-/**
- * lib/agent/agent.c - Agent Abstraction Implementation
- *
- * Implements the agent lifecycle API that wraps AgentSession.
- */
-
 #include "agent.h"
 #include "repl.h"
 #include "../workflow/workflow.h"

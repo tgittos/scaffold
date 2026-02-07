@@ -164,7 +164,7 @@ int streaming_process_message(AgentSession* session, LLMProvider* provider,
     }
 
     if (ctx->tool_uses.count > 0) {
-        // Downstream APIs use int for call_count
+        /* Safe narrowing: size_t→int; checked against INT_MAX above */
         if (ctx->tool_uses.count > INT_MAX) {
             fprintf(stderr, "Error: Too many tool calls (%zu exceeds INT_MAX)\n", ctx->tool_uses.count);
             streaming_context_free(ctx);
@@ -180,21 +180,13 @@ int streaming_process_message(AgentSession* session, LLMProvider* provider,
                 tool_calls[i].arguments = ctx->tool_uses.data[i].arguments_json ? strdup(ctx->tool_uses.data[i].arguments_json) : NULL;
             }
 
-            // OpenAI conversation format requires assistant messages to include the tool_calls array
-            char* constructed_message = conversation_build_assistant_tool_message(
-                ctx->text_content, tool_calls, call_count);
-            if (constructed_message != NULL) {
-                if (append_conversation_message(&session->session_data.conversation, "assistant", constructed_message) != 0) {
-                    fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
-                }
-                free(constructed_message);
-            }
+            conversation_append_assistant(session, ctx->text_content, tool_calls, call_count);
 
             if (session->session_data.config.json_output_mode) {
                 if (ctx->text_content != NULL && ctx->text_len > 0) {
                     json_output_assistant_text(ctx->text_content, input_tokens, output_tokens);
                 }
-                json_output_assistant_tool_calls(ctx->tool_uses.data, call_count, input_tokens, output_tokens);
+                json_output_assistant_tool_calls_buffered(tool_calls, call_count, input_tokens, output_tokens);
             }
 
             result = session_execute_tool_workflow(session, tool_calls, call_count,
@@ -205,14 +197,10 @@ int streaming_process_message(AgentSession* session, LLMProvider* provider,
             result = -1;
         }
     } else {
-        if (ctx->text_content != NULL && ctx->text_len > 0) {
-            if (append_conversation_message(&session->session_data.conversation, "assistant", ctx->text_content) != 0) {
-                fprintf(stderr, "Warning: Failed to save assistant response to conversation history\n");
-            }
+        conversation_append_assistant(session, ctx->text_content, NULL, 0);
 
-            if (session->session_data.config.json_output_mode) {
-                json_output_assistant_text(ctx->text_content, input_tokens, output_tokens);
-            }
+        if (ctx->text_content != NULL && ctx->text_len > 0 && session->session_data.config.json_output_mode) {
+            json_output_assistant_text(ctx->text_content, input_tokens, output_tokens);
         }
         display_streaming_complete(input_tokens, output_tokens);
     }

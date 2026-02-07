@@ -32,10 +32,6 @@
 extern "C" {
 #endif
 
-/* =============================================================================
- * AGENT MODE
- * ============================================================================= */
-
 /**
  * Agent execution mode determines how the agent interacts.
  */
@@ -52,10 +48,6 @@ typedef enum {
     /** Worker mode: claims and processes items from a work queue */
     AGENT_MODE_WORKER = 3
 } AgentMode;
-
-/* =============================================================================
- * AGENT CONFIGURATION
- * ============================================================================= */
 
 /**
  * Configuration for creating an agent.
@@ -113,10 +105,6 @@ typedef struct AgentConfig {
     Services* services;
 } AgentConfig;
 
-/* =============================================================================
- * AGENT STRUCTURE
- * ============================================================================= */
-
 /**
  * The Agent wraps an AgentSession with a cleaner lifecycle API.
  */
@@ -128,10 +116,6 @@ typedef struct Agent {
     bool initialized;
     bool config_loaded;
 } Agent;
-
-/* =============================================================================
- * AGENT LIFECYCLE
- * ============================================================================= */
 
 /**
  * Create a default agent configuration.

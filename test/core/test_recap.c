@@ -3,6 +3,8 @@
 #include "agent/agent.h"
 #include "session/conversation_tracker.h"
 #include "db/hnswlib_wrapper.h"
+
+extern void hnswlib_clear_all(void);
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

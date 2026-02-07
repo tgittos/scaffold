@@ -41,8 +41,6 @@ int hnswlib_load_index(const char* name, const char* path, const hnswlib_index_c
 int hnswlib_set_ef(const char* name, size_t ef);
 size_t hnswlib_get_current_count(const char* name);
 
-void hnswlib_clear_all(void);
-
 #ifdef __cplusplus
 }
 #endif

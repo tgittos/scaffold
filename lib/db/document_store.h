@@ -75,6 +75,4 @@ int document_store_ensure_index(document_store_t* store, const char* index_name,
 
 char** document_store_list_indices(document_store_t* store, size_t* count);
 
-void document_store_clear_conversations(document_store_t* store);
-
 #endif

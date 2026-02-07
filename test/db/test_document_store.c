@@ -4,6 +4,8 @@
 #include "db/hnswlib_wrapper.h"
 #include "services/services.h"
 #include "util/ralph_home.h"
+
+extern void hnswlib_clear_all(void);
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>

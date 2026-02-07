@@ -40,10 +40,6 @@
  * - approval_gate.h: Integration with approval gates system
  * - path_normalize.h: Cross-platform path normalization
  *
- * Note: This header defines VerifyResult and ApprovedPath as the canonical
- * source for these types. The approval_gate.h header currently has duplicate
- * definitions for backward compatibility; it should be updated to include
- * this header and remove its local definitions.
  */
 
 /**

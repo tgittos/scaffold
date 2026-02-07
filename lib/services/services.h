@@ -22,10 +22,6 @@
 extern "C" {
 #endif
 
-/* =============================================================================
- * SERVICE CONTAINER
- * ============================================================================= */
-
 /**
  * Service container for dependency injection.
  * Holds references to services that can be injected into agents.
@@ -54,10 +50,6 @@ typedef struct Services {
     bool use_singletons;
 } Services;
 
-/* =============================================================================
- * FACTORY FUNCTIONS
- * ============================================================================= */
-
 /**
  * Create a services container with default service instances.
  *
@@ -82,56 +74,11 @@ Services* services_create_empty(void);
  */
 void services_destroy(Services* services);
 
-/* =============================================================================
- * CONVENIENCE ACCESSORS
- * ============================================================================= */
-
-/**
- * Get the message store from a services container.
- *
- * @param services Services container (may be NULL)
- * @return Message store instance, or NULL if services is NULL
- */
 message_store_t* services_get_message_store(Services* services);
-
-/**
- * Get the vector DB service from a services container.
- *
- * @param services Services container (may be NULL)
- * @return Vector DB service instance, or NULL if services is NULL
- */
 vector_db_service_t* services_get_vector_db(Services* services);
-
-/**
- * Get the embeddings service from a services container.
- *
- * @param services Services container (may be NULL)
- * @return Embeddings service instance, or NULL if services is NULL
- */
 embeddings_service_t* services_get_embeddings(Services* services);
-
-/**
- * Get the task store from a services container.
- *
- * @param services Services container (may be NULL)
- * @return Task store instance, or NULL if services is NULL
- */
 task_store_t* services_get_task_store(Services* services);
-
-/**
- * Get the document store from a services container.
- *
- * @param services Services container (may be NULL)
- * @return Document store instance, or NULL if services is NULL
- */
 document_store_t* services_get_document_store(Services* services);
-
-/**
- * Get the metadata store from a services container.
- *
- * @param services Services container (may be NULL)
- * @return Metadata store instance, or NULL if services is NULL
- */
 metadata_store_t* services_get_metadata_store(Services* services);
 
 #ifdef __cplusplus

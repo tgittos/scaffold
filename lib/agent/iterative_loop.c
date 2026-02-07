@@ -22,6 +22,11 @@ int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx) {
 
     while (1) {
         loop_count++;
+        if (loop_count > ITERATIVE_LOOP_MAX_ITERATIONS) {
+            fprintf(stderr, "Error: Iterative tool loop exceeded safety limit of %d iterations\n",
+                    ITERATIVE_LOOP_MAX_ITERATIONS);
+            return -1;
+        }
         tool_orchestration_reset_batch(ctx);
         debug_printf("Tool calling loop iteration %d\n", loop_count);
 
@@ -88,7 +93,7 @@ int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx) {
         }
 
         api_round_trip_cleanup(&rt);
-        assistant_content = NULL;
+        assistant_content = NULL;  /* borrowed from rt; invalidated by cleanup */
 
         int new_tool_calls = 0;
         for (int i = 0; i < call_count; i++) {

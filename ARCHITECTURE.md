@@ -7,7 +7,7 @@ Ralph is a portable C-based AI assistant that provides a consistent interface ac
 ```mermaid
 graph TB
     %% User Interface Layer
-    CLI[Command Line Interface<br/>main.c] --> Core[Ralph Core<br/>ralph.c/h]
+    CLI[Command Line Interface<br/>main.c] --> Core[Agent Core<br/>agent.c/h]
     CLI --> MemoryCommands[Memory Commands<br/>lib/ui/memory_commands.c/h]
 
     %% Core Application Layer
@@ -94,8 +94,6 @@ graph TB
     %% Document Processing
     PDFTool --> PDFExtractor[PDF Extractor<br/>pdf_extractor.c/h]
     PDFTool --> DocumentChunker[Document Chunker<br/>document_chunker.c/h]
-    PDFTool --> PDFProcessor[PDF Processor<br/>pdf_processor.c/h]
-
     PDFExtractor --> PDFio[PDFio Library]
 
     %% Context Retrieval
@@ -167,7 +165,7 @@ graph TB
     class ConversationTracker,TokenManager,ConversationCompactor sessionLayer
     class HTTPClient,APICommon networkLayer
     class OutputFormatter,PromptLoader,JSONEscape,DebugOutput,ToolResultBuilder,CommonUtils,ContextRetriever utilsLayer
-    class VectorDBService,VectorDB,EmbeddingsService,EmbeddingProvider,EmbedProviderRegistry,OpenAIEmbed,LocalEmbed,PDFExtractor,DocumentChunker,PDFProcessor,DocumentStore,MetadataStore vectorLayer
+    class VectorDBService,VectorDB,EmbeddingsService,EmbeddingProvider,EmbedProviderRegistry,OpenAIEmbed,LocalEmbed,PDFExtractor,DocumentChunker,DocumentStore,MetadataStore vectorLayer
     class cURL,mbedTLS,FileSystem,PromptFile,ConfigFile,VectorStorage,DocStorage,MetaStorage,HNSWLib,PDFio,pthread,CPP,cJSON externalLayer
     class MCPClient,MCPServers mcpLayer
 ```
@@ -178,7 +176,7 @@ graph TB
 sequenceDiagram
     participant User
     participant CLI as main.c
-    participant Core as ralph.c
+    participant Core as agent.c
     participant Session as Session Manager
     participant Provider as LLM Provider
     participant Tools as Tools System
@@ -280,7 +278,7 @@ graph TB
 
 ```mermaid
 graph TB
-    Core[Core Layer<br/>ralph.c/h] --> LLM[LLM Layer]
+    Core[Core Layer<br/>agent.c/h] --> LLM[LLM Layer]
     Core --> Tools[Tools Layer]
     Core --> Session[Session Layer]
     Core --> Utils[Utils Layer]
@@ -945,7 +943,7 @@ graph TB
 src/
 ├── core/                   # CLI Entry Point (thin wrapper around lib/)
 │   ├── main.c              # Entry point (CLI interface, --json, --subagent modes)
-│   └── ralph.c/h           # Re-exports lib/agent/session.h and lib/agent/agent.h
+│   └── ralph.c/h           # Re-exports lib/agent/agent.h for backward compatibility
 ├── tools/                  # Python tool integration
 │   ├── python_tool.c/h     # Embedded Python interpreter
 │   ├── python_tool_files.c/h # Python file-based tools
@@ -965,7 +963,15 @@ lib/
 ├── types.h                 # Shared types (ToolCall, ToolResult, StreamingToolUse)
 ├── agent/                  # Agent abstraction and session management
 │   ├── agent.c/h           # Agent lifecycle (init, run, cleanup)
-│   ├── session.c/h         # AgentSession aggregating all components
+│   ├── session.c/h         # Thin coordinator delegating to extracted modules
+│   ├── session_configurator.c/h # Configuration loading and API type detection
+│   ├── message_dispatcher.c/h  # Dispatch path selection (streaming vs buffered)
+│   ├── message_processor.c/h   # Buffered response handling
+│   ├── api_round_trip.c/h  # Single LLM request-response cycle
+│   ├── conversation_state.c/h  # Conversation history append helpers
+│   ├── tool_batch_executor.c/h # Batch tool execution with approval gates
+│   ├── tool_orchestration.c/h  # Tool call deduplication and tracking
+│   ├── repl.c/h            # Read-Eval-Print-Loop for interactive mode
 │   ├── async_executor.c/h  # Non-blocking message processing thread
 │   ├── context_enhancement.c/h  # Prompt enhancement with memory/context
 │   ├── recap.c/h           # Conversation recap generation
@@ -992,6 +998,7 @@ lib/
 │   ├── embeddings.c/h      # Low-level embeddings API
 │   ├── embedding_provider.c/h # Embedding provider abstraction
 │   ├── embeddings_service.c/h # Embeddings singleton service
+│   ├── llm_client.c/h      # LLM HTTP client abstraction
 │   ├── models/             # Model capability implementations
 │   │   ├── claude_model.c
 │   │   ├── gpt_model.c
@@ -1049,8 +1056,7 @@ lib/
 │   ├── spinner.c/h         # Tool execution spinner feedback
 │   ├── output_formatter.c/h # Response formatting
 │   ├── json_output.c/h     # JSON output mode
-│   ├── memory_commands.c/h # Interactive /memory slash commands
-│   └── repl.c/h            # Read-Eval-Print-Loop implementation
+│   └── memory_commands.c/h # Interactive /memory slash commands
 ├── tools/                  # Tool system
 │   ├── tools.h             # Public tools API header
 │   ├── tools_system.c/h    # Tool registry and execution
@@ -1083,11 +1089,9 @@ lib/
 │   ├── document_chunker.c/h # Text chunking
 │   ├── config.c/h          # Configuration management
 │   ├── prompt_loader.c/h   # System prompt loading
-│   ├── pdf_processor.c/h   # PDF download/processing
 │   ├── context_retriever.c/h # Vector context retrieval
+│   ├── ansi_codes.h        # Terminal color codes and box-drawing characters
 │   └── ralph_home.c/h      # Centralized home directory management
 └── workflow/               # Task queue
     └── workflow.c/h        # SQLite-backed work queue
-```
-
 ```

@@ -5,6 +5,8 @@
 #include "tools/builtin_tools.h"
 #include "mock_api_server.h"
 #include "db/hnswlib_wrapper.h"
+
+extern void hnswlib_clear_all(void);
 #include "util/json_escape.h"
 #include "network/api_common.h"
 #include <stdio.h>
