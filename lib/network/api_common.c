@@ -60,6 +60,93 @@ size_t calculate_json_payload_size(const char* model, const char* system_prompt,
     return total;
 }
 
+static char* build_simple_message_json(const char* role, const char* content) {
+    cJSON* json = cJSON_CreateObject();
+    if (json == NULL) return NULL;
+    cJSON_AddStringToObject(json, "role", role);
+    cJSON_AddStringToObject(json, "content", content);
+    char* result = cJSON_PrintUnformatted(json);
+    cJSON_Delete(json);
+    return result;
+}
+
+static char* summarize_tool_calls(const char* raw_json) {
+    cJSON* root = cJSON_Parse(raw_json);
+    if (!root) return NULL;
+
+    cJSON* tool_calls = cJSON_GetObjectItem(root, "tool_calls");
+    if (!tool_calls || !cJSON_IsArray(tool_calls)) {
+        cJSON_Delete(root);
+        return NULL;
+    }
+
+    // Build summary: "Calling tool1(arg1=\"val1\") tool2(...)"
+    size_t buf_size = 256;
+    char* summary = malloc(buf_size);
+    if (!summary) { cJSON_Delete(root); return NULL; }
+    size_t offset = 0;
+
+    int count = cJSON_GetArraySize(tool_calls);
+    for (int i = 0; i < count; i++) {
+        cJSON* tc = cJSON_GetArrayItem(tool_calls, i);
+        cJSON* fn = cJSON_GetObjectItem(tc, "function");
+        if (!fn) continue;
+
+        cJSON* name = cJSON_GetObjectItem(fn, "name");
+        cJSON* args = cJSON_GetObjectItem(fn, "arguments");
+        const char* name_str = name && cJSON_IsString(name) ? name->valuestring : "unknown";
+        const char* args_str = args && cJSON_IsString(args) ? args->valuestring : "{}";
+
+        // Parse arguments JSON to build arg summary
+        cJSON* args_obj = cJSON_Parse(args_str);
+        char arg_summary[512] = "";
+        if (args_obj) {
+            size_t aoff = 0;
+            cJSON* field = NULL;
+            int first = 1;
+            cJSON_ArrayForEach(field, args_obj) {
+                if (!field->string) continue;
+                const char* val_str;
+                char num_buf[64];
+                if (cJSON_IsString(field)) {
+                    val_str = field->valuestring;
+                } else if (cJSON_IsNumber(field)) {
+                    snprintf(num_buf, sizeof(num_buf), "%g", field->valuedouble);
+                    val_str = num_buf;
+                } else if (cJSON_IsBool(field)) {
+                    val_str = cJSON_IsTrue(field) ? "true" : "false";
+                } else {
+                    val_str = "...";
+                }
+                int written = snprintf(arg_summary + aoff, sizeof(arg_summary) - aoff,
+                                       "%s%s=\"%s\"", first ? "" : ", ", field->string, val_str);
+                if (written < 0 || (size_t)written >= sizeof(arg_summary) - aoff) break;
+                aoff += written;
+                first = 0;
+            }
+            cJSON_Delete(args_obj);
+        }
+
+        // Ensure enough space
+        size_t needed = strlen(name_str) + strlen(arg_summary) + 32;
+        while (offset + needed >= buf_size) {
+            buf_size *= 2;
+            char* tmp = realloc(summary, buf_size);
+            if (!tmp) { free(summary); cJSON_Delete(root); return NULL; }
+            summary = tmp;
+        }
+
+        int written = snprintf(summary + offset, buf_size - offset,
+                               "%sCalling %s(%s)",
+                               (i > 0) ? "\n" : "", name_str, arg_summary);
+        if (written > 0) offset += written;
+    }
+
+    cJSON_Delete(root);
+    if (offset == 0) { free(summary); return NULL; }
+    return summary;
+}
+
 int format_openai_message(char* buffer, size_t buffer_size,
                          const ConversationMessage* message,
                          int is_first_message) {
@@ -69,20 +156,44 @@ int format_openai_message(char* buffer, size_t buffer_size,
         return -1;
     }
 
-    if (strcmp(message->role, "tool") == 0 && message->tool_call_id != NULL) {
+    if (strcmp(message->role, "tool") == 0) {
+        // Rewrite tool results as system messages so the model treats them as
+        // background context rather than user-provided conversational input
+        const char* name = (message->tool_name != NULL) ? message->tool_name : "unknown";
+
+        size_t prefix_len = strlen("[Tool  result]:\n") + strlen(name) + 1;
+        size_t content_len = strlen(message->content);
+        char* combined = malloc(prefix_len + content_len + 1);
+        if (!combined) return -1;
+        snprintf(combined, prefix_len + content_len + 1,
+                 "[Tool %s result]:\n%s", name, message->content);
+
         cJSON* json = cJSON_CreateObject();
-        if (!json) return -1;
-
-        cJSON_AddStringToObject(json, "role", "tool");
-        cJSON_AddStringToObject(json, "content", message->content);
-        cJSON_AddStringToObject(json, "tool_call_id", message->tool_call_id);
-
+        if (!json) { free(combined); return -1; }
+        cJSON_AddStringToObject(json, "role", "system");
+        cJSON_AddStringToObject(json, "content", combined);
         message_json = cJSON_PrintUnformatted(json);
         cJSON_Delete(json);
+        free(combined);
     } else if (strcmp(message->role, "assistant") == 0 &&
                strstr(message->content, "\"tool_calls\"") != NULL) {
-        // Content is pre-formatted JSON from a prior assistant tool_calls response
-        message_json = strdup(message->content);
+        // Rewrite assistant tool_calls as plain text summaries so the API
+        // doesn't reject orphaned tool_calls without matching tool responses
+        char* summary = summarize_tool_calls(message->content);
+        if (summary) {
+            cJSON* json = cJSON_CreateObject();
+            if (json) {
+                cJSON_AddStringToObject(json, "role", "assistant");
+                cJSON_AddStringToObject(json, "content", summary);
+                message_json = cJSON_PrintUnformatted(json);
+                cJSON_Delete(json);
+            }
+            free(summary);
+        }
+        // Fallback: if summarization fails, send as plain assistant text
+        if (message_json == NULL) {
+            message_json = build_simple_message_json("assistant", message->content);
+        }
     } else {
         cJSON* json = cJSON_CreateObject();
         if (json) {
@@ -109,16 +220,6 @@ int format_openai_message(char* buffer, size_t buffer_size,
     }
 
     return written;
-}
-
-static char* build_simple_message_json(const char* role, const char* content) {
-    cJSON* json = cJSON_CreateObject();
-    if (json == NULL) return NULL;
-    cJSON_AddStringToObject(json, "role", role);
-    cJSON_AddStringToObject(json, "content", content);
-    char* result = cJSON_PrintUnformatted(json);
-    cJSON_Delete(json);
-    return result;
 }
 
 int format_anthropic_message(char* buffer, size_t buffer_size,
