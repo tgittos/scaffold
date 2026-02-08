@@ -13,8 +13,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include <unistd.h>
+#include "../test_fs_utils.h"
 
+extern void hnswlib_clear_all(void);
+
+static char g_test_home[256];
 static char *saved_ralph_config_backup = NULL;
 static MockAPIServer mock_server;
 static MockAPIResponse mock_responses[1];
@@ -23,7 +26,9 @@ static char* saved_api_key = NULL;
 static char* saved_api_url = NULL;
 
 void setUp(void) {
-    ralph_home_init(NULL);
+    snprintf(g_test_home, sizeof(g_test_home), "/tmp/test_vdb_tool_XXXXXX");
+    TEST_ASSERT_NOT_NULL(mkdtemp(g_test_home));
+    ralph_home_init(g_test_home);
 
     // Back up existing ralph.config.json file if it exists
     FILE *ralph_config_file = fopen("ralph.config.json", "r");
@@ -97,6 +102,8 @@ void tearDown(void) {
         test_services = NULL;
     }
 
+    hnswlib_clear_all();
+
     // Restore env vars
     if (saved_api_key) {
         setenv("OPENAI_API_KEY", saved_api_key, 1);
@@ -113,6 +120,7 @@ void tearDown(void) {
         unsetenv("EMBEDDING_API_URL");
     }
 
+    rmdir_recursive(g_test_home);
     ralph_home_cleanup();
 }
 

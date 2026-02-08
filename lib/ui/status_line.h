@@ -19,6 +19,17 @@ void status_line_cleanup(void);
  */
 void status_line_update_agents(int count, const StatusAgentInfo *agents);
 
+/**
+ * Mark the system as busy with a short activity label.
+ * The status line will show "● label (Ns)" while busy.
+ */
+void status_line_set_busy(const char *label);
+
+/**
+ * Clear the busy state set by status_line_set_busy().
+ */
+void status_line_set_idle(void);
+
 void status_line_add_tokens(int prompt_tokens, int completion_tokens);
 void status_line_set_last_response_tokens(int tokens);
 

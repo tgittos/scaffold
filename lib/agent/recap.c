@@ -3,6 +3,7 @@
 #include "../llm/llm_provider.h"
 #include "../llm/llm_client.h"
 #include "../ui/output_formatter.h"
+#include "../ui/status_line.h"
 #include "../util/debug_output.h"
 #include "../session/token_manager.h"
 #include <stdio.h>
@@ -91,6 +92,7 @@ static void recap_sse_data_callback(const char* data, size_t len, void* user_dat
 
 static void recap_text_callback(const char* text, size_t len, void* user_data) {
     (void)user_data;
+    status_line_set_idle();
     display_streaming_text(text, len);
 }
 
@@ -216,6 +218,7 @@ int recap_generate(AgentSession* session, int max_messages) {
     ctx->on_error = recap_error_callback;
     ctx->on_sse_data = recap_sse_data_callback;
 
+    status_line_set_busy("Requesting...");
     display_streaming_init();
 
     struct StreamingHTTPConfig streaming_config = {
@@ -236,6 +239,7 @@ int recap_generate(AgentSession* session, int max_messages) {
     free(post_data);
 
     if (result != 0) {
+        status_line_set_idle();
         if (provider->cleanup_stream_state != NULL) {
             provider->cleanup_stream_state(provider);
         }

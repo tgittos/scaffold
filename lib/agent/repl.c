@@ -11,6 +11,7 @@
 #include "../ipc/message_poller.h"
 #include "../ipc/notification_formatter.h"
 #include "../session/conversation_tracker.h"
+#include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -113,7 +114,36 @@ static void process_pending_notifications(AgentSession* session) {
     }
     int total_count = notification_bundle_total_count(bundle);
     if (total_count > 0) {
-        display_message_notification(total_count);
+        int generic_count = 0;
+        for (size_t i = 0; i < bundle->count; i++) {
+            const char *content = bundle->messages[i].content;
+            if (content && strstr(content, "subagent_completion")) {
+                cJSON *root = cJSON_Parse(content);
+                if (root) {
+                    cJSON *type = cJSON_GetObjectItem(root, "type");
+                    if (type && cJSON_IsString(type) &&
+                        strcmp(type->valuestring, "subagent_completion") == 0) {
+                        cJSON *task = cJSON_GetObjectItem(root, "task");
+                        cJSON *status = cJSON_GetObjectItem(root, "status");
+                        cJSON *elapsed = cJSON_GetObjectItem(root, "elapsed_seconds");
+                        const char *task_str = (task && cJSON_IsString(task))
+                                               ? task->valuestring : "unknown";
+                        bool success = (status && cJSON_IsString(status) &&
+                                       strcmp(status->valuestring, "completed") == 0);
+                        int elapsed_secs = (elapsed && cJSON_IsNumber(elapsed))
+                                           ? elapsed->valueint : 0;
+                        display_agent_completed(task_str, elapsed_secs, success);
+                        cJSON_Delete(root);
+                        continue;
+                    }
+                    cJSON_Delete(root);
+                }
+            }
+            generic_count++;
+        }
+        if (generic_count > 0) {
+            display_message_notification(generic_count);
+        }
         char* notification_text = notification_format_for_llm(bundle);
         if (notification_text != NULL) {
             debug_printf("Processing %d incoming messages\n", total_count);
@@ -266,7 +296,6 @@ void repl_show_greeting(AgentSession* session, bool json_mode) {
         if (result != 0) {
             printf("Hello! I'm Ralph, your AI assistant. What can I help you with today?\n");
         }
-        printf("\n");
     } else {
         debug_printf("Generating recap of recent conversation (%d messages)...\n",
                      session->session_data.conversation.count);
@@ -275,6 +304,5 @@ void repl_show_greeting(AgentSession* session, bool json_mode) {
         if (result != 0) {
             printf("Welcome back! Ready to continue where we left off.\n");
         }
-        printf("\n");
     }
 }

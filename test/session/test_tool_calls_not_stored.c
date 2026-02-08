@@ -4,18 +4,20 @@
 #include "db/vector_db_service.h"
 #include "services/services.h"
 
+extern void hnswlib_clear_all(void);
 extern void document_store_clear_conversations(document_store_t* store);
 #include "llm/embeddings_service.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <cJSON.h>
 #include "util/ralph_home.h"
+#include "../test_fs_utils.h"
 #include "../mock_api_server.h"
 #include "../mock_embeddings.h"
 #include "../mock_embeddings_server.h"
 
+static char g_test_home[256];
 static Services* g_test_services = NULL;
 static MockAPIServer mock_server;
 static MockAPIResponse mock_responses[1];
@@ -23,7 +25,9 @@ static char* saved_api_key = NULL;
 static char* saved_api_url = NULL;
 
 void setUp(void) {
-    ralph_home_init(NULL);
+    snprintf(g_test_home, sizeof(g_test_home), "/tmp/test_tcns_XXXXXX");
+    TEST_ASSERT_NOT_NULL(mkdtemp(g_test_home));
+    ralph_home_init(g_test_home);
 
     mock_embeddings_init_test_groups();
 
@@ -66,6 +70,8 @@ void tearDown(void) {
         g_test_services = NULL;
     }
 
+    hnswlib_clear_all();
+
     mock_api_server_stop(&mock_server);
     mock_embeddings_cleanup();
 
@@ -85,6 +91,7 @@ void tearDown(void) {
         unsetenv("EMBEDDING_API_URL");
     }
 
+    rmdir_recursive(g_test_home);
     ralph_home_cleanup();
 }
 

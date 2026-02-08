@@ -770,13 +770,7 @@ void cleanup_output_formatter(void) {
 }
 
 void display_streaming_init(void) {
-    if (g_json_output_mode) {
-        return;
-    }
-
     streaming_first_chunk = 1;
-    fprintf(stdout, TERM_CYAN TERM_SYM_ACTIVE TERM_RESET " ");
-    fflush(stdout);
 }
 
 void display_streaming_text(const char* text, size_t len) {
@@ -789,7 +783,6 @@ void display_streaming_text(const char* text, size_t len) {
     }
 
     if (streaming_first_chunk) {
-        fprintf(stdout, TERM_CLEAR_LINE);
         streaming_first_chunk = 0;
     }
     fwrite(text, 1, len, stdout);
@@ -935,6 +928,13 @@ void log_subagent_approval(const char *subagent_id,
     fflush(stdout);
 }
 
+#define AGENT_TASK_DISPLAY_MAX 60
+#define AGENT_TASK_TRUNC_LEN  (AGENT_TASK_DISPLAY_MAX - 3)
+
+static void truncate_task(const char *src, char *buf, size_t buf_size) {
+    snprintf(buf, buf_size, "%.*s...", AGENT_TASK_TRUNC_LEN, src);
+}
+
 void display_agents_launched(int count, const char **tasks) {
     if (g_json_output_mode || count <= 0 || !tasks) return;
 
@@ -942,21 +942,34 @@ void display_agents_launched(int count, const char **tasks) {
            count, count > 1 ? "s" : "");
     for (int i = 0; i < count; i++) {
         const char *connector = (i == count - 1) ? TERM_TREE_LAST : TERM_TREE_BRANCH;
-        printf(TERM_DIM "  %s " TERM_RESET "%s\n", connector, tasks[i] ? tasks[i] : "");
+        const char *t = tasks[i] ? tasks[i] : "";
+        if (strlen(t) > AGENT_TASK_DISPLAY_MAX) {
+            char trunc[AGENT_TASK_DISPLAY_MAX + 4];
+            truncate_task(t, trunc, sizeof(trunc));
+            printf(TERM_DIM "  %s " TERM_RESET "%s\n", connector, trunc);
+        } else {
+            printf(TERM_DIM "  %s " TERM_RESET "%s\n", connector, t);
+        }
     }
-    printf("\n");
     fflush(stdout);
 }
 
 void display_agent_completed(const char *task, int elapsed_secs, bool success) {
     if (g_json_output_mode) return;
 
+    const char *t = task ? task : "unknown";
+    char truncated[AGENT_TASK_DISPLAY_MAX + 4];
+    if (strlen(t) > AGENT_TASK_DISPLAY_MAX) {
+        truncate_task(t, truncated, sizeof(truncated));
+        t = truncated;
+    }
+
     if (success) {
-        printf(TERM_CYAN TERM_SYM_ACTIVE TERM_RESET " Agent \"%s\" completed (%ds)\n\n",
-               task ? task : "unknown", elapsed_secs);
+        printf("\n" TERM_CYAN TERM_SYM_ACTIVE TERM_RESET " Agent \"%s\" completed (%ds)\n\n",
+               t, elapsed_secs);
     } else {
-        printf(TERM_RED TERM_SYM_ACTIVE TERM_RESET " Agent \"%s\" failed (%ds)\n\n",
-               task ? task : "unknown", elapsed_secs);
+        printf("\n" TERM_RED TERM_SYM_ACTIVE TERM_RESET " Agent \"%s\" failed (%ds)\n\n",
+               t, elapsed_secs);
     }
     fflush(stdout);
 }

@@ -5,6 +5,7 @@
 #include "../llm/llm_client.h"
 #include "../llm/model_capabilities.h"
 #include "../network/http_client.h"
+#include "../ui/status_line.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,10 +24,7 @@ int api_round_trip_execute(AgentSession* session, const char* user_message,
         return -1;
     }
 
-    if (!session->session_data.config.json_output_mode) {
-        fprintf(stdout, TERM_CYAN TERM_SYM_ACTIVE TERM_RESET " ");
-        fflush(stdout);
-    }
+    status_line_set_busy("Requesting...");
 
     debug_printf("POST data length: %zu\n", strlen(post_data));
 
@@ -35,10 +33,7 @@ int api_round_trip_execute(AgentSession* session, const char* user_message,
     if (llm_client_send(session->session_data.config.api_url,
                         session->session_data.config.api_key,
                         post_data, &response) != 0) {
-        if (!session->session_data.config.json_output_mode) {
-            fprintf(stdout, TERM_CLEAR_LINE);
-            fflush(stdout);
-        }
+        status_line_set_idle();
 
         APIError err;
         get_last_api_error(&err);
@@ -60,10 +55,7 @@ int api_round_trip_execute(AgentSession* session, const char* user_message,
     }
 
     if (response.data == NULL) {
-        if (!session->session_data.config.json_output_mode) {
-            fprintf(stdout, TERM_CLEAR_LINE);
-            fflush(stdout);
-        }
+        status_line_set_idle();
         fprintf(stderr, "Error: Empty response from API\n");
         cleanup_response(&response);
         free(post_data);
@@ -78,10 +70,7 @@ int api_round_trip_execute(AgentSession* session, const char* user_message,
     }
 
     if (parse_result != 0) {
-        if (!session->session_data.config.json_output_mode) {
-            fprintf(stdout, TERM_CLEAR_LINE);
-            fflush(stdout);
-        }
+        status_line_set_idle();
 
         if (strstr(response.data, "didn't provide an API key") != NULL ||
             strstr(response.data, "Incorrect API key") != NULL ||
@@ -102,10 +91,7 @@ int api_round_trip_execute(AgentSession* session, const char* user_message,
         return -1;
     }
 
-    if (!session->session_data.config.json_output_mode) {
-        fprintf(stdout, TERM_CLEAR_LINE);
-        fflush(stdout);
-    }
+    status_line_set_idle();
 
     const char* content = result->parsed.response_content ?
                           result->parsed.response_content :

@@ -8,6 +8,7 @@
 #include "../ui/json_output.h"
 #include "../util/debug_output.h"
 #include "../llm/llm_client.h"
+#include "../ui/status_line.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -39,6 +40,7 @@ static void streaming_sse_data_callback(const char* data, size_t len, void* user
 
 static void streaming_text_callback(const char* text, size_t len, void* user_data) {
     (void)user_data;
+    status_line_set_idle();
     display_streaming_text(text, len);
 }
 
@@ -128,6 +130,7 @@ int streaming_process_message(AgentSession* session, LLMProvider* provider,
     ctx->on_error = streaming_error_callback;
     ctx->on_sse_data = streaming_sse_data_callback;
 
+    status_line_set_busy("Requesting...");
     display_streaming_init();
 
     struct StreamingHTTPConfig streaming_config = {
@@ -148,6 +151,7 @@ int streaming_process_message(AgentSession* session, LLMProvider* provider,
     free(post_data);
 
     if (result != 0) {
+        status_line_set_idle();
         if (provider->cleanup_stream_state != NULL) {
             provider->cleanup_stream_state(provider);
         }

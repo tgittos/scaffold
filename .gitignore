@@ -23,6 +23,7 @@ deps/
 # Test executables
 test/test_*
 !test/test_*.c
+!test/test_*.h
 
 # Unity build artifacts
 test/unity/*.o

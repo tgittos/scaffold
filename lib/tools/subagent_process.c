@@ -315,6 +315,11 @@ void subagent_notify_parent(const Subagent* sub, Services *services) {
         cJSON_AddStringToObject(msg, "task", sub->task);
     }
 
+    if (sub->start_time > 0) {
+        int elapsed = (int)(time(NULL) - sub->start_time);
+        cJSON_AddNumberToObject(msg, "elapsed_seconds", elapsed);
+    }
+
     char* json_str = cJSON_PrintUnformatted(msg);
     cJSON_Delete(msg);
 

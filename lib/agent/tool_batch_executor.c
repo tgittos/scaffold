@@ -7,6 +7,7 @@
 #include "../ui/spinner.h"
 #include "../policy/protected_files.h"
 #include "../policy/verified_file_context.h"
+#include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -154,6 +155,17 @@ int tool_batch_execute(ToolBatchContext* ctx,
         if (!json_mode) {
             log_tool_execution_improved(calls[i].name, calls[i].arguments,
                                         results[slot].success, results[slot].result);
+
+            if (strcmp(calls[i].name, "subagent") == 0 && results[slot].success) {
+                cJSON *args_json = cJSON_Parse(calls[i].arguments);
+                if (args_json) {
+                    cJSON *task_item = cJSON_GetObjectItem(args_json, "task");
+                    const char *task_str = (task_item && cJSON_IsString(task_item))
+                                           ? task_item->valuestring : "subagent";
+                    display_agents_launched(1, &task_str);
+                    cJSON_Delete(args_json);
+                }
+            }
         }
 
         verified_file_context_clear();

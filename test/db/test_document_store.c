@@ -1,7 +1,6 @@
 #include "../unity/unity.h"
 #include "db/document_store.h"
 #include "db/vector_db_service.h"
-#include "db/hnswlib_wrapper.h"
 #include "services/services.h"
 #include "util/ralph_home.h"
 
@@ -9,38 +8,15 @@ extern void hnswlib_clear_all(void);
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <unistd.h>
-#include <dirent.h>
-#include <sys/stat.h>
+#include "../test_fs_utils.h"
 
+static char g_test_home[256];
 static Services* g_test_services = NULL;
 
-static void rmdir_recursive(const char* path) {
-    DIR* dir = opendir(path);
-    if (dir == NULL) return;
-
-    struct dirent* entry;
-    while ((entry = readdir(dir)) != NULL) {
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
-            continue;
-        }
-        char full_path[1024] = {0};
-        snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
-        struct stat st;
-        if (stat(full_path, &st) == 0) {
-            if (S_ISDIR(st.st_mode)) {
-                rmdir_recursive(full_path);
-            } else {
-                unlink(full_path);
-            }
-        }
-    }
-    closedir(dir);
-    rmdir(path);
-}
-
 void setUp(void) {
-    ralph_home_init(NULL);
+    snprintf(g_test_home, sizeof(g_test_home), "/tmp/test_doc_store_XXXXXX");
+    TEST_ASSERT_NOT_NULL(mkdtemp(g_test_home));
+    ralph_home_init(g_test_home);
     hnswlib_clear_all();
     rmdir_recursive("/tmp/test_doc_store");
 
@@ -59,6 +35,7 @@ void tearDown(void) {
         services_destroy(g_test_services);
         g_test_services = NULL;
     }
+    rmdir_recursive(g_test_home);
     ralph_home_cleanup();
 }
 
