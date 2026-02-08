@@ -170,6 +170,11 @@ int streaming_process_message(AgentSession* session, LLMProvider* provider,
     }
 
     if (ctx->tool_uses.count > 0) {
+        status_line_update_tokens(input_tokens, output_tokens);
+        if (output_tokens > 0) {
+            status_line_set_last_response_tokens(output_tokens);
+        }
+
         /* Safe narrowing: size_t→int; checked against INT_MAX above */
         if (ctx->tool_uses.count > INT_MAX) {
             fprintf(stderr, "Error: Too many tool calls (%zu exceeds INT_MAX)\n", ctx->tool_uses.count);

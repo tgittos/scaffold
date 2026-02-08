@@ -30,7 +30,11 @@ void status_line_set_busy(const char *label);
  */
 void status_line_set_idle(void);
 
-void status_line_add_tokens(int prompt_tokens, int completion_tokens);
+/**
+ * Update token counters. prompt_tokens overwrites (tracks current context
+ * size); completion_tokens accumulates (tracks total generated output).
+ */
+void status_line_update_tokens(int prompt_tokens, int completion_tokens);
 void status_line_set_last_response_tokens(int tokens);
 
 /**

@@ -467,9 +467,9 @@ void print_formatted_response_improved(const ParsedResponse *response) {
     if (response->response_content) {
         printf("%s\n", response->response_content);
 
-        status_line_add_tokens(response->prompt_tokens, response->completion_tokens);
-        if (response->total_tokens > 0) {
-            status_line_set_last_response_tokens(response->total_tokens);
+        status_line_update_tokens(response->prompt_tokens, response->completion_tokens);
+        if (response->completion_tokens > 0) {
+            status_line_set_last_response_tokens(response->completion_tokens);
         }
     }
 }
@@ -832,10 +832,9 @@ void display_streaming_complete(int input_tokens, int output_tokens) {
 
     printf("\n");
 
-    status_line_add_tokens(input_tokens, output_tokens);
-    int total = input_tokens + output_tokens;
-    if (total > 0) {
-        status_line_set_last_response_tokens(total);
+    status_line_update_tokens(input_tokens, output_tokens);
+    if (output_tokens > 0) {
+        status_line_set_last_response_tokens(output_tokens);
     }
 
     fflush(stdout);

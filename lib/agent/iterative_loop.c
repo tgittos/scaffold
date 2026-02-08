@@ -5,6 +5,7 @@
 #include "tool_orchestration.h"
 #include "../ui/output_formatter.h"
 #include "../ui/json_output.h"
+#include "../ui/status_line.h"
 #include "../util/debug_output.h"
 #include "../session/token_manager.h"
 #include <stdio.h>
@@ -57,6 +58,11 @@ int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx) {
         rt.tool_call_count = 0;
 
         if (call_count > 0) {
+            status_line_update_tokens(rt.parsed.prompt_tokens, rt.parsed.completion_tokens);
+            if (rt.parsed.completion_tokens > 0) {
+                status_line_set_last_response_tokens(rt.parsed.completion_tokens);
+            }
+
             if (rt.parsed.response_content != NULL && strlen(rt.parsed.response_content) > 0) {
                 if (!session->session_data.config.json_output_mode) {
                     printf("%s\n", rt.parsed.response_content);
@@ -87,6 +93,12 @@ int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx) {
 
         if (call_count == 0) {
             debug_printf("No more tool calls found - ending tool loop after %d iterations\n", loop_count);
+            if (rt.parsed.response_content == NULL) {
+                status_line_update_tokens(rt.parsed.prompt_tokens, rt.parsed.completion_tokens);
+                if (rt.parsed.completion_tokens > 0) {
+                    status_line_set_last_response_tokens(rt.parsed.completion_tokens);
+                }
+            }
             print_formatted_response_improved(&rt.parsed);
             api_round_trip_cleanup(&rt);
             return 0;

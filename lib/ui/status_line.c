@@ -116,10 +116,10 @@ void status_line_set_idle(void) {
     }
 }
 
-void status_line_add_tokens(int prompt_tokens, int completion_tokens) {
+void status_line_update_tokens(int prompt_tokens, int completion_tokens) {
     if (!g_status.initialized) return;
     pthread_mutex_lock(&g_status.mutex);
-    if (prompt_tokens > 0) g_status.session_prompt_tokens += prompt_tokens;
+    if (prompt_tokens > 0) g_status.session_prompt_tokens = prompt_tokens;
     if (completion_tokens > 0) g_status.session_completion_tokens += completion_tokens;
     pthread_mutex_unlock(&g_status.mutex);
 }
@@ -153,6 +153,7 @@ void status_line_render_info(void) {
     int agent_count = g_status.active_agent_count;
     AgentSummary agents[STATUS_MAX_AGENTS];
     memcpy(agents, g_status.agents, sizeof(agents));
+    /* Context size (latest prompt) + total generated output */
     int session_total = g_status.session_prompt_tokens + g_status.session_completion_tokens;
     int last_response = g_status.last_response_tokens;
     bool busy = g_status.system_busy;
