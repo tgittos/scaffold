@@ -8,7 +8,7 @@ This document provides a comprehensive overview of Ralph's codebase structure an
 
 Application-specific code that uses the library layer. This is a thin wrapper around lib/.
 
-#### `src/core/` - CLI Entry Point
+#### `src/ralph/` - CLI Entry Point
 - **`main.c`** - Application entry point with CLI argument parsing (--debug, --json, --yolo, --subagent modes). Thin wrapper that invokes lib/agent/agent.h API.
 
 #### `src/tools/` - Python Tool Integration
@@ -307,7 +307,7 @@ The test directory mirrors the source structure:
 ### 1. Library-First Architecture
 The codebase follows a library-first design where all core functionality lives in `lib/`:
 - **libagent.h**: Public API header that exposes the entire library
-- **src/core/main.c**: Thin CLI wrapper that parses arguments and invokes lib/agent/agent.h
+- **src/ralph/main.c**: Thin CLI wrapper that parses arguments and invokes lib/agent/agent.h
 - This enables embedding ralph functionality in other programs
 
 ### 2. Agent Abstraction (lib/agent/)
@@ -371,7 +371,7 @@ Centralized configuration:
 ## Development Workflow
 
 1. **Core Logic**: Start with `lib/agent/agent.h` for agent lifecycle
-2. **CLI Integration**: See `src/core/main.c` for argument parsing
+2. **CLI Integration**: See `src/ralph/main.c` for argument parsing
 3. **Tool Development**: Add new tools in `lib/tools/` with corresponding tests
 4. **LLM Integration**: Extend providers in `lib/llm/providers/` or models in `lib/llm/models/`
 5. **Python Tools**: Add to `src/tools/python_defaults/` or user's `~/.local/ralph/tools/`

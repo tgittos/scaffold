@@ -68,8 +68,8 @@ ralph-python/
 
 | File | Purpose |
 |------|---------|
-| `src/core/main.c` | Application entry point, CLI argument parsing |
-| `src/core/ralph.c` | Core orchestration, LLM communication loop |
+| `src/ralph/main.c` | Application entry point, CLI argument parsing |
+| `src/ralph/ralph.c` | Core orchestration, LLM communication loop |
 | `src/tools/tools_system.c` | Tool registry and execution framework |
 | `src/llm/llm_provider.c` | Provider abstraction with URL-based detection |
 | `lib/session/conversation_tracker.c` | Conversation history with vector DB persistence |

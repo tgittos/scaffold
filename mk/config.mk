@@ -82,12 +82,12 @@ INCLUDES := -I. -I$(CURL_DIR)/include -I$(MBEDTLS_DIR)/include -I$(HNSWLIB_DIR) 
     -I$(PDFIO_DIR) -I$(ZLIB_DIR) -I$(CJSON_DIR) -I$(READLINE_DIR) \
     -I$(READLINE_DIR)/readline -I$(NCURSES_DIR)/include -I$(SQLITE_DIR) \
     -I$(OSSP_UUID_DIR) -I$(PYTHON_INCLUDE) \
-    -I$(SRCDIR) -I$(SRCDIR)/core -I$(SRCDIR)/llm \
+    -I$(SRCDIR) -I$(SRCDIR)/ralph -I$(SRCDIR)/llm \
     -I$(SRCDIR)/session -I$(SRCDIR)/tools -I$(SRCDIR)/utils -I$(SRCDIR)/db \
     -I$(SRCDIR)/cli
 
 TEST_INCLUDES := $(INCLUDES) -I$(TESTDIR)/unity -I$(TESTDIR) \
-    -I$(TESTDIR)/core -I$(TESTDIR)/network -I$(TESTDIR)/llm \
+    -I$(TESTDIR)/ralph -I$(TESTDIR)/network -I$(TESTDIR)/llm \
     -I$(TESTDIR)/session -I$(TESTDIR)/tools -I$(TESTDIR)/utils -I$(TESTDIR)/policy
 
 LDFLAGS := -L$(CURL_DIR)/lib/.libs -L$(MBEDTLS_DIR)/library -L$(PDFIO_DIR) \

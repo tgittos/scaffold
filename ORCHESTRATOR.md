@@ -146,7 +146,7 @@ Wire the supervisor into the existing agent process spawning.
 **Modify:**
 - `lib/agent/agent.h` — Add `AGENT_MODE_SUPERVISOR = 4` to `AgentMode` enum. Add `const char* supervisor_project_id` to `AgentConfig`.
 - `lib/agent/agent.c` — Add `case AGENT_MODE_SUPERVISOR:` to `agent_run()`. This case creates a `Supervisor`, calls `supervisor_run()`, and cleans up. Follows the exact pattern of `AGENT_MODE_WORKER` (lines 205-289).
-- `src/core/main.c` — Add `--supervisor --project <id>` CLI flags, mirroring `--worker --queue`.
+- `src/ralph/main.c` — Add `--supervisor --project <id>` CLI flags, mirroring `--worker --queue`.
 
 The orchestrator spawns supervisors by forking ralph with `--supervisor --project <project_id>`.
 
@@ -219,7 +219,7 @@ Handle crashes and restarts.
 | Modify | `lib/services/services.c` | Wire project_store in factory |
 | Modify | `lib/agent/agent.h` | Add `AGENT_MODE_SUPERVISOR` |
 | Modify | `lib/agent/agent.c` | Add supervisor case + worker result capture |
-| Modify | `src/core/main.c` | Add `--supervisor --project` flags |
+| Modify | `src/ralph/main.c` | Add `--supervisor --project` flags |
 | Modify | `lib/util/config.h` | Add `max_workers_per_project` field |
 | Modify | `lib/util/config.c` | Default, JSON load/save, `config_get_int` case |
 | Modify | `mk/lib.mk` | Add `LIB_ORCHESTRATOR_SOURCES` |

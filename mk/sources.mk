@@ -2,7 +2,7 @@
 
 # Core application sources
 CORE_SOURCES := \
-    $(SRCDIR)/core/main.c
+    $(SRCDIR)/ralph/main.c
 
 # Tool system (Python tools only; core tools in lib/tools/)
 TOOL_SOURCES := \
