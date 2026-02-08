@@ -6,6 +6,7 @@
 #include "../types.h"
 
 typedef struct Services Services;
+typedef struct ToolCache ToolCache;
 
 /**
  * Structure representing a tool parameter
@@ -32,6 +33,7 @@ typedef struct {
     ToolParameter *parameters;
     int parameter_count;
     tool_execute_func_t execute_func;  // Function pointer for tool execution
+    int cacheable;                     // 1 if results can be cached, 0 otherwise
 } ToolFunction;
 
 DARRAY_DECLARE(ToolFunctionArray, ToolFunction)
@@ -42,6 +44,7 @@ DARRAY_DECLARE(ToolFunctionArray, ToolFunction)
 typedef struct ToolRegistry {
     ToolFunctionArray functions;
     Services* services;
+    ToolCache *cache;
 } ToolRegistry;
 
 /**
@@ -64,6 +67,16 @@ void init_tool_registry(ToolRegistry *registry);
  */
 int register_tool(ToolRegistry *registry, const char *name, const char *description,
                   ToolParameter *parameters, int param_count, tool_execute_func_t execute_func);
+
+/**
+ * Mark a tool as cacheable by name
+ *
+ * @param registry Pointer to ToolRegistry structure
+ * @param tool_name Name of the tool to mark cacheable
+ * @param cacheable 1 to enable caching, 0 to disable
+ * @return 0 on success, -1 if tool not found
+ */
+int tool_set_cacheable(ToolRegistry *registry, const char *tool_name, int cacheable);
 
 /**
  * Generate JSON tools array for API request (OpenAI format)
@@ -109,7 +122,7 @@ int parse_anthropic_tool_calls(const char *json_response, ToolCall **tool_calls,
  * @param result Output tool result, caller must free result->result
  * @return 0 on success, -1 on failure
  */
-int execute_tool_call(const ToolRegistry *registry, const ToolCall *tool_call, ToolResult *result);
+int execute_tool_call(ToolRegistry *registry, const ToolCall *tool_call, ToolResult *result);
 
 /**
  * Generate JSON message for tool results to send back to model

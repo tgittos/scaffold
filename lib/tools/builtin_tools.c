@@ -43,5 +43,7 @@ int register_builtin_tools(ToolRegistry *registry) {
      * session_init() after all extensions have been registered. This allows lib/
      * to remain independent of Python-specific code. */
 
+    tool_set_cacheable(registry, "pdf_extract_text", 1);
+
     return 0;
 }

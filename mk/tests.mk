@@ -50,6 +50,7 @@ $(eval $(call def_test,rate_limiter,policy/test_rate_limiter,$(LIBDIR)/policy/ra
 $(eval $(call def_test,allowlist,policy/test_allowlist,$(LIBDIR)/policy/allowlist.c $(LIBDIR)/policy/shell_parser.c $(LIBDIR)/policy/shell_parser_cmd.c $(LIBDIR)/policy/shell_parser_ps.c))
 $(eval $(call def_test,tool_args,test_tool_args,$(LIBDIR)/policy/tool_args.c))
 $(eval $(call def_test,gate_prompter,policy/test_gate_prompter,$(LIBDIR)/policy/gate_prompter.c))
+$(eval $(call def_test,tool_cache,tools/test_tool_cache,$(LIBDIR)/tools/tool_cache.c))
 
 # Gate dependencies (used by multiple gate-related tests)
 GATE_DEPS := \
@@ -130,6 +131,9 @@ $(TEST_tool_args_TARGET): $(TEST_tool_args_OBJECTS) $(CJSON_LIB)
 
 $(TEST_gate_prompter_TARGET): $(TEST_gate_prompter_OBJECTS)
 	$(CC) -o $@ $(TEST_gate_prompter_OBJECTS)
+
+$(TEST_tool_cache_TARGET): $(TEST_tool_cache_OBJECTS) $(CJSON_LIB)
+	$(CC) -o $@ $(TEST_tool_cache_OBJECTS) $(CJSON_LIB)
 
 $(TEST_approval_gate_TARGET): $(TEST_approval_gate_OBJECTS) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_approval_gate_OBJECTS) $(CJSON_LIB)

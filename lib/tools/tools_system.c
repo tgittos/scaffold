@@ -1,4 +1,5 @@
 #include "tools_system.h"
+#include "tool_cache.h"
 #include "tool_format.h"
 #include <cJSON.h>
 #include <stdio.h>
@@ -31,6 +32,7 @@ void init_tool_registry(ToolRegistry *registry) {
     }
     ToolFunctionArray_init(&registry->functions);
     registry->services = NULL;
+    registry->cache = tool_cache_create();
 }
 
 int register_tool(ToolRegistry *registry, const char *name, const char *description,
@@ -160,7 +162,21 @@ int parse_anthropic_tool_calls(const char *json_response, ToolCall **tool_calls,
     return tool_format_anthropic.parse_tool_calls(json_response, tool_calls, call_count);
 }
 
-int execute_tool_call(const ToolRegistry *registry, const ToolCall *tool_call, ToolResult *result) {
+int tool_set_cacheable(ToolRegistry *registry, const char *tool_name, int cacheable) {
+    if (registry == NULL || tool_name == NULL) {
+        return -1;
+    }
+
+    for (size_t i = 0; i < registry->functions.count; i++) {
+        if (strcmp(registry->functions.data[i].name, tool_name) == 0) {
+            registry->functions.data[i].cacheable = cacheable;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+int execute_tool_call(ToolRegistry *registry, const ToolCall *tool_call, ToolResult *result) {
     if (registry == NULL || tool_call == NULL || result == NULL) {
         return -1;
     }
@@ -175,7 +191,41 @@ int execute_tool_call(const ToolRegistry *registry, const ToolCall *tool_call, T
 
     for (size_t i = 0; i < registry->functions.count; i++) {
         if (strcmp(registry->functions.data[i].name, tool_call->name) == 0) {
-            return registry->functions.data[i].execute_func(tool_call, result);
+            ToolFunction *func = &registry->functions.data[i];
+
+            if (func->cacheable && registry->cache != NULL) {
+                ToolCacheEntry *hit = tool_cache_lookup(registry->cache, tool_call->name, tool_call->arguments);
+                if (hit != NULL) {
+                    result->result = strdup(hit->result);
+                    result->success = hit->success;
+                    return 0;
+                }
+            }
+
+            int rc = func->execute_func(tool_call, result);
+
+            if (rc == 0 && registry->cache != NULL) {
+                if (func->cacheable && result->success && result->result != NULL) {
+                    tool_cache_store(registry->cache, tool_call->name, tool_call->arguments,
+                                     result->result, result->success);
+                }
+
+                if (!func->cacheable && result->success && tool_call->arguments != NULL) {
+                    cJSON *args = cJSON_Parse(tool_call->arguments);
+                    if (args != NULL) {
+                        cJSON *path_item = cJSON_GetObjectItemCaseSensitive(args, "path");
+                        if (path_item == NULL) {
+                            path_item = cJSON_GetObjectItemCaseSensitive(args, "file_path");
+                        }
+                        if (cJSON_IsString(path_item) && path_item->valuestring != NULL) {
+                            tool_cache_invalidate_path(registry->cache, path_item->valuestring);
+                        }
+                        cJSON_Delete(args);
+                    }
+                }
+            }
+
+            return rc;
         }
     }
 
@@ -272,6 +322,8 @@ void cleanup_tool_registry(ToolRegistry *registry) {
         free_tool_function_contents(&registry->functions.data[i]);
     }
     ToolFunctionArray_destroy(&registry->functions);
+    tool_cache_destroy(registry->cache);
+    registry->cache = NULL;
 }
 
 void cleanup_tool_calls(ToolCall *tool_calls, int call_count) {

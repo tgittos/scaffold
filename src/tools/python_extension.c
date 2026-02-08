@@ -34,6 +34,10 @@ static int python_extension_register_tools(ToolRegistry *registry) {
         /* Non-fatal: core Python tool still works */
     }
 
+    tool_set_cacheable(registry, "read_file", 1);
+    tool_set_cacheable(registry, "list_dir", 1);
+    tool_set_cacheable(registry, "file_info", 1);
+
     return 0;
 }
 
