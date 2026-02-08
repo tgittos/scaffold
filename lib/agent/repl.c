@@ -167,7 +167,6 @@ int repl_run_session(AgentSession* session, bool json_mode) {
         fprintf(stderr, "Warning: Failed to initialize interrupt handling\n");
     }
 
-    status_line_init();
     repl_install_prompt();
 
     int notify_fd = -1;

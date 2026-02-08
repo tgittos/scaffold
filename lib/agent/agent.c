@@ -7,6 +7,7 @@
 #include "../ui/json_output.h"
 #include "../util/ralph_home.h"
 #include "../ui/spinner.h"
+#include "../ui/status_line.h"
 #include "../policy/approval_gate.h"
 #include "../tools/subagent_tool.h"
 #include "../tools/tool_extension.h"
@@ -298,6 +299,7 @@ int agent_run(Agent* agent) {
                 printf("Commands: quit, exit | Ctrl+D to end\n\n");
             }
 
+            status_line_init();
             repl_show_greeting(&agent->session, agent->config.json_mode);
 
             using_history();
