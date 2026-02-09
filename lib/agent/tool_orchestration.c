@@ -42,7 +42,8 @@ void tool_orchestration_cleanup(ToolOrchestrationContext* ctx) {
 
 int tool_orchestration_check_approval(ToolOrchestrationContext* ctx,
                                       const ToolCall* tool_call,
-                                      ToolResult* result) {
+                                      ToolResult* result,
+                                      ApprovedPath* out_path) {
     if (ctx == NULL || tool_call == NULL || result == NULL) {
         return 0;
     }
@@ -83,6 +84,12 @@ int tool_orchestration_check_approval(ToolOrchestrationContext* ctx,
         /* fallthrough */
         case APPROVAL_ALLOWED:
             if (approved_path.resolved_path != NULL && is_file_tool(tool_call->name)) {
+                if (out_path != NULL) {
+                    /* Move ownership: shallow copy transfers all heap pointers.
+                     * Caller is responsible for calling free_approved_path(). */
+                    *out_path = approved_path;
+                    return 0;
+                }
                 if (verified_file_context_set(&approved_path) != 0) {
                     VerifyResult verify = verify_approved_path(&approved_path);
                     if (verify != VERIFY_OK) {

@@ -176,6 +176,20 @@ int tool_set_cacheable(ToolRegistry *registry, const char *tool_name, int cachea
     return -1;
 }
 
+int tool_set_thread_safe(ToolRegistry *registry, const char *tool_name, int thread_safe) {
+    if (registry == NULL || tool_name == NULL) {
+        return -1;
+    }
+
+    for (size_t i = 0; i < registry->functions.count; i++) {
+        if (strcmp(registry->functions.data[i].name, tool_name) == 0) {
+            registry->functions.data[i].thread_safe = thread_safe;
+            return 0;
+        }
+    }
+    return -1;
+}
+
 int execute_tool_call(ToolRegistry *registry, const ToolCall *tool_call, ToolResult *result) {
     if (registry == NULL || tool_call == NULL || result == NULL) {
         return -1;
@@ -194,10 +208,12 @@ int execute_tool_call(ToolRegistry *registry, const ToolCall *tool_call, ToolRes
             ToolFunction *func = &registry->functions.data[i];
 
             if (func->cacheable && registry->cache != NULL) {
-                ToolCacheEntry *hit = tool_cache_lookup(registry->cache, tool_call->name, tool_call->arguments);
-                if (hit != NULL) {
-                    result->result = strdup(hit->result);
-                    result->success = hit->success;
+                char *cached_result = NULL;
+                int cached_success = 0;
+                if (tool_cache_fetch(registry->cache, tool_call->name,
+                                     tool_call->arguments, &cached_result, &cached_success)) {
+                    result->result = cached_result;
+                    result->success = cached_success;
                     return 0;
                 }
             }

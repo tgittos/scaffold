@@ -7,10 +7,29 @@
 #include "../ui/spinner.h"
 #include "../policy/protected_files.h"
 #include "../policy/verified_file_context.h"
+#include "../policy/atomic_file.h"
 #include <cJSON.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+typedef struct {
+    int call_index;
+    int slot;
+    int is_mcp;
+    int approved;
+    int thread_safe;
+    ApprovedPath approved_path;
+    int has_approved_path;
+} PreScreenEntry;
+
+typedef struct {
+    ToolBatchContext* ctx;
+    ToolCall* call;
+    ToolResult* result;
+    PreScreenEntry* entry;
+} WorkerArg;
 
 static void fill_error_result(ToolResult* result, const char* call_id,
                                const char* error_json) {
@@ -42,6 +61,37 @@ static void fill_remaining_interrupted(ToolBatchContext* ctx,
     }
 }
 
+static void execute_single_tool(ToolBatchContext* ctx, ToolCall* call,
+                                 ToolResult* result, PreScreenEntry* entry) {
+    if (entry->has_approved_path) {
+        verified_file_context_set(&entry->approved_path);
+    }
+
+    int tool_executed = 0;
+    if (entry->is_mcp) {
+        if (mcp_client_execute_tool(&ctx->session->mcp_client,
+                                     call, result) == 0) {
+            tool_executed = 1;
+        }
+    }
+
+    if (!tool_executed &&
+        execute_tool_call(&ctx->session->tools, call, result) != 0) {
+        debug_printf("Warning: Failed to execute tool call %s\n", call->name);
+        fill_error_result(result, call->id, "Tool execution failed");
+    } else {
+        debug_printf("Executed tool: %s (ID: %s)\n", call->name, call->id);
+    }
+
+    verified_file_context_clear();
+}
+
+static void* worker_thread(void* arg) {
+    WorkerArg* w = (WorkerArg*)arg;
+    execute_single_tool(w->ctx, w->call, w->result, w->entry);
+    return NULL;
+}
+
 int tool_batch_execute(ToolBatchContext* ctx,
                        ToolCall* calls,
                        int call_count,
@@ -59,10 +109,19 @@ int tool_batch_execute(ToolBatchContext* ctx,
 
     force_protected_inode_refresh();
 
+    /* ================================================================
+     * Phase 1: Pre-screen (serial) — dedup, subagent limits, approval
+     * ================================================================ */
+    PreScreenEntry* approved = calloc(call_count, sizeof(PreScreenEntry));
+    if (approved == NULL) {
+        *executed_count = 0;
+        return -1;
+    }
+    int approved_count = 0;
+
     for (int i = 0; i < call_count; i++) {
         if (interrupt_pending()) {
             interrupt_acknowledge();
-            spinner_stop();
             status = -2;
             display_cancellation_message(i, call_count, json_mode);
             fill_remaining_interrupted(ctx, calls, call_count, i, compact,
@@ -104,9 +163,13 @@ int tool_batch_execute(ToolBatchContext* ctx,
             debug_printf("First subagent call (ID: %s)\n", calls[i].id);
         }
 
+        ApprovedPath out_path;
+        init_approved_path(&out_path);
         int approval = tool_orchestration_check_approval(ctx->orchestration,
-                                                          &calls[i], &results[slot]);
+                                                          &calls[i], &results[slot],
+                                                          &out_path);
         if (approval == -2) {
+            free_approved_path(&out_path);
             status = -1;
             debug_printf("User aborted tool execution at tool %d of %d\n", i + 1, call_count);
             fill_error_result(&results[slot], calls[i].id,
@@ -123,6 +186,7 @@ int tool_batch_execute(ToolBatchContext* ctx,
             break;
         }
         if (approval == -1) {
+            free_approved_path(&out_path);
             debug_printf("Tool %s blocked by approval gate\n", calls[i].name);
             if (json_mode) {
                 json_output_tool_result(calls[i].id, results[slot].result,
@@ -132,25 +196,132 @@ int tool_batch_execute(ToolBatchContext* ctx,
             continue;
         }
 
-        int tool_executed = 0;
-        spinner_start(calls[i].name, calls[i].arguments);
-
-        if (strncmp(calls[i].name, "mcp_", 4) == 0) {
-            if (mcp_client_execute_tool(&ctx->session->mcp_client,
-                                         &calls[i], &results[slot]) == 0) {
-                tool_executed = 1;
+        PreScreenEntry* e = &approved[approved_count++];
+        e->call_index = i;
+        e->slot = slot;
+        e->is_mcp = (strncmp(calls[i].name, "mcp_", 4) == 0);
+        e->approved = 1;
+        e->thread_safe = 0;
+        for (size_t t = 0; t < ctx->session->tools.functions.count; t++) {
+            if (strcmp(ctx->session->tools.functions.data[t].name, calls[i].name) == 0) {
+                e->thread_safe = ctx->session->tools.functions.data[t].thread_safe;
+                break;
             }
         }
-
-        if (!tool_executed &&
-            execute_tool_call(&ctx->session->tools, &calls[i], &results[slot]) != 0) {
-            fprintf(stderr, "Warning: Failed to execute tool call %s\n", calls[i].name);
-            fill_error_result(&results[slot], calls[i].id, "Tool execution failed");
+        if (out_path.resolved_path != NULL) {
+            e->approved_path = out_path;
+            e->has_approved_path = 1;
         } else {
-            debug_printf("Executed tool: %s (ID: %s)\n", calls[i].name, calls[i].id);
+            free_approved_path(&out_path);
+            e->has_approved_path = 0;
+        }
+
+        count++;
+    }
+
+    if (status != 0 || approved_count == 0) {
+        for (int k = 0; k < approved_count; k++) {
+            if (approved[k].has_approved_path) {
+                free_approved_path(&approved[k].approved_path);
+            }
+        }
+        free(approved);
+        if (!json_mode && count > 0) {
+            printf("\n");
+            fflush(stdout);
+        }
+        *executed_count = count;
+        return status;
+    }
+
+    /* ================================================================
+     * Phase 2: Execute (parallel for 2+ thread-safe tools, else serial)
+     * ================================================================ */
+    int all_thread_safe = 1;
+    for (int k = 0; k < approved_count; k++) {
+        if (!approved[k].thread_safe) {
+            all_thread_safe = 0;
+            break;
+        }
+    }
+
+    int use_parallel = (approved_count >= 2 && all_thread_safe);
+
+    if (approved_count == 1) {
+        PreScreenEntry* e = &approved[0];
+        spinner_start(calls[e->call_index].name, calls[e->call_index].arguments);
+        execute_single_tool(ctx, &calls[e->call_index], &results[e->slot], e);
+        spinner_stop();
+    } else if (!use_parallel) {
+        for (int k = 0; k < approved_count; k++) {
+            PreScreenEntry* e = &approved[k];
+            spinner_start(calls[e->call_index].name, calls[e->call_index].arguments);
+            execute_single_tool(ctx, &calls[e->call_index], &results[e->slot], e);
+            spinner_stop();
+        }
+    } else {
+        char label[32];
+        snprintf(label, sizeof(label), "%d tools", approved_count);
+        spinner_start(label, NULL);
+
+        pthread_t* threads = malloc(approved_count * sizeof(pthread_t));
+        WorkerArg* args = malloc(approved_count * sizeof(WorkerArg));
+        int* created = calloc(approved_count, sizeof(int));
+        if (threads == NULL || args == NULL || created == NULL) {
+            free(threads);
+            free(args);
+            free(created);
+            for (int k = 0; k < approved_count; k++) {
+                PreScreenEntry* e = &approved[k];
+                execute_single_tool(ctx, &calls[e->call_index], &results[e->slot], e);
+            }
+        } else {
+            for (int k = 0; k < approved_count; k++) {
+                PreScreenEntry* e = &approved[k];
+                args[k] = (WorkerArg){
+                    .ctx = ctx,
+                    .call = &calls[e->call_index],
+                    .result = &results[e->slot],
+                    .entry = e
+                };
+                if (pthread_create(&threads[k], NULL, worker_thread, &args[k]) != 0) {
+                    debug_printf("Failed to create thread for tool %s, executing inline\n",
+                               calls[e->call_index].name);
+                    execute_single_tool(ctx, &calls[e->call_index], &results[e->slot], e);
+                } else {
+                    created[k] = 1;
+                }
+            }
+
+            for (int k = 0; k < approved_count; k++) {
+                if (created[k]) {
+                    pthread_join(threads[k], NULL);
+                }
+            }
+            free(threads);
+            free(args);
+            free(created);
         }
 
         spinner_stop();
+    }
+
+    if (interrupt_pending()) {
+        interrupt_acknowledge();
+        status = -2;
+    }
+
+    /* ================================================================
+     * Phase 3: Post-process (serial) — log results in original order
+     * ================================================================ */
+    for (int k = 0; k < approved_count; k++) {
+        PreScreenEntry* e = &approved[k];
+        int i = e->call_index;
+        int slot = e->slot;
+
+        if (e->has_approved_path) {
+            free_approved_path(&e->approved_path);
+        }
 
         if (!json_mode) {
             log_tool_execution_improved(calls[i].name, calls[i].arguments,
@@ -168,15 +339,13 @@ int tool_batch_execute(ToolBatchContext* ctx,
             }
         }
 
-        verified_file_context_clear();
-
         if (json_mode) {
             json_output_tool_result(calls[i].id, results[slot].result,
                                     !results[slot].success);
         }
-
-        count++;
     }
+
+    free(approved);
 
     if (!json_mode && count > 0) {
         printf("\n");

@@ -34,6 +34,7 @@ typedef struct {
     int parameter_count;
     tool_execute_func_t execute_func;  // Function pointer for tool execution
     int cacheable;                     // 1 if results can be cached, 0 otherwise
+    int thread_safe;                   // 1 if safe for concurrent execution, 0 otherwise
 } ToolFunction;
 
 DARRAY_DECLARE(ToolFunctionArray, ToolFunction)
@@ -77,6 +78,20 @@ int register_tool(ToolRegistry *registry, const char *name, const char *descript
  * @return 0 on success, -1 if tool not found
  */
 int tool_set_cacheable(ToolRegistry *registry, const char *tool_name, int cacheable);
+
+/**
+ * Mark a tool as thread-safe for parallel batch execution
+ *
+ * Only tools whose execute_func uses no unprotected global state should
+ * be marked thread_safe. When a batch contains any non-thread-safe tool,
+ * the entire batch falls back to serial execution.
+ *
+ * @param registry Pointer to ToolRegistry structure
+ * @param tool_name Name of the tool to mark
+ * @param thread_safe 1 to allow parallel execution, 0 to require serial
+ * @return 0 on success, -1 if tool not found
+ */
+int tool_set_thread_safe(ToolRegistry *registry, const char *tool_name, int thread_safe);
 
 /**
  * Generate JSON tools array for API request (OpenAI format)

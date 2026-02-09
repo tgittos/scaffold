@@ -133,7 +133,7 @@ $(TEST_gate_prompter_TARGET): $(TEST_gate_prompter_OBJECTS)
 	$(CC) -o $@ $(TEST_gate_prompter_OBJECTS)
 
 $(TEST_tool_cache_TARGET): $(TEST_tool_cache_OBJECTS) $(CJSON_LIB)
-	$(CC) -o $@ $(TEST_tool_cache_OBJECTS) $(CJSON_LIB)
+	$(CC) -o $@ $(TEST_tool_cache_OBJECTS) $(CJSON_LIB) -lpthread
 
 $(TEST_approval_gate_TARGET): $(TEST_approval_gate_OBJECTS) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_approval_gate_OBJECTS) $(CJSON_LIB)
@@ -288,6 +288,7 @@ $(eval $(call def_test_lib,ralph,ralph/test_ralph,$(TESTDIR)/mock_api_server.c))
 $(eval $(call def_test_lib,message_dispatcher,ralph/test_message_dispatcher,))
 $(eval $(call def_test_lib,message_processor,ralph/test_message_processor,))
 $(eval $(call def_test_lib,recap,ralph/test_recap,))
+$(eval $(call def_test_lib,parallel_batch,agent/test_parallel_batch,))
 $(eval $(call def_test_lib,python_tool,tools/test_python_tool,$(TOOL_SOURCES)))
 $(eval $(call def_test_lib,python_integration,tools/test_python_integration,$(TOOL_SOURCES)))
 
@@ -296,7 +297,7 @@ LIBRALPH_TESTS := tool_param_dsl json_output output tools_system vector_db_tool 
     memory_mgmt token_manager conversation_compactor rolling_summary model_tools \
     openai_streaming anthropic_streaming messages_array_bug mcp_client subagent_tool \
     incomplete_task_bug conversation conversation_vdb tool_calls_not_stored document_store \
-    message_dispatcher message_processor recap
+    message_dispatcher message_processor recap parallel_batch
 
 $(foreach t,$(LIBRALPH_TESTS),$(eval \
 $$(TEST_$(t)_TARGET): $$(TEST_$(t)_OBJECTS) $$(LIBRALPH) $$(ALL_LIBS) ; \
@@ -362,7 +363,8 @@ check: test
 # recap (uses timeout + SIGPIPE)
 VALGRIND_EXCLUDED := $(TEST_http_TARGET) $(TEST_python_tool_TARGET) $(TEST_python_integration_TARGET) \
     $(TEST_tools_system_TARGET) $(TEST_ralph_TARGET) $(TEST_recap_TARGET) \
-    $(TEST_subagent_tool_TARGET) $(TEST_message_poller_TARGET) $(TEST_async_executor_TARGET)
+    $(TEST_subagent_tool_TARGET) $(TEST_message_poller_TARGET) $(TEST_async_executor_TARGET) \
+    $(TEST_parallel_batch_TARGET)
 
 VALGRIND_TESTS := $(filter-out $(VALGRIND_EXCLUDED),$(ALL_TEST_TARGETS))
 

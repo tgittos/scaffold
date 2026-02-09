@@ -1,6 +1,7 @@
 #ifndef MCP_CLIENT_H
 #define MCP_CLIENT_H
 
+#include <pthread.h>
 #include <stddef.h>
 #include "tools/tools_system.h"
 #include "util/ptrarray.h"
@@ -40,6 +41,7 @@ typedef struct MCPServerState {
     MCPTransport* transport;     /* Transport abstraction for communication */
     int initialized;
     ToolFunctionArray tools;
+    pthread_mutex_t request_mutex; /* Serializes concurrent tool calls to this server */
 } MCPServerState;
 
 DARRAY_DECLARE(MCPServerStateArray, MCPServerState)

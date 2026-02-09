@@ -1,5 +1,6 @@
 #include "tool_cache.h"
 #include <cJSON.h>
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -62,6 +63,12 @@ ToolCache *tool_cache_create(void) {
         return NULL;
     }
 
+    if (pthread_mutex_init(&cache->mutex, NULL) != 0) {
+        free(cache->entries);
+        free(cache);
+        return NULL;
+    }
+
     cache->count = 0;
     cache->capacity = TOOL_CACHE_INITIAL_CAPACITY;
     return cache;
@@ -76,6 +83,7 @@ void tool_cache_destroy(ToolCache *cache) {
         free_cache_entry(&cache->entries[i]);
     }
     free(cache->entries);
+    pthread_mutex_destroy(&cache->mutex);
     free(cache);
 }
 
@@ -83,6 +91,8 @@ ToolCacheEntry *tool_cache_lookup(ToolCache *cache, const char *tool_name, const
     if (cache == NULL || tool_name == NULL) {
         return NULL;
     }
+
+    pthread_mutex_lock(&cache->mutex);
 
     const char *args = arguments ? arguments : "";
 
@@ -103,14 +113,59 @@ ToolCacheEntry *tool_cache_lookup(ToolCache *cache, const char *tool_name, const
                     cache->entries[i] = cache->entries[cache->count - 1];
                 }
                 cache->count--;
+                pthread_mutex_unlock(&cache->mutex);
                 return NULL;
             }
         }
 
+        pthread_mutex_unlock(&cache->mutex);
         return entry;
     }
 
+    pthread_mutex_unlock(&cache->mutex);
     return NULL;
+}
+
+int tool_cache_fetch(ToolCache *cache, const char *tool_name, const char *arguments,
+                     char **out_result, int *out_success) {
+    if (cache == NULL || tool_name == NULL || out_result == NULL || out_success == NULL) {
+        return 0;
+    }
+
+    pthread_mutex_lock(&cache->mutex);
+
+    const char *args = arguments ? arguments : "";
+
+    for (int i = 0; i < cache->count; i++) {
+        ToolCacheEntry *entry = &cache->entries[i];
+        if (strcmp(entry->tool_name, tool_name) != 0) {
+            continue;
+        }
+        if (strcmp(entry->arguments, args) != 0) {
+            continue;
+        }
+
+        if (entry->file_path != NULL) {
+            time_t current_mtime = get_file_mtime(entry->file_path);
+            if (current_mtime != entry->file_mtime) {
+                free_cache_entry(entry);
+                if (i < cache->count - 1) {
+                    cache->entries[i] = cache->entries[cache->count - 1];
+                }
+                cache->count--;
+                pthread_mutex_unlock(&cache->mutex);
+                return 0;
+            }
+        }
+
+        *out_result = entry->result ? strdup(entry->result) : NULL;
+        *out_success = entry->success;
+        pthread_mutex_unlock(&cache->mutex);
+        return 1;
+    }
+
+    pthread_mutex_unlock(&cache->mutex);
+    return 0;
 }
 
 int tool_cache_store(ToolCache *cache, const char *tool_name, const char *arguments,
@@ -118,6 +173,8 @@ int tool_cache_store(ToolCache *cache, const char *tool_name, const char *argume
     if (cache == NULL || tool_name == NULL || result == NULL) {
         return -1;
     }
+
+    pthread_mutex_lock(&cache->mutex);
 
     const char *args = arguments ? arguments : "";
 
@@ -128,6 +185,7 @@ int tool_cache_store(ToolCache *cache, const char *tool_name, const char *argume
             free(existing->result);
             existing->result = strdup(result);
             if (existing->result == NULL) {
+                pthread_mutex_unlock(&cache->mutex);
                 return -1;
             }
             existing->success = success;
@@ -137,6 +195,7 @@ int tool_cache_store(ToolCache *cache, const char *tool_name, const char *argume
             if (existing->file_path != NULL) {
                 existing->file_mtime = get_file_mtime(existing->file_path);
             }
+            pthread_mutex_unlock(&cache->mutex);
             return 0;
         }
     }
@@ -145,6 +204,7 @@ int tool_cache_store(ToolCache *cache, const char *tool_name, const char *argume
         int new_capacity = cache->capacity * 2;
         ToolCacheEntry *new_entries = realloc(cache->entries, new_capacity * sizeof(ToolCacheEntry));
         if (new_entries == NULL) {
+            pthread_mutex_unlock(&cache->mutex);
             return -1;
         }
         cache->entries = new_entries;
@@ -161,6 +221,7 @@ int tool_cache_store(ToolCache *cache, const char *tool_name, const char *argume
         free(entry->tool_name);
         free(entry->arguments);
         free(entry->result);
+        pthread_mutex_unlock(&cache->mutex);
         return -1;
     }
 
@@ -171,6 +232,7 @@ int tool_cache_store(ToolCache *cache, const char *tool_name, const char *argume
     }
 
     cache->count++;
+    pthread_mutex_unlock(&cache->mutex);
     return 0;
 }
 
@@ -178,6 +240,8 @@ void tool_cache_invalidate_path(ToolCache *cache, const char *path) {
     if (cache == NULL || path == NULL) {
         return;
     }
+
+    pthread_mutex_lock(&cache->mutex);
 
     for (int i = cache->count - 1; i >= 0; i--) {
         if (cache->entries[i].file_path != NULL &&
@@ -189,6 +253,8 @@ void tool_cache_invalidate_path(ToolCache *cache, const char *path) {
             cache->count--;
         }
     }
+
+    pthread_mutex_unlock(&cache->mutex);
 }
 
 void tool_cache_clear(ToolCache *cache) {
@@ -196,8 +262,12 @@ void tool_cache_clear(ToolCache *cache) {
         return;
     }
 
+    pthread_mutex_lock(&cache->mutex);
+
     for (int i = 0; i < cache->count; i++) {
         free_cache_entry(&cache->entries[i]);
     }
     cache->count = 0;
+
+    pthread_mutex_unlock(&cache->mutex);
 }

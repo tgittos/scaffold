@@ -3,6 +3,7 @@
 #include <cJSON.h>
 #include "util/debug_output.h"
 #include "../util/ralph_home.h"
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,7 +13,7 @@ DARRAY_DEFINE(KeyValueArray, KeyValue)
 DARRAY_DEFINE(MCPServerConfigArray, MCPServerConfig)
 DARRAY_DEFINE(MCPServerStateArray, MCPServerState)
 
-static int g_request_id = 1;
+static atomic_int g_request_id = 1;
 
 /* Caller transfers ownership of key and value; freed on failure */
 static int keyvalue_array_add(KeyValueArray* arr, char* key, char* value) {
@@ -403,6 +404,13 @@ int mcp_connect_server(MCPServerState* server) {
         return -1;
     }
 
+    if (pthread_mutex_init(&server->request_mutex, NULL) != 0) {
+        debug_printf("Failed to init request mutex for MCP server %s\n", server->config->name);
+        server->transport->ops->destroy(server->transport);
+        server->transport = NULL;
+        return -1;
+    }
+
     server->initialized = 1;
     debug_printf("Connected to MCP server: %s\n", server->config->name);
 
@@ -421,7 +429,8 @@ int mcp_disconnect_server(MCPServerState* server) {
         server->transport->ops->disconnect(server->transport);
     }
 
-    server->initialized = 0;
+    /* Note: initialized stays true so cleanup can destroy the mutex.
+     * Full teardown (initialized = 0, mutex destroy) is mcp_cleanup_server_state's job. */
 
     debug_printf("Disconnected MCP server: %s\n",
                  server->config ? server->config->name : "unknown");
@@ -443,7 +452,7 @@ int mcp_send_request(MCPServerState* server, const char* method, const char* par
     cJSON* request = cJSON_CreateObject();
     cJSON_AddStringToObject(request, "jsonrpc", "2.0");
     cJSON_AddStringToObject(request, "method", method);
-    cJSON_AddNumberToObject(request, "id", g_request_id++);
+    cJSON_AddNumberToObject(request, "id", atomic_fetch_add(&g_request_id, 1));
 
     if (params) {
         cJSON* params_json = cJSON_Parse(params);
@@ -743,6 +752,7 @@ int mcp_client_register_tools(MCPClient* client, ToolRegistry* registry) {
                     reg_tool.description = tool->description ? strdup(tool->description) : NULL;
                     /* NULL execute_func signals MCP dispatch via mcp_client_execute_tool */
                     reg_tool.execute_func = NULL;
+                    reg_tool.thread_safe = 1; /* Per-server mutex serializes I/O */
                     reg_tool.parameter_count = tool->parameter_count;
                     reg_tool.parameters = deep_copy_parameters(tool->parameters, tool->parameter_count);
 
@@ -828,8 +838,10 @@ int mcp_client_execute_tool(MCPClient* client, const ToolCall* tool_call, ToolRe
         return -1;
     }
 
+    pthread_mutex_lock(&server->request_mutex);
     char* response = NULL;
     int send_result = mcp_send_request(server, "tools/call", params_str, &response);
+    pthread_mutex_unlock(&server->request_mutex);
     free(params_str);
 
     if (send_result != 0 || !response) {
@@ -916,6 +928,10 @@ void mcp_cleanup_server_state(MCPServerState* server) {
     if (server->transport) {
         server->transport->ops->destroy(server->transport);
         server->transport = NULL;
+    }
+
+    if (server->initialized) {
+        pthread_mutex_destroy(&server->request_mutex);
     }
 
     server->initialized = 0;
