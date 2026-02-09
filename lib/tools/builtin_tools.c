@@ -45,5 +45,10 @@ int register_builtin_tools(ToolRegistry *registry) {
 
     tool_set_cacheable(registry, "pdf_extract_text", 1);
 
+    tool_set_thread_safe(registry, "recall_memories", 1);
+    tool_set_thread_safe(registry, "remember", 1);
+    tool_set_thread_safe(registry, "forget_memory", 1);
+    tool_set_thread_safe(registry, "pdf_extract_text", 1);
+
     return 0;
 }

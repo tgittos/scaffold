@@ -246,6 +246,8 @@ int tool_batch_execute(ToolBatchContext* ctx,
     }
 
     int use_parallel = (approved_count >= 2 && all_thread_safe);
+    debug_printf("Batch: %d approved tools, all_thread_safe=%d, parallel=%d\n",
+                 approved_count, all_thread_safe, use_parallel);
 
     if (approved_count == 1) {
         PreScreenEntry* e = &approved[0];
