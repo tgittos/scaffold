@@ -350,4 +350,6 @@ void agent_cleanup(Agent* agent) {
         agent->services = NULL;
         agent->owns_services = false;
     }
+
+    cleanup_output_formatter();
 }
