@@ -432,6 +432,157 @@ void cleanup_response(struct HTTPResponse *response)
     response->http_status = 0;
 }
 
+struct FileWriteData {
+    FILE *fp;
+    size_t bytes_written;
+};
+
+static size_t file_write_callback(void *contents, size_t size, size_t nmemb, void *userp)
+{
+    struct FileWriteData *fwd = (struct FileWriteData *)userp;
+    size_t realsize = size * nmemb;
+    size_t written = fwrite(contents, 1, realsize, fwd->fp);
+    fwd->bytes_written += written;
+    return written;
+}
+
+int http_download_file(const char *url, const char **headers,
+                       const struct HTTPConfig *config,
+                       const char *dest_path, size_t *bytes_written)
+{
+    if (url == NULL || dest_path == NULL || config == NULL) {
+        return -1;
+    }
+
+    CURL *curl = NULL;
+    CURLcode res = CURLE_OK;
+    long http_status = 0;
+    struct curl_slist *curl_headers = NULL;
+    struct HeaderData header_data = {0};
+    APIError api_err;
+    int return_code = 0;
+
+    int max_retries = config_get_int("api_max_retries", 3);
+    int base_delay_ms = config_get_int("api_retry_delay_ms", 1000);
+    float backoff_factor = config_get_float("api_backoff_factor", 2.0f);
+
+    static int seeded = 0;
+    if (!seeded) {
+        srand((unsigned int)time(NULL));
+        seeded = 1;
+    }
+
+    clear_last_api_error();
+
+    struct FileWriteData fwd = {0};
+
+    int attempt = 0;
+    while (attempt <= max_retries) {
+        if (fwd.fp != NULL) {
+            fclose(fwd.fp);
+            fwd.fp = NULL;
+        }
+        fwd.bytes_written = 0;
+
+        fwd.fp = fopen(dest_path, "wb");
+        if (fwd.fp == NULL) {
+            return -1;
+        }
+
+        curl = curl_easy_init();
+        if (curl == NULL) {
+            fclose(fwd.fp);
+            unlink(dest_path);
+            return -1;
+        }
+        configure_ssl_certs(curl);
+
+        curl_headers = NULL;
+        if (headers != NULL) {
+            for (int i = 0; headers[i] != NULL; i++) {
+                curl_headers = curl_slist_append(curl_headers, headers[i]);
+                if (curl_headers == NULL) {
+                    fclose(fwd.fp);
+                    fwd.fp = NULL;
+                    curl_easy_cleanup(curl);
+                    unlink(dest_path);
+                    return -1;
+                }
+            }
+        }
+
+        curl_easy_setopt(curl, CURLOPT_URL, url);
+        curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+        if (curl_headers) {
+            curl_easy_setopt(curl, CURLOPT_HTTPHEADER, curl_headers);
+        }
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, file_write_callback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &fwd);
+        curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
+        curl_easy_setopt(curl, CURLOPT_HEADERDATA, &header_data);
+        if (config->timeout_seconds > 0) {
+            curl_easy_setopt(curl, CURLOPT_TIMEOUT, config->timeout_seconds);
+        }
+        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, config->connect_timeout_seconds);
+        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, config->follow_redirects ? 1L : 0L);
+        curl_easy_setopt(curl, CURLOPT_MAXREDIRS, config->max_redirects);
+        curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, interrupt_progress_callback);
+        curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+
+        res = curl_easy_perform(curl);
+
+        http_status = 0;
+        if (res == CURLE_OK) {
+            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_status);
+        }
+
+        if (curl_headers) {
+            curl_slist_free_all(curl_headers);
+            curl_headers = NULL;
+        }
+        curl_easy_cleanup(curl);
+        curl = NULL;
+
+        fclose(fwd.fp);
+        fwd.fp = NULL;
+
+        if (res == CURLE_OK && http_status >= 200 && http_status < 400) {
+            if (bytes_written) {
+                *bytes_written = fwd.bytes_written;
+            }
+            return_code = 0;
+            break;
+        }
+
+        if (res == CURLE_ABORTED_BY_CALLBACK) {
+            unlink(dest_path);
+            return -2;
+        }
+
+        int is_retryable = api_error_is_retryable(http_status, res);
+
+        if (!is_retryable || attempt == max_retries) {
+            api_error_set(&api_err, http_status, res, attempt + 1);
+            set_last_api_error(&api_err);
+            unlink(dest_path);
+            return_code = -1;
+            break;
+        }
+
+        int delay_ms;
+        if (header_data.retry_after_seconds > 0) {
+            delay_ms = header_data.retry_after_seconds * 1000;
+        } else {
+            delay_ms = calculate_retry_delay(attempt, base_delay_ms, backoff_factor);
+        }
+
+        usleep(delay_ms * 1000);
+        attempt++;
+    }
+
+    return return_code;
+}
+
 const struct StreamingHTTPConfig DEFAULT_STREAMING_HTTP_CONFIG = {
     .base = {
         .timeout_seconds = 0, // SSE streams have no overall timeout; stall detection uses low_speed_*

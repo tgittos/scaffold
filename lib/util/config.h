@@ -25,6 +25,7 @@ typedef struct {
 
     bool enable_streaming;
     bool json_output_mode;
+    bool check_updates;
 
     char *model_simple;         // "simple" tier model ID
     char *model_standard;       // "standard" tier model ID

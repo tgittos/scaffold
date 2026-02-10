@@ -125,7 +125,8 @@ LIB_UTIL_SOURCES := \
     $(LIBDIR)/util/config.c \
     $(LIBDIR)/util/prompt_loader.c \
     $(LIBDIR)/util/ralph_home.c \
-    $(LIBDIR)/util/context_retriever.c
+    $(LIBDIR)/util/context_retriever.c \
+    $(LIBDIR)/util/executable_path.c
 
 # PDF module
 LIB_PDF_SOURCES := $(LIBDIR)/pdf/pdf_extractor.c
@@ -161,12 +162,15 @@ LIB_MCP_SOURCES := \
     $(LIBDIR)/mcp/mcp_transport_stdio.c \
     $(LIBDIR)/mcp/mcp_transport_http.c
 
+# Updater module
+LIB_UPDATER_SOURCES := $(LIBDIR)/updater/updater.c
+
 # Combined library sources
 LIB_C_SOURCES := $(LIB_IPC_SOURCES) $(LIB_UI_SOURCES) $(LIB_TOOLS_SOURCES) \
     $(LIB_AGENT_SOURCES) $(LIB_SERVICES_SOURCES) $(LIB_LLM_SOURCES) \
     $(LIB_SESSION_SOURCES) $(LIB_POLICY_SOURCES) $(LIB_DB_SOURCES) \
     $(LIB_WORKFLOW_SOURCES) $(LIB_UTIL_SOURCES) $(LIB_PDF_SOURCES) \
-    $(LIB_NETWORK_SOURCES) $(LIB_MCP_SOURCES)
+    $(LIB_NETWORK_SOURCES) $(LIB_MCP_SOURCES) $(LIB_UPDATER_SOURCES)
 
 LIB_CPP_SOURCES := $(LIB_DB_CPP_SOURCES)
 

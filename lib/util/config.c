@@ -48,6 +48,7 @@ static int config_set_defaults(agent_config_t *config)
 
     config->enable_streaming = true;
     config->json_output_mode = false;
+    config->check_updates = true;
 
     config->model_simple = strdup("o4-mini");
     if (!config->model_simple) return -1;
@@ -314,6 +315,11 @@ int config_load_from_file(const char *filepath)
         g_config->enable_streaming = cJSON_IsTrue(item);
     }
 
+    item = cJSON_GetObjectItem(json, "check_updates");
+    if (cJSON_IsBool(item)) {
+        g_config->check_updates = cJSON_IsTrue(item);
+    }
+
     item = cJSON_GetObjectItem(json, "models");
     if (cJSON_IsObject(item)) {
         cJSON *child;
@@ -384,6 +390,7 @@ int config_save_to_file(const char *filepath)
     cJSON_AddNumberToObject(json, "subagent_timeout", g_config->subagent_timeout);
 
     cJSON_AddBoolToObject(json, "enable_streaming", g_config->enable_streaming);
+    cJSON_AddBoolToObject(json, "check_updates", g_config->check_updates);
 
     cJSON *models = cJSON_CreateObject();
     if (models) {
@@ -655,6 +662,8 @@ bool config_get_bool(const char *key, bool default_value)
 
     if (strcmp(key, "enable_streaming") == 0) {
         return g_config->enable_streaming;
+    } else if (strcmp(key, "check_updates") == 0) {
+        return g_config->check_updates;
     }
 
     return default_value;

@@ -166,6 +166,17 @@ $(TEST_approval_gate_integration_TARGET): $(TEST_approval_gate_integration_OBJEC
 	$(CC) -o $@ $(TEST_approval_gate_integration_OBJECTS) $(CJSON_LIB)
 
 # =============================================================================
+# UPDATER TEST
+# =============================================================================
+
+$(eval $(call def_test,updater,updater/test_updater,\
+    $(TESTDIR)/updater/mock_http.c $(LIBDIR)/updater/updater.c \
+    $(LIBDIR)/util/executable_path.c $(LIBDIR)/util/ralph_home.c))
+
+$(TEST_updater_TARGET): $(TEST_updater_OBJECTS) $(CJSON_LIB)
+	$(CC) -o $@ $(TEST_updater_OBJECTS) $(CJSON_LIB)
+
+# =============================================================================
 # CJSON TESTS
 # =============================================================================
 

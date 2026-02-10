@@ -10,6 +10,7 @@
 #include "../ipc/message_store.h"
 #include "../services/services.h"
 #include "../util/debug_output.h"
+#include "../util/executable_path.h"
 
 #include <cJSON.h>
 #include <errno.h>
@@ -341,38 +342,6 @@ void subagent_notify_parent(const Subagent* sub, Services *services) {
     free(parent_id);
 }
 
-/*
- * Get the path to the current executable.
- * Uses /proc/self/exe on Linux with fallback options.
- *
- * Note: APE binaries run via an extracted loader (e.g., /root/.ape-1.10),
- * so /proc/self/exe returns the loader path, not the actual binary.
- * We detect this and fall back to finding ralph in the current directory.
- */
 char* subagent_get_executable_path(void) {
-    char *path = malloc(SUBAGENT_PATH_BUFFER_SIZE);
-    if (path == NULL) {
-        return NULL;
-    }
-
-    ssize_t len = readlink("/proc/self/exe", path, SUBAGENT_PATH_BUFFER_SIZE - 1);
-    if (len > 0) {
-        path[len] = '\0';
-        if (strstr(path, ".ape-") == NULL) {
-            return path;
-        }
-    }
-
-    if (getcwd(path, SUBAGENT_PATH_BUFFER_SIZE) != NULL) {
-        size_t cwd_len = strlen(path);
-        if (cwd_len + 7 < SUBAGENT_PATH_BUFFER_SIZE) {
-            strcat(path, "/ralph");
-            if (access(path, X_OK) == 0) {
-                return path;
-            }
-        }
-    }
-
-    free(path);
-    return strdup("./ralph");
+    return get_executable_path();
 }

@@ -34,6 +34,14 @@ int http_get_with_config(const char *url, const char **headers,
 void cleanup_response(struct HTTPResponse *response);
 
 // =============================================================================
+// File Download Functions
+// =============================================================================
+
+int http_download_file(const char *url, const char **headers,
+                       const struct HTTPConfig *config,
+                       const char *dest_path, size_t *bytes_written);
+
+// =============================================================================
 // Streaming HTTP Functions
 // =============================================================================
 

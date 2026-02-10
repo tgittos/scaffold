@@ -6,6 +6,7 @@
 
 #include "workflow.h"
 #include "../util/ralph_home.h"
+#include "../util/executable_path.h"
 #include "util/uuid_utils.h"
 #include <sqlite3.h>
 #include <stdio.h>
@@ -346,37 +347,8 @@ void work_item_free(WorkItem* item) {
  * WORKER MANAGEMENT
  * ============================================================================= */
 
-/**
- * Get the path to the ralph executable.
- * Tries /proc/self/exe first, then falls back to ./ralph.
- */
 static char* get_ralph_executable_path(void) {
-    char* path = malloc(512);
-    if (path == NULL) {
-        return NULL;
-    }
-
-    /* Try /proc/self/exe first (Linux) */
-    ssize_t len = readlink("/proc/self/exe", path, 511);
-    if (len > 0) {
-        path[len] = '\0';
-        /* Check if this is the APE loader (contains ".ape-" in path) */
-        if (strstr(path, ".ape-") == NULL) {
-            return path;
-        }
-    }
-
-    /* Fallback: try current directory */
-    if (getcwd(path, 500) != NULL) {
-        strcat(path, "/ralph");
-        if (access(path, X_OK) == 0) {
-            return path;
-        }
-    }
-
-    /* Last fallback */
-    free(path);
-    return strdup("./ralph");
+    return get_executable_path();
 }
 
 WorkerHandle* worker_spawn(const char* queue_name, const char* system_prompt) {
