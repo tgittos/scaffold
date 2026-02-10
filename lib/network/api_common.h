@@ -1,10 +1,15 @@
 #ifndef API_COMMON_H
 #define API_COMMON_H
 
+#include "image_attachment.h"
+
 /* Forward declarations to break cross-layer header dependencies */
 typedef struct ConversationHistory ConversationHistory;
 typedef struct ConversationMessage ConversationMessage;
 typedef struct ToolRegistry ToolRegistry;
+
+void api_common_set_pending_images(const ImageAttachment *images, size_t count);
+void api_common_clear_pending_images(void);
 
 size_t calculate_json_payload_size(const char* model, const char* system_prompt,
                                   const ConversationHistory* conversation,

@@ -151,7 +151,8 @@ LIB_NETWORK_SOURCES := \
     $(LIBDIR)/network/api_common.c \
     $(LIBDIR)/network/api_error.c \
     $(LIBDIR)/network/streaming.c \
-    $(LIBDIR)/network/embedded_cacert.c
+    $(LIBDIR)/network/embedded_cacert.c \
+    $(LIBDIR)/network/image_attachment.c
 
 # MCP module (Model Context Protocol)
 LIB_MCP_SOURCES := \

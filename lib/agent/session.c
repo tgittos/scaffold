@@ -18,6 +18,7 @@
 #include "../session/session_manager.h"
 #include "../ipc/message_store.h"
 #include "../network/api_common.h"
+#include "../network/image_attachment.h"
 #include "../session/conversation_compactor.h"
 #include "../llm/llm_provider.h"
 #include "../llm/llm_client.h"
@@ -387,12 +388,31 @@ int manage_conversation_tokens(AgentSession* session, const char* user_message,
 int session_process_message(AgentSession* session, const char* user_message) {
     if (session == NULL || user_message == NULL) return -1;
 
+    /* Parse image attachments from @path references */
+    ImageParseResult image_parse;
+    int has_images = 0;
+    const char *effective_message = user_message;
+
+    if (image_attachment_parse(user_message, &image_parse) == 0) {
+        if (image_parse.count > 0) {
+            has_images = 1;
+            api_common_set_pending_images(image_parse.items, image_parse.count);
+            effective_message = image_parse.cleaned_text;
+        } else {
+            image_attachment_cleanup(&image_parse);
+        }
+    }
+
     TokenConfig token_config;
     token_config_init(&token_config, session->session_data.config.context_window);
 
     TokenUsage token_usage;
-    if (manage_conversation_tokens(session, user_message, &token_config, &token_usage) != 0) {
+    if (manage_conversation_tokens(session, effective_message, &token_config, &token_usage) != 0) {
         fprintf(stderr, "Error: Failed to calculate token allocation\n");
+        if (has_images) {
+            api_common_clear_pending_images();
+            image_attachment_cleanup(&image_parse);
+        }
         return -1;
     }
 
@@ -404,18 +424,28 @@ int session_process_message(AgentSession* session, const char* user_message) {
     debug_printf("Using token allocation - Response tokens: %d, Safety buffer: %d, Context window: %d\n",
                  max_tokens, token_usage.safety_buffer_used, token_usage.context_window_used);
 
+    int result;
     DispatchDecision dispatch = message_dispatcher_select_mode(session);
     if (dispatch.mode == DISPATCH_STREAMING) {
-        return streaming_process_message(session, dispatch.provider, user_message, max_tokens);
+        result = streaming_process_message(session, dispatch.provider, effective_message, max_tokens);
+    } else {
+        LLMRoundTripResult rt;
+        if (api_round_trip_execute(session, effective_message, max_tokens, &rt) != 0) {
+            if (has_images) {
+                api_common_clear_pending_images();
+                image_attachment_cleanup(&image_parse);
+            }
+            return -1;
+        }
+
+        result = message_processor_handle_response(session, &rt, effective_message, max_tokens);
+        api_round_trip_cleanup(&rt);
     }
 
-    LLMRoundTripResult rt;
-    if (api_round_trip_execute(session, user_message, max_tokens, &rt) != 0) {
-        return -1;
+    if (has_images) {
+        api_common_clear_pending_images();
+        image_attachment_cleanup(&image_parse);
     }
-
-    int result = message_processor_handle_response(session, &rt, user_message, max_tokens);
-    api_round_trip_cleanup(&rt);
     return result;
 }
 

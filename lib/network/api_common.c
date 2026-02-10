@@ -8,6 +8,83 @@
 #include <string.h>
 #include "../util/json_escape.h"
 
+/* Thread-local pending images for the current API call */
+#ifdef __STDC_NO_THREADS__
+static const ImageAttachment *g_pending_images = NULL;
+static size_t g_pending_image_count = 0;
+#else
+static _Thread_local const ImageAttachment *g_pending_images = NULL;
+static _Thread_local size_t g_pending_image_count = 0;
+#endif
+
+void api_common_set_pending_images(const ImageAttachment *images, size_t count) {
+    g_pending_images = images;
+    g_pending_image_count = count;
+}
+
+void api_common_clear_pending_images(void) {
+    g_pending_images = NULL;
+    g_pending_image_count = 0;
+}
+
+static char *format_user_message_with_images(const char *text, int is_anthropic) {
+    cJSON *msg = cJSON_CreateObject();
+    if (msg == NULL) return NULL;
+
+    cJSON_AddStringToObject(msg, "role", "user");
+
+    cJSON *content = cJSON_CreateArray();
+    if (content == NULL) { cJSON_Delete(msg); return NULL; }
+
+    /* Text part */
+    cJSON *text_part = cJSON_CreateObject();
+    if (text_part == NULL) { cJSON_Delete(msg); cJSON_Delete(content); return NULL; }
+    cJSON_AddStringToObject(text_part, "type", "text");
+    cJSON_AddStringToObject(text_part, "text", text);
+    cJSON_AddItemToArray(content, text_part);
+
+    /* Image parts */
+    for (size_t i = 0; i < g_pending_image_count; i++) {
+        const ImageAttachment *img = &g_pending_images[i];
+        cJSON *img_part = cJSON_CreateObject();
+        if (img_part == NULL) continue;
+
+        if (is_anthropic) {
+            cJSON_AddStringToObject(img_part, "type", "image");
+            cJSON *source = cJSON_CreateObject();
+            if (source) {
+                cJSON_AddStringToObject(source, "type", "base64");
+                cJSON_AddStringToObject(source, "media_type", img->mime_type);
+                cJSON_AddStringToObject(source, "data", img->base64_data);
+                cJSON_AddItemToObject(img_part, "source", source);
+            }
+        } else {
+            cJSON_AddStringToObject(img_part, "type", "image_url");
+            cJSON *image_url = cJSON_CreateObject();
+            if (image_url) {
+                /* Build data URI: data:<mime>;base64,<data> */
+                size_t uri_len = strlen(img->mime_type) + strlen(img->base64_data) + 16;
+                char *data_uri = malloc(uri_len);
+                if (data_uri) {
+                    snprintf(data_uri, uri_len, "data:%s;base64,%s",
+                             img->mime_type, img->base64_data);
+                    cJSON_AddStringToObject(image_url, "url", data_uri);
+                    free(data_uri);
+                }
+                cJSON_AddItemToObject(img_part, "image_url", image_url);
+            }
+        }
+
+        cJSON_AddItemToArray(content, img_part);
+    }
+
+    cJSON_AddItemToObject(msg, "content", content);
+
+    char *result = cJSON_PrintUnformatted(msg);
+    cJSON_Delete(msg);
+    return result;
+}
+
 size_t calculate_json_payload_size(const char* model, const char* system_prompt,
                                   const ConversationHistory* conversation,
                                   const char* user_message, const ToolRegistry* tools) {
@@ -41,6 +118,13 @@ size_t calculate_json_payload_size(const char* model, const char* system_prompt,
         tools_len = tools->functions.count * 500;
     }
 
+    size_t image_len = 0;
+    if (g_pending_images != NULL) {
+        for (size_t i = 0; i < g_pending_image_count; i++) {
+            image_len += strlen(g_pending_images[i].base64_data) + 256;
+        }
+    }
+
     size_t total = base_size;
     if (total > SIZE_MAX - model_len) return SIZE_MAX;
     total += model_len;
@@ -52,6 +136,8 @@ size_t calculate_json_payload_size(const char* model, const char* system_prompt,
     total += history_len;
     if (total > SIZE_MAX - tools_len) return SIZE_MAX;
     total += tools_len;
+    if (total > SIZE_MAX - image_len) return SIZE_MAX;
+    total += image_len;
     if (total > SIZE_MAX - 200) return SIZE_MAX;
     total += 200;
 
@@ -341,19 +427,37 @@ int build_messages_json(char* buffer, size_t buffer_size,
     }
 
     if (user_message != NULL && strlen(user_message) > 0) {
-        ConversationMessage user_msg = {
-            .role = "user",
-            .content = (char*)user_message,
-            .tool_call_id = NULL,
-            .tool_name = NULL
-        };
+        if (g_pending_images != NULL && g_pending_image_count > 0) {
+            char *img_json = format_user_message_with_images(user_message, skip_system_in_history);
+            if (img_json == NULL) return -1;
 
-        int written = formatter(current, remaining, &user_msg, message_count == 0);
-        if (written < 0) return -1;
+            int written = 0;
+            if (message_count > 0) {
+                written = snprintf(current, remaining, ", %s", img_json);
+            } else {
+                written = snprintf(current, remaining, "%s", img_json);
+            }
+            free(img_json);
+            if (written < 0 || written >= (int)remaining) return -1;
 
-        current += written;
-        remaining -= written;
-        message_count++;
+            current += written;
+            remaining -= written;
+            message_count++;
+        } else {
+            ConversationMessage user_msg = {
+                .role = "user",
+                .content = (char*)user_message,
+                .tool_call_id = NULL,
+                .tool_name = NULL
+            };
+
+            int written = formatter(current, remaining, &user_msg, message_count == 0);
+            if (written < 0) return -1;
+
+            current += written;
+            remaining -= written;
+            message_count++;
+        }
     }
 
     return current - buffer;
