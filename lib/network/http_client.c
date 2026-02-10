@@ -204,6 +204,11 @@ int http_post_with_config(const char *url, const char *post_data, const char **h
         http_status = 0;
         if (res == CURLE_OK) {
             curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_status);
+            response->http_status = http_status;
+            char *ct = NULL;
+            curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &ct);
+            free(response->content_type);
+            response->content_type = ct ? strdup(ct) : NULL;
         }
 
         curl_slist_free_all(curl_headers);
@@ -355,6 +360,11 @@ int http_get_with_config(const char *url, const char **headers,
         http_status = 0;
         if (res == CURLE_OK) {
             curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_status);
+            response->http_status = http_status;
+            char *ct = NULL;
+            curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &ct);
+            free(response->content_type);
+            response->content_type = ct ? strdup(ct) : NULL;
         }
 
         if (curl_headers) {
@@ -413,11 +423,13 @@ int http_get_with_config(const char *url, const char **headers,
 
 void cleanup_response(struct HTTPResponse *response)
 {
-    if (response != NULL && response->data != NULL) {
-        free(response->data);
-        response->data = NULL;
-        response->size = 0;
-    }
+    if (response == NULL) return;
+    free(response->data);
+    response->data = NULL;
+    response->size = 0;
+    free(response->content_type);
+    response->content_type = NULL;
+    response->http_status = 0;
 }
 
 const struct StreamingHTTPConfig DEFAULT_STREAMING_HTTP_CONFIG = {

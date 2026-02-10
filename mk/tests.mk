@@ -292,6 +292,7 @@ $(eval $(call def_test_lib,parallel_batch,agent/test_parallel_batch,))
 $(eval $(call def_test_lib,model_commands,ui/test_model_commands,))
 $(eval $(call def_test_lib,python_tool,tools/test_python_tool,$(TOOL_SOURCES)))
 $(eval $(call def_test_lib,python_integration,tools/test_python_integration,$(TOOL_SOURCES)))
+$(eval $(call def_test_lib,http_python,network/test_http_python,))
 
 # Batch link rule for libralph-linked tests
 LIBRALPH_TESTS := tool_param_dsl json_output output tools_system vector_db_tool memory_tool \
@@ -339,6 +340,10 @@ $(TEST_python_integration_TARGET): $(TEST_python_integration_OBJECTS) $(LIBRALPH
 	$(CXX) -o $@ $(TEST_python_integration_OBJECTS) $(LIBRALPH) $(LIBS_STANDARD)
 	$(PYTHON_TEST_EMBED)
 
+$(TEST_http_python_TARGET): $(TEST_http_python_OBJECTS) $(LIBRALPH) $(ALL_LIBS)
+	$(CXX) -o $@ $(TEST_http_python_OBJECTS) $(LIBRALPH) $(LIBS_STANDARD)
+	$(PYTHON_TEST_EMBED)
+
 # =============================================================================
 # TEST EXECUTION
 # =============================================================================
@@ -363,6 +368,7 @@ check: test
 # threads (message_poller, async_executor), tools_system/ralph (python_interpreter_init),
 # recap (uses timeout + SIGPIPE)
 VALGRIND_EXCLUDED := $(TEST_http_TARGET) $(TEST_python_tool_TARGET) $(TEST_python_integration_TARGET) \
+    $(TEST_http_python_TARGET) \
     $(TEST_tools_system_TARGET) $(TEST_ralph_TARGET) $(TEST_recap_TARGET) \
     $(TEST_subagent_tool_TARGET) $(TEST_message_poller_TARGET) $(TEST_async_executor_TARGET) \
     $(TEST_parallel_batch_TARGET)

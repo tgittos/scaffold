@@ -6,6 +6,8 @@
 struct HTTPResponse {
     char *data;
     size_t size;
+    long http_status;
+    char *content_type;
 };
 
 struct HTTPConfig {

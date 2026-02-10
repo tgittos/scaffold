@@ -1,6 +1,7 @@
 #include "python_tool.h"
 #include "python_tool_files.h"
 #include "policy/verified_file_python.h"
+#include "network/http_python.h"
 #include <cJSON.h>
 #include <Python.h>
 #include <stdio.h>
@@ -11,8 +12,9 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-/* Track whether verified file module was registered (must be before Py_Initialize) */
+/* Track whether C extension modules were registered (must be before Py_Initialize) */
 static int verified_file_module_registered = 0;
+static int http_module_registered = 0;
 
 /*
  * Static globals for persistent interpreter state.
@@ -64,10 +66,15 @@ int python_interpreter_init(void) {
     setenv("PYTHONHOME", "/zip", 1);
     setenv("PYTHONDONTWRITEBYTECODE", "1", 1);
 
-    /* verified_file module must be registered before Py_Initialize() */
+    /* C extension modules must be registered before Py_Initialize() */
     if (!verified_file_module_registered) {
         if (verified_file_python_init() == 0) {
             verified_file_module_registered = 1;
+        }
+    }
+    if (!http_module_registered) {
+        if (http_python_init() == 0) {
+            http_module_registered = 1;
         }
     }
 

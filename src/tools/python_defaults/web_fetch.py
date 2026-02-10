@@ -26,65 +26,62 @@ def web_fetch(url: str, timeout: int = 30) -> dict:
     Returns:
         Dictionary with url, content, content_type, size, and truncated flag
     """
-    import urllib.request
-    import urllib.error
-    import ssl
+    import _ralph_http
 
     # Validate URL
     if not url.startswith(('http://', 'https://')):
         raise ValueError("URL must start with http:// or https://")
 
-    # Create SSL context (allow self-signed certs for local dev)
-    ctx = ssl.create_default_context()
-
-    # Set up request with user agent
-    headers = {
-        'User-Agent': 'Ralph/1.0 (Text-based web browser)',
-        'Accept': 'text/html,application/xhtml+xml,text/plain,*/*',
-    }
-
-    req = urllib.request.Request(url, headers=headers)
+    headers = [
+        'User-Agent: Ralph/1.0 (Text-based web browser)',
+        'Accept: text/html,application/xhtml+xml,text/plain,*/*',
+    ]
 
     try:
-        with urllib.request.urlopen(req, timeout=timeout, context=ctx) as response:
-            content_type = response.headers.get('Content-Type', '')
-            charset = 'utf-8'
-
-            # Try to extract charset from Content-Type
-            if 'charset=' in content_type:
-                charset = content_type.split('charset=')[-1].split(';')[0].strip()
-
-            raw_content = response.read()
-
-            try:
-                content = raw_content.decode(charset)
-            except (UnicodeDecodeError, LookupError):
-                content = raw_content.decode('utf-8', errors='replace')
-
-            # Convert HTML to plain text if it's HTML content
-            if 'html' in content_type.lower() or content.strip().startswith('<!DOCTYPE') or content.strip().startswith('<html'):
-                content = html_to_text(content)
-
-            # Truncate very long content
-            truncated = False
-            if len(content) > MAX_CONTENT_SIZE:
-                content = content[:MAX_CONTENT_SIZE] + '\n[Content truncated at 1MB]'
-                truncated = True
-
-            return {
-                "url": url,
-                "content": content,
-                "content_type": content_type,
-                "size": len(content),
-                "truncated": truncated
-            }
-
-    except urllib.error.HTTPError as e:
-        raise Exception(f"HTTP Error {e.code}: {e.reason}")
-    except urllib.error.URLError as e:
-        raise Exception(f"URL Error: {e.reason}")
+        result = _ralph_http.get(url, headers=headers, timeout=timeout)
     except Exception as e:
         raise Exception(f"Fetch failed: {str(e)}")
+
+    if not result.get("ok"):
+        status = result.get("status", 0)
+        if status > 0:
+            raise Exception(f"HTTP Error {status}")
+        else:
+            raise Exception("Fetch failed: connection error")
+
+    data = result.get("data", "")
+    content_type = result.get("content_type", "")
+
+    # Extract charset from Content-Type header
+    charset = 'utf-8'
+    if 'charset=' in content_type:
+        charset = content_type.split('charset=')[-1].split(';')[0].strip()
+
+    # Re-encode with proper charset if not UTF-8
+    content = data
+    if charset.lower() not in ('utf-8', 'utf8', ''):
+        try:
+            content = data.encode('utf-8').decode(charset, errors='replace')
+        except (UnicodeDecodeError, LookupError):
+            pass
+
+    # Convert HTML to plain text if it's HTML content
+    if 'html' in content_type.lower() or content.strip().startswith('<!DOCTYPE') or content.strip().startswith('<html'):
+        content = html_to_text(content)
+
+    # Truncate very long content
+    truncated = False
+    if len(content) > MAX_CONTENT_SIZE:
+        content = content[:MAX_CONTENT_SIZE] + '\n[Content truncated at 1MB]'
+        truncated = True
+
+    return {
+        "url": url,
+        "content": content,
+        "content_type": content_type,
+        "size": len(content),
+        "truncated": truncated
+    }
 
 
 class _HTMLTextExtractor(html.parser.HTMLParser):

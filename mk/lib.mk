@@ -148,6 +148,7 @@ LIB_WORKFLOW_SOURCES := $(LIBDIR)/workflow/workflow.c
 # Network module
 LIB_NETWORK_SOURCES := \
     $(LIBDIR)/network/http_client.c \
+    $(LIBDIR)/network/http_python.c \
     $(LIBDIR)/network/api_common.c \
     $(LIBDIR)/network/api_error.c \
     $(LIBDIR)/network/streaming.c \
