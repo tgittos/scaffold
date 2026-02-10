@@ -8,6 +8,8 @@
 
 PTRARRAY_DEFINE(ModelRegistry, ModelCapabilities)
 
+static void model_destroy(ModelCapabilities *m) { free(m); }
+
 static int model_pattern_match(const char* model_name, const char* pattern) {
     if (!model_name || !pattern) {
         return 0;
@@ -42,8 +44,7 @@ static int model_pattern_match(const char* model_name, const char* pattern) {
 }
 
 int init_model_registry(ModelRegistry* registry) {
-    // Models are static, so we don't own them - pass NULL destructor
-    return ModelRegistry_init_capacity(registry, 16, NULL);
+    return ModelRegistry_init_capacity(registry, 16, model_destroy);
 }
 
 int register_model_capabilities(ModelRegistry* registry, ModelCapabilities* model) {

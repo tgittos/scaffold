@@ -140,12 +140,11 @@ ModelRegistry* get_model_registry() {
     if (!g_model_registry) {
         g_model_registry = malloc(sizeof(ModelRegistry));
         if (g_model_registry) {
-            if (init_model_registry(g_model_registry) == 0) {
-                register_qwen_models(g_model_registry);
-                register_deepseek_models(g_model_registry);
-                register_gpt_models(g_model_registry);
-                register_claude_models(g_model_registry);
-                register_default_model(g_model_registry);
+            if (init_model_registry(g_model_registry) != 0 ||
+                register_all_models(g_model_registry) != 0) {
+                cleanup_model_registry(g_model_registry);
+                free(g_model_registry);
+                g_model_registry = NULL;
             }
         }
     }

@@ -80,9 +80,7 @@ LIB_LLM_SOURCES := \
     $(LIBDIR)/llm/models/response_processing.c \
     $(LIBDIR)/llm/models/claude_model.c \
     $(LIBDIR)/llm/models/gpt_model.c \
-    $(LIBDIR)/llm/models/qwen_model.c \
-    $(LIBDIR)/llm/models/deepseek_model.c \
-    $(LIBDIR)/llm/models/default_model.c
+    $(LIBDIR)/llm/models/model_registry.c
 
 # Services module
 LIB_SERVICES_SOURCES := $(LIBDIR)/services/services.c

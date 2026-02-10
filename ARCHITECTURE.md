@@ -45,11 +45,9 @@ graph TB
 
     %% Model Capabilities
     LLMProvider --> ModelCaps[Model Capabilities<br/>model_capabilities.c/h]
-    ModelCaps --> ClaudeModel[Claude Model<br/>claude_model.c]
-    ModelCaps --> GPTModel[GPT Model<br/>gpt_model.c]
-    ModelCaps --> QwenModel[Qwen Model<br/>qwen_model.c]
-    ModelCaps --> DeepSeekModel[DeepSeek Model<br/>deepseek_model.c]
-    ModelCaps --> DefaultModel[Default Model<br/>default_model.c]
+    ModelCaps --> ModelRegistry[Model Registry<br/>model_registry.c]
+    ModelCaps --> GPTModel[GPT Format<br/>gpt_model.c]
+    ModelCaps --> ClaudeModel[Claude Format<br/>claude_model.c]
 
     %% Tools System
     Core --> ToolsSystem[Tools System<br/>tools_system.c/h]
@@ -1000,11 +998,9 @@ lib/
 │   ├── embeddings_service.c/h # Embeddings singleton service
 │   ├── llm_client.c/h      # LLM HTTP client abstraction
 │   ├── models/             # Model capability implementations
-│   │   ├── claude_model.c
-│   │   ├── gpt_model.c
-│   │   ├── qwen_model.c
-│   │   ├── deepseek_model.c
-│   │   ├── default_model.c
+│   │   ├── model_registry.c     # Data-driven model registration
+│   │   ├── claude_model.c       # Claude format function
+│   │   ├── gpt_model.c          # GPT format function
 │   │   └── response_processing.c/h  # Thinking tag processing
 │   └── providers/          # API provider implementations
 │       ├── anthropic_provider.c  # Anthropic API client

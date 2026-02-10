@@ -1,5 +1,6 @@
 #include "config.h"
 #include "ralph_home.h"
+#include <defaults.h>
 #include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,33 +31,33 @@ static int config_set_defaults(agent_config_t *config)
     config->model_standard = NULL;
     config->model_high = NULL;
 
-    config->api_url = strdup("https://api.openai.com/v1/chat/completions");
+    config->api_url = strdup(DEFAULT_API_URL);
     if (!config->api_url) return -1;
 
-    config->model = strdup("gpt-5-mini-2025-08-07");
+    config->model = strdup(DEFAULT_MODEL);
     if (!config->model) return -1;
 
-    config->context_window = 8192;
-    config->max_tokens = -1;
+    config->context_window = DEFAULT_CONTEXT_WINDOW;
+    config->max_tokens = DEFAULT_MAX_TOKENS;
 
-    config->api_max_retries = 3;
-    config->api_retry_delay_ms = 1000;
-    config->api_backoff_factor = 2.0f;
+    config->api_max_retries = DEFAULT_API_MAX_RETRIES;
+    config->api_retry_delay_ms = DEFAULT_API_RETRY_DELAY_MS;
+    config->api_backoff_factor = DEFAULT_API_BACKOFF_FACTOR;
 
-    config->max_subagents = 5;
-    config->subagent_timeout = 300;
+    config->max_subagents = DEFAULT_MAX_SUBAGENTS;
+    config->subagent_timeout = DEFAULT_SUBAGENT_TIMEOUT;
 
-    config->enable_streaming = true;
-    config->json_output_mode = false;
-    config->check_updates = true;
+    config->enable_streaming = DEFAULT_ENABLE_STREAMING;
+    config->json_output_mode = DEFAULT_JSON_OUTPUT_MODE;
+    config->check_updates = DEFAULT_CHECK_UPDATES;
 
-    config->model_simple = strdup("o4-mini");
+    config->model_simple = strdup(DEFAULT_MODEL_SIMPLE);
     if (!config->model_simple) return -1;
 
-    config->model_standard = strdup("gpt-5-mini-2025-08-07");
+    config->model_standard = strdup(DEFAULT_MODEL_STANDARD);
     if (!config->model_standard) return -1;
 
-    config->model_high = strdup("gpt-5.2-2025-12-11");
+    config->model_high = strdup(DEFAULT_MODEL_HIGH);
     if (!config->model_high) return -1;
 
     return 0;

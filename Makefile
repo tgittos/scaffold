@@ -30,6 +30,18 @@ FORCE:
 COMPILE_DEPS += $(VERSION_HEADER)
 
 # =============================================================================
+# DATA GENERATION
+# =============================================================================
+
+GENERATED_DATA := $(BUILDDIR)/generated/prompt_data.h \
+                  $(BUILDDIR)/generated/defaults.h
+
+$(GENERATED_DATA): data/prompts/system.txt data/defaults.json scripts/gen_data.sh
+	@scripts/gen_data.sh "$(BUILDDIR)/generated"
+
+COMPILE_DEPS += $(GENERATED_DATA)
+
+# =============================================================================
 # PRIMARY TARGETS
 # =============================================================================
 

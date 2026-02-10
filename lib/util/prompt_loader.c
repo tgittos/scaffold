@@ -1,5 +1,6 @@
 #include "prompt_loader.h"
 #include "config.h"
+#include <prompt_data.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,6 +9,8 @@
 #include <sys/utsname.h>
 #include <unistd.h>
 #include <limits.h>
+
+static const char *SYSTEM_PROMPT_PART2 = "\n# User Instructions (from AGENTS.md)\n";
 
 static char *get_platform_info(void) {
     struct utsname uname_info;
@@ -48,46 +51,6 @@ static char *get_platform_info(void) {
     snprintf(result, (size_t)size + 1, format, arch, os_name, cwd_str);
     return result;
 }
-
-static const char* SYSTEM_PROMPT_PART1 =
-    "You are an AI programming agent. Use your tools to help users with software tasks.\n"
-    "\n# Core Principles\n"
-    "- Act immediately on requests. Don't ask 'Should I proceed?' - just do it.\n"
-    "- Only ask questions when genuinely ambiguous.\n"
-    "- Simple tasks (1-2 actions): execute directly, no todo tracking.\n"
-    "- Complex tasks (3+ actions): use TodoWrite for systematic progress.\n"
-    "- Adapt verbosity to user expertise.\n"
-    "\n# Code Exploration\n"
-    "When finding definitions: search for actual implementations, READ files to confirm, "
-    "trace variable origins, verify you found the definition not just a reference.\n"
-    "\n# Memory System\n"
-    "Use 'remember' tool for: user corrections, preferences, standing instructions, "
-    "project-specific knowledge. Don't remember: transient info, code already in files.\n"
-    "Memory types: correction, preference, fact, instruction, web_content.\n"
-    "Relevant memories are auto-retrieved into your context.\n"
-    "\n# Inter-Agent Messaging\n"
-    "Messages are automatically delivered - you'll be notified when messages arrive.\n"
-    "Subagent dispatch is ONE atomic action - do NOT create todo lists for it. "
-    "Simply spawn the subagent and inform the user you're waiting. Results are sent "
-    "automatically when the subagent completes.\n"
-    "\n# Python Tools\n"
-    "External tools in ~/.local/ralph/tools/ are loaded into the Python REPL at startup.\n"
-    "\n# CLI Flags for Agent Use\n"
-    "When spawning subagents or workers, use these flags:\n"
-    "- --subagent: Run as a subagent (requires --task)\n"
-    "- --task <prompt>: Task prompt for subagent mode\n"
-    "- --context <json>: Context to pass to subagent\n"
-    "- --worker: Run as queue worker (requires --queue)\n"
-    "- --queue <name>: Queue name for worker mode\n"
-    "- --allow <spec>: Add allowlist entry (e.g., 'shell:git,status')\n"
-    "- --allow-category=<cat>: Allow category without prompting (file_write, shell, network)\n"
-    "- --model <name>: Override model (tier name or model ID)\n"
-    "- --no-auto-messages: Disable automatic message polling\n"
-    "- --message-poll-interval <ms>: Set message poll interval (default: 2000)\n\n";
-
-static const char* SYSTEM_PROMPT_PART2 =
-    "\n# User Instructions (from AGENTS.md)\n";
-
 
 static bool is_valid_filename_char(char c) {
     return isalnum((unsigned char)c) || c == '_' || c == '-' || c == '.' || c == '/';
@@ -346,7 +309,7 @@ int load_system_prompt(char **prompt_content, const char *tools_description) {
     char *model_table = generate_model_tier_table();
     size_t model_table_len = model_table ? strlen(model_table) : 0;
 
-    size_t part1_len = strlen(SYSTEM_PROMPT_PART1);
+    size_t part1_len = strlen(SYSTEM_PROMPT_TEXT);
     size_t part2_len = strlen(SYSTEM_PROMPT_PART2);
     size_t user_len = user_prompt ? strlen(user_prompt) : 0;
     size_t total_len = part1_len + platform_len + model_table_len + tools_len + part2_len + user_len + 1;
@@ -359,7 +322,7 @@ int load_system_prompt(char **prompt_content, const char *tools_description) {
         return -1;
     }
 
-    strcpy(combined_prompt, SYSTEM_PROMPT_PART1);
+    strcpy(combined_prompt, SYSTEM_PROMPT_TEXT);
 
     if (platform_info != NULL) {
         strcat(combined_prompt, platform_info);

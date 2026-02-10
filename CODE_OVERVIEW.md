@@ -76,11 +76,9 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`llm_client.c/h`** - LLM HTTP client abstraction wrapping http_client for API calls
 
 ##### `lib/llm/models/` - Model Capability Implementations
-- **`claude_model.c`** - Claude model capabilities (Anthropic)
-- **`gpt_model.c`** - GPT model capabilities (OpenAI)
-- **`qwen_model.c`** - Qwen model capabilities
-- **`deepseek_model.c`** - DeepSeek model capabilities
-- **`default_model.c`** - Default fallback model
+- **`model_registry.c`** - Data-driven model registration (all models in one static table)
+- **`claude_model.c`** - Claude assistant tool message formatting
+- **`gpt_model.c`** - GPT assistant tool message formatting
 - **`response_processing.c/h`** - Thinking tag processing for reasoning models
 
 ##### `lib/llm/providers/` - API Provider Implementations

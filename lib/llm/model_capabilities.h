@@ -35,11 +35,14 @@ int register_model_capabilities(ModelRegistry* registry, ModelCapabilities* mode
 ModelCapabilities* detect_model_capabilities(ModelRegistry* registry, const char* model_name);
 void cleanup_model_registry(ModelRegistry* registry);
 
-int register_qwen_models(ModelRegistry* registry);
-int register_deepseek_models(ModelRegistry* registry);
-int register_claude_models(ModelRegistry* registry);
-int register_gpt_models(ModelRegistry* registry);
-int register_default_model(ModelRegistry* registry);
+int register_all_models(ModelRegistry* registry);
+
+char* gpt_format_assistant_tool_message(const char* response_content,
+                                        const ToolCall* tool_calls,
+                                        int tool_call_count);
+char* claude_format_assistant_tool_message(const char* response_content,
+                                           const ToolCall* tool_calls,
+                                           int tool_call_count);
 
 char* generate_model_tools_json(ModelRegistry* registry, const char* model_name, const ToolRegistry* tools);
 int parse_model_tool_calls(ModelRegistry* registry, const char* model_name,

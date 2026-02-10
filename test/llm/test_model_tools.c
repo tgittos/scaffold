@@ -18,12 +18,7 @@ void setUp(void) {
     test_registry = malloc(sizeof(ModelRegistry));
     init_model_registry(test_registry);
     
-    // Register test models
-    register_gpt_models(test_registry);
-    register_claude_models(test_registry);
-    register_qwen_models(test_registry);
-    register_deepseek_models(test_registry);
-    register_default_model(test_registry);
+    register_all_models(test_registry);
     
     // Initialize tool registry
     init_tool_registry(&tool_registry);
