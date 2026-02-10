@@ -134,22 +134,6 @@ static void filter_tool_call_markup(char *str) {
     *dst = '\0';
 }
 
-static ModelRegistry* g_model_registry = NULL;
-
-ModelRegistry* get_model_registry() {
-    if (!g_model_registry) {
-        g_model_registry = malloc(sizeof(ModelRegistry));
-        if (g_model_registry) {
-            if (init_model_registry(g_model_registry) != 0 ||
-                register_all_models(g_model_registry) != 0) {
-                cleanup_model_registry(g_model_registry);
-                free(g_model_registry);
-                g_model_registry = NULL;
-            }
-        }
-    }
-    return g_model_registry;
-}
 
 static void separate_thinking_and_response(const char *content, char **thinking, char **response) {
     *thinking = NULL;
@@ -761,11 +745,7 @@ void log_system_info(const char *category, const char *message) {
 }
 
 void cleanup_output_formatter(void) {
-    if (g_model_registry) {
-        cleanup_model_registry(g_model_registry);
-        free(g_model_registry);
-        g_model_registry = NULL;
-    }
+    cleanup_model_registry_singleton();
 }
 
 void display_streaming_init(void) {

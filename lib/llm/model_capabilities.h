@@ -52,5 +52,6 @@ char* format_model_assistant_tool_message(ModelRegistry* registry, const char* m
                                          const char* response_content, const ToolCall* tool_calls, int tool_call_count);
 
 ModelRegistry* get_model_registry(void);
+void cleanup_model_registry_singleton(void);
 
 #endif // MODEL_CAPABILITIES_H

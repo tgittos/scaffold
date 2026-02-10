@@ -1,5 +1,4 @@
 #include "model_capabilities.h"
-#include "../ui/output_formatter.h"
 #include "../tools/tools_system.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -73,6 +72,31 @@ ModelCapabilities* detect_model_capabilities(ModelRegistry* registry, const char
 
 void cleanup_model_registry(ModelRegistry* registry) {
     ModelRegistry_destroy(registry);
+}
+
+static ModelRegistry* g_model_registry = NULL;
+
+ModelRegistry* get_model_registry(void) {
+    if (!g_model_registry) {
+        g_model_registry = malloc(sizeof(ModelRegistry));
+        if (g_model_registry) {
+            if (init_model_registry(g_model_registry) != 0 ||
+                register_all_models(g_model_registry) != 0) {
+                cleanup_model_registry(g_model_registry);
+                free(g_model_registry);
+                g_model_registry = NULL;
+            }
+        }
+    }
+    return g_model_registry;
+}
+
+void cleanup_model_registry_singleton(void) {
+    if (g_model_registry) {
+        cleanup_model_registry(g_model_registry);
+        free(g_model_registry);
+        g_model_registry = NULL;
+    }
 }
 
 char* generate_model_tools_json(ModelRegistry* registry, const char* model_name, const ToolRegistry* tools) {

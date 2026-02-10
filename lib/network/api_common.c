@@ -8,8 +8,6 @@
 #include <string.h>
 #include "../util/json_escape.h"
 
-extern ModelRegistry* get_model_registry(void);
-
 size_t calculate_json_payload_size(const char* model, const char* system_prompt,
                                   const ConversationHistory* conversation,
                                   const char* user_message, const ToolRegistry* tools) {
