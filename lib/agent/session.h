@@ -41,6 +41,7 @@ typedef struct AgentSession {
     SessionPollingConfig polling_config;/**< Polling configuration */
     Services* services;                 /**< Dependency injection container */
     ModelRegistry* model_registry;      /**< Model capability registry */
+    const char* model_override;         /**< Model override from --model flag */
 } AgentSession;
 
 /* Cleanup hooks: external code registers shutdown functions (e.g. Python interpreter). */

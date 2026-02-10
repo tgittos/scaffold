@@ -54,6 +54,18 @@ int session_configurator_load(AgentSession* session) {
         if (session->session_data.config.model == NULL) return -1;
     }
 
+    if (session->model_override) {
+        const char *resolved = config_resolve_model(session->model_override);
+        if (resolved) {
+            char *dup = strdup(resolved);
+            if (dup) {
+                free(session->session_data.config.model);
+                session->session_data.config.model = dup;
+                config_set("model", resolved);
+            }
+        }
+    }
+
     if (config->api_key) {
         session->session_data.config.api_key = strdup(config->api_key);
         if (session->session_data.config.api_key == NULL) return -1;

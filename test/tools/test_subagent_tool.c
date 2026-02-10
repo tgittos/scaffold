@@ -360,13 +360,13 @@ void test_subagent_spawn_null_params(void) {
     char id[SUBAGENT_ID_LENGTH + 1];
 
     // Null manager
-    TEST_ASSERT_EQUAL_INT(-1, subagent_spawn(NULL, "task", NULL, id));
+    TEST_ASSERT_EQUAL_INT(-1, subagent_spawn(NULL, "task", NULL, NULL, id));
 
     // Null task
-    TEST_ASSERT_EQUAL_INT(-1, subagent_spawn(&manager, NULL, NULL, id));
+    TEST_ASSERT_EQUAL_INT(-1, subagent_spawn(&manager, NULL, NULL, NULL, id));
 
     // Null id output
-    TEST_ASSERT_EQUAL_INT(-1, subagent_spawn(&manager, "task", NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(-1, subagent_spawn(&manager, "task", NULL, NULL, NULL));
 
     subagent_manager_cleanup(&manager);
 }
@@ -380,7 +380,7 @@ void test_subagent_spawn_prevents_nesting(void) {
     manager.is_subagent_process = 1;
 
     // Should fail because we're already in a subagent
-    int result = subagent_spawn(&manager, "test task", NULL, id);
+    int result = subagent_spawn(&manager, "test task", NULL, NULL, id);
     TEST_ASSERT_EQUAL_INT(-1, result);
     TEST_ASSERT_EQUAL_INT(0, manager.subagents.count);
 
@@ -399,7 +399,7 @@ void test_subagent_spawn_respects_max_limit(void) {
     SubagentArray_push(&manager.subagents, dummy2);
 
     // Try to spawn - should fail
-    int result = subagent_spawn(&manager, "test task", NULL, id);
+    int result = subagent_spawn(&manager, "test task", NULL, NULL, id);
     TEST_ASSERT_EQUAL_INT(-1, result);
     TEST_ASSERT_EQUAL_INT(2, (int)manager.subagents.count);  // Count unchanged
 
@@ -416,7 +416,7 @@ void test_subagent_spawn_basic(void) {
     // Spawn a subagent
     // Note: This will fork a process that tries to run ralph --subagent
     // The process will likely fail/exit quickly since --subagent isn't fully implemented
-    int result = subagent_spawn(&manager, "test task", NULL, id);
+    int result = subagent_spawn(&manager, "test task", NULL, NULL, id);
     TEST_ASSERT_EQUAL_INT(0, result);
 
     // Verify the subagent was created
@@ -449,7 +449,7 @@ void test_subagent_spawn_with_context(void) {
     memset(id, 0, sizeof(id));
 
     // Spawn a subagent with context
-    int result = subagent_spawn(&manager, "test task", "some context", id);
+    int result = subagent_spawn(&manager, "test task", "some context", NULL, id);
     TEST_ASSERT_EQUAL_INT(0, result);
 
     // Verify the subagent was created with context
@@ -469,7 +469,7 @@ void test_subagent_spawn_empty_context_treated_as_null(void) {
     memset(id, 0, sizeof(id));
 
     // Spawn with empty context (should be treated as NULL)
-    int result = subagent_spawn(&manager, "test task", "", id);
+    int result = subagent_spawn(&manager, "test task", "", NULL, id);
     TEST_ASSERT_EQUAL_INT(0, result);
 
     Subagent *sub = &manager.subagents.data[0];
@@ -487,9 +487,9 @@ void test_subagent_spawn_multiple(void) {
     char id3[SUBAGENT_ID_LENGTH + 1];
 
     // Spawn multiple subagents
-    TEST_ASSERT_EQUAL_INT(0, subagent_spawn(&manager, "task 1", NULL, id1));
-    TEST_ASSERT_EQUAL_INT(0, subagent_spawn(&manager, "task 2", "ctx 2", id2));
-    TEST_ASSERT_EQUAL_INT(0, subagent_spawn(&manager, "task 3", NULL, id3));
+    TEST_ASSERT_EQUAL_INT(0, subagent_spawn(&manager, "task 1", NULL, NULL, id1));
+    TEST_ASSERT_EQUAL_INT(0, subagent_spawn(&manager, "task 2", "ctx 2", NULL, id2));
+    TEST_ASSERT_EQUAL_INT(0, subagent_spawn(&manager, "task 3", NULL, NULL, id3));
 
     TEST_ASSERT_EQUAL_INT(3, manager.subagents.count);
 
@@ -513,7 +513,7 @@ void test_subagent_spawn_and_poll(void) {
     char id[SUBAGENT_ID_LENGTH + 1];
 
     // Spawn a subagent
-    int result = subagent_spawn(&manager, "test task", NULL, id);
+    int result = subagent_spawn(&manager, "test task", NULL, NULL, id);
     TEST_ASSERT_EQUAL_INT(0, result);
 
     // Initial status should be running
@@ -592,7 +592,7 @@ void test_subagent_get_status_running_nowait(void) {
     char *error_str = NULL;
 
     // Spawn a subagent
-    int result = subagent_spawn(&manager, "test task", NULL, id);
+    int result = subagent_spawn(&manager, "test task", NULL, NULL, id);
     TEST_ASSERT_EQUAL_INT(0, result);
 
     // Query immediately - should be running

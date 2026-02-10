@@ -3,6 +3,7 @@
 #include "../util/json_escape.h"
 #include "../util/debug_output.h"
 #include "../util/interrupt.h"
+#include "../util/config.h"
 #include "../policy/subagent_approval.h"
 #include "../ipc/message_store.h"
 #include "messaging_tool.h"
@@ -262,7 +263,7 @@ int subagent_poll_all(SubagentManager *manager) {
  * Forks a new process running ralph in subagent mode.
  * Creates approval channel pipes for IPC-based approval proxying.
  */
-int subagent_spawn(SubagentManager *manager, const char *task, const char *context, char *subagent_id_out) {
+int subagent_spawn(SubagentManager *manager, const char *task, const char *context, const char *model, char *subagent_id_out) {
     if (manager == NULL || task == NULL || subagent_id_out == NULL) {
         return -1;
     }
@@ -334,7 +335,7 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
             free(parent_id);
         }
 
-        char *args[7];
+        char *args[9];
         int arg_idx = 0;
 
         args[arg_idx++] = ralph_path;
@@ -345,6 +346,11 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
         if (context != NULL && strlen(context) > 0) {
             args[arg_idx++] = "--context";
             args[arg_idx++] = (char*)context;
+        }
+
+        if (model != NULL && strlen(model) > 0) {
+            args[arg_idx++] = "--model";
+            args[arg_idx++] = (char*)model;
         }
 
         args[arg_idx] = NULL;
@@ -645,7 +651,7 @@ int register_subagent_tool(ToolRegistry *registry, SubagentManager *manager) {
     g_subagent_manager = manager;
     manager->services = registry->services;
 
-    ToolParameter parameters[2];
+    ToolParameter parameters[3];
     memset(parameters, 0, sizeof(parameters));
 
     parameters[0].name = strdup("task");
@@ -662,7 +668,14 @@ int register_subagent_tool(ToolRegistry *registry, SubagentManager *manager) {
     parameters[1].enum_count = 0;
     parameters[1].required = 0;
 
-    for (int i = 0; i < 2; i++) {
+    parameters[2].name = strdup("model");
+    parameters[2].type = strdup("string");
+    parameters[2].description = strdup("Model to use for this subagent (e.g. 'simple', 'standard', 'high', or a model ID). Omit to inherit the current model.");
+    parameters[2].enum_values = NULL;
+    parameters[2].enum_count = 0;
+    parameters[2].required = 0;
+
+    for (int i = 0; i < 3; i++) {
         if (parameters[i].name == NULL ||
             parameters[i].type == NULL ||
             parameters[i].description == NULL) {
@@ -680,9 +693,9 @@ int register_subagent_tool(ToolRegistry *registry, SubagentManager *manager) {
                               "The subagent runs with fresh context and cannot spawn additional subagents. "
                               "Results are automatically sent to you when the subagent completes - "
                               "no need to poll or wait for messages.",
-                              parameters, 2, execute_subagent_tool_call);
+                              parameters, 3, execute_subagent_tool_call);
 
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 3; i++) {
         free(parameters[i].name);
         free(parameters[i].type);
         free(parameters[i].description);
@@ -790,12 +803,21 @@ int execute_subagent_tool_call(const ToolCall *tool_call, ToolResult *result) {
     }
 
     char *context = extract_json_string_value(tool_call->arguments, "context");
+    char *model_raw = extract_json_string_value(tool_call->arguments, "model");
+
+    const char *resolved_model = NULL;
+    if (model_raw && strlen(model_raw) > 0) {
+        resolved_model = config_resolve_model(model_raw);
+    } else {
+        resolved_model = config_get_string("model");
+    }
 
     char subagent_id[SUBAGENT_ID_LENGTH + 1];
-    int spawn_result = subagent_spawn(g_subagent_manager, task, context, subagent_id);
+    int spawn_result = subagent_spawn(g_subagent_manager, task, context, resolved_model, subagent_id);
 
     free(task);
     free(context);
+    free(model_raw);
 
     if (spawn_result != 0) {
         if ((int)g_subagent_manager->subagents.count >= g_subagent_manager->max_subagents) {

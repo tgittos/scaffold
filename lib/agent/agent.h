@@ -93,6 +93,9 @@ typedef struct AgentConfig {
     /** System prompt for WORKER mode (NULL uses default) */
     const char* worker_system_prompt;
 
+    /** Model override (tier name or raw model ID) from --model flag */
+    const char* model_override;
+
     /** CLI allowlist entries (tool:pattern format) */
     const char** allow_entries;
     int allow_entry_count;

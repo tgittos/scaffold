@@ -26,6 +26,10 @@ typedef struct {
     bool enable_streaming;
     bool json_output_mode;
 
+    char *model_simple;         // "simple" tier model ID
+    char *model_standard;       // "standard" tier model ID
+    char *model_high;           // "high" tier model ID
+
     char *config_file_path;
     bool config_loaded;
 } agent_config_t;
@@ -114,5 +118,14 @@ float config_get_float(const char *key, float default_value);
  * @return Configuration value or default_value
  */
 bool config_get_bool(const char *key, bool default_value);
+
+/**
+ * Resolve a model name: if it matches a tier name ("simple", "standard", "high"),
+ * return the mapped model ID; otherwise return the input as-is.
+ *
+ * @param name Tier name or raw model ID
+ * @return Model ID string (points to config internals or to name itself — do NOT free)
+ */
+const char* config_resolve_model(const char *name);
 
 #endif /* CONFIG_H */

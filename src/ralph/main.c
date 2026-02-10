@@ -67,6 +67,7 @@ int main(int argc, char *argv[]) {
     char *subagent_context = NULL;
     int worker_mode = 0;
     char *worker_queue = NULL;
+    char *model_override = NULL;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--debug") == 0) {
@@ -107,6 +108,8 @@ int main(int argc, char *argv[]) {
             subagent_task = argv[++i];
         } else if (strcmp(argv[i], "--context") == 0 && i + 1 < argc) {
             subagent_context = argv[++i];
+        } else if (strcmp(argv[i], "--model") == 0 && i + 1 < argc) {
+            model_override = argv[++i];
         } else if (strcmp(argv[i], "--worker") == 0) {
             worker_mode = 1;
         } else if (strcmp(argv[i], "--queue") == 0 && i + 1 < argc) {
@@ -142,6 +145,8 @@ int main(int argc, char *argv[]) {
     } else {
         config.mode = AGENT_MODE_INTERACTIVE;
     }
+
+    config.model_override = model_override;
 
     if (python_extension_register() != 0) {
         fprintf(stderr, "Warning: Failed to register Python extension\n");

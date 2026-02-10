@@ -26,6 +26,9 @@ static int config_set_defaults(agent_config_t *config)
     config->system_prompt = NULL;
     config->config_file_path = NULL;
     config->config_loaded = false;
+    config->model_simple = NULL;
+    config->model_standard = NULL;
+    config->model_high = NULL;
 
     config->api_url = strdup("https://api.openai.com/v1/chat/completions");
     if (!config->api_url) return -1;
@@ -45,6 +48,15 @@ static int config_set_defaults(agent_config_t *config)
 
     config->enable_streaming = true;
     config->json_output_mode = false;
+
+    config->model_simple = strdup("o4-mini");
+    if (!config->model_simple) return -1;
+
+    config->model_standard = strdup("gpt-5-mini-2025-08-07");
+    if (!config->model_standard) return -1;
+
+    config->model_high = strdup("gpt-5.2-2025-12-11");
+    if (!config->model_high) return -1;
 
     return 0;
 }
@@ -302,6 +314,26 @@ int config_load_from_file(const char *filepath)
         g_config->enable_streaming = cJSON_IsTrue(item);
     }
 
+    item = cJSON_GetObjectItem(json, "models");
+    if (cJSON_IsObject(item)) {
+        cJSON *child;
+        child = cJSON_GetObjectItem(item, "simple");
+        if (cJSON_IsString(child)) {
+            new_val = strdup(child->valuestring);
+            if (new_val) { free(g_config->model_simple); g_config->model_simple = new_val; }
+        }
+        child = cJSON_GetObjectItem(item, "standard");
+        if (cJSON_IsString(child)) {
+            new_val = strdup(child->valuestring);
+            if (new_val) { free(g_config->model_standard); g_config->model_standard = new_val; }
+        }
+        child = cJSON_GetObjectItem(item, "high");
+        if (cJSON_IsString(child)) {
+            new_val = strdup(child->valuestring);
+            if (new_val) { free(g_config->model_high); g_config->model_high = new_val; }
+        }
+    }
+
     (void)config_update_api_key_selection(g_config);
 
     cJSON_Delete(json);
@@ -352,6 +384,17 @@ int config_save_to_file(const char *filepath)
     cJSON_AddNumberToObject(json, "subagent_timeout", g_config->subagent_timeout);
 
     cJSON_AddBoolToObject(json, "enable_streaming", g_config->enable_streaming);
+
+    cJSON *models = cJSON_CreateObject();
+    if (models) {
+        if (g_config->model_simple)
+            cJSON_AddStringToObject(models, "simple", g_config->model_simple);
+        if (g_config->model_standard)
+            cJSON_AddStringToObject(models, "standard", g_config->model_standard);
+        if (g_config->model_high)
+            cJSON_AddStringToObject(models, "high", g_config->model_high);
+        cJSON_AddItemToObject(json, "models", models);
+    }
 
     char *json_string = cJSON_Print(json);
     cJSON_Delete(json);
@@ -461,6 +504,9 @@ void config_cleanup(void)
     free(g_config->embedding_model);
     free(g_config->system_prompt);
     free(g_config->config_file_path);
+    free(g_config->model_simple);
+    free(g_config->model_standard);
+    free(g_config->model_high);
 
     free(g_config);
     g_config = NULL;
@@ -505,6 +551,15 @@ int config_set(const char *key, const char *value)
     } else if (strcmp(key, "system_prompt") == 0) {
         free(g_config->system_prompt);
         g_config->system_prompt = new_val;
+    } else if (strcmp(key, "model_simple") == 0) {
+        free(g_config->model_simple);
+        g_config->model_simple = new_val;
+    } else if (strcmp(key, "model_standard") == 0) {
+        free(g_config->model_standard);
+        g_config->model_standard = new_val;
+    } else if (strcmp(key, "model_high") == 0) {
+        free(g_config->model_high);
+        g_config->model_high = new_val;
     } else if (strcmp(key, "context_window") == 0) {
         free(new_val);
         if (value) {
@@ -551,6 +606,12 @@ const char* config_get_string(const char *key)
         return g_config->embedding_model;
     } else if (strcmp(key, "system_prompt") == 0) {
         return g_config->system_prompt;
+    } else if (strcmp(key, "model_simple") == 0) {
+        return g_config->model_simple;
+    } else if (strcmp(key, "model_standard") == 0) {
+        return g_config->model_standard;
+    } else if (strcmp(key, "model_high") == 0) {
+        return g_config->model_high;
     }
 
     return NULL;
@@ -597,4 +658,18 @@ bool config_get_bool(const char *key, bool default_value)
     }
 
     return default_value;
+}
+
+const char* config_resolve_model(const char *name)
+{
+    if (!name || !g_config) return name;
+
+    if (strcmp(name, "simple") == 0 && g_config->model_simple)
+        return g_config->model_simple;
+    if (strcmp(name, "standard") == 0 && g_config->model_standard)
+        return g_config->model_standard;
+    if (strcmp(name, "high") == 0 && g_config->model_high)
+        return g_config->model_high;
+
+    return name;
 }

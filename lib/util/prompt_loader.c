@@ -1,4 +1,5 @@
 #include "prompt_loader.h"
+#include "config.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -80,6 +81,7 @@ static const char* SYSTEM_PROMPT_PART1 =
     "- --queue <name>: Queue name for worker mode\n"
     "- --allow <spec>: Add allowlist entry (e.g., 'shell:git,status')\n"
     "- --allow-category=<cat>: Allow category without prompting (file_write, shell, network)\n"
+    "- --model <name>: Override model (tier name or model ID)\n"
     "- --no-auto-messages: Disable automatic message polling\n"
     "- --message-poll-interval <ms>: Set message poll interval (default: 2000)\n\n";
 
@@ -265,6 +267,34 @@ static char *expand_file_references(const char *content) {
     return result;
 }
 
+char* generate_model_tier_table(void) {
+    const char *simple = config_get_string("model_simple");
+    const char *standard = config_get_string("model_standard");
+    const char *high = config_get_string("model_high");
+
+    if (!simple) simple = "o4-mini";
+    if (!standard) standard = "gpt-5-mini-2025-08-07";
+    if (!high) high = "gpt-5.2-2025-12-11";
+
+    const char *format =
+        "\n## Model Tiers\n"
+        "Select a model tier when spawning subagents via the \"model\" parameter.\n"
+        "| Tier | Model |\n"
+        "|------|-------|\n"
+        "| simple | %s |\n"
+        "| standard | %s |\n"
+        "| high | %s |\n";
+
+    int size = snprintf(NULL, 0, format, simple, standard, high);
+    if (size < 0) return NULL;
+
+    char *result = malloc((size_t)size + 1);
+    if (!result) return NULL;
+
+    snprintf(result, (size_t)size + 1, format, simple, standard, high);
+    return result;
+}
+
 int load_system_prompt(char **prompt_content, const char *tools_description) {
     if (prompt_content == NULL) {
         return -1;
@@ -313,15 +343,19 @@ int load_system_prompt(char **prompt_content, const char *tools_description) {
     char *platform_info = get_platform_info();
     size_t platform_len = platform_info ? strlen(platform_info) : 0;
 
+    char *model_table = generate_model_tier_table();
+    size_t model_table_len = model_table ? strlen(model_table) : 0;
+
     size_t part1_len = strlen(SYSTEM_PROMPT_PART1);
     size_t part2_len = strlen(SYSTEM_PROMPT_PART2);
     size_t user_len = user_prompt ? strlen(user_prompt) : 0;
-    size_t total_len = part1_len + platform_len + tools_len + part2_len + user_len + 1;
+    size_t total_len = part1_len + platform_len + model_table_len + tools_len + part2_len + user_len + 1;
 
     char *combined_prompt = malloc(total_len);
     if (combined_prompt == NULL) {
         free(user_prompt);
         free(platform_info);
+        free(model_table);
         return -1;
     }
 
@@ -330,6 +364,11 @@ int load_system_prompt(char **prompt_content, const char *tools_description) {
     if (platform_info != NULL) {
         strcat(combined_prompt, platform_info);
         free(platform_info);
+    }
+
+    if (model_table != NULL) {
+        strcat(combined_prompt, model_table);
+        free(model_table);
     }
 
     if (tools_description != NULL) {

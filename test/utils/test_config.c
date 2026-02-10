@@ -352,6 +352,87 @@ void test_config_get_bool_nonexistent_key(void) {
     TEST_ASSERT_FALSE(config_get_bool("nonexistent_key", false));
 }
 
+void test_config_model_tier_defaults(void) {
+    TEST_ASSERT_EQUAL(0, config_init());
+
+    agent_config_t *config = config_get();
+    TEST_ASSERT_NOT_NULL(config);
+    TEST_ASSERT_EQUAL_STRING("o4-mini", config->model_simple);
+    TEST_ASSERT_EQUAL_STRING("gpt-5-mini-2025-08-07", config->model_standard);
+    TEST_ASSERT_EQUAL_STRING("gpt-5.2-2025-12-11", config->model_high);
+
+    TEST_ASSERT_EQUAL_STRING("o4-mini", config_get_string("model_simple"));
+    TEST_ASSERT_EQUAL_STRING("gpt-5-mini-2025-08-07", config_get_string("model_standard"));
+    TEST_ASSERT_EQUAL_STRING("gpt-5.2-2025-12-11", config_get_string("model_high"));
+}
+
+void test_config_model_tiers_load_from_file(void) {
+    FILE *test_file = fopen("test_config.json", "w");
+    TEST_ASSERT_NOT_NULL(test_file);
+
+    const char *json_content =
+        "{\n"
+        "  \"model\": \"gpt-5-mini-2025-08-07\",\n"
+        "  \"models\": {\n"
+        "    \"simple\": \"custom-small\",\n"
+        "    \"standard\": \"custom-medium\",\n"
+        "    \"high\": \"custom-large\"\n"
+        "  }\n"
+        "}\n";
+
+    fwrite(json_content, 1, strlen(json_content), test_file);
+    fclose(test_file);
+
+    TEST_ASSERT_EQUAL(0, config_init());
+    TEST_ASSERT_EQUAL(0, config_load_from_file("test_config.json"));
+
+    agent_config_t *config = config_get();
+    TEST_ASSERT_NOT_NULL(config);
+    TEST_ASSERT_EQUAL_STRING("custom-small", config->model_simple);
+    TEST_ASSERT_EQUAL_STRING("custom-medium", config->model_standard);
+    TEST_ASSERT_EQUAL_STRING("custom-large", config->model_high);
+}
+
+void test_config_model_tiers_save_to_file(void) {
+    TEST_ASSERT_EQUAL(0, config_init());
+
+    TEST_ASSERT_EQUAL(0, config_set("model_simple", "my-simple"));
+    TEST_ASSERT_EQUAL(0, config_set("model_standard", "my-standard"));
+    TEST_ASSERT_EQUAL(0, config_set("model_high", "my-high"));
+
+    TEST_ASSERT_EQUAL(0, config_save_to_file("test_config.json"));
+
+    config_cleanup();
+    TEST_ASSERT_EQUAL(0, config_init());
+    TEST_ASSERT_EQUAL(0, config_load_from_file("test_config.json"));
+
+    agent_config_t *config = config_get();
+    TEST_ASSERT_EQUAL_STRING("my-simple", config->model_simple);
+    TEST_ASSERT_EQUAL_STRING("my-standard", config->model_standard);
+    TEST_ASSERT_EQUAL_STRING("my-high", config->model_high);
+}
+
+void test_config_resolve_model_tier_names(void) {
+    TEST_ASSERT_EQUAL(0, config_init());
+
+    TEST_ASSERT_EQUAL_STRING("o4-mini", config_resolve_model("simple"));
+    TEST_ASSERT_EQUAL_STRING("gpt-5-mini-2025-08-07", config_resolve_model("standard"));
+    TEST_ASSERT_EQUAL_STRING("gpt-5.2-2025-12-11", config_resolve_model("high"));
+}
+
+void test_config_resolve_model_raw_id(void) {
+    TEST_ASSERT_EQUAL(0, config_init());
+
+    TEST_ASSERT_EQUAL_STRING("gpt-4o", config_resolve_model("gpt-4o"));
+    TEST_ASSERT_EQUAL_STRING("claude-3-sonnet", config_resolve_model("claude-3-sonnet"));
+}
+
+void test_config_resolve_model_null(void) {
+    TEST_ASSERT_EQUAL(0, config_init());
+
+    TEST_ASSERT_NULL(config_resolve_model(NULL));
+}
+
 int main(void) {
     UNITY_BEGIN();
     
@@ -371,6 +452,12 @@ int main(void) {
     RUN_TEST(test_config_enable_streaming_load_from_file);
     RUN_TEST(test_config_enable_streaming_save_to_file);
     RUN_TEST(test_config_get_bool_nonexistent_key);
+    RUN_TEST(test_config_model_tier_defaults);
+    RUN_TEST(test_config_model_tiers_load_from_file);
+    RUN_TEST(test_config_model_tiers_save_to_file);
+    RUN_TEST(test_config_resolve_model_tier_names);
+    RUN_TEST(test_config_resolve_model_raw_id);
+    RUN_TEST(test_config_resolve_model_null);
 
     return UNITY_END();
 }

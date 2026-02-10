@@ -75,6 +75,8 @@ int agent_init(Agent* agent, const AgentConfig* config) {
         return -1;
     }
 
+    agent->session.model_override = agent->config.model_override;
+
     /* Wire remaining services after session_init — register_subagent_tool() copied
      * registry->services during session_init when it was still NULL. */
     agent->session.services = agent->services;

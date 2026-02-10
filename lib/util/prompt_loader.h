@@ -20,4 +20,11 @@ int load_system_prompt(char **prompt_content, const char *tools_description);
  */
 void cleanup_system_prompt(char **prompt_content);
 
+/**
+ * Generate a markdown table of model tiers from config.
+ *
+ * @return Allocated string (caller must free), or NULL on failure
+ */
+char* generate_model_tier_table(void);
+
 #endif // PROMPT_LOADER_H

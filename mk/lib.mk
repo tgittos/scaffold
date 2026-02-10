@@ -22,6 +22,7 @@ LIB_UI_SOURCES := \
     $(LIBDIR)/ui/output_formatter.c \
     $(LIBDIR)/ui/json_output.c \
     $(LIBDIR)/ui/memory_commands.c \
+    $(LIBDIR)/ui/model_commands.c \
     $(LIBDIR)/ui/status_line.c
 
 # Tools module

@@ -39,7 +39,7 @@ $(eval $(call def_test,interrupt,ralph/test_interrupt,$(LIBDIR)/util/interrupt.c
 $(eval $(call def_test,async_executor,ralph/test_async_executor,$(LIBDIR)/agent/async_executor.c $(LIBDIR)/util/interrupt.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/ipc/pipe_notifier.c $(TESTDIR)/stubs/ralph_stub.c))
 $(eval $(call def_test,pipe_notifier,utils/test_pipe_notifier,$(LIBDIR)/ipc/pipe_notifier.c))
 $(eval $(call def_test,agent_identity,ralph/test_agent_identity,$(LIBDIR)/ipc/agent_identity.c))
-$(eval $(call def_test,prompt,utils/test_prompt_loader,$(LIBDIR)/util/prompt_loader.c $(LIBDIR)/util/ralph_home.c))
+$(eval $(call def_test,prompt,utils/test_prompt_loader,$(LIBDIR)/util/prompt_loader.c $(LIBDIR)/util/ralph_home.c $(LIBDIR)/util/config.c))
 $(eval $(call def_test,ralph_home,utils/test_ralph_home,$(LIBDIR)/util/ralph_home.c))
 $(eval $(call def_test,todo_manager,tools/test_todo_manager,$(LIBDIR)/tools/todo_manager.c))
 $(eval $(call def_test,document_chunker,test_document_chunker,$(LIBDIR)/util/document_chunker.c $(LIBDIR)/util/common_utils.c))
@@ -99,8 +99,8 @@ $(TEST_pipe_notifier_TARGET): $(TEST_pipe_notifier_OBJECTS)
 $(TEST_agent_identity_TARGET): $(TEST_agent_identity_OBJECTS)
 	$(CC) -o $@ $(TEST_agent_identity_OBJECTS) -lpthread
 
-$(TEST_prompt_TARGET): $(TEST_prompt_OBJECTS)
-	$(CC) -o $@ $(TEST_prompt_OBJECTS)
+$(TEST_prompt_TARGET): $(TEST_prompt_OBJECTS) $(CJSON_LIB)
+	$(CC) -o $@ $(TEST_prompt_OBJECTS) $(CJSON_LIB)
 
 $(TEST_ralph_home_TARGET): $(TEST_ralph_home_OBJECTS)
 	$(CC) -o $@ $(TEST_ralph_home_OBJECTS)
@@ -289,6 +289,7 @@ $(eval $(call def_test_lib,message_dispatcher,ralph/test_message_dispatcher,))
 $(eval $(call def_test_lib,message_processor,ralph/test_message_processor,))
 $(eval $(call def_test_lib,recap,ralph/test_recap,))
 $(eval $(call def_test_lib,parallel_batch,agent/test_parallel_batch,))
+$(eval $(call def_test_lib,model_commands,ui/test_model_commands,))
 $(eval $(call def_test_lib,python_tool,tools/test_python_tool,$(TOOL_SOURCES)))
 $(eval $(call def_test_lib,python_integration,tools/test_python_integration,$(TOOL_SOURCES)))
 
@@ -297,7 +298,7 @@ LIBRALPH_TESTS := tool_param_dsl json_output output tools_system vector_db_tool 
     memory_mgmt token_manager conversation_compactor rolling_summary model_tools \
     openai_streaming anthropic_streaming messages_array_bug mcp_client subagent_tool \
     incomplete_task_bug conversation conversation_vdb tool_calls_not_stored document_store \
-    message_dispatcher message_processor recap parallel_batch
+    message_dispatcher message_processor recap parallel_batch model_commands
 
 $(foreach t,$(LIBRALPH_TESTS),$(eval \
 $$(TEST_$(t)_TARGET): $$(TEST_$(t)_OBJECTS) $$(LIBRALPH) $$(ALL_LIBS) ; \

@@ -79,8 +79,8 @@ void subagent_manager_set_services(SubagentManager *manager, Services *services)
 /** Kills any running subagents and frees all memory. */
 void subagent_manager_cleanup(SubagentManager *manager);
 
-/** subagent_id_out must be at least SUBAGENT_ID_LENGTH + 1 bytes. */
-int subagent_spawn(SubagentManager *manager, const char *task, const char *context, char *subagent_id_out);
+/** subagent_id_out must be at least SUBAGENT_ID_LENGTH + 1 bytes. model may be NULL to inherit parent's model. */
+int subagent_spawn(SubagentManager *manager, const char *task, const char *context, const char *model, char *subagent_id_out);
 
 /** If wait is non-zero, blocks until subagent completes. Caller must free result/error. */
 int subagent_get_status(SubagentManager *manager, const char *subagent_id, int wait,
