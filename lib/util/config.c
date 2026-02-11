@@ -517,6 +517,12 @@ int config_set(const char *key, const char *value)
             int parsed = atoi(value);
             g_config->max_tokens = parsed;
         }
+    } else if (strcmp(key, "api_max_retries") == 0) {
+        free(new_val);
+        if (value) {
+            int parsed = atoi(value);
+            if (parsed >= 0) g_config->api_max_retries = parsed;
+        }
     } else {
         free(new_val);
         return -1;

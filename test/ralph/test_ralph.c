@@ -14,12 +14,14 @@ extern void hnswlib_clear_all(void);
 #include <string.h>
 #include <unistd.h>
 #include "util/ralph_home.h"
+#include "util/config.h"
 
 void setUp(void) {
     ralph_home_init(NULL);
     hnswlib_clear_all();
 }
 void tearDown(void) {
+    config_cleanup();
     ralph_home_cleanup();
 }
 
@@ -261,6 +263,9 @@ void test_session_execute_tool_workflow_api_failure_resilience(void) {
 
     session_init(&session);
     session_load_config(&session);
+    config_set("api_max_retries", "0");
+    free(session.session_data.config.api_url);
+    session.session_data.config.api_url = strdup("http://127.0.0.1:8888/v1/chat/completions");
 
     // Execute tool workflow - this should return 0 (success) because:
     // 1. Tool execution succeeds (vector_db_list_indices returns list of indices)
@@ -313,7 +318,8 @@ void test_session_process_message_basic_workflow(void) {
     // Set up a non-working API URL to avoid dependency on external services
     // but still test the message processing pipeline
     free(session.session_data.config.api_url);
-    session.session_data.config.api_url = strdup("http://127.0.0.1:99999/v1/chat/completions");
+    session.session_data.config.api_url = strdup("http://127.0.0.1:1/v1/chat/completions");
+    config_set("api_max_retries", "0");
     
     // Process a basic user message
     const char* user_message = "Hello, how are you today?";
@@ -374,6 +380,9 @@ void test_tool_execution_without_api_server(void) {
 
     session_init(&session);
     session_load_config(&session);
+    config_set("api_max_retries", "0");
+    free(session.session_data.config.api_url);
+    session.session_data.config.api_url = strdup("http://127.0.0.1:8888/v1/chat/completions");
 
     // Execute tool workflow - should succeed despite unreachable API
     int result = session_execute_tool_workflow(&session, tool_calls, 1, "test without api", 100);
@@ -417,7 +426,7 @@ void test_tool_execution_with_network_timeout(void) {
     responses[0] = mock_network_failure(); // Simulates timeout by dropping connection
     responses[0].endpoint = "/v1/chat/completions";
     responses[0].method = "POST";
-    responses[0].delay_ms = 5000; // Long delay before dropping
+    responses[0].delay_ms = 100; // Brief delay before dropping
     server.responses = responses;
     server.response_count = 1;
 
@@ -439,6 +448,9 @@ void test_tool_execution_with_network_timeout(void) {
 
     session_init(&session);
     session_load_config(&session);
+    config_set("api_max_retries", "0");
+    free(session.session_data.config.api_url);
+    session.session_data.config.api_url = strdup("http://127.0.0.1:8888/v1/chat/completions");
 
     // Execute - should succeed because tool executes locally, API timeout doesn't matter
     int result = session_execute_tool_workflow(&session, tool_calls, 1, "timeout test", 100);
@@ -492,6 +504,9 @@ void test_tool_execution_with_auth_failure(void) {
 
     session_init(&session);
     session_load_config(&session);
+    config_set("api_max_retries", "0");
+    free(session.session_data.config.api_url);
+    session.session_data.config.api_url = strdup("http://127.0.0.1:8888/v1/chat/completions");
 
     // Execute - tool should succeed even with API auth failure
     int result = session_execute_tool_workflow(&session, tool_calls, 1, "auth test", 100);
@@ -542,6 +557,9 @@ void test_graceful_degradation_on_api_errors(void) {
 
     session_init(&session);
     session_load_config(&session);
+    config_set("api_max_retries", "0");
+    free(session.session_data.config.api_url);
+    session.session_data.config.api_url = strdup("http://127.0.0.1:8888/v1/chat/completions");
 
     // Execute tool workflow
     int result = session_execute_tool_workflow(&session, tool_calls, 1, "server error test", 100);
@@ -582,7 +600,8 @@ void test_shell_command_request_workflow(void) {
     
     // Use unreachable API to test tool execution without server dependency
     free(session.session_data.config.api_url);
-    session.session_data.config.api_url = strdup("http://192.0.2.1:99999/v1/chat/completions");
+    session.session_data.config.api_url = strdup("http://127.0.0.1:1/v1/chat/completions");
+    config_set("api_max_retries", "0");
     
     // Simulate user requesting shell command
     const char* user_message = "run echo command to show workflow success";
@@ -624,7 +643,8 @@ void test_sequential_tool_execution(void) {
 
     // Use unreachable API to focus on tool execution
     free(session.session_data.config.api_url);
-    session.session_data.config.api_url = strdup("http://192.0.2.1:99999/v1/chat/completions");
+    session.session_data.config.api_url = strdup("http://127.0.0.1:1/v1/chat/completions");
+    config_set("api_max_retries", "0");
 
     // Execute multiple tools
     int result = session_execute_tool_workflow(&session, tool_calls, 2, "sequential test", 100);
@@ -666,7 +686,8 @@ void test_conversation_persistence_through_tools(void) {
     
     // Use unreachable API to test session persistence without server dependency
     free(session.session_data.config.api_url);
-    session.session_data.config.api_url = strdup("http://192.0.2.1:99999/v1/chat/completions");
+    session.session_data.config.api_url = strdup("http://127.0.0.1:1/v1/chat/completions");
+    config_set("api_max_retries", "0");
     
     // Initial conversation should be empty
     TEST_ASSERT_EQUAL_INT(0, session.session_data.conversation.count);
@@ -702,7 +723,8 @@ void test_tool_name_hardcoded_bug_fixed(void) {
 
     // Use unreachable API to focus on tool execution fix verification
     free(session.session_data.config.api_url);
-    session.session_data.config.api_url = strdup("http://192.0.2.1:99999/v1/chat/completions");
+    session.session_data.config.api_url = strdup("http://127.0.0.1:1/v1/chat/completions");
+    config_set("api_max_retries", "0");
 
     // Execute tool workflow which will eventually call the fixed ralph_execute_tool_loop
     int result = session_execute_tool_workflow(&session, tool_calls, 1, "list indices", 100);

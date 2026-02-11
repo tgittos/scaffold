@@ -137,7 +137,7 @@ void test_get_returns_dict_with_expected_keys(void) {
      * code path returning a dict without needing a live server. */
     PyObject *result = run_python(
         "import _ralph_http\n"
-        "r = _ralph_http.get('http://192.0.2.1/', timeout=1)\n"
+        "r = _ralph_http.get('http://127.0.0.1:1/', timeout=1)\n"
         "_r5_type = type(r).__name__\n"
         "_r5_has_status = 'status' in r\n"
         "_r5_has_ok = 'ok' in r\n"
@@ -163,7 +163,7 @@ void test_get_returns_dict_with_expected_keys(void) {
 void test_post_returns_dict(void) {
     PyObject *result = run_python(
         "import _ralph_http\n"
-        "r = _ralph_http.post('http://192.0.2.1/', 'body', timeout=1)\n"
+        "r = _ralph_http.post('http://127.0.0.1:1/', 'body', timeout=1)\n"
         "_r6_type = type(r).__name__\n"
         "_r6_ok = str(r['ok'])\n"
     );

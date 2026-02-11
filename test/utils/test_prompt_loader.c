@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include "util/ralph_home.h"
+#include <prompt_data.h>
 
 // Store original directory to restore after tests
 static char original_dir[4096];
@@ -65,7 +66,7 @@ void test_load_system_prompt_file_not_exists(void) {
     TEST_ASSERT_NOT_NULL(prompt_content);
     
     // Should contain the core system prompt
-    TEST_ASSERT_TRUE(strstr(prompt_content, "You are an AI programming agent") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, SYSTEM_PROMPT_TEXT) != NULL);
     TEST_ASSERT_TRUE(strstr(prompt_content, "# User Instructions") != NULL);
     
     cleanup_system_prompt(&prompt_content);
@@ -86,7 +87,7 @@ void test_load_system_prompt_simple_content(void) {
     TEST_ASSERT_NOT_NULL(prompt_content);
     
     // Should contain both core prompt and user prompt
-    TEST_ASSERT_TRUE(strstr(prompt_content, "You are an AI programming agent") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, SYSTEM_PROMPT_TEXT) != NULL);
     TEST_ASSERT_TRUE(strstr(prompt_content, "# User Instructions") != NULL);
     TEST_ASSERT_TRUE(strstr(prompt_content, "You are a helpful assistant.") != NULL);
     
@@ -109,7 +110,7 @@ void test_load_system_prompt_with_trailing_newlines(void) {
     TEST_ASSERT_NOT_NULL(prompt_content);
     
     // Should contain core prompt and trimmed user prompt
-    TEST_ASSERT_TRUE(strstr(prompt_content, "You are an AI programming agent") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, SYSTEM_PROMPT_TEXT) != NULL);
     TEST_ASSERT_TRUE(strstr(prompt_content, "You are a helpful assistant.") != NULL);
     // Should not contain the trailing newlines
     TEST_ASSERT_TRUE(strstr(prompt_content, "assistant.\n\n") == NULL);
@@ -132,7 +133,7 @@ void test_load_system_prompt_multiline_content(void) {
     TEST_ASSERT_NOT_NULL(prompt_content);
     
     // Should contain core prompt and full multiline user prompt
-    TEST_ASSERT_TRUE(strstr(prompt_content, "You are an AI programming agent") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, SYSTEM_PROMPT_TEXT) != NULL);
     TEST_ASSERT_TRUE(strstr(prompt_content, "You are a helpful assistant.\nAlways be polite and informative.\nRespond concisely.") != NULL);
     
     cleanup_system_prompt(&prompt_content);
@@ -152,7 +153,7 @@ void test_load_system_prompt_empty_file(void) {
     TEST_ASSERT_NOT_NULL(prompt_content);
     
     // Should contain only the core system prompt (no user content)
-    TEST_ASSERT_TRUE(strstr(prompt_content, "You are an AI programming agent") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, SYSTEM_PROMPT_TEXT) != NULL);
     TEST_ASSERT_TRUE(strstr(prompt_content, "# User Instructions") != NULL);
     
     cleanup_system_prompt(&prompt_content);
@@ -173,7 +174,7 @@ void test_load_system_prompt_with_whitespace_only(void) {
     TEST_ASSERT_NOT_NULL(prompt_content);
     
     // Should contain only the core system prompt (whitespace trimmed away)
-    TEST_ASSERT_TRUE(strstr(prompt_content, "You are an AI programming agent") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, SYSTEM_PROMPT_TEXT) != NULL);
     TEST_ASSERT_TRUE(strstr(prompt_content, "# User Instructions") != NULL);
     
     cleanup_system_prompt(&prompt_content);
@@ -229,7 +230,7 @@ void test_load_system_prompt_large_content(void) {
     TEST_ASSERT_NOT_NULL(prompt_content);
     
     // Should contain core prompt plus the large user content
-    TEST_ASSERT_TRUE(strstr(prompt_content, "You are an AI programming agent") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, SYSTEM_PROMPT_TEXT) != NULL);
     TEST_ASSERT_TRUE(strstr(prompt_content, "Line 0: You are a helpful assistant") != NULL);
     TEST_ASSERT_TRUE(strstr(prompt_content, "Line 99: You are a helpful assistant") != NULL);
     TEST_ASSERT_TRUE(strlen(prompt_content) > 1000); // Should be a large string
@@ -247,8 +248,7 @@ void test_core_system_prompt_always_present(void) {
     TEST_ASSERT_NOT_NULL(prompt_content);
 
     // Core prompt should always be present
-    TEST_ASSERT_TRUE(strstr(prompt_content, "You are an AI programming agent") != NULL);
-    TEST_ASSERT_TRUE(strstr(prompt_content, "Use your tools") != NULL);
+    TEST_ASSERT_TRUE(strstr(prompt_content, SYSTEM_PROMPT_TEXT) != NULL);
     TEST_ASSERT_TRUE(strstr(prompt_content, "# User Instructions") != NULL);
 
     cleanup_system_prompt(&prompt_content);

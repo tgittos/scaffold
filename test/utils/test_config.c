@@ -200,6 +200,33 @@ void test_config_set_invalid_key(void) {
     TEST_ASSERT_EQUAL(-1, config_set("invalid_key", "value"));
 }
 
+void test_config_set_api_max_retries(void) {
+    TEST_ASSERT_EQUAL(0, config_init());
+
+    agent_config_t *config = config_get();
+    int original = config->api_max_retries;
+
+    // Set to zero (disable retries)
+    TEST_ASSERT_EQUAL(0, config_set("api_max_retries", "0"));
+    TEST_ASSERT_EQUAL(0, config->api_max_retries);
+
+    // Set to positive value
+    TEST_ASSERT_EQUAL(0, config_set("api_max_retries", "5"));
+    TEST_ASSERT_EQUAL(5, config->api_max_retries);
+
+    // Negative value should be rejected (unchanged)
+    TEST_ASSERT_EQUAL(0, config_set("api_max_retries", "-1"));
+    TEST_ASSERT_EQUAL(5, config->api_max_retries);
+
+    // NULL value should not crash
+    TEST_ASSERT_EQUAL(0, config_set("api_max_retries", NULL));
+
+    // Restore original
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%d", original);
+    config_set("api_max_retries", buf);
+}
+
 void test_config_anthropic_api_key_selection(void) {
     TEST_ASSERT_EQUAL(0, config_init());
     
@@ -396,6 +423,7 @@ int main(void) {
     RUN_TEST(test_config_get_string);
     RUN_TEST(test_config_get_int);
     RUN_TEST(test_config_set_invalid_key);
+    RUN_TEST(test_config_set_api_max_retries);
     RUN_TEST(test_config_anthropic_api_key_selection);
     RUN_TEST(test_config_openai_api_key_selection);
     RUN_TEST(test_config_load_nonexistent_file);
