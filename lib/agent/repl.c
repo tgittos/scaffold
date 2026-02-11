@@ -6,8 +6,7 @@
 #include "../ui/json_output.h"
 #include "../ui/spinner.h"
 #include "../ui/status_line.h"
-#include "../ui/memory_commands.h"
-#include "../ui/model_commands.h"
+#include "../ui/slash_commands.h"
 #include "../tools/subagent_tool.h"
 #include "../ipc/message_poller.h"
 #include "../ipc/notification_formatter.h"
@@ -88,11 +87,7 @@ static void repl_line_callback(char* line) {
     add_history(line);
 
     if (line[0] == '/') {
-        if (process_memory_command(line) == 0) {
-            free(line);
-            return;
-        }
-        if (process_model_command(line, g_repl_session) == 0) {
+        if (slash_command_dispatch(line, g_repl_session) == 0) {
             free(line);
             return;
         }

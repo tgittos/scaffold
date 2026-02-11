@@ -11,6 +11,7 @@
 #include "../policy/approval_gate.h"
 #include "../tools/subagent_tool.h"
 #include "../tools/tool_extension.h"
+#include "../ui/slash_commands.h"
 #include "../ui/memory_commands.h"
 #include "../tools/memory_tool.h"
 #include "../util/context_retriever.h"
@@ -298,21 +299,21 @@ int agent_run(Agent* agent) {
         default: {
             if (!agent->config.json_mode) {
                 printf(TERM_BOLD "Ralph" TERM_RESET " - AI Assistant\n");
-                printf("Commands: quit, exit | Ctrl+D to end\n\n");
+                printf("Type /help for commands | quit, exit, Ctrl+D to end\n\n");
             }
 
             status_line_init();
             repl_show_greeting(&agent->session, agent->config.json_mode);
 
             using_history();
-            memory_commands_init();
+            slash_commands_init(&agent->session);
 
             session_start_message_polling(&agent->session);
 
             int result = repl_run_session(&agent->session, agent->config.json_mode);
 
             session_stop_message_polling(&agent->session);
-            memory_commands_cleanup();
+            slash_commands_cleanup();
             spinner_cleanup();
 
             return result;

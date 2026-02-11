@@ -482,10 +482,3 @@ int process_memory_command(const char* command) {
     }
 }
 
-void memory_commands_init(void) {
-    /* Intentional no-op: provides a consistent init/cleanup lifecycle pattern. */
-}
-
-void memory_commands_cleanup(void) {
-    /* Intentional no-op: provides a consistent init/cleanup lifecycle pattern. */
-}

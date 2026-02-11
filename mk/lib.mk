@@ -23,6 +23,9 @@ LIB_UI_SOURCES := \
     $(LIBDIR)/ui/json_output.c \
     $(LIBDIR)/ui/memory_commands.c \
     $(LIBDIR)/ui/model_commands.c \
+    $(LIBDIR)/ui/slash_commands.c \
+    $(LIBDIR)/ui/task_commands.c \
+    $(LIBDIR)/ui/agent_commands.c \
     $(LIBDIR)/ui/status_line.c
 
 # Tools module

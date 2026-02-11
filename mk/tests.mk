@@ -184,6 +184,7 @@ $(eval $(call def_test,config,utils/test_config,$(LIBDIR)/util/config.c $(LIBDIR
 $(eval $(call def_test,debug_output,utils/test_debug_output,$(LIBDIR)/util/debug_output.c))
 $(eval $(call def_test,spinner,utils/test_spinner,$(LIBDIR)/ui/terminal.c $(LIBDIR)/ui/spinner.c $(LIBDIR)/util/common_utils.c $(TESTDIR)/stubs/output_formatter_stub.c))
 $(eval $(call def_test,terminal,utils/test_terminal,$(LIBDIR)/ui/terminal.c $(LIBDIR)/util/common_utils.c $(TESTDIR)/stubs/output_formatter_stub.c))
+$(eval $(call def_test_lib,slash_commands,ui/test_slash_commands,))
 
 $(TEST_config_TARGET): $(TEST_config_OBJECTS) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_config_OBJECTS) $(CJSON_LIB)
@@ -301,6 +302,8 @@ $(eval $(call def_test_lib,message_processor,ralph/test_message_processor,))
 $(eval $(call def_test_lib,recap,ralph/test_recap,))
 $(eval $(call def_test_lib,parallel_batch,agent/test_parallel_batch,))
 $(eval $(call def_test_lib,model_commands,ui/test_model_commands,))
+$(eval $(call def_test_lib,task_commands,ui/test_task_commands,))
+$(eval $(call def_test_lib,agent_commands,ui/test_agent_commands,))
 $(eval $(call def_test_lib,python_tool,tools/test_python_tool,$(TOOL_SOURCES)))
 $(eval $(call def_test_lib,python_integration,tools/test_python_integration,$(TOOL_SOURCES)))
 $(eval $(call def_test_lib,http_python,network/test_http_python,))
@@ -312,7 +315,7 @@ LIBRALPH_TESTS := tool_param_dsl json_output output tools_system vector_db_tool 
     openai_streaming anthropic_streaming messages_array_bug mcp_client subagent_tool \
     incomplete_task_bug conversation conversation_vdb tool_calls_not_stored document_store \
     message_dispatcher message_processor recap parallel_batch model_commands \
-    image_attachment
+    slash_commands task_commands agent_commands image_attachment
 
 $(foreach t,$(LIBRALPH_TESTS),$(eval \
 $$(TEST_$(t)_TARGET): $$(TEST_$(t)_OBJECTS) $$(LIBRALPH) $$(ALL_LIBS) ; \
