@@ -84,7 +84,7 @@ INCLUDES := -I. -I$(CURL_DIR)/include -I$(MBEDTLS_DIR)/include -I$(HNSWLIB_DIR) 
     -I$(OSSP_UUID_DIR) -I$(PYTHON_INCLUDE) \
     -I$(BUILDDIR)/generated \
     -I$(SRCDIR) -I$(SRCDIR)/ralph -I$(SRCDIR)/llm \
-    -I$(SRCDIR)/session -I$(SRCDIR)/tools -I$(SRCDIR)/utils -I$(SRCDIR)/db \
+    -I$(SRCDIR)/session -I$(SRCDIR)/ralph/tools -I$(SRCDIR)/utils -I$(SRCDIR)/db \
     -I$(SRCDIR)/cli
 
 TEST_INCLUDES := $(INCLUDES) -I$(TESTDIR)/unity -I$(TESTDIR) \
@@ -104,7 +104,7 @@ CACERT_SOURCE := $(LIBDIR)/network/embedded_cacert.c
 
 # Python paths
 PYTHON_STDLIB_DIR := python/build/results/py-tmp
-PYTHON_DEFAULTS_DIR := src/tools/python_defaults
+PYTHON_DEFAULTS_DIR := src/ralph/tools/python_defaults
 
 # Valgrind settings
 VALGRIND_FLAGS := --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1

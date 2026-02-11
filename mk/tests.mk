@@ -340,7 +340,7 @@ define PYTHON_TEST_EMBED
 	EMBED_ZIP=$(CURDIR)/$(BUILDDIR)/python-embed-$$(basename $@).zip; \
 	rm -f $$EMBED_ZIP; \
 	cd $(PYTHON_STDLIB_DIR) && zip -qr $$EMBED_ZIP lib/; \
-	cd $(CURDIR)/$(SRCDIR)/tools && zip -qr $$EMBED_ZIP python_defaults/; \
+	cd $(CURDIR)/$(SRCDIR)/ralph/tools && zip -qr $$EMBED_ZIP python_defaults/; \
 	zipcopy $$EMBED_ZIP $(CURDIR)/$@; \
 	rm -f $$EMBED_ZIP
 endef

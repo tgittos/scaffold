@@ -6,9 +6,9 @@ CORE_SOURCES := \
 
 # Tool system (Python tools only; core tools in lib/tools/)
 TOOL_SOURCES := \
-    $(SRCDIR)/tools/python_tool.c \
-    $(SRCDIR)/tools/python_tool_files.c \
-    $(SRCDIR)/tools/python_extension.c
+    $(SRCDIR)/ralph/tools/python_tool.c \
+    $(SRCDIR)/ralph/tools/python_tool_files.c \
+    $(SRCDIR)/ralph/tools/python_extension.c
 
 # LLM (in lib/llm/)
 PROVIDER_SOURCES :=

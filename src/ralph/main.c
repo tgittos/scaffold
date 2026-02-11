@@ -13,7 +13,7 @@
 #include "../../lib/util/executable_path.h"
 #include "../../lib/util/ralph_home.h"
 #include "../../lib/util/config.h"
-#include "../tools/python_extension.h"
+#include "tools/python_extension.h"
 #include "util/debug_output.h"
 #include "build/version.h"
 
