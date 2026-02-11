@@ -1,4 +1,5 @@
 #include "context_enhancement.h"
+#include "prompt_mode.h"
 #include "../session/rolling_summary.h"
 #include "../tools/todo_tool.h"
 #include "../tools/memory_tool.h"
@@ -84,8 +85,15 @@ static char* ralph_build_enhanced_system_prompt(const AgentSession* session) {
                                    "- Creating a todo list does NOT mean you should start implementing the tasks\n"
                                    "- Follow the user's actual request, not the existence of todos";
 
+    static const char* const MODE_SECTION_HEADER = "\n\n# Active Mode Instructions\n";
+    const char* mode_text = prompt_mode_get_text(session->current_mode);
+
     size_t total_len = strlen(base_prompt) + strlen(todo_section) +
                        strlen(todo_json) + strlen(todo_instructions) + 1;
+
+    if (mode_text != NULL) {
+        total_len += strlen(MODE_SECTION_HEADER) + strlen(mode_text);
+    }
 
     char* enhanced_prompt = malloc(total_len);
     if (enhanced_prompt == NULL) {
@@ -95,6 +103,11 @@ static char* ralph_build_enhanced_system_prompt(const AgentSession* session) {
 
     snprintf(enhanced_prompt, total_len, "%s%s%s%s",
              base_prompt, todo_section, todo_json, todo_instructions);
+
+    if (mode_text != NULL) {
+        strcat(enhanced_prompt, MODE_SECTION_HEADER);
+        strcat(enhanced_prompt, mode_text);
+    }
 
     free(todo_json);
     return enhanced_prompt;

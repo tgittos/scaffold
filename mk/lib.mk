@@ -22,6 +22,7 @@ LIB_UI_SOURCES := \
     $(LIBDIR)/ui/output_formatter.c \
     $(LIBDIR)/ui/json_output.c \
     $(LIBDIR)/ui/memory_commands.c \
+    $(LIBDIR)/ui/mode_commands.c \
     $(LIBDIR)/ui/model_commands.c \
     $(LIBDIR)/ui/slash_commands.c \
     $(LIBDIR)/ui/task_commands.c \
@@ -38,6 +39,7 @@ LIB_TOOLS_SOURCES := \
     $(LIBDIR)/tools/tool_extension.c \
     $(LIBDIR)/tools/builtin_tools.c \
     $(LIBDIR)/tools/memory_tool.c \
+    $(LIBDIR)/tools/mode_tool.c \
     $(LIBDIR)/tools/messaging_tool.c \
     $(LIBDIR)/tools/pdf_tool.c \
     $(LIBDIR)/tools/todo_manager.c \
@@ -64,6 +66,7 @@ LIB_AGENT_SOURCES := \
     $(LIBDIR)/agent/tool_orchestration.c \
     $(LIBDIR)/agent/streaming_handler.c \
     $(LIBDIR)/agent/context_enhancement.c \
+    $(LIBDIR)/agent/prompt_mode.c \
     $(LIBDIR)/agent/recap.c \
     $(LIBDIR)/agent/repl.c
 

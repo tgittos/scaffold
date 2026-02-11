@@ -1,5 +1,6 @@
 #include "slash_commands.h"
 #include "memory_commands.h"
+#include "mode_commands.h"
 #include "model_commands.h"
 #include "task_commands.h"
 #include "agent_commands.h"
@@ -9,7 +10,7 @@
 #include <assert.h>
 
 #define MAX_SLASH_COMMANDS 16
-#define BUILTIN_COMMAND_COUNT 5
+#define BUILTIN_COMMAND_COUNT 6
 
 typedef struct {
     const char *name;
@@ -75,6 +76,7 @@ void slash_commands_init(AgentSession *session) {
     rc |= slash_command_register("memory", "Manage semantic memories", process_memory_command);
     rc |= slash_command_register("model", "Switch AI models", process_model_command);
     rc |= slash_command_register("tasks", "View and manage tasks", process_task_command);
+    rc |= slash_command_register("mode", "Switch behavioral mode", process_mode_command);
     rc |= slash_command_register("agents", "View subagent status", process_agent_command);
     assert(rc == 0 && "Failed to register built-in slash commands");
     (void)rc;

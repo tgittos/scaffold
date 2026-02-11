@@ -50,8 +50,15 @@ void status_line_render_info(void);
 void status_line_clear_rendered(void);
 
 /**
+ * Set the active prompt mode for display in the prompt string.
+ * @param mode  PromptMode enum value (0 = default, no overlay)
+ */
+void status_line_set_mode(int mode);
+
+/**
  * Build a single-line readline-compatible prompt string.
  * Returns a malloc'd bold "> " with ANSI codes wrapped in \001/\002.
+ * Shows "[mode] > " when a non-default mode is active.
  * In JSON mode, returns a plain "> ".
  */
 char *status_line_build_prompt(void);

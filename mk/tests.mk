@@ -51,6 +51,7 @@ $(eval $(call def_test,allowlist,policy/test_allowlist,$(LIBDIR)/policy/allowlis
 $(eval $(call def_test,tool_args,test_tool_args,$(LIBDIR)/policy/tool_args.c))
 $(eval $(call def_test,gate_prompter,policy/test_gate_prompter,$(LIBDIR)/policy/gate_prompter.c))
 $(eval $(call def_test,tool_cache,tools/test_tool_cache,$(LIBDIR)/tools/tool_cache.c))
+$(eval $(call def_test,prompt_mode,agent/test_prompt_mode,$(LIBDIR)/agent/prompt_mode.c))
 
 # Gate dependencies (used by multiple gate-related tests)
 GATE_DEPS := \
@@ -134,6 +135,9 @@ $(TEST_gate_prompter_TARGET): $(TEST_gate_prompter_OBJECTS)
 
 $(TEST_tool_cache_TARGET): $(TEST_tool_cache_OBJECTS) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_tool_cache_OBJECTS) $(CJSON_LIB) -lpthread
+
+$(TEST_prompt_mode_TARGET): $(TEST_prompt_mode_OBJECTS)
+	$(CC) -o $@ $(TEST_prompt_mode_OBJECTS)
 
 $(TEST_approval_gate_TARGET): $(TEST_approval_gate_OBJECTS) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_approval_gate_OBJECTS) $(CJSON_LIB)
@@ -304,6 +308,9 @@ $(eval $(call def_test_lib,parallel_batch,agent/test_parallel_batch,))
 $(eval $(call def_test_lib,model_commands,ui/test_model_commands,))
 $(eval $(call def_test_lib,task_commands,ui/test_task_commands,))
 $(eval $(call def_test_lib,agent_commands,ui/test_agent_commands,))
+$(eval $(call def_test_lib,mode_tool,tools/test_mode_tool,))
+$(eval $(call def_test_lib,mode_commands,ui/test_mode_commands,))
+$(eval $(call def_test_lib,context_mode_injection,agent/test_context_mode_injection,))
 $(eval $(call def_test_lib,python_tool,tools/test_python_tool,$(TOOL_SOURCES)))
 $(eval $(call def_test_lib,python_integration,tools/test_python_integration,$(TOOL_SOURCES)))
 $(eval $(call def_test_lib,http_python,network/test_http_python,))
@@ -315,7 +322,8 @@ LIBRALPH_TESTS := tool_param_dsl json_output output tools_system vector_db_tool 
     openai_streaming anthropic_streaming messages_array_bug mcp_client subagent_tool \
     incomplete_task_bug conversation conversation_vdb tool_calls_not_stored document_store \
     message_dispatcher message_processor recap parallel_batch model_commands \
-    slash_commands task_commands agent_commands image_attachment
+    slash_commands task_commands agent_commands mode_tool mode_commands \
+    context_mode_injection image_attachment
 
 $(foreach t,$(LIBRALPH_TESTS),$(eval \
 $$(TEST_$(t)_TARGET): $$(TEST_$(t)_OBJECTS) $$(LIBRALPH) $$(ALL_LIBS) ; \

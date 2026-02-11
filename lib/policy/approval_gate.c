@@ -585,6 +585,7 @@ GateCategory get_tool_category(const char *tool_name) {
     if (strcmp(tool_name, "remember") == 0 ||
         strcmp(tool_name, "recall_memories") == 0 ||
         strcmp(tool_name, "forget_memory") == 0 ||
+        strcmp(tool_name, "switch_mode") == 0 ||
         strcmp(tool_name, "todo") == 0) {
         return GATE_CATEGORY_MEMORY;
     }

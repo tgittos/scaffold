@@ -112,3 +112,33 @@ cat > "$TMP" << HEOF
 HEOF
 
 swap_if_changed "$TMP" "$OUTDIR/defaults.h"
+
+# =============================================================================
+# 3. mode_prompts.h
+# =============================================================================
+
+MODES_DIR="$DATADIR/prompts/modes"
+TMP="$OUTDIR/mode_prompts.h.tmp"
+
+{
+    cat << 'HEOF'
+#ifndef MODE_PROMPTS_H
+#define MODE_PROMPTS_H
+
+HEOF
+
+    for mode in plan explore debug review; do
+        MODE_FILE="$MODES_DIR/${mode}.txt"
+        if [ -f "$MODE_FILE" ]; then
+            UPPER=$(echo "$mode" | tr 'a-z' 'A-Z')
+            ESCAPED=$(c_escape < "$MODE_FILE")
+            printf 'static const char MODE_PROMPT_%s[] = "%s";\n\n' "$UPPER" "$ESCAPED"
+        fi
+    done
+
+    cat << 'HEOF'
+#endif
+HEOF
+} > "$TMP"
+
+swap_if_changed "$TMP" "$OUTDIR/mode_prompts.h"

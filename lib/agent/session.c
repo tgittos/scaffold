@@ -10,6 +10,7 @@
 #include "../tools/todo_tool.h"
 #include "../tools/todo_display.h"
 #include "../tools/builtin_tools.h"
+#include "../tools/mode_tool.h"
 #include "../tools/tool_extension.h"
 #include "../tools/messaging_tool.h"
 #include "../util/debug_output.h"
@@ -64,6 +65,7 @@ int session_init(AgentSession* session) {
 
     session->services = NULL;
     session->model_registry = NULL;
+    session->current_mode = PROMPT_MODE_DEFAULT;
 
     if (uuid_generate_v4(session->session_id) != 0) {
         fprintf(stderr, "Warning: Failed to generate session ID, using fallback\n");
@@ -85,6 +87,8 @@ int session_init(AgentSession* session) {
     if (register_builtin_tools(&session->tools) != 0) {
         fprintf(stderr, "Warning: Failed to register built-in tools\n");
     }
+
+    mode_tool_set_session(session);
 
     if (tool_extension_init_all(&session->tools) != 0) {
         fprintf(stderr, "Warning: Some tool extensions failed to initialize\n");
@@ -194,6 +198,7 @@ void session_cleanup(AgentSession* session) {
     mcp_client_cleanup(&session->mcp_client);
 
     messaging_tool_cleanup();
+    mode_tool_set_session(NULL);
 
     /* Cleanup ordering: todo tool holds a pointer to todo_list, which the registry references */
     clear_todo_tool_reference();

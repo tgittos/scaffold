@@ -6,6 +6,7 @@
 #include "../tools/todo_manager.h"
 #include "../tools/tools_system.h"
 #include "../mcp/mcp_client.h"
+#include "prompt_mode.h"
 #include "../tools/subagent_tool.h"
 #include "../policy/approval_gate.h"
 #include "../ipc/message_poller.h"
@@ -42,6 +43,7 @@ typedef struct AgentSession {
     Services* services;                 /**< Dependency injection container */
     ModelRegistry* model_registry;      /**< Model capability registry */
     const char* model_override;         /**< Model override from --model flag */
+    PromptMode current_mode;            /**< Active behavioral prompt mode */
 } AgentSession;
 
 /* Cleanup hooks: external code registers shutdown functions (e.g. Python interpreter). */

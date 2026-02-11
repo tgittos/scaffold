@@ -1,5 +1,6 @@
 #include "status_line.h"
 #include "output_formatter.h"
+#include "../agent/prompt_mode.h"
 #include "../util/ansi_codes.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,6 +32,8 @@ typedef struct {
     int session_completion_tokens;
     int last_response_tokens;
     bool busy_rendered;
+
+    int current_mode;
 } StatusLineState;
 
 static StatusLineState g_status = {0};
@@ -139,6 +142,13 @@ static void format_token_count(int tokens, char *buf, size_t buf_size) {
     } else {
         snprintf(buf, buf_size, "%d", tokens);
     }
+}
+
+void status_line_set_mode(int mode) {
+    if (!g_status.initialized) return;
+    pthread_mutex_lock(&g_status.mutex);
+    g_status.current_mode = mode;
+    pthread_mutex_unlock(&g_status.mutex);
 }
 
 #define RL_START "\001"
@@ -251,5 +261,25 @@ char *status_line_build_prompt(void) {
     if (get_json_output_mode()) {
         return strdup("> ");
     }
+
+    PromptMode mode = PROMPT_MODE_DEFAULT;
+    if (g_status.initialized) {
+        pthread_mutex_lock(&g_status.mutex);
+        mode = g_status.current_mode;
+        pthread_mutex_unlock(&g_status.mutex);
+    }
+
+    if (mode != PROMPT_MODE_DEFAULT) {
+        const char* name = prompt_mode_name(mode);
+        char buf[128];
+        snprintf(buf, sizeof(buf),
+                 RL_START "\033[2m" RL_END "[%s]"
+                 RL_START "\033[0m" RL_END " "
+                 RL_START "\033[1m" RL_END "> "
+                 RL_START "\033[0m" RL_END,
+                 name);
+        return strdup(buf);
+    }
+
     return strdup(RL_START "\033[1m" RL_END "> " RL_START "\033[0m" RL_END);
 }
