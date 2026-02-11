@@ -76,7 +76,7 @@ int api_round_trip_execute(AgentSession* session, const char* user_message,
             strstr(response.data, "Incorrect API key") != NULL ||
             strstr(response.data, "invalid_api_key") != NULL) {
             fprintf(stderr, "API key missing or invalid.\n");
-            fprintf(stderr, "   Please add your API key to ralph.config.json\n");
+            fprintf(stderr, "   Please set OPENAI_API_KEY or ANTHROPIC_API_KEY environment variable\n");
         } else if (strstr(response.data, "\"error\"") != NULL) {
             fprintf(stderr, "API request failed.\n");
             if (debug_enabled) {

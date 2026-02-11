@@ -21,7 +21,6 @@ extern void hnswlib_clear_all(void);
 #define MOCK_GROUP_GEOGRAPHY  7
 
 static char g_test_home[256];
-static char *saved_ralph_config_backup = NULL;
 static char *saved_openai_api_key = NULL;
 static char *saved_openai_api_url = NULL;
 static MockAPIServer mock_server;
@@ -32,22 +31,6 @@ void setUp(void) {
     snprintf(g_test_home, sizeof(g_test_home), "/tmp/test_memory_tool_XXXXXX");
     TEST_ASSERT_NOT_NULL(mkdtemp(g_test_home));
     ralph_home_init(g_test_home);
-
-    // Back up existing ralph.config.json file if it exists
-    FILE *ralph_config_file = fopen("ralph.config.json", "r");
-    if (ralph_config_file) {
-        fseek(ralph_config_file, 0, SEEK_END);
-        long file_size = ftell(ralph_config_file);
-        fseek(ralph_config_file, 0, SEEK_SET);
-
-        saved_ralph_config_backup = malloc(file_size + 1);
-        if (saved_ralph_config_backup) {
-            fread(saved_ralph_config_backup, 1, file_size, ralph_config_file);
-            saved_ralph_config_backup[file_size] = '\0';
-        }
-        fclose(ralph_config_file);
-        remove("ralph.config.json");
-    }
 
     // Initialize mock embeddings with semantic groups
     mock_embeddings_init_test_groups();
@@ -110,18 +93,6 @@ void setUp(void) {
 
 void tearDown(void) {
     config_cleanup();
-    remove("ralph.config.json");
-
-    // Restore backed up ralph.config.json file if it existed
-    if (saved_ralph_config_backup) {
-        FILE *ralph_config_file = fopen("ralph.config.json", "w");
-        if (ralph_config_file) {
-            fwrite(saved_ralph_config_backup, 1, strlen(saved_ralph_config_backup), ralph_config_file);
-            fclose(ralph_config_file);
-        }
-        free(saved_ralph_config_backup);
-        saved_ralph_config_backup = NULL;
-    }
 
     // Restore original env vars
     if (saved_openai_api_key) {

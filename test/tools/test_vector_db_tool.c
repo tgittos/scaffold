@@ -18,7 +18,6 @@
 extern void hnswlib_clear_all(void);
 
 static char g_test_home[256];
-static char *saved_ralph_config_backup = NULL;
 static MockAPIServer mock_server;
 static MockAPIResponse mock_responses[1];
 static Services* test_services = NULL;
@@ -29,22 +28,6 @@ void setUp(void) {
     snprintf(g_test_home, sizeof(g_test_home), "/tmp/test_vdb_tool_XXXXXX");
     TEST_ASSERT_NOT_NULL(mkdtemp(g_test_home));
     ralph_home_init(g_test_home);
-
-    // Back up existing ralph.config.json file if it exists
-    FILE *ralph_config_file = fopen("ralph.config.json", "r");
-    if (ralph_config_file) {
-        fseek(ralph_config_file, 0, SEEK_END);
-        long file_size = ftell(ralph_config_file);
-        fseek(ralph_config_file, 0, SEEK_SET);
-
-        saved_ralph_config_backup = malloc(file_size + 1);
-        if (saved_ralph_config_backup) {
-            fread(saved_ralph_config_backup, 1, file_size, ralph_config_file);
-            saved_ralph_config_backup[file_size] = '\0';
-        }
-        fclose(ralph_config_file);
-        remove("ralph.config.json");
-    }
 
     mock_embeddings_init_test_groups();
 
@@ -80,17 +63,6 @@ void setUp(void) {
 
 void tearDown(void) {
     config_cleanup();
-    remove("ralph.config.json");
-
-    if (saved_ralph_config_backup) {
-        FILE *ralph_config_file = fopen("ralph.config.json", "w");
-        if (ralph_config_file) {
-            fwrite(saved_ralph_config_backup, 1, strlen(saved_ralph_config_backup), ralph_config_file);
-            fclose(ralph_config_file);
-        }
-        free(saved_ralph_config_backup);
-        saved_ralph_config_backup = NULL;
-    }
 
     mock_api_server_stop(&mock_server);
     mock_embeddings_cleanup();

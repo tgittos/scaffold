@@ -16,6 +16,7 @@
 #include <unistd.h>
 
 #include "../util/debug_output.h"
+#include "../util/ralph_home.h"
 
 static ApprovalGateCallbacks g_gate_callbacks = {0};
 
@@ -71,10 +72,9 @@ static const char *RESULT_NAMES[] = {
 #define INITIAL_ALLOWLIST_CAPACITY 16
 #define INITIAL_SHELL_ALLOWLIST_CAPACITY 16
 
-static const char *CONFIG_FILE_PATHS[] = {
-    "./ralph.config.json",
-    NULL
-};
+static char* get_config_file_path(void) {
+    return ralph_home_path("config.json");
+}
 
 static int parse_gate_action(const char *str, GateAction *out) {
     if (str == NULL || out == NULL) {
@@ -315,15 +315,16 @@ int approval_gate_init(ApprovalGateConfig *config) {
 
     config->approval_channel = NULL;
 
-    for (int i = 0; CONFIG_FILE_PATHS[i] != NULL; i++) {
-        if (access(CONFIG_FILE_PATHS[i], R_OK) == 0) {
-            int load_result = approval_gate_load_from_file(config, CONFIG_FILE_PATHS[i]);
+    char *config_path = get_config_file_path();
+    if (config_path) {
+        if (access(config_path, R_OK) == 0) {
+            int load_result = approval_gate_load_from_file(config, config_path);
             if (load_result != 0) {
                 debug_printf("Warning: Failed to parse approval_gates from %s, "
-                             "using defaults\n", CONFIG_FILE_PATHS[i]);
+                             "using defaults\n", config_path);
             }
-            break;
         }
+        free(config_path);
     }
 
     /* Session-only entries (added after this point) are NOT inherited by subagents */

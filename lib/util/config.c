@@ -1,4 +1,5 @@
 #include "config.h"
+#include "debug_output.h"
 #include "ralph_home.h"
 #include <defaults.h>
 #include <cJSON.h>
@@ -85,40 +86,6 @@ static int config_update_api_key_selection(agent_config_t *config)
     return 0;
 }
 
-static char* get_user_config_dir(void)
-{
-    const char *home = ralph_home_get();
-    if (!home) return NULL;
-
-    return strdup(home);
-}
-
-static int ensure_directory_exists(const char *path)
-{
-    struct stat st;
-    if (stat(path, &st) == 0) {
-        return S_ISDIR(st.st_mode) ? 0 : -1;
-    }
-
-    // Create directory with parents
-    char *path_copy = strdup(path);
-    if (!path_copy) return -1;
-
-    char *p = path_copy;
-    while (*p) {
-        if (*p == '/' && p != path_copy) {
-            *p = '\0';
-            mkdir(path_copy, 0755);
-            *p = '/';
-        }
-        p++;
-    }
-
-    int result = mkdir(path_copy, 0755);
-    free(path_copy);
-    return (result == 0 || errno == EEXIST) ? 0 : -1;
-}
-
 static void config_generate_default_file(void)
 {
     if (!g_config) return;
@@ -136,30 +103,14 @@ static void config_generate_default_file(void)
 
     (void)config_update_api_key_selection(g_config);
 
-    const char *local_path = "./ralph.config.json";
+    if (ralph_home_ensure_exists() != 0) return;
 
-    if (access(".", W_OK) == 0) {
-        if (config_save_to_file(local_path) == 0) {
-            fprintf(stderr, "[Config] Created %s with API keys from environment\n\n", local_path);
-            return;
+    char *config_file = ralph_home_path("config.json");
+    if (config_file) {
+        if (config_save_to_file(config_file) == 0) {
+            debug_printf("[Config] Created %s with API keys from environment\n\n", config_file);
         }
-    }
-
-    // Fall back to user config directory
-    char *user_config_dir = get_user_config_dir();
-    if (user_config_dir) {
-        if (ensure_directory_exists(user_config_dir) == 0) {
-            char *user_config_file = malloc(strlen(user_config_dir) + strlen("/config.json") + 1);
-            if (user_config_file) {
-                sprintf(user_config_file, "%s/config.json", user_config_dir);
-
-                if (config_save_to_file(user_config_file) == 0) {
-                    fprintf(stderr, "[Config] Created %s with API keys from environment\n\n", user_config_file);
-                }
-                free(user_config_file);
-            }
-        }
-        free(user_config_dir);
+        free(config_file);
     }
 }
 
@@ -438,30 +389,16 @@ int config_init(void)
         return -1;
     }
 
-    // Priority: local override > user config > generated defaults
     bool config_loaded = false;
 
-    if (access("./ralph.config.json", R_OK) == 0) {
-        if (config_load_from_file("./ralph.config.json") == 0) {
-            config_loaded = true;
-        }
-    }
-
-    if (!config_loaded) {
-        char *user_config_dir = get_user_config_dir();
-        if (user_config_dir) {
-            char *user_config_file = malloc(strlen(user_config_dir) + strlen("/config.json") + 1);
-            if (user_config_file) {
-                sprintf(user_config_file, "%s/config.json", user_config_dir);
-                if (access(user_config_file, R_OK) == 0) {
-                    if (config_load_from_file(user_config_file) == 0) {
-                        config_loaded = true;
-                    }
-                }
-                free(user_config_file);
+    char *config_file = ralph_home_path("config.json");
+    if (config_file) {
+        if (access(config_file, R_OK) == 0) {
+            if (config_load_from_file(config_file) == 0) {
+                config_loaded = true;
             }
-            free(user_config_dir);
         }
+        free(config_file);
     }
 
     if (!config_loaded) {

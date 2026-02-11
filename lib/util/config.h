@@ -37,11 +37,10 @@ typedef struct {
 
 /**
  * Initialize the configuration system
- * This will attempt to load configuration from:
- * 1. ./ralph.config.json (if present)
- * 2. ~/.local/ralph/config.json (if ~/.local/ralph exists)
- * 3. Environment variables (as fallback)
- * 4. Built-in defaults
+ * Loads configuration with increasing priority:
+ * 1. Built-in defaults (lowest)
+ * 2. $RALPH_HOME/config.json (default ~/.local/ralph/config.json)
+ * 3. Environment variables (highest, override config file values)
  *
  * @return 0 on success, -1 on error
  */

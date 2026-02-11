@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include "util/ralph_home.h"
 
@@ -31,51 +32,37 @@ const char* python_tool_get_match_arg(const char *name) {
     return NULL; /* No metadata available in test environment */
 }
 
-/* Backup for existing config file */
-static char *saved_config_backup = NULL;
-
 /* Test fixture */
 static ApprovalGateConfig config;
 
-static void backup_config_file(void) {
-    FILE *f = fopen("ralph.config.json", "r");
-    if (f) {
-        fseek(f, 0, SEEK_END);
-        long size = ftell(f);
-        fseek(f, 0, SEEK_SET);
-        saved_config_backup = malloc(size + 1);
-        if (saved_config_backup) {
-            size_t read_size = fread(saved_config_backup, 1, size, f);
-            saved_config_backup[read_size] = '\0';
-            fclose(f);
-            unlink("ralph.config.json");  /* Only unlink if backup succeeded */
-        } else {
-            fclose(f);  /* Don't unlink if we couldn't backup */
-        }
-    }
+static const char *g_test_home = "/tmp/test_approval_gate_home";
+
+static void remove_test_config(void) {
+    char path[512];
+    snprintf(path, sizeof(path), "%s/config.json", g_test_home);
+    unlink(path);
 }
 
-static void restore_config_file(void) {
-    if (saved_config_backup) {
-        FILE *f = fopen("ralph.config.json", "w");
-        if (f) {
-            fwrite(saved_config_backup, 1, strlen(saved_config_backup), f);
-            fclose(f);
-        }
-        free(saved_config_backup);
-        saved_config_backup = NULL;
-    }
+static FILE* create_test_config(void) {
+    char path[512];
+    snprintf(path, sizeof(path), "%s/config.json", g_test_home);
+    return fopen(path, "w");
 }
 
 void setUp(void) {
-    ralph_home_init(NULL);
+    ralph_home_cleanup();
+    remove_test_config();
+    rmdir(g_test_home);
+    mkdir(g_test_home, 0755);
+    ralph_home_init(g_test_home);
     int result = approval_gate_init(&config);
     TEST_ASSERT_EQUAL(0, result);
 }
 
 void tearDown(void) {
     approval_gate_cleanup(&config);
-
+    remove_test_config();
+    rmdir(g_test_home);
     ralph_home_cleanup();
 }
 
@@ -743,10 +730,7 @@ void test_verify_approved_path_null_path(void) {
  * ========================================================================== */
 
 void test_approval_gate_load_from_json_file_enabled(void) {
-    backup_config_file();
-
-    /* Create config file with approval_gates section */
-    FILE *f = fopen("ralph.config.json", "w");
+    FILE *f = create_test_config();
     TEST_ASSERT_NOT_NULL(f);
 
     const char *json =
@@ -766,16 +750,10 @@ void test_approval_gate_load_from_json_file_enabled(void) {
 
     /* Enabled should be false from config */
     TEST_ASSERT_EQUAL(0, config.enabled);
-
-    unlink("ralph.config.json");
-    restore_config_file();
 }
 
 void test_approval_gate_load_from_json_file_categories(void) {
-    backup_config_file();
-
-    /* Create config file with category overrides */
-    FILE *f = fopen("ralph.config.json", "w");
+    FILE *f = create_test_config();
     TEST_ASSERT_NOT_NULL(f);
 
     const char *json =
@@ -804,16 +782,10 @@ void test_approval_gate_load_from_json_file_categories(void) {
     TEST_ASSERT_EQUAL(GATE_ACTION_GATE, config.categories[GATE_CATEGORY_MEMORY]);
     /* Unchanged categories should have defaults */
     TEST_ASSERT_EQUAL(GATE_ACTION_ALLOW, config.categories[GATE_CATEGORY_FILE_READ]);
-
-    unlink("ralph.config.json");
-    restore_config_file();
 }
 
 void test_approval_gate_load_from_json_file_regex_allowlist(void) {
-    backup_config_file();
-
-    /* Create config file with regex allowlist entries */
-    FILE *f = fopen("ralph.config.json", "w");
+    FILE *f = create_test_config();
     TEST_ASSERT_NOT_NULL(f);
 
     const char *json =
@@ -840,16 +812,10 @@ void test_approval_gate_load_from_json_file_regex_allowlist(void) {
     TEST_ASSERT_EQUAL_STRING("^\\.test\\.c$", config.allowlist[0].pattern);
     TEST_ASSERT_EQUAL(1, config.allowlist[0].valid);
     TEST_ASSERT_EQUAL_STRING("web_fetch", config.allowlist[1].tool);
-
-    unlink("ralph.config.json");
-    restore_config_file();
 }
 
 void test_approval_gate_load_from_json_file_shell_allowlist(void) {
-    backup_config_file();
-
-    /* Create config file with shell command allowlist entries */
-    FILE *f = fopen("ralph.config.json", "w");
+    FILE *f = create_test_config();
     TEST_ASSERT_NOT_NULL(f);
 
     const char *json =
@@ -888,16 +854,10 @@ void test_approval_gate_load_from_json_file_shell_allowlist(void) {
     TEST_ASSERT_EQUAL(1, config.shell_allowlist[2].prefix_len);
     TEST_ASSERT_EQUAL_STRING("dir", config.shell_allowlist[2].command_prefix[0]);
     TEST_ASSERT_EQUAL(SHELL_TYPE_CMD, config.shell_allowlist[2].shell_type);
-
-    unlink("ralph.config.json");
-    restore_config_file();
 }
 
 void test_approval_gate_load_from_json_file_mixed_allowlist(void) {
-    backup_config_file();
-
-    /* Create config file with mixed shell and regex allowlist entries */
-    FILE *f = fopen("ralph.config.json", "w");
+    FILE *f = create_test_config();
     TEST_ASSERT_NOT_NULL(f);
 
     const char *json =
@@ -932,16 +892,10 @@ void test_approval_gate_load_from_json_file_mixed_allowlist(void) {
 
     /* Also check category override */
     TEST_ASSERT_EQUAL(GATE_ACTION_ALLOW, config.categories[GATE_CATEGORY_NETWORK]);
-
-    unlink("ralph.config.json");
-    restore_config_file();
 }
 
 void test_approval_gate_load_from_json_file_no_approval_gates_section(void) {
-    backup_config_file();
-
-    /* Create config file without approval_gates section */
-    FILE *f = fopen("ralph.config.json", "w");
+    FILE *f = create_test_config();
     TEST_ASSERT_NOT_NULL(f);
 
     const char *json =
@@ -961,16 +915,10 @@ void test_approval_gate_load_from_json_file_no_approval_gates_section(void) {
     TEST_ASSERT_EQUAL(1, config.enabled);
     TEST_ASSERT_EQUAL(GATE_ACTION_GATE, config.categories[GATE_CATEGORY_FILE_WRITE]);
     TEST_ASSERT_EQUAL(GATE_ACTION_ALLOW, config.categories[GATE_CATEGORY_FILE_READ]);
-
-    unlink("ralph.config.json");
-    restore_config_file();
 }
 
 void test_approval_gate_load_from_json_file_powershell_shell(void) {
-    backup_config_file();
-
-    /* Create config file with PowerShell shell type */
-    FILE *f = fopen("ralph.config.json", "w");
+    FILE *f = create_test_config();
     TEST_ASSERT_NOT_NULL(f);
 
     const char *json =
@@ -993,16 +941,10 @@ void test_approval_gate_load_from_json_file_powershell_shell(void) {
     TEST_ASSERT_EQUAL(1, config.shell_allowlist_count);
     TEST_ASSERT_EQUAL_STRING("Get-ChildItem", config.shell_allowlist[0].command_prefix[0]);
     TEST_ASSERT_EQUAL(SHELL_TYPE_POWERSHELL, config.shell_allowlist[0].shell_type);
-
-    unlink("ralph.config.json");
-    restore_config_file();
 }
 
 void test_approval_gate_load_from_json_file_malformed_json(void) {
-    backup_config_file();
-
-    /* Create config file with malformed JSON */
-    FILE *f = fopen("ralph.config.json", "w");
+    FILE *f = create_test_config();
     TEST_ASSERT_NOT_NULL(f);
 
     const char *json = "{ invalid json here }";
@@ -1021,16 +963,10 @@ void test_approval_gate_load_from_json_file_malformed_json(void) {
     TEST_ASSERT_EQUAL(GATE_ACTION_ALLOW, config.categories[GATE_CATEGORY_FILE_READ]);
     TEST_ASSERT_EQUAL(0, config.allowlist_count);
     TEST_ASSERT_EQUAL(0, config.shell_allowlist_count);
-
-    unlink("ralph.config.json");
-    restore_config_file();
 }
 
 void test_approval_gate_load_from_json_file_invalid_entries_skipped(void) {
-    backup_config_file();
-
-    /* Create config file with some invalid entries mixed with valid ones */
-    FILE *f = fopen("ralph.config.json", "w");
+    FILE *f = create_test_config();
     TEST_ASSERT_NOT_NULL(f);
 
     const char *json =
@@ -1068,9 +1004,6 @@ void test_approval_gate_load_from_json_file_invalid_entries_skipped(void) {
     TEST_ASSERT_EQUAL(1, config.shell_allowlist_count);
     TEST_ASSERT_EQUAL_STRING("ls", config.shell_allowlist[0].command_prefix[0]);
     TEST_ASSERT_EQUAL(0, config.allowlist_count);
-
-    unlink("ralph.config.json");
-    restore_config_file();
 }
 
 /* =============================================================================

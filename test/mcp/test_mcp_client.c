@@ -2,49 +2,34 @@
 #include "mcp/mcp_client.h"
 #include "agent/session.h"
 #include "agent/agent.h"
+#include "util/ralph_home.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
-static char *saved_ralph_config_backup = NULL;
+static const char *g_test_home = "/tmp/test_mcp_client_home";
+
+static void remove_test_home(void) {
+    char path[512];
+    snprintf(path, sizeof(path), "%s/config.json", g_test_home);
+    unlink(path);
+    rmdir(g_test_home);
+}
 
 void setUp(void) {
-    // Back up existing ralph.config.json file if it exists
-    FILE *ralph_config_file = fopen("ralph.config.json", "r");
-    if (ralph_config_file) {
-        fseek(ralph_config_file, 0, SEEK_END);
-        long file_size = ftell(ralph_config_file);
-        fseek(ralph_config_file, 0, SEEK_SET);
-        
-        saved_ralph_config_backup = malloc(file_size + 1);
-        if (saved_ralph_config_backup) {
-            fread(saved_ralph_config_backup, 1, file_size, ralph_config_file);
-            saved_ralph_config_backup[file_size] = '\0';
-        }
-        fclose(ralph_config_file);
-        unlink("ralph.config.json");  // Remove temporarily
-    }
-    
-    // Clean up any existing config files
+    ralph_home_cleanup();
+    remove_test_home();
+    mkdir(g_test_home, 0755);
+    ralph_home_init(g_test_home);
     unlink("test_mcp_config.json");
 }
 
 void tearDown(void) {
-    // Clean up test files
     unlink("test_mcp_config.json");
-    unlink("ralph.config.json");
-    
-    // Restore backed up ralph.config.json file if it existed
-    if (saved_ralph_config_backup) {
-        FILE *ralph_config_file = fopen("ralph.config.json", "w");
-        if (ralph_config_file) {
-            fwrite(saved_ralph_config_backup, 1, strlen(saved_ralph_config_backup), ralph_config_file);
-            fclose(ralph_config_file);
-        }
-        free(saved_ralph_config_backup);
-        saved_ralph_config_backup = NULL;
-    }
+    remove_test_home();
+    ralph_home_cleanup();
 }
 
 void test_mcp_client_initialization(void) {
@@ -118,8 +103,9 @@ void test_ralph_initializes_with_hosted_mcp_server(void) {
         "  }\n"
         "}";
     
-    // Write config to ralph.config.json (where ralph looks for it)
-    FILE* config_file = fopen("ralph.config.json", "w");
+    char config_path[512];
+    snprintf(config_path, sizeof(config_path), "%s/config.json", g_test_home);
+    FILE* config_file = fopen(config_path, "w");
     TEST_ASSERT_NOT_NULL(config_file);
     fputs(ralph_config, config_file);
     fclose(config_file);

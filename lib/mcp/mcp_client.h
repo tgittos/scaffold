@@ -77,11 +77,7 @@ int mcp_send_request(MCPServerState* server, const char* method, const char* par
 /* Caller must free *tools. */
 int mcp_parse_tools(const char* response, ToolFunction** tools, int* tool_count);
 
-/*
- * Searches for ralph.config.json in order:
- * 1. Current working directory
- * 2. ~/.local/ralph/
- */
+/* Searches for config.json in $RALPH_HOME (default ~/.local/ralph/). */
 int mcp_find_config_path(char* config_path, size_t path_size);
 
 /* Expands ${VAR} and ${VAR:-default} syntax. Caller must free the result. */

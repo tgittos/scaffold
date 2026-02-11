@@ -1,53 +1,31 @@
 #include "../../test/unity/unity.h"
 #include "util/config.h"
+#include "util/ralph_home.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
-static char *saved_env_backup = NULL;
-static char *saved_ralph_config_backup = NULL;
+static const char *g_test_home = "/tmp/test_config_home";
+
+static void remove_test_home(void) {
+    char path[512];
+    snprintf(path, sizeof(path), "%s/config.json", g_test_home);
+    unlink(path);
+    rmdir(g_test_home);
+}
 
 void setUp(void) {
-    // Clean up any existing config
     config_cleanup();
-    
-    // Back up existing .env file if it exists
-    FILE *env_file = fopen(".env", "r");
-    if (env_file) {
-        fseek(env_file, 0, SEEK_END);
-        long file_size = ftell(env_file);
-        fseek(env_file, 0, SEEK_SET);
-        
-        saved_env_backup = malloc(file_size + 1);
-        if (saved_env_backup) {
-            fread(saved_env_backup, 1, file_size, env_file);
-            saved_env_backup[file_size] = '\0';
-        }
-        fclose(env_file);
-        unlink(".env");  // Remove temporarily
-    }
-    
-    // Back up existing ralph.config.json file if it exists
-    FILE *ralph_config_file = fopen("ralph.config.json", "r");
-    if (ralph_config_file) {
-        fseek(ralph_config_file, 0, SEEK_END);
-        long file_size = ftell(ralph_config_file);
-        fseek(ralph_config_file, 0, SEEK_SET);
-        
-        saved_ralph_config_backup = malloc(file_size + 1);
-        if (saved_ralph_config_backup) {
-            fread(saved_ralph_config_backup, 1, file_size, ralph_config_file);
-            saved_ralph_config_backup[file_size] = '\0';
-        }
-        fclose(ralph_config_file);
-        unlink("ralph.config.json");  // Remove temporarily
-    }
-    
-    // Clean up test files
+    ralph_home_cleanup();
+
+    remove_test_home();
+    mkdir(g_test_home, 0755);
+    ralph_home_init(g_test_home);
+
     unlink("test_config.json");
-    unlink("./ralph.config.json");
-    
-    // Clear environment variables that might interfere with tests
+
     unsetenv("API_URL");
     unsetenv("MODEL");
     unsetenv("OPENAI_API_KEY");
@@ -61,29 +39,8 @@ void setUp(void) {
 void tearDown(void) {
     config_cleanup();
     unlink("test_config.json");
-    unlink("./ralph.config.json");
-    
-    // Restore backed up .env file if it existed
-    if (saved_env_backup) {
-        FILE *env_file = fopen(".env", "w");
-        if (env_file) {
-            fwrite(saved_env_backup, 1, strlen(saved_env_backup), env_file);
-            fclose(env_file);
-        }
-        free(saved_env_backup);
-        saved_env_backup = NULL;
-    }
-    
-    // Restore backed up ralph.config.json file if it existed
-    if (saved_ralph_config_backup) {
-        FILE *ralph_config_file = fopen("ralph.config.json", "w");
-        if (ralph_config_file) {
-            fwrite(saved_ralph_config_backup, 1, strlen(saved_ralph_config_backup), ralph_config_file);
-            fclose(ralph_config_file);
-        }
-        free(saved_ralph_config_backup);
-        saved_ralph_config_backup = NULL;
-    }
+    remove_test_home();
+    ralph_home_cleanup();
 }
 
 void test_config_init_with_defaults(void) {
@@ -101,11 +58,12 @@ void test_config_init_with_defaults(void) {
 }
 
 void test_config_init_with_anthropic_config(void) {
-    // Create a test JSON config file with Anthropic settings
-    FILE *test_file = fopen("ralph.config.json", "w");
+    char path[512];
+    snprintf(path, sizeof(path), "%s/config.json", g_test_home);
+    FILE *test_file = fopen(path, "w");
     TEST_ASSERT_NOT_NULL(test_file);
-    
-    const char *json_content = 
+
+    const char *json_content =
         "{\n"
         "  \"api_url\": \"https://api.anthropic.com/v1/messages\",\n"
         "  \"model\": \"claude-3-sonnet-20240229\",\n"
@@ -113,23 +71,20 @@ void test_config_init_with_anthropic_config(void) {
         "  \"context_window\": 4096,\n"
         "  \"max_tokens\": 1000\n"
         "}\n";
-    
+
     fprintf(test_file, "%s", json_content);
     fclose(test_file);
-    
+
     TEST_ASSERT_EQUAL(0, config_init());
-    
+
     agent_config_t *config = config_get();
     TEST_ASSERT_NOT_NULL(config);
     TEST_ASSERT_EQUAL_STRING("https://api.anthropic.com/v1/messages", config->api_url);
     TEST_ASSERT_EQUAL_STRING("claude-3-sonnet-20240229", config->model);
-    TEST_ASSERT_EQUAL_STRING("test-key", config->api_key); // Should be set from anthropic_api_key
+    TEST_ASSERT_EQUAL_STRING("test-key", config->api_key);
     TEST_ASSERT_EQUAL_STRING("test-key", config->anthropic_api_key);
     TEST_ASSERT_EQUAL(4096, config->context_window);
     TEST_ASSERT_EQUAL(1000, config->max_tokens);
-    
-    // Clean up
-    unlink("ralph.config.json");
 }
 
 void test_config_load_from_json_file(void) {
@@ -194,29 +149,26 @@ void test_config_save_to_json_file(void) {
 }
 
 void test_config_local_override_priority(void) {
-    // Create a local config file
-    FILE *local_file = fopen("./ralph.config.json", "w");
-    TEST_ASSERT_NOT_NULL(local_file);
-    
-    const char *local_json = 
+    char path[512];
+    snprintf(path, sizeof(path), "%s/config.json", g_test_home);
+    FILE *config_file = fopen(path, "w");
+    TEST_ASSERT_NOT_NULL(config_file);
+
+    const char *json =
         "{\n"
         "  \"api_url\": \"https://local.example.com/v1/chat\",\n"
         "  \"model\": \"local-model\"\n"
         "}\n";
-    
-    fwrite(local_json, 1, strlen(local_json), local_file);
-    fclose(local_file);
-    
+
+    fwrite(json, 1, strlen(json), config_file);
+    fclose(config_file);
+
     TEST_ASSERT_EQUAL(0, config_init());
-    
+
     agent_config_t *config = config_get();
     TEST_ASSERT_NOT_NULL(config);
-    // Local config should be loaded
     TEST_ASSERT_EQUAL_STRING("https://local.example.com/v1/chat", config->api_url);
     TEST_ASSERT_EQUAL_STRING("local-model", config->model);
-    
-    // Clean up
-    unlink("./ralph.config.json");
 }
 
 void test_config_get_string(void) {

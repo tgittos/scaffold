@@ -95,17 +95,7 @@ int mcp_find_config_path(char* config_path, size_t path_size) {
         return -1;
     }
 
-    const char* local_config = "./ralph.config.json";
-    if (access(local_config, R_OK) == 0) {
-        if (strlen(local_config) >= path_size) {
-            return -1;
-        }
-        strcpy(config_path, local_config);
-        debug_printf("Found MCP config at: %s\n\n", config_path);
-        return 0;
-    }
-
-    char* user_config = ralph_home_path("ralph.config.json");
+    char* user_config = ralph_home_path("config.json");
     if (user_config) {
         if (access(user_config, R_OK) == 0) {
             if (strlen(user_config) >= path_size) {

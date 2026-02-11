@@ -13,9 +13,8 @@ static AgentSession g_session;
 
 void setUp(void) {
     config_cleanup();
-    unlink("ralph.config.json");
-    config_init();
     ralph_home_init(NULL);
+    config_init();
 
     memset(&g_session, 0, sizeof(g_session));
     g_session.session_data.config.model = strdup("gpt-5-mini-2025-08-07");
@@ -28,7 +27,6 @@ void tearDown(void) {
     free(g_session.session_data.config.api_url);
     config_cleanup();
     ralph_home_cleanup();
-    unlink("ralph.config.json");
 }
 
 void test_model_command_not_model(void) {
