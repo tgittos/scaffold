@@ -12,7 +12,6 @@
 #include "../tools/subagent_tool.h"
 #include "../tools/tool_extension.h"
 #include "../ui/slash_commands.h"
-#include "../ui/memory_commands.h"
 #include "../tools/memory_tool.h"
 #include "../util/context_retriever.h"
 #include "../ipc/message_poller.h"
@@ -84,7 +83,6 @@ int agent_init(Agent* agent, const AgentConfig* config) {
     agent->session.tools.services = agent->services;
     subagent_manager_set_services(&agent->session.subagent_manager, agent->services);
     document_store_set_services(agent->services);
-    memory_commands_set_services(agent->services);
     memory_tool_set_services(agent->services);
     context_retriever_set_services(agent->services);
     session_wire_services(&agent->session);

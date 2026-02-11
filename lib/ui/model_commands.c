@@ -94,24 +94,19 @@ static void switch_model(const char *name, AgentSession *session) {
     }
 }
 
-int process_model_command(const char *command, AgentSession *session) {
-    if (!command || !session) return -1;
-    if (strncmp(command, "/model", 6) != 0) return -1;
-    if (command[6] != '\0' && command[6] != ' ') return -1;
+int process_model_command(const char *args, AgentSession *session) {
+    if (!args || !session) return -1;
 
-    const char *arg = command + 6;
-    while (*arg == ' ') arg++;
-
-    if (*arg == '\0') {
+    if (*args == '\0') {
         show_current_model(session);
         return 0;
     }
 
-    if (strcmp(arg, "list") == 0) {
+    if (strcmp(args, "list") == 0) {
         show_model_list(session);
         return 0;
     }
 
-    switch_model(arg, session);
+    switch_model(args, session);
     return 0;
 }

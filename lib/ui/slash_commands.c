@@ -65,19 +65,6 @@ static int handle_help(const char *args, AgentSession *session) {
     return 0;
 }
 
-static int adapter_memory(const char *args, AgentSession *session) {
-    (void)session;
-    char line[1024];
-    snprintf(line, sizeof(line), "/memory%s%s", args[0] ? " " : "", args);
-    return process_memory_command(line);
-}
-
-static int adapter_model(const char *args, AgentSession *session) {
-    char line[1024];
-    snprintf(line, sizeof(line), "/model%s%s", args[0] ? " " : "", args);
-    return process_model_command(line, session);
-}
-
 void slash_commands_init(AgentSession *session) {
     (void)session;
     _Static_assert(BUILTIN_COMMAND_COUNT <= MAX_SLASH_COMMANDS,
@@ -85,8 +72,8 @@ void slash_commands_init(AgentSession *session) {
     g_command_count = 0;
     int rc = 0;
     rc |= slash_command_register("help", "Show available commands", handle_help);
-    rc |= slash_command_register("memory", "Manage semantic memories", adapter_memory);
-    rc |= slash_command_register("model", "Switch AI models", adapter_model);
+    rc |= slash_command_register("memory", "Manage semantic memories", process_memory_command);
+    rc |= slash_command_register("model", "Switch AI models", process_model_command);
     rc |= slash_command_register("tasks", "View and manage tasks", process_task_command);
     rc |= slash_command_register("agents", "View subagent status", process_agent_command);
     assert(rc == 0 && "Failed to register built-in slash commands");

@@ -1,4 +1,5 @@
 #include "memory_commands.h"
+#include "../agent/session.h"
 #include "db/vector_db_service.h"
 #include "llm/embeddings_service.h"
 #include "services/services.h"
@@ -9,12 +10,6 @@
 #include <time.h>
 #include <ctype.h>
 #include <errno.h>
-
-static Services* g_services = NULL;
-
-void memory_commands_set_services(Services* services) {
-    g_services = services;
-}
 
 static void print_help(void) {
     printf("\n" TERM_BOLD "Memory Management Commands" TERM_RESET "\n");
@@ -106,14 +101,14 @@ static void print_chunk_details(const ChunkMetadata* chunk) {
     printf(TERM_SEP_HEAVY_40 "\n\n");
 }
 
-static int cmd_list(const char* args) {
+static int cmd_list(const char* args, Services* svc) {
     const char* index_name = "long_term_memory";
 
     if (args && strlen(args) > 0) {
         index_name = args;
     }
 
-    metadata_store_t* store = services_get_metadata_store(g_services);
+    metadata_store_t* store = services_get_metadata_store(svc);
     if (store == NULL) {
         printf("❌ Failed to access metadata store\n");
         return -1;
@@ -138,14 +133,14 @@ static int cmd_list(const char* args) {
     return 0;
 }
 
-static int cmd_search(const char* args) {
+static int cmd_search(const char* args, Services* svc) {
     if (args == NULL || strlen(args) == 0) {
         printf("❌ Please provide a search query\n");
         printf("Usage: /memory search <query>\n");
         return -1;
     }
 
-    metadata_store_t* store = services_get_metadata_store(g_services);
+    metadata_store_t* store = services_get_metadata_store(svc);
     if (store == NULL) {
         printf("❌ Failed to access metadata store\n");
         return -1;
@@ -171,7 +166,7 @@ static int cmd_search(const char* args) {
     return 0;
 }
 
-static int cmd_show(const char* args) {
+static int cmd_show(const char* args, Services* svc) {
     if (args == NULL || strlen(args) == 0) {
         printf("❌ Please provide a chunk ID\n");
         printf("Usage: /memory show <chunk_id>\n");
@@ -187,7 +182,7 @@ static int cmd_show(const char* args) {
     }
     size_t chunk_id = (size_t)parsed;
 
-    metadata_store_t* store = services_get_metadata_store(g_services);
+    metadata_store_t* store = services_get_metadata_store(svc);
     if (store == NULL) {
         printf("❌ Failed to access metadata store\n");
         return -1;
@@ -213,7 +208,7 @@ static int cmd_show(const char* args) {
 }
 
 
-static int cmd_edit(const char* args) {
+static int cmd_edit(const char* args, Services* svc) {
     if (args == NULL || strlen(args) == 0) {
         printf("❌ Invalid syntax\n");
         printf("Usage: /memory edit <chunk_id> <field> <value>\n");
@@ -247,7 +242,7 @@ static int cmd_edit(const char* args) {
     }
     size_t chunk_id = (size_t)parsed;
 
-    metadata_store_t* store = services_get_metadata_store(g_services);
+    metadata_store_t* store = services_get_metadata_store(svc);
     if (store == NULL) {
         printf("❌ Failed to access metadata store\n");
         free(args_copy);
@@ -313,13 +308,13 @@ static int cmd_edit(const char* args) {
         chunk->content = new_value;
 
         // Content changes require re-embedding to keep vector search consistent
-        embeddings_service_t* embeddings = services_get_embeddings(g_services);
+        embeddings_service_t* embeddings = services_get_embeddings(svc);
         if (embeddings_service_is_configured(embeddings)) {
             vector_t* new_vector = embeddings_service_text_to_vector(embeddings, value);
             if (new_vector == NULL) {
                 printf("⚠️  Warning: Failed to create embedding for updated content\n");
             } else {
-                vector_db_service_t* vdb_service = services_get_vector_db(g_services);
+                vector_db_service_t* vdb_service = services_get_vector_db(svc);
                 if (vdb_service == NULL || vector_db_service_update_vector(vdb_service, index_name, new_vector, chunk_id) != 0) {
                     printf("⚠️  Warning: Failed to update vector embedding\n");
                 }
@@ -346,10 +341,10 @@ static int cmd_edit(const char* args) {
     return valid_field ? 0 : -1;
 }
 
-static int cmd_indices(const char* args) {
+static int cmd_indices(const char* args, Services* svc) {
     (void)args;
 
-    vector_db_service_t* vdb_service = services_get_vector_db(g_services);
+    vector_db_service_t* vdb_service = services_get_vector_db(svc);
     if (vdb_service == NULL) {
         printf("❌ Failed to access vector database\n");
         return -1;
@@ -386,14 +381,14 @@ static int cmd_indices(const char* args) {
     return 0;
 }
 
-static int cmd_stats(const char* args) {
+static int cmd_stats(const char* args, Services* svc) {
     const char* index_name = "long_term_memory";
 
     if (args && strlen(args) > 0) {
         index_name = args;
     }
 
-    vector_db_service_t* vdb_service = services_get_vector_db(g_services);
+    vector_db_service_t* vdb_service = services_get_vector_db(svc);
     if (vdb_service == NULL) {
         printf("❌ Failed to access vector database\n");
         return -1;
@@ -407,7 +402,7 @@ static int cmd_stats(const char* args) {
     size_t size = vector_db_service_get_index_size(vdb_service, index_name);
     size_t capacity = vector_db_service_get_index_capacity(vdb_service, index_name);
 
-    metadata_store_t* store = services_get_metadata_store(g_services);
+    metadata_store_t* store = services_get_metadata_store(svc);
     size_t metadata_count = 0;
     if (store != NULL) {
         ChunkMetadata** chunks = metadata_store_list(store, index_name, &metadata_count);
@@ -434,15 +429,10 @@ static int cmd_stats(const char* args) {
     return 0;
 }
 
-int process_memory_command(const char* command) {
-    if (command == NULL) return -1;
+int process_memory_command(const char *args, AgentSession *session) {
+    if (args == NULL || session == NULL) return -1;
 
-    if (strncmp(command, "/memory", 7) != 0) {
-        return -1;
-    }
-
-    const char* args = command + 7;
-    while (*args && isspace(*args)) args++;
+    Services* svc = session->services;
 
     if (strlen(args) == 0 || strcmp(args, "help") == 0) {
         print_help();
@@ -464,21 +454,20 @@ int process_memory_command(const char* command) {
     }
 
     if (strcmp(subcommand, "list") == 0) {
-        return cmd_list(subargs);
+        return cmd_list(subargs, svc);
     } else if (strcmp(subcommand, "search") == 0) {
-        return cmd_search(subargs);
+        return cmd_search(subargs, svc);
     } else if (strcmp(subcommand, "show") == 0) {
-        return cmd_show(subargs);
+        return cmd_show(subargs, svc);
     } else if (strcmp(subcommand, "edit") == 0) {
-        return cmd_edit(subargs);
+        return cmd_edit(subargs, svc);
     } else if (strcmp(subcommand, "indices") == 0) {
-        return cmd_indices(subargs);
+        return cmd_indices(subargs, svc);
     } else if (strcmp(subcommand, "stats") == 0) {
-        return cmd_stats(subargs);
+        return cmd_stats(subargs, svc);
     } else {
         printf("❌ Unknown subcommand: %s\n", subcommand);
         print_help();
         return -1;
     }
 }
-
