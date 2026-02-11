@@ -558,6 +558,12 @@ char* extract_arg_summary(const char *tool_name, const char *arguments) {
     } else if (text && cJSON_IsString(text)) {
         value = cJSON_GetStringValue(text);
         label = "text: ";
+    } else {
+        cJSON *mode = cJSON_GetObjectItem(json, "mode");
+        if (mode && cJSON_IsString(mode)) {
+            value = cJSON_GetStringValue(mode);
+            label = "";
+        }
     }
 
     if (value == NULL) {
