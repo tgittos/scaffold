@@ -78,10 +78,6 @@ static int mkdir_recursive(const char *path) {
     return 0;
 }
 
-static const char* get_app_name(void) {
-    return g_app_name ? g_app_name : "ralph";
-}
-
 void app_home_set_app_name(const char *name) {
     free(g_app_name);
     g_app_name = (name != NULL) ? strdup(name) : NULL;
@@ -94,7 +90,7 @@ int app_home_init(const char *cli_override) {
     }
     g_initialized = 0;
 
-    const char *app_name = get_app_name();
+    const char *app_name = app_home_get_app_name();
 
     const char *source = NULL;
     char *resolved = NULL;
@@ -190,4 +186,8 @@ void app_home_cleanup(void) {
 
 int app_home_is_initialized(void) {
     return g_initialized;
+}
+
+const char* app_home_get_app_name(void) {
+    return g_app_name ? g_app_name : "ralph";
 }

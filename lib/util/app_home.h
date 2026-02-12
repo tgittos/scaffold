@@ -88,4 +88,11 @@ void app_home_cleanup(void);
  */
 int app_home_is_initialized(void);
 
+/**
+ * Get the current application name.
+ *
+ * @return Application name (e.g. "ralph", "scaffold"), never NULL
+ */
+const char* app_home_get_app_name(void);
+
 #endif // APP_HOME_H

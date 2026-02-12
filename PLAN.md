@@ -190,7 +190,7 @@ Tool implementations that supervisors (and the scaffold agent during decompositi
 
 ---
 
-## Chunk 9: Tool Registration + Service Wiring
+## Chunk 9: Tool Registration + Service Wiring [DONE]
 
 Wire GOAP tools into the tool registry for scaffold agents.
 

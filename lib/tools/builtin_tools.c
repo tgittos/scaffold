@@ -11,6 +11,8 @@
 #include "mode_tool.h"
 #include "pdf_tool.h"
 #include "messaging_tool.h"
+#include "goap_tools.h"
+#include "../util/app_home.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -41,6 +43,13 @@ int register_builtin_tools(ToolRegistry *registry) {
     if (is_subagent == NULL || strcmp(is_subagent, "1") != 0) {
         if (register_messaging_tools(registry) != 0) {
             fprintf(stderr, "Warning: Failed to register messaging tools\n");
+        }
+    }
+
+    /* GOAP tools are only available in scaffold mode */
+    if (strcmp(app_home_get_app_name(), "scaffold") == 0) {
+        if (register_goap_tools(registry) != 0) {
+            fprintf(stderr, "Warning: Failed to register GOAP tools\n");
         }
     }
 
