@@ -9,16 +9,21 @@ Wouldn't it be cool to do that, but for whole applications?
 ```bash
 wget https://github.com/tgittos/scaffold/releases/latest/download/scaffold
 chmod +x scaffold
-./scaffold "build a minimal twitter clone as a SPA web app. use something like React or Vue with a clean, responsive ui and an express backend with sqlite storage. users should be able to sign up, log in, post short text messages, follow/unfollow other users, and see a timeline of posts from people they follow. I want a user profile page showing their posts and follower/following counts. JWT for auth, hash passwords with bcrypt, and keep the schema simple — users, posts, and follows tables. no email verification or real-time updates. focus on clean code, proper error handling, and a polished UI with loading states. seed the database with a handful of demo users and posts so the app feels alive on first launch."
+./scaffold "build a minimal twitter clone as a SPA web app. use something like React or Vue with a clean, responsive ui \
+and an express backend with sqlite storage. users should be able to sign up, log in, post short text messages, follow/unfollow \
+other users, and see a timeline of posts from people they follow. I want a user profile page showing their posts and \
+follower/following counts. JWT for auth, hash passwords with bcrypt, and keep the schema simple — users, posts, and follows tables.\
+ no email verification or real-time updates. focus on clean code, proper error handling, and a polished UI with loading states. \
+ seed the database with a handful of demo users and posts so the app feels alive on first launch."
 ```
 
-Built on [https://github.com/jart/cosmopolitan](Cosmopolitan C) because I think it's neat.
+Built on [Cosmopolitan C](https://github.com/jart/cosmopolitan) because I think it's neat.
 
 ## How it works
 
-`scaffold` is my version of [https://steve-yegge.medium.com/welcome-to-gas-town-4f25ee16dd04](Gastown).
+`scaffold` is my version of [Gastown](https://steve-yegge.medium.com/welcome-to-gas-town-4f25ee16dd04).
 
-It's built on my version of [https://ghuntley.com/ralph/](ralph).
+It's built on my version of [ralph](https://ghuntley.com/ralph/).
 
 If all of that is nonsense and you don't want to read two very long blog posts, in a nutshell:
 
