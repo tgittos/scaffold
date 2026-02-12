@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y \
     libatomic1 \
     vim \
     zip \
+    jq \
     && rm -rf /var/lib/apt/lists/*
 
 RUN touch ~/.bashrc && chmod +x ~/.bashrc
