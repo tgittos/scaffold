@@ -34,7 +34,7 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).parent.absolute()
 RALPH_ROOT = SCRIPT_DIR.parent
 BUILD_DIR = RALPH_ROOT / "build"
-TARGET = RALPH_ROOT / "ralph"
+TARGET = RALPH_ROOT / "out" / "ralph"
 TARGET_BASE = BUILD_DIR / "ralph.base"  # Clean binary without zip content
 STAMP_FILE = BUILD_DIR / ".embed-python.stamp"
 TEMP_ZIP = BUILD_DIR / "python-embed.zip"

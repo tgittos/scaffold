@@ -1,7 +1,7 @@
 # Library build configuration for libagent
 
 # Library output
-LIBAGENT := $(BUILDDIR)/libagent.a
+LIBAGENT := $(OUTDIR)/libagent.a
 
 # =============================================================================
 # LIBRARY SOURCES
@@ -201,7 +201,7 @@ $(LIBDIR)/%.o: $(LIBDIR)/%.cpp | $(COMPILE_DEPS)
 
 # Build the library archive
 $(LIBAGENT): $(LIB_OBJECTS)
-	@mkdir -p $(BUILDDIR)
+	@mkdir -p $(OUTDIR)
 	@if [ -n "$(LIB_OBJECTS)" ]; then \
 		$(AR) rcs $@ $(LIB_OBJECTS); \
 	else \

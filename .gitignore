@@ -10,8 +10,8 @@
 src/.aarch64/
 test/.aarch64/
 
-# Executables
-ralph
+# Output binaries and libraries
+out/
 
 # Build directory and artifacts
 build/

@@ -61,6 +61,7 @@ scaffold: $(BUILDDIR)/.scaffold-linked
 
 # Linking step for ralph - produces the base binary and saves it for embedding
 $(BUILDDIR)/.ralph-linked: $(OBJECTS) $(ALL_LIBS) $(LIBAGENT) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
+	@mkdir -p $(OUTDIR)
 	@echo "Linking ralph with PDFio support"
 	$(CXX) $(LDFLAGS) -o $(TARGET) $(OBJECTS) $(LIB_OBJECTS) $(LIBS) -lpthread
 	@echo "Saving base binary for smart embedding..."
@@ -69,6 +70,7 @@ $(BUILDDIR)/.ralph-linked: $(OBJECTS) $(ALL_LIBS) $(LIBAGENT) $(HNSWLIB_DIR)/hns
 
 # Linking step for scaffold (no Python embedding — scaffold has no Python tool extension)
 $(BUILDDIR)/.scaffold-linked: $(SCAFFOLD_OBJECTS) $(ALL_LIBS) $(LIBAGENT) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
+	@mkdir -p $(OUTDIR)
 	@echo "Linking scaffold"
 	$(CXX) $(LDFLAGS) -o $(SCAFFOLD_TARGET) $(SCAFFOLD_OBJECTS) $(LIB_OBJECTS) $(LIBS) -lpthread
 	@touch $@
@@ -102,7 +104,8 @@ $(TESTDIR)/unity/%.o: $(TESTDIR)/unity/%.c
 # =============================================================================
 
 clean:
-	rm -f $(OBJECTS) $(SCAFFOLD_OBJECTS) $(TARGET) $(SCAFFOLD_TARGET) $(ALL_TEST_TARGETS)
+	rm -rf $(OUTDIR)
+	rm -f $(OBJECTS) $(SCAFFOLD_OBJECTS) $(ALL_TEST_TARGETS)
 	rm -f src/*.o src/*/*.o src/*/*/*.o test/*.o test/*/*.o test/unity/*.o
 	rm -f src/*.o.d src/*/*.o.d src/*/*/*.o.d test/*.o.d test/*/*.o.d test/unity/*.o.d lib/*.o.d lib/*/*.o.d lib/*/*/*.o.d
 	rm -f *.aarch64.elf *.com.dbg *.dbg

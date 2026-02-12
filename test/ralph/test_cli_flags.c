@@ -28,21 +28,21 @@ static char* run_command(const char *cmd) {
 }
 
 void test_version_long_flag(void) {
-    char *output = run_command("./ralph --version 2>&1");
+    char *output = run_command("./out/ralph --version 2>&1");
     TEST_ASSERT_NOT_NULL(output);
     TEST_ASSERT_NOT_NULL(strstr(output, "ralph"));
     TEST_ASSERT_NOT_NULL(strstr(output, RALPH_VERSION));
 }
 
 void test_version_short_flag(void) {
-    char *output = run_command("./ralph -v 2>&1");
+    char *output = run_command("./out/ralph -v 2>&1");
     TEST_ASSERT_NOT_NULL(output);
     TEST_ASSERT_NOT_NULL(strstr(output, "ralph"));
     TEST_ASSERT_NOT_NULL(strstr(output, RALPH_VERSION));
 }
 
 void test_help_long_flag(void) {
-    char *output = run_command("./ralph --help 2>&1");
+    char *output = run_command("./out/ralph --help 2>&1");
     TEST_ASSERT_NOT_NULL(output);
     TEST_ASSERT_NOT_NULL(strstr(output, "ralph"));
     TEST_ASSERT_NOT_NULL(strstr(output, RALPH_VERSION));
@@ -58,7 +58,7 @@ void test_help_long_flag(void) {
 }
 
 void test_help_short_flag(void) {
-    char *output = run_command("./ralph -h 2>&1");
+    char *output = run_command("./out/ralph -h 2>&1");
     TEST_ASSERT_NOT_NULL(output);
     TEST_ASSERT_NOT_NULL(strstr(output, "ralph"));
     TEST_ASSERT_NOT_NULL(strstr(output, "Usage:"));
@@ -66,7 +66,7 @@ void test_help_short_flag(void) {
 }
 
 void test_help_excludes_internal_flags(void) {
-    char *output = run_command("./ralph --help 2>&1");
+    char *output = run_command("./out/ralph --help 2>&1");
     TEST_ASSERT_NOT_NULL(output);
     // Internal flags should NOT be documented in user help
     TEST_ASSERT_NULL(strstr(output, "--subagent"));
@@ -81,13 +81,13 @@ void test_help_excludes_internal_flags(void) {
 
 void test_version_exits_immediately(void) {
     // Version flag should exit with success (0)
-    int ret = system("./ralph --version > /dev/null 2>&1");
+    int ret = system("./out/ralph --version > /dev/null 2>&1");
     TEST_ASSERT_EQUAL_INT(0, ret);
 }
 
 void test_help_exits_immediately(void) {
     // Help flag should exit with success (0)
-    int ret = system("./ralph --help > /dev/null 2>&1");
+    int ret = system("./out/ralph --help > /dev/null 2>&1");
     TEST_ASSERT_EQUAL_INT(0, ret);
 }
 

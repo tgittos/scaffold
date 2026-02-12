@@ -8,8 +8,9 @@ RANLIB := aarch64-linux-cosmo-ranlib
 CFLAGS := -Wall -Wextra -Werror -O2 -std=c11 -DHAVE_PDFIO -MMD -MP
 CXXFLAGS := -Wall -Wextra -Werror -O2 -std=c++14 -Wno-unused-parameter -Wno-unused-function -Wno-type-limits -MMD -MP
 
-TARGET := ralph
-SCAFFOLD_TARGET := scaffold
+OUTDIR := out
+TARGET := $(OUTDIR)/ralph
+SCAFFOLD_TARGET := $(OUTDIR)/scaffold
 
 # Project version (single source of truth — build/version.h is generated from these)
 RALPH_VERSION_MAJOR := 0

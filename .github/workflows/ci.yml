@@ -70,11 +70,11 @@ jobs:
 
       - name: Fix permissions for cache
         if: always()
-        run: sudo chown -R $(id -u):$(id -g) deps/ build/ python/build/ 2>/dev/null || true
+        run: sudo chown -R $(id -u):$(id -g) deps/ build/ out/ python/build/ 2>/dev/null || true
 
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
           name: ralph
-          path: ralph
+          path: out/ralph
           if-no-files-found: error
