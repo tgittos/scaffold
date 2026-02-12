@@ -8,8 +8,11 @@ This document provides a comprehensive overview of Ralph's codebase structure an
 
 Application-specific code that uses the library layer. This is a thin wrapper around lib/.
 
-#### `src/ralph/` - CLI Entry Point
+#### `src/ralph/` - Ralph CLI (Standalone Agent)
 - **`main.c`** - Application entry point with CLI argument parsing (--debug, --json, --yolo, --subagent modes). Thin wrapper that invokes lib/agent/agent.h API.
+
+#### `src/scaffold/` - Scaffold CLI (Orchestrator)
+- **`main.c`** - Orchestrator entry point. Supports REPL, one-shot, --supervisor --goal, --worker --queue modes. Coordinates goal decomposition and supervisor spawning.
 
 #### `src/tools/` - Python Tool Integration
 - **`python_tool.c/h`** - Embedded Python interpreter execution
@@ -64,6 +67,8 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`document_store.c/h`** - High-level document storage with embeddings and JSON persistence
 - **`metadata_store.c/h`** - Chunk metadata storage layer (separate from vectors)
 - **`task_store.c/h`** - SQLite-based persistent task storage with hierarchies and dependencies
+- **`goal_store.c/h`** - GOAP goal persistence: goal state, world state, supervisor PID tracking
+- **`action_store.c/h`** - GOAP action persistence: hierarchy (compound/primitive), preconditions/effects, readiness queries
 - **`sqlite_dal.c/h`** - SQLite data access layer with mutex protection, schema initialization, and common query patterns
 - **`hnswlib_wrapper.cpp/h`** - C++ wrapper for HNSW vector indexing
 
@@ -142,6 +147,8 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`todo_manager.c/h`** - Todo data structures and operations
 - **`todo_tool.c/h`** - Todo tool call handler
 - **`todo_display.c/h`** - Todo console visualization
+- **`goap_tools.c/h`** - GOAP goal/action tools for supervisors (9 tools, scaffold mode only)
+- **`orchestrator_tool.c/h`** - Orchestrator lifecycle tools: execute_plan, list_goals, goal_status, start/pause/cancel_goal (scaffold mode only)
 
 #### `lib/ipc/` - Inter-Process Communication
 - **`ipc.h`** - Public IPC API header
@@ -186,6 +193,10 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 
 #### `lib/services/` - Service Container
 - **`services.c/h`** - Dependency injection container for service management (message store, vector DB, embeddings, task store)
+
+#### `lib/orchestrator/` - Scaffold Orchestration
+- **`supervisor.c/h`** - Supervisor event loop: GOAP tool-driven goal progression, message-poller-based wake-on-worker-completion
+- **`orchestrator.c/h`** - Supervisor spawning (fork/exec), liveness checks, zombie reaping, stale PID cleanup, respawn
 
 #### `lib/workflow/` - Task Queue
 - **`workflow.c/h`** - SQLite-backed work queue for asynchronous task processing and worker management

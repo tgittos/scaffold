@@ -273,7 +273,7 @@ int orchestrator_kill_supervisor(goal_store_t* store, const char* goal_id);
 
 ---
 
-## Chunk 13: Orchestrator Tools + execute_plan
+## Chunk 13: Orchestrator Tools + execute_plan [DONE]
 
 Scaffold-agent-facing tools for goal lifecycle management.
 

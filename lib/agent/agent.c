@@ -14,6 +14,7 @@
 #include "../ui/slash_commands.h"
 #include "../tools/memory_tool.h"
 #include "../tools/goap_tools.h"
+#include "../tools/orchestrator_tool.h"
 #include "../util/context_retriever.h"
 #include "../orchestrator/supervisor.h"
 #include "../ipc/message_poller.h"
@@ -89,6 +90,7 @@ int agent_init(Agent* agent, const AgentConfig* config) {
     document_store_set_services(agent->services);
     memory_tool_set_services(agent->services);
     goap_tools_set_services(agent->services); /* no-op when GOAP tools not registered (non-scaffold) */
+    orchestrator_tool_set_services(agent->services); /* no-op when not registered (non-scaffold) */
     context_retriever_set_services(agent->services);
     session_wire_services(&agent->session);
 

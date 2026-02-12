@@ -124,10 +124,12 @@ static bool is_valid_action_status(const char *s) {
 }
 
 static void set_error(ToolResult *result, const char *msg) {
-    char buf[1200];
-    snprintf(buf, sizeof(buf), "{\"success\":false,\"error\":\"%s\"}", msg);
-    result->result = safe_strdup(buf);
+    cJSON *json = cJSON_CreateObject();
+    cJSON_AddFalseToObject(json, "success");
+    cJSON_AddStringToObject(json, "error", msg);
+    result->result = cJSON_PrintUnformatted(json);
     result->success = 0;
+    cJSON_Delete(json);
 }
 
 static cJSON *action_to_json(const Action *a) {

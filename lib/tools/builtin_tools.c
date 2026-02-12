@@ -12,6 +12,7 @@
 #include "pdf_tool.h"
 #include "messaging_tool.h"
 #include "goap_tools.h"
+#include "orchestrator_tool.h"
 #include "../util/app_home.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -46,10 +47,13 @@ int register_builtin_tools(ToolRegistry *registry) {
         }
     }
 
-    /* GOAP tools are only available in scaffold mode */
+    /* GOAP and orchestrator tools are only available in scaffold mode */
     if (strcmp(app_home_get_app_name(), "scaffold") == 0) {
         if (register_goap_tools(registry) != 0) {
             fprintf(stderr, "Warning: Failed to register GOAP tools\n");
+        }
+        if (register_orchestrator_tools(registry) != 0) {
+            fprintf(stderr, "Warning: Failed to register orchestrator tools\n");
         }
     }
 

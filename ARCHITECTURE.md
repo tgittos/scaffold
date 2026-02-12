@@ -61,6 +61,8 @@ graph TB
     ToolRegistry --> VectorDBTool[Vector DB Tool<br/>vector_db_tool.c/h]
     ToolRegistry --> SubagentTool[Subagent Tool<br/>subagent_tool.c/h]
     ToolRegistry --> MessagingTool[Messaging Tool<br/>messaging_tool.c/h]
+    ToolRegistry --> GOAPTools[GOAP Tools<br/>goap_tools.c/h]
+    ToolRegistry --> OrchestratorTool[Orchestrator Tools<br/>orchestrator_tool.c/h]
 
     PythonFileTools --> PythonDefaults[Python Defaults<br/>python_defaults/]
     TodoTool --> TodoManager[Todo Manager<br/>todo_manager.c/h]
@@ -920,6 +922,25 @@ graph TB
 - **`TodoWrite`**: Create, update status/priority, delete, or bulk set todos
 - **`TodoRead`**: List and filter todos by status and priority
 
+### GOAP Tools (9 tools, scaffold mode only)
+- **`goap_get_goal`**: Read goal details (description, goal state, world state, status)
+- **`goap_list_actions`**: List actions for a goal, optionally filtered by status or parent
+- **`goap_create_goal`**: Create a new goal with goal state assertions
+- **`goap_create_actions`**: Batch-create actions with preconditions and effects
+- **`goap_update_action`**: Update action status and result
+- **`goap_dispatch_action`**: Dispatch primitive action to worker (enqueue + spawn)
+- **`goap_update_world_state`**: Merge boolean assertions into goal's world state
+- **`goap_check_complete`**: Check if world_state satisfies goal_state
+- **`goap_get_action_results`**: Read completed action results (truncated for context safety)
+
+### Orchestrator Tools (6 tools, scaffold mode only)
+- **`execute_plan`**: Decompose a plan into GOAP goals and actions with decomposition instructions
+- **`list_goals`**: List all goals with status and world state progress
+- **`goal_status`**: Detailed goal view (world state, action tree, supervisor info)
+- **`start_goal`**: Activate a goal and spawn its supervisor process
+- **`pause_goal`**: Pause a goal by stopping its supervisor
+- **`cancel_goal`**: Cancel a goal by killing its supervisor
+
 ### Vector Database Tools (13 tools)
 - **Index Management**: `vector_db_create_index`, `vector_db_delete_index`, `vector_db_list_indices`
 - **Vector Operations**: `vector_db_add_vector`, `vector_db_update_vector`, `vector_db_delete_vector`, `vector_db_get_vector`
@@ -939,8 +960,11 @@ graph TB
 
 ```
 src/
-├── core/                   # CLI Entry Point (thin wrapper around lib/)
-│   ├── main.c              # Entry point (CLI interface, --json, --subagent modes)
+├── ralph/                  # Ralph CLI (standalone agent)
+│   └── main.c              # Entry point (CLI interface, --json, --subagent modes)
+├── scaffold/               # Scaffold CLI (orchestrator binary)
+│   └── main.c              # Entry point (REPL, one-shot, --supervisor --goal, --worker --queue)
+├── core/                   # Shared entry point (thin wrapper around lib/)
 │   └── ralph.c/h           # Re-exports lib/agent/agent.h for backward compatibility
 ├── tools/                  # Python tool integration
 │   ├── python_tool.c/h     # Embedded Python interpreter
@@ -988,6 +1012,8 @@ lib/
 │   ├── document_store.c/h  # High-level document storage
 │   ├── metadata_store.c/h  # Chunk metadata storage
 │   ├── task_store.c/h      # SQLite-based persistent task storage
+│   ├── goal_store.c/h      # GOAP goal persistence (scaffold orchestration)
+│   ├── action_store.c/h    # GOAP action persistence with hierarchy and readiness queries
 │   ├── sqlite_dal.c/h      # SQLite data access layer
 │   └── hnswlib_wrapper.cpp/h # C++ bridge
 ├── llm/                    # LLM core framework
@@ -1069,6 +1095,8 @@ lib/
 │   ├── subagent_tool.c/h   # Subagent process spawning
 │   ├── subagent_process.c/h    # Subagent I/O and lifecycle
 │   ├── messaging_tool.c/h  # Inter-agent messaging (6 tools)
+│   ├── goap_tools.c/h      # GOAP goal/action tools for supervisors (9 tools, scaffold only)
+│   ├── orchestrator_tool.c/h # Orchestrator lifecycle tools (6 tools, scaffold only)
 │   ├── todo_manager.c/h    # Todo data structures
 │   ├── todo_tool.c/h       # Todo tool call handler
 │   └── todo_display.c/h    # Todo visualization
@@ -1088,6 +1116,9 @@ lib/
 │   ├── context_retriever.c/h # Vector context retrieval
 │   ├── ansi_codes.h        # Terminal color codes and box-drawing characters
 │   └── app_home.c/h        # Centralized home directory management
+├── orchestrator/          # Scaffold orchestration layer
+│   ├── supervisor.c/h     # Supervisor event loop (GOAP tool-driven goal progression)
+│   └── orchestrator.c/h   # Supervisor spawning, monitoring, and lifecycle
 └── workflow/               # Task queue
     └── workflow.c/h        # SQLite-backed work queue
 ```
