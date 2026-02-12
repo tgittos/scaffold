@@ -322,6 +322,7 @@ $(eval $(call def_test_lib,parallel_batch,agent/test_parallel_batch,))
 $(eval $(call def_test_lib,model_commands,ui/test_model_commands,))
 $(eval $(call def_test_lib,task_commands,ui/test_task_commands,))
 $(eval $(call def_test_lib,agent_commands,ui/test_agent_commands,))
+$(eval $(call def_test_lib,goal_commands,ui/test_goal_commands,))
 $(eval $(call def_test_lib,mode_tool,tools/test_mode_tool,))
 $(eval $(call def_test_lib,mode_commands,ui/test_mode_commands,))
 $(eval $(call def_test_lib,context_mode_injection,agent/test_context_mode_injection,))
@@ -338,7 +339,7 @@ LIBAGENT_TESTS := tool_param_dsl json_output output tools_system vector_db_tool 
     openai_streaming anthropic_streaming messages_array_bug mcp_client subagent_tool \
     incomplete_task_bug conversation conversation_vdb tool_calls_not_stored document_store \
     message_dispatcher message_processor recap parallel_batch model_commands \
-    slash_commands task_commands agent_commands mode_tool mode_commands \
+    slash_commands task_commands agent_commands goal_commands mode_tool mode_commands \
     context_mode_injection image_attachment goap_tools orchestrator_tool
 
 $(foreach t,$(LIBAGENT_TESTS),$(eval \

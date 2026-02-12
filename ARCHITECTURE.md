@@ -723,7 +723,7 @@ Gates are configured in `ralph.config.json`:
 
 ## CLI Commands
 
-Interactive slash commands provide direct access to memory management without LLM involvement.
+Interactive slash commands provide direct access to state inspection without LLM involvement. Commands are registered via `slash_commands.c` — some are always available, others are scaffold-only (registered conditionally based on `app_home_get_app_name()`).
 
 ```mermaid
 graph TB
@@ -766,6 +766,11 @@ graph TB
 | `/memory edit` | `<chunk_id> <field> <value>` | Edit chunk metadata |
 | `/memory indices` | - | List all available indices with stats |
 | `/memory stats` | `[index_name]` | Show statistics for index |
+| `/tasks` | `[subcommand]` | List/show tasks (`list`, `ready`, `show <id>`) |
+| `/agents` | `[subcommand]` | List subagents and supervisors (`show <id>`) |
+| `/model` | `[model_name]` | Switch AI models |
+| `/mode` | `[mode_name]` | Switch behavioral prompt modes |
+| `/goals` | `[subcommand]` | List GOAP goals, show details + action tree (scaffold only) |
 
 ## Embedding Provider Abstraction
 
@@ -1078,7 +1083,13 @@ lib/
 │   ├── spinner.c/h         # Tool execution spinner feedback
 │   ├── output_formatter.c/h # Response formatting
 │   ├── json_output.c/h     # JSON output mode
-│   └── memory_commands.c/h # Interactive /memory slash commands
+│   ├── slash_commands.c/h  # Slash command registry and dispatch
+│   ├── memory_commands.c/h # /memory slash commands
+│   ├── task_commands.c/h   # /tasks slash commands
+│   ├── agent_commands.c/h  # /agents slash commands (subagents + supervisors)
+│   ├── goal_commands.c/h   # /goals slash commands (scaffold only)
+│   ├── model_commands.c/h  # /model slash commands
+│   └── mode_commands.c/h   # /mode slash commands
 ├── tools/                  # Tool system
 │   ├── tools.h             # Public tools API header
 │   ├── tools_system.c/h    # Tool registry and execution

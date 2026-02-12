@@ -4,7 +4,9 @@
 #include "model_commands.h"
 #include "task_commands.h"
 #include "agent_commands.h"
+#include "goal_commands.h"
 #include "terminal.h"
+#include "../util/app_home.h"
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
@@ -79,6 +81,11 @@ void slash_commands_init(AgentSession *session) {
     rc |= slash_command_register("mode", "Switch behavioral mode", process_mode_command);
     rc |= slash_command_register("agents", "View subagent status", process_agent_command);
     assert(rc == 0 && "Failed to register built-in slash commands");
+
+    if (strcmp(app_home_get_app_name(), "scaffold") == 0) {
+        rc |= slash_command_register("goals", "View GOAP goals and actions", process_goals_command);
+        assert(rc == 0 && "Failed to register scaffold slash commands");
+    }
     (void)rc;
 }
 

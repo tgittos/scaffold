@@ -27,6 +27,7 @@ LIB_UI_SOURCES := \
     $(LIBDIR)/ui/slash_commands.c \
     $(LIBDIR)/ui/task_commands.c \
     $(LIBDIR)/ui/agent_commands.c \
+    $(LIBDIR)/ui/goal_commands.c \
     $(LIBDIR)/ui/status_line.c
 
 # Tools module

@@ -1,6 +1,8 @@
 #include "agent_commands.h"
 #include "terminal.h"
 #include "../agent/session.h"
+#include "../services/services.h"
+#include "../db/goal_store.h"
 #include "../tools/subagent_tool.h"
 #include <stdio.h>
 #include <string.h>
@@ -32,7 +34,77 @@ static void format_elapsed(time_t start, char *buf, size_t buf_size) {
     }
 }
 
+static void format_elapsed_millis(int64_t started_at_ms, char *buf, size_t buf_size) {
+    if (started_at_ms <= 0) {
+        snprintf(buf, buf_size, "--");
+        return;
+    }
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    int64_t now_ms = (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+    int elapsed = (int)((now_ms - started_at_ms) / 1000);
+    if (elapsed < 0) elapsed = 0;
+
+    if (elapsed < 60) {
+        snprintf(buf, buf_size, "%ds", elapsed);
+    } else if (elapsed < 3600) {
+        snprintf(buf, buf_size, "%dm%ds", elapsed / 60, elapsed % 60);
+    } else {
+        snprintf(buf, buf_size, "%dh%dm", elapsed / 3600, (elapsed % 3600) / 60);
+    }
+}
+
+static void print_supervisors(AgentSession *session) {
+    if (session->services == NULL) return;
+    goal_store_t *store = services_get_goal_store(session->services);
+    if (store == NULL) return;
+
+    size_t count = 0;
+    Goal **goals = goal_store_list_all(store, &count);
+    if (goals == NULL || count == 0) {
+        if (goals) goal_free_list(goals, count);
+        return;
+    }
+
+    /* Count supervisors */
+    int sup_count = 0;
+    for (size_t i = 0; i < count; i++) {
+        if (goals[i]->supervisor_pid > 0) sup_count++;
+    }
+
+    if (sup_count == 0) {
+        goal_free_list(goals, count);
+        return;
+    }
+
+    printf("\n" TERM_BOLD "Supervisors" TERM_RESET " (%d)\n", sup_count);
+    printf(TERM_SEP_LIGHT_40 "\n");
+
+    for (size_t i = 0; i < count; i++) {
+        Goal *g = goals[i];
+        if (g->supervisor_pid <= 0) continue;
+
+        char elapsed[16];
+        format_elapsed_millis(g->supervisor_started_at, elapsed, sizeof(elapsed));
+
+        char name_trunc[35];
+        size_t nlen = strlen(g->name);
+        if (nlen > 30) {
+            snprintf(name_trunc, sizeof(name_trunc), "%.27s...", g->name);
+        } else {
+            snprintf(name_trunc, sizeof(name_trunc), "%s", g->name);
+        }
+
+        printf("  %.8s  " TERM_CYAN "pid %-6d" TERM_RESET "  %5s  %s\n",
+               g->id, g->supervisor_pid, elapsed, name_trunc);
+    }
+
+    goal_free_list(goals, count);
+}
+
 static int cmd_agents_list(AgentSession *session) {
+    print_supervisors(session);
+
     SubagentManager *mgr = &session->subagent_manager;
     subagent_poll_all(mgr);
 
@@ -137,12 +209,14 @@ static int cmd_agents_show(const char *id_prefix, AgentSession *session) {
 static void print_agent_help(void) {
     printf("\n" TERM_BOLD "Agent Commands" TERM_RESET "\n");
     printf(TERM_SEP_LIGHT_40 "\n");
-    printf("  " TERM_BOLD "/agents" TERM_RESET "             List all subagents\n");
+    printf("  " TERM_BOLD "/agents" TERM_RESET "             List supervisors and subagents\n");
     printf("  " TERM_BOLD "/agents show <id>" TERM_RESET "   Show subagent details (prefix match)\n");
     printf("  " TERM_BOLD "/agents help" TERM_RESET "        Show this help\n\n");
 }
 
 int process_agent_command(const char *args, AgentSession *session) {
+    if (session == NULL) return -1;
+
     if (args == NULL || args[0] == '\0' || strcmp(args, "list") == 0) {
         return cmd_agents_list(session);
     }

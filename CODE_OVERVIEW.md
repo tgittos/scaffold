@@ -165,7 +165,13 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`spinner.c/h`** - Pulsing spinner for tool execution visual feedback
 - **`output_formatter.c/h`** - Response formatting and display for LLM responses
 - **`json_output.c/h`** - JSON output mode for programmatic integration (--json flag)
+- **`slash_commands.c/h`** - Slash command registry and dispatch (`/help`, conditional scaffold commands)
 - **`memory_commands.c/h`** - Interactive `/memory` slash commands for direct memory management
+- **`task_commands.c/h`** - `/tasks` command for viewing task store entries
+- **`agent_commands.c/h`** - `/agents` command for subagent and supervisor status
+- **`goal_commands.c/h`** - `/goals` command for GOAP goal listing and action tree display (scaffold only)
+- **`model_commands.c/h`** - `/model` command for switching AI models
+- **`mode_commands.c/h`** - `/mode` command for switching behavioral prompt modes
 
 #### `lib/util/` - Generic Utilities
 - **`darray.h`** - Type-safe dynamic array macros (header-only)

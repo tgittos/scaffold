@@ -302,7 +302,7 @@ Scaffold-agent-facing tools for goal lifecycle management.
 
 ---
 
-## Chunk 14: Slash Commands
+## Chunk 14: Slash Commands [DONE]
 
 Direct state inspection commands that bypass the LLM.
 
