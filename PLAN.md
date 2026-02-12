@@ -243,7 +243,7 @@ Wire the supervisor into the agent lifecycle and scaffold CLI.
 
 ---
 
-## Chunk 12: Orchestrator — Supervisor Spawning + Monitoring
+## Chunk 12: Orchestrator — Supervisor Spawning + Monitoring [DONE]
 
 The scaffold-agent-level code that spawns supervisors (one per goal) and monitors their progress.
 

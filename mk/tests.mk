@@ -246,6 +246,11 @@ $(TEST_goal_store_TARGET): $(TEST_goal_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_
 $(TEST_action_store_TARGET): $(TEST_action_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_action_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) $(CJSON_LIB) -lpthread -lm
 
+$(eval $(call def_test,orchestrator,orchestrator/test_orchestrator,$(LIBDIR)/orchestrator/orchestrator.c $(LIBDIR)/db/goal_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/uuid_utils.c $(LIBDIR)/util/app_home.c $(LIBDIR)/util/executable_path.c $(LIBDIR)/util/debug_output.c))
+
+$(TEST_orchestrator_TARGET): $(TEST_orchestrator_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) $(CJSON_LIB)
+	$(CC) -o $@ $(TEST_orchestrator_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) $(CJSON_LIB) -lpthread -lm
+
 # Messaging deps (use stubs that conflict with libagent.a symbols)
 MESSAGING_DEPS := \
     $(LIBDIR)/ipc/message_poller.c \
@@ -405,7 +410,7 @@ VALGRIND_EXCLUDED := $(TEST_http_TARGET) $(TEST_python_tool_TARGET) $(TEST_pytho
     $(TEST_http_python_TARGET) \
     $(TEST_tools_system_TARGET) $(TEST_ralph_TARGET) $(TEST_recap_TARGET) \
     $(TEST_subagent_tool_TARGET) $(TEST_message_poller_TARGET) $(TEST_async_executor_TARGET) \
-    $(TEST_parallel_batch_TARGET)
+    $(TEST_parallel_batch_TARGET) $(TEST_orchestrator_TARGET)
 
 VALGRIND_TESTS := $(filter-out $(VALGRIND_EXCLUDED),$(ALL_TEST_TARGETS))
 

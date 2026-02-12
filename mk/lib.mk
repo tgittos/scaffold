@@ -174,7 +174,9 @@ LIB_MCP_SOURCES := \
 LIB_UPDATER_SOURCES := $(LIBDIR)/updater/updater.c
 
 # Orchestrator module
-LIB_ORCHESTRATOR_SOURCES := $(LIBDIR)/orchestrator/supervisor.c
+LIB_ORCHESTRATOR_SOURCES := \
+    $(LIBDIR)/orchestrator/supervisor.c \
+    $(LIBDIR)/orchestrator/orchestrator.c
 
 # Combined library sources
 LIB_C_SOURCES := $(LIB_IPC_SOURCES) $(LIB_UI_SOURCES) $(LIB_TOOLS_SOURCES) \
