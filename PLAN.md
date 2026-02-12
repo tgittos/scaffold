@@ -155,7 +155,7 @@ Add the `max_workers_per_goal` configuration key.
 
 ---
 
-## Chunk 8: GOAP Tools
+## Chunk 8: GOAP Tools [DONE]
 
 Tool implementations that supervisors (and the scaffold agent during decomposition) call via the LLM. These are the core GOAP operations exposed as tools.
 

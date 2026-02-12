@@ -324,6 +324,7 @@ $(eval $(call def_test_lib,python_tool,tools/test_python_tool,$(TOOL_SOURCES)))
 $(eval $(call def_test_lib,python_integration,tools/test_python_integration,$(TOOL_SOURCES)))
 $(eval $(call def_test_lib,http_python,network/test_http_python,))
 $(eval $(call def_test_lib,image_attachment,network/test_image_attachment,))
+$(eval $(call def_test_lib,goap_tools,tools/test_goap_tools,))
 
 # Batch link rule for libagent-linked tests
 LIBAGENT_TESTS := tool_param_dsl json_output output tools_system vector_db_tool memory_tool \
@@ -332,7 +333,7 @@ LIBAGENT_TESTS := tool_param_dsl json_output output tools_system vector_db_tool 
     incomplete_task_bug conversation conversation_vdb tool_calls_not_stored document_store \
     message_dispatcher message_processor recap parallel_batch model_commands \
     slash_commands task_commands agent_commands mode_tool mode_commands \
-    context_mode_injection image_attachment
+    context_mode_injection image_attachment goap_tools
 
 $(foreach t,$(LIBAGENT_TESTS),$(eval \
 $$(TEST_$(t)_TARGET): $$(TEST_$(t)_OBJECTS) $$(LIBAGENT) $$(ALL_LIBS) ; \

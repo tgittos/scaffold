@@ -48,7 +48,8 @@ LIB_TOOLS_SOURCES := \
     $(LIBDIR)/tools/vector_db_tool.c \
     $(LIBDIR)/tools/subagent_tool.c \
     $(LIBDIR)/tools/subagent_process.c \
-    $(LIBDIR)/tools/tool_cache.c
+    $(LIBDIR)/tools/tool_cache.c \
+    $(LIBDIR)/tools/goap_tools.c
 
 # Agent module
 LIB_AGENT_SOURCES := \
