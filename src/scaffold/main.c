@@ -68,6 +68,8 @@ int main(int argc, char *argv[]) {
     char *subagent_context = NULL;
     int worker_mode = 0;
     char *worker_queue = NULL;
+    int supervisor_mode = 0;
+    char *supervisor_goal_id = NULL;
     char *model_override = NULL;
     char *system_prompt_file = NULL;
 
@@ -116,6 +118,10 @@ int main(int argc, char *argv[]) {
             worker_mode = 1;
         } else if (strcmp(argv[i], "--queue") == 0 && i + 1 < argc) {
             worker_queue = argv[++i];
+        } else if (strcmp(argv[i], "--supervisor") == 0) {
+            supervisor_mode = 1;
+        } else if (strcmp(argv[i], "--goal") == 0 && i + 1 < argc) {
+            supervisor_goal_id = argv[++i];
         } else if (strcmp(argv[i], "--system-prompt-file") == 0 && i + 1 < argc) {
             system_prompt_file = argv[++i];
         } else if (message_arg_index == -1 && argv[i][0] != '-') {
@@ -128,7 +134,14 @@ int main(int argc, char *argv[]) {
     config.allow_categories = cli_allow_categories;
     config.allow_category_count = cli_allow_category_count;
 
-    if (worker_mode) {
+    if (supervisor_mode) {
+        if (supervisor_goal_id == NULL) {
+            fprintf(stderr, "Error: --supervisor requires --goal argument\n");
+            return EXIT_FAILURE;
+        }
+        config.mode = AGENT_MODE_SUPERVISOR;
+        config.supervisor_goal_id = supervisor_goal_id;
+    } else if (worker_mode) {
         if (worker_queue == NULL) {
             fprintf(stderr, "Error: --worker requires --queue argument\n");
             return EXIT_FAILURE;

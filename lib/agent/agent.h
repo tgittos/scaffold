@@ -46,7 +46,10 @@ typedef enum {
     AGENT_MODE_BACKGROUND = 2,
 
     /** Worker mode: claims and processes items from a work queue */
-    AGENT_MODE_WORKER = 3
+    AGENT_MODE_WORKER = 3,
+
+    /** Supervisor mode: drives a goal to completion via GOAP tools */
+    AGENT_MODE_SUPERVISOR = 4
 } AgentMode;
 
 /**
@@ -95,6 +98,9 @@ typedef struct AgentConfig {
 
     /** System prompt for WORKER mode (NULL uses default) */
     const char* worker_system_prompt;
+
+    /** Goal ID for SUPERVISOR mode */
+    const char* supervisor_goal_id;
 
     /** Model override (tier name or raw model ID) from --model flag */
     const char* model_override;

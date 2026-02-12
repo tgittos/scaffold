@@ -173,12 +173,16 @@ LIB_MCP_SOURCES := \
 # Updater module
 LIB_UPDATER_SOURCES := $(LIBDIR)/updater/updater.c
 
+# Orchestrator module
+LIB_ORCHESTRATOR_SOURCES := $(LIBDIR)/orchestrator/supervisor.c
+
 # Combined library sources
 LIB_C_SOURCES := $(LIB_IPC_SOURCES) $(LIB_UI_SOURCES) $(LIB_TOOLS_SOURCES) \
     $(LIB_AGENT_SOURCES) $(LIB_SERVICES_SOURCES) $(LIB_LLM_SOURCES) \
     $(LIB_SESSION_SOURCES) $(LIB_POLICY_SOURCES) $(LIB_DB_SOURCES) \
     $(LIB_WORKFLOW_SOURCES) $(LIB_UTIL_SOURCES) $(LIB_PDF_SOURCES) \
-    $(LIB_NETWORK_SOURCES) $(LIB_MCP_SOURCES) $(LIB_UPDATER_SOURCES)
+    $(LIB_NETWORK_SOURCES) $(LIB_MCP_SOURCES) $(LIB_UPDATER_SOURCES) \
+    $(LIB_ORCHESTRATOR_SOURCES)
 
 LIB_CPP_SOURCES := $(LIB_DB_CPP_SOURCES)
 
@@ -212,12 +216,19 @@ $(LIBAGENT): $(LIB_OBJECTS)
 # LIBRARY TARGETS
 # =============================================================================
 
+# Amalgamated public header — single file consumers include with libagent.a
+LIBAGENT_HEADER := $(OUTDIR)/libagent.h
+LIB_HEADERS := $(shell find $(LIBDIR) -name '*.h' -not -name 'hnswlib_wrapper.h')
+
+$(LIBAGENT_HEADER): $(LIB_HEADERS) $(VERSION_HEADER) scripts/gen_header.py
+	@uv run scripts/gen_header.py "$@"
+
 .PHONY: libagent libagent-clean
 
-libagent: $(LIBAGENT)
+libagent: $(LIBAGENT) $(LIBAGENT_HEADER)
 
 libagent-clean:
-	rm -f $(LIB_OBJECTS) $(LIBAGENT)
+	rm -f $(LIB_OBJECTS) $(LIBAGENT) $(LIBAGENT_HEADER)
 	find $(LIBDIR) -name "*.o" -delete 2>/dev/null || true
 	find $(LIBDIR) -name "*.o.d" -delete 2>/dev/null || true
 

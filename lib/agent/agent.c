@@ -15,6 +15,7 @@
 #include "../tools/memory_tool.h"
 #include "../tools/goap_tools.h"
 #include "../util/context_retriever.h"
+#include "../orchestrator/supervisor.h"
 #include "../ipc/message_poller.h"
 #include <stdio.h>
 #include <string.h>
@@ -313,6 +314,24 @@ int agent_run(Agent* agent) {
 
             work_queue_destroy(queue);
             return (errors > 0) ? -1 : 0;
+        }
+
+        case AGENT_MODE_SUPERVISOR: {
+            if (agent->config.supervisor_goal_id == NULL) {
+                fprintf(stderr, "Error: Supervisor mode requires goal ID\n");
+                return -1;
+            }
+
+            cleanup_conversation_history(&agent->session.session_data.conversation);
+            init_conversation_history(&agent->session.session_data.conversation);
+
+            session_start_message_polling(&agent->session);
+
+            int result = supervisor_run(&agent->session,
+                                        agent->config.supervisor_goal_id);
+
+            session_stop_message_polling(&agent->session);
+            return result;
         }
 
         case AGENT_MODE_INTERACTIVE:

@@ -204,7 +204,7 @@ Wire GOAP tools into the tool registry for scaffold agents.
 
 ---
 
-## Chunk 10: Supervisor Event Loop
+## Chunk 10: Supervisor Event Loop [DONE]
 
 The supervisor agent mode — a REPL without stdin that progresses a goal via GOAP tool calls, sleeping between worker dispatches and waking on worker completion.
 
@@ -228,7 +228,7 @@ The supervisor agent mode — a REPL without stdin that progresses a goal via GO
 
 ---
 
-## Chunk 11: Agent Mode — Supervisor
+## Chunk 11: Agent Mode — Supervisor [DONE]
 
 Wire the supervisor into the agent lifecycle and scaffold CLI.
 
