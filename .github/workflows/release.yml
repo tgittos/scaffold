@@ -84,4 +84,8 @@ jobs:
         with:
           name: ralph v${{ steps.version.outputs.version }}
           generate_release_notes: true
-          files: out/ralph
+          files: |
+            out/ralph
+            out/scaffold
+            out/libagent.a
+            out/libagent.h
