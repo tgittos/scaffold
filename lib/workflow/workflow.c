@@ -5,7 +5,7 @@
  */
 
 #include "workflow.h"
-#include "../util/ralph_home.h"
+#include "../util/app_home.h"
 #include "../util/executable_path.h"
 #include "util/uuid_utils.h"
 #include <sqlite3.h>
@@ -72,7 +72,7 @@ WorkQueue* work_queue_create(const char* name) {
 
     /* Open database in ralph home directory */
     char db_path[512];
-    const char* home = ralph_home_get();
+    const char* home = app_home_get();
     snprintf(db_path, sizeof(db_path), "%s/work_queues.db", home);
 
     int rc = sqlite3_open(db_path, &queue->db);

@@ -5,16 +5,16 @@
 #include "agent/agent.h"
 #include <string.h>
 #include <stdlib.h>
-#include "util/ralph_home.h"
+#include "util/app_home.h"
 
 void setUp(void) {
-    ralph_home_init(NULL);
+    app_home_init(NULL);
 }
 
 void tearDown(void) {
     // This is run after each test
 
-    ralph_home_cleanup();
+    app_home_cleanup();
 }
 
 void test_compaction_config_init(void) {

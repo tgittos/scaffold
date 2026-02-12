@@ -7,7 +7,7 @@
 #include <cJSON.h>
 #include "util/common_utils.h"
 #include "util/ptrarray.h"
-#include "../util/ralph_home.h"
+#include "../util/app_home.h"
 
 PTRARRAY_DEFINE(ChunkMetadataArray, ChunkMetadata)
 
@@ -44,7 +44,7 @@ metadata_store_t* metadata_store_create(const char* base_path) {
     if (store == NULL) return NULL;
 
     if (base_path == NULL) {
-        store->base_path = ralph_home_path("metadata");
+        store->base_path = app_home_path("metadata");
         if (store->base_path == NULL) {
             free(store);
             return NULL;

@@ -2,7 +2,7 @@
 #include "ipc/message_poller.h"
 #include "ipc/message_store.h"
 #include "services/services.h"
-#include "util/ralph_home.h"
+#include "util/app_home.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -12,7 +12,7 @@
 static message_store_t* g_store = NULL;
 
 void setUp(void) {
-    ralph_home_init("/tmp/test_poller_home");
+    app_home_init("/tmp/test_poller_home");
     g_store = message_store_create(NULL);
 }
 
@@ -21,7 +21,7 @@ void tearDown(void) {
         message_store_destroy(g_store);
         g_store = NULL;
     }
-    ralph_home_cleanup();
+    app_home_cleanup();
 }
 
 void test_poller_create_destroy(void) {

@@ -19,7 +19,7 @@
 #include "policy/approval_gate.h"
 #include "policy/protected_files.h"
 #include "policy/rate_limiter.h"
-#include "util/ralph_home.h"
+#include "util/app_home.h"
 
 #include <fcntl.h>
 #include <stdio.h>
@@ -33,7 +33,7 @@
 static ApprovalGateConfig config;
 
 void setUp(void) {
-    int home_result = ralph_home_init(NULL);
+    int home_result = app_home_init(NULL);
     TEST_ASSERT_EQUAL(0, home_result);
     int result = approval_gate_init(&config);
     TEST_ASSERT_EQUAL(0, result);
@@ -41,7 +41,7 @@ void setUp(void) {
 
 void tearDown(void) {
     approval_gate_cleanup(&config);
-    ralph_home_cleanup();
+    app_home_cleanup();
 }
 
 /* =============================================================================

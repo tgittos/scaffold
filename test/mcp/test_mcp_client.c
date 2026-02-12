@@ -2,7 +2,7 @@
 #include "mcp/mcp_client.h"
 #include "agent/session.h"
 #include "agent/agent.h"
-#include "util/ralph_home.h"
+#include "util/app_home.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,17 +19,17 @@ static void remove_test_home(void) {
 }
 
 void setUp(void) {
-    ralph_home_cleanup();
+    app_home_cleanup();
     remove_test_home();
     mkdir(g_test_home, 0755);
-    ralph_home_init(g_test_home);
+    app_home_init(g_test_home);
     unlink("test_mcp_config.json");
 }
 
 void tearDown(void) {
     unlink("test_mcp_config.json");
     remove_test_home();
-    ralph_home_cleanup();
+    app_home_cleanup();
 }
 
 void test_mcp_client_initialization(void) {

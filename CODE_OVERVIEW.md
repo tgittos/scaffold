@@ -173,7 +173,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`prompt_loader.c/h`** - System prompt loading (core + AGENTS.md)
 - **`context_retriever.c/h`** - Vector database context retrieval for prompts
 - **`ansi_codes.h`** - Terminal color codes, box-drawing characters, and status symbols
-- **`ralph_home.c/h`** - Centralized Ralph home directory management (~/.local/ralph/)
+- **`app_home.c/h`** - Centralized application home directory management (~/.local/<app_name>/)
 
 #### `lib/pdf/` - PDF Processing
 - **`pdf_extractor.c/h`** - PDF text extraction using PDFio library
@@ -263,7 +263,7 @@ The test directory mirrors the source structure:
 - **`test_config.c`** - Configuration system tests
 - **`test_json_output.c`** - JSON output mode tests
 - **`test_debug_output.c`** - Debug output tests
-- **`test_ralph_home.c`** - Ralph home directory management tests
+- **`test_app_home.c`** - Application home directory management tests
 - **`test_pipe_notifier.c`** - Pipe notifier async notification tests
 - **`test_spinner.c`** - Tool execution spinner tests
 - **`test_terminal.c`** - Terminal abstraction tests

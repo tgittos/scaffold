@@ -1,7 +1,7 @@
 #include "unity.h"
 #include "db/vector_db.h"
 #include "db/hnswlib_wrapper.h"
-#include "util/ralph_home.h"
+#include "util/app_home.h"
 
 extern void hnswlib_clear_all(void);
 #include <stdlib.h>
@@ -11,7 +11,7 @@ extern void hnswlib_clear_all(void);
 #include <sys/stat.h>
 
 void setUp(void) {
-    ralph_home_init(NULL);
+    app_home_init(NULL);
     // Clean up any leftover test files using rmdir
     rmdir("/tmp/vector_db_test");
     // Clear all indexes from hnswlib to ensure clean state
@@ -21,7 +21,7 @@ void setUp(void) {
 void tearDown(void) {
     // Clean up test files after each test
     rmdir("/tmp/vector_db_test");
-    ralph_home_cleanup();
+    app_home_cleanup();
 }
 
 static void fill_random_vector(vector_t* vec) {

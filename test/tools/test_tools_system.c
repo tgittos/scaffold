@@ -7,17 +7,17 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-#include "util/ralph_home.h"
+#include "util/app_home.h"
 
 void setUp(void) {
-    ralph_home_init(NULL);
+    app_home_init(NULL);
     // Clean up any existing test files
 }
 
 void tearDown(void) {
     // Clean up test files
 
-    ralph_home_cleanup();
+    app_home_cleanup();
 }
 
 void test_init_tool_registry(void) {

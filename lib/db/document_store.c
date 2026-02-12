@@ -1,7 +1,7 @@
 #include "document_store.h"
 #include "vector_db_service.h"
 #include "hnswlib_wrapper.h"
-#include "../util/ralph_home.h"
+#include "../util/app_home.h"
 #include "../services/services.h"
 #include "util/ptrarray.h"
 #include <stdio.h>
@@ -84,7 +84,7 @@ document_store_t* document_store_create(const char* base_path) {
     if (store == NULL) return NULL;
 
     if (base_path == NULL) {
-        const char* home = ralph_home_get();
+        const char* home = app_home_get();
         if (home == NULL) {
             free(store);
             return NULL;

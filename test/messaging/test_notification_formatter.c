@@ -2,7 +2,7 @@
 #include "ipc/notification_formatter.h"
 #include "ipc/message_store.h"
 #include "services/services.h"
-#include "util/ralph_home.h"
+#include "util/app_home.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -38,7 +38,7 @@ static void rmdir_recursive(const char* path) {
 void setUp(void) {
     // Clean up any leftover test data
     rmdir_recursive("/tmp/test_formatter_home");
-    ralph_home_init("/tmp/test_formatter_home");
+    app_home_init("/tmp/test_formatter_home");
     g_store = message_store_create(NULL);
 }
 
@@ -47,7 +47,7 @@ void tearDown(void) {
         message_store_destroy(g_store);
         g_store = NULL;
     }
-    ralph_home_cleanup();
+    app_home_cleanup();
 }
 
 void test_bundle_create_null_agent(void) {

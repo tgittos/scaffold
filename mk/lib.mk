@@ -1,7 +1,7 @@
-# Library build configuration for libralph
+# Library build configuration for libagent
 
 # Library output
-LIBRALPH := $(BUILDDIR)/libralph.a
+LIBAGENT := $(BUILDDIR)/libagent.a
 
 # =============================================================================
 # LIBRARY SOURCES
@@ -128,7 +128,7 @@ LIB_UTIL_SOURCES := \
     $(LIBDIR)/util/interrupt.c \
     $(LIBDIR)/util/config.c \
     $(LIBDIR)/util/prompt_loader.c \
-    $(LIBDIR)/util/ralph_home.c \
+    $(LIBDIR)/util/app_home.c \
     $(LIBDIR)/util/context_retriever.c \
     $(LIBDIR)/util/executable_path.c
 
@@ -197,7 +197,7 @@ $(LIBDIR)/%.o: $(LIBDIR)/%.cpp | $(COMPILE_DEPS)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) $(LIB_INCLUDES) -c $< -o $@
 
 # Build the library archive
-$(LIBRALPH): $(LIB_OBJECTS)
+$(LIBAGENT): $(LIB_OBJECTS)
 	@mkdir -p $(BUILDDIR)
 	@if [ -n "$(LIB_OBJECTS)" ]; then \
 		$(AR) rcs $@ $(LIB_OBJECTS); \
@@ -209,12 +209,12 @@ $(LIBRALPH): $(LIB_OBJECTS)
 # LIBRARY TARGETS
 # =============================================================================
 
-.PHONY: libralph libralph-clean
+.PHONY: libagent libagent-clean
 
-libralph: $(LIBRALPH)
+libagent: $(LIBAGENT)
 
-libralph-clean:
-	rm -f $(LIB_OBJECTS) $(LIBRALPH)
+libagent-clean:
+	rm -f $(LIB_OBJECTS) $(LIBAGENT)
 	find $(LIBDIR) -name "*.o" -delete 2>/dev/null || true
 	find $(LIBDIR) -name "*.o.d" -delete 2>/dev/null || true
 
@@ -227,4 +227,4 @@ INCLUDES += $(LIB_INCLUDES)
 TEST_INCLUDES += $(LIB_INCLUDES)
 
 # Clean target should also clean library
-clean: libralph-clean
+clean: libagent-clean

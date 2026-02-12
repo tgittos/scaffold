@@ -1,6 +1,6 @@
 #include "config.h"
 #include "debug_output.h"
-#include "ralph_home.h"
+#include "app_home.h"
 #include <defaults.h>
 #include <cJSON.h>
 #include <stdio.h>
@@ -103,9 +103,9 @@ static void config_generate_default_file(void)
 
     (void)config_update_api_key_selection(g_config);
 
-    if (ralph_home_ensure_exists() != 0) return;
+    if (app_home_ensure_exists() != 0) return;
 
-    char *config_file = ralph_home_path("config.json");
+    char *config_file = app_home_path("config.json");
     if (config_file) {
         if (config_save_to_file(config_file) == 0) {
             debug_printf("[Config] Created %s with API keys from environment\n\n", config_file);
@@ -391,7 +391,7 @@ int config_init(void)
 
     bool config_loaded = false;
 
-    char *config_file = ralph_home_path("config.json");
+    char *config_file = app_home_path("config.json");
     if (config_file) {
         if (access(config_file, R_OK) == 0) {
             if (config_load_from_file(config_file) == 0) {

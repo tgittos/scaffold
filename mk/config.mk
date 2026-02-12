@@ -9,6 +9,7 @@ CFLAGS := -Wall -Wextra -Werror -O2 -std=c11 -DHAVE_PDFIO -MMD -MP
 CXXFLAGS := -Wall -Wextra -Werror -O2 -std=c++14 -Wno-unused-parameter -Wno-unused-function -Wno-type-limits -MMD -MP
 
 TARGET := ralph
+SCAFFOLD_TARGET := scaffold
 
 # Project version (single source of truth — build/version.h is generated from these)
 RALPH_VERSION_MAJOR := 0
@@ -66,7 +67,7 @@ PYTHON_INCLUDE := $(BUILDDIR)/python-include
 # Grouped library sets
 LIBS_MBEDTLS := $(CURL_LIB) $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
 ALL_LIBS := $(LIBS_MBEDTLS) $(PDFIO_LIB) $(ZLIB_LIB) $(CJSON_LIB) $(READLINE_LIB) $(HISTORY_LIB) $(NCURSES_LIB) $(SQLITE_LIB) $(OSSP_UUID_LIB) $(PYTHON_LIB)
-# Omits READLINE_LIB/HISTORY_LIB/NCURSES_LIB — no test reaches the REPL path in libralph.a.
+# Omits READLINE_LIB/HISTORY_LIB/NCURSES_LIB — no test reaches the REPL path in libagent.a.
 # If a future test calls agent_run() or repl functions, add those libs or use $(LIBS) instead.
 LIBS_STANDARD := $(LIBS_MBEDTLS) $(PDFIO_LIB) $(CJSON_LIB) $(SQLITE_LIB) $(OSSP_UUID_LIB) $(PYTHON_LIB) $(ZLIB_LIB) -lm -lpthread
 

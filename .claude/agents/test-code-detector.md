@@ -12,11 +12,11 @@ You are an expert software architect specializing in clean code practices, testa
 
 **ralph** is a portable C codebase compiled with Cosmopolitan libc.
 
-- **Layout**: `src/` (application), `lib/` (shared library, built as `libralph.a`), `test/` (Unity-based tests), `mk/` (build config)
+- **Layout**: `src/` (application), `lib/` (shared library, built as `libagent.a`), `test/` (Unity-based tests), `mk/` (build config)
 - **Key docs**: `ARCHITECTURE.md` and `CODE_OVERVIEW.md` describe the design. Use `ripgrep` to find implementations.
 - **Libraries**: mbedtls (TLS), SQLite (storage), HNSWLIB (vectors), PDFio (PDF), cJSON (JSON), ossp-uuid (UUIDs)
 - **Code style**: Memory safety first. Functional C (prefer immutability, small functions). SOLID/DRY. No TODOs or placeholders. Delete dead code aggressively.
-- **Key pattern**: `lib/` has zero references to `src/` symbols — this is an intentional architectural boundary. Tests mock via link-time symbol resolution (mock `.o` files listed before `libralph.a`).
+- **Key pattern**: `lib/` has zero references to `src/` symbols — this is an intentional architectural boundary. Tests mock via link-time symbol resolution (mock `.o` files listed before `libagent.a`).
 - **Sensitive**: `.env` has API credentials — never read it.
 
 ## Your Mission

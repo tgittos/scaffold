@@ -1,14 +1,16 @@
-#include "ralph_home.h"
+#include "app_home.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <sys/stat.h>
 #include <errno.h>
 #include <unistd.h>
 #include <limits.h>
 
-static char *g_ralph_home = NULL;
+static char *g_app_home = NULL;
 static int g_initialized = 0;
+static char *g_app_name = NULL;
 
 static char* resolve_to_absolute(const char *path) {
     if (path == NULL || path[0] == '\0') {
@@ -76,12 +78,23 @@ static int mkdir_recursive(const char *path) {
     return 0;
 }
 
-int ralph_home_init(const char *cli_override) {
-    if (g_ralph_home != NULL) {
-        free(g_ralph_home);
-        g_ralph_home = NULL;
+static const char* get_app_name(void) {
+    return g_app_name ? g_app_name : "ralph";
+}
+
+void app_home_set_app_name(const char *name) {
+    free(g_app_name);
+    g_app_name = (name != NULL) ? strdup(name) : NULL;
+}
+
+int app_home_init(const char *cli_override) {
+    if (g_app_home != NULL) {
+        free(g_app_home);
+        g_app_home = NULL;
     }
     g_initialized = 0;
+
+    const char *app_name = get_app_name();
 
     const char *source = NULL;
     char *resolved = NULL;
@@ -90,7 +103,20 @@ int ralph_home_init(const char *cli_override) {
         source = cli_override;
     }
     else {
-        const char *env_home = getenv("RALPH_HOME");
+        /* Build env var name: <APP_NAME>_HOME (uppercased) */
+        size_t name_len = strlen(app_name);
+        char *env_var = malloc(name_len + strlen("_HOME") + 1);
+        if (env_var == NULL) {
+            return -1;
+        }
+        for (size_t i = 0; i < name_len; i++) {
+            env_var[i] = (char)toupper((unsigned char)app_name[i]);
+        }
+        strcpy(env_var + name_len, "_HOME");
+
+        const char *env_home = getenv(env_var);
+        free(env_var);
+
         if (env_home != NULL && env_home[0] != '\0') {
             source = env_home;
         }
@@ -101,7 +127,7 @@ int ralph_home_init(const char *cli_override) {
         if (resolved == NULL) {
             return -1;
         }
-        g_ralph_home = resolved;
+        g_app_home = resolved;
     }
     else {
         const char *home = getenv("HOME");
@@ -109,24 +135,25 @@ int ralph_home_init(const char *cli_override) {
             return -1;
         }
 
-        size_t len = strlen(home) + strlen("/.local/ralph") + 1;
-        g_ralph_home = malloc(len);
-        if (g_ralph_home == NULL) {
+        /* Build default path: ~/.local/<app_name> */
+        size_t len = strlen(home) + strlen("/.local/") + strlen(app_name) + 1;
+        g_app_home = malloc(len);
+        if (g_app_home == NULL) {
             return -1;
         }
-        snprintf(g_ralph_home, len, "%s/.local/ralph", home);
+        snprintf(g_app_home, len, "%s/.local/%s", home, app_name);
     }
 
     g_initialized = 1;
     return 0;
 }
 
-const char* ralph_home_get(void) {
-    return g_ralph_home;
+const char* app_home_get(void) {
+    return g_app_home;
 }
 
-char* ralph_home_path(const char *relative_path) {
-    if (g_ralph_home == NULL || relative_path == NULL) {
+char* app_home_path(const char *relative_path) {
+    if (g_app_home == NULL || relative_path == NULL) {
         return NULL;
     }
 
@@ -135,30 +162,32 @@ char* ralph_home_path(const char *relative_path) {
         rel++;
     }
 
-    size_t len = strlen(g_ralph_home) + 1 + strlen(rel) + 1;
+    size_t len = strlen(g_app_home) + 1 + strlen(rel) + 1;
     char *full_path = malloc(len);
     if (full_path == NULL) {
         return NULL;
     }
 
-    snprintf(full_path, len, "%s/%s", g_ralph_home, rel);
+    snprintf(full_path, len, "%s/%s", g_app_home, rel);
     return full_path;
 }
 
-int ralph_home_ensure_exists(void) {
-    if (g_ralph_home == NULL) {
+int app_home_ensure_exists(void) {
+    if (g_app_home == NULL) {
         return -1;
     }
 
-    return mkdir_recursive(g_ralph_home);
+    return mkdir_recursive(g_app_home);
 }
 
-void ralph_home_cleanup(void) {
-    free(g_ralph_home);
-    g_ralph_home = NULL;
+void app_home_cleanup(void) {
+    free(g_app_home);
+    g_app_home = NULL;
     g_initialized = 0;
+    free(g_app_name);
+    g_app_name = NULL;
 }
 
-int ralph_home_is_initialized(void) {
+int app_home_is_initialized(void) {
     return g_initialized;
 }

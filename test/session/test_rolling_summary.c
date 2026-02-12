@@ -2,16 +2,16 @@
 #include "session/rolling_summary.h"
 #include "session/session_manager.h"
 #include "session/conversation_tracker.h"
-#include "util/ralph_home.h"
+#include "util/app_home.h"
 #include <string.h>
 #include <stdlib.h>
 
 void setUp(void) {
-    ralph_home_init(NULL);
+    app_home_init(NULL);
 }
 
 void tearDown(void) {
-    ralph_home_cleanup();
+    app_home_cleanup();
 }
 
 void test_rolling_summary_init(void) {

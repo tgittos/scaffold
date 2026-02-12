@@ -57,7 +57,7 @@ void test_create_default_path(void) {
 
     sqlite_dal_t *dal = sqlite_dal_create(&config);
 
-    /* Default path creation depends on ralph_home which may fail in test env */
+    /* Default path creation depends on app_home which may fail in test env */
     if (dal != NULL) {
         TEST_ASSERT_NOT_NULL(sqlite_dal_get_path(dal));
 
@@ -67,7 +67,7 @@ void test_create_default_path(void) {
         sqlite_dal_delete_file(path_copy);
         free(path_copy);
     }
-    /* If dal is NULL, that's OK - ralph_home doesn't exist in test env */
+    /* If dal is NULL, that's OK - app_home doesn't exist in test env */
 }
 
 /* Test destroy with NULL is safe */

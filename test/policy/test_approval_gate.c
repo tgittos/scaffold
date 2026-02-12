@@ -10,7 +10,7 @@
 #include <time.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include "util/ralph_home.h"
+#include "util/app_home.h"
 
 /*
  * Stub implementations for Python tool functions.
@@ -50,11 +50,11 @@ static FILE* create_test_config(void) {
 }
 
 void setUp(void) {
-    ralph_home_cleanup();
+    app_home_cleanup();
     remove_test_config();
     rmdir(g_test_home);
     mkdir(g_test_home, 0755);
-    ralph_home_init(g_test_home);
+    app_home_init(g_test_home);
     int result = approval_gate_init(&config);
     TEST_ASSERT_EQUAL(0, result);
 }
@@ -63,7 +63,7 @@ void tearDown(void) {
     approval_gate_cleanup(&config);
     remove_test_config();
     rmdir(g_test_home);
-    ralph_home_cleanup();
+    app_home_cleanup();
 }
 
 /* =============================================================================

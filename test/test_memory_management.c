@@ -3,7 +3,7 @@
 #include "ui/memory_commands.h"
 #include "agent/session.h"
 #include "services/services.h"
-#include "util/ralph_home.h"
+#include "util/app_home.h"
 #include "../test/test_fs_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,7 +18,7 @@ static char g_test_home[256];
 void setUp(void) {
     snprintf(g_test_home, sizeof(g_test_home), "/tmp/test_memory_mgmt_XXXXXX");
     TEST_ASSERT_NOT_NULL(mkdtemp(g_test_home));
-    ralph_home_init(g_test_home);
+    app_home_init(g_test_home);
 
     test_store = metadata_store_create(NULL);
 }
@@ -30,7 +30,7 @@ void tearDown(void) {
     }
 
     rmdir_recursive(g_test_home);
-    ralph_home_cleanup();
+    app_home_cleanup();
 }
 
 void test_metadata_store_create_and_destroy(void) {

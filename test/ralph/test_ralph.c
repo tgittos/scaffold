@@ -13,16 +13,16 @@ extern void hnswlib_clear_all(void);
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include "util/ralph_home.h"
+#include "util/app_home.h"
 #include "util/config.h"
 
 void setUp(void) {
-    ralph_home_init(NULL);
+    app_home_init(NULL);
     hnswlib_clear_all();
 }
 void tearDown(void) {
     config_cleanup();
-    ralph_home_cleanup();
+    app_home_cleanup();
 }
 
 void test_json_escape_string_null(void) {

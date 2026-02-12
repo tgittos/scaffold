@@ -5,7 +5,7 @@
 #include "db/document_store.h"
 #include "services/services.h"
 #include "util/config.h"
-#include "util/ralph_home.h"
+#include "util/app_home.h"
 #include "../mock_api_server.h"
 #include "../mock_embeddings.h"
 #include "../mock_embeddings_server.h"
@@ -27,7 +27,7 @@ static char* saved_api_url = NULL;
 void setUp(void) {
     snprintf(g_test_home, sizeof(g_test_home), "/tmp/test_vdb_tool_XXXXXX");
     TEST_ASSERT_NOT_NULL(mkdtemp(g_test_home));
-    ralph_home_init(g_test_home);
+    app_home_init(g_test_home);
 
     mock_embeddings_init_test_groups();
 
@@ -93,7 +93,7 @@ void tearDown(void) {
     }
 
     rmdir_recursive(g_test_home);
-    ralph_home_cleanup();
+    app_home_cleanup();
 }
 
 void test_register_vector_db_tool(void) {

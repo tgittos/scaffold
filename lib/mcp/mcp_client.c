@@ -2,7 +2,7 @@
 #include "mcp_transport.h"
 #include <cJSON.h>
 #include "util/debug_output.h"
-#include "../util/ralph_home.h"
+#include "../util/app_home.h"
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -95,7 +95,7 @@ int mcp_find_config_path(char* config_path, size_t path_size) {
         return -1;
     }
 
-    char* user_config = ralph_home_path("config.json");
+    char* user_config = app_home_path("config.json");
     if (user_config) {
         if (access(user_config, R_OK) == 0) {
             if (strlen(user_config) >= path_size) {

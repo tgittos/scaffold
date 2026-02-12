@@ -2,7 +2,7 @@
 #include "ui/model_commands.h"
 #include "agent/session.h"
 #include "util/config.h"
-#include "util/ralph_home.h"
+#include "util/app_home.h"
 #include "llm/model_capabilities.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,7 +13,7 @@ static AgentSession g_session;
 
 void setUp(void) {
     config_cleanup();
-    ralph_home_init(NULL);
+    app_home_init(NULL);
     config_init();
 
     memset(&g_session, 0, sizeof(g_session));
@@ -26,7 +26,7 @@ void tearDown(void) {
     free(g_session.session_data.config.model);
     free(g_session.session_data.config.api_url);
     config_cleanup();
-    ralph_home_cleanup();
+    app_home_cleanup();
 }
 
 void test_model_command_null_params(void) {

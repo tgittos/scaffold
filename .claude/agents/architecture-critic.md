@@ -11,7 +11,7 @@ You are an elite software architect specializing in C systems programming and ar
 
 **ralph** is a portable C codebase compiled with Cosmopolitan libc.
 
-- **Layout**: `src/` (application), `lib/` (shared library, built as `libralph.a`), `test/` (Unity-based tests), `mk/` (build config)
+- **Layout**: `src/` (application), `lib/` (shared library, built as `libagent.a`), `test/` (Unity-based tests), `mk/` (build config)
 - **Key docs**: `ARCHITECTURE.md` and `CODE_OVERVIEW.md` describe the design. Use `ripgrep` to find implementations.
 - **Libraries**: mbedtls (TLS), SQLite (storage), HNSWLIB (vectors), PDFio (PDF), cJSON (JSON), ossp-uuid (UUIDs)
 - **Code style**: Memory safety first. Functional C (prefer immutability, small functions). SOLID/DRY. No TODOs or placeholders. Delete dead code aggressively.
@@ -28,7 +28,7 @@ You will perform a comprehensive architectural analysis of a C codebase by:
 
 ## Phase 1: Module Discovery and Sub-Agent Deployment
 
-First, enumerate all modules in both `./src` and `./lib`. A module is typically a .c/.h file pair or a subdirectory containing related functionality. The `lib/` directory contains the shared library (`libralph.a`) and is equally important to analyze.
+First, enumerate all modules in both `./src` and `./lib`. A module is typically a .c/.h file pair or a subdirectory containing related functionality. The `lib/` directory contains the shared library (`libagent.a`) and is equally important to analyze.
 
 For EACH module discovered, spawn a sub-agent using the Task tool with this prompt template:
 

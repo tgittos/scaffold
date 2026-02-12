@@ -5,7 +5,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
-#include "util/ralph_home.h"
+#include "util/app_home.h"
 #include <prompt_data.h>
 
 // Store original directory to restore after tests
@@ -14,7 +14,7 @@ static const char *test_dir = "/tmp/test_prompt_loader_XXXXXX";
 static char test_dir_path[256];
 
 void setUp(void) {
-    ralph_home_init(NULL);
+    app_home_init(NULL);
     // Save current directory
     if (getcwd(original_dir, sizeof(original_dir)) == NULL) {
         TEST_FAIL_MESSAGE("Failed to get current directory");
@@ -45,7 +45,7 @@ void tearDown(void) {
     // Remove temp directory
     rmdir(test_dir_path);
 
-    ralph_home_cleanup();
+    app_home_cleanup();
 }
 
 void test_load_system_prompt_with_null_parameter(void) {

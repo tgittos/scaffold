@@ -9,20 +9,20 @@ extern void hnswlib_clear_all(void);
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "util/ralph_home.h"
+#include "util/app_home.h"
 
 static char g_test_home[256];
 
 void setUp(void) {
     snprintf(g_test_home, sizeof(g_test_home), "/tmp/test_recap_XXXXXX");
     TEST_ASSERT_NOT_NULL(mkdtemp(g_test_home));
-    ralph_home_init(g_test_home);
+    app_home_init(g_test_home);
     hnswlib_clear_all();
 }
 
 void tearDown(void) {
     rmdir_recursive(g_test_home);
-    ralph_home_cleanup();
+    app_home_cleanup();
 }
 
 // Test that recap with NULL session returns error

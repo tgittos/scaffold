@@ -18,10 +18,10 @@ TEST_$(1)_TARGET := $$(TESTDIR)/test_$(1)
 ALL_TEST_TARGETS += $$(TEST_$(1)_TARGET)
 endef
 
-# Template for libralph-linked test (test .c + optional extras, linked against libralph.a)
+# Template for libagent-linked test (test .c + optional extras, linked against libagent.a)
 # $(1) = test name (lowercase, no prefix)
 # $(2) = test file path (relative to TESTDIR, no .c)
-# $(3) = additional source files (mocks, stubs — listed BEFORE libralph.a to win symbol resolution)
+# $(3) = additional source files (mocks, stubs — listed BEFORE libagent.a to win symbol resolution)
 define def_test_lib
 TEST_$(1)_SOURCES := $$(TESTDIR)/$(2).c $(3) $$(UNITY)
 TEST_$(1)_OBJECTS := $$(TEST_$(1)_SOURCES:.c=.o)
@@ -39,8 +39,8 @@ $(eval $(call def_test,interrupt,ralph/test_interrupt,$(LIBDIR)/util/interrupt.c
 $(eval $(call def_test,async_executor,ralph/test_async_executor,$(LIBDIR)/agent/async_executor.c $(LIBDIR)/util/interrupt.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/ipc/pipe_notifier.c $(TESTDIR)/stubs/ralph_stub.c))
 $(eval $(call def_test,pipe_notifier,utils/test_pipe_notifier,$(LIBDIR)/ipc/pipe_notifier.c))
 $(eval $(call def_test,agent_identity,ralph/test_agent_identity,$(LIBDIR)/ipc/agent_identity.c))
-$(eval $(call def_test,prompt,utils/test_prompt_loader,$(LIBDIR)/util/prompt_loader.c $(LIBDIR)/util/ralph_home.c $(LIBDIR)/util/config.c $(LIBDIR)/util/debug_output.c))
-$(eval $(call def_test,ralph_home,utils/test_ralph_home,$(LIBDIR)/util/ralph_home.c))
+$(eval $(call def_test,prompt,utils/test_prompt_loader,$(LIBDIR)/util/prompt_loader.c $(LIBDIR)/util/app_home.c $(LIBDIR)/util/config.c $(LIBDIR)/util/debug_output.c))
+$(eval $(call def_test,app_home,utils/test_app_home,$(LIBDIR)/util/app_home.c))
 $(eval $(call def_test,todo_manager,tools/test_todo_manager,$(LIBDIR)/tools/todo_manager.c))
 $(eval $(call def_test,document_chunker,test_document_chunker,$(LIBDIR)/util/document_chunker.c $(LIBDIR)/util/common_utils.c))
 $(eval $(call def_test,streaming,network/test_streaming,$(LIBDIR)/network/streaming.c))
@@ -68,14 +68,14 @@ GATE_DEPS := \
     $(LIBDIR)/policy/subagent_approval.c \
     $(LIBDIR)/policy/tool_args.c \
     $(LIBDIR)/util/debug_output.c \
-    $(LIBDIR)/util/ralph_home.c \
+    $(LIBDIR)/util/app_home.c \
     $(LIBDIR)/util/json_escape.c
 
 $(eval $(call def_test,approval_gate,policy/test_approval_gate,$(GATE_DEPS)))
 $(eval $(call def_test,atomic_file,policy/test_atomic_file,$(LIBDIR)/policy/atomic_file.c))
 $(eval $(call def_test,path_normalize,policy/test_path_normalize,$(LIBDIR)/policy/path_normalize.c))
 $(eval $(call def_test,verified_file_context,test_verified_file_context,$(LIBDIR)/policy/verified_file_context.c $(LIBDIR)/policy/atomic_file.c $(LIBDIR)/policy/path_normalize.c))
-$(eval $(call def_test,protected_files,policy/test_protected_files,$(LIBDIR)/policy/protected_files.c $(LIBDIR)/policy/path_normalize.c $(LIBDIR)/util/ralph_home.c))
+$(eval $(call def_test,protected_files,policy/test_protected_files,$(LIBDIR)/policy/protected_files.c $(LIBDIR)/policy/path_normalize.c $(LIBDIR)/util/app_home.c))
 $(eval $(call def_test,shell_parser,policy/test_shell_parser,$(LIBDIR)/policy/shell_parser.c $(LIBDIR)/policy/shell_parser_cmd.c $(LIBDIR)/policy/shell_parser_ps.c))
 $(eval $(call def_test,shell_parser_cmd,policy/test_shell_parser_cmd,$(LIBDIR)/policy/shell_parser_cmd.c $(LIBDIR)/policy/shell_parser.c $(LIBDIR)/policy/shell_parser_ps.c))
 $(eval $(call def_test,shell_parser_ps,policy/test_shell_parser_ps,$(LIBDIR)/policy/shell_parser_ps.c $(LIBDIR)/policy/shell_parser.c $(LIBDIR)/policy/shell_parser_cmd.c))
@@ -103,8 +103,8 @@ $(TEST_agent_identity_TARGET): $(TEST_agent_identity_OBJECTS)
 $(TEST_prompt_TARGET): $(TEST_prompt_OBJECTS) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_prompt_OBJECTS) $(CJSON_LIB)
 
-$(TEST_ralph_home_TARGET): $(TEST_ralph_home_OBJECTS)
-	$(CC) -o $@ $(TEST_ralph_home_OBJECTS)
+$(TEST_app_home_TARGET): $(TEST_app_home_OBJECTS)
+	$(CC) -o $@ $(TEST_app_home_OBJECTS)
 
 $(TEST_todo_manager_TARGET): $(TEST_todo_manager_OBJECTS)
 	$(CC) -o $@ $(TEST_todo_manager_OBJECTS)
@@ -175,7 +175,7 @@ $(TEST_approval_gate_integration_TARGET): $(TEST_approval_gate_integration_OBJEC
 
 $(eval $(call def_test,updater,updater/test_updater,\
     $(TESTDIR)/updater/mock_http.c $(LIBDIR)/updater/updater.c \
-    $(LIBDIR)/util/executable_path.c $(LIBDIR)/util/ralph_home.c))
+    $(LIBDIR)/util/executable_path.c $(LIBDIR)/util/app_home.c))
 
 $(TEST_updater_TARGET): $(TEST_updater_OBJECTS) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_updater_OBJECTS) $(CJSON_LIB)
@@ -184,7 +184,7 @@ $(TEST_updater_TARGET): $(TEST_updater_OBJECTS) $(CJSON_LIB)
 # CJSON TESTS
 # =============================================================================
 
-$(eval $(call def_test,config,utils/test_config,$(LIBDIR)/util/config.c $(LIBDIR)/util/ralph_home.c $(LIBDIR)/util/debug_output.c))
+$(eval $(call def_test,config,utils/test_config,$(LIBDIR)/util/config.c $(LIBDIR)/util/app_home.c $(LIBDIR)/util/debug_output.c))
 $(eval $(call def_test,debug_output,utils/test_debug_output,$(LIBDIR)/util/debug_output.c))
 $(eval $(call def_test,spinner,utils/test_spinner,$(LIBDIR)/ui/terminal.c $(LIBDIR)/ui/spinner.c $(LIBDIR)/util/common_utils.c $(TESTDIR)/stubs/output_formatter_stub.c))
 $(eval $(call def_test,terminal,utils/test_terminal,$(LIBDIR)/ui/terminal.c $(LIBDIR)/util/common_utils.c $(TESTDIR)/stubs/output_formatter_stub.c))
@@ -215,7 +215,7 @@ $(TEST_pdf_extractor_TARGET): $(TEST_pdf_extractor_OBJECTS) $(PDFIO_LIB) $(ZLIB_
 # HTTP RETRY TEST
 # =============================================================================
 
-$(eval $(call def_test,http_retry,network/test_http_retry,$(LIBDIR)/network/api_error.c $(LIBDIR)/util/config.c $(LIBDIR)/util/ralph_home.c $(LIBDIR)/util/debug_output.c))
+$(eval $(call def_test,http_retry,network/test_http_retry,$(LIBDIR)/network/api_error.c $(LIBDIR)/util/config.c $(LIBDIR)/util/app_home.c $(LIBDIR)/util/debug_output.c))
 
 $(TEST_http_retry_TARGET): $(TEST_http_retry_OBJECTS) $(CJSON_LIB) $(LIBS_MBEDTLS)
 	$(CC) -o $@ $(TEST_http_retry_OBJECTS) $(CJSON_LIB) $(LIBS_MBEDTLS) -lm
@@ -224,9 +224,9 @@ $(TEST_http_retry_TARGET): $(TEST_http_retry_OBJECTS) $(CJSON_LIB) $(LIBS_MBEDTL
 # SQLITE TESTS
 # =============================================================================
 
-$(eval $(call def_test,sqlite_dal,db/test_sqlite_dal,$(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/ralph_home.c))
-$(eval $(call def_test,task_store,db/test_task_store,$(LIBDIR)/db/task_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/uuid_utils.c $(LIBDIR)/util/ralph_home.c))
-$(eval $(call def_test,message_store,db/test_message_store,$(LIBDIR)/ipc/message_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/uuid_utils.c $(LIBDIR)/util/ralph_home.c))
+$(eval $(call def_test,sqlite_dal,db/test_sqlite_dal,$(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/app_home.c))
+$(eval $(call def_test,task_store,db/test_task_store,$(LIBDIR)/db/task_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/uuid_utils.c $(LIBDIR)/util/app_home.c))
+$(eval $(call def_test,message_store,db/test_message_store,$(LIBDIR)/ipc/message_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/uuid_utils.c $(LIBDIR)/util/app_home.c))
 
 $(TEST_sqlite_dal_TARGET): $(TEST_sqlite_dal_OBJECTS) $(SQLITE_LIB)
 	$(CC) -o $@ $(TEST_sqlite_dal_OBJECTS) $(SQLITE_LIB) -lpthread -lm
@@ -237,14 +237,14 @@ $(TEST_task_store_TARGET): $(TEST_task_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_
 $(TEST_message_store_TARGET): $(TEST_message_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB)
 	$(CC) -o $@ $(TEST_message_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) -lpthread -lm
 
-# Messaging deps (use stubs that conflict with libralph.a symbols)
+# Messaging deps (use stubs that conflict with libagent.a symbols)
 MESSAGING_DEPS := \
     $(LIBDIR)/ipc/message_poller.c \
     $(LIBDIR)/ipc/notification_formatter.c \
     $(LIBDIR)/ipc/message_store.c \
     $(LIBDIR)/db/sqlite_dal.c \
     $(LIBDIR)/util/uuid_utils.c \
-    $(LIBDIR)/util/ralph_home.c \
+    $(LIBDIR)/util/app_home.c \
     $(LIBDIR)/util/common_utils.c \
     $(LIBDIR)/ipc/pipe_notifier.c \
     $(TESTDIR)/stubs/services_stub.c \
@@ -263,8 +263,8 @@ $(TEST_notification_formatter_TARGET): $(TEST_notification_formatter_OBJECTS) $(
 # VECTOR DB TEST (minimal, just hnswlib)
 # =============================================================================
 
-TEST_vector_db_SOURCES := $(TESTDIR)/db/test_vector_db.c $(LIBDIR)/db/vector_db.c $(LIBDIR)/util/ralph_home.c $(LIB_DB_CPP_SOURCES) $(UNITY)
-TEST_vector_db_OBJECTS := $(TESTDIR)/db/test_vector_db.o $(LIBDIR)/db/vector_db.o $(LIBDIR)/util/ralph_home.o $(LIBDIR)/db/hnswlib_wrapper.o $(TESTDIR)/unity/unity.o
+TEST_vector_db_SOURCES := $(TESTDIR)/db/test_vector_db.c $(LIBDIR)/db/vector_db.c $(LIBDIR)/util/app_home.c $(LIB_DB_CPP_SOURCES) $(UNITY)
+TEST_vector_db_OBJECTS := $(TESTDIR)/db/test_vector_db.o $(LIBDIR)/db/vector_db.o $(LIBDIR)/util/app_home.o $(LIBDIR)/db/hnswlib_wrapper.o $(TESTDIR)/unity/unity.o
 TEST_vector_db_TARGET := $(TESTDIR)/test_vector_db
 ALL_TEST_TARGETS += $(TEST_vector_db_TARGET)
 
@@ -316,8 +316,8 @@ $(eval $(call def_test_lib,python_integration,tools/test_python_integration,$(TO
 $(eval $(call def_test_lib,http_python,network/test_http_python,))
 $(eval $(call def_test_lib,image_attachment,network/test_image_attachment,))
 
-# Batch link rule for libralph-linked tests
-LIBRALPH_TESTS := tool_param_dsl json_output output tools_system vector_db_tool memory_tool \
+# Batch link rule for libagent-linked tests
+LIBAGENT_TESTS := tool_param_dsl json_output output tools_system vector_db_tool memory_tool \
     memory_mgmt token_manager conversation_compactor rolling_summary model_tools \
     openai_streaming anthropic_streaming messages_array_bug mcp_client subagent_tool \
     incomplete_task_bug conversation conversation_vdb tool_calls_not_stored document_store \
@@ -325,17 +325,17 @@ LIBRALPH_TESTS := tool_param_dsl json_output output tools_system vector_db_tool 
     slash_commands task_commands agent_commands mode_tool mode_commands \
     context_mode_injection image_attachment
 
-$(foreach t,$(LIBRALPH_TESTS),$(eval \
-$$(TEST_$(t)_TARGET): $$(TEST_$(t)_OBJECTS) $$(LIBRALPH) $$(ALL_LIBS) ; \
-	$$(CXX) -o $$@ $$(TEST_$(t)_OBJECTS) $$(LIBRALPH) $$(LIBS_STANDARD)))
+$(foreach t,$(LIBAGENT_TESTS),$(eval \
+$$(TEST_$(t)_TARGET): $$(TEST_$(t)_OBJECTS) $$(LIBAGENT) $$(ALL_LIBS) ; \
+	$$(CXX) -o $$@ $$(TEST_$(t)_OBJECTS) $$(LIBAGENT) $$(LIBS_STANDARD)))
 
 # http test needs LDFLAGS for library search paths
-$(TEST_http_TARGET): $(TEST_http_OBJECTS) $(LIBRALPH) $(ALL_LIBS)
-	$(CXX) $(LDFLAGS) -o $@ $(TEST_http_OBJECTS) $(LIBRALPH) $(LIBS) -lpthread
+$(TEST_http_TARGET): $(TEST_http_OBJECTS) $(LIBAGENT) $(ALL_LIBS)
+	$(CXX) $(LDFLAGS) -o $@ $(TEST_http_OBJECTS) $(LIBAGENT) $(LIBS) -lpthread
 
 # ralph test needs LDFLAGS and mock_api_server
-$(TEST_ralph_TARGET): $(TEST_ralph_OBJECTS) $(LIBRALPH) $(ALL_LIBS)
-	$(CXX) $(LDFLAGS) -o $@ $(TEST_ralph_OBJECTS) $(LIBRALPH) $(LIBS) -lpthread
+$(TEST_ralph_TARGET): $(TEST_ralph_OBJECTS) $(LIBAGENT) $(ALL_LIBS)
+	$(CXX) $(LDFLAGS) -o $@ $(TEST_ralph_OBJECTS) $(LIBAGENT) $(LIBS) -lpthread
 
 # =============================================================================
 # PYTHON TESTS (need stdlib embedding)
@@ -356,16 +356,16 @@ define PYTHON_TEST_EMBED
 	rm -f $$EMBED_ZIP
 endef
 
-$(TEST_python_tool_TARGET): $(TEST_python_tool_OBJECTS) $(LIBRALPH) $(ALL_LIBS)
-	$(CXX) -o $@ $(TEST_python_tool_OBJECTS) $(LIBRALPH) $(LIBS_STANDARD)
+$(TEST_python_tool_TARGET): $(TEST_python_tool_OBJECTS) $(LIBAGENT) $(ALL_LIBS)
+	$(CXX) -o $@ $(TEST_python_tool_OBJECTS) $(LIBAGENT) $(LIBS_STANDARD)
 	$(PYTHON_TEST_EMBED)
 
-$(TEST_python_integration_TARGET): $(TEST_python_integration_OBJECTS) $(LIBRALPH) $(ALL_LIBS)
-	$(CXX) -o $@ $(TEST_python_integration_OBJECTS) $(LIBRALPH) $(LIBS_STANDARD)
+$(TEST_python_integration_TARGET): $(TEST_python_integration_OBJECTS) $(LIBAGENT) $(ALL_LIBS)
+	$(CXX) -o $@ $(TEST_python_integration_OBJECTS) $(LIBAGENT) $(LIBS_STANDARD)
 	$(PYTHON_TEST_EMBED)
 
-$(TEST_http_python_TARGET): $(TEST_http_python_OBJECTS) $(LIBRALPH) $(ALL_LIBS)
-	$(CXX) -o $@ $(TEST_http_python_OBJECTS) $(LIBRALPH) $(LIBS_STANDARD)
+$(TEST_http_python_TARGET): $(TEST_http_python_OBJECTS) $(LIBAGENT) $(ALL_LIBS)
+	$(CXX) -o $@ $(TEST_http_python_OBJECTS) $(LIBAGENT) $(LIBS_STANDARD)
 	$(PYTHON_TEST_EMBED)
 
 # =============================================================================

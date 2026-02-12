@@ -3,7 +3,7 @@
  */
 
 #include "sqlite_dal.h"
-#include "../util/ralph_home.h"
+#include "../util/app_home.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -55,11 +55,11 @@ static char *get_default_path(const char *default_name) {
         return NULL;
     }
 
-    if (ralph_home_ensure_exists() != 0) {
+    if (app_home_ensure_exists() != 0) {
         return NULL;
     }
 
-    return ralph_home_path(default_name);
+    return app_home_path(default_name);
 }
 
 sqlite_dal_t *sqlite_dal_create(const sqlite_dal_config_t *config) {

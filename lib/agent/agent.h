@@ -54,7 +54,10 @@ typedef enum {
  * All string fields are copied; caller retains ownership of originals.
  */
 typedef struct AgentConfig {
-    /** Ralph home directory (uses default if NULL) */
+    /** Application name ("ralph", "scaffold", etc.) — sets home dir default */
+    const char* app_name;
+
+    /** Home directory override (uses default if NULL) */
     const char* home_dir;
 
     /** Execution mode */

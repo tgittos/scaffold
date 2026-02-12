@@ -5,7 +5,7 @@
 #include "../util/debug_output.h"
 #include "../ui/output_formatter.h"
 #include "../ui/json_output.h"
-#include "../util/ralph_home.h"
+#include "../util/app_home.h"
 #include "../ui/spinner.h"
 #include "../ui/status_line.h"
 #include "../policy/approval_gate.h"
@@ -43,8 +43,10 @@ int agent_init(Agent* agent, const AgentConfig* config) {
         agent->config = agent_config_default();
     }
 
-    /* Initialize ralph home directory FIRST - services depend on it */
-    if (ralph_home_init(agent->config.home_dir) != 0) {
+    /* Initialize home directory FIRST - services depend on it */
+    /* Always set app name (NULL resets to default "ralph") */
+    app_home_set_app_name(agent->config.app_name);
+    if (app_home_init(agent->config.home_dir) != 0) {
         return -1;
     }
 
@@ -64,7 +66,7 @@ int agent_init(Agent* agent, const AgentConfig* config) {
     /* For BACKGROUND mode (subagent), set env var BEFORE session init
      * so tool registration knows to skip subagent tools */
     if (agent->config.mode == AGENT_MODE_BACKGROUND) {
-        setenv("RALPH_IS_SUBAGENT", "1", 1);
+        setenv("AGENT_IS_SUBAGENT", "1", 1);
     }
 
     /* conversation_tracker needs services before session_init because

@@ -1,6 +1,6 @@
 #include "protected_files.h"
 #include "path_normalize.h"
-#include "../util/ralph_home.h"
+#include "../util/app_home.h"
 
 #include <errno.h>
 #include <fnmatch.h>
@@ -147,7 +147,7 @@ void refresh_protected_inodes(void) {
 
     scan_protected_paths_in_dir("/");
 
-    char *ralph_config = ralph_home_path("config.json");
+    char *ralph_config = app_home_path("config.json");
     if (ralph_config) {
         add_protected_inode_if_exists(ralph_config);
         free(ralph_config);

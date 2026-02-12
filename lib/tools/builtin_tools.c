@@ -37,7 +37,7 @@ int register_builtin_tools(ToolRegistry *registry) {
     }
 
     /* Subagents communicate with the parent via the harness, not messaging tools */
-    const char* is_subagent = getenv("RALPH_IS_SUBAGENT");
+    const char* is_subagent = getenv("AGENT_IS_SUBAGENT");
     if (is_subagent == NULL || strcmp(is_subagent, "1") != 0) {
         if (register_messaging_tools(registry) != 0) {
             fprintf(stderr, "Warning: Failed to register messaging tools\n");

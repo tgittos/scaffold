@@ -2,20 +2,20 @@
 #include "../../src/ralph/tools/python_tool.h"
 #include "../../src/ralph/tools/python_tool_files.h"
 #include "lib/tools/tools_system.h"
-#include "util/ralph_home.h"
+#include "util/app_home.h"
 #include <string.h>
 #include <stdlib.h>
 
 static ToolRegistry registry;
 
 void setUp(void) {
-    ralph_home_init(NULL);
+    app_home_init(NULL);
     init_tool_registry(&registry);
 }
 
 void tearDown(void) {
     cleanup_tool_registry(&registry);
-    ralph_home_cleanup();
+    app_home_cleanup();
 }
 
 // Test that the Python interpreter initializes correctly
@@ -352,12 +352,12 @@ void test_python_tool_docstring_parsing(void) {
 
 int main(void) {
     // Initialize ralph home before Python interpreter (needed for tool files path)
-    ralph_home_init(NULL);
+    app_home_init(NULL);
 
     // Initialize interpreter once for all tests
     if (python_interpreter_init() != 0) {
         fprintf(stderr, "Failed to initialize Python interpreter\n");
-        ralph_home_cleanup();
+        app_home_cleanup();
         return 1;
     }
 
@@ -379,7 +379,7 @@ int main(void) {
     int result = UNITY_END();
 
     python_interpreter_shutdown();
-    ralph_home_cleanup();
+    app_home_cleanup();
 
     return result;
 }

@@ -4,7 +4,7 @@
 #include "lib/ipc/message_store.h"
 #include "services/services.h"
 #include "util/config.h"
-#include "util/ralph_home.h"
+#include "util/app_home.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -77,7 +77,7 @@ static int spawn_mock_subagent(SubagentManager *manager, const char *mock_output
 void setUp(void) {
     // Initialize config for each test
     config_init();
-    ralph_home_init(NULL);
+    app_home_init(NULL);
     g_store = message_store_create(NULL);
 }
 
@@ -89,7 +89,7 @@ void tearDown(void) {
         message_store_destroy(g_store);
         g_store = NULL;
     }
-    ralph_home_cleanup();
+    app_home_cleanup();
 }
 
 void test_subagent_manager_init_defaults(void) {

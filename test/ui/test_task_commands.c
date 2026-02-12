@@ -3,7 +3,7 @@
 #include "agent/session.h"
 #include "services/services.h"
 #include "db/task_store.h"
-#include "util/ralph_home.h"
+#include "util/app_home.h"
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -22,7 +22,7 @@ static void restore_stdout(void) {
 }
 
 void setUp(void) {
-    ralph_home_init(NULL);
+    app_home_init(NULL);
     unlink(TEST_DB_PATH);
 
     g_services = services_create_empty();
@@ -41,7 +41,7 @@ void tearDown(void) {
         g_services = NULL;
     }
     unlink(TEST_DB_PATH);
-    ralph_home_cleanup();
+    app_home_cleanup();
 }
 
 static task_store_t *store(void) {

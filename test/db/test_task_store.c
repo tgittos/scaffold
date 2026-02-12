@@ -1,7 +1,7 @@
 #include "unity.h"
 #include "db/task_store.h"
 #include "util/uuid_utils.h"
-#include "util/ralph_home.h"
+#include "util/app_home.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -12,7 +12,7 @@ static task_store_t* g_store = NULL;
 static char g_session_id[40];
 
 void setUp(void) {
-    ralph_home_init(NULL);
+    app_home_init(NULL);
 
     // Clean up any leftover test database
     unlink(TEST_DB_PATH);
@@ -34,7 +34,7 @@ void tearDown(void) {
     // Remove test database
     unlink(TEST_DB_PATH);
 
-    ralph_home_cleanup();
+    app_home_cleanup();
 }
 
 // =============================================================================

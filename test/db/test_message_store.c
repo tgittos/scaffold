@@ -1,7 +1,7 @@
 #include "unity.h"
 #include "ipc/message_store.h"
 #include "util/uuid_utils.h"
-#include "util/ralph_home.h"
+#include "util/app_home.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -16,7 +16,7 @@ static message_store_t* g_store = NULL;
 void setUp(void) {
     snprintf(g_test_db_path, sizeof(g_test_db_path), "/tmp/test_messages_%d.db", getpid());
     snprintf(g_test_home_dir, sizeof(g_test_home_dir), "/tmp/test_message_store_home_%d", getpid());
-    ralph_home_init(g_test_home_dir);
+    app_home_init(g_test_home_dir);
     unlink(g_test_db_path);
     g_store = message_store_create(g_test_db_path);
 }
@@ -27,7 +27,7 @@ void tearDown(void) {
         g_store = NULL;
     }
     unlink(g_test_db_path);
-    ralph_home_cleanup();
+    app_home_cleanup();
 }
 
 void test_message_store_create_destroy(void) {

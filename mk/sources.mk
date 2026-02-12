@@ -1,6 +1,6 @@
-# Source file definitions for ralph
+# Source file definitions for ralph and scaffold
 
-# Core application sources
+# Core application sources (ralph binary)
 CORE_SOURCES := \
     $(SRCDIR)/ralph/main.c
 
@@ -14,9 +14,13 @@ TOOL_SOURCES := \
 PROVIDER_SOURCES :=
 MODEL_SOURCES :=
 
-# Combined sources
+# Combined sources (ralph binary)
 C_SOURCES := $(CORE_SOURCES) $(TOOL_SOURCES) \
     $(PROVIDER_SOURCES) $(MODEL_SOURCES)
 CPP_SOURCES :=
 SOURCES := $(C_SOURCES) $(CPP_SOURCES)
 OBJECTS := $(C_SOURCES:.c=.o) $(CPP_SOURCES:.cpp=.o)
+
+# Scaffold binary sources
+SCAFFOLD_SOURCES := $(SRCDIR)/scaffold/main.c
+SCAFFOLD_OBJECTS := $(SCAFFOLD_SOURCES:.c=.o)

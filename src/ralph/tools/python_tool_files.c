@@ -1,6 +1,6 @@
 #include "python_tool_files.h"
 #include "python_tool.h"
-#include "util/ralph_home.h"
+#include "util/app_home.h"
 #include "util/debug_output.h"
 #include <Python.h>
 #include <cJSON.h>
@@ -31,7 +31,7 @@ static const char *DEFAULT_TOOL_NAMES[] = {
 };
 
 static char* get_tools_dir_path(void) {
-    return ralph_home_path(PYTHON_TOOLS_DIR_NAME);
+    return app_home_path(PYTHON_TOOLS_DIR_NAME);
 }
 
 static int mkdir_recursive(const char *path) {

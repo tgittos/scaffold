@@ -1,7 +1,7 @@
 #include "vector_db.h"
 #include "hnswlib_wrapper.h"
 #include "util/ptrarray.h"
-#include "../util/ralph_home.h"
+#include "../util/app_home.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -38,12 +38,12 @@ struct vector_db {
 static void* flush_thread_func(void* arg);
 
 char* vector_db_get_default_directory(void) {
-    const char* home = ralph_home_get();
+    const char* home = app_home_get();
     if (!home) {
         return NULL;
     }
 
-    if (ralph_home_ensure_exists() != 0) {
+    if (app_home_ensure_exists() != 0) {
         return NULL;
     }
 

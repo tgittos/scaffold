@@ -4,16 +4,16 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdbool.h>
-#include "util/ralph_home.h"
+#include "util/app_home.h"
 
 void setUp(void) {
-    ralph_home_init(NULL);
+    app_home_init(NULL);
 }
 
 void tearDown(void) {
     // No file cleanup needed - using vector DB only
 
-    ralph_home_cleanup();
+    app_home_cleanup();
 }
 
 void test_init_conversation_history(void) {

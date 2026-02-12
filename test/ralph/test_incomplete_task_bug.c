@@ -6,15 +6,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "util/ralph_home.h"
+#include "util/app_home.h"
 
 void setUp(void) {
-    ralph_home_init(NULL);
+    app_home_init(NULL);
 }
 
 void tearDown(void) {
 
-    ralph_home_cleanup();
+    app_home_cleanup();
 }
 
 void test_todo_has_pending_tasks(void) {

@@ -2,7 +2,7 @@
 #include "db/document_store.h"
 #include "db/vector_db_service.h"
 #include "services/services.h"
-#include "util/ralph_home.h"
+#include "util/app_home.h"
 
 extern void hnswlib_clear_all(void);
 #include <stdlib.h>
@@ -16,7 +16,7 @@ static Services* g_test_services = NULL;
 void setUp(void) {
     snprintf(g_test_home, sizeof(g_test_home), "/tmp/test_doc_store_XXXXXX");
     TEST_ASSERT_NOT_NULL(mkdtemp(g_test_home));
-    ralph_home_init(g_test_home);
+    app_home_init(g_test_home);
     hnswlib_clear_all();
     rmdir_recursive("/tmp/test_doc_store");
 
@@ -36,7 +36,7 @@ void tearDown(void) {
         g_test_services = NULL;
     }
     rmdir_recursive(g_test_home);
-    ralph_home_cleanup();
+    app_home_cleanup();
 }
 
 void test_document_store_create_and_destroy(void) {

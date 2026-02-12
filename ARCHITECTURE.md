@@ -1087,7 +1087,7 @@ lib/
 │   ├── prompt_loader.c/h   # System prompt loading
 │   ├── context_retriever.c/h # Vector context retrieval
 │   ├── ansi_codes.h        # Terminal color codes and box-drawing characters
-│   └── ralph_home.c/h      # Centralized home directory management
+│   └── app_home.c/h        # Centralized home directory management
 └── workflow/               # Task queue
     └── workflow.c/h        # SQLite-backed work queue
 ```

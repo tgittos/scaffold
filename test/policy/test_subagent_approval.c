@@ -17,7 +17,7 @@
 #include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include "util/ralph_home.h"
+#include "util/app_home.h"
 
 /* =============================================================================
  * Stubs for Python tool functions (not linked in unit tests)
@@ -39,12 +39,12 @@ const char* python_tool_get_match_arg(const char *name) {
 }
 
 void setUp(void) {
-    ralph_home_init(NULL);
+    app_home_init(NULL);
 }
 
 void tearDown(void) {
 
-    ralph_home_cleanup();
+    app_home_cleanup();
 }
 
 /* =============================================================================
