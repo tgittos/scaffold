@@ -1,137 +1,89 @@
 #include "unity.h"
 #include "agent/session.h"
-#include "agent/agent.h"
+#include "session/session_manager.h"
 #include "session/conversation_tracker.h"
-#include "db/hnswlib_wrapper.h"
-#include "../test_fs_utils.h"
 
-extern void hnswlib_clear_all(void);
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "util/app_home.h"
 
-static char g_test_home[256];
+static AgentSession g_session;
 
-void setUp(void) {
-    snprintf(g_test_home, sizeof(g_test_home), "/tmp/test_recap_XXXXXX");
-    TEST_ASSERT_NOT_NULL(mkdtemp(g_test_home));
-    app_home_init(g_test_home);
-    hnswlib_clear_all();
+static void init_bare_session(AgentSession* s) {
+    memset(s, 0, sizeof(*s));
+    session_data_init(&s->session_data);
 }
 
-void tearDown(void) {
-    rmdir_recursive(g_test_home);
-    app_home_cleanup();
+static void cleanup_bare_session(AgentSession* s) {
+    session_data_cleanup(&s->session_data);
 }
 
-// Test that recap with NULL session returns error
+void setUp(void) {}
+void tearDown(void) {}
+
 void test_recap_null_session(void) {
     int result = session_generate_recap(NULL, 5);
     TEST_ASSERT_EQUAL_INT(-1, result);
 }
 
-// Test that recap with empty conversation returns success (nothing to recap)
 void test_recap_empty_conversation(void) {
-    AgentSession session;
+    init_bare_session(&g_session);
 
-    int init_result = session_init(&session);
-    TEST_ASSERT_EQUAL_INT(0, init_result);
-
-    // Clear any loaded conversation
-    cleanup_conversation_history(&session.session_data.conversation);
-    init_conversation_history(&session.session_data.conversation);
-
-    // Recap with empty conversation should return 0 (nothing to do)
-    int result = session_generate_recap(&session, 5);
+    int result = session_generate_recap(&g_session, 5);
     TEST_ASSERT_EQUAL_INT(0, result);
 
-    session_cleanup(&session);
+    cleanup_bare_session(&g_session);
 }
 
-// Test that recap doesn't persist to conversation history
 void test_recap_does_not_persist_conversation(void) {
-    AgentSession session;
+    init_bare_session(&g_session);
 
-    int init_result = session_init(&session);
-    TEST_ASSERT_EQUAL_INT(0, init_result);
+    append_conversation_message(&g_session.session_data.conversation, "user", "Hello");
+    append_conversation_message(&g_session.session_data.conversation, "assistant", "Hi there!");
+    append_conversation_message(&g_session.session_data.conversation, "user", "How are you?");
 
-    int load_result = session_load_config(&session);
-    TEST_ASSERT_EQUAL_INT(0, load_result);
-
-    // Clear and add some test messages
-    cleanup_conversation_history(&session.session_data.conversation);
-    init_conversation_history(&session.session_data.conversation);
-
-    append_conversation_message(&session.session_data.conversation, "user", "Hello");
-    append_conversation_message(&session.session_data.conversation, "assistant", "Hi there!");
-    append_conversation_message(&session.session_data.conversation, "user", "How are you?");
-
-    int original_count = session.session_data.conversation.count;
+    int original_count = g_session.session_data.conversation.count;
     TEST_ASSERT_EQUAL_INT(3, original_count);
 
-    // Generate recap (will fail due to no API key, but should still not modify history)
-    int result = session_generate_recap(&session, 5);
-    // Result may be -1 due to API failure, that's expected
-    (void)result; // Suppress unused warning
+    int result = session_generate_recap(&g_session, 5);
+    (void)result;
 
-    // Verify conversation count is unchanged
-    TEST_ASSERT_EQUAL_INT(original_count, session.session_data.conversation.count);
+    TEST_ASSERT_EQUAL_INT(original_count, g_session.session_data.conversation.count);
 
-    session_cleanup(&session);
+    cleanup_bare_session(&g_session);
 }
 
-// Test max_messages parameter with 0 (should use default)
 void test_recap_max_messages_zero_uses_default(void) {
-    AgentSession session;
+    init_bare_session(&g_session);
 
-    int init_result = session_init(&session);
-    TEST_ASSERT_EQUAL_INT(0, init_result);
+    append_conversation_message(&g_session.session_data.conversation, "user", "Test message");
 
-    // Clear and add test messages
-    cleanup_conversation_history(&session.session_data.conversation);
-    init_conversation_history(&session.session_data.conversation);
+    int original_count = g_session.session_data.conversation.count;
 
-    append_conversation_message(&session.session_data.conversation, "user", "Test message");
-
-    int original_count = session.session_data.conversation.count;
-
-    // Call with 0 max_messages - should use default
-    int result = session_generate_recap(&session, 0);
+    int result = session_generate_recap(&g_session, 0);
     (void)result;
 
-    // History should be unchanged
-    TEST_ASSERT_EQUAL_INT(original_count, session.session_data.conversation.count);
+    TEST_ASSERT_EQUAL_INT(original_count, g_session.session_data.conversation.count);
 
-    session_cleanup(&session);
+    cleanup_bare_session(&g_session);
 }
 
-// Test that tool messages are skipped in recap context
 void test_recap_skips_tool_messages(void) {
-    AgentSession session;
+    init_bare_session(&g_session);
 
-    int init_result = session_init(&session);
-    TEST_ASSERT_EQUAL_INT(0, init_result);
+    append_conversation_message(&g_session.session_data.conversation, "user", "Run a command");
+    append_tool_message(&g_session.session_data.conversation, "Command output", "call_123", "shell");
+    append_conversation_message(&g_session.session_data.conversation, "assistant", "Here's the result");
 
-    // Clear and add messages including tool messages
-    cleanup_conversation_history(&session.session_data.conversation);
-    init_conversation_history(&session.session_data.conversation);
-
-    append_conversation_message(&session.session_data.conversation, "user", "Run a command");
-    append_tool_message(&session.session_data.conversation, "Command output", "call_123", "shell");
-    append_conversation_message(&session.session_data.conversation, "assistant", "Here's the result");
-
-    int original_count = session.session_data.conversation.count;
+    int original_count = g_session.session_data.conversation.count;
     TEST_ASSERT_EQUAL_INT(3, original_count);
 
-    // Generate recap (may fail due to no API)
-    int result = session_generate_recap(&session, 5);
+    int result = session_generate_recap(&g_session, 5);
     (void)result;
 
-    // History should be unchanged
-    TEST_ASSERT_EQUAL_INT(original_count, session.session_data.conversation.count);
+    TEST_ASSERT_EQUAL_INT(original_count, g_session.session_data.conversation.count);
 
-    session_cleanup(&session);
+    cleanup_bare_session(&g_session);
 }
 
 int main(void) {
