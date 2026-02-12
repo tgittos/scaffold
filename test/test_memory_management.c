@@ -4,6 +4,7 @@
 #include "agent/session.h"
 #include "services/services.h"
 #include "util/ralph_home.h"
+#include "../test/test_fs_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,17 +13,12 @@
 
 static metadata_store_t* test_store = NULL;
 static AgentSession g_session;
+static char g_test_home[256];
 
 void setUp(void) {
-    ralph_home_init(NULL);
-
-    // Clean up any existing test data
-    const char* home = getenv("HOME");
-    if (home != NULL) {
-        char cmd[512] = {0};  // Initialize to avoid valgrind warnings
-        snprintf(cmd, sizeof(cmd), "rm -rf %s/.local/ralph/metadata/test_index 2>/dev/null", home);
-        system(cmd);
-    }
+    snprintf(g_test_home, sizeof(g_test_home), "/tmp/test_memory_mgmt_XXXXXX");
+    TEST_ASSERT_NOT_NULL(mkdtemp(g_test_home));
+    ralph_home_init(g_test_home);
 
     test_store = metadata_store_create(NULL);
 }
@@ -33,14 +29,7 @@ void tearDown(void) {
         test_store = NULL;
     }
 
-    // Clean up test data
-    const char* home = getenv("HOME");
-    if (home != NULL) {
-        char cmd[512];
-        snprintf(cmd, sizeof(cmd), "rm -rf %s/.local/ralph/metadata/test_index 2>/dev/null", home);
-        system(cmd);
-    }
-
+    rmdir_recursive(g_test_home);
     ralph_home_cleanup();
 }
 
@@ -52,8 +41,6 @@ void test_metadata_store_create_and_destroy(void) {
 }
 
 void test_metadata_store_save_and_get(void) {
-    setUp();  // Ensure clean state
-
     metadata_store_t* store = test_store;
     TEST_ASSERT_NOT_NULL(store);
 
@@ -85,8 +72,6 @@ void test_metadata_store_save_and_get(void) {
 }
 
 void test_metadata_store_delete(void) {
-    setUp();  // Ensure clean state
-
     metadata_store_t* store = test_store;
     TEST_ASSERT_NOT_NULL(store);
 
@@ -120,16 +105,7 @@ void test_metadata_store_delete(void) {
 }
 
 void test_metadata_store_list(void) {
-    // Use a unique test index for this test to avoid conflicts
     const char* test_index = "test_index_list";
-
-    // Clean up any existing data for this specific index
-    const char* home = getenv("HOME");
-    if (home != NULL) {
-        char cmd[512];
-        snprintf(cmd, sizeof(cmd), "rm -rf %s/.local/ralph/metadata/%s 2>/dev/null", home, test_index);
-        system(cmd);
-    }
 
     metadata_store_t* store = test_store;
     TEST_ASSERT_NOT_NULL(store);
@@ -167,18 +143,9 @@ void test_metadata_store_list(void) {
     }
 
     metadata_store_free_chunks(chunks, count);
-
-    // Clean up after test
-    if (home != NULL) {
-        char cmd[512];
-        snprintf(cmd, sizeof(cmd), "rm -rf %s/.local/ralph/metadata/%s 2>/dev/null", home, test_index);
-        system(cmd);
-    }
 }
 
 void test_metadata_store_search(void) {
-    setUp();  // Ensure clean state
-
     metadata_store_t* store = test_store;
     TEST_ASSERT_NOT_NULL(store);
 
@@ -241,8 +208,6 @@ void test_metadata_store_search(void) {
 }
 
 void test_metadata_store_update(void) {
-    setUp();  // Ensure clean state
-
     metadata_store_t* store = test_store;
     TEST_ASSERT_NOT_NULL(store);
 

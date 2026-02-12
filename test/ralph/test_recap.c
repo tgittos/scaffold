@@ -3,6 +3,7 @@
 #include "agent/agent.h"
 #include "session/conversation_tracker.h"
 #include "db/hnswlib_wrapper.h"
+#include "../test_fs_utils.h"
 
 extern void hnswlib_clear_all(void);
 #include <stdio.h>
@@ -10,12 +11,17 @@ extern void hnswlib_clear_all(void);
 #include <string.h>
 #include "util/ralph_home.h"
 
+static char g_test_home[256];
+
 void setUp(void) {
-    ralph_home_init(NULL);
+    snprintf(g_test_home, sizeof(g_test_home), "/tmp/test_recap_XXXXXX");
+    TEST_ASSERT_NOT_NULL(mkdtemp(g_test_home));
+    ralph_home_init(g_test_home);
     hnswlib_clear_all();
 }
 
 void tearDown(void) {
+    rmdir_recursive(g_test_home);
     ralph_home_cleanup();
 }
 
