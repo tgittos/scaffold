@@ -32,6 +32,8 @@ Services* services_create_empty(void) {
     services->task_store = NULL;
     services->document_store = NULL;
     services->metadata_store = NULL;
+    services->goal_store = NULL;
+    services->action_store = NULL;
     services->use_singletons = false;
 
     return services;
@@ -76,6 +78,20 @@ document_store_t* services_get_document_store(Services* services) {
 metadata_store_t* services_get_metadata_store(Services* services) {
     if (services != NULL && services->metadata_store != NULL) {
         return services->metadata_store;
+    }
+    return NULL;
+}
+
+goal_store_t* services_get_goal_store(Services* services) {
+    if (services != NULL && services->goal_store != NULL) {
+        return services->goal_store;
+    }
+    return NULL;
+}
+
+action_store_t* services_get_action_store(Services* services) {
+    if (services != NULL && services->action_store != NULL) {
+        return services->action_store;
     }
     return NULL;
 }

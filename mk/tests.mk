@@ -237,6 +237,15 @@ $(TEST_task_store_TARGET): $(TEST_task_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_
 $(TEST_message_store_TARGET): $(TEST_message_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB)
 	$(CC) -o $@ $(TEST_message_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) -lpthread -lm
 
+$(eval $(call def_test,goal_store,db/test_goal_store,$(LIBDIR)/db/goal_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/uuid_utils.c $(LIBDIR)/util/app_home.c))
+$(eval $(call def_test,action_store,db/test_action_store,$(LIBDIR)/db/action_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/uuid_utils.c $(LIBDIR)/util/app_home.c))
+
+$(TEST_goal_store_TARGET): $(TEST_goal_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB)
+	$(CC) -o $@ $(TEST_goal_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) -lpthread -lm
+
+$(TEST_action_store_TARGET): $(TEST_action_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) $(CJSON_LIB)
+	$(CC) -o $@ $(TEST_action_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) $(CJSON_LIB) -lpthread -lm
+
 # Messaging deps (use stubs that conflict with libagent.a symbols)
 MESSAGING_DEPS := \
     $(LIBDIR)/ipc/message_poller.c \

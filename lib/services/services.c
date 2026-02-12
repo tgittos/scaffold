@@ -17,6 +17,9 @@ Services* services_create_default(void) {
     document_store_set_services(services);
     services->document_store = document_store_create(NULL);
 
+    services->goal_store = goal_store_create(NULL);
+    services->action_store = action_store_create(NULL);
+
     services->use_singletons = false;
 
     return services;
@@ -34,6 +37,8 @@ Services* services_create_empty(void) {
     services->task_store = NULL;
     services->document_store = NULL;
     services->metadata_store = NULL;
+    services->goal_store = NULL;
+    services->action_store = NULL;
     services->use_singletons = false;
 
     return services;
@@ -62,6 +67,12 @@ void services_destroy(Services* services) {
     if (services->metadata_store != NULL) {
         metadata_store_destroy(services->metadata_store);
     }
+    if (services->goal_store != NULL) {
+        goal_store_destroy(services->goal_store);
+    }
+    if (services->action_store != NULL) {
+        action_store_destroy(services->action_store);
+    }
 
     free(services);
 }
@@ -88,4 +99,12 @@ document_store_t* services_get_document_store(Services* services) {
 
 metadata_store_t* services_get_metadata_store(Services* services) {
     return (services != NULL) ? services->metadata_store : NULL;
+}
+
+goal_store_t* services_get_goal_store(Services* services) {
+    return (services != NULL) ? services->goal_store : NULL;
+}
+
+action_store_t* services_get_action_store(Services* services) {
+    return (services != NULL) ? services->action_store : NULL;
 }

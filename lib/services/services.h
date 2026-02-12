@@ -16,6 +16,8 @@
 #include "db/task_store.h"
 #include "db/document_store.h"
 #include "db/metadata_store.h"
+#include "db/goal_store.h"
+#include "db/action_store.h"
 #include "llm/embeddings_service.h"
 
 #ifdef __cplusplus
@@ -45,6 +47,12 @@ typedef struct Services {
 
     /** Metadata store for chunk metadata */
     metadata_store_t* metadata_store;
+
+    /** Goal store for GOAP goal persistence */
+    goal_store_t* goal_store;
+
+    /** Action store for GOAP action persistence */
+    action_store_t* action_store;
 
     /** Reserved for future use */
     bool use_singletons;
@@ -80,6 +88,8 @@ embeddings_service_t* services_get_embeddings(Services* services);
 task_store_t* services_get_task_store(Services* services);
 document_store_t* services_get_document_store(Services* services);
 metadata_store_t* services_get_metadata_store(Services* services);
+goal_store_t* services_get_goal_store(Services* services);
+action_store_t* services_get_action_store(Services* services);
 
 #ifdef __cplusplus
 }
