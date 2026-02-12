@@ -38,13 +38,19 @@ It's 3 layers of abstraction in a trenchcoat, with the final layer being mostly 
 
 A generic-ish library for agentic AI stuff:
 
-- async tool calling
-- sub-agents + async inter-agent messaging
-- a semantic memory store
-- stdio MCP tools
-- Anthropic/OpenAI-compatible provider support (including local)
+- Anthropic/OpenAI-compatible provider support (including local via LM Studio, Ollama)
+- async tool calling with built-in filesystem, shell, memory, PDF, vector DB, and task tools
+- extensible Python tool system
+- MCP tool support (stdio and HTTP/SSE transports)
+- sub-agents with direct and pub/sub messaging
+- GOAP-based multi-agent orchestration with work queues
+- HNSWLIB-backed semantic memory and document store
+- conversation management with token-aware compression and rolling summaries
+- category-based approval gates with allowlists and protected file detection
+- SSE streaming with provider-specific parsing
+- SQLite-backed persistence for tasks, messages, goals, and actions
+- self-updater via GitHub releases
 - AGENTS.md support
-- more
 
 Used to build my ralph. Use it to build a ralph of your own.
 
@@ -56,10 +62,11 @@ This is my ralph.
 
 Mine is a little smarter than the average ralph:
 
-- semantic long-term memory
-- expandable Python based tooling
-- MCP tool support
-- task tracking
+- interactive REPL and single-shot CLI modes
+- Python-based filesystem, shell, and web tools out of the box
+- semantic long-term memory across sessions
+- task tracking and management
+- project-aware via AGENTS.md context loading
 
 ### scaffold
 
@@ -119,8 +126,15 @@ The orchestrator will autonomously plan and execute your software design, and co
 Rather than having to setup a Cosmopolitan toolchain of your own, you can build this project using the devcontainer:
 
 ```bash
+# Build the devcontainer image
+docker build -t scaffold-dev .devcontainer/
+
+# Build the project
 docker run --rm --privileged \
     -v /your/checkout/path:/workspaces/ralph \
     -w /workspaces/ralph \
-    bash -c "make -j$(nproc)"
+    scaffold-dev \
+    ./scripts/build.sh
 ```
+
+The `--privileged` flag is required to register the APE binary loader for Cosmopolitan executables.
