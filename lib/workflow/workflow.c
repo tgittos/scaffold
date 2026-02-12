@@ -371,9 +371,31 @@ WorkerHandle* worker_spawn(const char* queue_name, const char* system_prompt) {
     }
     snprintf(handle->agent_id, sizeof(handle->agent_id), "worker-%s", uuid);
 
+    /* Write system prompt to temp file if provided */
+    if (system_prompt != NULL && strlen(system_prompt) > 0) {
+        snprintf(handle->system_prompt_file, sizeof(handle->system_prompt_file),
+                 "/tmp/scaffold_prompt_XXXXXX");
+        int fd = mkstemp(handle->system_prompt_file);
+        if (fd < 0) {
+            free(handle);
+            return NULL;
+        }
+        size_t prompt_len = strlen(system_prompt);
+        ssize_t written = write(fd, system_prompt, prompt_len);
+        close(fd);
+        if (written < 0 || (size_t)written != prompt_len) {
+            unlink(handle->system_prompt_file);
+            free(handle);
+            return NULL;
+        }
+    }
+
     /* Get path to ralph executable */
     char* ralph_path = get_ralph_executable_path();
     if (ralph_path == NULL) {
+        if (handle->system_prompt_file[0]) {
+            unlink(handle->system_prompt_file);
+        }
         free(handle);
         return NULL;
     }
@@ -382,13 +404,15 @@ WorkerHandle* worker_spawn(const char* queue_name, const char* system_prompt) {
     pid_t pid = fork();
     if (pid < 0) {
         free(ralph_path);
+        if (handle->system_prompt_file[0]) {
+            unlink(handle->system_prompt_file);
+        }
         free(handle);
         return NULL;
     }
 
     if (pid == 0) {
-        /* Child process - exec ralph as worker */
-        /* Redirect stdout/stderr to /dev/null for background operation */
+        /* Child process - exec as worker */
         int devnull = open("/dev/null", O_WRONLY);
         if (devnull >= 0) {
             dup2(devnull, STDOUT_FILENO);
@@ -396,8 +420,7 @@ WorkerHandle* worker_spawn(const char* queue_name, const char* system_prompt) {
             close(devnull);
         }
 
-        /* Build argument list */
-        char* args[8];
+        char* args[10];
         int arg_idx = 0;
 
         args[arg_idx++] = ralph_path;
@@ -405,13 +428,14 @@ WorkerHandle* worker_spawn(const char* queue_name, const char* system_prompt) {
         args[arg_idx++] = "--queue";
         args[arg_idx++] = (char*)queue_name;
 
-        /* Add system prompt if provided (future: --system-prompt flag) */
-        (void)system_prompt;
+        if (handle->system_prompt_file[0]) {
+            args[arg_idx++] = "--system-prompt-file";
+            args[arg_idx++] = handle->system_prompt_file;
+        }
 
         args[arg_idx] = NULL;
 
         execv(ralph_path, args);
-        /* If execv fails, exit with error */
         _exit(127);
     }
 
@@ -471,6 +495,9 @@ int worker_stop(WorkerHandle* handle) {
 void worker_handle_free(WorkerHandle* handle) {
     if (handle == NULL) {
         return;
+    }
+    if (handle->system_prompt_file[0]) {
+        unlink(handle->system_prompt_file);
     }
     free(handle);
 }

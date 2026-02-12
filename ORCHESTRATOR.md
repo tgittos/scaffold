@@ -2,43 +2,40 @@
 
 ## Context
 
-Scaffold is an orchestrator built on ralph. Three layers:
+Scaffold is an orchestrator built on ralph. Two binaries, one library:
 
 - **libagent** (`libagent.a`): Generic agent library — tool calling, sub-agents, messaging, memory, MCP, LLM providers.
 - **ralph** (`src/ralph/main.c`): A standalone AI agent binary with semantic memory, Python tooling, MCP support, task tracking.
-- **scaffold** (`src/scaffold/main.c`): An orchestrator binary that coordinates goal supervisors and their worker agents.
+- **scaffold** (`src/scaffold/main.c`): An orchestrator binary that coordinates goal decomposition, supervision, and worker execution.
 
 It's ralphs all the way down.
 
-Both binaries link against `libagent.a`. `ralph` is the standalone agent. `scaffold` is the orchestrator that manages long-lived goals using ephemeral workers.
+Both binaries link against `libagent.a`. `ralph` is the standalone agent. `scaffold` is the orchestrator. Every process in scaffold is a full agent with all tooling — the difference is the system prompt and the task.
 
-**Core insight**: Flip the worker/work relationship. Work (goals, actions, results, world state) is persistent and lives in SQLite stores. Workers are ephemeral processes that pick up an action, execute it with a fresh context window, report results, and die. Goal supervisors maintain lean context (goal state + world state + action table) and never accumulate worker conversation histories.
+**Core insight**: Every stage gets its own agent with its own context window. Work (goals, actions, results, world state) is persistent and lives in SQLite stores. Agents are organized into layers — planning, supervision, execution — each with a focused scope that prevents context blowup by architecture, not by relying on compaction. No agent ever sees another agent's conversation history; results flow through the stores.
 
 **Planning model**: Combines Goal-Oriented Action Planning (GOAP) with Hierarchical Task Network (HTN) decomposition. Goals are desired world states. Actions are transforms with preconditions and effects — dependencies emerge mechanically from precondition/effect chains. Actions can be **compound** (decomposed into children just-in-time by the supervisor) or **primitive** (dispatched to workers). This hierarchical decomposition means the LLM only needs to plan one level of detail at a time, with full context from completed prerequisite work.
 
 ## Architecture
 
-Every process in scaffold is a ralph instance running in a different mode.
+Three agent roles, two context boundaries. Both `ralph` and `scaffold` are thin CLI wrappers around `libagent.a` — they share the same agent lifecycle (`agent_init` → `agent_run` → `agent_cleanup`) and differ only in `app_name` and app-specific extensions. `worker_spawn()` uses `get_executable_path()` to fork the current binary, so all child processes are scaffold instances.
 
 ```
 scaffold (interactive REPL or one-shot mode)
-  └── Orchestrator (in-process, manages goals)
-        ├── Goal A ──→ ralph --supervisor --goal A
-        │                ├── ralph --worker --queue A (action 1) → dies
-        │                ├── ralph --worker --queue A (action 2) → dies
-        │                └── ralph --worker --queue A (action 3) → dies
-        └── Goal B ──→ ralph --supervisor --goal B
-                         └── ralph --worker --queue B (action 4) → dies
+  └── Plan finalized → context cleared → decompose into goals
+        ├── Goal A → Supervisor agent (fresh context)
+        │              ├── Worker (action 1) → dies
+        │              ├── Worker (action 2) → dies
+        │              └── Worker (action 3) → dies
+        └── Goal B → Supervisor agent (fresh context)
+                       └── Worker (action 4) → dies
 ```
 
-- **Scaffold**: The user-facing process. In REPL mode, it's an interactive ralph with orchestrator tools and slash commands. In one-shot mode (`cat spec.md | ./scaffold` or `./scaffold "build X"`), it receives the spec, decomposes into goals, starts supervisors, monitors to completion, and exits. One-shot mode is a natural consequence of ralph's existing one-shot mode — the orchestrator module just needs to be active.
-- **Orchestrator**: In-process module inside scaffold. Exposes LLM tools (`create_goal`, `goal_status`, etc.) and slash commands (`/goals`, `/tasks`, `/agents`) so the user manages goals through conversation or direct inspection.
-- **Goal Supervisor**: A ralph process (`--supervisor --goal <id>`) forked per active goal. Runs the GOAP planning loop: evaluate world state → find ready actions → decompose or dispatch → collect results → verify effects → update world state → repeat.
-- **Worker**: An ephemeral ralph process (`--worker --queue <name>`). Claims a work item, runs `session_process_message()` with fresh conversation history, reports the result string, exits.
+- **Scaffold agent**: The user-facing process. In REPL mode, the user collaborates with the agent to build a plan. In one-shot mode (`cat spec.md | ./scaffold` or `./scaffold "build X"`), the plan arrives via stdin/argument. Once the plan is finalized, the scaffold clears its context (plan-mode → execution-mode handoff) and decomposes the plan into goals with GOAP structure — goal state assertions, world state, initial compound actions — using GOAP tools (`goap_create_goal`, `goap_create_actions`). This is one short LLM interaction on a fresh context. The scaffold then spawns one supervisor per goal and monitors progress.
+- **Goal Supervisor agents**: One per active goal, fresh context. Ensures the goal reaches completion by managing the GOAP loop via tool calls: find ready actions → decompose compound ones → dispatch primitives to workers → verify effects from completed work → replan when stuck. Reads worker results from the store, never from worker conversations. Context stays bounded because each interaction is tool-call-heavy with bounded store reads. Event-driven — sleeps between worker dispatches, wakes on worker completion messages via the message poller (see Supervisor Event Loop below).
+- **Worker agents**: Ephemeral, fresh context per action. Receive an action description + prerequisite results as their task. Execute using the full toolset with a role-specific system prompt (implementation, code review, testing, etc.). Report result. Die when queue is empty. The current `AGENT_MODE_WORKER` sleeps indefinitely on empty queue — this needs modification to exit cleanly instead (see Phase 5).
 
-### Future: HTTP Control Surface
-
-The supervisor's GOAP engine is deliberately decoupled from UI code — no session dependencies, no terminal assumptions. This makes it a natural target for an HTTP control surface: expose world state, action status, and commands (pause, cancel, add actions) over HTTP without refactoring the decision engine.
+All agents are full scaffold processes with the complete toolkit — GOAP tools, file editing, shell, everything. Context blowup is prevented by architecture: the scaffold clears context before decomposition, supervisors never see worker conversations (results live in the store), workers are ephemeral. Only the scaffold agent might accumulate context from user conversation (pre-plan).
 
 ## GOAP Model
 
@@ -56,6 +53,8 @@ A set of boolean assertions about the current state of the project:
 ```
 
 Absent keys are false. The supervisor maintains this as a JSON object, persisted on the goal row. World state is updated when workers complete primitive actions and the supervisor verifies their effects.
+
+World state is strictly an **ordering and completion lattice** — it answers "what conditions hold?" for mechanical readiness checks and goal completion tests. It is not a knowledge base. When the supervisor or a downstream action needs to know *what* was built (schema details, API shape, implementation choices), it reads **action results** from the store via `goap_get_action_results`. This separation is critical: if world state carried semantic values (strings, JSON objects), precondition checking would require an LLM call ("does this state satisfy this precondition?"), defeating GOAP's core property that ordering is *derived mechanically*, not *decided*.
 
 ### Goal State
 
@@ -115,7 +114,7 @@ typedef struct {
 
 ### Worker Roles
 
-Each primitive action carries a `role` that determines the worker's system prompt. The supervisor maps roles to system prompt templates when spawning workers via `worker_spawn()` (which already accepts a `system_prompt` parameter).
+Each primitive action carries a `role` that determines the worker's system prompt. The supervisor maps roles to system prompt templates when spawning workers. Note: `worker_spawn()` accepts a `system_prompt` parameter in its signature but currently ignores it (`(void)system_prompt` with a "future: --system-prompt flag" comment). Phase 5 must wire this through — writing the prompt to a temp file and passing the path via CLI flag (avoids `execv` argument length limits).
 
 | Role | System Prompt Focus |
 |------|-------------------|
@@ -126,7 +125,7 @@ Each primitive action carries a `role` that determines the worker's system promp
 | `pm_review` | Check implementation against original requirements. Verify acceptance criteria are met. |
 | `testing` | Write and run tests, verify behavior, check edge cases. |
 
-Roles are strings, not an enum — new roles can be added without code changes. The supervisor loads prompt templates from a configurable directory (following the `python_defaults/` pattern) or falls back to a generic worker prompt for unknown roles.
+Roles are strings, not an enum — new roles can be added without code changes. The supervisor loads prompt templates from a configurable directory (e.g., `~/.local/scaffold/prompts/`), following the runtime file-loading pattern used by `prompt_loader.c` (loads `AGENTS.md` from CWD) and `config.c` (loads JSON from `app_home_get()` directory). Falls back to built-in default prompts for the standard roles and a generic worker prompt for unknown roles.
 
 Verification actions are first-class actions in the GOAP model. They have preconditions on the implementation effects they verify (so they naturally run after implementation completes) and produce quality gate effects that feed into the goal state. The decomposition prompts instruct the LLM to include verification actions alongside implementation actions.
 
@@ -207,19 +206,18 @@ The initial decomposition only needs 3-5 high-level compound actions. Each decom
 
 Planning is hierarchical and just-in-time:
 
-1. **Initial decomposition** (`create_goal`): The LLM decomposes the goal into compound actions (high-level phases) plus the goal state assertions. This is a coarse plan — 3-5 actions, not 30.
-2. **Just-in-time decomposition** (supervisor loop): When a compound action becomes ready (preconditions satisfied), the supervisor asks the LLM to decompose it into children. Children can be primitive (worker-executable) or further compound (decomposed later). The supervisor has results from prerequisite actions available, so it can plan with more context than the initial decomposition had.
-3. **Primitive dispatch**: When a primitive action becomes ready, it goes to a worker.
-4. **Continuous replanning**: If the supervisor is stuck at any level (no ready actions, no running workers, effects not met), it asks the LLM to generate new actions bridging the gap. This works identically for top-level stuck states and for compound actions whose children didn't fully satisfy the contract.
+1. **Initial decomposition** (scaffold agent, post-context-clear): The plan is decomposed into goals, each with goal state assertions and initial compound actions (high-level phases). This is a coarse plan — 3-5 actions per goal, not 30. The scaffold agent does this directly after clearing its context, using GOAP tools in one short LLM interaction.
+2. **Just-in-time decomposition** (supervisor agent): When a compound action becomes ready (preconditions satisfied), the supervisor decomposes it into children via GOAP tools. Children can be primitive (worker-executable) or further compound (decomposed later). The supervisor has results from prerequisite actions available in the store, so it can plan with more context than the initial decomposition had.
+3. **Primitive dispatch**: When a primitive action becomes ready, the supervisor dispatches it to a worker via GOAP tools.
+4. **Continuous replanning**: If the supervisor is stuck at any level (no ready actions, no running workers, effects not met), it generates new actions bridging the gap. This works identically for top-level stuck states and for compound actions whose children didn't fully satisfy the contract.
 
-### LLM's Role in the GOAP Loop
+### How Each Layer Uses the LLM
 
-The LLM is used for four specific things:
+Every layer goes through `session_process_message()` — no raw `llm_client_send()` calls. Each agent's LLM drives its work through tool calls:
 
-1. **Initial decomposition** (in scaffold, during `create_goal`): Goal description → goal state assertions + compound action library with preconditions/effects.
-2. **Compound decomposition** (in supervisor, when compound action is ready): Compound action description + world state + prerequisite results → child actions (compound or primitive) with preconditions/effects.
-3. **Effect verification** (in supervisor, after worker completes a primitive): "Worker completed this action and reported: [result]. Are these effects satisfied: [effects list]?" → yes/no per effect. Verified effects are applied to world state.
-4. **Action generation** (in supervisor, when stuck): "Current world state is X. Target effects are Y. No available actions can progress. What new actions would bridge the gap?" → new actions with preconditions/effects.
+- **Scaffold agent**: Two phases. (1) **Planning**: conversational — the LLM helps the user refine a plan via normal conversation. Once finalized, the LLM calls `execute_plan` which clears the context. (2) **Decomposition + monitoring**: on the fresh context, the LLM decomposes the plan into goals and initial compound actions via GOAP tools (`goap_create_goal`, `goap_create_actions`), spawns supervisors, and enters monitoring mode. One short decomposition interaction, then the scaffold reports progress to the user as supervisor status messages arrive.
+- **Supervisor agent**: Receives a goal ID as its task. The LLM examines the state via GOAP tools (`goap_get_goal`, `goap_list_actions`, `goap_get_action_results`) and progresses the goal via tool calls (`goap_create_actions`, `goap_dispatch_action`, `goap_update_world_state`, `goap_check_complete`). The supervisor is event-driven — after dispatching workers, it sleeps until worker completion messages arrive via the message poller (see Supervisor Event Loop). If it dies (context full, crash), the scaffold agent respawns it — the new instance reads current state from the stores and continues. Context stays naturally bounded because worker results come from the store (not from conversation history) and each supervisor manages a single focused goal.
+- **Worker agent**: Receives action description + prerequisite results as its task. Uses the full toolset (file editing, shell, etc.) to complete the action. Reports result via work queue. Dies.
 
 Goal completion is mechanical — no LLM call needed. `world_state ⊇ goal_state` → done.
 
@@ -320,206 +318,113 @@ void action_free_list(Action** actions, size_t count);
 - `mk/lib.mk` — Add to `LIB_DB_SOURCES`
 - `mk/tests.mk` — Add test target
 
-### Phase 3: Goal Supervisor
+### Phase 3: Worker Result Capture
 
-The supervisor is a lightweight process that does NOT use a full `AgentSession`. It uses `llm_client_send()` directly for structured evaluation calls, keeping dependencies minimal.
+Workers currently report "Task completed successfully" as the result. Workers need to capture the LLM's final response so supervisors can verify effects against actual output. This must be done before GOAP tools and supervisors are built — supervisors read worker results from the store to verify effects and plan next steps.
+
+**Modify:**
+- `lib/agent/agent.c` (worker loop, `AGENT_MODE_WORKER` case, inside the `result == 0` branch where `work_queue_complete()` is called with the static `"Task completed successfully"` string) — After `session_process_message()`, extract the last assistant message from `agent->session.session_data.conversation` (a `ConversationHistory` DARRAY with `.data[]` and `.count`) and pass its `.content` to `work_queue_complete()` as the result instead of the static string. The conversation history is valid here because `session_process_message()` appends the assistant response before returning.
+
+### Phase 4: GOAP Tools + Goal Supervisor
+
+The supervisor is a full agent — it goes through `session_process_message()` like every other layer. The GOAP logic lives in tools that the supervisor's LLM calls, not in hand-crafted prompt/response cycles.
 
 **New files:**
-- `lib/orchestrator/supervisor.h` — Supervisor config, lifecycle, GOAP engine API
+- `lib/tools/goap_tools.h` — GOAP tool registration + `goap_tools_set_services()`
+- `lib/tools/goap_tools.c` — Tool implementations
+- `lib/orchestrator/supervisor.h` — Supervisor session loop
 - `lib/orchestrator/supervisor.c` — Implementation
+- `test/orchestrator/test_goap_tools.c` — GOAP tool unit tests
 
-**Supervisor GOAP loop** (in `supervisor_run()`):
-```
-while (running) {
-    1. supervisor_collect_results()
-       → poll work_queue for completed items
-       → for each completed primitive action:
-           → LLM call: verify effects against worker result
-           → apply verified effects to world_state
-           → update action status to COMPLETED
-       → for each failed action:
-           → increment attempt_count
-           → if under max_attempts: reset to PENDING (work_queue handles retry)
-           → if exhausted: mark action FAILED
-       → check compound actions: if all children COMPLETED and
-         effects verified in world_state → mark compound COMPLETED
-       → persist updated world_state to goal_store
+**GOAP Tools** (registered for all scaffold agents, used primarily by supervisors and the scaffold agent during decomposition):
 
-    2. supervisor_check_completion()
-       → if world_state ⊇ goal_state → update goal to COMPLETED, exit
+| Tool | Description |
+|------|-------------|
+| `goap_get_goal` | Read goal description, goal state, world state |
+| `goap_list_actions` | List actions for a goal, filtered by status/parent |
+| `goap_create_goal` | Create a new goal with goal state assertions |
+| `goap_create_actions` | Insert actions (compound or primitive) with preconditions/effects |
+| `goap_update_action` | Update action status/result |
+| `goap_dispatch_action` | Enqueue primitive action to work queue + spawn worker |
+| `goap_update_world_state` | Set world state assertions (verified effects) |
+| `goap_check_complete` | Test if `world_state ⊇ goal_state` |
+| `goap_get_action_results` | Read completed action results from store |
 
-    3. ready = supervisor_find_ready_actions(world_state)
-       → actions where status == PENDING and all preconditions satisfied
+Tools follow existing patterns: global `Services*` pointer via `goap_tools_set_services()`, parameters via `extract_string_param()`, results via `tool_result_builder`. The `goap_dispatch_action` tool handles worker context building (goal summary, action description, prerequisite results from store) and role-based system prompt selection internally. It also enforces the worker capacity cap — before spawning, it counts running workers for the goal and returns an error if at `max_workers_per_goal`. Workers are spawned as subagents of the supervisor, so completion triggers `subagent_notify_parent()` automatically (see Supervisor Event Loop).
 
-    4. for each ready action:
-       → if action.is_compound:
-           → LLM call: decompose into child actions
-           → insert children into action_store (parent_action_id = this action)
-           → update compound action status to RUNNING
-       → else if worker capacity available:
-           → build worker context JSON
-           → select system prompt for action.role
-           → work_queue_enqueue()
-           → worker_spawn(queue_name, role_system_prompt)
-           → update action status to RUNNING
+**Supervisor event loop:**
 
-    5. if no ready actions AND no running workers AND goal not met:
-       → identify unsatisfied effects (goal_state keys not in world_state,
-         or compound action effects not met by children)
-       → LLM call: generate new actions to bridge the gap
-       → if new actions produced: insert, loop back
-       → if no viable path: update goal to FAILED, exit
+The supervisor runs as `AGENT_MODE_SUPERVISOR` — a stripped-down REPL without stdin. The lifecycle:
 
-    6. else if workers or decompositions pending:
-       → sleep briefly, loop back to step 1
-}
-```
+1. **Initial kick**: `supervisor_run()` reads goal state from stores, builds a status summary, calls `session_process_message()`. The LLM examines the state and calls GOAP tools — decompose compound actions, dispatch primitives, verify effects.
+2. **Wait for events**: After the LLM's turn completes (workers dispatched, nothing left to do until they finish), the supervisor enters an event loop: `select()` on the message poller fd only (no stdin). This is the REPL event loop minus readline.
+3. **Worker completion notification**: Workers are spawned as subagents. When a worker completes, `subagent_notify_parent()` sends a direct message via `message_send_direct()`. The supervisor's message poller detects it (within `poll_interval_ms`), writes `'M'` to the notification pipe, and `select()` unblocks.
+4. **Out-of-band LLM call**: The event loop fetches the message, injects it as a system notification into the conversation, and calls `session_continue()`. The LLM sees "worker X completed with result Y" and responds with GOAP tool calls — verify effects, update world state, dispatch next actions.
+5. **Repeat** steps 2-4 until `world_state ⊇ goal_state` → supervisor exits cleanly.
+6. **Context full**: If the supervisor's context fills up, it exits. The scaffold agent detects the dead PID and respawns.
 
-**Lean context for LLM calls** — built from scratch each time:
+The supervisor reads worker results from the action store / work queue (structured data for GOAP tool calls), not from the notification message itself. The notification is just the wake-up trigger.
 
-For compound action decomposition:
-```
-System: You are decomposing a project phase into concrete actions using
-goal-oriented action planning. Each child action should have preconditions
-and effects. Children may be compound (need further decomposition) or
-primitive (directly executable by a worker agent).
+**Crash resilience:**
 
-Each primitive action has a role that determines what kind of worker executes it:
-- "implementation": build, create, or modify code
-- "code_review": review code for quality, security, and correctness
-- "architecture_review": evaluate structural and design decisions
-- "pm_review": verify implementation against original requirements
-- "testing": write and run tests, verify behavior
+All goal state is external in the stores. Supervisors are designed to die and restart:
 
-Include verification actions alongside implementation actions. Verification
-actions should have preconditions on the implementation effects they verify.
+- If context fills up, the supervisor exits
+- If the process crashes, the scaffold agent detects the dead PID
+- In both cases, the scaffold agent respawns the supervisor for the same goal
+- The new instance reads current world state, action statuses, and worker results from the stores and continues where the last one left off
+- The GOAP model naturally supports this — no in-memory state to lose
 
-User:
-## Goal
-{goal.description}
-
-## Phase to Decompose
-{compound_action.description}
-
-## Expected Effects
-{compound_action.effects as bulleted list}
-
-## Current World State
-{world_state as key: true list}
-
-## Completed Prerequisite Results
-{results from actions whose effects are in this action's preconditions}
-
-Return a JSON array inside a ```json fenced block:
-[{"description": "...", "is_compound": bool, "role": "...", "preconditions": ["..."], "effects": ["..."]}]
-
-Children's effects should collectively satisfy the phase's expected effects.
-```
-
-For effect verification:
-```
-System: You are verifying whether a completed action achieved its intended effects.
-
-User:
-## Action
-{action.description}
-
-## Worker Result
-{action.result}
-
-## Effects to Verify
-{effects as bulleted list}
-
-For each effect, respond with the effect name and YES or NO.
-```
-
-For action generation (when stuck):
-```
-System: You are a project planner using goal-oriented action planning.
-Given the current state and desired goal, propose new actions to make progress.
-
-User:
-## Goal
-{goal.description}
-
-## Current World State
-{world_state as key: true list}
-
-## Unsatisfied Effects
-{effects needed but not yet in world_state}
-
-## Completed Actions
-{completed actions with results, brief}
-
-## Problem
-No available actions can make progress toward the required effects.
-Propose new actions with preconditions and effects.
-
-Return a JSON array inside a ```json fenced block:
-[{"description": "...", "is_compound": bool, "role": "...", "preconditions": ["..."], "effects": ["..."]}]
-```
-
-Each LLM call stays at ~2-4K tokens regardless of goal lifetime. Compound decomposition calls are naturally small because they focus on a single phase.
+This is the same principle as workers (ephemeral, die after work) applied to supervision: agents are like processes in an actor framework, designed to die and restart around persistent external state. Each supervisor is told "ensure this goal is complete" and keeps getting respawned until it can report that `world_state ⊇ goal_state`.
 
 **Key design decisions:**
-- Supervisor calls `llm_client_send()` + `config_get()` directly. Depends on: `llm_client.h`, `config.h`, `action_store.h`, `goal_store.h`, `workflow.h`. No dependency on `session.h`, `tools_system.h`, `approval_gate.h`, or any UI code. This minimal dependency surface is what makes the supervisor viable as a standalone HTTP-accessible process in the future.
-- LLM responses parsed with `parse_api_response()` from `output_formatter.h`, which yields `ParsedResponse.response_content`. For structured output (action generation, decomposition), the supervisor extracts ` ```json ``` ` blocks and parses with cJSON.
 - **Worker capacity**: `config_get_int("max_workers_per_goal", 3)` with a hard cap of 20 (matching `SUBAGENT_HARD_CAP`). Add `int max_workers_per_goal` to `agent_config_t` in `config.h`.
+- **Scaffold↔Supervisor communication**: The `goal_store` is the single source of truth. The supervisor updates `goal.status`, `goal.world_state`, and `goal.summary` directly in SQLite as it progresses. Scaffold polls with `goal_store_get()` — no IPC messages needed for status. Process liveness is checked with `kill(supervisor_pid, 0)`.
+- **Worker role specialization**: The `goap_dispatch_action` tool selects a system prompt matching `action.role` and passes it to `worker_spawn(queue_name, system_prompt)`. Prompt templates are loaded from a configurable directory (e.g., `~/.local/scaffold/prompts/`), following the runtime file-loading patterns in `prompt_loader.c` and `config.c`, with built-in fallbacks for the standard roles. Unknown roles get a generic worker prompt.
+- **Worker context building**: The `goap_dispatch_action` tool builds the work item context from the stores: goal description (1-2 sentence summary), action description and role, relevant world state, results from prerequisite actions, and for verification roles, the results from the implementation actions being verified.
 
-**Scaffold↔Supervisor communication**: The `goal_store` is the single source of truth. The supervisor updates `goal.status`, `goal.world_state`, and `goal.summary` directly in SQLite as it progresses. Scaffold polls with `goal_store_get()` — no IPC messages needed for status. Process liveness is checked with `kill(supervisor_pid, 0)`.
-
-**Worker role specialization**: The supervisor maintains a mapping from role strings to system prompt templates. When spawning a worker for a primitive action, the supervisor selects the prompt matching `action.role` and passes it to `worker_spawn(queue_name, system_prompt)` — which already accepts a system prompt parameter. Prompt templates are loaded from a configurable directory (e.g., `~/.local/scaffold/prompts/`) following the `python_defaults/` pattern, with built-in fallbacks for the standard roles. Unknown roles get a generic worker prompt.
-
-**Worker context building**: Before enqueuing a work item, the supervisor builds a context JSON containing:
-- Goal description (1-2 sentence summary)
-- This action's description and role
-- Relevant world state (what's already been accomplished)
-- Results from prerequisite actions (actions whose effects are in this action's preconditions)
-- For verification roles: the results from the implementation actions being verified
-
-### Phase 4: Agent Mode Integration
+### Phase 5: Agent Mode Integration
 
 Wire the supervisor into the existing agent process spawning.
 
 **Modify:**
-- `lib/agent/agent.h` — Add `AGENT_MODE_SUPERVISOR = 4` to `AgentMode` enum. Add `const char* supervisor_goal_id` to `AgentConfig`.
-- `lib/agent/agent.c` — Add `case AGENT_MODE_SUPERVISOR:` in `agent_run()`. Creates a `Supervisor`, calls `supervisor_run()`, cleans up. Same pattern as `AGENT_MODE_WORKER` (lines 213-297).
-- `src/scaffold/main.c` — New entry point for the scaffold binary. Supports REPL mode (default) and one-shot mode (stdin/argument). Parses `--supervisor --goal <id>` for supervisor processes and `--worker --queue <name>` for workers (same as ralph).
+- `lib/agent/agent.h` — Add `AGENT_MODE_SUPERVISOR = 4` to `AgentMode` enum (after existing `AGENT_MODE_WORKER = 3`). Add `const char* supervisor_goal_id` to `AgentConfig` (alongside existing `worker_queue_name` and `worker_system_prompt` fields).
+- `lib/agent/agent.c` — Add `case AGENT_MODE_SUPERVISOR:` in `agent_run()`. Creates a `Supervisor`, calls `supervisor_run()`, cleans up. Same pattern as the `AGENT_MODE_WORKER` case (signal handler setup, create resource, run loop, destroy resource on exit). Also modify `AGENT_MODE_WORKER`: when `work_queue_claim()` returns NULL, exit cleanly instead of sleeping (`usleep(1000000)` → `break`), so workers die after draining their queue.
+- `lib/workflow/workflow.c` — Wire `system_prompt` through `worker_spawn()`: write the prompt to a temp file and pass the path via `--system-prompt-file <path>` CLI flag to the child process. Temp file avoids OS-level `execv` argument length limits for long prompts. Currently `system_prompt` is accepted but unused (`(void)system_prompt` at line 409).
+- `src/scaffold/main.c` — Already exists with REPL, single-shot, worker, and subagent modes. Add `--supervisor --goal <id>` argument parsing (same pattern as existing `--worker --queue <name>`).
 
 **Modify build:**
-- `mk/sources.mk` — Add `SCAFFOLD_SOURCES` alongside existing `RALPH_SOURCES`
-- `Makefile` — Add scaffold binary target
+- `mk/sources.mk` — `SCAFFOLD_SOURCES` already exists (pointing to `src/scaffold/main.c`), no change needed
+- `Makefile` — Add scaffold binary target (if not already present)
 
-### Phase 5: Scaffold Tools + Slash Commands
+### Phase 6: Scaffold Orchestrator Tools + Slash Commands
 
-The orchestrator is an in-process module instantiated by the scaffold process.
+The scaffold agent needs tools to manage the overall lifecycle — executing plans (with inline decomposition), spawning supervisors, monitoring progress. These are separate from the GOAP tools (Phase 4) which all agents share.
 
 **New files:**
-- `lib/orchestrator/orchestrator.h` — Orchestrator lifecycle, goal management API
+- `lib/orchestrator/orchestrator.h` — Orchestrator lifecycle, supervisor spawning/monitoring
 - `lib/orchestrator/orchestrator.c` — Implementation
-- `lib/tools/orchestrator_tool.h` — Tool registration for LLM access
+- `lib/tools/orchestrator_tool.h` — Tool registration for scaffold agent
 - `lib/tools/orchestrator_tool.c` — Tool implementations
 
-**LLM Tools:**
+**Scaffold Agent Tools** (user-facing goal lifecycle):
+
 | Tool | Description |
 |------|-------------|
-| `create_goal` | Decompose user goal into GOAP actions, create goal |
+| `execute_plan` | Clear context, decompose plan into goals, spawn supervisors |
 | `list_goals` | Show all goals with status and world state summary |
 | `goal_status` | Detailed view: world state, action tree, progress |
-| `start_goal` | Spawn supervisor for a goal |
 | `pause_goal` | Signal supervisor to pause |
 | `cancel_goal` | Kill supervisor and workers |
 
-**`create_goal` implementation:**
-1. Create `Goal` row in `goal_store` with status PLANNING.
-2. LLM call via `llm_client_send()` with GOAP decomposition prompt: goal description → JSON output with `goal_state` (assertions) and `actions` (compound, with description + preconditions + effects) inside a fenced code block.
-3. Parse response: `parse_api_response()` → extract JSON block → cJSON.
-4. Store `goal_state` on the goal row. Initialize `world_state` to `{}`.
-5. Create each top-level action via `action_store_insert()`. Initial actions are compound — the supervisor handles further decomposition.
-6. Update goal status to ACTIVE.
-7. Return goal ID, action count, and goal state summary via `tool_result_builder`.
+**`execute_plan` implementation:**
+1. Clear the scaffold agent's conversation context (plan-mode → execution-mode handoff).
+2. Return a tool result containing the plan text and a decomposition instruction. On the fresh context, the scaffold agent's LLM sees the plan and decomposes it into goals and initial compound actions using GOAP tools (`goap_create_goal`, `goap_create_actions`).
+3. The scaffold agent spawns one supervisor per goal (via orchestrator functions) and enters monitoring mode.
 
-The tool follows existing patterns: global `Services*` pointer set via explicit `*_set_services()` wiring (see `memory_tool.c`), parameters extracted with `extract_string_param()`, results via `tool_result_builder_create/set_success/finalize`.
+No separate decomposer process — the scaffold agent handles decomposition directly on its fresh post-clear context. This is one short LLM interaction (plan in, goals + actions out via tool calls).
+
+Tools follow existing patterns: global `Services*` pointer via `orchestrator_tool_set_services()` (see `memory_tool.c`), parameters via `extract_string_param()`, results via `tool_result_builder`.
 
 **Slash Commands** (direct state inspection, bypass LLM):
 | Command | Description |
@@ -529,30 +434,25 @@ The tool follows existing patterns: global `Services*` pointer set via explicit 
 | `/agents` | Show running supervisors and workers |
 | `/memory` | Access semantic memory (existing) |
 
-`/tasks` displays the action hierarchy as a tree — compound actions as parent nodes, children indented beneath. Status, effects, and worker results shown per action. This gives the user a natural view of project phases and their progress.
+`/tasks` displays the action hierarchy as a tree — compound actions as parent nodes, children indented beneath. Status, effects, and worker results shown per action.
 
 Slash commands read directly from stores and format output for the terminal without an LLM round-trip.
 
 **Modify:**
-- `lib/agent/session.c` — Init orchestrator during `session_init()` when running as scaffold, register tools
-- `mk/lib.mk` — Add `LIB_ORCHESTRATOR_SOURCES`
+- `lib/agent/session.c` — Register GOAP tools and orchestrator tools during `session_init()` when running as scaffold (check `app_name`). Wire services via `goap_tools_set_services()` and `orchestrator_tool_set_services()` in `session_wire_services()` (same pattern as `memory_tool_set_services()`, `vector_db_tool_set_services()`, etc.)
+- `lib/tools/builtin_tools.c` — Add `register_goap_tools()` and `register_orchestrator_tools()` calls (conditioned on scaffold mode) alongside existing `register_memory_tools()`, `register_vector_db_tools()`, etc.
+- `mk/lib.mk` — Add `LIB_ORCHESTRATOR_SOURCES` to the library module list
 
-### Phase 6: Worker Result Capture
+### Phase 7: Recovery + Supervisor Respawn
 
-Workers currently report "Task completed successfully" as the result. Workers need to capture the LLM's final response so supervisors can verify effects against actual output.
+Agents are designed to die and restart. All state is external in the stores — no in-memory state to lose.
 
-**Modify:**
-- `lib/agent/agent.c` (worker loop, line 273) — After `session_process_message()`, extract the last assistant message from `conversation.data[conversation.count-1].content` and pass it to `work_queue_complete()` as the result instead of the static string.
-
-### Phase 7: Recovery
-
-Handle crashes and restarts.
-
-- **Stale supervisor detection**: On scaffold init, scan `goal_store` for goals with `supervisor_pid != 0`. Check each PID with `kill(pid, 0)`. If the process is gone (errno == ESRCH), clear the PID and set status to PAUSED for user-initiated restart. Use `supervisor_started_at` to guard against PID recycling — treat any supervisor older than 1 hour with a dead PID as definitively stale.
-- **Zombie reaping**: Scaffold calls `waitpid(pid, &status, WNOHANG)` for each tracked supervisor during its polling cycle, following `subagent_poll_all()` patterns. On `cancel_goal`: `kill(pid, SIGTERM)` → `usleep(100ms)` → `kill(pid, SIGKILL)` → `waitpid(pid, &status, 0)`.
+- **Automatic supervisor respawn**: The scaffold agent monitors supervisor PIDs. When a supervisor dies (context full, crash, or clean exit without goal completion), the scaffold agent respawns it for the same goal. The new instance reads current world state, action statuses, and worker results from the stores and continues where the last one left off. The GOAP model naturally supports this — a freshly spawned supervisor examining the stores is indistinguishable from one that's been running.
+- **Stale supervisor detection**: On scaffold init, scan `goal_store` for goals with `supervisor_pid != 0`. Check each PID with `kill(pid, 0)`. If the process is gone (errno == ESRCH), clear the PID and respawn. Use `supervisor_started_at` to guard against PID recycling — treat any supervisor older than 1 hour with a dead PID as definitively stale.
+- **Zombie reaping**: Scaffold calls `waitpid(pid, &status, WNOHANG)` for each tracked supervisor during its polling cycle, following the pattern in `subagent_poll_all()` (`lib/tools/subagent_tool.c`). On `cancel_goal`: `kill(pid, SIGTERM)` → `usleep(100ms)` → `kill(pid, SIGKILL)` → `waitpid(pid, &status, 0)` (same sequence as `worker_stop()` in `workflow.c`).
 - **Action retry**: The `work_queue` handles retry mechanics (failed items retry up to `max_attempts`). The supervisor also tracks `attempt_count` on actions for its own retry decisions.
-- **Goal resume**: `start_goal` on an existing goal picks up from current world state and action status. The GOAP loop naturally handles partial progress — compound actions already decomposed keep their children, primitives already completed keep their effects in world state.
-- **World state consistency**: If a supervisor crashes mid-update, world state might be stale (effects verified but not persisted). On restart, the supervisor re-scans completed actions and re-verifies any whose effects aren't reflected in world state.
+- **Goal resume**: Any supervisor spawn (initial or respawn) picks up from current world state and action status. The GOAP tools return current state from the stores. Compound actions already decomposed keep their children, primitives already completed keep their effects in world state. There is no distinction between "resume" and "start" — both are just "ensure this goal is complete."
+- **World state consistency**: If a supervisor dies mid-update, world state might be stale (effects verified but not persisted). On respawn, the supervisor's LLM sees completed actions whose effects aren't reflected in world state and re-verifies them naturally through GOAP tool calls.
 
 ## File Summary
 
@@ -562,44 +462,58 @@ Handle crashes and restarts.
 | Create | `lib/db/goal_store.c` | SQLite-backed implementation |
 | Create | `lib/db/action_store.h` | Action struct + hierarchy + readiness queries |
 | Create | `lib/db/action_store.c` | SQLite-backed implementation |
-| Create | `lib/orchestrator/supervisor.h` | GOAP/HTN engine API |
-| Create | `lib/orchestrator/supervisor.c` | Supervisor loop + LLM evaluation |
-| Create | `lib/orchestrator/orchestrator.h` | Multi-goal management API |
-| Create | `lib/orchestrator/orchestrator.c` | Supervisor spawning + lifecycle |
-| Create | `lib/tools/orchestrator_tool.h` | LLM tool registration |
-| Create | `lib/tools/orchestrator_tool.c` | Tool implementations |
-| Create | `src/scaffold/main.c` | Scaffold binary entry point |
+| Create | `lib/tools/goap_tools.h` | GOAP tool registration (shared by all scaffold agents) |
+| Create | `lib/tools/goap_tools.c` | GOAP tool implementations |
+| Create | `lib/orchestrator/supervisor.h` | Supervisor session loop + respawn support |
+| Create | `lib/orchestrator/supervisor.c` | Implementation |
+| Create | `lib/orchestrator/orchestrator.h` | Goal lifecycle management (scaffold agent layer) |
+| Create | `lib/orchestrator/orchestrator.c` | Supervisor spawning, monitoring, respawn |
+| Create | `lib/tools/orchestrator_tool.h` | Scaffold agent tool registration |
+| Create | `lib/tools/orchestrator_tool.c` | Scaffold agent tool implementations |
+| Modify | `src/scaffold/main.c` | Add `--supervisor --goal` argument parsing (binary already exists) |
 | Create | `test/db/test_goal_store.c` | Goal store unit tests |
 | Create | `test/db/test_action_store.c` | Action store + hierarchy tests |
-| Create | `test/orchestrator/test_supervisor.c` | Supervisor GOAP/HTN decision tests |
-| Modify | `lib/services/services.h` | Add `goal_store`, `action_store` fields |
-| Modify | `lib/services/services.c` | Wire stores in factory functions |
+| Create | `test/tools/test_goap_tools.c` | GOAP tool unit tests |
+| Create | `test/orchestrator/test_supervisor.c` | Supervisor respawn + goal completion tests |
+| Modify | `lib/services/services.h` | Add `goal_store_t*`, `action_store_t*` fields + accessors (alongside existing `task_store_t*`, `document_store_t*`, etc.) |
+| Modify | `lib/services/services.c` | Create/destroy in `services_create_default()` / `services_destroy()` |
 | Modify | `lib/agent/agent.h` | Add `AGENT_MODE_SUPERVISOR` |
-| Modify | `lib/agent/agent.c` | Add supervisor case + worker result capture |
-| Modify | `lib/util/config.h` | Add `max_workers_per_goal` field |
-| Modify | `lib/util/config.c` | Default, JSON load/save |
+| Modify | `lib/agent/agent.c` | Worker result capture (Phase 3), supervisor case + worker exit-on-empty (Phase 5) |
+| Modify | `lib/workflow/workflow.c` | Wire `system_prompt` through `worker_spawn()` |
+| Modify | `lib/tools/builtin_tools.c` | Register GOAP + orchestrator tools (scaffold mode) |
+| Modify | `lib/util/config.h` | Add `int max_workers_per_goal` field to `agent_config_t` |
+| Modify | `lib/util/config.c` | Default value, JSON load/save, add key mapping in `config_get_int()` |
 | Modify | `mk/lib.mk` | Add `LIB_ORCHESTRATOR_SOURCES`, `LIB_DB_SOURCES` additions |
-| Modify | `mk/sources.mk` | Add `SCAFFOLD_SOURCES` |
+| Modify | `mk/sources.mk` | `SCAFFOLD_SOURCES` already exists — no change needed |
 | Modify | `mk/tests.mk` | Add test targets |
 | Modify | `Makefile` | Add scaffold binary target |
 
 ## Key Reuse
 
 These existing primitives are used **as-is** with no modification:
-- `work_queue` / `worker_spawn()` — Work distribution, claiming, retry
-- `sqlite_dal` — Database access patterns (config, binders, mappers, transactions)
-- `parse_api_response()` — Extract `ParsedResponse.response_content` from raw LLM JSON
-- `llm_client_send()` — Supervisor's LLM calls for decomposition, verification, and generation
+- `session_process_message()` — Every layer (scaffold, supervisor, worker) drives its work through this. No raw `llm_client_send()` calls anywhere.
+- `session_continue()` — Out-of-band LLM call triggered by message poller notifications. Used by supervisor event loop to respond to worker completion.
+- `message_poller` / `message_send_direct()` / `subagent_notify_parent()` — Event-driven supervisor wake-up when workers complete.
+- `work_queue` — Work distribution (`work_queue_enqueue`, `work_queue_claim`), completion (`work_queue_complete`), retry (`work_queue_fail` requeues if `attempt_count < max_attempts`)
+- `worker_is_running()` / `worker_stop()` — Worker process liveness checks and forced termination (for `cancel_goal`)
+- `sqlite_dal` — Database access patterns (config struct, `BindText*`/`BindInt64` binders, `sqlite_row_mapper_t` mappers, `sqlite_dal_query_list_p`/`sqlite_dal_exec_p` parameterized queries, transactions)
 - `config_get()` / `config_get_int()` — API credentials and `max_workers_per_goal`
-- `tool_result_builder` — Consistent tool result formatting for orchestrator tools
+- `tool_result_builder` — Consistent tool result formatting (`tool_result_builder_create` → `set_success`/`set_error` → `finalize`)
+- `extract_string_param()` — JSON parameter extraction for tool arguments (from `common_utils.h`)
 
-Note: `task_store` is **not** reused for GOAP actions. `task_store` remains available for ralph's regular task tracking via the todo tools.
+These primitives require **modification** (detailed in phases above):
+- `worker_spawn()` — System prompt parameter must be wired through to child process via temp file (currently unused: `(void)system_prompt`) — Phase 5
+- `AGENT_MODE_WORKER` — Two changes: (1) capture actual LLM response from `session_data.conversation` instead of static `"Task completed successfully"` string — Phase 3; (2) exit when queue is empty instead of sleeping forever (`usleep` loop → clean exit), so workers die naturally after draining their queue — Phase 5
+
+Note: `task_store` is **not** reused for GOAP actions. GOAP actions have precondition/effect semantics and hierarchical compound/primitive relationships that don't map to task_store's dependency model. `task_store` remains available for ralph's regular task tracking via the todo tools.
 
 ## Verification
 
 1. **Goal store**: Build and run `test/test_goal_store` — CRUD, status transitions, world state persistence
 2. **Action store**: Build and run `test/test_action_store` — CRUD, hierarchy (parent/child), readiness queries with world state, precondition matching
-3. **Supervisor GOAP/HTN**: Build and run `test/test_supervisor` — mock LLM responses, verify: compound decomposition produces children, primitive dispatch to workers, effect verification updates world state, goal completes when world state satisfies goal state, stuck state generates new actions
-4. **Integration**: Create a goal via scaffold REPL, verify supervisor decomposes compound actions into children, workers execute primitives, effects bubble up through hierarchy, goal completes
-5. **Recovery**: Kill a supervisor, restart scaffold, verify stale PID detection and resume from current world state with hierarchy intact
-6. **Memory safety**: `make check-valgrind` on all new test binaries (exclude subagent/fork tests per existing policy)
+3. **Worker result capture**: Verify worker passes LLM's final response to `work_queue_complete()` instead of static string
+4. **GOAP tools**: Build and run `test/test_goap_tools` — mock stores, verify each tool returns correct results, dispatch enforces worker cap, dispatch creates work items + spawns workers
+5. **Supervisor lifecycle**: Build and run `test/test_supervisor` — verify supervisor reads state from stores on startup, progresses goal via tool calls, sleeps on message poller, wakes on worker completion, exits cleanly when goal complete
+6. **Respawn**: Kill a supervisor mid-goal, respawn it, verify it reads current state from stores and continues — no distinction between fresh start and respawn
+7. **Integration**: Create a plan via scaffold REPL, verify scaffold decomposes into goals, supervisors progress them via GOAP tools, workers execute primitives, effects bubble up, goals complete
+8. **Memory safety**: `make check-valgrind` on all new test binaries (exclude subagent/fork tests per existing policy)

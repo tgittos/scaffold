@@ -124,6 +124,15 @@ int agent_load_config(Agent* agent) {
         return -1;
     }
 
+    if (agent->config.worker_system_prompt != NULL) {
+        char *dup = strdup(agent->config.worker_system_prompt);
+        if (dup == NULL) {
+            return -1;
+        }
+        free(agent->session.session_data.config.system_prompt);
+        agent->session.session_data.config.system_prompt = dup;
+    }
+
     if (agent->config.yolo) {
         approval_gate_enable_yolo(&agent->session.gate_config);
         debug_printf("Approval gates disabled (yolo mode)\n");
@@ -237,8 +246,7 @@ int agent_run(Agent* agent) {
             while (g_worker_running) {
                 WorkItem* item = work_queue_claim(queue, agent->session.session_id);
                 if (item == NULL) {
-                    usleep(1000000);
-                    continue;
+                    break;
                 }
 
                 debug_printf("Worker claimed item %s: %s\n", item->id,
@@ -270,7 +278,17 @@ int agent_run(Agent* agent) {
                 free(message);
 
                 if (result == 0) {
-                    work_queue_complete(queue, item->id, "Task completed successfully");
+                    const char* worker_result = "Task completed successfully";
+                    ConversationHistory* conv = &agent->session.session_data.conversation;
+                    for (int ci = (int)conv->count - 1; ci >= 0; ci--) {
+                        if (conv->data[ci].role &&
+                            strcmp(conv->data[ci].role, "assistant") == 0 &&
+                            conv->data[ci].content) {
+                            worker_result = conv->data[ci].content;
+                            break;
+                        }
+                    }
+                    work_queue_complete(queue, item->id, worker_result);
                     items_processed++;
                     debug_printf("Worker completed item %s\n", item->id);
                 } else if (result == -2) {

@@ -97,7 +97,7 @@ Connect new stores to the DI container so tools and agents can access them.
 
 ---
 
-## Chunk 4: Worker Result Capture
+## Chunk 4: Worker Result Capture [DONE]
 
 Workers pass the LLM's actual final response to `work_queue_complete()` instead of the static `"Task completed successfully"` string. Supervisors need actual results to verify effects.
 
@@ -110,7 +110,7 @@ Workers pass the LLM's actual final response to `work_queue_complete()` instead 
 
 ---
 
-## Chunk 5: Worker Exit on Empty Queue
+## Chunk 5: Worker Exit on Empty Queue [DONE]
 
 Workers exit cleanly when the queue is empty instead of sleeping forever. This makes workers ephemeral — they die after draining their queue, which is essential for the supervisor to know when dispatched work is complete.
 
@@ -123,7 +123,7 @@ Workers exit cleanly when the queue is empty instead of sleeping forever. This m
 
 ---
 
-## Chunk 6: System Prompt Pass-Through
+## Chunk 6: System Prompt Pass-Through [DONE]
 
 Wire the `system_prompt` parameter through `worker_spawn()` to the child process. Currently accepted but unused (`(void)system_prompt`).
 
@@ -141,7 +141,7 @@ Wire the `system_prompt` parameter through `worker_spawn()` to the child process
 
 ---
 
-## Chunk 7: Config — max_workers_per_goal
+## Chunk 7: Config — max_workers_per_goal [DONE]
 
 Add the `max_workers_per_goal` configuration key.
 

@@ -69,6 +69,7 @@ int main(int argc, char *argv[]) {
     int worker_mode = 0;
     char *worker_queue = NULL;
     char *model_override = NULL;
+    char *system_prompt_file = NULL;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--debug") == 0) {
@@ -115,6 +116,8 @@ int main(int argc, char *argv[]) {
             worker_mode = 1;
         } else if (strcmp(argv[i], "--queue") == 0 && i + 1 < argc) {
             worker_queue = argv[++i];
+        } else if (strcmp(argv[i], "--system-prompt-file") == 0 && i + 1 < argc) {
+            system_prompt_file = argv[++i];
         } else if (message_arg_index == -1 && argv[i][0] != '-') {
             message_arg_index = i;
         }
@@ -149,6 +152,29 @@ int main(int argc, char *argv[]) {
 
     config.model_override = model_override;
 
+    /* Read system prompt from file if provided */
+    char *loaded_system_prompt = NULL;
+    if (system_prompt_file != NULL) {
+        FILE *fp = fopen(system_prompt_file, "r");
+        if (fp == NULL) {
+            fprintf(stderr, "Error: Cannot open system prompt file: %s\n",
+                    system_prompt_file);
+            return EXIT_FAILURE;
+        }
+        fseek(fp, 0, SEEK_END);
+        long fsize = ftell(fp);
+        fseek(fp, 0, SEEK_SET);
+        if (fsize > 0) {
+            loaded_system_prompt = malloc(fsize + 1);
+            if (loaded_system_prompt != NULL) {
+                size_t nread = fread(loaded_system_prompt, 1, fsize, fp);
+                loaded_system_prompt[nread] = '\0';
+                config.worker_system_prompt = loaded_system_prompt;
+            }
+        }
+        fclose(fp);
+    }
+
     Agent agent;
     if (agent_init(&agent, &config) != 0) {
         fprintf(stderr, "Error: Failed to initialize scaffold agent\n");
@@ -164,5 +190,6 @@ int main(int argc, char *argv[]) {
     int result = agent_run(&agent);
 
     agent_cleanup(&agent);
+    free(loaded_system_prompt);
     return (result == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

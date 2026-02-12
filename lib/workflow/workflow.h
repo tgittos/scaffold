@@ -155,6 +155,7 @@ typedef struct WorkerHandle {
     char queue_name[64];         /**< Queue the worker is processing */
     pid_t pid;                   /**< Process ID of worker */
     bool is_running;             /**< Whether worker is still active */
+    char system_prompt_file[256]; /**< Temp file for system prompt (empty if none) */
 } WorkerHandle;
 
 /**
