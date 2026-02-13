@@ -271,6 +271,9 @@ int supervisor_run(AgentSession *session, const char *goal_id) {
 
     if (goal_is_complete(session, goal_id)) {
         debug_printf("Supervisor: goal %s complete after initial processing\n", goal_id);
+        goal_store_t *gs = services_get_goal_store(session->services);
+        if (gs != NULL)
+            goal_store_update_status(gs, goal_id, GOAL_STATUS_COMPLETED);
         return SUPERVISOR_EXIT_COMPLETE;
     }
 
@@ -347,6 +350,9 @@ int supervisor_run(AgentSession *session, const char *goal_id) {
 
         if (goal_is_complete(session, goal_id)) {
             debug_printf("Supervisor: goal %s complete\n", goal_id);
+            goal_store_t *gs2 = services_get_goal_store(session->services);
+            if (gs2 != NULL)
+                goal_store_update_status(gs2, goal_id, GOAL_STATUS_COMPLETED);
             return SUPERVISOR_EXIT_COMPLETE;
         }
     }

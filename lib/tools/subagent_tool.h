@@ -82,6 +82,10 @@ void subagent_manager_cleanup(SubagentManager *manager);
 /** subagent_id_out must be at least SUBAGENT_ID_LENGTH + 1 bytes. model may be NULL to inherit parent's model. */
 int subagent_spawn(SubagentManager *manager, const char *task, const char *context, const char *model, char *subagent_id_out);
 
+/** Spawn a subagent with a custom argv. The child execv's args[0] with args. task_desc populates the Subagent.task field for completion notifications. */
+int subagent_spawn_with_args(SubagentManager *manager, char *args[],
+                             const char *task_desc, char *subagent_id_out);
+
 /** If wait is non-zero, blocks until subagent completes. Caller must free result/error. */
 int subagent_get_status(SubagentManager *manager, const char *subagent_id, int wait,
                         SubagentStatus *status, char **result, char **error);

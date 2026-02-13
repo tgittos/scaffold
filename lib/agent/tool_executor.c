@@ -4,6 +4,7 @@
 #include "tool_batch_executor.h"
 #include "conversation_state.h"
 #include "iterative_loop.h"
+#include "../session/conversation_tracker.h"
 #include "../util/debug_output.h"
 #include <stdlib.h>
 
@@ -33,6 +34,21 @@ int tool_executor_run_workflow(AgentSession* session, ToolCall* tool_calls, int 
     int executed_count = 0;
     int batch_status = tool_batch_execute(&batch_ctx, tool_calls, call_count,
                                            results, NULL, &executed_count);
+
+    /* Check if any tool requested a conversation reset (e.g. execute_plan
+     * clears planning context before decomposition begins). */
+    for (int i = 0; i < call_count; i++) {
+        if (results[i].clear_history) {
+            debug_printf("Tool %s requested conversation clear\n",
+                         tool_calls[i].name ? tool_calls[i].name : "?");
+            cleanup_conversation_history(&session->session_data.conversation);
+            init_conversation_history(&session->session_data.conversation);
+            /* Re-append the assistant message with tool calls so the
+             * conversation has the required assistant→tool_result structure. */
+            conversation_append_assistant(session, NULL, tool_calls, call_count);
+            break;
+        }
+    }
 
     conversation_append_tool_results(session, results, call_count, tool_calls, NULL);
 

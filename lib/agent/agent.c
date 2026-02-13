@@ -93,6 +93,7 @@ int agent_init(Agent* agent, const AgentConfig* config) {
     document_store_set_services(agent->services);
     memory_tool_set_services(agent->services);
     goap_tools_set_services(agent->services); /* no-op when GOAP tools not registered (non-scaffold) */
+    goap_tools_set_subagent_manager(&agent->session.subagent_manager); /* no-op when GOAP tools not registered */
     orchestrator_tool_set_services(agent->services); /* no-op when not registered (non-scaffold) */
     context_retriever_set_services(agent->services);
     session_wire_services(&agent->session);

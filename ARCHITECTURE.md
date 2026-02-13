@@ -1130,9 +1130,9 @@ lib/
 │   └── process_spawn.c/h  # Common fork/exec with stdout/stderr to /dev/null
 ├── orchestrator/          # Scaffold orchestration layer
 │   ├── supervisor.c/h     # Supervisor event loop (GOAP tool-driven goal progression, orphaned action recovery)
-│   ├── orchestrator.c/h   # Supervisor spawning (via process_spawn), monitoring, and lifecycle
+│   ├── orchestrator.c/h   # Supervisor spawning (via process_spawn), monitoring, stale-PID cleanup (dead-only), and lifecycle
 │   ├── goap_state.c/h     # Shared GOAP state evaluation (precondition checking, progress tracking)
 │   └── role_prompts.c/h   # Role-based system prompts for workers (file override + built-in defaults)
 └── workflow/               # Task queue
-    └── workflow.c/h        # SQLite-backed work queue
+    └── workflow.c/h        # SQLite-backed work queue (workers spawned via subagent system)
 ```

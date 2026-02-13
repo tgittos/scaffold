@@ -147,21 +147,13 @@ void orchestrator_check_stale(goal_store_t* store) {
     Goal** goals = goal_store_list_all(store, &count);
     if (goals == NULL) return;
 
-    int64_t now = now_millis();
-    const int64_t stale_threshold_ms = 3600 * 1000;
-
     for (size_t i = 0; i < count; i++) {
         pid_t pid = goals[i]->supervisor_pid;
         if (pid <= 0) continue;
 
-        bool is_dead = (kill(pid, 0) != 0 && errno == ESRCH);
-        bool is_stale = (goals[i]->supervisor_started_at > 0 &&
-                         (now - goals[i]->supervisor_started_at) > stale_threshold_ms);
-
-        if (is_dead || is_stale) {
-            debug_printf("orchestrator: clearing stale supervisor pid=%d "
-                         "for goal %s (dead=%d, stale=%d)\n",
-                         pid, goals[i]->id, is_dead, is_stale);
+        if (kill(pid, 0) != 0 && errno == ESRCH) {
+            debug_printf("orchestrator: clearing dead supervisor pid=%d "
+                         "for goal %s\n", pid, goals[i]->id);
             goal_store_update_supervisor(store, goals[i]->id, 0, 0);
         }
     }

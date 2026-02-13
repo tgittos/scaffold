@@ -198,7 +198,7 @@ void test_check_stale_recent_running_not_cleared(void) {
     waitpid(pid, NULL, 0);
 }
 
-void test_check_stale_old_running_cleared(void) {
+void test_check_stale_old_running_not_cleared(void) {
     char goal_id[40];
     create_test_goal("test", goal_id);
     pid_t pid = fork_sleeper();
@@ -209,8 +209,9 @@ void test_check_stale_old_running_cleared(void) {
 
     orchestrator_check_stale(g_store);
 
+    /* Live processes are never cleared regardless of age */
     Goal *goal = goal_store_get(g_store, goal_id);
-    TEST_ASSERT_EQUAL(0, goal->supervisor_pid);
+    TEST_ASSERT_EQUAL(pid, goal->supervisor_pid);
     goal_free(goal);
 
     kill(pid, SIGKILL);
@@ -248,7 +249,7 @@ int main(void) {
     RUN_TEST(test_reap_non_active_goal);
     RUN_TEST(test_check_stale_dead_pid);
     RUN_TEST(test_check_stale_recent_running_not_cleared);
-    RUN_TEST(test_check_stale_old_running_cleared);
+    RUN_TEST(test_check_stale_old_running_not_cleared);
     RUN_TEST(test_respawn_dead_no_active_goals);
     RUN_TEST(test_null_params);
 

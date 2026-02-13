@@ -199,10 +199,7 @@ typedef struct OutputConfig OutputConfig;
  *   work_queue_fail()       - Mark task as failed (may retry)
  *   work_queue_destroy()    - Clean up queue handle
  *
- * WorkerHandle - Manage spawned worker agents
- *   worker_spawn()          - Spawn a worker for a queue
- *   worker_is_running()     - Check if worker is alive
- *   worker_stop()           - Terminate a worker
+ *   work_queue_remove()     - Remove a work item from queue
  */
 
 #include "workflow/workflow.h"

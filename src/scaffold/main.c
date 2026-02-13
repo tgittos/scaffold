@@ -294,6 +294,7 @@ int main(int argc, char *argv[]) {
             }
         }
         fclose(fp);
+        unlink(system_prompt_file);
     }
 
     if (python_extension_register() != 0) {

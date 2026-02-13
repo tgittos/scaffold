@@ -8,13 +8,11 @@
  * Key concepts:
  * - WorkQueue: A named queue of tasks that workers can claim
  * - WorkItem: A task in a queue with assignment tracking
- * - WorkerHandle: Reference to a spawned worker agent
  */
 
 #ifndef LIB_WORKFLOW_WORKFLOW_H
 #define LIB_WORKFLOW_WORKFLOW_H
 
-#include <stdbool.h>
 #include <stddef.h>
 #include <time.h>
 
@@ -137,6 +135,15 @@ int work_queue_fail(WorkQueue* queue, const char* item_id, const char* error);
 int work_queue_pending_count(WorkQueue* queue);
 
 /**
+ * Remove a work item from the queue.
+ *
+ * @param queue Queue containing the item
+ * @param item_id Work item ID
+ * @return 0 on success, -1 on error or item not found
+ */
+int work_queue_remove(WorkQueue* queue, const char* item_id);
+
+/**
  * Look up a work item by ID.
  *
  * @param queue Queue containing the item
@@ -151,53 +158,6 @@ WorkItem* work_queue_get_item(WorkQueue* queue, const char* item_id);
  * @param item Item to free
  */
 void work_item_free(WorkItem* item);
-
-/* =============================================================================
- * WORKER MANAGEMENT
- * ============================================================================= */
-
-/**
- * Handle to a spawned worker agent.
- */
-typedef struct WorkerHandle {
-    char agent_id[64];           /**< Worker's agent ID */
-    char queue_name[64];         /**< Queue the worker is processing */
-    pid_t pid;                   /**< Process ID of worker */
-    bool is_running;             /**< Whether worker is still active */
-    char system_prompt_file[256]; /**< Temp file for system prompt (empty if none) */
-} WorkerHandle;
-
-/**
- * Spawn a worker agent to process items from a queue.
- *
- * @param queue_name Queue for the worker to process
- * @param system_prompt System prompt for the worker (may be NULL for default)
- * @return Worker handle (caller owns and must free), or NULL on error
- */
-WorkerHandle* worker_spawn(const char* queue_name, const char* system_prompt);
-
-/**
- * Check if a worker is still running.
- *
- * @param handle Worker handle
- * @return true if running, false if terminated
- */
-bool worker_is_running(WorkerHandle* handle);
-
-/**
- * Stop a worker agent.
- *
- * @param handle Worker handle
- * @return 0 on success, -1 on error
- */
-int worker_stop(WorkerHandle* handle);
-
-/**
- * Free a worker handle.
- *
- * @param handle Handle to free
- */
-void worker_handle_free(WorkerHandle* handle);
 
 #ifdef __cplusplus
 }

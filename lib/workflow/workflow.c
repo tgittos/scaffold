@@ -6,16 +6,11 @@
 
 #include "workflow.h"
 #include "../util/app_home.h"
-#include "../util/executable_path.h"
-#include "../util/process_spawn.h"
 #include "util/uuid_utils.h"
 #include <sqlite3.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/wait.h>
-#include <unistd.h>
-#include <signal.h>
 
 /* =============================================================================
  * WORK QUEUE IMPLEMENTATION
@@ -332,6 +327,29 @@ int work_queue_pending_count(WorkQueue* queue) {
     return count;
 }
 
+int work_queue_remove(WorkQueue* queue, const char* item_id) {
+    if (queue == NULL || item_id == NULL) {
+        return -1;
+    }
+
+    const char* sql =
+        "DELETE FROM work_items WHERE id = ? AND queue_name = ?";
+
+    sqlite3_stmt* stmt = NULL;
+    int rc = sqlite3_prepare_v2(queue->db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        return -1;
+    }
+
+    sqlite3_bind_text(stmt, 1, item_id, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 2, queue->name, -1, SQLITE_STATIC);
+
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    return (rc == SQLITE_DONE && sqlite3_changes(queue->db) > 0) ? 0 : -1;
+}
+
 WorkItem* work_queue_get_item(WorkQueue* queue, const char* item_id) {
     if (queue == NULL || item_id == NULL) return NULL;
 
@@ -399,148 +417,3 @@ void work_item_free(WorkItem* item) {
     free(item);
 }
 
-/* =============================================================================
- * WORKER MANAGEMENT
- * ============================================================================= */
-
-static char* get_ralph_executable_path(void) {
-    return get_executable_path();
-}
-
-WorkerHandle* worker_spawn(const char* queue_name, const char* system_prompt) {
-    if (queue_name == NULL || strlen(queue_name) == 0) {
-        return NULL;
-    }
-
-    WorkerHandle* handle = calloc(1, sizeof(WorkerHandle));
-    if (handle == NULL) {
-        return NULL;
-    }
-
-    strncpy(handle->queue_name, queue_name, sizeof(handle->queue_name) - 1);
-
-    /* Generate worker ID */
-    char uuid[40];
-    if (uuid_generate_v4(uuid) != 0) {
-        free(handle);
-        return NULL;
-    }
-    snprintf(handle->agent_id, sizeof(handle->agent_id), "worker-%s", uuid);
-
-    /* Write system prompt to temp file if provided */
-    if (system_prompt != NULL && strlen(system_prompt) > 0) {
-        snprintf(handle->system_prompt_file, sizeof(handle->system_prompt_file),
-                 "/tmp/scaffold_prompt_XXXXXX");
-        int fd = mkstemp(handle->system_prompt_file);
-        if (fd < 0) {
-            free(handle);
-            return NULL;
-        }
-        size_t prompt_len = strlen(system_prompt);
-        ssize_t written = write(fd, system_prompt, prompt_len);
-        close(fd);
-        if (written < 0 || (size_t)written != prompt_len) {
-            unlink(handle->system_prompt_file);
-            free(handle);
-            return NULL;
-        }
-    }
-
-    /* Get path to ralph executable */
-    char* ralph_path = get_ralph_executable_path();
-    if (ralph_path == NULL) {
-        if (handle->system_prompt_file[0]) {
-            unlink(handle->system_prompt_file);
-        }
-        free(handle);
-        return NULL;
-    }
-
-    /* Build args array */
-    char* args[12];
-    int arg_idx = 0;
-
-    args[arg_idx++] = ralph_path;
-    args[arg_idx++] = "--worker";
-    args[arg_idx++] = "--queue";
-    args[arg_idx++] = (char*)queue_name;
-    args[arg_idx++] = "--yolo";
-
-    if (handle->system_prompt_file[0]) {
-        args[arg_idx++] = "--system-prompt-file";
-        args[arg_idx++] = handle->system_prompt_file;
-    }
-
-    args[arg_idx] = NULL;
-
-    pid_t pid;
-    if (process_spawn_devnull(args, &pid) != 0) {
-        free(ralph_path);
-        if (handle->system_prompt_file[0]) {
-            unlink(handle->system_prompt_file);
-        }
-        free(handle);
-        return NULL;
-    }
-
-    free(ralph_path);
-    handle->pid = pid;
-    handle->is_running = true;
-
-    return handle;
-}
-
-bool worker_is_running(WorkerHandle* handle) {
-    if (handle == NULL) {
-        return false;
-    }
-
-    if (!handle->is_running) {
-        return false;
-    }
-
-    /* Check if process is still alive */
-    int status;
-    pid_t result = waitpid(handle->pid, &status, WNOHANG);
-    if (result == handle->pid) {
-        /* Process has terminated */
-        handle->is_running = false;
-        return false;
-    }
-
-    return true;
-}
-
-int worker_stop(WorkerHandle* handle) {
-    if (handle == NULL || !handle->is_running) {
-        return -1;
-    }
-
-    /* Send SIGTERM */
-    if (kill(handle->pid, SIGTERM) != 0) {
-        return -1;
-    }
-
-    /* Wait briefly for termination */
-    int status;
-    pid_t result = waitpid(handle->pid, &status, WNOHANG);
-    if (result == 0) {
-        /* Still running, send SIGKILL */
-        usleep(100000); /* 100ms */
-        kill(handle->pid, SIGKILL);
-        waitpid(handle->pid, &status, 0);
-    }
-
-    handle->is_running = false;
-    return 0;
-}
-
-void worker_handle_free(WorkerHandle* handle) {
-    if (handle == NULL) {
-        return;
-    }
-    if (handle->system_prompt_file[0]) {
-        unlink(handle->system_prompt_file);
-    }
-    free(handle);
-}

@@ -18,7 +18,7 @@ Both binaries link against `libagent.a`. `ralph` is the standalone agent. `scaff
 
 ## Architecture
 
-Three agent roles, two context boundaries. Both `ralph` and `scaffold` are thin CLI wrappers around `libagent.a` — they share the same agent lifecycle (`agent_init` → `agent_run` → `agent_cleanup`) and differ only in `app_name` and app-specific extensions. `worker_spawn()` uses `get_executable_path()` to fork the current binary, so all child processes are scaffold instances.
+Three agent roles, two context boundaries. Both `ralph` and `scaffold` are thin CLI wrappers around `libagent.a` — they share the same agent lifecycle (`agent_init` → `agent_run` → `agent_cleanup`) and differ only in `app_name` and app-specific extensions. Workers are spawned via `subagent_spawn_with_args()` which uses `get_executable_path()` to fork the current binary, so all child processes are scaffold instances tracked by the supervisor's subagent manager.
 
 ```
 scaffold (interactive REPL or one-shot mode)
@@ -114,7 +114,7 @@ typedef struct {
 
 ### Worker Roles
 
-Each primitive action carries a `role` that determines the worker's system prompt. The supervisor maps roles to system prompt templates when spawning workers. Note: `worker_spawn()` accepts a `system_prompt` parameter in its signature but currently ignores it (`(void)system_prompt` with a "future: --system-prompt flag" comment). Phase 5 must wire this through — writing the prompt to a temp file and passing the path via CLI flag (avoids `execv` argument length limits).
+Each primitive action carries a `role` that determines the worker's system prompt. The supervisor maps roles to system prompt templates when spawning workers. The system prompt is written to a temp file and passed via `--system-prompt-file` CLI flag (avoids `execv` argument length limits). The child process reads and unlinks the temp file on startup.
 
 | Role | System Prompt Focus |
 |------|-------------------|
@@ -380,7 +380,7 @@ This is the same principle as workers (ephemeral, die after work) applied to sup
 **Key design decisions:**
 - **Worker capacity**: `config_get_int("max_workers_per_goal", 3)` with a hard cap of 20 (matching `SUBAGENT_HARD_CAP`). Add `int max_workers_per_goal` to `agent_config_t` in `config.h`.
 - **Scaffold↔Supervisor communication**: The `goal_store` is the single source of truth. The supervisor updates `goal.status`, `goal.world_state`, and `goal.summary` directly in SQLite as it progresses. Scaffold polls with `goal_store_get()` — no IPC messages needed for status. Process liveness is checked with `kill(supervisor_pid, 0)`.
-- **Worker role specialization**: The `goap_dispatch_action` tool selects a system prompt matching `action.role` and passes it to `worker_spawn(queue_name, system_prompt)`. Prompt templates are loaded from a configurable directory (e.g., `~/.local/scaffold/prompts/`), following the runtime file-loading patterns in `prompt_loader.c` and `config.c`, with built-in fallbacks for the standard roles. Unknown roles get a generic worker prompt.
+- **Worker role specialization**: The `goap_dispatch_action` tool selects a system prompt matching `action.role`, writes it to a temp file, and passes it via `--system-prompt-file` to `subagent_spawn_with_args()`. Prompt templates are loaded from a configurable directory (e.g., `~/.local/scaffold/prompts/`), following the runtime file-loading patterns in `prompt_loader.c` and `config.c`, with built-in fallbacks for the standard roles. Unknown roles get a generic worker prompt.
 - **Worker context building**: The `goap_dispatch_action` tool builds the work item context from the stores: goal description (1-2 sentence summary), action description and role, relevant world state, results from prerequisite actions, and for verification roles, the results from the implementation actions being verified.
 
 ### Phase 5: Agent Mode Integration
@@ -390,7 +390,7 @@ Wire the supervisor into the existing agent process spawning.
 **Modify:**
 - `lib/agent/agent.h` — Add `AGENT_MODE_SUPERVISOR = 4` to `AgentMode` enum (after existing `AGENT_MODE_WORKER = 3`). Add `const char* supervisor_goal_id` to `AgentConfig` (alongside existing `worker_queue_name` and `worker_system_prompt` fields).
 - `lib/agent/agent.c` — Add `case AGENT_MODE_SUPERVISOR:` in `agent_run()`. Creates a `Supervisor`, calls `supervisor_run()`, cleans up. Same pattern as the `AGENT_MODE_WORKER` case (signal handler setup, create resource, run loop, destroy resource on exit). Also modify `AGENT_MODE_WORKER`: when `work_queue_claim()` returns NULL, exit cleanly instead of sleeping (`usleep(1000000)` → `break`), so workers die after draining their queue.
-- `lib/workflow/workflow.c` — Wire `system_prompt` through `worker_spawn()`: write the prompt to a temp file and pass the path via `--system-prompt-file <path>` CLI flag to the child process. Temp file avoids OS-level `execv` argument length limits for long prompts. Currently `system_prompt` is accepted but unused (`(void)system_prompt` at line 409).
+- `lib/workflow/workflow.c` — Work queue data layer only (enqueue, claim, complete, fail, remove). Worker spawning is handled by `goap_dispatch_action` via `subagent_spawn_with_args()` in `goap_tools.c`.
 - `src/scaffold/main.c` — Already exists with REPL, single-shot, worker, and subagent modes. Add `--supervisor --goal <id>` argument parsing (same pattern as existing `--worker --queue <name>`).
 
 **Modify build:**
@@ -448,7 +448,7 @@ Slash commands read directly from stores and format output for the terminal with
 Agents are designed to die and restart. All state is external in the stores — no in-memory state to lose.
 
 - **Automatic supervisor respawn**: The scaffold agent monitors supervisor PIDs. When a supervisor dies (context full, crash, or clean exit without goal completion), the scaffold agent respawns it for the same goal. The new instance reads current world state, action statuses, and worker results from the stores and continues where the last one left off. The GOAP model naturally supports this — a freshly spawned supervisor examining the stores is indistinguishable from one that's been running.
-- **Stale supervisor detection**: On scaffold init, scan `goal_store` for goals with `supervisor_pid != 0`. Check each PID with `kill(pid, 0)`. If the process is gone (errno == ESRCH), clear the PID and respawn. Use `supervisor_started_at` to guard against PID recycling — treat any supervisor older than 1 hour with a dead PID as definitively stale.
+- **Stale supervisor detection**: On scaffold init, scan `goal_store` for goals with `supervisor_pid != 0`. Check each PID with `kill(pid, 0)`. If the process is gone (errno == ESRCH), clear the PID and respawn. Live processes are never cleared regardless of age.
 - **Zombie reaping**: Scaffold calls `waitpid(pid, &status, WNOHANG)` for each tracked supervisor during its polling cycle, following the pattern in `subagent_poll_all()` (`lib/tools/subagent_tool.c`). On `cancel_goal`: `kill(pid, SIGTERM)` → `usleep(100ms)` → `kill(pid, SIGKILL)` → `waitpid(pid, &status, 0)` (same sequence as `worker_stop()` in `workflow.c`).
 - **Action retry**: The `work_queue` handles retry mechanics (failed items retry up to `max_attempts`). The supervisor also tracks `attempt_count` on actions for its own retry decisions.
 - **Goal resume**: Any supervisor spawn (initial or respawn) picks up from current world state and action status. The GOAP tools return current state from the stores. Compound actions already decomposed keep their children, primitives already completed keep their effects in world state. There is no distinction between "resume" and "start" — both are just "ensure this goal is complete."
@@ -479,7 +479,7 @@ Agents are designed to die and restart. All state is external in the stores — 
 | Modify | `lib/services/services.c` | Create/destroy in `services_create_default()` / `services_destroy()` |
 | Modify | `lib/agent/agent.h` | Add `AGENT_MODE_SUPERVISOR` |
 | Modify | `lib/agent/agent.c` | Worker result capture (Phase 3), supervisor case + worker exit-on-empty (Phase 5) |
-| Modify | `lib/workflow/workflow.c` | Wire `system_prompt` through `worker_spawn()` |
+| Modify | `lib/workflow/workflow.c` | Work queue data layer (worker spawning moved to goap_tools.c via subagent system) |
 | Modify | `lib/tools/builtin_tools.c` | Register GOAP + orchestrator tools (scaffold mode) |
 | Modify | `lib/util/config.h` | Add `int max_workers_per_goal` field to `agent_config_t` |
 | Modify | `lib/util/config.c` | Default value, JSON load/save, add key mapping in `config_get_int()` |
@@ -495,15 +495,18 @@ These existing primitives are used **as-is** with no modification:
 - `session_continue()` — Out-of-band LLM call triggered by message poller notifications. Used by supervisor event loop to respond to worker completion.
 - `message_poller` / `message_send_direct()` / `subagent_notify_parent()` — Event-driven supervisor wake-up when workers complete.
 - `work_queue` — Work distribution (`work_queue_enqueue`, `work_queue_claim`), completion (`work_queue_complete`), retry (`work_queue_fail` requeues if `attempt_count < max_attempts`)
-- `worker_is_running()` / `worker_stop()` — Worker process liveness checks and forced termination (for `cancel_goal`)
+- `subagent_spawn_with_args()` — Spawns workers as subagents with custom argv, tracked by supervisor's subagent manager for event-driven completion detection
 - `sqlite_dal` — Database access patterns (config struct, `BindText*`/`BindInt64` binders, `sqlite_row_mapper_t` mappers, `sqlite_dal_query_list_p`/`sqlite_dal_exec_p` parameterized queries, transactions)
 - `config_get()` / `config_get_int()` — API credentials and `max_workers_per_goal`
 - `tool_result_builder` — Consistent tool result formatting (`tool_result_builder_create` → `set_success`/`set_error` → `finalize`)
 - `extract_string_param()` — JSON parameter extraction for tool arguments (from `common_utils.h`)
 
-These primitives require **modification** (detailed in phases above):
-- `worker_spawn()` — System prompt parameter must be wired through to child process via temp file (currently unused: `(void)system_prompt`) — Phase 5
-- `AGENT_MODE_WORKER` — Two changes: (1) capture actual LLM response from `session_data.conversation` instead of static `"Task completed successfully"` string — Phase 3; (2) exit when queue is empty instead of sleeping forever (`usleep` loop → clean exit), so workers die naturally after draining their queue — Phase 5
+These primitives required **modification** (completed):
+- Workers are now spawned via `subagent_spawn_with_args()` instead of `worker_spawn()` — tracked by the supervisor's subagent manager so `subagent_poll_all()` detects completion
+- `AGENT_MODE_WORKER` — Captures actual LLM response from `session_data.conversation` and exits when queue is empty
+- `ToolResult.clear_history` — Signals `tool_executor_run_workflow()` to clear conversation before decomposition
+- `services_create_default()` — GOAP stores are only created for scaffold binary (conditional on `app_home_get_app_name()`)
+- `orchestrator_check_stale()` — Only clears PIDs for dead processes (ESRCH), not time-based eviction
 
 Note: `task_store` is **not** reused for GOAP actions. GOAP actions have precondition/effect semantics and hierarchical compound/primitive relationships that don't map to task_store's dependency model. `task_store` remains available for ralph's regular task tracking via the todo tools.
 

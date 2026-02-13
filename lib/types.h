@@ -13,6 +13,7 @@ typedef struct ToolResult {
     char *tool_call_id; /* Matching the tool call ID */
     char *result;       /* Tool execution result as string */
     int success;        /* 1 if successful, 0 if error */
+    int clear_history;  /* Signal session to clear conversation after this result */
 } ToolResult;
 
 typedef struct StreamingToolUse {

@@ -113,6 +113,7 @@ int execute_execute_plan(const ToolCall *tc, ToolResult *result) {
 
     result->result = cJSON_PrintUnformatted(json);
     result->success = 1;
+    result->clear_history = 1;
 
     cJSON_Delete(json);
     free(response);

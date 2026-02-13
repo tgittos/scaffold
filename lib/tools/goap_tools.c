@@ -1,8 +1,10 @@
 #include "goap_tools.h"
+#include "subagent_tool.h"
 #include "tool_param_dsl.h"
 #include "tool_result_builder.h"
 #include "../util/common_utils.h"
 #include "../util/uuid_utils.h"
+#include "../util/executable_path.h"
 #include "../util/config.h"
 #include "db/goal_store.h"
 #include "db/action_store.h"
@@ -14,13 +16,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #define MAX_RESULT_PREVIEW 4000
 
 static Services *g_services = NULL;
+static SubagentManager *g_subagent_manager = NULL;
 
 void goap_tools_set_services(Services *services) {
     g_services = services;
+}
+
+void goap_tools_set_subagent_manager(SubagentManager *mgr) {
+    g_subagent_manager = mgr;
 }
 
 /* ========================================================================
@@ -676,11 +684,65 @@ int execute_goap_dispatch_action(const ToolCall *tc, ToolResult *result) {
         return 0;
     }
 
+    /* Write system prompt to temp file if a role prompt exists */
     const char *role_name = action->role[0] ? action->role : "implementation";
     char *system_prompt = role_prompt_load(role_name);
-    WorkerHandle *worker = worker_spawn(goal->queue_name, system_prompt);
+    char prompt_file[256] = {0};
+    if (system_prompt != NULL && strlen(system_prompt) > 0) {
+        snprintf(prompt_file, sizeof(prompt_file), "/tmp/scaffold_prompt_XXXXXX");
+        int fd = mkstemp(prompt_file);
+        if (fd >= 0) {
+            size_t plen = strlen(system_prompt);
+            ssize_t written = write(fd, system_prompt, plen);
+            close(fd);
+            if (written < 0 || (size_t)written != plen) {
+                unlink(prompt_file);
+                prompt_file[0] = '\0';
+            }
+        } else {
+            prompt_file[0] = '\0';
+        }
+    }
     free(system_prompt);
-    if (!worker) {
+
+    /* Build argv for the worker process */
+    char *exe_path = get_executable_path();
+    if (!exe_path) {
+        if (prompt_file[0]) unlink(prompt_file);
+        work_queue_remove(wq, work_item_id);
+        tool_result_set_error(result, "Failed to get executable path");
+        work_queue_destroy(wq);
+        goal_free(goal);
+        action_free(action);
+        free(action_id);
+        free(context);
+        return 0;
+    }
+
+    char *spawn_args[12];
+    int ai = 0;
+    spawn_args[ai++] = exe_path;
+    spawn_args[ai++] = "--worker";
+    spawn_args[ai++] = "--queue";
+    spawn_args[ai++] = goal->queue_name;
+    spawn_args[ai++] = "--yolo";
+    if (prompt_file[0]) {
+        spawn_args[ai++] = "--system-prompt-file";
+        spawn_args[ai++] = prompt_file;
+    }
+    spawn_args[ai] = NULL;
+
+    char subagent_id[SUBAGENT_ID_LENGTH + 1] = {0};
+    int spawn_rc = -1;
+    if (g_subagent_manager != NULL) {
+        spawn_rc = subagent_spawn_with_args(g_subagent_manager, spawn_args,
+                                             action->description, subagent_id);
+    }
+    free(exe_path);
+
+    if (spawn_rc != 0) {
+        if (prompt_file[0]) unlink(prompt_file);
+        work_queue_remove(wq, work_item_id);
         tool_result_set_error(result, "Failed to spawn worker");
         work_queue_destroy(wq);
         goal_free(goal);
@@ -696,13 +758,12 @@ int execute_goap_dispatch_action(const ToolCall *tc, ToolResult *result) {
     cJSON *resp = cJSON_CreateObject();
     cJSON_AddBoolToObject(resp, "success", cJSON_True);
     cJSON_AddStringToObject(resp, "action_id", action_id);
-    cJSON_AddNumberToObject(resp, "worker_pid", (double)worker->pid);
+    cJSON_AddStringToObject(resp, "subagent_id", subagent_id);
     cJSON_AddStringToObject(resp, "work_item_id", work_item_id);
     result->result = cJSON_PrintUnformatted(resp);
     result->success = 1;
     cJSON_Delete(resp);
 
-    worker_handle_free(worker);
     work_queue_destroy(wq);
     goal_free(goal);
     action_free(action);

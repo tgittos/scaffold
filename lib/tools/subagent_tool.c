@@ -258,117 +258,41 @@ int subagent_poll_all(SubagentManager *manager) {
     return changed;
 }
 
-/**
- * Spawn a new subagent to execute a task.
- * Forks a new process running ralph in subagent mode.
- * Creates approval channel pipes for IPC-based approval proxying.
- */
-int subagent_spawn(SubagentManager *manager, const char *task, const char *context, const char *model, char *subagent_id_out) {
-    if (manager == NULL || task == NULL || subagent_id_out == NULL) {
-        return -1;
+/* Set up child process FDs and environment for subagent IPC.
+ * Called in the child (post-fork). Does not return on success. */
+static void child_setup_ipc(int stdout_write_fd, int request_pipe[2],
+                             int response_pipe[2]) {
+    if (dup2(stdout_write_fd, STDOUT_FILENO) == -1) _exit(127);
+    close(stdout_write_fd);
+    if (dup2(STDOUT_FILENO, STDERR_FILENO) == -1) _exit(127);
+
+    close(request_pipe[0]);
+    close(response_pipe[1]);
+
+    char request_fd_str[32], response_fd_str[32];
+    snprintf(request_fd_str, sizeof(request_fd_str), "%d", request_pipe[1]);
+    snprintf(response_fd_str, sizeof(response_fd_str), "%d", response_pipe[0]);
+    setenv(RALPH_APPROVAL_REQUEST_FD, request_fd_str, 1);
+    setenv(RALPH_APPROVAL_RESPONSE_FD, response_fd_str, 1);
+
+    char* parent_id = messaging_tool_get_agent_id();
+    if (parent_id != NULL) {
+        setenv(RALPH_PARENT_AGENT_ID_ENV, parent_id, 1);
+        free(parent_id);
     }
+}
 
-    if (manager->is_subagent_process) {
-        return -1;
-    }
-
-    if (manager->max_subagents <= 0 || manager->subagents.count >= (size_t)manager->max_subagents) {
-        return -1;
-    }
-
-    char id[SUBAGENT_ID_LENGTH + 1];
-    generate_subagent_id(id);
-
-    int stdout_pipefd[2];
-    if (pipe(stdout_pipefd) == -1) {
-        return -1;
-    }
-
-    int request_pipe[2], response_pipe[2];
-    if (create_approval_channel_pipes(request_pipe, response_pipe) < 0) {
-        close(stdout_pipefd[0]);
-        close(stdout_pipefd[1]);
-        return -1;
-    }
-
-    char *ralph_path = subagent_get_executable_path();
-    if (ralph_path == NULL) {
-        close(stdout_pipefd[0]);
-        close(stdout_pipefd[1]);
-        cleanup_approval_channel_pipes(request_pipe, response_pipe);
-        return -1;
-    }
-
-    pid_t pid = fork();
-    if (pid == -1) {
-        free(ralph_path);
-        close(stdout_pipefd[0]);
-        close(stdout_pipefd[1]);
-        cleanup_approval_channel_pipes(request_pipe, response_pipe);
-        return -1;
-    }
-
-    if (pid == 0) {
-        close(stdout_pipefd[0]);
-
-        if (dup2(stdout_pipefd[1], STDOUT_FILENO) == -1) {
-            _exit(127);
-        }
-        close(stdout_pipefd[1]);
-
-        if (dup2(STDOUT_FILENO, STDERR_FILENO) == -1) {
-            _exit(127);
-        }
-
-        close(request_pipe[0]);
-        close(response_pipe[1]);
-
-        char request_fd_str[32], response_fd_str[32];
-        snprintf(request_fd_str, sizeof(request_fd_str), "%d", request_pipe[1]);
-        snprintf(response_fd_str, sizeof(response_fd_str), "%d", response_pipe[0]);
-        setenv(RALPH_APPROVAL_REQUEST_FD, request_fd_str, 1);
-        setenv(RALPH_APPROVAL_RESPONSE_FD, response_fd_str, 1);
-
-        char* parent_id = messaging_tool_get_agent_id();
-        if (parent_id != NULL) {
-            setenv(RALPH_PARENT_AGENT_ID_ENV, parent_id, 1);
-            free(parent_id);
-        }
-
-        char *args[9];
-        int arg_idx = 0;
-
-        args[arg_idx++] = ralph_path;
-        args[arg_idx++] = "--subagent";
-        args[arg_idx++] = "--task";
-        args[arg_idx++] = (char*)task;
-
-        if (context != NULL && strlen(context) > 0) {
-            args[arg_idx++] = "--context";
-            args[arg_idx++] = (char*)context;
-        }
-
-        if (model != NULL && strlen(model) > 0) {
-            args[arg_idx++] = "--model";
-            args[arg_idx++] = (char*)model;
-        }
-
-        args[arg_idx] = NULL;
-
-        execv(ralph_path, args);
-        _exit(127);
-    }
-
-    free(ralph_path);
-    close(stdout_pipefd[1]);
-
-    close(request_pipe[1]);
-    close(response_pipe[0]);
-
+/* Register a freshly-forked child as a tracked subagent.
+ * Closes parent-side write ends, builds Subagent struct, pushes to manager.
+ * On failure kills the child and closes all FDs. */
+static int register_subagent(SubagentManager *manager, const char id[SUBAGENT_ID_LENGTH + 1],
+                              pid_t pid, int stdout_read_fd,
+                              int request_read_fd, int response_write_fd,
+                              const char *task, const char *context_str,
+                              char *subagent_id_out) {
     Subagent new_sub;
     memset(&new_sub, 0, sizeof(Subagent));
 
-    /* Initialize FDs to -1 to prevent accidental close of stdin/stdout/stderr */
     new_sub.stdout_pipe[0] = -1;
     new_sub.stdout_pipe[1] = -1;
     new_sub.approval_channel.request_fd = -1;
@@ -378,53 +302,170 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
     new_sub.id[SUBAGENT_ID_LENGTH] = '\0';
     new_sub.pid = pid;
     new_sub.status = SUBAGENT_STATUS_RUNNING;
-    new_sub.stdout_pipe[0] = stdout_pipefd[0];
+    new_sub.stdout_pipe[0] = stdout_read_fd;
     new_sub.stdout_pipe[1] = -1;
-    new_sub.approval_channel.request_fd = request_pipe[0];
-    new_sub.approval_channel.response_fd = response_pipe[1];
+    new_sub.approval_channel.request_fd = request_read_fd;
+    new_sub.approval_channel.response_fd = response_write_fd;
     new_sub.approval_channel.subagent_pid = pid;
-    new_sub.task = strdup(task);
-    new_sub.context = (context != NULL && strlen(context) > 0) ? strdup(context) : NULL;
+    new_sub.task = (task != NULL) ? strdup(task) : strdup("subagent");
+    new_sub.context = (context_str != NULL && strlen(context_str) > 0)
+                      ? strdup(context_str) : NULL;
     new_sub.output = NULL;
     new_sub.output_len = 0;
     new_sub.result = NULL;
     new_sub.error = NULL;
     new_sub.start_time = time(NULL);
 
-    if (new_sub.task == NULL || (context != NULL && strlen(context) > 0 && new_sub.context == NULL)) {
-        if (new_sub.task) free(new_sub.task);
-        if (new_sub.context) free(new_sub.context);
+    if (new_sub.task == NULL ||
+        (context_str != NULL && strlen(context_str) > 0 && new_sub.context == NULL)) {
+        free(new_sub.task);
+        free(new_sub.context);
         kill(pid, SIGKILL);
         waitpid(pid, NULL, 0);
-        close(stdout_pipefd[0]);
-        close(request_pipe[0]);
-        close(response_pipe[1]);
+        close(stdout_read_fd);
+        close(request_read_fd);
+        close(response_write_fd);
         return -1;
     }
 
     if (SubagentArray_push(&manager->subagents, new_sub) != 0) {
-        if (new_sub.task) free(new_sub.task);
-        if (new_sub.context) free(new_sub.context);
+        free(new_sub.task);
+        free(new_sub.context);
         kill(pid, SIGKILL);
         waitpid(pid, NULL, 0);
-        close(stdout_pipefd[0]);
-        close(request_pipe[0]);
-        close(response_pipe[1]);
+        close(stdout_read_fd);
+        close(request_read_fd);
+        close(response_write_fd);
         return -1;
     }
 
     strcpy(subagent_id_out, id);
 
-    /* Notify the main thread (if callback registered) that a new subagent was spawned.
-     * This wakes up the main thread's select() loop so it can rebuild its
-     * fd_set to include the new subagent's approval channel FD. Without this,
-     * approval prompts would be delayed until the select() timeout or user input. */
     if (manager->spawn_callback != NULL) {
         manager->spawn_callback(manager->spawn_callback_data);
-        debug_printf("subagent_spawn: Notified main thread of new subagent\n");
     }
 
     return 0;
+}
+
+/* Common pre-fork validation and pipe creation. Returns 0 on success. */
+static int prefork_setup(SubagentManager *manager, char id_out[SUBAGENT_ID_LENGTH + 1],
+                          int stdout_pipefd[2], int request_pipe[2], int response_pipe[2]) {
+    if (manager->is_subagent_process) return -1;
+    if (manager->max_subagents <= 0 ||
+        manager->subagents.count >= (size_t)manager->max_subagents) return -1;
+
+    generate_subagent_id(id_out);
+
+    if (pipe(stdout_pipefd) == -1) return -1;
+
+    if (create_approval_channel_pipes(request_pipe, response_pipe) < 0) {
+        close(stdout_pipefd[0]);
+        close(stdout_pipefd[1]);
+        return -1;
+    }
+    return 0;
+}
+
+/**
+ * Spawn a new subagent to execute a task.
+ * Forks a new process running ralph in subagent mode.
+ * Creates approval channel pipes for IPC-based approval proxying.
+ */
+int subagent_spawn(SubagentManager *manager, const char *task, const char *context, const char *model, char *subagent_id_out) {
+    if (manager == NULL || task == NULL || subagent_id_out == NULL) return -1;
+
+    char id[SUBAGENT_ID_LENGTH + 1];
+    int stdout_pipefd[2], request_pipe[2], response_pipe[2];
+    if (prefork_setup(manager, id, stdout_pipefd, request_pipe, response_pipe) != 0)
+        return -1;
+
+    char *ralph_path = subagent_get_executable_path();
+    if (ralph_path == NULL) {
+        close(stdout_pipefd[0]); close(stdout_pipefd[1]);
+        cleanup_approval_channel_pipes(request_pipe, response_pipe);
+        return -1;
+    }
+
+    pid_t pid = fork();
+    if (pid == -1) {
+        free(ralph_path);
+        close(stdout_pipefd[0]); close(stdout_pipefd[1]);
+        cleanup_approval_channel_pipes(request_pipe, response_pipe);
+        return -1;
+    }
+
+    if (pid == 0) {
+        close(stdout_pipefd[0]);
+        child_setup_ipc(stdout_pipefd[1], request_pipe, response_pipe);
+
+        char *args[9];
+        int ai = 0;
+        args[ai++] = ralph_path;
+        args[ai++] = "--subagent";
+        args[ai++] = "--task";
+        args[ai++] = (char*)task;
+        if (context != NULL && strlen(context) > 0) {
+            args[ai++] = "--context";
+            args[ai++] = (char*)context;
+        }
+        if (model != NULL && strlen(model) > 0) {
+            args[ai++] = "--model";
+            args[ai++] = (char*)model;
+        }
+        args[ai] = NULL;
+
+        execv(ralph_path, args);
+        _exit(127);
+    }
+
+    free(ralph_path);
+    close(stdout_pipefd[1]);
+    close(request_pipe[1]);
+    close(response_pipe[0]);
+
+    return register_subagent(manager, id, pid, stdout_pipefd[0],
+                             request_pipe[0], response_pipe[1],
+                             task, context, subagent_id_out);
+}
+
+/**
+ * Spawn a subagent with a custom argv array.
+ * Same pipe/approval-channel setup as subagent_spawn, but the child
+ * calls execv(args[0], args) with the caller-provided argument list.
+ * task_desc populates the Subagent.task field for completion notifications.
+ */
+int subagent_spawn_with_args(SubagentManager *manager, char *args[],
+                             const char *task_desc, char *subagent_id_out) {
+    if (manager == NULL || args == NULL || args[0] == NULL || subagent_id_out == NULL)
+        return -1;
+
+    char id[SUBAGENT_ID_LENGTH + 1];
+    int stdout_pipefd[2], request_pipe[2], response_pipe[2];
+    if (prefork_setup(manager, id, stdout_pipefd, request_pipe, response_pipe) != 0)
+        return -1;
+
+    pid_t pid = fork();
+    if (pid == -1) {
+        close(stdout_pipefd[0]); close(stdout_pipefd[1]);
+        cleanup_approval_channel_pipes(request_pipe, response_pipe);
+        return -1;
+    }
+
+    if (pid == 0) {
+        close(stdout_pipefd[0]);
+        child_setup_ipc(stdout_pipefd[1], request_pipe, response_pipe);
+        execv(args[0], args);
+        _exit(127);
+    }
+
+    close(stdout_pipefd[1]);
+    close(request_pipe[1]);
+    close(response_pipe[0]);
+
+    return register_subagent(manager, id, pid, stdout_pipefd[0],
+                             request_pipe[0], response_pipe[1],
+                             task_desc, NULL, subagent_id_out);
 }
 
 /**

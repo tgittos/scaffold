@@ -394,6 +394,23 @@ $(TEST_http_python_TARGET): $(TEST_http_python_OBJECTS) $(LIBAGENT) $(ALL_LIBS)
 	$(PYTHON_TEST_EMBED)
 
 # =============================================================================
+# FLAT HEADER + STATIC LIBRARY LINKAGE TEST
+# =============================================================================
+
+# Compiles against the generated out/libagent.h (not individual lib/ headers)
+# to verify the flat header is self-contained and the library links cleanly.
+TEST_libagent_header_SOURCES := $(TESTDIR)/test_libagent_header.c $(UNITY)
+TEST_libagent_header_OBJECTS := $(TESTDIR)/test_libagent_header.o $(TESTDIR)/unity/unity.o
+TEST_libagent_header_TARGET := $(TESTDIR)/test_libagent_header
+ALL_TEST_TARGETS += $(TEST_libagent_header_TARGET)
+
+$(TESTDIR)/test_libagent_header.o: $(TESTDIR)/test_libagent_header.c $(LIBAGENT_HEADER)
+	$(CC) $(CFLAGS) -I$(OUTDIR) -I$(TESTDIR)/unity -c $< -o $@
+
+$(TEST_libagent_header_TARGET): $(TEST_libagent_header_OBJECTS) $(LIBAGENT) $(ALL_LIBS)
+	$(CXX) -o $@ $(TEST_libagent_header_OBJECTS) $(LIBAGENT) $(LIBS_STANDARD)
+
+# =============================================================================
 # TEST EXECUTION
 # =============================================================================
 

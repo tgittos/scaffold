@@ -51,7 +51,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`context_enhancement.c/h`** - Prompt enhancement with todo state, memory recall, and context retrieval
 - **`recap.c/h`** - Conversation recap generation (one-shot LLM calls without history persistence)
 - **`streaming_handler.c/h`** - Application-layer streaming orchestration and provider registry management
-- **`tool_executor.c/h`** - Thin entry point for tool execution workflow (init, initial batch, hand-off)
+- **`tool_executor.c/h`** - Thin entry point for tool execution workflow (init, initial batch, clear_history support, hand-off)
 - **`iterative_loop.c/h`** - Iterative tool-calling loop for follow-up LLM rounds
 
 #### `lib/session/` - Session Data Management
@@ -199,16 +199,16 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`mcp_transport_http.c`** - HTTP transport for remote MCP servers
 
 #### `lib/services/` - Service Container
-- **`services.c/h`** - Dependency injection container for service management (message store, vector DB, embeddings, task store, goal/action stores with shared SQLite DAL)
+- **`services.c/h`** - Dependency injection container for service management (message store, vector DB, embeddings, task store, goal/action stores with shared SQLite DAL). GOAP stores are only created for scaffold binary (conditional on app_name).
 
 #### `lib/orchestrator/` - Scaffold Orchestration
 - **`supervisor.c/h`** - Supervisor event loop: GOAP tool-driven goal progression, message-poller-based wake-on-worker-completion, orphaned action recovery on startup
-- **`orchestrator.c/h`** - Supervisor spawning (via process_spawn), liveness checks, zombie reaping, stale PID cleanup, respawn
+- **`orchestrator.c/h`** - Supervisor spawning (via process_spawn), liveness checks, zombie reaping, stale PID cleanup (dead processes only), respawn
 - **`goap_state.c/h`** - Shared GOAP state evaluation: precondition checking (`goap_preconditions_met`) and progress tracking (`goap_check_progress`) used by 5 call sites
 - **`role_prompts.c/h`** - Role-based system prompts for workers: loads from `<app_home>/prompts/<role>.md` with built-in defaults for 6 standard roles (implementation, code_review, architecture_review, design_review, pm_review, testing)
 
 #### `lib/workflow/` - Task Queue
-- **`workflow.c/h`** - SQLite-backed work queue for asynchronous task processing, worker management (via process_spawn), and work item lookup by ID
+- **`workflow.c/h`** - SQLite-backed work queue for asynchronous task processing and work item lifecycle (enqueue, claim, complete, fail, remove). Workers are spawned via the subagent system (`subagent_spawn_with_args`), not directly from workflow.
 
 #### Top-Level Library Headers
 - **`lib/libagent.h`** - Public API for the agent library (includes all major subsystems)
