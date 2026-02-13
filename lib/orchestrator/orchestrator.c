@@ -1,8 +1,8 @@
 #include "orchestrator.h"
 #include "../util/executable_path.h"
+#include "../util/process_spawn.h"
 #include "../util/debug_output.h"
 #include <errno.h>
-#include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,30 +26,18 @@ int orchestrator_spawn_supervisor(goal_store_t* store, const char* goal_id) {
         return -1;
     }
 
-    pid_t pid = fork();
-    if (pid < 0) {
+    char* args[] = {
+        exe_path,
+        "--supervisor",
+        "--goal", (char*)goal_id,
+        "--yolo",
+        NULL
+    };
+
+    pid_t pid;
+    if (process_spawn_devnull(args, &pid) != 0) {
         free(exe_path);
         return -1;
-    }
-
-    if (pid == 0) {
-        int devnull = open("/dev/null", O_WRONLY);
-        if (devnull >= 0) {
-            dup2(devnull, STDOUT_FILENO);
-            dup2(devnull, STDERR_FILENO);
-            close(devnull);
-        }
-
-        char* args[] = {
-            exe_path,
-            "--supervisor",
-            "--goal", (char*)goal_id,
-            "--yolo",
-            NULL
-        };
-
-        execv(exe_path, args);
-        _exit(127);
     }
 
     free(exe_path);

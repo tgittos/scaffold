@@ -7,6 +7,7 @@
 #include "workflow.h"
 #include "../util/app_home.h"
 #include "../util/executable_path.h"
+#include "../util/process_spawn.h"
 #include "util/uuid_utils.h"
 #include <sqlite3.h>
 #include <stdio.h>
@@ -15,7 +16,6 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <signal.h>
-#include <fcntl.h>
 
 /* =============================================================================
  * WORK QUEUE IMPLEMENTATION
@@ -332,6 +332,62 @@ int work_queue_pending_count(WorkQueue* queue) {
     return count;
 }
 
+WorkItem* work_queue_get_item(WorkQueue* queue, const char* item_id) {
+    if (queue == NULL || item_id == NULL) return NULL;
+
+    const char* sql =
+        "SELECT id, queue_name, task_description, context, assigned_to, "
+        "status, attempt_count, max_attempts, created_at, assigned_at, "
+        "completed_at, result, error "
+        "FROM work_items WHERE id = ? AND queue_name = ?";
+
+    sqlite3_stmt* stmt = NULL;
+    int rc = sqlite3_prepare_v2(queue->db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) return NULL;
+
+    sqlite3_bind_text(stmt, 1, item_id, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 2, queue->name, -1, SQLITE_STATIC);
+
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_ROW) {
+        sqlite3_finalize(stmt);
+        return NULL;
+    }
+
+    WorkItem* item = calloc(1, sizeof(WorkItem));
+    if (item == NULL) {
+        sqlite3_finalize(stmt);
+        return NULL;
+    }
+
+    const char* id_val = (const char*)sqlite3_column_text(stmt, 0);
+    const char* qname = (const char*)sqlite3_column_text(stmt, 1);
+    const char* desc = (const char*)sqlite3_column_text(stmt, 2);
+    const char* ctx = (const char*)sqlite3_column_text(stmt, 3);
+    const char* assigned = (const char*)sqlite3_column_text(stmt, 4);
+    const char* result_val = (const char*)sqlite3_column_text(stmt, 11);
+    const char* error_val = (const char*)sqlite3_column_text(stmt, 12);
+
+    if (id_val) strncpy(item->id, id_val, sizeof(item->id) - 1);
+    if (qname) strncpy(item->queue_name, qname, sizeof(item->queue_name) - 1);
+    if (assigned) strncpy(item->assigned_to, assigned, sizeof(item->assigned_to) - 1);
+
+    if (desc) item->task_description = strdup(desc);
+    if (ctx) item->context = strdup(ctx);
+    if (result_val) item->result = strdup(result_val);
+    if (error_val) item->error = strdup(error_val);
+
+    item->status = (WorkItemStatus)sqlite3_column_int(stmt, 5);
+    item->attempt_count = sqlite3_column_int(stmt, 6);
+    item->max_attempts = sqlite3_column_int(stmt, 7);
+    item->created_at = (time_t)sqlite3_column_int64(stmt, 8);
+    item->assigned_at = (time_t)sqlite3_column_int64(stmt, 9);
+    item->completed_at = (time_t)sqlite3_column_int64(stmt, 10);
+
+    sqlite3_finalize(stmt);
+    return item;
+}
+
 void work_item_free(WorkItem* item) {
     if (item == NULL) {
         return;
@@ -400,9 +456,25 @@ WorkerHandle* worker_spawn(const char* queue_name, const char* system_prompt) {
         return NULL;
     }
 
-    /* Fork worker process */
-    pid_t pid = fork();
-    if (pid < 0) {
+    /* Build args array */
+    char* args[12];
+    int arg_idx = 0;
+
+    args[arg_idx++] = ralph_path;
+    args[arg_idx++] = "--worker";
+    args[arg_idx++] = "--queue";
+    args[arg_idx++] = (char*)queue_name;
+    args[arg_idx++] = "--yolo";
+
+    if (handle->system_prompt_file[0]) {
+        args[arg_idx++] = "--system-prompt-file";
+        args[arg_idx++] = handle->system_prompt_file;
+    }
+
+    args[arg_idx] = NULL;
+
+    pid_t pid;
+    if (process_spawn_devnull(args, &pid) != 0) {
         free(ralph_path);
         if (handle->system_prompt_file[0]) {
             unlink(handle->system_prompt_file);
@@ -411,35 +483,6 @@ WorkerHandle* worker_spawn(const char* queue_name, const char* system_prompt) {
         return NULL;
     }
 
-    if (pid == 0) {
-        /* Child process - exec as worker */
-        int devnull = open("/dev/null", O_WRONLY);
-        if (devnull >= 0) {
-            dup2(devnull, STDOUT_FILENO);
-            dup2(devnull, STDERR_FILENO);
-            close(devnull);
-        }
-
-        char* args[10];
-        int arg_idx = 0;
-
-        args[arg_idx++] = ralph_path;
-        args[arg_idx++] = "--worker";
-        args[arg_idx++] = "--queue";
-        args[arg_idx++] = (char*)queue_name;
-
-        if (handle->system_prompt_file[0]) {
-            args[arg_idx++] = "--system-prompt-file";
-            args[arg_idx++] = handle->system_prompt_file;
-        }
-
-        args[arg_idx] = NULL;
-
-        execv(ralph_path, args);
-        _exit(127);
-    }
-
-    /* Parent process */
     free(ralph_path);
     handle->pid = pid;
     handle->is_running = true;

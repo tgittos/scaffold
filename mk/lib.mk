@@ -133,7 +133,8 @@ LIB_UTIL_SOURCES := \
     $(LIBDIR)/util/prompt_loader.c \
     $(LIBDIR)/util/app_home.c \
     $(LIBDIR)/util/context_retriever.c \
-    $(LIBDIR)/util/executable_path.c
+    $(LIBDIR)/util/executable_path.c \
+    $(LIBDIR)/util/process_spawn.c
 
 # PDF module
 LIB_PDF_SOURCES := $(LIBDIR)/pdf/pdf_extractor.c
@@ -179,7 +180,8 @@ LIB_UPDATER_SOURCES := $(LIBDIR)/updater/updater.c
 LIB_ORCHESTRATOR_SOURCES := \
     $(LIBDIR)/orchestrator/supervisor.c \
     $(LIBDIR)/orchestrator/orchestrator.c \
-    $(LIBDIR)/orchestrator/role_prompts.c
+    $(LIBDIR)/orchestrator/role_prompts.c \
+    $(LIBDIR)/orchestrator/goap_state.c
 
 # Combined library sources
 LIB_C_SOURCES := $(LIB_IPC_SOURCES) $(LIB_UI_SOURCES) $(LIB_TOOLS_SOURCES) \

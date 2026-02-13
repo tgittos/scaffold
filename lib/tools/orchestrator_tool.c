@@ -1,10 +1,12 @@
 #include "orchestrator_tool.h"
 #include "tool_param_dsl.h"
+#include "tool_result_builder.h"
 #include "../util/common_utils.h"
 #include "db/goal_store.h"
 #include "db/action_store.h"
 #include "services/services.h"
 #include "orchestrator/orchestrator.h"
+#include "orchestrator/goap_state.h"
 #include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -57,48 +59,9 @@ static const ToolDef ORCHESTRATOR_TOOLS[] = {
 
 int register_orchestrator_tools(ToolRegistry *registry) {
     if (registry == NULL) return -1;
-    g_services = registry->services;
     int registered = register_tools_from_defs(registry, ORCHESTRATOR_TOOLS,
                                               ORCHESTRATOR_TOOL_COUNT);
     return (registered == (int)ORCHESTRATOR_TOOL_COUNT) ? 0 : -1;
-}
-
-/* ========================================================================
- * Helpers
- * ======================================================================== */
-
-static void set_error(ToolResult *result, const char *msg) {
-    cJSON *json = cJSON_CreateObject();
-    cJSON_AddFalseToObject(json, "success");
-    cJSON_AddStringToObject(json, "error", msg);
-    result->result = cJSON_PrintUnformatted(json);
-    result->success = 0;
-    cJSON_Delete(json);
-}
-
-static int count_satisfied(const char *goal_state_json, const char *world_state_json,
-                           int *out_total) {
-    cJSON *gs = goal_state_json ? cJSON_Parse(goal_state_json) : NULL;
-    cJSON *ws = world_state_json ? cJSON_Parse(world_state_json) : NULL;
-
-    int satisfied = 0;
-    int total = 0;
-
-    if (gs && cJSON_IsObject(gs)) {
-        cJSON *item;
-        cJSON_ArrayForEach(item, gs) {
-            total++;
-            cJSON *ws_val = ws ? cJSON_GetObjectItem(ws, item->string) : NULL;
-            if (ws_val && cJSON_IsTrue(ws_val)) {
-                satisfied++;
-            }
-        }
-    }
-
-    cJSON_Delete(gs);
-    cJSON_Delete(ws);
-    if (out_total) *out_total = total;
-    return satisfied;
 }
 
 /* ========================================================================
@@ -127,7 +90,7 @@ int execute_execute_plan(const ToolCall *tc, ToolResult *result) {
 
     char *plan_text = extract_string_param(tc->arguments, "plan_text");
     if (!plan_text) {
-        set_error(result, "Missing required parameter: plan_text");
+        tool_result_set_error(result, "Missing required parameter: plan_text");
         return 0;
     }
 
@@ -135,7 +98,7 @@ int execute_execute_plan(const ToolCall *tc, ToolResult *result) {
     size_t plan_len = strlen(plan_text);
     char *response = malloc(inst_len + plan_len + 1);
     if (!response) {
-        set_error(result, "Memory allocation failed");
+        tool_result_set_error(result, "Memory allocation failed");
         free(plan_text);
         return 0;
     }
@@ -167,7 +130,7 @@ int execute_list_goals(const ToolCall *tc, ToolResult *result) {
 
     goal_store_t *gs = services_get_goal_store(g_services);
     if (!gs) {
-        set_error(result, "Goal store not available");
+        tool_result_set_error(result, "Goal store not available");
         return 0;
     }
 
@@ -184,11 +147,10 @@ int execute_list_goals(const ToolCall *tc, ToolResult *result) {
         cJSON_AddStringToObject(g, "name", goals[i]->name);
         cJSON_AddStringToObject(g, "status", goal_status_to_string(goals[i]->status));
 
-        int total = 0;
-        int satisfied = count_satisfied(goals[i]->goal_state,
-                                        goals[i]->world_state, &total);
+        GoapProgress gp = goap_check_progress(goals[i]->goal_state,
+                                               goals[i]->world_state);
         char progress[32];
-        snprintf(progress, sizeof(progress), "%d/%d", satisfied, total);
+        snprintf(progress, sizeof(progress), "%d/%d", gp.satisfied, gp.total);
         cJSON_AddStringToObject(g, "progress", progress);
 
         if (goals[i]->summary)
@@ -272,21 +234,21 @@ int execute_goal_status(const ToolCall *tc, ToolResult *result) {
 
     char *goal_id = extract_string_param(tc->arguments, "goal_id");
     if (!goal_id) {
-        set_error(result, "Missing required parameter: goal_id");
+        tool_result_set_error(result, "Missing required parameter: goal_id");
         return 0;
     }
 
     goal_store_t *gs = services_get_goal_store(g_services);
     action_store_t *as = services_get_action_store(g_services);
     if (!gs || !as) {
-        set_error(result, "Stores not available");
+        tool_result_set_error(result, "Stores not available");
         free(goal_id);
         return 0;
     }
 
     Goal *goal = goal_store_get(gs, goal_id);
     if (!goal) {
-        set_error(result, "Goal not found");
+        tool_result_set_error(result, "Goal not found");
         free(goal_id);
         return 0;
     }
@@ -308,10 +270,9 @@ int execute_goal_status(const ToolCall *tc, ToolResult *result) {
         if (wst) cJSON_AddItemToObject(json, "world_state", wst);
     }
 
-    int total = 0;
-    int satisfied = count_satisfied(goal->goal_state, goal->world_state, &total);
-    cJSON_AddNumberToObject(json, "assertions_satisfied", satisfied);
-    cJSON_AddNumberToObject(json, "assertions_total", total);
+    GoapProgress gp = goap_check_progress(goal->goal_state, goal->world_state);
+    cJSON_AddNumberToObject(json, "assertions_satisfied", gp.satisfied);
+    cJSON_AddNumberToObject(json, "assertions_total", gp.total);
 
     if (goal->summary)
         cJSON_AddStringToObject(json, "summary", goal->summary);
@@ -358,20 +319,20 @@ int execute_start_goal(const ToolCall *tc, ToolResult *result) {
 
     char *goal_id = extract_string_param(tc->arguments, "goal_id");
     if (!goal_id) {
-        set_error(result, "Missing required parameter: goal_id");
+        tool_result_set_error(result, "Missing required parameter: goal_id");
         return 0;
     }
 
     goal_store_t *gs = services_get_goal_store(g_services);
     if (!gs) {
-        set_error(result, "Goal store not available");
+        tool_result_set_error(result, "Goal store not available");
         free(goal_id);
         return 0;
     }
 
     Goal *goal = goal_store_get(gs, goal_id);
     if (!goal) {
-        set_error(result, "Goal not found");
+        tool_result_set_error(result, "Goal not found");
         free(goal_id);
         return 0;
     }
@@ -380,14 +341,14 @@ int execute_start_goal(const ToolCall *tc, ToolResult *result) {
         char err[128];
         snprintf(err, sizeof(err), "Cannot start goal in %s status (must be planning or paused)",
                  goal_status_to_string(goal->status));
-        set_error(result, err);
+        tool_result_set_error(result, err);
         goal_free(goal);
         free(goal_id);
         return 0;
     }
 
     if (goal->supervisor_pid > 0 && orchestrator_supervisor_alive(gs, goal_id)) {
-        set_error(result, "Supervisor already running for this goal");
+        tool_result_set_error(result, "Supervisor already running for this goal");
         goal_free(goal);
         free(goal_id);
         return 0;
@@ -396,7 +357,7 @@ int execute_start_goal(const ToolCall *tc, ToolResult *result) {
     GoalStatus original_status = goal->status;
     int rc = goal_store_update_status(gs, goal_id, GOAL_STATUS_ACTIVE);
     if (rc != 0) {
-        set_error(result, "Failed to activate goal");
+        tool_result_set_error(result, "Failed to activate goal");
         goal_free(goal);
         free(goal_id);
         return 0;
@@ -404,7 +365,7 @@ int execute_start_goal(const ToolCall *tc, ToolResult *result) {
 
     rc = orchestrator_spawn_supervisor(gs, goal_id);
     if (rc != 0) {
-        set_error(result, "Failed to spawn supervisor");
+        tool_result_set_error(result, "Failed to spawn supervisor");
         goal_store_update_status(gs, goal_id, original_status);
         goal_free(goal);
         free(goal_id);
@@ -441,20 +402,20 @@ int execute_pause_goal(const ToolCall *tc, ToolResult *result) {
 
     char *goal_id = extract_string_param(tc->arguments, "goal_id");
     if (!goal_id) {
-        set_error(result, "Missing required parameter: goal_id");
+        tool_result_set_error(result, "Missing required parameter: goal_id");
         return 0;
     }
 
     goal_store_t *gs = services_get_goal_store(g_services);
     if (!gs) {
-        set_error(result, "Goal store not available");
+        tool_result_set_error(result, "Goal store not available");
         free(goal_id);
         return 0;
     }
 
     Goal *goal = goal_store_get(gs, goal_id);
     if (!goal) {
-        set_error(result, "Goal not found");
+        tool_result_set_error(result, "Goal not found");
         free(goal_id);
         return 0;
     }
@@ -463,7 +424,7 @@ int execute_pause_goal(const ToolCall *tc, ToolResult *result) {
         char err[128];
         snprintf(err, sizeof(err), "Cannot pause goal in %s status (must be active)",
                  goal_status_to_string(goal->status));
-        set_error(result, err);
+        tool_result_set_error(result, err);
         goal_free(goal);
         free(goal_id);
         return 0;
@@ -482,7 +443,7 @@ int execute_pause_goal(const ToolCall *tc, ToolResult *result) {
         result->success = 1;
         cJSON_Delete(json);
     } else {
-        set_error(result, "Failed to pause goal (no supervisor running?)");
+        tool_result_set_error(result, "Failed to pause goal (no supervisor running?)");
     }
 
     free(goal_id);
@@ -499,20 +460,20 @@ int execute_cancel_goal(const ToolCall *tc, ToolResult *result) {
 
     char *goal_id = extract_string_param(tc->arguments, "goal_id");
     if (!goal_id) {
-        set_error(result, "Missing required parameter: goal_id");
+        tool_result_set_error(result, "Missing required parameter: goal_id");
         return 0;
     }
 
     goal_store_t *gs = services_get_goal_store(g_services);
     if (!gs) {
-        set_error(result, "Goal store not available");
+        tool_result_set_error(result, "Goal store not available");
         free(goal_id);
         return 0;
     }
 
     Goal *goal = goal_store_get(gs, goal_id);
     if (!goal) {
-        set_error(result, "Goal not found");
+        tool_result_set_error(result, "Goal not found");
         free(goal_id);
         return 0;
     }
@@ -521,7 +482,7 @@ int execute_cancel_goal(const ToolCall *tc, ToolResult *result) {
         char err[128];
         snprintf(err, sizeof(err), "Goal already in terminal state: %s",
                  goal_status_to_string(goal->status));
-        set_error(result, err);
+        tool_result_set_error(result, err);
         goal_free(goal);
         free(goal_id);
         return 0;

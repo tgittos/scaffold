@@ -1,4 +1,5 @@
 #include "services.h"
+#include "../db/sqlite_dal.h"
 #include <stdlib.h>
 
 Services* services_create_default(void) {
@@ -17,8 +18,17 @@ Services* services_create_default(void) {
     document_store_set_services(services);
     services->document_store = document_store_create(NULL);
 
-    services->goal_store = goal_store_create(NULL);
-    services->action_store = action_store_create(NULL);
+    sqlite_dal_config_t scaffold_cfg = SQLITE_DAL_CONFIG_DEFAULT;
+    scaffold_cfg.default_name = "scaffold.db";
+    sqlite_dal_t *scaffold_dal = sqlite_dal_create(&scaffold_cfg);
+    if (scaffold_dal != NULL) {
+        services->goal_store = goal_store_create_with_dal(scaffold_dal);
+        services->action_store = action_store_create_with_dal(scaffold_dal);
+        sqlite_dal_destroy(scaffold_dal);
+    } else {
+        services->goal_store = goal_store_create(NULL);
+        services->action_store = action_store_create(NULL);
+    }
 
     services->use_singletons = false;
 

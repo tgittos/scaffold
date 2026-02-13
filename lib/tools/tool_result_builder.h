@@ -74,4 +74,10 @@ ToolResult* tool_result_builder_finalize(tool_result_builder_t* builder);
  */
 void tool_result_builder_destroy(tool_result_builder_t* builder);
 
+/**
+ * Set a JSON error response directly on a ToolResult.
+ * Produces {"success":false,"error":"<msg>"} and sets success=0.
+ */
+void tool_result_set_error(ToolResult *result, const char *msg);
+
 #endif // TOOL_RESULT_BUILDER_H

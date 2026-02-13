@@ -238,7 +238,7 @@ $(TEST_message_store_TARGET): $(TEST_message_store_OBJECTS) $(SQLITE_LIB) $(OSSP
 	$(CC) -o $@ $(TEST_message_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) -lpthread -lm
 
 $(eval $(call def_test,goal_store,db/test_goal_store,$(LIBDIR)/db/goal_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/uuid_utils.c $(LIBDIR)/util/app_home.c))
-$(eval $(call def_test,action_store,db/test_action_store,$(LIBDIR)/db/action_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/uuid_utils.c $(LIBDIR)/util/app_home.c))
+$(eval $(call def_test,action_store,db/test_action_store,$(LIBDIR)/db/action_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/orchestrator/goap_state.c $(LIBDIR)/util/uuid_utils.c $(LIBDIR)/util/app_home.c))
 
 $(TEST_goal_store_TARGET): $(TEST_goal_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB)
 	$(CC) -o $@ $(TEST_goal_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) -lpthread -lm
@@ -246,7 +246,7 @@ $(TEST_goal_store_TARGET): $(TEST_goal_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_
 $(TEST_action_store_TARGET): $(TEST_action_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_action_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) $(CJSON_LIB) -lpthread -lm
 
-$(eval $(call def_test,orchestrator,orchestrator/test_orchestrator,$(LIBDIR)/orchestrator/orchestrator.c $(LIBDIR)/db/goal_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/uuid_utils.c $(LIBDIR)/util/app_home.c $(LIBDIR)/util/executable_path.c $(LIBDIR)/util/debug_output.c))
+$(eval $(call def_test,orchestrator,orchestrator/test_orchestrator,$(LIBDIR)/orchestrator/orchestrator.c $(LIBDIR)/db/goal_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/uuid_utils.c $(LIBDIR)/util/app_home.c $(LIBDIR)/util/executable_path.c $(LIBDIR)/util/process_spawn.c $(LIBDIR)/util/debug_output.c))
 
 $(TEST_orchestrator_TARGET): $(TEST_orchestrator_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_orchestrator_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) $(CJSON_LIB) -lpthread -lm
@@ -338,6 +338,7 @@ $(eval $(call def_test_lib,image_attachment,network/test_image_attachment,))
 $(eval $(call def_test_lib,goap_tools,tools/test_goap_tools,))
 $(eval $(call def_test_lib,orchestrator_tool,tools/test_orchestrator_tool,))
 $(eval $(call def_test_lib,goap_lifecycle,orchestrator/test_goap_lifecycle,))
+$(eval $(call def_test_lib,goap_state,orchestrator/test_goap_state,))
 
 # Batch link rule for libagent-linked tests
 LIBAGENT_TESTS := tool_param_dsl json_output output tools_system vector_db_tool memory_tool \
@@ -346,7 +347,8 @@ LIBAGENT_TESTS := tool_param_dsl json_output output tools_system vector_db_tool 
     incomplete_task_bug conversation conversation_vdb tool_calls_not_stored document_store \
     message_dispatcher message_processor recap parallel_batch model_commands \
     slash_commands task_commands agent_commands goal_commands mode_tool mode_commands \
-    context_mode_injection image_attachment goap_tools orchestrator_tool goap_lifecycle
+    context_mode_injection image_attachment goap_tools orchestrator_tool goap_lifecycle \
+    goap_state
 
 $(foreach t,$(LIBAGENT_TESTS),$(eval \
 $$(TEST_$(t)_TARGET): $$(TEST_$(t)_OBJECTS) $$(LIBAGENT) $$(ALL_LIBS) ; \

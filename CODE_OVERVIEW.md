@@ -68,8 +68,8 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`metadata_store.c/h`** - Chunk metadata storage layer (separate from vectors)
 - **`task_store.c/h`** - SQLite-based persistent task storage with hierarchies and dependencies
 - **`goal_store.c/h`** - GOAP goal persistence: goal state, world state, supervisor PID tracking
-- **`action_store.c/h`** - GOAP action persistence: hierarchy (compound/primitive), preconditions/effects, readiness queries
-- **`sqlite_dal.c/h`** - SQLite data access layer with mutex protection, schema initialization, and common query patterns
+- **`action_store.c/h`** - GOAP action persistence: hierarchy (compound/primitive), preconditions/effects, readiness queries, work_item_id correlation for dispatch tracking
+- **`sqlite_dal.c/h`** - SQLite data access layer with mutex protection, ref-counted shared connections, schema initialization, and common query patterns
 - **`hnswlib_wrapper.cpp/h`** - C++ wrapper for HNSW vector indexing
 
 #### `lib/llm/` - LLM Core Framework
@@ -131,7 +131,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 #### `lib/tools/` - Tool System
 - **`tools_system.c/h`** - Core tool registry and execution framework
 - **`tools.h`** - Public tools API header
-- **`tool_result_builder.c/h`** - Standardized tool result construction (builder pattern)
+- **`tool_result_builder.c/h`** - Standardized tool result construction (builder pattern) with shared error helper
 - **`tool_param_dsl.c/h`** - Declarative table-driven tool parameter registration
 - **`tool_format.h`** - Provider-specific tool format strategy interface
 - **`tool_format_anthropic.c`** - Anthropic Messages API tool format
@@ -187,6 +187,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`context_retriever.c/h`** - Vector database context retrieval for prompts
 - **`ansi_codes.h`** - Terminal color codes, box-drawing characters, and status symbols
 - **`app_home.c/h`** - Centralized application home directory management (~/.local/<app_name>/)
+- **`process_spawn.c/h`** - Common fork/exec helper with stdout/stderr redirected to /dev/null
 
 #### `lib/pdf/` - PDF Processing
 - **`pdf_extractor.c/h`** - PDF text extraction using PDFio library
@@ -198,15 +199,16 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`mcp_transport_http.c`** - HTTP transport for remote MCP servers
 
 #### `lib/services/` - Service Container
-- **`services.c/h`** - Dependency injection container for service management (message store, vector DB, embeddings, task store)
+- **`services.c/h`** - Dependency injection container for service management (message store, vector DB, embeddings, task store, goal/action stores with shared SQLite DAL)
 
 #### `lib/orchestrator/` - Scaffold Orchestration
-- **`supervisor.c/h`** - Supervisor event loop: GOAP tool-driven goal progression, message-poller-based wake-on-worker-completion
-- **`orchestrator.c/h`** - Supervisor spawning (fork/exec), liveness checks, zombie reaping, stale PID cleanup, respawn
+- **`supervisor.c/h`** - Supervisor event loop: GOAP tool-driven goal progression, message-poller-based wake-on-worker-completion, orphaned action recovery on startup
+- **`orchestrator.c/h`** - Supervisor spawning (via process_spawn), liveness checks, zombie reaping, stale PID cleanup, respawn
+- **`goap_state.c/h`** - Shared GOAP state evaluation: precondition checking (`goap_preconditions_met`) and progress tracking (`goap_check_progress`) used by 5 call sites
 - **`role_prompts.c/h`** - Role-based system prompts for workers: loads from `<app_home>/prompts/<role>.md` with built-in defaults for 6 standard roles (implementation, code_review, architecture_review, design_review, pm_review, testing)
 
 #### `lib/workflow/` - Task Queue
-- **`workflow.c/h`** - SQLite-backed work queue for asynchronous task processing and worker management
+- **`workflow.c/h`** - SQLite-backed work queue for asynchronous task processing, worker management (via process_spawn), and work item lookup by ID
 
 #### Top-Level Library Headers
 - **`lib/libagent.h`** - Public API for the agent library (includes all major subsystems)
@@ -270,7 +272,7 @@ The test directory mirrors the source structure:
 - **`test_message_store.c`** - Inter-agent messaging storage tests
 - **`test_sqlite_dal.c`** - SQLite Data Access Layer tests
 - **`test_goal_store.c`** - GOAP goal store persistence tests (16 tests: CRUD, status transitions, world state, supervisor PID tracking)
-- **`test_action_store.c`** - GOAP action store tests (21 tests: hierarchy, precondition matching, readiness queries, skip_pending)
+- **`test_action_store.c`** - GOAP action store tests (23 tests: hierarchy, precondition matching, readiness queries, skip_pending, work_item_id correlation)
 
 #### `test/mcp/` - MCP Integration Tests
 - **`test_mcp_client.c`** - MCP client functionality tests
@@ -308,6 +310,7 @@ The test directory mirrors the source structure:
 - **`test_orchestrator.c`** - Supervisor process lifecycle tests (12 tests: spawn, alive checks, kill, reap, stale PID cleanup, respawn)
 - **`test_role_prompts.c`** - Role-based system prompt tests (17 tests: built-in roles, file overrides, unknown role fallback)
 - **`test_goap_lifecycle.c`** - GOAP lifecycle integration test (6 tests: full supervisor workflow simulation, readiness ordering, parallel readiness, world state accumulation, multi-goal isolation, replanning)
+- **`test_goap_state.c`** - GOAP state evaluation tests (precondition checking, progress tracking, NULL/empty/malformed JSON edge cases)
 
 #### `test/` - Root-Level Tests
 - **`test_darray.c`** - Dynamic array implementation tests

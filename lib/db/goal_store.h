@@ -30,8 +30,11 @@ typedef struct {
 } Goal;
 
 typedef struct goal_store goal_store_t;
+typedef struct sqlite_dal sqlite_dal_t;
 
 goal_store_t* goal_store_create(const char* db_path);
+goal_store_t* goal_store_create_with_dal(sqlite_dal_t* dal);
+sqlite_dal_t* goal_store_get_dal(goal_store_t* store);
 void goal_store_destroy(goal_store_t* store);
 
 // out_id must be at least 40 bytes.

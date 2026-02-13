@@ -26,18 +26,35 @@ static const char *SCHEMA_SQL =
     ");"
     "CREATE INDEX IF NOT EXISTS idx_goals_status ON goals(status);";
 
+#define GOAL_COLUMNS \
+    "id, name, description, goal_state, world_state, summary, " \
+    "status, supervisor_pid, queue_name, supervisor_started_at, created_at, updated_at"
+
+#define GOAL_COL_ID                  0
+#define GOAL_COL_NAME                1
+#define GOAL_COL_DESCRIPTION         2
+#define GOAL_COL_GOAL_STATE          3
+#define GOAL_COL_WORLD_STATE         4
+#define GOAL_COL_SUMMARY             5
+#define GOAL_COL_STATUS              6
+#define GOAL_COL_SUPERVISOR_PID      7
+#define GOAL_COL_QUEUE_NAME          8
+#define GOAL_COL_SUPERVISOR_STARTED  9
+#define GOAL_COL_CREATED_AT         10
+#define GOAL_COL_UPDATED_AT         11
+
 static void *map_goal(sqlite3_stmt *stmt, void *user_data) {
     (void)user_data;
     Goal *goal = calloc(1, sizeof(Goal));
     if (goal == NULL) return NULL;
 
-    const char *id = (const char *)sqlite3_column_text(stmt, 0);
-    const char *name = (const char *)sqlite3_column_text(stmt, 1);
-    const char *description = (const char *)sqlite3_column_text(stmt, 2);
-    const char *goal_state = (const char *)sqlite3_column_text(stmt, 3);
-    const char *world_state = (const char *)sqlite3_column_text(stmt, 4);
-    const char *summary = (const char *)sqlite3_column_text(stmt, 5);
-    const char *queue_name = (const char *)sqlite3_column_text(stmt, 8);
+    const char *id = (const char *)sqlite3_column_text(stmt, GOAL_COL_ID);
+    const char *name = (const char *)sqlite3_column_text(stmt, GOAL_COL_NAME);
+    const char *description = (const char *)sqlite3_column_text(stmt, GOAL_COL_DESCRIPTION);
+    const char *goal_state = (const char *)sqlite3_column_text(stmt, GOAL_COL_GOAL_STATE);
+    const char *world_state = (const char *)sqlite3_column_text(stmt, GOAL_COL_WORLD_STATE);
+    const char *summary = (const char *)sqlite3_column_text(stmt, GOAL_COL_SUMMARY);
+    const char *queue_name = (const char *)sqlite3_column_text(stmt, GOAL_COL_QUEUE_NAME);
 
     if (id) strncpy(goal->id, id, sizeof(goal->id) - 1);
     if (name) strncpy(goal->name, name, sizeof(goal->name) - 1);
@@ -60,11 +77,11 @@ static void *map_goal(sqlite3_stmt *stmt, void *user_data) {
         if (!goal->summary) { free(goal->world_state); free(goal->goal_state); free(goal->description); free(goal); return NULL; }
     }
 
-    goal->status = (GoalStatus)sqlite3_column_int(stmt, 6);
-    goal->supervisor_pid = (pid_t)sqlite3_column_int(stmt, 7);
-    goal->supervisor_started_at = sqlite3_column_int64(stmt, 9);
-    goal->created_at = (time_t)sqlite3_column_int64(stmt, 10);
-    goal->updated_at = (time_t)sqlite3_column_int64(stmt, 11);
+    goal->status = (GoalStatus)sqlite3_column_int(stmt, GOAL_COL_STATUS);
+    goal->supervisor_pid = (pid_t)sqlite3_column_int(stmt, GOAL_COL_SUPERVISOR_PID);
+    goal->supervisor_started_at = sqlite3_column_int64(stmt, GOAL_COL_SUPERVISOR_STARTED);
+    goal->created_at = (time_t)sqlite3_column_int64(stmt, GOAL_COL_CREATED_AT);
+    goal->updated_at = (time_t)sqlite3_column_int64(stmt, GOAL_COL_UPDATED_AT);
     return goal;
 }
 
@@ -115,15 +132,30 @@ goal_store_t *goal_store_create(const char *db_path) {
     return store;
 }
 
+goal_store_t *goal_store_create_with_dal(sqlite_dal_t *dal) {
+    if (dal == NULL) return NULL;
+
+    goal_store_t *store = calloc(1, sizeof(goal_store_t));
+    if (store == NULL) return NULL;
+
+    if (sqlite_dal_apply_schema(dal, SCHEMA_SQL) != 0) {
+        free(store);
+        return NULL;
+    }
+
+    store->dal = sqlite_dal_retain(dal);
+    return store;
+}
+
+sqlite_dal_t *goal_store_get_dal(goal_store_t *store) {
+    return store ? store->dal : NULL;
+}
+
 void goal_store_destroy(goal_store_t *store) {
     if (store == NULL) return;
     sqlite_dal_destroy(store->dal);
     free(store);
 }
-
-#define GOAL_COLUMNS \
-    "id, name, description, goal_state, world_state, summary, " \
-    "status, supervisor_pid, queue_name, supervisor_started_at, created_at, updated_at"
 
 int goal_store_insert(goal_store_t *store, const char *name,
                       const char *description, const char *goal_state_json,
@@ -228,40 +260,14 @@ Goal **goal_store_list_by_status(goal_store_t *store, GoalStatus status, size_t 
     if (!store || !count) return NULL;
     *count = 0;
 
+    BindInt params = { (int)status };
     void **items = NULL;
     size_t c = 0;
-
-    sqlite_dal_lock(store->dal);
-    sqlite3 *db = sqlite_dal_get_db(store->dal);
-
-    sqlite3_stmt *stmt = NULL;
-    int rc = sqlite3_prepare_v2(db,
+    int rc = sqlite_dal_query_list_p(store->dal,
         "SELECT " GOAL_COLUMNS " FROM goals WHERE status = ? ORDER BY created_at;",
-        -1, &stmt, NULL);
-    if (rc != SQLITE_OK) { sqlite_dal_unlock(store->dal); return NULL; }
-
-    sqlite3_bind_int(stmt, 1, (int)status);
-
-    size_t capacity = 8;
-    items = malloc(capacity * sizeof(void *));
-    if (!items) { sqlite3_finalize(stmt); sqlite_dal_unlock(store->dal); return NULL; }
-
-    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
-        void *item = map_goal(stmt, NULL);
-        if (!item) continue;
-        if (c >= capacity) {
-            capacity *= 2;
-            void **new_items = realloc(items, capacity * sizeof(void *));
-            if (!new_items) { goal_free(item); break; }
-            items = new_items;
-        }
-        items[c++] = item;
-    }
-
-    sqlite3_finalize(stmt);
-    sqlite_dal_unlock(store->dal);
-
-    if (c == 0) { free(items); return NULL; }
+        bind_int, &params, map_goal, (sqlite_item_free_t)goal_free,
+        NULL, &items, &c);
+    if (rc != 0 || c == 0) return NULL;
     *count = c;
     return (Goal **)items;
 }

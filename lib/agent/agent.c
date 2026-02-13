@@ -78,16 +78,16 @@ int agent_init(Agent* agent, const AgentConfig* config) {
      * load_conversation_history() is called during session_init. */
     conversation_tracker_set_services(agent->services);
 
+    /* Wire services BEFORE session_init so registry->services is valid when
+     * register_*_tools() captures it during tool registration. */
+    agent->session.services = agent->services;
+    agent->session.tools.services = agent->services;
+
     if (session_init(&agent->session) != 0) {
         return -1;
     }
 
     agent->session.model_override = agent->config.model_override;
-
-    /* Wire remaining services after session_init — register_subagent_tool() copied
-     * registry->services during session_init when it was still NULL. */
-    agent->session.services = agent->services;
-    agent->session.tools.services = agent->services;
     subagent_manager_set_services(&agent->session.subagent_manager, agent->services);
     document_store_set_services(agent->services);
     memory_tool_set_services(agent->services);

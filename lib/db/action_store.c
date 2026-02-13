@@ -1,6 +1,7 @@
 #include "action_store.h"
 #include "sqlite_dal.h"
 #include "util/uuid_utils.h"
+#include "orchestrator/goap_state.h"
 #include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,6 +16,7 @@ static const char *SCHEMA_SQL =
     "    id TEXT PRIMARY KEY,"
     "    goal_id TEXT NOT NULL,"
     "    parent_action_id TEXT,"
+    "    work_item_id TEXT,"
     "    description TEXT NOT NULL,"
     "    preconditions TEXT DEFAULT '[]',"
     "    effects TEXT DEFAULT '[]',"
@@ -32,26 +34,43 @@ static const char *SCHEMA_SQL =
     "CREATE INDEX IF NOT EXISTS idx_actions_parent ON actions(parent_action_id);";
 
 #define ACTION_COLUMNS \
-    "id, goal_id, parent_action_id, description, preconditions, effects, " \
+    "id, goal_id, parent_action_id, work_item_id, description, preconditions, effects, " \
     "is_compound, status, role, result, attempt_count, created_at, updated_at"
+
+#define ACTION_COL_ID               0
+#define ACTION_COL_GOAL_ID          1
+#define ACTION_COL_PARENT_ID        2
+#define ACTION_COL_WORK_ITEM_ID     3
+#define ACTION_COL_DESCRIPTION      4
+#define ACTION_COL_PRECONDITIONS    5
+#define ACTION_COL_EFFECTS          6
+#define ACTION_COL_IS_COMPOUND      7
+#define ACTION_COL_STATUS           8
+#define ACTION_COL_ROLE             9
+#define ACTION_COL_RESULT          10
+#define ACTION_COL_ATTEMPT_COUNT   11
+#define ACTION_COL_CREATED_AT      12
+#define ACTION_COL_UPDATED_AT      13
 
 static void *map_action(sqlite3_stmt *stmt, void *user_data) {
     (void)user_data;
     Action *action = calloc(1, sizeof(Action));
     if (action == NULL) return NULL;
 
-    const char *id = (const char *)sqlite3_column_text(stmt, 0);
-    const char *goal_id = (const char *)sqlite3_column_text(stmt, 1);
-    const char *parent_id = (const char *)sqlite3_column_text(stmt, 2);
-    const char *description = (const char *)sqlite3_column_text(stmt, 3);
-    const char *preconditions = (const char *)sqlite3_column_text(stmt, 4);
-    const char *effects = (const char *)sqlite3_column_text(stmt, 5);
-    const char *role = (const char *)sqlite3_column_text(stmt, 8);
-    const char *result = (const char *)sqlite3_column_text(stmt, 9);
+    const char *id = (const char *)sqlite3_column_text(stmt, ACTION_COL_ID);
+    const char *goal_id = (const char *)sqlite3_column_text(stmt, ACTION_COL_GOAL_ID);
+    const char *parent_id = (const char *)sqlite3_column_text(stmt, ACTION_COL_PARENT_ID);
+    const char *work_item_id = (const char *)sqlite3_column_text(stmt, ACTION_COL_WORK_ITEM_ID);
+    const char *description = (const char *)sqlite3_column_text(stmt, ACTION_COL_DESCRIPTION);
+    const char *preconditions = (const char *)sqlite3_column_text(stmt, ACTION_COL_PRECONDITIONS);
+    const char *effects = (const char *)sqlite3_column_text(stmt, ACTION_COL_EFFECTS);
+    const char *role = (const char *)sqlite3_column_text(stmt, ACTION_COL_ROLE);
+    const char *result = (const char *)sqlite3_column_text(stmt, ACTION_COL_RESULT);
 
     if (id) strncpy(action->id, id, sizeof(action->id) - 1);
     if (goal_id) strncpy(action->goal_id, goal_id, sizeof(action->goal_id) - 1);
     if (parent_id) strncpy(action->parent_action_id, parent_id, sizeof(action->parent_action_id) - 1);
+    if (work_item_id) strncpy(action->work_item_id, work_item_id, sizeof(action->work_item_id) - 1);
     if (role) strncpy(action->role, role, sizeof(action->role) - 1);
 
     if (description) {
@@ -71,11 +90,11 @@ static void *map_action(sqlite3_stmt *stmt, void *user_data) {
         if (!action->result) { free(action->effects); free(action->preconditions); free(action->description); free(action); return NULL; }
     }
 
-    action->is_compound = sqlite3_column_int(stmt, 6) != 0;
-    action->status = (ActionStatus)sqlite3_column_int(stmt, 7);
-    action->attempt_count = sqlite3_column_int(stmt, 10);
-    action->created_at = (time_t)sqlite3_column_int64(stmt, 11);
-    action->updated_at = (time_t)sqlite3_column_int64(stmt, 12);
+    action->is_compound = sqlite3_column_int(stmt, ACTION_COL_IS_COMPOUND) != 0;
+    action->status = (ActionStatus)sqlite3_column_int(stmt, ACTION_COL_STATUS);
+    action->attempt_count = sqlite3_column_int(stmt, ACTION_COL_ATTEMPT_COUNT);
+    action->created_at = (time_t)sqlite3_column_int64(stmt, ACTION_COL_CREATED_AT);
+    action->updated_at = (time_t)sqlite3_column_int64(stmt, ACTION_COL_UPDATED_AT);
     return action;
 }
 
@@ -94,6 +113,25 @@ action_store_t *action_store_create(const char *db_path) {
         return NULL;
     }
     return store;
+}
+
+action_store_t *action_store_create_with_dal(sqlite_dal_t *dal) {
+    if (dal == NULL) return NULL;
+
+    action_store_t *store = calloc(1, sizeof(action_store_t));
+    if (store == NULL) return NULL;
+
+    if (sqlite_dal_apply_schema(dal, SCHEMA_SQL) != 0) {
+        free(store);
+        return NULL;
+    }
+
+    store->dal = sqlite_dal_retain(dal);
+    return store;
+}
+
+sqlite_dal_t *action_store_get_dal(action_store_t *store) {
+    return store ? store->dal : NULL;
 }
 
 void action_store_destroy(action_store_t *store) {
@@ -181,33 +219,39 @@ int action_store_update_status(action_store_t *store, const char *id,
     return (rc == SQLITE_DONE && changes > 0) ? 0 : -1;
 }
 
-static bool preconditions_satisfied(const char *preconditions_json,
-                                     const char *world_state_json) {
-    if (!preconditions_json || strcmp(preconditions_json, "[]") == 0) return true;
+static int bind_text2_int64(sqlite3_stmt *stmt, void *data) {
+    const char **s = data;
+    sqlite3_bind_text(stmt, 1, s[0], -1, SQLITE_STATIC);
+    sqlite3_bind_int64(stmt, 2, (int64_t)time(NULL));
+    sqlite3_bind_text(stmt, 3, s[1], -1, SQLITE_STATIC);
+    return 0;
+}
 
-    cJSON *preconditions = cJSON_Parse(preconditions_json);
-    if (!preconditions) return true;
-    if (!cJSON_IsArray(preconditions)) { cJSON_Delete(preconditions); return true; }
-    if (cJSON_GetArraySize(preconditions) == 0) { cJSON_Delete(preconditions); return true; }
+int action_store_update_work_item(action_store_t *store, const char *id,
+                                   const char *work_item_id) {
+    if (!store || !id || !work_item_id) return -1;
+    const char *params[] = { work_item_id, id };
+    return sqlite_dal_exec_p(store->dal,
+        "UPDATE actions SET work_item_id = ?, updated_at = ? WHERE id = ?;",
+        bind_text2_int64, params);
+}
 
-    cJSON *world_state = cJSON_Parse(world_state_json);
-    if (!world_state) { cJSON_Delete(preconditions); return false; }
+Action **action_store_list_running(action_store_t *store, const char *goal_id,
+                                    size_t *count) {
+    if (!store || !goal_id || !count) return NULL;
+    *count = 0;
 
-    bool satisfied = true;
-    cJSON *item = NULL;
-    cJSON_ArrayForEach(item, preconditions) {
-        if (!cJSON_IsString(item)) continue;
-        const char *key = item->valuestring;
-        cJSON *val = cJSON_GetObjectItemCaseSensitive(world_state, key);
-        if (!val || !cJSON_IsTrue(val)) {
-            satisfied = false;
-            break;
-        }
-    }
+    BindTextInt params = { goal_id, ACTION_STATUS_RUNNING };
+    void **items = NULL;
+    size_t c = 0;
+    int rc = sqlite_dal_query_list_p(store->dal,
+        "SELECT " ACTION_COLUMNS " FROM actions WHERE goal_id = ? AND status = ? ORDER BY created_at;",
+        bind_text_int, &params, map_action, (sqlite_item_free_t)action_free,
+        NULL, &items, &c);
 
-    cJSON_Delete(preconditions);
-    cJSON_Delete(world_state);
-    return satisfied;
+    if (rc != 0 || c == 0) return NULL;
+    *count = c;
+    return (Action **)items;
 }
 
 Action **action_store_list_ready(action_store_t *store, const char *goal_id,
@@ -239,7 +283,7 @@ Action **action_store_list_ready(action_store_t *store, const char *goal_id,
     const char *ws = world_state_json ? world_state_json : "{}";
     for (size_t i = 0; i < total; i++) {
         Action *action = (Action *)items[i];
-        if (preconditions_satisfied(action->preconditions, ws)) {
+        if (goap_preconditions_met(action->preconditions, ws)) {
             ready[ready_count++] = action;
         } else {
             action_free(action);

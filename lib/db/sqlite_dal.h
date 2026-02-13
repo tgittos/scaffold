@@ -54,7 +54,26 @@ typedef struct {
 sqlite_dal_t *sqlite_dal_create(const sqlite_dal_config_t *config);
 
 /*
+ * Increment the reference count on a DAL.
+ * Use when sharing a DAL across multiple stores.
+ * Returns the same dal pointer for convenience.
+ *
+ * Thread safety: retain/destroy calls must not race with the final
+ * destroy that closes the DB. Typical usage is single-threaded setup
+ * and teardown with concurrent query access in between.
+ */
+sqlite_dal_t *sqlite_dal_retain(sqlite_dal_t *dal);
+
+/*
+ * Apply additional schema SQL to an existing DAL.
+ * Used by stores created with a shared DAL to initialize their tables.
+ * Returns: 0 on success, -1 on failure.
+ */
+int sqlite_dal_apply_schema(sqlite_dal_t *dal, const char *schema_sql);
+
+/*
  * Destroy a SQLite store and release all resources.
+ * With ref counting, the DB is only closed when the last reference is released.
  * Safe to call with NULL.
  */
 void sqlite_dal_destroy(sqlite_dal_t *dal);
@@ -295,6 +314,7 @@ typedef struct { const char *s1; } BindText1;
 typedef struct { const char *s1; const char *s2; } BindText2;
 typedef struct { const char *s1; int i1; } BindTextInt;
 typedef struct { const char *s1; const char *s2; int i1; } BindText2Int;
+typedef struct { int i1; } BindInt;
 typedef struct { int64_t i1; } BindInt64;
 
 /*
@@ -326,6 +346,12 @@ static inline int bind_text2_int(sqlite3_stmt *stmt, void *data) {
     sqlite3_bind_text(stmt, 1, b->s1, -1, SQLITE_STATIC);
     sqlite3_bind_text(stmt, 2, b->s2, -1, SQLITE_STATIC);
     sqlite3_bind_int(stmt, 3, b->i1);
+    return 0;
+}
+
+static inline int bind_int(sqlite3_stmt *stmt, void *data) {
+    BindInt *b = data;
+    sqlite3_bind_int(stmt, 1, b->i1);
     return 0;
 }
 

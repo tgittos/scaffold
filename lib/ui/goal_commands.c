@@ -4,6 +4,7 @@
 #include "../services/services.h"
 #include "../db/goal_store.h"
 #include "../db/action_store.h"
+#include "../orchestrator/goap_state.h"
 #include <cJSON.h>
 #include <stdio.h>
 #include <string.h>
@@ -40,32 +41,6 @@ static const char *action_status_symbol(ActionStatus status) {
         case ACTION_STATUS_PENDING:   return TERM_SYM_INFO;
         default:                      return " ";
     }
-}
-
-/* Count goal_state keys satisfied in world_state (world_state has key set to true) */
-static void count_progress(const char *goal_state_json, const char *world_state_json,
-                           int *total, int *satisfied) {
-    *total = 0;
-    *satisfied = 0;
-    if (goal_state_json == NULL || goal_state_json[0] == '\0') return;
-
-    cJSON *gs = cJSON_Parse(goal_state_json);
-    if (gs == NULL) return;
-
-    cJSON *ws = (world_state_json && world_state_json[0])
-                ? cJSON_Parse(world_state_json) : NULL;
-
-    cJSON *item = NULL;
-    cJSON_ArrayForEach(item, gs) {
-        (*total)++;
-        cJSON *ws_val = ws ? cJSON_GetObjectItem(ws, item->string) : NULL;
-        if (ws_val && cJSON_IsTrue(ws_val)) {
-            (*satisfied)++;
-        }
-    }
-
-    if (ws) cJSON_Delete(ws);
-    cJSON_Delete(gs);
 }
 
 static void format_elapsed_since(int64_t started_at_ms, char *buf, size_t buf_size) {
@@ -108,8 +83,8 @@ static int cmd_goals_list(AgentSession *session) {
 
     for (size_t i = 0; i < count; i++) {
         Goal *g = goals[i];
-        int total = 0, satisfied = 0;
-        count_progress(g->goal_state, g->world_state, &total, &satisfied);
+        GoapProgress gp = goap_check_progress(g->goal_state, g->world_state);
+        int total = gp.total, satisfied = gp.satisfied;
 
         char progress[32];
         if (total > 0) {
@@ -218,8 +193,8 @@ static int cmd_goals_show(const char *id_prefix, AgentSession *session) {
         return 0;
     }
 
-    int total = 0, satisfied = 0;
-    count_progress(goal->goal_state, goal->world_state, &total, &satisfied);
+    GoapProgress gp = goap_check_progress(goal->goal_state, goal->world_state);
+    int total = gp.total, satisfied = gp.satisfied;
 
     printf("\n" TERM_BOLD "Goal %.8s" TERM_RESET "\n", goal->id);
     printf(TERM_SEP_LIGHT_40 "\n");

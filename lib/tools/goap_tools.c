@@ -1,5 +1,6 @@
 #include "goap_tools.h"
 #include "tool_param_dsl.h"
+#include "tool_result_builder.h"
 #include "../util/common_utils.h"
 #include "../util/uuid_utils.h"
 #include "../util/config.h"
@@ -8,6 +9,7 @@
 #include "services/services.h"
 #include "workflow/workflow.h"
 #include "orchestrator/role_prompts.h"
+#include "orchestrator/goap_state.h"
 #include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -109,7 +111,6 @@ static const ToolDef GOAP_TOOLS[] = {
 
 int register_goap_tools(ToolRegistry *registry) {
     if (registry == NULL) return -1;
-    g_services = registry->services;
     int registered = register_tools_from_defs(registry, GOAP_TOOLS, GOAP_TOOL_COUNT);
     return (registered == (int)GOAP_TOOL_COUNT) ? 0 : -1;
 }
@@ -122,15 +123,6 @@ static bool is_valid_action_status(const char *s) {
     return s && (strcmp(s, "pending") == 0 || strcmp(s, "running") == 0 ||
                  strcmp(s, "completed") == 0 || strcmp(s, "failed") == 0 ||
                  strcmp(s, "skipped") == 0);
-}
-
-static void set_error(ToolResult *result, const char *msg) {
-    cJSON *json = cJSON_CreateObject();
-    cJSON_AddFalseToObject(json, "success");
-    cJSON_AddStringToObject(json, "error", msg);
-    result->result = cJSON_PrintUnformatted(json);
-    result->success = 0;
-    cJSON_Delete(json);
 }
 
 static cJSON *action_to_json(const Action *a) {
@@ -169,13 +161,13 @@ int execute_goap_get_goal(const ToolCall *tc, ToolResult *result) {
 
     char *goal_id = extract_string_param(tc->arguments, "goal_id");
     if (!goal_id) {
-        set_error(result, "Missing required parameter: goal_id");
+        tool_result_set_error(result, "Missing required parameter: goal_id");
         return 0;
     }
 
     goal_store_t *gs = services_get_goal_store(g_services);
     if (!gs) {
-        set_error(result, "Goal store not available");
+        tool_result_set_error(result, "Goal store not available");
         free(goal_id);
         return 0;
     }
@@ -183,7 +175,7 @@ int execute_goap_get_goal(const ToolCall *tc, ToolResult *result) {
     Goal *goal = goal_store_get(gs, goal_id);
     free(goal_id);
     if (!goal) {
-        set_error(result, "Goal not found");
+        tool_result_set_error(result, "Goal not found");
         return 0;
     }
 
@@ -229,7 +221,7 @@ int execute_goap_list_actions(const ToolCall *tc, ToolResult *result) {
 
     char *goal_id = extract_string_param(tc->arguments, "goal_id");
     if (!goal_id) {
-        set_error(result, "Missing required parameter: goal_id");
+        tool_result_set_error(result, "Missing required parameter: goal_id");
         return 0;
     }
 
@@ -237,7 +229,7 @@ int execute_goap_list_actions(const ToolCall *tc, ToolResult *result) {
     char *parent_id = extract_string_param(tc->arguments, "parent_action_id");
 
     if (status_str && !is_valid_action_status(status_str)) {
-        set_error(result, "Invalid status filter (must be: pending, running, completed, failed, skipped)");
+        tool_result_set_error(result, "Invalid status filter (must be: pending, running, completed, failed, skipped)");
         free(goal_id);
         free(status_str);
         free(parent_id);
@@ -246,7 +238,7 @@ int execute_goap_list_actions(const ToolCall *tc, ToolResult *result) {
 
     action_store_t *as = services_get_action_store(g_services);
     if (!as) {
-        set_error(result, "Action store not available");
+        tool_result_set_error(result, "Action store not available");
         free(goal_id);
         free(status_str);
         free(parent_id);
@@ -299,7 +291,7 @@ int execute_goap_create_goal(const ToolCall *tc, ToolResult *result) {
 
     cJSON *args = cJSON_Parse(tc->arguments);
     if (!args) {
-        set_error(result, "Invalid JSON arguments");
+        tool_result_set_error(result, "Invalid JSON arguments");
         return 0;
     }
 
@@ -308,7 +300,7 @@ int execute_goap_create_goal(const ToolCall *tc, ToolResult *result) {
     const char *queue_name = cJSON_GetStringValue(cJSON_GetObjectItem(args, "queue_name"));
 
     if (!name || !description) {
-        set_error(result, "Missing required parameters: name, description");
+        tool_result_set_error(result, "Missing required parameters: name, description");
         cJSON_Delete(args);
         return 0;
     }
@@ -334,7 +326,7 @@ int execute_goap_create_goal(const ToolCall *tc, ToolResult *result) {
 
     goal_store_t *store = services_get_goal_store(g_services);
     if (!store) {
-        set_error(result, "Goal store not available");
+        tool_result_set_error(result, "Goal store not available");
         free(goal_state_str);
         cJSON_Delete(args);
         return 0;
@@ -352,7 +344,7 @@ int execute_goap_create_goal(const ToolCall *tc, ToolResult *result) {
         result->success = 1;
         cJSON_Delete(resp);
     } else {
-        set_error(result, "Failed to create goal");
+        tool_result_set_error(result, "Failed to create goal");
     }
 
     free(goal_state_str);
@@ -370,7 +362,7 @@ int execute_goap_create_actions(const ToolCall *tc, ToolResult *result) {
 
     cJSON *args = cJSON_Parse(tc->arguments);
     if (!args) {
-        set_error(result, "Invalid JSON arguments");
+        tool_result_set_error(result, "Invalid JSON arguments");
         return 0;
     }
 
@@ -378,14 +370,14 @@ int execute_goap_create_actions(const ToolCall *tc, ToolResult *result) {
     cJSON *actions_arr = cJSON_GetObjectItem(args, "actions");
 
     if (!goal_id || !actions_arr || !cJSON_IsArray(actions_arr)) {
-        set_error(result, "Missing required parameters: goal_id, actions (array)");
+        tool_result_set_error(result, "Missing required parameters: goal_id, actions (array)");
         cJSON_Delete(args);
         return 0;
     }
 
     action_store_t *as = services_get_action_store(g_services);
     if (!as) {
-        set_error(result, "Action store not available");
+        tool_result_set_error(result, "Action store not available");
         cJSON_Delete(args);
         return 0;
     }
@@ -468,7 +460,7 @@ int execute_goap_update_action(const ToolCall *tc, ToolResult *result) {
     char *result_text = extract_string_param(tc->arguments, "result");
 
     if (!action_id || !status_str) {
-        set_error(result, "Missing required parameters: action_id, status");
+        tool_result_set_error(result, "Missing required parameters: action_id, status");
         free(action_id);
         free(status_str);
         free(result_text);
@@ -476,7 +468,7 @@ int execute_goap_update_action(const ToolCall *tc, ToolResult *result) {
     }
 
     if (!is_valid_action_status(status_str)) {
-        set_error(result, "Invalid status (must be: pending, running, completed, failed, skipped)");
+        tool_result_set_error(result, "Invalid status (must be: pending, running, completed, failed, skipped)");
         free(action_id);
         free(status_str);
         free(result_text);
@@ -485,7 +477,7 @@ int execute_goap_update_action(const ToolCall *tc, ToolResult *result) {
 
     action_store_t *as = services_get_action_store(g_services);
     if (!as) {
-        set_error(result, "Action store not available");
+        tool_result_set_error(result, "Action store not available");
         free(action_id);
         free(status_str);
         free(result_text);
@@ -504,7 +496,7 @@ int execute_goap_update_action(const ToolCall *tc, ToolResult *result) {
         result->success = 1;
         cJSON_Delete(resp);
     } else {
-        set_error(result, "Failed to update action");
+        tool_result_set_error(result, "Failed to update action");
     }
 
     free(action_id);
@@ -608,34 +600,34 @@ int execute_goap_dispatch_action(const ToolCall *tc, ToolResult *result) {
 
     char *action_id = extract_string_param(tc->arguments, "action_id");
     if (!action_id) {
-        set_error(result, "Missing required parameter: action_id");
+        tool_result_set_error(result, "Missing required parameter: action_id");
         return 0;
     }
 
     action_store_t *as = services_get_action_store(g_services);
     goal_store_t *gs = services_get_goal_store(g_services);
     if (!as || !gs) {
-        set_error(result, "Stores not available");
+        tool_result_set_error(result, "Stores not available");
         free(action_id);
         return 0;
     }
 
     Action *action = action_store_get(as, action_id);
     if (!action) {
-        set_error(result, "Action not found");
+        tool_result_set_error(result, "Action not found");
         free(action_id);
         return 0;
     }
 
     if (action->is_compound) {
-        set_error(result, "Cannot dispatch compound action - decompose it first");
+        tool_result_set_error(result, "Cannot dispatch compound action - decompose it first");
         action_free(action);
         free(action_id);
         return 0;
     }
 
     if (action->status != ACTION_STATUS_PENDING) {
-        set_error(result, "Action is not pending");
+        tool_result_set_error(result, "Action is not pending");
         action_free(action);
         free(action_id);
         return 0;
@@ -646,7 +638,7 @@ int execute_goap_dispatch_action(const ToolCall *tc, ToolResult *result) {
                                                 ACTION_STATUS_RUNNING);
     int max_workers = config_get_int("max_workers_per_goal", 3);
     if (running >= max_workers) {
-        set_error(result, "Worker capacity reached for this goal");
+        tool_result_set_error(result, "Worker capacity reached for this goal");
         action_free(action);
         free(action_id);
         return 0;
@@ -654,7 +646,7 @@ int execute_goap_dispatch_action(const ToolCall *tc, ToolResult *result) {
 
     Goal *goal = goal_store_get(gs, action->goal_id);
     if (!goal) {
-        set_error(result, "Goal not found for action");
+        tool_result_set_error(result, "Goal not found for action");
         action_free(action);
         free(action_id);
         return 0;
@@ -664,7 +656,7 @@ int execute_goap_dispatch_action(const ToolCall *tc, ToolResult *result) {
 
     WorkQueue *wq = work_queue_create(goal->queue_name);
     if (!wq) {
-        set_error(result, "Failed to create work queue");
+        tool_result_set_error(result, "Failed to create work queue");
         goal_free(goal);
         action_free(action);
         free(action_id);
@@ -675,7 +667,7 @@ int execute_goap_dispatch_action(const ToolCall *tc, ToolResult *result) {
     char work_item_id[40] = {0};
     int rc = work_queue_enqueue(wq, action->description, context, 3, work_item_id);
     if (rc != 0) {
-        set_error(result, "Failed to enqueue work item");
+        tool_result_set_error(result, "Failed to enqueue work item");
         work_queue_destroy(wq);
         goal_free(goal);
         action_free(action);
@@ -689,7 +681,7 @@ int execute_goap_dispatch_action(const ToolCall *tc, ToolResult *result) {
     WorkerHandle *worker = worker_spawn(goal->queue_name, system_prompt);
     free(system_prompt);
     if (!worker) {
-        set_error(result, "Failed to spawn worker");
+        tool_result_set_error(result, "Failed to spawn worker");
         work_queue_destroy(wq);
         goal_free(goal);
         action_free(action);
@@ -699,6 +691,7 @@ int execute_goap_dispatch_action(const ToolCall *tc, ToolResult *result) {
     }
 
     action_store_update_status(as, action_id, ACTION_STATUS_RUNNING, NULL);
+    action_store_update_work_item(as, action_id, work_item_id);
 
     cJSON *resp = cJSON_CreateObject();
     cJSON_AddBoolToObject(resp, "success", cJSON_True);
@@ -728,20 +721,20 @@ int execute_goap_update_world_state(const ToolCall *tc, ToolResult *result) {
 
     char *goal_id = extract_string_param(tc->arguments, "goal_id");
     if (!goal_id) {
-        set_error(result, "Missing required parameter: goal_id");
+        tool_result_set_error(result, "Missing required parameter: goal_id");
         return 0;
     }
 
     cJSON *args = cJSON_Parse(tc->arguments);
     if (!args) {
-        set_error(result, "Invalid JSON arguments");
+        tool_result_set_error(result, "Invalid JSON arguments");
         free(goal_id);
         return 0;
     }
 
     cJSON *assertions = cJSON_GetObjectItem(args, "assertions");
     if (!assertions || !cJSON_IsObject(assertions)) {
-        set_error(result, "Missing required parameter: assertions (object)");
+        tool_result_set_error(result, "Missing required parameter: assertions (object)");
         cJSON_Delete(args);
         free(goal_id);
         return 0;
@@ -749,7 +742,7 @@ int execute_goap_update_world_state(const ToolCall *tc, ToolResult *result) {
 
     goal_store_t *gs = services_get_goal_store(g_services);
     if (!gs) {
-        set_error(result, "Goal store not available");
+        tool_result_set_error(result, "Goal store not available");
         cJSON_Delete(args);
         free(goal_id);
         return 0;
@@ -757,7 +750,7 @@ int execute_goap_update_world_state(const ToolCall *tc, ToolResult *result) {
 
     Goal *goal = goal_store_get(gs, goal_id);
     if (!goal) {
-        set_error(result, "Goal not found");
+        tool_result_set_error(result, "Goal not found");
         cJSON_Delete(args);
         free(goal_id);
         return 0;
@@ -788,7 +781,7 @@ int execute_goap_update_world_state(const ToolCall *tc, ToolResult *result) {
         result->success = 1;
         cJSON_Delete(resp); /* also frees world_state */
     } else {
-        set_error(result, "Failed to update world state");
+        tool_result_set_error(result, "Failed to update world state");
         cJSON_Delete(world_state);
     }
 
@@ -809,13 +802,13 @@ int execute_goap_check_complete(const ToolCall *tc, ToolResult *result) {
 
     char *goal_id = extract_string_param(tc->arguments, "goal_id");
     if (!goal_id) {
-        set_error(result, "Missing required parameter: goal_id");
+        tool_result_set_error(result, "Missing required parameter: goal_id");
         return 0;
     }
 
     goal_store_t *gs = services_get_goal_store(g_services);
     if (!gs) {
-        set_error(result, "Goal store not available");
+        tool_result_set_error(result, "Goal store not available");
         free(goal_id);
         return 0;
     }
@@ -823,49 +816,41 @@ int execute_goap_check_complete(const ToolCall *tc, ToolResult *result) {
     Goal *goal = goal_store_get(gs, goal_id);
     free(goal_id);
     if (!goal) {
-        set_error(result, "Goal not found");
+        tool_result_set_error(result, "Goal not found");
         return 0;
     }
 
-    cJSON *goal_state = goal->goal_state ? cJSON_Parse(goal->goal_state) : NULL;
-    cJSON *world_state = goal->world_state ? cJSON_Parse(goal->world_state) : NULL;
-
-    bool complete = true;
-    int satisfied = 0;
-    int total = 0;
-    cJSON *missing = cJSON_CreateArray();
-
-    if (goal_state && cJSON_IsObject(goal_state)) {
-        cJSON *gs_item;
-        cJSON_ArrayForEach(gs_item, goal_state) {
-            total++;
-            cJSON *ws_val = world_state
-                ? cJSON_GetObjectItem(world_state, gs_item->string) : NULL;
-            if (ws_val && cJSON_IsTrue(ws_val)) {
-                satisfied++;
-            } else {
-                complete = false;
-                cJSON_AddItemToArray(missing, cJSON_CreateString(gs_item->string));
-            }
-        }
-    }
+    GoapProgress progress = goap_check_progress(goal->goal_state, goal->world_state);
 
     cJSON *json = cJSON_CreateObject();
     cJSON_AddBoolToObject(json, "success", cJSON_True);
-    cJSON_AddBoolToObject(json, "complete", complete);
-    cJSON_AddNumberToObject(json, "satisfied", satisfied);
-    cJSON_AddNumberToObject(json, "total", total);
-    if (!complete)
+    cJSON_AddBoolToObject(json, "complete", progress.complete);
+    cJSON_AddNumberToObject(json, "satisfied", progress.satisfied);
+    cJSON_AddNumberToObject(json, "total", progress.total);
+
+    if (!progress.complete) {
+        cJSON *missing = cJSON_CreateArray();
+        cJSON *goal_state = goal->goal_state ? cJSON_Parse(goal->goal_state) : NULL;
+        cJSON *world_state = goal->world_state ? cJSON_Parse(goal->world_state) : NULL;
+        if (goal_state && cJSON_IsObject(goal_state)) {
+            cJSON *gs_item;
+            cJSON_ArrayForEach(gs_item, goal_state) {
+                cJSON *ws_val = world_state
+                    ? cJSON_GetObjectItem(world_state, gs_item->string) : NULL;
+                if (!ws_val || !cJSON_IsTrue(ws_val)) {
+                    cJSON_AddItemToArray(missing, cJSON_CreateString(gs_item->string));
+                }
+            }
+        }
         cJSON_AddItemToObject(json, "missing", missing);
-    else
-        cJSON_Delete(missing);
+        cJSON_Delete(goal_state);
+        cJSON_Delete(world_state);
+    }
 
     result->result = cJSON_PrintUnformatted(json);
     result->success = 1;
 
     cJSON_Delete(json);
-    cJSON_Delete(goal_state);
-    cJSON_Delete(world_state);
     goal_free(goal);
     return 0;
 }
@@ -880,13 +865,13 @@ int execute_goap_get_action_results(const ToolCall *tc, ToolResult *result) {
 
     char *goal_id = extract_string_param(tc->arguments, "goal_id");
     if (!goal_id) {
-        set_error(result, "Missing required parameter: goal_id");
+        tool_result_set_error(result, "Missing required parameter: goal_id");
         return 0;
     }
 
     action_store_t *as = services_get_action_store(g_services);
     if (!as) {
-        set_error(result, "Action store not available");
+        tool_result_set_error(result, "Action store not available");
         free(goal_id);
         return 0;
     }

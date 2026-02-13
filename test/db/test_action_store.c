@@ -335,6 +335,44 @@ void test_action_status_conversion(void) {
     TEST_ASSERT_EQUAL(ACTION_STATUS_PENDING, action_status_from_string(NULL));
 }
 
+void test_action_store_work_item_roundtrip(void) {
+    char action_id[40];
+    action_store_insert(g_store, g_goal_id, NULL, "Dispatched action",
+        "[]", "[\"done\"]", false, NULL, action_id);
+
+    /* Initially empty */
+    Action *action = action_store_get(g_store, action_id);
+    TEST_ASSERT_NOT_NULL(action);
+    TEST_ASSERT_EQUAL_STRING("", action->work_item_id);
+    action_free(action);
+
+    /* Set work_item_id */
+    int rc = action_store_update_work_item(g_store, action_id, "wi-test-1234");
+    TEST_ASSERT_EQUAL(1, rc);
+
+    action = action_store_get(g_store, action_id);
+    TEST_ASSERT_NOT_NULL(action);
+    TEST_ASSERT_EQUAL_STRING("wi-test-1234", action->work_item_id);
+    action_free(action);
+}
+
+void test_action_store_list_running(void) {
+    char id1[40], id2[40], id3[40];
+
+    action_store_insert(g_store, g_goal_id, NULL, "A", "[]", "[]", false, NULL, id1);
+    action_store_insert(g_store, g_goal_id, NULL, "B", "[]", "[]", false, NULL, id2);
+    action_store_insert(g_store, g_goal_id, NULL, "C", "[]", "[]", false, NULL, id3);
+
+    action_store_update_status(g_store, id1, ACTION_STATUS_RUNNING, NULL);
+    action_store_update_status(g_store, id3, ACTION_STATUS_RUNNING, NULL);
+
+    size_t count = 0;
+    Action **running = action_store_list_running(g_store, g_goal_id, &count);
+    TEST_ASSERT_EQUAL(2, count);
+    TEST_ASSERT_NOT_NULL(running);
+    action_free_list(running, count);
+}
+
 void test_action_free_null(void) {
     action_free(NULL);
     action_free_list(NULL, 0);
@@ -363,6 +401,8 @@ int main(void) {
     RUN_TEST(test_action_store_list_ready_null_world_state);
     RUN_TEST(test_action_store_list_children_empty);
     RUN_TEST(test_action_status_conversion);
+    RUN_TEST(test_action_store_work_item_roundtrip);
+    RUN_TEST(test_action_store_list_running);
     RUN_TEST(test_action_free_null);
 
     return UNITY_END();

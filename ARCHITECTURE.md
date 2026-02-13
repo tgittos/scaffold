@@ -1018,8 +1018,8 @@ lib/
 │   ├── metadata_store.c/h  # Chunk metadata storage
 │   ├── task_store.c/h      # SQLite-based persistent task storage
 │   ├── goal_store.c/h      # GOAP goal persistence (scaffold orchestration)
-│   ├── action_store.c/h    # GOAP action persistence with hierarchy and readiness queries
-│   ├── sqlite_dal.c/h      # SQLite data access layer
+│   ├── action_store.c/h    # GOAP action persistence with hierarchy, readiness queries, and work_item_id correlation
+│   ├── sqlite_dal.c/h      # SQLite data access layer (ref-counted for shared DAL)
 │   └── hnswlib_wrapper.cpp/h # C++ bridge
 ├── llm/                    # LLM core framework
 │   ├── llm_provider.c/h    # Provider abstraction layer
@@ -1126,10 +1126,12 @@ lib/
 │   ├── prompt_loader.c/h   # System prompt loading
 │   ├── context_retriever.c/h # Vector context retrieval
 │   ├── ansi_codes.h        # Terminal color codes and box-drawing characters
-│   └── app_home.c/h        # Centralized home directory management
+│   ├── app_home.c/h        # Centralized home directory management
+│   └── process_spawn.c/h  # Common fork/exec with stdout/stderr to /dev/null
 ├── orchestrator/          # Scaffold orchestration layer
-│   ├── supervisor.c/h     # Supervisor event loop (GOAP tool-driven goal progression)
-│   ├── orchestrator.c/h   # Supervisor spawning, monitoring, and lifecycle
+│   ├── supervisor.c/h     # Supervisor event loop (GOAP tool-driven goal progression, orphaned action recovery)
+│   ├── orchestrator.c/h   # Supervisor spawning (via process_spawn), monitoring, and lifecycle
+│   ├── goap_state.c/h     # Shared GOAP state evaluation (precondition checking, progress tracking)
 │   └── role_prompts.c/h   # Role-based system prompts for workers (file override + built-in defaults)
 └── workflow/               # Task queue
     └── workflow.c/h        # SQLite-backed work queue

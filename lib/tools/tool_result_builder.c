@@ -1,5 +1,6 @@
 #include "tool_result_builder.h"
 #include "../util/common_utils.h"
+#include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -167,4 +168,13 @@ void tool_result_builder_destroy(tool_result_builder_t* builder) {
         free(builder->result_content);
         free(builder);
     }
+}
+
+void tool_result_set_error(ToolResult *result, const char *msg) {
+    cJSON *json = cJSON_CreateObject();
+    cJSON_AddFalseToObject(json, "success");
+    cJSON_AddStringToObject(json, "error", msg);
+    result->result = cJSON_PrintUnformatted(json);
+    result->success = 0;
+    cJSON_Delete(json);
 }

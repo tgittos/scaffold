@@ -1,5 +1,7 @@
 #include "supervisor.h"
+#include "goap_state.h"
 #include "../ipc/message_poller.h"
+#include "workflow/workflow.h"
 #include "../ipc/notification_formatter.h"
 #include "../session/conversation_tracker.h"
 #include "../tools/subagent_tool.h"
@@ -48,18 +50,7 @@ static char *build_initial_message(AgentSession *session, const char *goal_id) {
         }
     }
 
-    int satisfied = 0, total = 0;
-    cJSON *goal_state = goal->goal_state ? cJSON_Parse(goal->goal_state) : NULL;
-    cJSON *world_state = goal->world_state ? cJSON_Parse(goal->world_state) : NULL;
-    if (goal_state) {
-        cJSON *item;
-        cJSON_ArrayForEach(item, goal_state) {
-            total++;
-            cJSON *ws_val = world_state
-                ? cJSON_GetObjectItem(world_state, item->string) : NULL;
-            if (ws_val && cJSON_IsTrue(ws_val)) satisfied++;
-        }
-    }
+    GoapProgress progress = goap_check_progress(goal->goal_state, goal->world_state);
 
     size_t buf_size = 2048 + strlen(goal->name)
         + (goal->description ? strlen(goal->description) : 0)
@@ -87,12 +78,10 @@ static char *build_initial_message(AgentSession *session, const char *goal_id) {
         goal->description ? goal->description : "(none)",
         goal->goal_state ? goal->goal_state : "{}",
         goal->world_state ? goal->world_state : "{}",
-        satisfied, total,
+        progress.satisfied, progress.total,
         pending, running, completed, failed, action_count);
 
 cleanup:
-    cJSON_Delete(goal_state);
-    cJSON_Delete(world_state);
     action_free_list(actions, action_count);
     goal_free(goal);
     return msg;
@@ -114,28 +103,9 @@ static bool goal_is_complete(AgentSession *session, const char *goal_id) {
         return true;
     }
 
-    cJSON *goal_state = goal->goal_state ? cJSON_Parse(goal->goal_state) : NULL;
-    cJSON *world_state = goal->world_state ? cJSON_Parse(goal->world_state) : NULL;
-
-    bool complete = true;
-    if (goal_state) {
-        cJSON *item;
-        cJSON_ArrayForEach(item, goal_state) {
-            cJSON *ws_val = world_state
-                ? cJSON_GetObjectItem(world_state, item->string) : NULL;
-            if (!ws_val || !cJSON_IsTrue(ws_val)) {
-                complete = false;
-                break;
-            }
-        }
-    } else {
-        complete = false;
-    }
-
-    cJSON_Delete(goal_state);
-    cJSON_Delete(world_state);
+    GoapProgress progress = goap_check_progress(goal->goal_state, goal->world_state);
     goal_free(goal);
-    return complete;
+    return progress.complete;
 }
 
 /**
@@ -197,6 +167,75 @@ static int rebuild_fd_set(AgentSession *session, fd_set *read_fds, int notify_fd
     return max_fd;
 }
 
+int supervisor_recover_orphaned_actions(Services *services, const char *goal_id) {
+    if (services == NULL || goal_id == NULL) return -1;
+
+    action_store_t *as = services_get_action_store(services);
+    goal_store_t *gs = services_get_goal_store(services);
+    if (as == NULL || gs == NULL) return -1;
+
+    Goal *goal = goal_store_get(gs, goal_id);
+    if (goal == NULL) return -1;
+
+    size_t count = 0;
+    Action **running = action_store_list_running(as, goal_id, &count);
+    if (running == NULL || count == 0) {
+        goal_free(goal);
+        if (running) action_free_list(running, count);
+        return 0;
+    }
+
+    WorkQueue *wq = work_queue_create(goal->queue_name);
+    goal_free(goal);
+    if (wq == NULL) {
+        action_free_list(running, count);
+        return -1;
+    }
+
+    int recovered = 0;
+    for (size_t i = 0; i < count; i++) {
+        Action *a = running[i];
+
+        if (a->work_item_id[0] == '\0') {
+            action_store_update_status(as, a->id, ACTION_STATUS_PENDING, NULL);
+            recovered++;
+            continue;
+        }
+
+        WorkItem *wi = work_queue_get_item(wq, a->work_item_id);
+        if (wi == NULL) {
+            action_store_update_status(as, a->id, ACTION_STATUS_PENDING, NULL);
+            recovered++;
+            continue;
+        }
+
+        switch (wi->status) {
+            case WORK_ITEM_COMPLETED:
+                action_store_update_status(as, a->id, ACTION_STATUS_COMPLETED,
+                                           wi->result);
+                recovered++;
+                break;
+            case WORK_ITEM_FAILED:
+                action_store_update_status(as, a->id, ACTION_STATUS_FAILED,
+                                           wi->error);
+                recovered++;
+                break;
+            case WORK_ITEM_ASSIGNED:
+                /* Worker is actively processing — leave as RUNNING */
+                break;
+            default:
+                action_store_update_status(as, a->id, ACTION_STATUS_PENDING, NULL);
+                recovered++;
+                break;
+        }
+        work_item_free(wi);
+    }
+
+    work_queue_destroy(wq);
+    action_free_list(running, count);
+    return recovered;
+}
+
 int supervisor_run(AgentSession *session, const char *goal_id) {
     if (session == NULL || goal_id == NULL) return SUPERVISOR_EXIT_ERROR;
 
@@ -210,6 +249,11 @@ int supervisor_run(AgentSession *session, const char *goal_id) {
     sigaction(SIGINT, &sa, NULL);
 
     debug_printf("Supervisor started for goal %s\n", goal_id);
+
+    int orphans = supervisor_recover_orphaned_actions(session->services, goal_id);
+    if (orphans > 0) {
+        debug_printf("Supervisor: recovered %d orphaned actions\n", orphans);
+    }
 
     char *initial_msg = build_initial_message(session, goal_id);
     if (initial_msg == NULL) {

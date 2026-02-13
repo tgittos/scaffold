@@ -17,6 +17,7 @@ typedef struct {
     char id[40];
     char goal_id[40];
     char parent_action_id[40];
+    char work_item_id[40];
     char* description;
     char* preconditions;
     char* effects;
@@ -30,8 +31,11 @@ typedef struct {
 } Action;
 
 typedef struct action_store action_store_t;
+typedef struct sqlite_dal sqlite_dal_t;
 
 action_store_t* action_store_create(const char* db_path);
+action_store_t* action_store_create_with_dal(sqlite_dal_t* dal);
+sqlite_dal_t* action_store_get_dal(action_store_t* store);
 void action_store_destroy(action_store_t* store);
 
 // parent_action_id may be NULL for top-level actions.
@@ -48,6 +52,9 @@ Action* action_store_get(action_store_t* store, const char* id);
 int action_store_update_status(action_store_t* store, const char* id,
                                ActionStatus status, const char* result);
 
+int action_store_update_work_item(action_store_t* store, const char* id,
+                                   const char* work_item_id);
+
 // Fetch all PENDING actions whose preconditions are satisfied by world_state.
 // Precondition checking is done in C after fetching all pending actions.
 // Caller owns returned array and must free with action_free_list().
@@ -62,6 +69,11 @@ Action** action_store_list_by_goal(action_store_t* store, const char* goal_id,
 // Caller owns returned array and must free with action_free_list().
 Action** action_store_list_children(action_store_t* store,
                                      const char* parent_action_id, size_t* count);
+
+// List all RUNNING actions for a goal.
+// Caller owns returned array and must free with action_free_list().
+Action** action_store_list_running(action_store_t* store, const char* goal_id,
+                                    size_t* count);
 
 int action_store_count_by_status(action_store_t* store, const char* goal_id,
                                   ActionStatus status);

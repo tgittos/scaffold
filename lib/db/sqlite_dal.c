@@ -12,6 +12,7 @@ struct sqlite_dal {
     sqlite3 *db;
     pthread_mutex_t mutex;
     char *db_path;
+    int ref_count;
 };
 
 static int init_pragmas(sqlite3 *db, const sqlite_dal_config_t *config) {
@@ -113,7 +114,24 @@ sqlite_dal_t *sqlite_dal_create(const sqlite_dal_config_t *config) {
         return NULL;
     }
 
+    dal->ref_count = 1;
     return dal;
+}
+
+sqlite_dal_t *sqlite_dal_retain(sqlite_dal_t *dal) {
+    if (dal == NULL) return NULL;
+    pthread_mutex_lock(&dal->mutex);
+    dal->ref_count++;
+    pthread_mutex_unlock(&dal->mutex);
+    return dal;
+}
+
+int sqlite_dal_apply_schema(sqlite_dal_t *dal, const char *schema_sql) {
+    if (dal == NULL) return -1;
+    pthread_mutex_lock(&dal->mutex);
+    int rc = init_schema(dal->db, schema_sql);
+    pthread_mutex_unlock(&dal->mutex);
+    return rc;
 }
 
 void sqlite_dal_destroy(sqlite_dal_t *dal) {
@@ -122,6 +140,12 @@ void sqlite_dal_destroy(sqlite_dal_t *dal) {
     }
 
     pthread_mutex_lock(&dal->mutex);
+    dal->ref_count--;
+    if (dal->ref_count > 0) {
+        pthread_mutex_unlock(&dal->mutex);
+        return;
+    }
+
     if (dal->db != NULL) {
         sqlite3_close(dal->db);
         dal->db = NULL;

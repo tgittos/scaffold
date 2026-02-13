@@ -137,6 +137,15 @@ int work_queue_fail(WorkQueue* queue, const char* item_id, const char* error);
 int work_queue_pending_count(WorkQueue* queue);
 
 /**
+ * Look up a work item by ID.
+ *
+ * @param queue Queue containing the item
+ * @param item_id Work item ID
+ * @return Work item (caller owns and must free), or NULL if not found
+ */
+WorkItem* work_queue_get_item(WorkQueue* queue, const char* item_id);
+
+/**
  * Free a work item.
  *
  * @param item Item to free
