@@ -23,4 +23,4 @@ OBJECTS := $(C_SOURCES:.c=.o) $(CPP_SOURCES:.cpp=.o)
 
 # Scaffold binary sources
 SCAFFOLD_SOURCES := $(SRCDIR)/scaffold/main.c
-SCAFFOLD_OBJECTS := $(SCAFFOLD_SOURCES:.c=.o)
+SCAFFOLD_OBJECTS := $(SCAFFOLD_SOURCES:.c=.o) $(TOOL_SOURCES:.c=.o)

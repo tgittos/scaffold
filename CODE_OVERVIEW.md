@@ -11,8 +11,8 @@ Application-specific code that uses the library layer. This is a thin wrapper ar
 #### `src/ralph/` - Ralph CLI (Standalone Agent)
 - **`main.c`** - Application entry point with CLI argument parsing (--debug, --json, --yolo, --subagent modes). Thin wrapper that invokes lib/agent/agent.h API.
 
-#### `src/scaffold/` - Scaffold CLI (Orchestrator)
-- **`main.c`** - Orchestrator entry point. Supports REPL, one-shot, --supervisor --goal, --worker --queue modes. Coordinates goal decomposition and supervisor spawning.
+#### `src/scaffold/` - Scaffold CLI (Full Agent + Orchestrator)
+- **`main.c`** - Full agent entry point with GOAP orchestration. Has the complete toolkit (Python tools, update management, memory, sub-agents) plus orchestrator-specific modes (--supervisor --goal, --worker --queue). Uses its own system prompt (`data/prompts/scaffold_system.txt`) and REPL greeting.
 
 #### `src/tools/` - Python Tool Integration
 - **`python_tool.c/h`** - Embedded Python interpreter execution

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-embed_python.py - Smart Python stdlib embedding for ralph
+embed_python.py - Smart Python stdlib embedding
 
 This script handles embedding the Python stdlib and default tools into
-the ralph binary. It solves the zipcopy accumulation problem by:
+a Cosmopolitan binary. It solves the zipcopy accumulation problem by:
 
 1. Preserving a clean copy of the base binary (without zip content)
 2. Computing content hashes to detect changes
@@ -11,8 +11,11 @@ the ralph binary. It solves the zipcopy accumulation problem by:
 4. Always starting from the clean base to avoid accumulation
 
 Usage:
-    # Normal embedding (called by make)
+    # Normal embedding for ralph (called by make)
     uv run scripts/embed_python.py
+
+    # Embed into scaffold
+    uv run scripts/embed_python.py --target scaffold
 
     # Save base binary (called right after linking)
     uv run scripts/embed_python.py --save-base
@@ -34,13 +37,18 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).parent.absolute()
 RALPH_ROOT = SCRIPT_DIR.parent
 BUILD_DIR = RALPH_ROOT / "build"
-TARGET = RALPH_ROOT / "out" / "ralph"
-TARGET_BASE = BUILD_DIR / "ralph.base"  # Clean binary without zip content
-STAMP_FILE = BUILD_DIR / ".embed-python.stamp"
 TEMP_ZIP = BUILD_DIR / "python-embed.zip"
 
 PYTHON_STDLIB_DIR = RALPH_ROOT / "python" / "build" / "results" / "py-tmp"
 PYTHON_DEFAULTS_DIR = RALPH_ROOT / "src" / "ralph" / "tools" / "python_defaults"
+
+
+def get_target_paths(name: str) -> tuple[Path, Path, Path]:
+    """Return (target, target_base, stamp_file) for the given binary name."""
+    target = RALPH_ROOT / "out" / name
+    target_base = BUILD_DIR / f"{name}.base"
+    stamp_file = BUILD_DIR / f".embed-python-{name}.stamp"
+    return target, target_base, stamp_file
 
 
 def compute_dir_hash(directory: Path) -> str:
@@ -68,28 +76,28 @@ def compute_file_hash(filepath: Path) -> str:
     return hashlib.sha256(filepath.read_bytes()).hexdigest()[:16]
 
 
-def get_current_state() -> dict:
+def get_current_state(target_base: Path) -> dict:
     """Compute the current state of all inputs."""
     return {
-        "base_binary": compute_file_hash(TARGET_BASE),
+        "base_binary": compute_file_hash(target_base),
         "stdlib": compute_dir_hash(PYTHON_STDLIB_DIR / "lib"),
         "defaults": compute_dir_hash(PYTHON_DEFAULTS_DIR),
     }
 
 
-def get_stored_state() -> dict | None:
+def get_stored_state(stamp_file: Path) -> dict | None:
     """Get the stored state from last successful embed."""
-    if STAMP_FILE.exists():
+    if stamp_file.exists():
         try:
-            return json.loads(STAMP_FILE.read_text())
+            return json.loads(stamp_file.read_text())
         except (json.JSONDecodeError, KeyError):
             return None
     return None
 
 
-def save_state(state: dict):
+def save_state(stamp_file: Path, state: dict):
     """Save the current state after successful embed."""
-    STAMP_FILE.write_text(json.dumps(state, indent=2))
+    stamp_file.write_text(json.dumps(state, indent=2))
 
 
 def needs_embedding(current: dict, stored: dict | None) -> tuple[bool, str]:
@@ -112,19 +120,19 @@ def needs_embedding(current: dict, stored: dict | None) -> tuple[bool, str]:
     return False, "up to date"
 
 
-def save_base():
+def save_base(target: Path, target_base: Path, stamp_file: Path):
     """Save a clean copy of the base binary (called right after linking)."""
-    if not TARGET.exists():
-        print(f"Error: {TARGET} not found", file=sys.stderr)
+    if not target.exists():
+        print(f"Error: {target} not found", file=sys.stderr)
         sys.exit(1)
 
     BUILD_DIR.mkdir(exist_ok=True)
-    shutil.copy2(TARGET, TARGET_BASE)
-    print(f"Saved base binary to {TARGET_BASE}")
+    shutil.copy2(target, target_base)
+    print(f"Saved base binary to {target_base}")
 
     # Also invalidate the stamp since base changed
-    if STAMP_FILE.exists():
-        STAMP_FILE.unlink()
+    if stamp_file.exists():
+        stamp_file.unlink()
 
 
 def run_shell(cmd: str, cwd: Path | None = None) -> subprocess.CompletedProcess:
@@ -170,8 +178,10 @@ def create_embed_zip() -> Path:
     return TEMP_ZIP
 
 
-def embed(force: bool = False):
+def embed(target: Path, target_base: Path, stamp_file: Path, force: bool = False):
     """Perform the embedding operation."""
+    name = target.name
+
     # Validate inputs
     if not (PYTHON_STDLIB_DIR / "lib").exists():
         print(f"Error: Python stdlib not found at {PYTHON_STDLIB_DIR}/lib", file=sys.stderr)
@@ -183,48 +193,43 @@ def embed(force: bool = False):
         sys.exit(1)
 
     # Check if we have a base binary
-    if not TARGET_BASE.exists():
-        if TARGET.exists():
-            # First time setup: use existing target as base
-            # (This handles the case where make was run before this script existed)
-            print("No base binary found, checking existing target...")
-            # Try to detect if target already has zip content
-            result = run_shell(f"unzip -l {TARGET}")
+    if not target_base.exists():
+        if target.exists():
+            print(f"No base binary found for {name}, checking existing target...")
+            result = run_shell(f"unzip -l {target}")
             if result.returncode == 0 and "lib/python" in result.stdout:
-                print("Warning: Existing ralph binary already has embedded content.")
-                print("To get a clean base, run 'make clean && make' then 'make embed-python'")
+                print(f"Warning: Existing {name} binary already has embedded content.")
+                print(f"To get a clean base, run 'make clean && make' then 'make embed-python'")
                 print("Proceeding anyway (may cause size inflation)...")
-                shutil.copy2(TARGET, TARGET_BASE)
+                shutil.copy2(target, target_base)
             else:
-                # Target is clean, save it as base
                 print("Target appears clean, saving as base binary...")
-                shutil.copy2(TARGET, TARGET_BASE)
+                shutil.copy2(target, target_base)
         else:
-            print(f"Error: No base binary at {TARGET_BASE}", file=sys.stderr)
-            print("Run 'make' to build ralph first.", file=sys.stderr)
+            print(f"Error: No base binary at {target_base}", file=sys.stderr)
+            print(f"Run 'make' to build {name} first.", file=sys.stderr)
             sys.exit(1)
 
     # Check if embedding is needed
-    current_state = get_current_state()
-    stored_state = get_stored_state()
+    current_state = get_current_state(target_base)
+    stored_state = get_stored_state(stamp_file)
 
     needs_embed, reason = needs_embedding(current_state, stored_state)
 
     if not needs_embed and not force:
-        print(f"Python embedding up to date ({reason}), skipping.")
-        # Make sure target exists (might have been deleted)
-        if not TARGET.exists():
+        print(f"Python embedding for {name} up to date ({reason}), skipping.")
+        if not target.exists():
             print("Target missing, restoring from embedded state...")
             needs_embed = True
             reason = "target binary missing"
         else:
             return
 
-    print(f"Embedding Python stdlib and default tools ({reason})...")
+    print(f"Embedding Python stdlib and default tools into {name} ({reason})...")
 
     # Always start from the clean base
     print(f"  Copying base binary...")
-    shutil.copy2(TARGET_BASE, TARGET)
+    shutil.copy2(target_base, target)
 
     # Create the zip
     print(f"  Creating embed zip...")
@@ -232,7 +237,7 @@ def embed(force: bool = False):
 
     # Embed using zipcopy
     print(f"  Running zipcopy...")
-    result = run_shell(f"zipcopy {zip_path.absolute()} {TARGET.absolute()}")
+    result = run_shell(f"zipcopy {zip_path.absolute()} {target.absolute()}")
     if result.returncode != 0:
         print(f"Error running zipcopy: {result.stderr}", file=sys.stderr)
         sys.exit(1)
@@ -241,25 +246,36 @@ def embed(force: bool = False):
     zip_path.unlink(missing_ok=True)
 
     # Update state
-    # Re-compute base hash since we just copied it
-    current_state["base_binary"] = compute_file_hash(TARGET_BASE)
-    save_state(current_state)
+    current_state["base_binary"] = compute_file_hash(target_base)
+    save_state(stamp_file, current_state)
 
     # Report size
-    size_bytes = TARGET.stat().st_size
+    size_bytes = target.stat().st_size
     size_mb = size_bytes / (1024 * 1024)
-    print(f"Python embedding complete. Binary size: {size_mb:.1f}M")
+    print(f"Python embedding for {name} complete. Binary size: {size_mb:.1f}M")
 
 
 def main():
     args = sys.argv[1:]
 
+    # Parse --target <name> (default: ralph)
+    name = "ralph"
+    if "--target" in args:
+        idx = args.index("--target")
+        if idx + 1 < len(args):
+            name = args[idx + 1]
+        else:
+            print("Error: --target requires a name argument", file=sys.stderr)
+            sys.exit(1)
+
+    target, target_base, stamp_file = get_target_paths(name)
+
     if "--save-base" in args:
-        save_base()
+        save_base(target, target_base, stamp_file)
         return
 
     force = "--force" in args
-    embed(force=force)
+    embed(target, target_base, stamp_file, force=force)
 
 
 if __name__ == "__main__":

@@ -1,16 +1,20 @@
 /**
- * scaffold - AI Agent Scaffolding CLI
+ * scaffold - AI Agent Orchestrator CLI
  *
- * Thin wrapper around libagent that parses command-line arguments
- * and invokes the agent API with app_name="scaffold".
+ * Full agent wrapper around libagent with GOAP orchestration,
+ * Python tooling, and update management. app_name="scaffold".
  */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include "../../lib/agent/agent.h"
+#include "../../lib/updater/updater.h"
+#include "../../lib/util/executable_path.h"
 #include "../../lib/util/app_home.h"
 #include "../../lib/util/config.h"
+#include "../ralph/tools/python_extension.h"
 #include "build/version.h"
 
 #define MAX_CLI_ALLOW_ENTRIES 64
@@ -21,7 +25,7 @@ static void print_version(void) {
 }
 
 static void print_help(const char *program_name) {
-    printf("scaffold %s - AI Agent Scaffolding\n\n", RALPH_VERSION);
+    printf("scaffold %s - AI Orchestrator\n\n", RALPH_VERSION);
     printf("Usage: %s [OPTIONS] [MESSAGE]\n\n", program_name);
     printf("Options:\n");
     printf("  -h, --help        Show this help message and exit\n");
@@ -31,6 +35,8 @@ static void print_help(const char *program_name) {
     printf("  --json            Enable JSON output mode\n");
     printf("  --home <path>     Override home directory (default: ~/.local/scaffold)\n");
     printf("  --yolo            Disable all approval gates for this session\n");
+    printf("  --check-update    Check for updates and exit\n");
+    printf("  --update          Download and apply the latest update, then exit\n");
     printf("\n");
     printf("Arguments:\n");
     printf("  MESSAGE           Process a single message and exit\n");
@@ -42,7 +48,86 @@ static void print_help(const char *program_name) {
     printf("  Ctrl+D            End session\n");
 }
 
+static int handle_check_update(void) {
+    updater_release_t release;
+    updater_status_t status = updater_check(&release);
+
+    switch (status) {
+    case UPDATE_AVAILABLE:
+        printf("Update available: %s (current: %s)\n", release.tag, RALPH_VERSION);
+        if (release.body[0] != '\0') {
+            printf("\n%s\n", release.body);
+        }
+        printf("\nRun: scaffold --update\n");
+        return EXIT_SUCCESS;
+    case UP_TO_DATE:
+        printf("scaffold %s is up to date.\n", RALPH_VERSION);
+        return EXIT_SUCCESS;
+    case CHECK_FAILED:
+        fprintf(stderr, "Failed to check for updates.\n");
+        return EXIT_FAILURE;
+    }
+    return EXIT_FAILURE;
+}
+
+static int handle_update(void) {
+    printf("Checking for updates...\n");
+
+    updater_release_t release;
+    updater_status_t status = updater_check(&release);
+
+    if (status == UP_TO_DATE) {
+        printf("scaffold %s is already up to date.\n", RALPH_VERSION);
+        return EXIT_SUCCESS;
+    }
+    if (status == CHECK_FAILED) {
+        fprintf(stderr, "Failed to check for updates.\n");
+        return EXIT_FAILURE;
+    }
+
+    printf("Downloading %s...\n", release.tag);
+
+    char *tmp_path = app_home_path("scaffold.update.tmp");
+    if (tmp_path == NULL) {
+        fprintf(stderr, "Error: Could not resolve download path.\n");
+        return EXIT_FAILURE;
+    }
+
+    if (updater_download(&release, tmp_path) != 0) {
+        fprintf(stderr, "Error: Download failed.\n");
+        free(tmp_path);
+        return EXIT_FAILURE;
+    }
+
+    char *exe_path = get_executable_path();
+    if (exe_path == NULL) {
+        fprintf(stderr, "Error: Could not determine executable path.\n");
+        unlink(tmp_path);
+        free(tmp_path);
+        return EXIT_FAILURE;
+    }
+
+    printf("Applying update to %s...\n", exe_path);
+
+    if (updater_apply(tmp_path, exe_path) != 0) {
+        fprintf(stderr, "Error: Could not replace binary. Try: sudo scaffold --update\n");
+        unlink(tmp_path);
+        free(tmp_path);
+        free(exe_path);
+        return EXIT_FAILURE;
+    }
+
+    printf("Updated to %s successfully.\n", release.tag);
+    free(tmp_path);
+    free(exe_path);
+    return EXIT_SUCCESS;
+}
+
 int main(int argc, char *argv[]) {
+    int check_update_flag = 0;
+    int update_flag = 0;
+    const char *home_dir_override = NULL;
+
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--version") == 0 || strcmp(argv[i], "-v") == 0) {
             print_version();
@@ -52,6 +137,29 @@ int main(int argc, char *argv[]) {
             print_help(argv[0]);
             return EXIT_SUCCESS;
         }
+        if (strcmp(argv[i], "--check-update") == 0) {
+            check_update_flag = 1;
+        }
+        if (strcmp(argv[i], "--update") == 0) {
+            update_flag = 1;
+        }
+        if (strcmp(argv[i], "--home") == 0 && i + 1 < argc) {
+            home_dir_override = argv[i + 1];
+        }
+    }
+
+    if (check_update_flag || update_flag) {
+        app_home_set_app_name("scaffold");
+        app_home_init(home_dir_override);
+        app_home_ensure_exists();
+        if (update_flag) {
+            int rc = handle_update();
+            app_home_cleanup();
+            return rc;
+        }
+        int rc = handle_check_update();
+        app_home_cleanup();
+        return rc;
     }
 
     AgentConfig config = agent_config_default();
@@ -188,6 +296,10 @@ int main(int argc, char *argv[]) {
         fclose(fp);
     }
 
+    if (python_extension_register() != 0) {
+        fprintf(stderr, "Warning: Failed to register Python extension\n");
+    }
+
     Agent agent;
     if (agent_init(&agent, &config) != 0) {
         fprintf(stderr, "Error: Failed to initialize scaffold agent\n");
@@ -198,6 +310,15 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Error: Failed to load scaffold configuration\n");
         agent_cleanup(&agent);
         return EXIT_FAILURE;
+    }
+
+    if (config.mode == AGENT_MODE_INTERACTIVE &&
+        config_get_bool("check_updates", true)) {
+        updater_release_t release;
+        if (updater_check(&release) == UPDATE_AVAILABLE) {
+            fprintf(stderr, "Update available: %s (current: %s). Run: scaffold --update\n",
+                    release.tag, RALPH_VERSION);
+        }
     }
 
     int result = agent_run(&agent);

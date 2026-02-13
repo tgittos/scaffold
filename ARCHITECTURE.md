@@ -967,8 +967,8 @@ graph TB
 src/
 ├── ralph/                  # Ralph CLI (standalone agent)
 │   └── main.c              # Entry point (CLI interface, --json, --subagent modes)
-├── scaffold/               # Scaffold CLI (orchestrator binary)
-│   └── main.c              # Entry point (REPL, one-shot, --supervisor --goal, --worker --queue)
+├── scaffold/               # Scaffold CLI (full agent + orchestrator)
+│   └── main.c              # Entry point (REPL, one-shot, --supervisor, --worker, --check-update, --update)
 ├── core/                   # Shared entry point (thin wrapper around lib/)
 │   └── ralph.c/h           # Re-exports lib/agent/agent.h for backward compatibility
 ├── tools/                  # Python tool integration

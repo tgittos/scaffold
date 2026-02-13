@@ -1,5 +1,6 @@
 #include "prompt_loader.h"
 #include "config.h"
+#include "app_home.h"
 #include <prompt_data.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -309,7 +310,12 @@ int load_system_prompt(char **prompt_content, const char *tools_description) {
     char *model_table = generate_model_tier_table();
     size_t model_table_len = model_table ? strlen(model_table) : 0;
 
-    size_t part1_len = strlen(SYSTEM_PROMPT_TEXT);
+    const char *base_prompt = SYSTEM_PROMPT_TEXT;
+    if (strcmp(app_home_get_app_name(), "scaffold") == 0) {
+        base_prompt = SCAFFOLD_SYSTEM_PROMPT_TEXT;
+    }
+
+    size_t part1_len = strlen(base_prompt);
     size_t part2_len = strlen(SYSTEM_PROMPT_PART2);
     size_t user_len = user_prompt ? strlen(user_prompt) : 0;
     size_t total_len = part1_len + platform_len + model_table_len + tools_len + part2_len + user_len + 1;
@@ -322,7 +328,7 @@ int load_system_prompt(char **prompt_content, const char *tools_description) {
         return -1;
     }
 
-    strcpy(combined_prompt, SYSTEM_PROMPT_TEXT);
+    strcpy(combined_prompt, base_prompt);
 
     if (platform_info != NULL) {
         strcat(combined_prompt, platform_info);

@@ -307,15 +307,18 @@ void repl_show_greeting(AgentSession* session, bool json_mode) {
     if (session->session_data.conversation.count == 0) {
         debug_printf("Generating welcome message...\n");
 
-        const char* greeting_prompt = "This is your first interaction with this user in interactive mode. "
-                                      "Please introduce yourself as Ralph, briefly explain your capabilities "
-                                      "(answering questions, running shell commands, file operations, problem-solving), "
-                                      "and ask what you can help with today. Keep it warm, concise, and engaging. "
-                                      "Make it feel personal and conversational, not like a static template.";
+        const char *name = app_home_get_app_name();
+        char greeting_prompt[512];
+        snprintf(greeting_prompt, sizeof(greeting_prompt),
+                 "This is your first interaction with this user in interactive mode. "
+                 "Please introduce yourself as %s, briefly explain your capabilities "
+                 "(answering questions, running shell commands, file operations, problem-solving), "
+                 "and ask what you can help with today. Keep it warm, concise, and engaging. "
+                 "Make it feel personal and conversational, not like a static template.", name);
 
         int result = session_process_message(session, greeting_prompt);
         if (result != 0) {
-            printf("Hello! I'm Ralph, your AI assistant. What can I help you with today?\n");
+            printf("Hello! I'm %s, your AI assistant. What can I help you with today?\n", name);
         }
     } else {
         debug_printf("Generating recap of recent conversation (%d messages)...\n",

@@ -54,6 +54,7 @@ int agent_init(Agent* agent, const AgentConfig* config) {
     if (app_home_init(agent->config.home_dir) != 0) {
         return -1;
     }
+    app_home_ensure_exists();
 
     if (agent->config.services != NULL) {
         agent->services = agent->config.services;
@@ -341,7 +342,12 @@ int agent_run(Agent* agent) {
         case AGENT_MODE_INTERACTIVE:
         default: {
             if (!agent->config.json_mode) {
-                printf(TERM_BOLD "Ralph" TERM_RESET " - AI Assistant\n");
+                const char *app = app_home_get_app_name();
+                if (strcmp(app, "scaffold") == 0) {
+                    printf(TERM_BOLD "Scaffold" TERM_RESET " - AI Orchestrator\n");
+                } else {
+                    printf(TERM_BOLD "Ralph" TERM_RESET " - AI Assistant\n");
+                }
                 printf("Type /help for commands | quit, exit, Ctrl+D to end\n\n");
             }
 
