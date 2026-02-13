@@ -7,6 +7,7 @@
 #include "db/action_store.h"
 #include "services/services.h"
 #include "workflow/workflow.h"
+#include "orchestrator/role_prompts.h"
 #include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -683,7 +684,10 @@ int execute_goap_dispatch_action(const ToolCall *tc, ToolResult *result) {
         return 0;
     }
 
-    WorkerHandle *worker = worker_spawn(goal->queue_name, NULL);
+    const char *role_name = action->role[0] ? action->role : "implementation";
+    char *system_prompt = role_prompt_load(role_name);
+    WorkerHandle *worker = worker_spawn(goal->queue_name, system_prompt);
+    free(system_prompt);
     if (!worker) {
         set_error(result, "Failed to spawn worker");
         work_queue_destroy(wq);

@@ -203,6 +203,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 #### `lib/orchestrator/` - Scaffold Orchestration
 - **`supervisor.c/h`** - Supervisor event loop: GOAP tool-driven goal progression, message-poller-based wake-on-worker-completion
 - **`orchestrator.c/h`** - Supervisor spawning (fork/exec), liveness checks, zombie reaping, stale PID cleanup, respawn
+- **`role_prompts.c/h`** - Role-based system prompts for workers: loads from `<app_home>/prompts/<role>.md` with built-in defaults for 6 standard roles (implementation, code_review, architecture_review, design_review, pm_review, testing)
 
 #### `lib/workflow/` - Task Queue
 - **`workflow.c/h`** - SQLite-backed work queue for asynchronous task processing and worker management

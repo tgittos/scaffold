@@ -251,6 +251,11 @@ $(eval $(call def_test,orchestrator,orchestrator/test_orchestrator,$(LIBDIR)/orc
 $(TEST_orchestrator_TARGET): $(TEST_orchestrator_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_orchestrator_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) $(CJSON_LIB) -lpthread -lm
 
+$(eval $(call def_test,role_prompts,orchestrator/test_role_prompts,$(LIBDIR)/orchestrator/role_prompts.c $(LIBDIR)/util/app_home.c))
+
+$(TEST_role_prompts_TARGET): $(TEST_role_prompts_OBJECTS)
+	$(CC) -o $@ $(TEST_role_prompts_OBJECTS)
+
 # Messaging deps (use stubs that conflict with libagent.a symbols)
 MESSAGING_DEPS := \
     $(LIBDIR)/ipc/message_poller.c \

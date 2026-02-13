@@ -1129,7 +1129,8 @@ lib/
 │   └── app_home.c/h        # Centralized home directory management
 ├── orchestrator/          # Scaffold orchestration layer
 │   ├── supervisor.c/h     # Supervisor event loop (GOAP tool-driven goal progression)
-│   └── orchestrator.c/h   # Supervisor spawning, monitoring, and lifecycle
+│   ├── orchestrator.c/h   # Supervisor spawning, monitoring, and lifecycle
+│   └── role_prompts.c/h   # Role-based system prompts for workers (file override + built-in defaults)
 └── workflow/               # Task queue
     └── workflow.c/h        # SQLite-backed work queue
 ```

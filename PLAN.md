@@ -323,7 +323,7 @@ Direct state inspection commands that bypass the LLM.
 
 ---
 
-## Chunk 15: Role-Based System Prompts
+## Chunk 15: Role-Based System Prompts [DONE]
 
 Worker system prompt templates loaded from configurable directory with built-in fallbacks.
 
