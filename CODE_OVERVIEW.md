@@ -257,6 +257,8 @@ The test directory mirrors the source structure:
 - **`test_python_tool.c`** & **`test_python_integration.c`** - Python interpreter tests
 - **`test_subagent_tool.c`** - Subagent system tests
 - **`test_tool_param_dsl.c`** - Tool parameter DSL tests
+- **`test_goap_tools.c`** - GOAP tool unit tests (26 tests: goal/action CRUD, readiness, dispatch validation, world state, completion checking)
+- **`test_orchestrator_tool.c`** - Orchestrator tool unit tests (13 tests: execute_plan, list_goals, goal_status, start/pause/cancel_goal)
 
 #### `test/pdf/` - PDF Processing Tests
 - **`test_pdf_extractor.c`** - PDF extraction functionality tests
@@ -267,6 +269,8 @@ The test directory mirrors the source structure:
 - **`test_task_store.c`** - Task store persistence tests
 - **`test_message_store.c`** - Inter-agent messaging storage tests
 - **`test_sqlite_dal.c`** - SQLite Data Access Layer tests
+- **`test_goal_store.c`** - GOAP goal store persistence tests (16 tests: CRUD, status transitions, world state, supervisor PID tracking)
+- **`test_action_store.c`** - GOAP action store tests (21 tests: hierarchy, precondition matching, readiness queries, skip_pending)
 
 #### `test/mcp/` - MCP Integration Tests
 - **`test_mcp_client.c`** - MCP client functionality tests
@@ -299,6 +303,11 @@ The test directory mirrors the source structure:
 - **`test_protected_files.c`** - Protected file detection
 - **`test_atomic_file.c`** - TOCTOU-safe file operations
 - **`test_subagent_approval.c`** - Approval proxy pipe management
+
+#### `test/orchestrator/` - Orchestrator Tests
+- **`test_orchestrator.c`** - Supervisor process lifecycle tests (12 tests: spawn, alive checks, kill, reap, stale PID cleanup, respawn)
+- **`test_role_prompts.c`** - Role-based system prompt tests (17 tests: built-in roles, file overrides, unknown role fallback)
+- **`test_goap_lifecycle.c`** - GOAP lifecycle integration test (6 tests: full supervisor workflow simulation, readiness ordering, parallel readiness, world state accumulation, multi-goal isolation, replanning)
 
 #### `test/` - Root-Level Tests
 - **`test_darray.c`** - Dynamic array implementation tests

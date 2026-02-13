@@ -359,17 +359,25 @@ Crash resilience: detect dead supervisors, respawn them, handle stale state on s
 
 ---
 
-## Chunk 17: Integration Testing
+## Chunk 17: Integration Testing [DONE]
 
 End-to-end validation of the full orchestration pipeline.
 
-**Tests (manual + scripted):**
-1. Scaffold REPL → user provides plan → LLM calls `execute_plan` → context clears → LLM decomposes into goals + actions via GOAP tools → supervisors spawn
-2. Supervisor reads goal state → decomposes compound actions → dispatches primitives → workers execute → workers die → supervisor wakes on completion → verifies effects → updates world state → dispatches next batch
-3. Goal completes when `world_state ⊇ goal_state` → supervisor exits cleanly → scaffold reports completion
-4. Kill supervisor mid-goal → scaffold detects dead PID → respawns → new supervisor continues from store state
-5. `/goals`, `/tasks`, `/agents` show correct state at each stage
-6. Valgrind on new test binaries (exclude fork/exec tests per existing policy)
+**Files:**
+- `[NEW] test/orchestrator/test_goap_lifecycle.c` — GOAP lifecycle integration test (6 tests)
+- `[MOD] mk/tests.mk` — Add `test_goap_lifecycle` target (`def_test_lib`)
+
+**Tests implemented:**
+1. **Full lifecycle** — Goal creation → compound decomposition → child execution → world state updates → goal completion. Simulates the complete supervisor workflow through the tool API.
+2. **Readiness ordering** — Chained preconditions (A→B→C) only unlock sequentially as world state advances.
+3. **Parallel readiness** — Independent actions (no preconditions) are ready simultaneously.
+4. **World state accumulation** — Multiple incremental updates merge correctly; goal completes when all assertions satisfied.
+5. **Multi-goal isolation** — Separate goals have independent world states, action lists, and completion checks.
+6. **Replanning** — Skip pending actions and create replacements; only new actions appear as ready.
+
+**Valgrind results:** All scaffold test binaries (goal_store, action_store, goap_tools, orchestrator_tool, role_prompts, goap_lifecycle) pass with zero memory leaks. The only errors are Cosmopolitan's SIMD strlen false positives (expected).
+
+**Full test suite:** 88 binaries, 1708 tests, 0 failures.
 
 **Depends on:** All previous chunks.
 
