@@ -73,6 +73,9 @@ void session_unregister_all_hooks(void);
  * Initialize an agent session.
  * Sets up all subsystems: tools, MCP, subagents, approval gates, etc.
  *
+ * Precondition: session must be zero-initialized or have session->services
+ * pre-set before calling. session_init does NOT reset the services pointer.
+ *
  * @param session Session structure to initialize
  * @return 0 on success, -1 on failure
  */

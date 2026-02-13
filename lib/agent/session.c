@@ -63,7 +63,6 @@ static void on_subagent_spawn(void *user_data) {
 int session_init(AgentSession* session) {
     if (session == NULL) return -1;
 
-    session->services = NULL;
     session->model_registry = NULL;
     session->current_mode = PROMPT_MODE_DEFAULT;
 

@@ -110,8 +110,8 @@ void test_ralph_initializes_with_hosted_mcp_server(void) {
     fputs(ralph_config, config_file);
     fclose(config_file);
     
-    AgentSession session;
-    
+    AgentSession session = {0};
+
     // Initialize ralph session - should load MCP config automatically
     int result = session_init(&session);
     TEST_ASSERT_EQUAL(0, result);

@@ -57,7 +57,7 @@ void test_incomplete_task_bug_integration(void) {
     // 2. The session has pending todos
     // 3. The fix ensures processing continues when there are pending todos
     
-    AgentSession session;
+    AgentSession session = {0};
     TEST_ASSERT_EQUAL(0, session_init(&session));
     
     // Create some pending todos in the session

@@ -85,7 +85,7 @@ $(eval $(call def_test,approval_gate_integration,policy/test_approval_gate_integ
 $(TEST_main_TARGET): $(TEST_main_OBJECTS)
 	$(CC) -o $@ $(TEST_main_OBJECTS)
 
-$(TEST_cli_flags_TARGET): $(TEST_cli_flags_OBJECTS) ralph
+$(TEST_cli_flags_TARGET): $(TEST_cli_flags_OBJECTS) $(BUILDDIR)/.ralph-linked
 	$(CC) -o $@ $(TEST_cli_flags_OBJECTS)
 
 $(TEST_interrupt_TARGET): $(TEST_interrupt_OBJECTS)
