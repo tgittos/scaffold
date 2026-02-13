@@ -2,18 +2,20 @@
 #include "db/action_store.h"
 #include "util/uuid_utils.h"
 #include "util/app_home.h"
+#include "../test_fs_utils.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-static const char *TEST_DB_PATH = "/tmp/test_actions.db";
+static char g_test_db_path[256];
 static action_store_t *g_store = NULL;
 static char g_goal_id[40];
 
 void setUp(void) {
     app_home_init(NULL);
-    unlink(TEST_DB_PATH);
-    g_store = action_store_create(TEST_DB_PATH);
+    snprintf(g_test_db_path, sizeof(g_test_db_path), "/tmp/test_actions_%d.db", getpid());
+    unlink_sqlite_db(g_test_db_path);
+    g_store = action_store_create(g_test_db_path);
     uuid_generate_v4(g_goal_id);
 }
 
@@ -22,7 +24,7 @@ void tearDown(void) {
         action_store_destroy(g_store);
         g_store = NULL;
     }
-    unlink(TEST_DB_PATH);
+    unlink_sqlite_db(g_test_db_path);
     app_home_cleanup();
 }
 

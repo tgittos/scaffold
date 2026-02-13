@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include "../test_fs_utils.h"
 
 #define TEST_DB_PATH "/tmp/test_task_commands.db"
 
@@ -23,7 +24,7 @@ static void restore_stdout(void) {
 
 void setUp(void) {
     app_home_init(NULL);
-    unlink(TEST_DB_PATH);
+    unlink_sqlite_db(TEST_DB_PATH);
 
     g_services = services_create_empty();
     g_services->task_store = task_store_create(TEST_DB_PATH);
@@ -40,7 +41,7 @@ void tearDown(void) {
         services_destroy(g_services);
         g_services = NULL;
     }
-    unlink(TEST_DB_PATH);
+    unlink_sqlite_db(TEST_DB_PATH);
     app_home_cleanup();
 }
 

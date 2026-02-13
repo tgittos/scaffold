@@ -2,37 +2,33 @@
 #include "db/task_store.h"
 #include "util/uuid_utils.h"
 #include "util/app_home.h"
+#include "../test_fs_utils.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
 
-static const char* TEST_DB_PATH = "/tmp/test_tasks.db";
+static char g_test_db_path[256];
 static task_store_t* g_store = NULL;
 static char g_session_id[40];
 
 void setUp(void) {
     app_home_init(NULL);
 
-    // Clean up any leftover test database
-    unlink(TEST_DB_PATH);
+    snprintf(g_test_db_path, sizeof(g_test_db_path), "/tmp/test_tasks_%d.db", getpid());
+    unlink_sqlite_db(g_test_db_path);
+    g_store = task_store_create(g_test_db_path);
 
-    // Create fresh store for each test
-    g_store = task_store_create(TEST_DB_PATH);
-
-    // Generate a unique session ID for tests
     uuid_generate_v4(g_session_id);
 }
 
 void tearDown(void) {
-    // Clean up store
     if (g_store != NULL) {
         task_store_destroy(g_store);
         g_store = NULL;
     }
 
-    // Remove test database
-    unlink(TEST_DB_PATH);
+    unlink_sqlite_db(g_test_db_path);
 
     app_home_cleanup();
 }
@@ -83,13 +79,14 @@ void test_task_store_create_destroy(void) {
 }
 
 void test_task_store_multiple_instances(void) {
-    // Can create separate instances with different paths
-    task_store_t* store2 = task_store_create("/tmp/test_tasks2.db");
+    char other_path[256];
+    snprintf(other_path, sizeof(other_path), "/tmp/test_tasks2_%d.db", getpid());
+    task_store_t* store2 = task_store_create(other_path);
     TEST_ASSERT_NOT_NULL(store2);
     TEST_ASSERT_NOT_EQUAL(g_store, store2);
 
     task_store_destroy(store2);
-    unlink("/tmp/test_tasks2.db");
+    unlink_sqlite_db(other_path);
 }
 
 // =============================================================================

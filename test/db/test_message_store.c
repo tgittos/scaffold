@@ -2,6 +2,7 @@
 #include "ipc/message_store.h"
 #include "util/uuid_utils.h"
 #include "util/app_home.h"
+#include "../test_fs_utils.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -17,7 +18,7 @@ void setUp(void) {
     snprintf(g_test_db_path, sizeof(g_test_db_path), "/tmp/test_messages_%d.db", getpid());
     snprintf(g_test_home_dir, sizeof(g_test_home_dir), "/tmp/test_message_store_home_%d", getpid());
     app_home_init(g_test_home_dir);
-    unlink(g_test_db_path);
+    unlink_sqlite_db(g_test_db_path);
     g_store = message_store_create(g_test_db_path);
 }
 
@@ -26,7 +27,7 @@ void tearDown(void) {
         message_store_destroy(g_store);
         g_store = NULL;
     }
-    unlink(g_test_db_path);
+    unlink_sqlite_db(g_test_db_path);
     app_home_cleanup();
 }
 
@@ -43,7 +44,7 @@ void test_message_store_multiple_instances(void) {
     TEST_ASSERT_NOT_EQUAL(g_store, store2);
 
     message_store_destroy(store2);
-    unlink(other_path);
+    unlink_sqlite_db(other_path);
 }
 
 void test_send_direct_message(void) {

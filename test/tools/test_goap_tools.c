@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include "../test_fs_utils.h"
 
 static const char *TEST_DB = "/tmp/test_goap_tools.db";
 static Services *svc = NULL;
@@ -17,7 +18,7 @@ static action_store_t *as = NULL;
 
 void setUp(void) {
     app_home_init(NULL);
-    unlink(TEST_DB);
+    unlink_sqlite_db(TEST_DB);
     gs = goal_store_create(TEST_DB);
     as = action_store_create(TEST_DB);
     svc = services_create_empty();
@@ -34,7 +35,7 @@ void tearDown(void) {
         gs = NULL;
         as = NULL;
     }
-    unlink(TEST_DB);
+    unlink_sqlite_db(TEST_DB);
     app_home_cleanup();
 }
 

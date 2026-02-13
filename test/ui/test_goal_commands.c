@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include "../test_fs_utils.h"
 
 static AgentSession g_session;
 static Services *g_services;
@@ -21,7 +22,7 @@ static void restore_stdout(void) {
 }
 
 void setUp(void) {
-    unlink(TEST_DB);
+    unlink_sqlite_db(TEST_DB);
     memset(&g_session, 0, sizeof(g_session));
 
     g_services = services_create_empty();
@@ -43,7 +44,7 @@ void tearDown(void) {
         g_services = NULL;
     }
     g_session.services = NULL;
-    unlink(TEST_DB);
+    unlink_sqlite_db(TEST_DB);
 }
 
 void test_goals_list_empty(void) {

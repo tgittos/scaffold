@@ -7,6 +7,18 @@
 #include <unistd.h>
 #include <stdio.h>
 
+__attribute__((unused))
+static void unlink_sqlite_db(const char* path) {
+    char wal_path[1024];
+    char shm_path[1024];
+    snprintf(wal_path, sizeof(wal_path), "%s-wal", path);
+    snprintf(shm_path, sizeof(shm_path), "%s-shm", path);
+    unlink(wal_path);
+    unlink(shm_path);
+    unlink(path);
+}
+
+__attribute__((unused))
 static void rmdir_recursive(const char* path) {
     DIR* dir = opendir(path);
     if (dir == NULL) return;

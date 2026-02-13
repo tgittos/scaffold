@@ -8,13 +8,14 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
+#include "../test_fs_utils.h"
 
 static const char *TEST_DB_PATH = "/tmp/test_orchestrator.db";
 static goal_store_t *g_store = NULL;
 
 void setUp(void) {
     app_home_init(NULL);
-    unlink(TEST_DB_PATH);
+    unlink_sqlite_db(TEST_DB_PATH);
     g_store = goal_store_create(TEST_DB_PATH);
 }
 
@@ -23,7 +24,7 @@ void tearDown(void) {
         goal_store_destroy(g_store);
         g_store = NULL;
     }
-    unlink(TEST_DB_PATH);
+    unlink_sqlite_db(TEST_DB_PATH);
     app_home_cleanup();
 }
 
