@@ -341,7 +341,7 @@ Worker system prompt templates loaded from configurable directory with built-in 
 
 ---
 
-## Chunk 16: Recovery + Respawn
+## Chunk 16: Recovery + Respawn [DONE]
 
 Crash resilience: detect dead supervisors, respawn them, handle stale state on startup.
 

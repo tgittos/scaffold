@@ -2,6 +2,7 @@
 #include "recap.h"
 #include "../util/interrupt.h"
 #include "../util/debug_output.h"
+#include "../util/app_home.h"
 #include "../ui/output_formatter.h"
 #include "../ui/json_output.h"
 #include "../ui/spinner.h"
@@ -11,10 +12,13 @@
 #include "../ipc/message_poller.h"
 #include "../ipc/notification_formatter.h"
 #include "../session/conversation_tracker.h"
+#include "../orchestrator/orchestrator.h"
+#include "../services/services.h"
 #include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <sys/select.h>
 #include <readline/readline.h>
@@ -174,6 +178,11 @@ int repl_run_session(AgentSession* session, bool json_mode) {
         notify_fd = message_poller_get_notify_fd(session->message_poller);
     }
 
+    goal_store_t *recovery_gs = (strcmp(app_home_get_app_name(), "scaffold") == 0)
+        ? services_get_goal_store(session->services) : NULL;
+    time_t last_recovery_check = time(NULL);
+    const int recovery_check_interval_secs = 5;
+
     while (g_repl_running) {
         interrupt_clear();
 
@@ -229,6 +238,19 @@ int repl_run_session(AgentSession* session, bool json_mode) {
             process_pending_notifications(session);
             if (g_repl_running) {
                 repl_install_prompt();
+            }
+        }
+
+        if (recovery_gs != NULL) {
+            time_t now = time(NULL);
+            if (now - last_recovery_check >= recovery_check_interval_secs) {
+                last_recovery_check = now;
+                orchestrator_reap_supervisors(recovery_gs);
+                int respawned = orchestrator_respawn_dead(recovery_gs);
+                if (respawned > 0) {
+                    debug_printf("REPL: respawned %d dead supervisors\n",
+                                 respawned);
+                }
             }
         }
 

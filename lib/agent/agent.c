@@ -17,6 +17,8 @@
 #include "../tools/orchestrator_tool.h"
 #include "../util/context_retriever.h"
 #include "../orchestrator/supervisor.h"
+#include "../orchestrator/orchestrator.h"
+#include "../services/services.h"
 #include "../ipc/message_poller.h"
 #include <stdio.h>
 #include <string.h>
@@ -341,6 +343,15 @@ int agent_run(Agent* agent) {
             if (!agent->config.json_mode) {
                 printf(TERM_BOLD "Ralph" TERM_RESET " - AI Assistant\n");
                 printf("Type /help for commands | quit, exit, Ctrl+D to end\n\n");
+            }
+
+            /* Clear stale supervisor PIDs from previous sessions (scaffold only) */
+            if (strcmp(app_home_get_app_name(), "scaffold") == 0) {
+                goal_store_t *gs = services_get_goal_store(agent->services);
+                if (gs != NULL) {
+                    orchestrator_check_stale(gs);
+                    orchestrator_respawn_dead(gs);
+                }
             }
 
             status_line_init();

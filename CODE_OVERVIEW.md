@@ -46,7 +46,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`conversation_state.c/h`** - Conversation history append helpers (assistant messages, tool results)
 - **`tool_batch_executor.c/h`** - Batch tool execution with approval gate integration
 - **`tool_orchestration.c/h`** - Tool call deduplication and per-batch tracking
-- **`repl.c/h`** - Read-Eval-Print-Loop for interactive mode with readline and async processing
+- **`repl.c/h`** - Read-Eval-Print-Loop for interactive mode with readline, async processing, and periodic supervisor recovery (scaffold mode)
 - **`async_executor.c/h`** - Non-blocking message processing using background thread with pipe notification
 - **`context_enhancement.c/h`** - Prompt enhancement with todo state, memory recall, and context retrieval
 - **`recap.c/h`** - Conversation recap generation (one-shot LLM calls without history persistence)
