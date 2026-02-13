@@ -160,8 +160,8 @@ graph TB
 
     class CLI,Core,Session,ConfigSystem,MemoryCommands,ContextEnhancement,RecapModule,StreamingHandler,ToolExecutor coreLayer
     class ApprovalGate,RateLimiter,Allowlist,GatePrompter,ProtectedFiles,ShellParser,AtomicFile,SubagentApproval,PatternGen,PathNormalize policyLayer
-    class LLMProvider,ProviderRegistry,Anthropic,OpenAI,LocalAI,ModelCaps,ClaudeModel,GPTModel,QwenModel,DeepSeekModel,DefaultModel llmLayer
-    class ToolsSystem,ToolRegistry,PythonTool,PythonFileTools,PythonDefaults,TodoTool,MemoryTool,PDFTool,VectorDBTool,SubagentTool,MessagingTool,TodoManager,TodoDisplay toolsLayer
+    class LLMProvider,ProviderRegistry,Anthropic,OpenAI,LocalAI,ModelCaps,ClaudeModel,GPTModel,ModelRegistry llmLayer
+    class ToolsSystem,ToolRegistry,PythonTool,PythonFileTools,PythonDefaults,TodoTool,MemoryTool,PDFTool,VectorDBTool,SubagentTool,MessagingTool,GOAPTools,OrchestratorTool,TodoManager,TodoDisplay toolsLayer
     class ConversationTracker,TokenManager,ConversationCompactor sessionLayer
     class HTTPClient,APICommon networkLayer
     class OutputFormatter,PromptLoader,JSONEscape,DebugOutput,ToolResultBuilder,CommonUtils,ContextRetriever utilsLayer
@@ -828,7 +828,7 @@ graph TB
         HNSWLib[HNSWLIB<br/>hnswlib_wrapper.h]
         DocJSON[Document JSON<br/>~/.local/ralph/documents/]
         MetaJSON[Metadata JSON<br/>~/.local/ralph/metadata/]
-        IndexFiles[Index Files<br/>~/.local/ralph/*.idx]
+        IndexFiles[Index Files<br/>~/.local/ralph/*.index]
     end
 
     MemoryTool --> VectorDBService
@@ -856,7 +856,7 @@ graph TB
 ### Storage Locations
 | Type | Path | Format |
 |------|------|--------|
-| Vector Indices | `~/.local/ralph/*.idx` | HNSWLIB binary |
+| Vector Indices | `~/.local/ralph/*.index` | HNSWLIB binary |
 | Index Metadata | `~/.local/ralph/*.meta` | JSON |
 | Documents | `~/.local/ralph/documents/{index}/doc_{id}.json` | JSON |
 | Chunk Metadata | `~/.local/ralph/metadata/{index}/chunk_{id}.json` | JSON |
@@ -865,7 +865,7 @@ graph TB
 | Index Type | Max Elements | M | ef_construction | Use Case |
 |------------|--------------|---|-----------------|----------|
 | Memory | 100,000 | 16 | 200 | Long-term semantic memory |
-| Documents | 50,000 | 32 | 400 | PDF and document storage |
+| Documents | 10,000 | 16 | 200 | PDF and document storage |
 
 ## Key Features
 
@@ -946,6 +946,9 @@ graph TB
 - **`pause_goal`**: Pause a goal by stopping its supervisor
 - **`cancel_goal`**: Cancel a goal by killing its supervisor
 
+### Mode Tools (1 tool)
+- **`switch_mode`**: Switch behavioral prompt mode (plan, explore, debug, review, default)
+
 ### Vector Database Tools (13 tools)
 - **Index Management**: `vector_db_create_index`, `vector_db_delete_index`, `vector_db_list_indices`
 - **Vector Operations**: `vector_db_add_vector`, `vector_db_update_vector`, `vector_db_delete_vector`, `vector_db_get_vector`
@@ -966,25 +969,23 @@ graph TB
 ```
 src/
 ├── ralph/                  # Ralph CLI (standalone agent)
-│   └── main.c              # Entry point (CLI interface, --json, --subagent modes)
+│   ├── main.c              # Entry point (CLI interface, --json, --subagent modes)
+│   └── tools/              # Python tool integration
+│       ├── python_tool.c/h     # Embedded Python interpreter
+│       ├── python_tool_files.c/h # Python file-based tools
+│       ├── python_extension.c/h  # Tool extension interface for Python
+│       └── python_defaults/    # Default Python tool files
+│           ├── read_file.py
+│           ├── write_file.py
+│           ├── append_file.py
+│           ├── file_info.py
+│           ├── list_dir.py
+│           ├── search_files.py
+│           ├── apply_delta.py
+│           ├── shell.py
+│           └── web_fetch.py
 ├── scaffold/               # Scaffold CLI (full agent + orchestrator)
 │   └── main.c              # Entry point (REPL, one-shot, --supervisor, --worker, --check-update, --update)
-├── core/                   # Shared entry point (thin wrapper around lib/)
-│   └── ralph.c/h           # Re-exports lib/agent/agent.h for backward compatibility
-├── tools/                  # Python tool integration
-│   ├── python_tool.c/h     # Embedded Python interpreter
-│   ├── python_tool_files.c/h # Python file-based tools
-│   ├── python_extension.c/h  # Tool extension interface for Python
-│   └── python_defaults/    # Default Python tool files
-│       ├── read_file.py
-│       ├── write_file.py
-│       ├── append_file.py
-│       ├── file_info.py
-│       ├── list_dir.py
-│       ├── search_files.py
-│       ├── apply_delta.py
-│       ├── shell.py
-│       └── web_fetch.py
 lib/
 ├── libagent.h              # Public API for the agent library
 ├── types.h                 # Shared types (ToolCall, ToolResult, StreamingToolUse)
@@ -1004,7 +1005,8 @@ lib/
 │   ├── recap.c/h           # Conversation recap generation
 │   ├── streaming_handler.c/h   # Streaming orchestration layer
 │   ├── tool_executor.c/h   # Tool execution entry point
-│   └── iterative_loop.c/h  # Iterative tool-calling loop
+│   ├── iterative_loop.c/h  # Iterative tool-calling loop
+│   └── prompt_mode.c/h     # Behavioral prompt mode definitions (plan, explore, debug, review)
 ├── session/                # Session data management
 │   ├── session_manager.c/h # Session data structures
 │   ├── conversation_tracker.c/h # Conversation persistence
@@ -1044,7 +1046,9 @@ lib/
 │   ├── api_common.c/h      # API payload building
 │   ├── streaming.c/h       # SSE streaming infrastructure
 │   ├── api_error.c/h       # Enhanced error handling with retries
-│   └── embedded_cacert.c/h # Embedded Mozilla CA certificate bundle
+│   ├── embedded_cacert.c/h # Embedded Mozilla CA certificate bundle
+│   ├── http_python.c/h     # Python extension for C HTTP client (_ralph_http module)
+│   └── image_attachment.c/h # Image attachment parsing (@path to base64)
 ├── policy/                 # Approval gate system
 │   ├── approval_gate.c/h   # Core approval orchestration
 │   ├── allowlist.c/h       # Pattern matching allowlist
@@ -1089,7 +1093,8 @@ lib/
 │   ├── agent_commands.c/h  # /agents slash commands (subagents + supervisors)
 │   ├── goal_commands.c/h   # /goals slash commands (scaffold only)
 │   ├── model_commands.c/h  # /model slash commands
-│   └── mode_commands.c/h   # /mode slash commands
+│   ├── mode_commands.c/h   # /mode slash commands
+│   └── status_line.c/h     # Status info line (tokens, agents, mode, busy state)
 ├── tools/                  # Tool system
 │   ├── tools.h             # Public tools API header
 │   ├── tools_system.c/h    # Tool registry and execution
@@ -1108,6 +1113,8 @@ lib/
 │   ├── messaging_tool.c/h  # Inter-agent messaging (6 tools)
 │   ├── goap_tools.c/h      # GOAP goal/action tools for supervisors (9 tools, scaffold only)
 │   ├── orchestrator_tool.c/h # Orchestrator lifecycle tools (6 tools, scaffold only)
+│   ├── mode_tool.c/h       # LLM-callable switch_mode tool
+│   ├── tool_cache.c/h      # Thread-safe tool result caching with file mtime invalidation
 │   ├── todo_manager.c/h    # Todo data structures
 │   ├── todo_tool.c/h       # Todo tool call handler
 │   └── todo_display.c/h    # Todo visualization
@@ -1127,7 +1134,10 @@ lib/
 │   ├── context_retriever.c/h # Vector context retrieval
 │   ├── ansi_codes.h        # Terminal color codes and box-drawing characters
 │   ├── app_home.c/h        # Centralized home directory management
-│   └── process_spawn.c/h  # Common fork/exec with stdout/stderr to /dev/null
+│   ├── process_spawn.c/h  # Common fork/exec with stdout/stderr to /dev/null
+│   └── executable_path.c/h # Executable path resolution for APE binaries
+├── updater/               # Self-update system
+│   └── updater.c/h        # GitHub releases check, download, and apply
 ├── orchestrator/          # Scaffold orchestration layer
 │   ├── supervisor.c/h     # Supervisor event loop (GOAP tool-driven goal progression, orphaned action recovery)
 │   ├── orchestrator.c/h   # Supervisor spawning (via process_spawn), monitoring, stale-PID cleanup (dead-only), and lifecycle

@@ -94,6 +94,8 @@ If the orchestrator is giving you a hard time, drop into the various slash comma
 - /goals
 - /tasks
 - /agents
+- /mode
+- /model
 
 ### One-shot mode
 

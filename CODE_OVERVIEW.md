@@ -14,7 +14,7 @@ Application-specific code that uses the library layer. This is a thin wrapper ar
 #### `src/scaffold/` - Scaffold CLI (Full Agent + Orchestrator)
 - **`main.c`** - Full agent entry point with GOAP orchestration. Has the complete toolkit (Python tools, update management, memory, sub-agents) plus orchestrator-specific modes (--supervisor --goal, --worker --queue). Uses its own system prompt (`data/prompts/scaffold_system.txt`) and REPL greeting.
 
-#### `src/tools/` - Python Tool Integration
+#### `src/ralph/tools/` - Python Tool Integration
 - **`python_tool.c/h`** - Embedded Python interpreter execution
 - **`python_tool_files.c/h`** - Python file-based tool loading system
 - **`python_extension.c/h`** - Tool extension interface for Python tools integration with lib/
@@ -53,6 +53,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`streaming_handler.c/h`** - Application-layer streaming orchestration and provider registry management
 - **`tool_executor.c/h`** - Thin entry point for tool execution workflow (init, initial batch, clear_history support, hand-off)
 - **`iterative_loop.c/h`** - Iterative tool-calling loop for follow-up LLM rounds
+- **`prompt_mode.c/h`** - Behavioral prompt mode definitions and parsing (plan, explore, debug, review)
 
 #### `lib/session/` - Session Data Management
 - **`session_manager.c/h`** - Session data structures (SessionData with config, conversation, model info)
@@ -99,6 +100,8 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`streaming.c/h`** - SSE streaming infrastructure for real-time response handling
 - **`api_error.c/h`** - Enhanced API error handling with retry logic
 - **`embedded_cacert.c/h`** - Embedded Mozilla CA certificate bundle for portable SSL/TLS
+- **`http_python.c/h`** - Python extension exposing C HTTP client (`_ralph_http` module)
+- **`image_attachment.c/h`** - Image attachment parsing (`@path` references to base64-encoded images)
 
 #### `lib/policy/` - Approval Gate System
 
@@ -149,6 +152,8 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`todo_display.c/h`** - Todo console visualization
 - **`goap_tools.c/h`** - GOAP goal/action tools for supervisors (9 tools, scaffold mode only)
 - **`orchestrator_tool.c/h`** - Orchestrator lifecycle tools: execute_plan, list_goals, goal_status, start/pause/cancel_goal (scaffold mode only)
+- **`mode_tool.c/h`** - LLM-callable switch_mode tool for changing behavioral modes
+- **`tool_cache.c/h`** - Thread-safe tool result caching with file mtime invalidation
 
 #### `lib/ipc/` - Inter-Process Communication
 - **`ipc.h`** - Public IPC API header
@@ -172,6 +177,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`goal_commands.c/h`** - `/goals` command for GOAP goal listing and action tree display (scaffold only)
 - **`model_commands.c/h`** - `/model` command for switching AI models
 - **`mode_commands.c/h`** - `/mode` command for switching behavioral prompt modes
+- **`status_line.c/h`** - Status info line rendering (tokens, agents, mode, busy state)
 
 #### `lib/util/` - Generic Utilities
 - **`darray.h`** - Type-safe dynamic array macros (header-only)
@@ -188,6 +194,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`ansi_codes.h`** - Terminal color codes, box-drawing characters, and status symbols
 - **`app_home.c/h`** - Centralized application home directory management (~/.local/<app_name>/)
 - **`process_spawn.c/h`** - Common fork/exec helper with stdout/stderr redirected to /dev/null
+- **`executable_path.c/h`** - Executable path resolution for APE binaries
 
 #### `lib/pdf/` - PDF Processing
 - **`pdf_extractor.c/h`** - PDF text extraction using PDFio library
@@ -200,6 +207,9 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 
 #### `lib/services/` - Service Container
 - **`services.c/h`** - Dependency injection container for service management (message store, vector DB, embeddings, task store, goal/action stores with shared SQLite DAL). GOAP stores are only created for scaffold binary (conditional on app_name).
+
+#### `lib/updater/` - Self-Update System
+- **`updater.c/h`** - Self-update via GitHub releases (check for updates, download, apply)
 
 #### `lib/orchestrator/` - Scaffold Orchestration
 - **`supervisor.c/h`** - Supervisor event loop: GOAP tool-driven goal progression, message-poller-based wake-on-worker-completion, orphaned action recovery on startup
@@ -220,7 +230,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 
 The test directory mirrors the source structure:
 
-#### `test/core/` - Core Functionality Tests
+#### `test/ralph/` - Core Functionality Tests
 - **`test_main.c`** - Main application tests
 - **`test_ralph.c`** - Core Ralph functionality tests
 - **`test_cli_flags.c`** - CLI flag parsing tests
@@ -242,6 +252,8 @@ The test directory mirrors the source structure:
 - **`test_messages_array_bug.c`** - Message handling regression tests
 - **`test_streaming.c`** - SSE streaming infrastructure tests
 - **`test_http_retry.c`** - HTTP retry logic tests
+- **`test_http_python.c`** - Python HTTP extension tests
+- **`test_image_attachment.c`** - Image attachment parsing tests
 
 #### `test/session/` - Session Management Tests
 - **`test_conversation_tracker.c`** - Conversation persistence tests
@@ -261,6 +273,8 @@ The test directory mirrors the source structure:
 - **`test_tool_param_dsl.c`** - Tool parameter DSL tests
 - **`test_goap_tools.c`** - GOAP tool unit tests (26 tests: goal/action CRUD, readiness, dispatch validation, world state, completion checking)
 - **`test_orchestrator_tool.c`** - Orchestrator tool unit tests (13 tests: execute_plan, list_goals, goal_status, start/pause/cancel_goal)
+- **`test_mode_tool.c`** - Mode tool switch_mode tests
+- **`test_tool_cache.c`** - Tool result caching tests
 
 #### `test/pdf/` - PDF Processing Tests
 - **`test_pdf_extractor.c`** - PDF extraction functionality tests
@@ -306,6 +320,22 @@ The test directory mirrors the source structure:
 - **`test_atomic_file.c`** - TOCTOU-safe file operations
 - **`test_subagent_approval.c`** - Approval proxy pipe management
 
+#### `test/agent/` - Agent Module Tests
+- **`test_prompt_mode.c`** - Prompt mode enum and parsing tests
+- **`test_context_mode_injection.c`** - Context mode injection tests
+- **`test_parallel_batch.c`** - Parallel batch execution tests
+
+#### `test/ui/` - UI Component Tests
+- **`test_slash_commands.c`** - Slash command registry tests
+- **`test_agent_commands.c`** - /agents command tests
+- **`test_goal_commands.c`** - /goals command tests
+- **`test_mode_commands.c`** - /mode command tests
+- **`test_model_commands.c`** - /model command tests
+- **`test_task_commands.c`** - /tasks command tests
+
+#### `test/updater/` - Updater Tests
+- **`test_updater.c`** - Self-update system tests
+
 #### `test/orchestrator/` - Orchestrator Tests
 - **`test_orchestrator.c`** - Supervisor process lifecycle tests (12 tests: spawn, alive checks, kill, reap, stale PID cleanup, respawn)
 - **`test_role_prompts.c`** - Role-based system prompt tests (17 tests: built-in roles, file overrides, unknown role fallback)
@@ -319,13 +349,16 @@ The test directory mirrors the source structure:
 - **`test_memory_management.c`** - Memory management tests
 - **`test_tool_args.c`** - Tool argument extraction tests
 - **`test_verified_file_context.c`** - Verified file context tests
+- **`test_libagent_header.c`** - Library public API header compilation test
 
 #### Test Infrastructure
 - **`test/unity/`** - Unity testing framework (vendored)
 - **`mock_api_server.c/h`** - Mock API server for testing
 - **`mock_embeddings.c/h`** - Mock embeddings for deterministic vector testing
 - **`mock_embeddings_server.c/h`** - Mock embeddings HTTP server
-- **`mock_embeddings_service.c/h`** - Mock embeddings service for DI
+- **`mock_embeddings_service.c`** - Mock embeddings service for DI
+- **`test/updater/mock_http.c`** - Mock HTTP for updater tests
+- **`test/fixtures/test.jpg`** - Test image fixture for image attachment tests
 - **`test/stubs/`** - Test stubs for isolated unit testing (ralph_stub, services_stub, output_formatter_stub, python_tool_stub, subagent_stub)
 
 ---
@@ -402,7 +435,7 @@ Centralized configuration:
 2. **CLI Integration**: See `src/ralph/main.c` for argument parsing
 3. **Tool Development**: Add new tools in `lib/tools/` with corresponding tests
 4. **LLM Integration**: Extend providers in `lib/llm/providers/` or models in `lib/llm/models/`
-5. **Python Tools**: Add to `src/tools/python_defaults/` or user's `~/.local/ralph/tools/`
+5. **Python Tools**: Add to `src/ralph/tools/python_defaults/` or user's `~/.local/ralph/tools/`
 6. **Testing**: Every module has corresponding tests in the `test/` directory structure
 
 ## Build System
