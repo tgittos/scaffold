@@ -21,11 +21,14 @@ $(HNSWLIB_DIR)/hnswlib/hnswlib.h: | $(DEPDIR)
 	@echo "Downloading hnswlib..."
 	$(call download_extract,hnswlib,$(HNSWLIB_VERSION),https://github.com/nmslib/hnswlib/archive/v$(HNSWLIB_VERSION).tar.gz)
 
-# MbedTLS
-$(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3): | $(DEPDIR)
+# MbedTLS (stamp file prevents triple-build race with -j)
+$(MBEDTLS_DIR)/.built: | $(DEPDIR)
 	@echo "Building MbedTLS..."
 	$(call download_extract,mbedtls,$(MBEDTLS_VERSION),https://github.com/Mbed-TLS/mbedtls/archive/v$(MBEDTLS_VERSION).tar.gz)
 	cd $(MBEDTLS_DIR) && CC="$(CC)" CFLAGS="-O2" $(MAKE) lib
+	@touch $@
+
+$(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3): $(MBEDTLS_DIR)/.built
 
 # libcurl (depends on MbedTLS)
 $(CURL_LIB): $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
@@ -92,8 +95,8 @@ $(NCURSES_LIB): | $(DEPDIR)
 		--without-cxx-binding --without-ada && \
 	$(MAKE) CC="$(CC)" AR="$(AR)" RANLIB="$(RANLIB)"
 
-# readline (depends on ncurses)
-$(READLINE_LIB) $(HISTORY_LIB): $(NCURSES_LIB)
+# readline (depends on ncurses; stamp file prevents double-build race with -j)
+$(READLINE_DIR)/.built: $(NCURSES_LIB)
 	@echo "Building Readline..."
 	$(call download_extract,readline,$(READLINE_VERSION),https://ftp.gnu.org/gnu/readline/readline-$(READLINE_VERSION).tar.gz)
 	cd $(READLINE_DIR) && \
@@ -112,6 +115,9 @@ $(READLINE_LIB) $(HISTORY_LIB): $(NCURSES_LIB)
 	mkdir -p readline && \
 	cd readline && \
 	for f in ../*.h; do ln -sf "$$f" $$(basename "$$f"); done
+	@touch $@
+
+$(READLINE_LIB) $(HISTORY_LIB): $(READLINE_DIR)/.built
 
 # SQLite
 $(SQLITE_LIB): | $(DEPDIR)
