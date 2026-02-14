@@ -49,7 +49,11 @@ $(CURL_LIB): $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
 # zlib
 $(ZLIB_LIB): | $(DEPDIR)
 	@echo "Building zlib..."
-	$(call download_extract,zlib,$(ZLIB_VERSION),https://zlib.net/current/zlib.tar.gz)
+	@if [ -f $(DEPDIR)/zlib-$(ZLIB_VERSION).tar.gz ] && [ $$(wc -c < $(DEPDIR)/zlib-$(ZLIB_VERSION).tar.gz) -lt 10000 ]; then \
+		echo "  Removing corrupt zlib tarball from cache"; \
+		rm -f $(DEPDIR)/zlib-$(ZLIB_VERSION).tar.gz; \
+	fi
+	$(call download_extract,zlib,$(ZLIB_VERSION),https://github.com/madler/zlib/releases/download/v$(ZLIB_VERSION)/zlib-$(ZLIB_VERSION).tar.gz)
 	cd $(ZLIB_DIR) && \
 	CC="$(CC)" CFLAGS="-O2" ./configure --static && \
 	$(MAKE) CC="$(CC)"

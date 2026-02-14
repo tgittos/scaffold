@@ -46,7 +46,6 @@ jobs:
           key: deps-${{ hashFiles('mk/config.mk', 'mk/deps.mk', 'python/Makefile') }}
           restore-keys: |
             deps-
-          save-always: true
 
       - name: Cache uv
         uses: actions/cache@v4
