@@ -39,16 +39,20 @@ It's 3 layers of abstraction in a trenchcoat, with the final layer being mostly 
 A generic-ish library for agentic AI stuff:
 
 - Anthropic/OpenAI-compatible provider support (including local via LM Studio, Ollama)
+- vision support — attach images to conversations for multimodal models
+- extended thinking support for models that expose reasoning (Claude, Qwen, DeepSeek)
 - async tool calling with built-in filesystem, shell, memory, PDF, vector DB, and task tools
-- extensible Python tool system
-- MCP tool support (stdio and HTTP/SSE transports)
-- sub-agents with direct and pub/sub messaging
+- extensible Python tool system with verified file I/O for approval-gated operations
+- MCP client with stdio, HTTP, and SSE transports, multi-server management, and per-server tool namespacing
+- sub-agents with direct and pub/sub messaging, approval proxying to parent
 - GOAP-based multi-agent orchestration with work queues
 - HNSWLIB-backed semantic memory and document store
-- conversation management with token-aware compression and rolling summaries
-- category-based approval gates with allowlists and protected file detection
+- conversation management with token-aware compression, multi-tier rolling summaries, and automatic compaction
+- category-based approval gates with allowlists, protected file detection, shell command parsing, and path traversal prevention
+- rate limiting with exponential backoff
 - SSE streaming with provider-specific parsing
 - SQLite-backed persistence for tasks, messages, goals, and actions
+- terminal and JSON output modes
 - self-updater via GitHub releases
 - AGENTS.md support
 
@@ -66,7 +70,9 @@ Mine is a little smarter than the average ralph:
 - Python-based filesystem, shell, and web tools out of the box
 - semantic long-term memory across sessions
 - task tracking and management
+- image understanding via vision-capable models
 - project-aware via AGENTS.md context loading
+- slash commands for direct inspection: `/memory`, `/goals`, `/tasks`, `/agents`, `/mode`, `/model`
 
 ### scaffold
 
