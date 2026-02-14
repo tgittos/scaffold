@@ -16,6 +16,8 @@ RUN apt-get update && apt-get install -y \
     vim \
     zip \
     jq \
+    file \
+    binutils \
     && rm -rf /var/lib/apt/lists/*
 
 RUN touch ~/.bashrc && chmod +x ~/.bashrc

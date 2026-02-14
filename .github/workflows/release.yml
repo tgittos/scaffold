@@ -115,6 +115,11 @@ jobs:
         if: always()
         run: sudo chown -R $(id -u):$(id -g) deps/ build/ out/ python/build/ 2>/dev/null || true
 
+      - name: Prepare release artifacts
+        run: |
+          cp out/libagent.a out/libagent.x86_64.a
+          cp out/.aarch64/libagent.a out/libagent.aarch64.a
+
       - name: Push tag
         run: git push origin "${{ steps.version.outputs.tag }}"
 
@@ -128,7 +133,8 @@ jobs:
           files: |
             out/ralph
             out/scaffold
-            out/libagent.a
+            out/libagent.x86_64.a
+            out/libagent.aarch64.a
             out/libagent.h
 
       - name: Create Release (auto-generated notes)
@@ -141,5 +147,6 @@ jobs:
           files: |
             out/ralph
             out/scaffold
-            out/libagent.a
+            out/libagent.x86_64.a
+            out/libagent.aarch64.a
             out/libagent.h
