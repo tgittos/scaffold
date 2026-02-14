@@ -1,5 +1,5 @@
 #include "http_python.h"
-#include "http_client.h"
+#include "network/http_client.h"
 #include <Python.h>
 #include <stdlib.h>
 #include <string.h>

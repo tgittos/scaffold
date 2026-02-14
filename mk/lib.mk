@@ -113,7 +113,6 @@ LIB_POLICY_SOURCES := \
     $(LIBDIR)/policy/protected_files.c \
     $(LIBDIR)/policy/atomic_file.c \
     $(LIBDIR)/policy/verified_file_context.c \
-    $(LIBDIR)/policy/verified_file_python.c \
     $(LIBDIR)/policy/tool_args.c \
     $(LIBDIR)/policy/pattern_generator.c \
     $(LIBDIR)/policy/gate_prompter.c \
@@ -159,7 +158,6 @@ LIB_WORKFLOW_SOURCES := $(LIBDIR)/workflow/workflow.c
 # Network module
 LIB_NETWORK_SOURCES := \
     $(LIBDIR)/network/http_client.c \
-    $(LIBDIR)/network/http_python.c \
     $(LIBDIR)/network/api_common.c \
     $(LIBDIR)/network/api_error.c \
     $(LIBDIR)/network/streaming.c \

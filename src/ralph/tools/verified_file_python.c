@@ -1,5 +1,5 @@
 #include "verified_file_python.h"
-#include "verified_file_context.h"
+#include "policy/verified_file_context.h"
 #include <Python.h>
 #include <string.h>
 
