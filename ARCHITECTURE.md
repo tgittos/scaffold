@@ -595,6 +595,7 @@ graph TB
 - **Message Store** (`message_store.c/h`): SQLite-backed singleton for persistent message storage
   - Direct messages between agents
   - Pub/sub channels for broadcast communication
+  - Peek-then-consume API for non-destructive message inspection before processing
   - Automatic message expiry and cleanup
 - **Message Poller** (`message_poller.c/h`): Background thread that polls for new messages
   - Uses PipeNotifier for integration with select/poll loops

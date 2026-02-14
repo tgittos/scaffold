@@ -44,6 +44,13 @@ typedef struct {
     int64_t created_at;
 } ChannelMessage;
 
+typedef struct {
+    char id[40];
+    char* content;
+    char* from;
+    int64_t timestamp;
+} PendingMessage;
+
 typedef struct message_store message_store_t;
 
 message_store_t* message_store_create(const char* db_path);
@@ -68,6 +75,16 @@ int channel_has_pending(message_store_t* store, const char* agent_id);
 
 /* Caller owns returned message and must free with direct_message_free(). */
 DirectMessage* message_get_direct(message_store_t* store, const char* message_id);
+
+/* Peek at the oldest unread message for recipient WITHOUT marking it as read. */
+/* Caller owns returned message and must free with pending_message_free(). */
+PendingMessage* message_peek_pending(message_store_t* store, const char* recipient);
+
+/* Mark a specific message as consumed (read) by ID. */
+/* Returns 0 on success, -1 on error or if message doesn't exist/already consumed. */
+int message_consume(message_store_t* store, const char* message_id);
+
+void pending_message_free(PendingMessage* msg);
 
 /* Channels */
 int channel_create(message_store_t* store, const char* channel_name,

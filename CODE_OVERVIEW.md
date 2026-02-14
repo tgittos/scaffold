@@ -159,7 +159,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`ipc.h`** - Public IPC API header
 - **`pipe_notifier.c/h`** - Thread-safe pipe-based notification for async event handling
 - **`agent_identity.c/h`** - Thread-safe agent identity management (ID, parent ID, subagent status)
-- **`message_store.c/h`** - SQLite-backed inter-agent messaging storage (direct messages, pub/sub channels)
+- **`message_store.c/h`** - SQLite-backed inter-agent messaging storage (direct messages, pub/sub channels, peek-then-consume API)
 - **`message_poller.c/h`** - Background thread for polling new messages with PipeNotifier integration
 - **`notification_formatter.c/h`** - Formats messages for LLM context injection
 

@@ -265,6 +265,48 @@ DirectMessage *message_get_direct(message_store_t *store, const char *message_id
         bind_text1, &params, map_direct_message, NULL);
 }
 
+/* Peek/consume operations */
+static void *map_pending_message(sqlite3_stmt *stmt, void *user_data) {
+    (void)user_data;
+    PendingMessage *msg = calloc(1, sizeof(PendingMessage));
+    if (msg == NULL) return NULL;
+
+    const char *id = (const char *)sqlite3_column_text(stmt, 0);
+    const char *sender_id = (const char *)sqlite3_column_text(stmt, 1);
+    const char *content = (const char *)sqlite3_column_text(stmt, 2);
+
+    if (id) strncpy(msg->id, id, sizeof(msg->id) - 1);
+    if (sender_id) {
+        msg->from = strdup(sender_id);
+        if (!msg->from) { free(msg); return NULL; }
+    }
+    if (content) {
+        msg->content = strdup(content);
+        if (!msg->content) { free(msg->from); free(msg); return NULL; }
+    }
+
+    msg->timestamp = sqlite3_column_int64(stmt, 3);
+    return msg;
+}
+
+PendingMessage *message_peek_pending(message_store_t *store, const char *recipient) {
+    if (!store || !recipient) return NULL;
+    BindText1 params = { recipient };
+    return sqlite_dal_query_one_p(store->dal,
+        "SELECT id, sender_id, content, created_at FROM direct_messages "
+        "WHERE recipient_id = ? AND read_at IS NULL ORDER BY created_at ASC LIMIT 1;",
+        bind_text1, &params, map_pending_message, NULL);
+}
+
+int message_consume(message_store_t *store, const char *message_id) {
+    if (!store || !message_id) return -1;
+    BindInt64Text params = { get_time_millis(), message_id };
+    int changed = sqlite_dal_exec_p(store->dal,
+        "UPDATE direct_messages SET read_at = ? WHERE id = ? AND read_at IS NULL;",
+        bind_int64_text, &params);
+    return (changed > 0) ? 0 : -1;
+}
+
 /* Channel operations */
 int channel_create(message_store_t *store, const char *channel_name,
                    const char *description, const char *creator_id,
@@ -603,6 +645,10 @@ void channel_message_free_list(ChannelMessage **msgs, size_t count) {
     if (!msgs) return;
     for (size_t i = 0; i < count; i++) channel_message_free(msgs[i]);
     free(msgs);
+}
+
+void pending_message_free(PendingMessage *msg) {
+    if (msg) { free(msg->content); free(msg->from); free(msg); }
 }
 
 void channel_subscribers_free(char **subscribers, size_t count) {

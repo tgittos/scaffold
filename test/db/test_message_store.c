@@ -414,6 +414,82 @@ void test_channel_delete_cascades(void) {
     TEST_ASSERT_EQUAL(0, subscribed);
 }
 
+void test_peek_pending_empty(void) {
+    PendingMessage* msg = message_peek_pending(g_store, "nobody");
+    TEST_ASSERT_NULL(msg);
+}
+
+void test_peek_pending_returns_oldest(void) {
+    char id1[40] = {0}, id2[40] = {0};
+    message_send_direct(g_store, "alice", "bob", "First message", 0, id1);
+    message_send_direct(g_store, "alice", "bob", "Second message", 0, id2);
+
+    PendingMessage* msg = message_peek_pending(g_store, "bob");
+    TEST_ASSERT_NOT_NULL(msg);
+    TEST_ASSERT_EQUAL_STRING(id1, msg->id);
+    TEST_ASSERT_EQUAL_STRING("alice", msg->from);
+    TEST_ASSERT_EQUAL_STRING("First message", msg->content);
+    TEST_ASSERT_TRUE(msg->timestamp > 0);
+    pending_message_free(msg);
+}
+
+void test_peek_pending_does_not_consume(void) {
+    char id[40] = {0};
+    message_send_direct(g_store, "alice", "bob", "Peek me", 0, id);
+
+    PendingMessage* first = message_peek_pending(g_store, "bob");
+    TEST_ASSERT_NOT_NULL(first);
+    TEST_ASSERT_EQUAL_STRING(id, first->id);
+    pending_message_free(first);
+
+    PendingMessage* second = message_peek_pending(g_store, "bob");
+    TEST_ASSERT_NOT_NULL(second);
+    TEST_ASSERT_EQUAL_STRING(id, second->id);
+    pending_message_free(second);
+}
+
+void test_consume_marks_as_read(void) {
+    char id[40] = {0};
+    message_send_direct(g_store, "alice", "bob", "Consume me", 0, id);
+
+    int rc = message_consume(g_store, id);
+    TEST_ASSERT_EQUAL(0, rc);
+
+    PendingMessage* msg = message_peek_pending(g_store, "bob");
+    TEST_ASSERT_NULL(msg);
+}
+
+void test_consume_then_peek_next(void) {
+    char id1[40] = {0}, id2[40] = {0};
+    message_send_direct(g_store, "alice", "bob", "First", 0, id1);
+    message_send_direct(g_store, "alice", "bob", "Second", 0, id2);
+
+    int rc = message_consume(g_store, id1);
+    TEST_ASSERT_EQUAL(0, rc);
+
+    PendingMessage* msg = message_peek_pending(g_store, "bob");
+    TEST_ASSERT_NOT_NULL(msg);
+    TEST_ASSERT_EQUAL_STRING(id2, msg->id);
+    TEST_ASSERT_EQUAL_STRING("Second", msg->content);
+    pending_message_free(msg);
+}
+
+void test_consume_nonexistent(void) {
+    int rc = message_consume(g_store, "no-such-id-at-all");
+    TEST_ASSERT_EQUAL(-1, rc);
+}
+
+void test_consume_already_consumed(void) {
+    char id[40] = {0};
+    message_send_direct(g_store, "alice", "bob", "Once only", 0, id);
+
+    int rc = message_consume(g_store, id);
+    TEST_ASSERT_EQUAL(0, rc);
+
+    rc = message_consume(g_store, id);
+    TEST_ASSERT_EQUAL(-1, rc);
+}
+
 void test_channel_has_pending_no_subscriptions(void) {
     int pending = channel_has_pending(g_store, "agent-1");
     TEST_ASSERT_EQUAL(0, pending);
@@ -504,6 +580,14 @@ int main(void) {
 
     RUN_TEST(test_cross_process_access);
     RUN_TEST(test_channel_delete_cascades);
+
+    RUN_TEST(test_peek_pending_empty);
+    RUN_TEST(test_peek_pending_returns_oldest);
+    RUN_TEST(test_peek_pending_does_not_consume);
+    RUN_TEST(test_consume_marks_as_read);
+    RUN_TEST(test_consume_then_peek_next);
+    RUN_TEST(test_consume_nonexistent);
+    RUN_TEST(test_consume_already_consumed);
 
     RUN_TEST(test_channel_has_pending_no_subscriptions);
     RUN_TEST(test_channel_has_pending_no_messages);
