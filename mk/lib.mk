@@ -225,7 +225,7 @@ $(LIBAGENT): $(LIB_OBJECTS)
 LIBAGENT_HEADER := $(OUTDIR)/libagent.h
 LIB_HEADERS := $(shell find $(LIBDIR) -name '*.h' -not -name 'hnswlib_wrapper.h')
 
-$(LIBAGENT_HEADER): $(LIB_HEADERS) $(VERSION_HEADER) scripts/gen_header.py
+$(LIBAGENT_HEADER): $(LIB_HEADERS) $(VERSION_HEADER) scripts/gen_header.py | $(ALL_LIBS)
 	@uv run scripts/gen_header.py "$@"
 
 .PHONY: libagent libagent-clean

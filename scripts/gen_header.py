@@ -118,6 +118,10 @@ def main():
             resolved = resolve(inc_name, filepath, is_quoted)
             if resolved:
                 result.extend(expand(resolved))
+            elif str(filepath).startswith(str(root / "lib")):
+                print(f"error: cannot resolve #include {bracket}{inc_name}{'>' if bracket == '<' else '\"'} "
+                      f"from {rel(filepath)}", file=sys.stderr)
+                sys.exit(1)
             elif emit:
                 result.append(line)
 
