@@ -1,4 +1,4 @@
-# Release workflow for ralph
+# Release workflow for scaffold
 # Manually triggered from the GitHub Actions UI.
 # Calculates the next version from the latest tag, builds, tests,
 # creates a git tag, and publishes a GitHub Release.
@@ -67,7 +67,7 @@ jobs:
         with:
           context: .devcontainer
           load: true
-          tags: ralph-dev:latest
+          tags: scaffold-dev:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -108,7 +108,7 @@ jobs:
             -v $HOME/.local/bin:/uv-bin:ro \
             -w /workspaces/ralph \
             -e PATH="/uv-bin:/opt/cosmos/bin:$PATH" \
-            ralph-dev:latest \
+            scaffold-dev:latest \
             bash -c "make -j$(nproc) && ./scripts/run_tests.sh"
 
       - name: Fix permissions
@@ -123,7 +123,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          name: ralph v${{ steps.version.outputs.version }}
+          name: scaffold v${{ steps.version.outputs.version }}
           body: ${{ inputs.release_notes }}
           files: |
             out/ralph
@@ -136,7 +136,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          name: ralph v${{ steps.version.outputs.version }}
+          name: scaffold v${{ steps.version.outputs.version }}
           generate_release_notes: true
           files: |
             out/ralph
