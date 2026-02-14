@@ -208,14 +208,19 @@ $(LIBDIR)/%.o: $(LIBDIR)/%.c | $(COMPILE_DEPS)
 $(LIBDIR)/%.o: $(LIBDIR)/%.cpp | $(COMPILE_DEPS)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) $(LIB_INCLUDES) -c $< -o $@
 
-# Build the library archive
-$(LIBAGENT): $(LIB_OBJECTS)
-	@mkdir -p $(OUTDIR)
-	@if [ -n "$(LIB_OBJECTS)" ]; then \
-		$(AR) rcs $@ $(LIB_OBJECTS); \
-	else \
-		touch $@; \
-	fi
+# Thin archive (lib/ objects only) — intermediate for fat archive
+LIBAGENT_THIN := $(BUILDDIR)/libagent-thin.a
+
+$(LIBAGENT_THIN): $(LIB_OBJECTS)
+	@mkdir -p $(BUILDDIR)
+	$(AR) rcs $@ $(LIB_OBJECTS)
+
+# Fat archive — bundles all deps so consumers link only libagent.a + system libs
+LIBAGENT_BUNDLED_LIBS := $(LIBS_MBEDTLS) $(PDFIO_LIB) $(CJSON_LIB) $(SQLITE_LIB) \
+    $(OSSP_UUID_LIB) $(PYTHON_LIB) $(ZLIB_LIB)
+
+$(LIBAGENT): $(LIBAGENT_THIN) $(LIBAGENT_BUNDLED_LIBS)
+	uv run scripts/merge_fat_archive.py $@ $(LIBAGENT_THIN) $(LIBAGENT_BUNDLED_LIBS)
 
 # =============================================================================
 # LIBRARY TARGETS
@@ -233,7 +238,7 @@ $(LIBAGENT_HEADER): $(LIB_HEADERS) $(VERSION_HEADER) scripts/gen_header.py | $(A
 libagent: $(LIBAGENT) $(LIBAGENT_HEADER)
 
 libagent-clean:
-	rm -f $(LIB_OBJECTS) $(LIBAGENT) $(LIBAGENT_HEADER)
+	rm -f $(LIB_OBJECTS) $(LIBAGENT) $(LIBAGENT_THIN) $(LIBAGENT_HEADER)
 	find $(LIBDIR) -name "*.o" -delete 2>/dev/null || true
 	find $(LIBDIR) -name "*.o.d" -delete 2>/dev/null || true
 
