@@ -1,14 +1,32 @@
 #!/bin/bash
-# Generate build/version.h with version info and git metadata.
+# Generate build/version.h with version info derived from git tags.
 # Uses compare-and-swap: only updates the file when content changes,
 # so unchanged builds don't trigger recompilation.
+#
+# Version is derived from `git describe --tags` (e.g. v0.1.0-14-gabcdef).
+# Falls back to 0.0.0 if no tags exist.
 
 set -e
 
-MAJOR="$1"
-MINOR="$2"
-PATCH="$3"
-OUTPUT="$4"
+OUTPUT="$1"
+
+if [ -z "$OUTPUT" ]; then
+    echo "Usage: $0 <output-file>" >&2
+    exit 1
+fi
+
+DESC=$(git describe --tags --always --match 'v*' 2>/dev/null || echo "")
+
+if echo "$DESC" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+'; then
+    BASE=$(echo "$DESC" | sed 's/^v//' | sed 's/-.*//')
+    MAJOR=$(echo "$BASE" | cut -d. -f1)
+    MINOR=$(echo "$BASE" | cut -d. -f2)
+    PATCH=$(echo "$BASE" | cut -d. -f3)
+else
+    MAJOR=0
+    MINOR=0
+    PATCH=0
+fi
 
 VERSION="${MAJOR}.${MINOR}.${PATCH}"
 GIT_HASH=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")

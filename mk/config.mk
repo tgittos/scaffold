@@ -12,11 +12,6 @@ OUTDIR := out
 TARGET := $(OUTDIR)/ralph
 SCAFFOLD_TARGET := $(OUTDIR)/scaffold
 
-# Project version (single source of truth — build/version.h is generated from these)
-RALPH_VERSION_MAJOR := 0
-RALPH_VERSION_MINOR := 1
-RALPH_VERSION_PATCH := 0
-
 # Directory structure
 SRCDIR := src
 LIBDIR := lib

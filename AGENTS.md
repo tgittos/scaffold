@@ -82,15 +82,11 @@ valgrind --leak-check=full ./test/test_foo.com.dbg      # x86_64
 
 ## Versioning & Releases
 
-**Single source of truth**: `mk/config.mk` defines `RALPH_VERSION_MAJOR/MINOR/PATCH`. The build generates `build/version.h` (gitignored) with version string, git hash, and dirty flag. All source files include this generated header.
+**Single source of truth**: Git tags (`v*`). The build generates `build/version.h` from `git describe --tags`, providing version string, git hash, and dirty flag. No version numbers in config files.
 
-**Bump version and release**:
-```bash
-scripts/bump_version.sh patch   # 0.1.0 -> 0.1.1 (also: minor, major)
-git push origin master --tags   # Tag push triggers release workflow
-```
+**Release**: Trigger the Release workflow from the GitHub Actions UI on `master`. Pick a bump type (major/minor/patch) and optionally provide release notes. The workflow calculates the next version from the latest tag, builds, tests, creates the tag, and publishes to GitHub Releases.
 
-The bump script updates `mk/config.mk`, commits, and creates an annotated `v*` tag. The release workflow (`.github/workflows/release.yml`) builds, tests, and publishes the binary to GitHub Releases.
+**Dev builds**: On non-tagged commits, `git describe` produces versions like `0.1.0-14-gabcdef`, giving a natural dev version with distance from the last release.
 
 **Build-time version header** (`build/version.h`): Provides `RALPH_VERSION`, `RALPH_GIT_HASH`, `RALPH_GIT_DIRTY`, `RALPH_BUILD_VERSION`. Uses compare-and-swap to avoid unnecessary recompilation.
 

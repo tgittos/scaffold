@@ -22,7 +22,7 @@ VERSION_HEADER := $(BUILDDIR)/version.h
 # After the first build, compiler-generated .o.d files track version.h as a
 # dependency of any .o that includes it — so only those files recompile.
 $(VERSION_HEADER): FORCE
-	@scripts/gen_version.sh "$(RALPH_VERSION_MAJOR)" "$(RALPH_VERSION_MINOR)" "$(RALPH_VERSION_PATCH)" "$@"
+	@scripts/gen_version.sh "$@"
 
 FORCE:
 

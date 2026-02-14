@@ -1,13 +1,25 @@
 # Release workflow for ralph
-# Triggered when a version tag (v*) is pushed to master.
-# Builds the binary and creates a GitHub Release with it.
+# Manually triggered from the GitHub Actions UI.
+# Calculates the next version from the latest tag, builds, tests,
+# creates a git tag, and publishes a GitHub Release.
 
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Version bump type'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      release_notes:
+        description: 'Release notes (leave empty for auto-generated)'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -19,10 +31,33 @@ jobs:
   release:
     name: Build and Release
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Calculate version
+        id: version
+        run: |
+          LATEST=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || echo "v0.0.0")
+          MAJOR=$(echo "$LATEST" | sed 's/^v//' | cut -d. -f1)
+          MINOR=$(echo "$LATEST" | sed 's/^v//' | cut -d. -f2)
+          PATCH=$(echo "$LATEST" | sed 's/^v//' | cut -d. -f3)
+
+          case "${{ inputs.bump }}" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+
+          NEW="${MAJOR}.${MINOR}.${PATCH}"
+          echo "version=${NEW}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${NEW}" >> "$GITHUB_OUTPUT"
+          echo "Releasing: v${NEW} (was ${LATEST})"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -61,6 +96,10 @@ jobs:
           fi
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
+      - name: Create tag
+        run: |
+          git tag -a "${{ steps.version.outputs.tag }}" -m "Release ${{ steps.version.outputs.tag }}"
+
       - name: Build and test
         run: |
           docker run --rm --privileged \
@@ -75,13 +114,27 @@ jobs:
         if: always()
         run: sudo chown -R $(id -u):$(id -g) deps/ build/ out/ python/build/ 2>/dev/null || true
 
-      - name: Extract version from tag
-        id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - name: Push tag
+        run: git push origin "${{ steps.version.outputs.tag }}"
 
-      - name: Create Release
+      - name: Create Release (with custom notes)
+        if: inputs.release_notes != ''
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ralph v${{ steps.version.outputs.version }}
+          body: ${{ inputs.release_notes }}
+          files: |
+            out/ralph
+            out/scaffold
+            out/libagent.a
+            out/libagent.h
+
+      - name: Create Release (auto-generated notes)
+        if: inputs.release_notes == ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
           name: ralph v${{ steps.version.outputs.version }}
           generate_release_notes: true
           files: |
