@@ -152,8 +152,11 @@ static void strbuf_free(StringBuffer *buf) {
     buf->capacity = 0;
 }
 
+#define MAX_EXPANDED_FILES 32
+
 // Expands @FILENAME references by inlining file contents wrapped in XML tags.
 // Non-recursive: files included this way are not scanned for further @references.
+// De-duplicates: each file is expanded only on first occurrence.
 static char *expand_file_references(const char *content) {
     if (content == NULL) return NULL;
 
@@ -161,6 +164,9 @@ static char *expand_file_references(const char *content) {
     if (!strbuf_init(&buf, strlen(content) + 1024)) {
         return NULL;
     }
+
+    char *expanded_files[MAX_EXPANDED_FILES];
+    int expanded_count = 0;
 
     const char *p = content;
     while (*p != '\0') {
@@ -177,11 +183,26 @@ static char *expand_file_references(const char *content) {
             if (filename_len > 0 && looks_like_file_path(start, filename_len)) {
                 char *filename = malloc(filename_len + 1);
                 if (filename == NULL) {
+                    for (int i = 0; i < expanded_count; i++) free(expanded_files[i]);
                     strbuf_free(&buf);
                     return NULL;
                 }
                 memcpy(filename, start, filename_len);
                 filename[filename_len] = '\0';
+
+                bool already_expanded = false;
+                for (int i = 0; i < expanded_count; i++) {
+                    if (strcmp(expanded_files[i], filename) == 0) {
+                        already_expanded = true;
+                        break;
+                    }
+                }
+
+                if (already_expanded) {
+                    free(filename);
+                    p = end;
+                    continue;
+                }
 
                 char *file_content = read_file_content(filename);
 
@@ -193,16 +214,24 @@ static char *expand_file_references(const char *content) {
                         !strbuf_append_str(&buf, "\n</file>")) {
                         free(filename);
                         free(file_content);
+                        for (int i = 0; i < expanded_count; i++) free(expanded_files[i]);
                         strbuf_free(&buf);
                         return NULL;
                     }
                     free(file_content);
-                    free(filename);
-                    p = end;  // Skip past the @FILENAME
+
+                    if (expanded_count < MAX_EXPANDED_FILES) {
+                        expanded_files[expanded_count++] = filename;
+                    } else {
+                        free(filename);
+                    }
+
+                    p = end;
                     continue;
                 } else {
                     free(filename);
                     if (!strbuf_append(&buf, p, 1)) {
+                        for (int i = 0; i < expanded_count; i++) free(expanded_files[i]);
                         strbuf_free(&buf);
                         return NULL;
                     }
@@ -211,6 +240,7 @@ static char *expand_file_references(const char *content) {
                 }
             } else {
                 if (!strbuf_append(&buf, p, 1)) {
+                    for (int i = 0; i < expanded_count; i++) free(expanded_files[i]);
                     strbuf_free(&buf);
                     return NULL;
                 }
@@ -219,12 +249,15 @@ static char *expand_file_references(const char *content) {
             }
         } else {
             if (!strbuf_append(&buf, p, 1)) {
+                for (int i = 0; i < expanded_count; i++) free(expanded_files[i]);
                 strbuf_free(&buf);
                 return NULL;
             }
             p++;
         }
     }
+
+    for (int i = 0; i < expanded_count; i++) free(expanded_files[i]);
 
     char *result = buf.data;
     buf.data = NULL;
