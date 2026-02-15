@@ -265,6 +265,77 @@ DirectMessage *message_get_direct(message_store_t *store, const char *message_id
         bind_text1, &params, map_direct_message, NULL);
 }
 
+/* Conversation listing (read-only) */
+typedef struct {
+    const char *agent1;
+    const char *agent2;
+    const char *after_id;
+    int limit;
+} ListBetweenParams;
+
+static int bind_list_between(sqlite3_stmt *stmt, void *data) {
+    ListBetweenParams *p = data;
+    sqlite3_bind_text(stmt, 1, p->agent1, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 2, p->agent2, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 3, p->agent2, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 4, p->agent1, -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 5, p->limit);
+    return 0;
+}
+
+static int bind_list_between_cursor(sqlite3_stmt *stmt, void *data) {
+    ListBetweenParams *p = data;
+    sqlite3_bind_text(stmt, 1, p->agent1, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 2, p->agent2, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 3, p->agent2, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 4, p->agent1, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 5, p->after_id, -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 6, p->limit);
+    return 0;
+}
+
+DirectMessage **message_list_between(message_store_t *store,
+                                     const char *agent1, const char *agent2,
+                                     const char *after_id, size_t limit,
+                                     size_t *out_count) {
+    if (!store || !agent1 || !agent2 || !out_count) return NULL;
+    *out_count = 0;
+
+    ListBetweenParams params = {
+        .agent1 = agent1,
+        .agent2 = agent2,
+        .after_id = after_id,
+        .limit = limit > 0 ? (int)limit : 100
+    };
+
+    void **items = NULL;
+    size_t count = 0;
+    int rc;
+
+    if (after_id) {
+        rc = sqlite_dal_query_list_p(store->dal,
+            "SELECT id, sender_id, recipient_id, content, created_at, read_at, expires_at "
+            "FROM direct_messages "
+            "WHERE ((sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?)) "
+            "AND created_at > (SELECT created_at FROM direct_messages WHERE id = ?) "
+            "ORDER BY created_at ASC LIMIT ?;",
+            bind_list_between_cursor, &params, map_direct_message,
+            (sqlite_item_free_t)direct_message_free, NULL, &items, &count);
+    } else {
+        rc = sqlite_dal_query_list_p(store->dal,
+            "SELECT id, sender_id, recipient_id, content, created_at, read_at, expires_at "
+            "FROM direct_messages "
+            "WHERE ((sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?)) "
+            "ORDER BY created_at ASC LIMIT ?;",
+            bind_list_between, &params, map_direct_message,
+            (sqlite_item_free_t)direct_message_free, NULL, &items, &count);
+    }
+
+    if (rc != 0 || count == 0) return NULL;
+    *out_count = count;
+    return (DirectMessage **)items;
+}
+
 /* Peek/consume operations */
 static void *map_pending_message(sqlite3_stmt *stmt, void *user_data) {
     (void)user_data;

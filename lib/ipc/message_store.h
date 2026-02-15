@@ -76,6 +76,15 @@ int channel_has_pending(message_store_t* store, const char* agent_id);
 /* Caller owns returned message and must free with direct_message_free(). */
 DirectMessage* message_get_direct(message_store_t* store, const char* message_id);
 
+/* Read-only conversation history between two agents. Does NOT mark messages as read.
+   Returns messages in both directions ordered by created_at ASC.
+   When after_id is NULL, returns from the beginning.
+   Caller owns returned array and must free with direct_message_free_list(). */
+DirectMessage** message_list_between(message_store_t* store,
+                                     const char* agent1, const char* agent2,
+                                     const char* after_id, size_t limit,
+                                     size_t* out_count);
+
 /* Peek at the oldest unread message for recipient WITHOUT marking it as read. */
 /* Caller owns returned message and must free with pending_message_free(). */
 PendingMessage* message_peek_pending(message_store_t* store, const char* recipient);
