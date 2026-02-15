@@ -793,7 +793,7 @@ void display_streaming_thinking(const char* text, size_t len) {
     fflush(stdout);
 }
 
-void display_streaming_tool_start(const char* tool_name) {
+void display_streaming_tool_start(const char* id, const char* tool_name) {
     if (tool_name == NULL) {
         return;
     }
@@ -806,8 +806,22 @@ void display_streaming_tool_start(const char* tool_name) {
         fprintf(stdout, TERM_CLEAR_LINE);
         streaming_first_chunk = 0;
     }
+    (void)id;        /* Terminal display doesn't need the call ID */
     (void)tool_name; /* Tool info shown by log_tool_execution_improved instead */
     fflush(stdout);
+}
+
+void display_streaming_tool_delta(const char* id, const char* json_delta, size_t len) {
+    (void)id;
+    (void)json_delta;
+    (void)len;
+}
+
+void display_streaming_tool_result(const char* id, const char* name,
+                                   const char* arguments, const char* result,
+                                   int success) {
+    (void)id;
+    log_tool_execution_improved(name, arguments, success, result);
 }
 
 void display_streaming_complete(int input_tokens, int output_tokens) {

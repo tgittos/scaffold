@@ -152,8 +152,9 @@ int tool_batch_execute(ToolBatchContext* ctx,
                               "\"Only one subagent can be spawned per turn. "
                               "A subagent was already spawned in this batch.\"}");
             if (!json_mode) {
-                log_tool_execution_improved(calls[i].name, calls[i].arguments, 0,
-                                            "Duplicate subagent blocked");
+                display_streaming_tool_result(calls[i].id, calls[i].name,
+                                              calls[i].arguments,
+                                              "Duplicate subagent blocked", 0);
             } else {
                 json_output_tool_result(calls[i].id, results[slot].result, 1);
             }
@@ -174,7 +175,8 @@ int tool_batch_execute(ToolBatchContext* ctx,
             debug_printf("User aborted tool execution at tool %d of %d\n", i + 1, call_count);
             fill_error_result(&results[slot], calls[i].id,
                               "{\"error\": \"aborted\", \"message\": \"Operation aborted by user\"}");
-            log_tool_execution_improved(calls[i].name, calls[i].arguments, 0, "Aborted by user");
+            display_streaming_tool_result(calls[i].id, calls[i].name,
+                                        calls[i].arguments, "Aborted by user", 0);
             count++;
             if (!compact) {
                 for (int j = i + 1; j < call_count; j++) {
@@ -326,8 +328,9 @@ int tool_batch_execute(ToolBatchContext* ctx,
         }
 
         if (!json_mode) {
-            log_tool_execution_improved(calls[i].name, calls[i].arguments,
-                                        results[slot].success, results[slot].result);
+            display_streaming_tool_result(calls[i].id, calls[i].name,
+                                          calls[i].arguments,
+                                          results[slot].result, results[slot].success);
 
             if (strcmp(calls[i].name, "subagent") == 0 && results[slot].success) {
                 cJSON *args_json = cJSON_Parse(calls[i].arguments);

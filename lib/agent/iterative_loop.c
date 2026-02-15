@@ -58,15 +58,10 @@ int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx) {
         rt.tool_call_count = 0;
 
         if (call_count > 0) {
-            status_line_update_tokens(rt.parsed.prompt_tokens, rt.parsed.completion_tokens);
-            if (rt.parsed.completion_tokens > 0) {
-                status_line_set_last_response_tokens(rt.parsed.completion_tokens);
-            }
-
             if (rt.parsed.response_content != NULL && strlen(rt.parsed.response_content) > 0) {
                 if (!session->session_data.config.json_output_mode) {
-                    printf("%s\n", rt.parsed.response_content);
-                    fflush(stdout);
+                    display_streaming_text(rt.parsed.response_content,
+                                           strlen(rt.parsed.response_content));
                 } else {
                     json_output_assistant_text(rt.parsed.response_content,
                                                rt.parsed.prompt_tokens,
@@ -74,7 +69,10 @@ int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx) {
                 }
             }
 
-            if (session->session_data.config.json_output_mode) {
+            if (!session->session_data.config.json_output_mode) {
+                display_streaming_complete(rt.parsed.prompt_tokens,
+                                           rt.parsed.completion_tokens);
+            } else {
                 json_output_assistant_tool_calls_buffered(tool_calls, call_count,
                                                           rt.parsed.prompt_tokens,
                                                           rt.parsed.completion_tokens);
@@ -93,13 +91,18 @@ int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx) {
 
         if (call_count == 0) {
             debug_printf("No more tool calls found - ending tool loop after %d iterations\n", loop_count);
-            if (rt.parsed.response_content == NULL) {
-                status_line_update_tokens(rt.parsed.prompt_tokens, rt.parsed.completion_tokens);
-                if (rt.parsed.completion_tokens > 0) {
-                    status_line_set_last_response_tokens(rt.parsed.completion_tokens);
+            if (!session->session_data.config.json_output_mode) {
+                if (rt.parsed.thinking_content != NULL) {
+                    display_streaming_thinking(rt.parsed.thinking_content,
+                                               strlen(rt.parsed.thinking_content));
                 }
+                if (rt.parsed.response_content != NULL) {
+                    display_streaming_text(rt.parsed.response_content,
+                                           strlen(rt.parsed.response_content));
+                }
+                display_streaming_complete(rt.parsed.prompt_tokens,
+                                           rt.parsed.completion_tokens);
             }
-            print_formatted_response_improved(&rt.parsed);
             api_round_trip_cleanup(&rt);
             return 0;
         }
