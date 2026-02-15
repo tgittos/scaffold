@@ -147,9 +147,32 @@ void display_streaming_thinking(const char* text, size_t len);
 /**
  * Display notification that a tool is being called
  *
+ * @param id Tool call ID from the LLM response
  * @param tool_name Name of the tool being called
  */
-void display_streaming_tool_start(const char* tool_name);
+void display_streaming_tool_start(const char* id, const char* tool_name);
+
+/**
+ * Display streaming tool input JSON as it arrives
+ *
+ * @param id Tool call ID this delta belongs to
+ * @param json_delta Chunk of JSON input for the tool
+ * @param len Length of the JSON chunk
+ */
+void display_streaming_tool_delta(const char* id, const char* json_delta, size_t len);
+
+/**
+ * Display result of a tool execution
+ *
+ * @param id Tool call ID that produced this result
+ * @param name Name of the tool
+ * @param arguments Tool arguments JSON (for terminal display summary)
+ * @param result Result string from tool execution
+ * @param success Whether the tool execution succeeded
+ */
+void display_streaming_tool_result(const char* id, const char* name,
+                                   const char* arguments, const char* result,
+                                   int success);
 
 /**
  * Display completion of streaming response with token counts

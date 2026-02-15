@@ -50,9 +50,13 @@ static void streaming_thinking_callback(const char* text, size_t len, void* user
 }
 
 static void streaming_tool_start_callback(const char* id, const char* name, void* user_data) {
-    (void)id;
     (void)user_data;
-    display_streaming_tool_start(name);
+    display_streaming_tool_start(id, name);
+}
+
+static void streaming_tool_delta_callback(const char* id, const char* json_delta, void* user_data) {
+    (void)user_data;
+    display_streaming_tool_delta(id, json_delta, json_delta ? strlen(json_delta) : 0);
 }
 
 static void streaming_end_callback(const char* stop_reason, void* user_data) {
@@ -126,6 +130,7 @@ int streaming_process_message(AgentSession* session, LLMProvider* provider,
     ctx->on_text_chunk = streaming_text_callback;
     ctx->on_thinking_chunk = streaming_thinking_callback;
     ctx->on_tool_use_start = streaming_tool_start_callback;
+    ctx->on_tool_use_delta = streaming_tool_delta_callback;
     ctx->on_stream_end = streaming_end_callback;
     ctx->on_error = streaming_error_callback;
     ctx->on_sse_data = streaming_sse_data_callback;
@@ -170,10 +175,7 @@ int streaming_process_message(AgentSession* session, LLMProvider* provider,
     }
 
     if (ctx->tool_uses.count > 0) {
-        status_line_update_tokens(input_tokens, output_tokens);
-        if (output_tokens > 0) {
-            status_line_set_last_response_tokens(output_tokens);
-        }
+        display_streaming_complete(input_tokens, output_tokens);
 
         /* Safe narrowing: size_t→int; checked against INT_MAX above */
         if (ctx->tool_uses.count > INT_MAX) {
