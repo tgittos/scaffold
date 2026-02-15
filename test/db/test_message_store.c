@@ -490,6 +490,127 @@ void test_consume_already_consumed(void) {
     TEST_ASSERT_EQUAL(-1, rc);
 }
 
+/* --- message_list_between tests --- */
+
+void test_list_between_empty_store(void) {
+    size_t count = 0;
+    DirectMessage** msgs = message_list_between(g_store, "alice", "bob", NULL, 10, &count);
+    TEST_ASSERT_NULL(msgs);
+    TEST_ASSERT_EQUAL(0, count);
+}
+
+void test_list_between_both_directions(void) {
+    char id1[40] = {0}, id2[40] = {0}, id3[40] = {0};
+    message_send_direct(g_store, "alice", "bob", "Hello Bob", 0, id1);
+    message_send_direct(g_store, "bob", "alice", "Hi Alice", 0, id2);
+    message_send_direct(g_store, "alice", "bob", "How are you?", 0, id3);
+
+    size_t count = 0;
+    DirectMessage** msgs = message_list_between(g_store, "alice", "bob", NULL, 10, &count);
+    TEST_ASSERT_NOT_NULL(msgs);
+    TEST_ASSERT_EQUAL(3, count);
+
+    TEST_ASSERT_EQUAL_STRING("Hello Bob", msgs[0]->content);
+    TEST_ASSERT_EQUAL_STRING("alice", msgs[0]->sender_id);
+    TEST_ASSERT_EQUAL_STRING("Hi Alice", msgs[1]->content);
+    TEST_ASSERT_EQUAL_STRING("bob", msgs[1]->sender_id);
+    TEST_ASSERT_EQUAL_STRING("How are you?", msgs[2]->content);
+
+    direct_message_free_list(msgs, count);
+}
+
+void test_list_between_does_not_mark_as_read(void) {
+    char id[40] = {0};
+    message_send_direct(g_store, "alice", "bob", "Peek test", 0, id);
+
+    size_t count1 = 0;
+    DirectMessage** msgs1 = message_list_between(g_store, "alice", "bob", NULL, 10, &count1);
+    TEST_ASSERT_EQUAL(1, count1);
+    direct_message_free_list(msgs1, count1);
+
+    /* Should still be visible on second call (not marked as read) */
+    size_t count2 = 0;
+    DirectMessage** msgs2 = message_list_between(g_store, "alice", "bob", NULL, 10, &count2);
+    TEST_ASSERT_EQUAL(1, count2);
+    direct_message_free_list(msgs2, count2);
+
+    /* Should still be pending */
+    int pending = message_has_pending(g_store, "bob");
+    TEST_ASSERT_EQUAL(1, pending);
+}
+
+void test_list_between_cursor_pagination(void) {
+    char ids[5][40];
+    memset(ids, 0, sizeof(ids));
+    for (int i = 0; i < 5; i++) {
+        char content[32];
+        snprintf(content, sizeof(content), "Message %d", i);
+        message_send_direct(g_store, "alice", "bob", content, 0, ids[i]);
+    }
+
+    /* Get first 2 */
+    size_t count1 = 0;
+    DirectMessage** msgs1 = message_list_between(g_store, "alice", "bob", NULL, 2, &count1);
+    TEST_ASSERT_EQUAL(2, count1);
+    TEST_ASSERT_EQUAL_STRING("Message 0", msgs1[0]->content);
+    TEST_ASSERT_EQUAL_STRING("Message 1", msgs1[1]->content);
+    char cursor[40] = {0};
+    snprintf(cursor, sizeof(cursor), "%s", msgs1[1]->id);
+    direct_message_free_list(msgs1, count1);
+
+    /* Get next 2 using cursor */
+    size_t count2 = 0;
+    DirectMessage** msgs2 = message_list_between(g_store, "alice", "bob", cursor, 2, &count2);
+    TEST_ASSERT_EQUAL(2, count2);
+    TEST_ASSERT_EQUAL_STRING("Message 2", msgs2[0]->content);
+    TEST_ASSERT_EQUAL_STRING("Message 3", msgs2[1]->content);
+    snprintf(cursor, sizeof(cursor), "%s", msgs2[1]->id);
+    direct_message_free_list(msgs2, count2);
+
+    /* Get final 1 */
+    size_t count3 = 0;
+    DirectMessage** msgs3 = message_list_between(g_store, "alice", "bob", cursor, 2, &count3);
+    TEST_ASSERT_EQUAL(1, count3);
+    TEST_ASSERT_EQUAL_STRING("Message 4", msgs3[0]->content);
+    direct_message_free_list(msgs3, count3);
+}
+
+void test_list_between_nonexistent_cursor(void) {
+    char id[40] = {0};
+    message_send_direct(g_store, "alice", "bob", "Only message", 0, id);
+
+    size_t count = 0;
+    DirectMessage** msgs = message_list_between(g_store, "alice", "bob",
+                                                 "nonexistent-cursor-id", 10, &count);
+    TEST_ASSERT_NULL(msgs);
+    TEST_ASSERT_EQUAL(0, count);
+}
+
+void test_list_between_excludes_other_conversations(void) {
+    char id[40] = {0};
+    message_send_direct(g_store, "alice", "bob", "For Bob", 0, id);
+    message_send_direct(g_store, "charlie", "dave", "For Dave", 0, id);
+    message_send_direct(g_store, "alice", "charlie", "For Charlie", 0, id);
+
+    size_t count = 0;
+    DirectMessage** msgs = message_list_between(g_store, "alice", "bob", NULL, 10, &count);
+    TEST_ASSERT_EQUAL(1, count);
+    TEST_ASSERT_EQUAL_STRING("For Bob", msgs[0]->content);
+    direct_message_free_list(msgs, count);
+}
+
+void test_list_between_reversed_agents(void) {
+    char id[40] = {0};
+    message_send_direct(g_store, "alice", "bob", "Hello", 0, id);
+
+    /* Should work regardless of argument order */
+    size_t count = 0;
+    DirectMessage** msgs = message_list_between(g_store, "bob", "alice", NULL, 10, &count);
+    TEST_ASSERT_EQUAL(1, count);
+    TEST_ASSERT_EQUAL_STRING("Hello", msgs[0]->content);
+    direct_message_free_list(msgs, count);
+}
+
 void test_channel_has_pending_no_subscriptions(void) {
     int pending = channel_has_pending(g_store, "agent-1");
     TEST_ASSERT_EQUAL(0, pending);
@@ -588,6 +709,14 @@ int main(void) {
     RUN_TEST(test_consume_then_peek_next);
     RUN_TEST(test_consume_nonexistent);
     RUN_TEST(test_consume_already_consumed);
+
+    RUN_TEST(test_list_between_empty_store);
+    RUN_TEST(test_list_between_both_directions);
+    RUN_TEST(test_list_between_does_not_mark_as_read);
+    RUN_TEST(test_list_between_cursor_pagination);
+    RUN_TEST(test_list_between_nonexistent_cursor);
+    RUN_TEST(test_list_between_excludes_other_conversations);
+    RUN_TEST(test_list_between_reversed_agents);
 
     RUN_TEST(test_channel_has_pending_no_subscriptions);
     RUN_TEST(test_channel_has_pending_no_messages);
