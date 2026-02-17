@@ -317,8 +317,8 @@ DirectMessage **message_list_between(message_store_t *store,
             "SELECT id, sender_id, recipient_id, content, created_at, read_at, expires_at "
             "FROM direct_messages "
             "WHERE ((sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?)) "
-            "AND created_at > (SELECT created_at FROM direct_messages WHERE id = ?) "
-            "ORDER BY created_at ASC LIMIT ?;",
+            "AND rowid > (SELECT rowid FROM direct_messages WHERE id = ?) "
+            "ORDER BY rowid ASC LIMIT ?;",
             bind_list_between_cursor, &params, map_direct_message,
             (sqlite_item_free_t)direct_message_free, NULL, &items, &count);
     } else {
@@ -326,7 +326,7 @@ DirectMessage **message_list_between(message_store_t *store,
             "SELECT id, sender_id, recipient_id, content, created_at, read_at, expires_at "
             "FROM direct_messages "
             "WHERE ((sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?)) "
-            "ORDER BY created_at ASC LIMIT ?;",
+            "ORDER BY rowid ASC LIMIT ?;",
             bind_list_between, &params, map_direct_message,
             (sqlite_item_free_t)direct_message_free, NULL, &items, &count);
     }
