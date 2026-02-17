@@ -220,6 +220,7 @@ LIBAGENT_BUNDLED_LIBS := $(LIBS_MBEDTLS) $(PDFIO_LIB) $(CJSON_LIB) $(SQLITE_LIB)
     $(OSSP_UUID_LIB) $(PYTHON_LIB) $(ZLIB_LIB)
 
 $(LIBAGENT): $(LIBAGENT_THIN) $(LIBAGENT_BUNDLED_LIBS)
+	@mkdir -p $(dir $@)
 	uv run scripts/merge_fat_archive.py $@ $(LIBAGENT_THIN) $(LIBAGENT_BUNDLED_LIBS)
 
 # =============================================================================

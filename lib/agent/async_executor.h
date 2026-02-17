@@ -55,6 +55,18 @@ void async_executor_destroy(async_executor_t* executor);
 int async_executor_start(async_executor_t* executor, const char* message);
 
 /**
+ * Continue the conversation without a new user message.
+ * Wraps session_continue() in a background thread, same as
+ * async_executor_start() wraps session_process_message().
+ *
+ * Use after injecting a system message into conversation history.
+ *
+ * @param executor The executor to use.
+ * @return 0 on success, -1 if already running or on error.
+ */
+int async_executor_continue(async_executor_t* executor);
+
+/**
  * Get the notification pipe fd for select().
  * When this fd is readable, call async_executor_process_events().
  *

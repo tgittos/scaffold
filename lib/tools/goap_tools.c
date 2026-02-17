@@ -54,7 +54,7 @@ static const ParamDef CREATE_GOAL_PARAMS[] = {
 
 static const ParamDef CREATE_ACTIONS_PARAMS[] = {
     {"goal_id", "string", "ID of the goal these actions belong to", NULL, 1},
-    {"actions", "array", "Array of action objects, each with: description (string), preconditions (string array), effects (string array), is_compound (bool), role (string, optional)", NULL, 1},
+    {"actions", "array", "Array of action objects. Required: description (string). Optional: effects (string array, default []), preconditions (string array, default []), is_compound (bool, default false), role (string), parent_action_id (string)", NULL, 1},
 };
 
 static const ParamDef UPDATE_ACTION_PARAMS[] = {
@@ -408,12 +408,12 @@ int execute_goap_create_actions(const ToolCall *tc, ToolResult *result) {
 
         cJSON *effects = cJSON_GetObjectItem(action_obj, "effects");
         char *effects_str = (effects && cJSON_IsArray(effects))
-            ? cJSON_PrintUnformatted(effects) : NULL;
+            ? cJSON_PrintUnformatted(effects) : safe_strdup("[]");
 
         cJSON *compound = cJSON_GetObjectItem(action_obj, "is_compound");
         bool is_compound = cJSON_IsTrue(compound);
 
-        if (!desc || !effects_str) {
+        if (!desc) {
             failed++;
             free(precond_str);
             free(effects_str);

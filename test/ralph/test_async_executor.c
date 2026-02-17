@@ -173,6 +173,30 @@ void test_async_executor_get_active_null_after_destruction(void) {
     TEST_ASSERT_NULL(active);
 }
 
+void test_async_executor_continue_null_returns_error(void) {
+    int result = async_executor_continue(NULL);
+    TEST_ASSERT_EQUAL(-1, result);
+}
+
+void test_async_executor_continue_completes_successfully(void) {
+    AgentSession session = {0};
+    async_executor_t* executor = async_executor_create(&session);
+    TEST_ASSERT_NOT_NULL(executor);
+
+    int rc = async_executor_continue(executor);
+    TEST_ASSERT_EQUAL(0, rc);
+    TEST_ASSERT_EQUAL(1, async_executor_is_running(executor));
+
+    TEST_ASSERT_EQUAL(0, async_executor_wait(executor));
+    TEST_ASSERT_EQUAL(0, async_executor_is_running(executor));
+    TEST_ASSERT_EQUAL(0, async_executor_get_result(executor));
+
+    int event = async_executor_process_events(executor);
+    TEST_ASSERT_EQUAL(ASYNC_EVENT_COMPLETE, event);
+
+    async_executor_destroy(executor);
+}
+
 void test_async_executor_notify_subagent_spawned_null_is_safe(void) {
     /* Calling notify on NULL executor should be a no-op */
     async_executor_notify_subagent_spawned(NULL);
@@ -218,6 +242,8 @@ int main(void) {
     RUN_TEST(test_async_executor_get_active_null_before_creation);
     RUN_TEST(test_async_executor_get_active_returns_executor_after_creation);
     RUN_TEST(test_async_executor_get_active_null_after_destruction);
+    RUN_TEST(test_async_executor_continue_null_returns_error);
+    RUN_TEST(test_async_executor_continue_completes_successfully);
     RUN_TEST(test_async_executor_notify_subagent_spawned_null_is_safe);
     RUN_TEST(test_async_executor_notify_subagent_spawned_when_not_running_is_noop);
 

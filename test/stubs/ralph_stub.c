@@ -29,3 +29,14 @@ int session_process_message(AgentSession* session, const char* user_message) {
 
     return atomic_load(&g_stub_return_value);
 }
+
+int session_continue(AgentSession* session) {
+    (void)session;
+
+    int delay = atomic_load(&g_stub_delay_ms);
+    if (delay > 0) {
+        usleep(delay * 1000);
+    }
+
+    return atomic_load(&g_stub_return_value);
+}

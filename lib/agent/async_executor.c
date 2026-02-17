@@ -95,6 +95,40 @@ static void* executor_thread_func(void* arg) {
     return NULL;
 }
 
+static void* executor_continue_func(void* arg) {
+    async_executor_t* executor = (async_executor_t*)arg;
+
+    debug_printf("async_executor: Continue thread started\n");
+
+    int result = session_continue(executor->session);
+
+    pthread_mutex_lock(&executor->mutex);
+    executor->last_result = result;
+    if (executor->last_error != NULL) {
+        free(executor->last_error);
+        executor->last_error = NULL;
+    }
+
+    if (atomic_load(&executor->cancel_requested) || result == -2) {
+        debug_printf("async_executor: Continue was cancelled\n");
+        send_event(executor, ASYNC_EVENT_INTERRUPTED);
+    } else if (result != 0) {
+        debug_printf("async_executor: Continue failed with result %d\n", result);
+        executor->last_error = strdup("Session continue failed");
+        send_event(executor, ASYNC_EVENT_ERROR);
+    } else {
+        debug_printf("async_executor: Continue completed successfully\n");
+        send_event(executor, ASYNC_EVENT_COMPLETE);
+    }
+
+    pthread_mutex_unlock(&executor->mutex);
+
+    atomic_store(&executor->running, 0);
+    pthread_cond_broadcast(&executor->cond);
+
+    return NULL;
+}
+
 async_executor_t* async_executor_create(AgentSession* session) {
     if (session == NULL) {
         return NULL;
@@ -222,6 +256,43 @@ int async_executor_start(async_executor_t* executor, const char* message) {
     atomic_store(&executor->thread_started, 1);
 
     debug_printf("async_executor: Started processing message\n");
+    return 0;
+}
+
+int async_executor_continue(async_executor_t* executor) {
+    if (executor == NULL) {
+        return -1;
+    }
+
+    if (atomic_load(&executor->running)) {
+        debug_printf("async_executor: Cannot continue, already running\n");
+        return -1;
+    }
+
+    /* Join any previous thread before starting a new one */
+    if (atomic_load(&executor->thread_started)) {
+        pthread_join(executor->thread, NULL);
+        atomic_store(&executor->thread_started, 0);
+    }
+
+    pthread_mutex_lock(&executor->mutex);
+
+    free(executor->last_error);
+    executor->last_error = NULL;
+    executor->last_result = 0;
+    atomic_store(&executor->cancel_requested, 0);
+    atomic_store(&executor->running, 1);
+
+    pthread_mutex_unlock(&executor->mutex);
+
+    if (pthread_create(&executor->thread, NULL, executor_continue_func, executor) != 0) {
+        atomic_store(&executor->running, 0);
+        return -1;
+    }
+
+    atomic_store(&executor->thread_started, 1);
+
+    debug_printf("async_executor: Started continue processing\n");
     return 0;
 }
 

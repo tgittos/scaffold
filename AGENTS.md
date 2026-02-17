@@ -49,6 +49,8 @@ Always update docs (AGENTS.md, `@ARCHITECTURE.md` and `@CODE_OVERVIEW.md`) befor
 
 **Build first**: Always build before running tests. Tests require compiled binaries.
 
+**Fix flaky tests**: Flaky tests are as bad as segfaults; they completely break the CI/CD system and must be fixed immediately.
+
 ```bash
 # Build, then run full suite (preferred)
 ./scripts/build.sh && ./scripts/run_tests.sh

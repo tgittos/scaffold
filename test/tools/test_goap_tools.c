@@ -207,12 +207,12 @@ void test_create_actions_all_fail(void) {
     char goal_id[40];
     create_test_goal(goal_id);
 
-    /* Actions missing required "effects" field should all fail */
+    /* Actions missing required "description" field should all fail */
     char args[512];
     snprintf(args, sizeof(args),
         "{\"goal_id\":\"%s\",\"actions\":["
-        "{\"description\":\"No effects\",\"is_compound\":false,\"preconditions\":[]},"
-        "{\"description\":\"Also no effects\",\"is_compound\":false}"
+        "{\"effects\":[\"a\"],\"is_compound\":false,\"preconditions\":[]},"
+        "{\"effects\":[\"b\"],\"is_compound\":false}"
         "]}", goal_id);
 
     ToolCall tc = make_tc("6b", "goap_create_actions", args);
@@ -227,6 +227,43 @@ void test_create_actions_all_fail(void) {
         cJSON_GetObjectItem(resp, "created")));
     TEST_ASSERT_EQUAL(2, (int)cJSON_GetNumberValue(
         cJSON_GetObjectItem(resp, "failed")));
+
+    cJSON_Delete(resp);
+    free_tc(&tc);
+    free_tr(&tr);
+}
+
+void test_create_actions_optional_effects(void) {
+    char goal_id[40];
+    create_test_goal(goal_id);
+
+    /* Actions without effects or preconditions should succeed with defaults */
+    char args[512];
+    snprintf(args, sizeof(args),
+        "{\"goal_id\":\"%s\",\"actions\":["
+        "{\"description\":\"Minimal action\"},"
+        "{\"description\":\"With preconditions only\",\"preconditions\":[\"x\"]}"
+        "]}", goal_id);
+
+    ToolCall tc = make_tc("6c", "goap_create_actions", args);
+    ToolResult tr = {0};
+
+    TEST_ASSERT_EQUAL(0, execute_goap_create_actions(&tc, &tr));
+    TEST_ASSERT_EQUAL(1, tr.success);
+
+    cJSON *resp = parse_result(&tr);
+    TEST_ASSERT_TRUE(cJSON_IsTrue(cJSON_GetObjectItem(resp, "success")));
+    TEST_ASSERT_EQUAL(2, (int)cJSON_GetNumberValue(
+        cJSON_GetObjectItem(resp, "created")));
+
+    /* Verify the first action was stored with default empty effects */
+    cJSON *ids = cJSON_GetObjectItem(resp, "action_ids");
+    const char *first_id = cJSON_GetStringValue(cJSON_GetArrayItem(ids, 0));
+    Action *a = action_store_get(as, first_id);
+    TEST_ASSERT_NOT_NULL(a);
+    TEST_ASSERT_EQUAL_STRING("[]", a->effects);
+    TEST_ASSERT_EQUAL_STRING("[]", a->preconditions);
+    action_free(a);
 
     cJSON_Delete(resp);
     free_tc(&tc);
@@ -804,6 +841,7 @@ int main(void) {
     /* goap_create_actions */
     RUN_TEST(test_create_actions);
     RUN_TEST(test_create_actions_all_fail);
+    RUN_TEST(test_create_actions_optional_effects);
     RUN_TEST(test_create_actions_with_parent);
 
     /* goap_list_actions */
