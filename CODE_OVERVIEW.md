@@ -18,6 +18,9 @@ Application-specific code that uses the library layer. This is a thin wrapper ar
 - **`python_tool.c/h`** - Embedded Python interpreter execution
 - **`python_tool_files.c/h`** - Python file-based tool loading system
 - **`python_extension.c/h`** - Tool extension interface for Python tools integration with lib/
+- **`http_python.c/h`** - Python extension for C HTTP client (`_ralph_http` module: get, post, download)
+- **`verified_file_python.c/h`** - Python extension for TOCTOU-safe file operations (`_ralph_verified_io` module)
+- **`sys_python.c/h`** - Python extension for system info (`_ralph_sys` module: get_executable_path, get_app_home)
 
 ##### Python Default Tools (in `python_defaults/`)
 - **`read_file.py`** - Read file contents
@@ -29,6 +32,8 @@ Application-specific code that uses the library layer. This is a thin wrapper ar
 - **`apply_delta.py`** - Apply unified diff patches
 - **`shell.py`** - Shell command execution with timeout
 - **`web_fetch.py`** - Fetch and process web content
+- **`pip_install.py`** - Install pure-Python packages from PyPI (py3-none-any wheels)
+- **`pip_list.py`** - List installed Python packages from site-packages
 
 ---
 
@@ -100,7 +105,6 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`streaming.c/h`** - SSE streaming infrastructure for real-time response handling
 - **`api_error.c/h`** - Enhanced API error handling with retry logic
 - **`embedded_cacert.c/h`** - Embedded Mozilla CA certificate bundle for portable SSL/TLS
-- **`http_python.c/h`** - Python extension exposing C HTTP client (`_ralph_http` module)
 - **`image_attachment.c/h`** - Image attachment parsing (`@path` references to base64-encoded images)
 
 #### `lib/policy/` - Approval Gate System

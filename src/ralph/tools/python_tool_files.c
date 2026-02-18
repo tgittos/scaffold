@@ -27,6 +27,8 @@ static const char *DEFAULT_TOOL_NAMES[] = {
     "apply_delta",
     "shell",
     "web_fetch",
+    "pip_install",
+    "pip_list",
     NULL
 };
 

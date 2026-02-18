@@ -10,7 +10,8 @@ TOOL_SOURCES := \
     $(SRCDIR)/ralph/tools/python_tool_files.c \
     $(SRCDIR)/ralph/tools/python_extension.c \
     $(SRCDIR)/ralph/tools/http_python.c \
-    $(SRCDIR)/ralph/tools/verified_file_python.c
+    $(SRCDIR)/ralph/tools/verified_file_python.c \
+    $(SRCDIR)/ralph/tools/sys_python.c
 
 # LLM (in lib/llm/)
 PROVIDER_SOURCES :=

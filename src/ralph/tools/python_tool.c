@@ -2,6 +2,8 @@
 #include "python_tool_files.h"
 #include "verified_file_python.h"
 #include "http_python.h"
+#include "sys_python.h"
+#include "util/app_home.h"
 #include <cJSON.h>
 #include <Python.h>
 #include <stdio.h>
@@ -15,6 +17,7 @@
 /* Track whether C extension modules were registered (must be before Py_Initialize) */
 static int verified_file_module_registered = 0;
 static int http_module_registered = 0;
+static int sys_module_registered = 0;
 
 /*
  * Static globals for persistent interpreter state.
@@ -66,6 +69,12 @@ int python_interpreter_init(void) {
     setenv("PYTHONHOME", "/zip", 1);
     setenv("PYTHONDONTWRITEBYTECODE", "1", 1);
 
+    /* Set app home for sitecustomize.py to find site-packages */
+    const char *app_home = app_home_get();
+    if (app_home != NULL) {
+        setenv("_RALPH_APP_HOME", app_home, 1);
+    }
+
     /* C extension modules must be registered before Py_Initialize() */
     if (!verified_file_module_registered) {
         if (verified_file_python_init() == 0) {
@@ -75,6 +84,11 @@ int python_interpreter_init(void) {
     if (!http_module_registered) {
         if (http_python_init() == 0) {
             http_module_registered = 1;
+        }
+    }
+    if (!sys_module_registered) {
+        if (sys_python_init() == 0) {
+            sys_module_registered = 1;
         }
     }
 

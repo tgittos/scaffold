@@ -203,11 +203,81 @@ static PyObject *py_http_post(PyObject *self, PyObject *args, PyObject *kwargs) 
     return result;
 }
 
+/**
+ * _ralph_http.download(url, dest_path, headers=None, timeout=300)
+ *
+ * Download a file from url to dest_path using the C HTTP client.
+ * Binary-safe (uses http_download_file, not UTF-8 text decoding).
+ *
+ * Returns dict with "ok" (bool), "bytes_written" (int), "path" (str).
+ */
+static PyObject *py_http_download(PyObject *self, PyObject *args, PyObject *kwargs) {
+    (void)self;
+
+    const char *url = NULL;
+    const char *dest_path = NULL;
+    PyObject *header_list = Py_None;
+    int timeout = 300;
+
+    static char *kwlist[] = {"url", "dest_path", "headers", "timeout", NULL};
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "ss|Oi", kwlist,
+                                     &url, &dest_path, &header_list, &timeout)) {
+        return NULL;
+    }
+
+    if (timeout <= 0) timeout = 300;
+
+    Py_ssize_t header_count = 0;
+    const char **headers = NULL;
+    if (header_list != Py_None) {
+        headers = parse_headers(header_list, &header_count);
+        if (headers == NULL && PyErr_Occurred()) return NULL;
+    }
+
+    struct HTTPConfig config = {
+        .timeout_seconds = timeout,
+        .connect_timeout_seconds = 10,
+        .follow_redirects = 1,
+        .max_redirects = 5
+    };
+
+    size_t bytes_written = 0;
+    int rc = 0;
+
+    Py_BEGIN_ALLOW_THREADS
+    rc = http_download_file(url, headers, &config, dest_path, &bytes_written);
+    Py_END_ALLOW_THREADS
+
+    free(headers);
+
+    PyObject *dict = PyDict_New();
+    if (dict == NULL) return NULL;
+
+    PyObject *ok = rc == 0 ? Py_True : Py_False;
+    Py_INCREF(ok);
+    PyDict_SetItemString(dict, "ok", ok);
+    Py_DECREF(ok);
+
+    PyObject *bw = PyLong_FromSize_t(bytes_written);
+    if (bw == NULL) { Py_DECREF(dict); return NULL; }
+    PyDict_SetItemString(dict, "bytes_written", bw);
+    Py_DECREF(bw);
+
+    PyObject *path = PyUnicode_FromString(dest_path);
+    if (path == NULL) { Py_DECREF(dict); return NULL; }
+    PyDict_SetItemString(dict, "path", path);
+    Py_DECREF(path);
+
+    return dict;
+}
+
 static PyMethodDef HttpMethods[] = {
     {"get", (PyCFunction)(void(*)(void))py_http_get, METH_VARARGS | METH_KEYWORDS,
      "HTTP GET request. get(url, headers=None, timeout=30) -> dict"},
     {"post", (PyCFunction)(void(*)(void))py_http_post, METH_VARARGS | METH_KEYWORDS,
      "HTTP POST request. post(url, data, headers=None, timeout=30) -> dict"},
+    {"download", (PyCFunction)(void(*)(void))py_http_download, METH_VARARGS | METH_KEYWORDS,
+     "Download file. download(url, dest_path, headers=None, timeout=300) -> dict"},
     {NULL, NULL, 0, NULL}
 };
 
