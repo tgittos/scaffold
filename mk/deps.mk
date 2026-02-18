@@ -42,7 +42,7 @@ $(CURL_LIB): $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
 		--disable-shared --enable-static \
 		--disable-ldap --disable-sspi --disable-tls-srp --disable-rtsp \
 		--disable-proxy --disable-dict --disable-telnet --disable-tftp \
-		--disable-pop3 --disable-smb --disable-smtp \
+		--disable-pop3 --disable-smb \
 		--disable-gopher --disable-manual --disable-ipv6 --disable-ftp \
 		--disable-file --disable-ntlm --disable-crypto-auth --disable-digest-auth \
 		--disable-negotiate-auth --with-mbedtls --without-zlib --without-brotli \
