@@ -111,6 +111,50 @@ void test_create_goal_with_queue_name(void) {
     free_tr(&tr);
 }
 
+void test_create_goal_persistent(void) {
+    ToolCall tc = make_tc("2p", "goap_create_goal",
+        "{\"name\":\"Persist\",\"description\":\"A persistent goal\","
+        "\"goal_state\":{\"done\":true},\"persistent\":true}");
+    ToolResult tr = {0};
+
+    TEST_ASSERT_EQUAL(0, execute_goap_create_goal(&tc, &tr));
+    TEST_ASSERT_EQUAL(1, tr.success);
+
+    cJSON *resp = parse_result(&tr);
+    TEST_ASSERT_NOT_NULL(resp);
+    TEST_ASSERT_EQUAL_STRING("active",
+        cJSON_GetStringValue(cJSON_GetObjectItem(resp, "status")));
+
+    /* Verify in store */
+    const char *gid = cJSON_GetStringValue(cJSON_GetObjectItem(resp, "goal_id"));
+    Goal *goal = goal_store_get(gs, gid);
+    TEST_ASSERT_NOT_NULL(goal);
+    TEST_ASSERT_EQUAL(GOAL_STATUS_ACTIVE, goal->status);
+    goal_free(goal);
+
+    cJSON_Delete(resp);
+    free_tc(&tc);
+    free_tr(&tr);
+}
+
+void test_create_goal_not_persistent(void) {
+    ToolCall tc = make_tc("2q", "goap_create_goal",
+        "{\"name\":\"Normal\",\"description\":\"A normal goal\","
+        "\"goal_state\":{\"x\":true}}");
+    ToolResult tr = {0};
+
+    TEST_ASSERT_EQUAL(0, execute_goap_create_goal(&tc, &tr));
+    TEST_ASSERT_EQUAL(1, tr.success);
+
+    cJSON *resp = parse_result(&tr);
+    TEST_ASSERT_EQUAL_STRING("planning",
+        cJSON_GetStringValue(cJSON_GetObjectItem(resp, "status")));
+
+    cJSON_Delete(resp);
+    free_tc(&tc);
+    free_tr(&tr);
+}
+
 void test_create_goal_missing_params(void) {
     ToolCall tc = make_tc("3", "goap_create_goal",
         "{\"name\":\"G\"}");
@@ -626,6 +670,30 @@ void test_update_world_state_merge(void) {
     free_tr(&tr2);
 }
 
+void test_update_world_state_with_summary(void) {
+    char goal_id[40];
+    create_test_goal(goal_id);
+
+    char args[256];
+    snprintf(args, sizeof(args),
+        "{\"goal_id\":\"%s\",\"assertions\":{\"a\":true},"
+        "\"summary\":\"Made progress on infra\"}", goal_id);
+    ToolCall tc = make_tc("14c", "goap_update_world_state", args);
+    ToolResult tr = {0};
+
+    TEST_ASSERT_EQUAL(0, execute_goap_update_world_state(&tc, &tr));
+    TEST_ASSERT_EQUAL(1, tr.success);
+
+    /* Verify summary persisted */
+    Goal *goal = goal_store_get(gs, goal_id);
+    TEST_ASSERT_NOT_NULL(goal);
+    TEST_ASSERT_EQUAL_STRING("Made progress on infra", goal->summary);
+    goal_free(goal);
+
+    free_tc(&tc);
+    free_tr(&tr);
+}
+
 /* ========================================================================
  * goap_check_complete
  * ======================================================================== */
@@ -832,6 +900,8 @@ int main(void) {
     /* goap_create_goal */
     RUN_TEST(test_create_goal);
     RUN_TEST(test_create_goal_with_queue_name);
+    RUN_TEST(test_create_goal_persistent);
+    RUN_TEST(test_create_goal_not_persistent);
     RUN_TEST(test_create_goal_missing_params);
 
     /* goap_get_goal */
@@ -863,6 +933,7 @@ int main(void) {
     /* goap_update_world_state */
     RUN_TEST(test_update_world_state);
     RUN_TEST(test_update_world_state_merge);
+    RUN_TEST(test_update_world_state_with_summary);
 
     /* goap_check_complete */
     RUN_TEST(test_check_complete_incomplete);

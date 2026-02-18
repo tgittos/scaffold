@@ -934,11 +934,11 @@ graph TB
 ### GOAP Tools (9 tools, scaffold mode only)
 - **`goap_get_goal`**: Read goal details (description, goal state, world state, status)
 - **`goap_list_actions`**: List actions for a goal, optionally filtered by status or parent
-- **`goap_create_goal`**: Create a new goal with goal state assertions
+- **`goap_create_goal`**: Create a new goal with goal state assertions; optional `persistent` flag promotes to ACTIVE immediately
 - **`goap_create_actions`**: Batch-create actions with preconditions and effects
 - **`goap_update_action`**: Update action status and result
 - **`goap_dispatch_action`**: Dispatch primitive action to worker (enqueue + spawn)
-- **`goap_update_world_state`**: Merge boolean assertions into goal's world state
+- **`goap_update_world_state`**: Merge boolean assertions into goal's world state; optional `summary` for progress notes
 - **`goap_check_complete`**: Check if world_state satisfies goal_state
 - **`goap_get_action_results`**: Read completed action results (truncated for context safety)
 

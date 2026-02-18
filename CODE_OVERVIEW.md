@@ -275,7 +275,7 @@ The test directory mirrors the source structure:
 - **`test_python_tool.c`** & **`test_python_integration.c`** - Python interpreter tests
 - **`test_subagent_tool.c`** - Subagent system tests
 - **`test_tool_param_dsl.c`** - Tool parameter DSL tests
-- **`test_goap_tools.c`** - GOAP tool unit tests (26 tests: goal/action CRUD, readiness, dispatch validation, world state, completion checking)
+- **`test_goap_tools.c`** - GOAP tool unit tests (30 tests: goal/action CRUD, persistent goals, readiness, dispatch validation, world state, summary, completion checking)
 - **`test_orchestrator_tool.c`** - Orchestrator tool unit tests (13 tests: execute_plan, list_goals, goal_status, start/pause/cancel_goal)
 - **`test_mode_tool.c`** - Mode tool switch_mode tests
 - **`test_tool_cache.c`** - Tool result caching tests
@@ -289,7 +289,7 @@ The test directory mirrors the source structure:
 - **`test_task_store.c`** - Task store persistence tests
 - **`test_message_store.c`** - Inter-agent messaging storage tests
 - **`test_sqlite_dal.c`** - SQLite Data Access Layer tests
-- **`test_goal_store.c`** - GOAP goal store persistence tests (16 tests: CRUD, status transitions, world state, supervisor PID tracking)
+- **`test_goal_store.c`** - GOAP goal store persistence tests (20 tests: CRUD, status transitions, world state, summary, active-goals query, supervisor PID tracking)
 - **`test_action_store.c`** - GOAP action store tests (23 tests: hierarchy, precondition matching, readiness queries, skip_pending, work_item_id correlation)
 
 #### `test/mcp/` - MCP Integration Tests
