@@ -5,6 +5,7 @@
 #include "../util/debug_output.h"
 #include "../llm/model_capabilities.h"
 #include "../util/interrupt.h"
+#include "../tools/tool_extension.h"
 #include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -563,6 +564,17 @@ char* extract_arg_summary(const char *tool_name, const char *arguments) {
         if (mode && cJSON_IsString(mode)) {
             value = cJSON_GetStringValue(mode);
             label = "";
+        }
+    }
+
+    if (value == NULL && tool_name != NULL) {
+        const char *match_arg = tool_extension_get_match_arg(tool_name);
+        if (match_arg != NULL) {
+            cJSON *matched = cJSON_GetObjectItem(json, match_arg);
+            if (matched && cJSON_IsString(matched)) {
+                value = cJSON_GetStringValue(matched);
+                label = "";
+            }
         }
     }
 
