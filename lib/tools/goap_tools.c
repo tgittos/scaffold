@@ -50,6 +50,7 @@ static const ParamDef CREATE_GOAL_PARAMS[] = {
     {"description", "string", "Full goal description", NULL, 1},
     {"goal_state", "object", "Goal state: JSON object of boolean assertion keys that must all be true", NULL, 1},
     {"queue_name", "string", "Work queue name for this goal's workers (auto-generated if omitted)", NULL, 0},
+    {"persistent", "boolean", "If true, goal stays ACTIVE across wake cycles for incremental advancement", NULL, 0},
 };
 
 static const ParamDef CREATE_ACTIONS_PARAMS[] = {
@@ -70,6 +71,7 @@ static const ParamDef DISPATCH_ACTION_PARAMS[] = {
 static const ParamDef UPDATE_WORLD_STATE_PARAMS[] = {
     {"goal_id", "string", "ID of the goal", NULL, 1},
     {"assertions", "object", "JSON object of assertion key/boolean pairs to merge into world state", NULL, 1},
+    {"summary", "string", "Progress notes for context recovery on next wake", NULL, 0},
 };
 
 static const ParamDef CHECK_COMPLETE_PARAMS[] = {
@@ -94,7 +96,7 @@ static const ToolDef GOAP_TOOLS[] = {
      LIST_ACTIONS_PARAMS, 3, execute_goap_list_actions},
     {"goap_create_goal",
      "Create a new goal with goal state assertions defining completion criteria",
-     CREATE_GOAL_PARAMS, 4, execute_goap_create_goal},
+     CREATE_GOAL_PARAMS, 5, execute_goap_create_goal},
     {"goap_create_actions",
      "Batch-create actions (compound or primitive) with preconditions and effects",
      CREATE_ACTIONS_PARAMS, 2, execute_goap_create_actions},
@@ -106,7 +108,7 @@ static const ToolDef GOAP_TOOLS[] = {
      DISPATCH_ACTION_PARAMS, 1, execute_goap_dispatch_action},
     {"goap_update_world_state",
      "Merge boolean assertions into a goal's world state after verifying effects",
-     UPDATE_WORLD_STATE_PARAMS, 2, execute_goap_update_world_state},
+     UPDATE_WORLD_STATE_PARAMS, 3, execute_goap_update_world_state},
     {"goap_check_complete",
      "Check if a goal is complete: world_state contains all goal_state assertions as true",
      CHECK_COMPLETE_PARAMS, 1, execute_goap_check_complete},
@@ -344,6 +346,10 @@ int execute_goap_create_goal(const ToolCall *tc, ToolResult *result) {
     int rc = goal_store_insert(store, name, description, goal_state_str, queue_name, goal_id);
 
     if (rc == 0) {
+        cJSON *persistent = cJSON_GetObjectItem(args, "persistent");
+        if (cJSON_IsTrue(persistent))
+            goal_store_update_status(store, goal_id, GOAL_STATUS_ACTIVE);
+
         cJSON *resp = cJSON_CreateObject();
         cJSON_AddBoolToObject(resp, "success", cJSON_True);
         cJSON_AddStringToObject(resp, "goal_id", goal_id);
@@ -834,6 +840,12 @@ int execute_goap_update_world_state(const ToolCall *tc, ToolResult *result) {
     int rc = goal_store_update_world_state(gs, goal_id, new_ws);
 
     if (rc == 0) {
+        char *summary_str = extract_string_param(tc->arguments, "summary");
+        if (summary_str) {
+            goal_store_update_summary(gs, goal_id, summary_str);
+            free(summary_str);
+        }
+
         cJSON *resp = cJSON_CreateObject();
         cJSON_AddBoolToObject(resp, "success", cJSON_True);
         /* cJSON_AddItemToObject transfers ownership of world_state */

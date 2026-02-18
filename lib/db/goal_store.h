@@ -56,6 +56,8 @@ int goal_store_update_supervisor(goal_store_t* store, const char* id,
 Goal** goal_store_list_all(goal_store_t* store, size_t* count);
 Goal** goal_store_list_by_status(goal_store_t* store, GoalStatus status, size_t* count);
 
+int goal_store_has_active_goals(goal_store_t* store);
+
 void goal_free(Goal* goal);
 void goal_free_list(Goal** goals, size_t count);
 

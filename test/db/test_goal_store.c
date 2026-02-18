@@ -222,6 +222,32 @@ void test_goal_status_conversion(void) {
     TEST_ASSERT_EQUAL(GOAL_STATUS_PLANNING, goal_status_from_string(NULL));
 }
 
+void test_goal_store_has_active_goals_empty(void) {
+    TEST_ASSERT_EQUAL(0, goal_store_has_active_goals(g_store));
+}
+
+void test_goal_store_has_active_goals_returns_1(void) {
+    char id[40];
+    goal_store_insert(g_store, "Active Goal", NULL, "{}", "q1", id);
+    goal_store_update_status(g_store, id, GOAL_STATUS_ACTIVE);
+
+    TEST_ASSERT_EQUAL(1, goal_store_has_active_goals(g_store));
+}
+
+void test_goal_store_has_active_goals_after_completed(void) {
+    char id[40];
+    goal_store_insert(g_store, "Will Complete", NULL, "{}", "q1", id);
+    goal_store_update_status(g_store, id, GOAL_STATUS_ACTIVE);
+    TEST_ASSERT_EQUAL(1, goal_store_has_active_goals(g_store));
+
+    goal_store_update_status(g_store, id, GOAL_STATUS_COMPLETED);
+    TEST_ASSERT_EQUAL(0, goal_store_has_active_goals(g_store));
+}
+
+void test_goal_store_has_active_goals_null(void) {
+    TEST_ASSERT_EQUAL(-1, goal_store_has_active_goals(NULL));
+}
+
 void test_goal_free_null(void) {
     goal_free(NULL);
     goal_free_list(NULL, 0);
@@ -245,6 +271,10 @@ int main(void) {
     RUN_TEST(test_goal_store_list_by_status);
     RUN_TEST(test_goal_store_update_nonexistent);
     RUN_TEST(test_goal_status_conversion);
+    RUN_TEST(test_goal_store_has_active_goals_empty);
+    RUN_TEST(test_goal_store_has_active_goals_returns_1);
+    RUN_TEST(test_goal_store_has_active_goals_after_completed);
+    RUN_TEST(test_goal_store_has_active_goals_null);
     RUN_TEST(test_goal_free_null);
 
     return UNITY_END();
