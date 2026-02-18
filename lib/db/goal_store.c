@@ -241,6 +241,14 @@ int goal_store_update_supervisor(goal_store_t *store, const char *id,
     return (changes > 0) ? 0 : -1;
 }
 
+int goal_store_has_active_goals(goal_store_t *store) {
+    if (!store) return -1;
+    BindInt params = { GOAL_STATUS_ACTIVE };
+    return sqlite_dal_exists_p(store->dal,
+        "SELECT 1 FROM goals WHERE status = ? LIMIT 1;",
+        bind_int, &params);
+}
+
 Goal **goal_store_list_all(goal_store_t *store, size_t *count) {
     if (!store || !count) return NULL;
     *count = 0;
