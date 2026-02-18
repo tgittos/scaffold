@@ -2,9 +2,7 @@
 
 Remember when you did your first `rails generate scaffold...`? Wasn't it magical?
 
-Wouldn't it be cool to do that, but for whole applications?
-
-## Usage
+This is that, but for entire applications.
 
 ```bash
 wget https://github.com/tgittos/scaffold/releases/latest/download/scaffold
@@ -15,107 +13,83 @@ to sign up, log in, post short text messages, follow/unfollow other users, and s
  of posts from people they follow. I want a user profile page showing their posts and \
 follower/following counts. JWT for auth, hash passwords with bcrypt, and keep the schema \
 simple — users, posts, and follows tables. no email verification or real-time updates. \
-focus on clean code, proper error handling, and a polished UI with loading states. 
+focus on clean code, proper error handling, and a polished UI with loading states.
 seed the database with a handful of demo users and posts so the app feels alive on \
 first launch."
 ```
 
+Describe what you want. Walk away. Come back to working software.
+
 Built on [Cosmopolitan C](https://github.com/jart/cosmopolitan) because I think it's neat.
+
+---
 
 ## How it works
 
-`scaffold` is my version of [Gastown](https://steve-yegge.medium.com/welcome-to-gas-town-4f25ee16dd04).
+scaffold orchestrates a three-layer hierarchy of AI agents to plan and build software autonomously.
 
-It's built on my version of [ralph](https://ghuntley.com/ralph/).
+**The orchestrator** takes your description, figures out the overall architecture, and breaks it into a sequence of supervised goals. It doesn't write a single line of code itself — it plans and delegates.
 
-If all of that is nonsense and you don't want to read two very long blog posts, in a nutshell:
+**Goal supervisors** are long-lived agents that own a single goal. Each supervisor breaks its goal into discrete tasks, dispatches worker agents to execute them, checks the results, and decides what's next. When all tasks for a goal are complete, the supervisor reports back to the orchestrator and exits.
 
-`scaffold` flips the agent/task paradigm and effectively plans and executes software specs of varying degrees of detail by orchestrating long-lived AI agent supervised goals. Each goal is broken down into a series of tasks, which in turn are worked by autonomous AI agents until the overall goal is complete.
+**Workers** do the actual work. Write code. Run tests. Fix the bug the tests found. Install dependencies. Each worker handles one task and exits. They're fast, focused, and disposable.
 
-It's 3 layers of abstraction in a trenchcoat, with the final layer being mostly stacks of ralphs in a trenchcoat.
+The orchestrator moves to the next goal when the previous one is complete. Repeat until the application exists. It's ralphs all the way down.
 
-### libagent
+---
 
-A generic-ish library for agentic AI stuff:
+## What it can do
 
-- Anthropic/OpenAI-compatible provider support (including local via LM Studio, Ollama)
-- vision support — attach images to conversations for multimodal models
-- extended thinking support for models that expose reasoning (Claude, Qwen, DeepSeek)
-- async tool calling with built-in filesystem, shell, memory, PDF, vector DB, and task tools
-- extensible Python tool system with verified file I/O for approval-gated operations
-- MCP client with stdio, HTTP, and SSE transports, multi-server management, and per-server tool namespacing
-- sub-agents with direct and pub/sub messaging, approval proxying to parent
-- GOAP-based multi-agent orchestration with work queues
-- HNSWLIB-backed semantic memory and document store
-- conversation management with token-aware compression, multi-tier rolling summaries, and automatic compaction
-- category-based approval gates with allowlists, protected file detection, shell command parsing, and path traversal prevention
-- rate limiting with exponential backoff
-- SSE streaming with provider-specific parsing
-- SQLite-backed persistence for tasks, messages, goals, and actions
-- terminal and JSON output modes
-- self-updater via GitHub releases
-- AGENTS.md support
-
-Used to build my ralph. Use it to build a ralph of your own.
-
-### ralph
-
-All the kids are ralphin', it's the coolest.
-
-This is my ralph.
-
-Mine is a little smarter than the average ralph:
-
-- interactive REPL and single-shot CLI modes
+- Anthropic/OpenAI-compatible providers, including local models via LM Studio or Ollama
+- Vision support — attach images to conversations for multimodal models
+- Extended thinking for models that expose reasoning (Claude, Qwen, DeepSeek)
 - Python-based filesystem, shell, and web tools out of the box
-- semantic long-term memory across sessions
-- task tracking and management
-- image understanding via vision-capable models
-- project-aware via AGENTS.md context loading
-- slash commands for direct inspection: `/memory`, `/goals`, `/tasks`, `/agents`, `/mode`, `/model`
+- Semantic long-term memory across sessions via HNSWLIB vector store
+- Task tracking and management persisted to SQLite
+- MCP client with stdio, HTTP, and SSE transports, multi-server support, per-server tool namespacing
+- Sub-agents with direct and pub/sub messaging
+- Approval gates with allowlists, protected file detection, shell command parsing, and path traversal prevention
+- Project-aware via AGENTS.md context loading
+- Self-updater via GitHub releases
 
-### scaffold
-
-An orchestrator ralph that co-ordinates long lived goal supervisor ralphs, who each dispatch ralphs to work individual tasks.
-
-It's ralphs all the way down.
+---
 
 ## How to use
 
-That intro "Usage" section was a little glib. How do you actually productively `scaffold` applications?
-
-`scaffold` supports two primary methods of interaction - an interactive chat-based REPL and a pipeable and stdin/stdout compatible CLI mode.
-
-In both modes, by default all tools will require user approval.
-
-Bypass entirely with `--yolo`.
-
 ### REPL mode
 
-Talk directly to the orchestrator. Chat and develop a software specification interactively. Once you have a spec, ask it to scaffold. Direct the orchestrator to refine goals, modify tasks and check on the progress of agents.
+Talk directly to the orchestrator. Develop your specification interactively — describe the application, refine goals, answer clarifying questions. When the spec is ready, tell it to build.
 
-If the orchestrator is giving you a hard time, drop into the various slash commands to investigate manually:
+```bash
+./scaffold
+```
 
-- /memory
-- /goals
-- /tasks
-- /agents
-- /mode
-- /model
+If things go sideways, drop into the slash commands to see what's happening:
+
+- `/goals` — current goal state
+- `/tasks` — task queue and status
+- `/agents` — active agents
+- `/memory` — what it remembers
+- `/mode` — current operating mode
+- `/model` — which LLM is in use
 
 ### One-shot mode
 
-Send a complete software specification into `scaffold` with:
+Pipe a complete spec and let it run unattended:
 
 ```bash
 cat ./SOFTWARE_SPEC.md | ./scaffold
 ```
 
-The orchestrator will autonomously plan and execute your software design, and continue working until it has completed.
+The orchestrator will plan and execute the full spec and continue until it's done.
+
+Both modes require tool approval by default. Bypass entirely with `--yolo`.
+
+---
 
 ## Building
 
-`scaffold` and co are written in C/C++ targeting the Cosmopolitan compiler. It has the following dependencies that are also downloaded and compiled:
+scaffold is written in C/C++ targeting the Cosmopolitan compiler. Dependencies:
 
 - libcurl
 - ncurses
@@ -131,7 +105,7 @@ The orchestrator will autonomously plan and execute your software design, and co
 
 ### devcontainer
 
-Rather than having to setup a Cosmopolitan toolchain of your own, you can build this project using the devcontainer:
+Rather than setting up a Cosmopolitan toolchain from scratch, use the devcontainer:
 
 ```bash
 # Build the devcontainer image
