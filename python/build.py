@@ -386,20 +386,26 @@ def _add_module_objects_to_library(build_dir, lib_x86, lib_aarch64):
     print_status("Module objects added to static library", COLOR_GREEN)
 
 def create_sitecustomize():
-    """Create sitecustomize.py for /zip paths."""
+    """Create sitecustomize.py for /zip paths and site-packages."""
     content = """import sys
+import os
 
-def _onlyzippaths():
+def _configure_paths():
     L = []
-    known_paths = set()
-    for dir0 in sys.path:
-        if dir0 not in known_paths and dir0.startswith("/zip/"):
-            L.append(dir0)
-            known_paths.add(dir0)
+    known = set()
+    for d in sys.path:
+        if d not in known and d.startswith("/zip/"):
+            L.append(d)
+            known.add(d)
+    app_home = os.environ.get('_RALPH_APP_HOME', '')
+    if app_home:
+        sp = os.path.join(app_home, 'site-packages')
+        if os.path.isdir(sp) and sp not in known:
+            L.append(sp)
+            known.add(sp)
     sys.path[:] = L
-    return known_paths
 
-_onlyzippaths()
+_configure_paths()
 """
     return content
 

@@ -355,6 +355,7 @@ graph TB
     DefaultTools --> WebFetch[Web Fetch<br/>web_fetch.py]
     DefaultTools --> DirOps[Directory Operations<br/>list_dir.py]
     DefaultTools --> SearchOp[Search Files<br/>search_files.py]
+    DefaultTools --> PipTools[Package Management<br/>pip_install/pip_list]
 
     SubagentTool --> ChildProcess[Child Ralph Process<br/>fork/exec]
 
@@ -901,7 +902,7 @@ graph TB
 ### Python Tools (1 tool + file-based tools)
 - **`python`**: Execute arbitrary Python code with embedded interpreter
 
-### Python File Tools (9 tools loaded from `~/.local/ralph/tools/`)
+### Python File Tools (11 tools loaded from `~/.local/ralph/tools/`)
 - **`read_file`**: Read file contents
 - **`write_file`**: Write content to file
 - **`append_file`**: Append content to file
@@ -911,6 +912,8 @@ graph TB
 - **`apply_delta`**: Apply unified diff to file
 - **`shell`**: Execute shell commands
 - **`web_fetch`**: Fetch web content
+- **`pip_install`**: Install pure-Python packages from PyPI (py3-none-any wheels only)
+- **`pip_list`**: List installed Python packages from site-packages
 
 ### Subagent Tools (2 tools)
 - **`subagent`**: Spawn a child ralph process for parallel task execution
@@ -975,6 +978,9 @@ src/
 │       ├── python_tool.c/h     # Embedded Python interpreter
 │       ├── python_tool_files.c/h # Python file-based tools
 │       ├── python_extension.c/h  # Tool extension interface for Python
+│       ├── http_python.c/h     # Python extension for C HTTP client (_ralph_http module)
+│       ├── verified_file_python.c/h # Python extension for verified I/O
+│       ├── sys_python.c/h      # Python extension for system info (_ralph_sys module)
 │       └── python_defaults/    # Default Python tool files
 │           ├── read_file.py
 │           ├── write_file.py
@@ -984,7 +990,9 @@ src/
 │           ├── search_files.py
 │           ├── apply_delta.py
 │           ├── shell.py
-│           └── web_fetch.py
+│           ├── web_fetch.py
+│           ├── pip_install.py
+│           └── pip_list.py
 ├── scaffold/               # Scaffold CLI (full agent + orchestrator)
 │   └── main.c              # Entry point (REPL, one-shot, --supervisor, --worker, --check-update, --update)
 lib/
@@ -1048,7 +1056,6 @@ lib/
 │   ├── streaming.c/h       # SSE streaming infrastructure
 │   ├── api_error.c/h       # Enhanced error handling with retries
 │   ├── embedded_cacert.c/h # Embedded Mozilla CA certificate bundle
-│   ├── http_python.c/h     # Python extension for C HTTP client (_ralph_http module)
 │   └── image_attachment.c/h # Image attachment parsing (@path to base64)
 ├── policy/                 # Approval gate system
 │   ├── approval_gate.c/h   # Core approval orchestration

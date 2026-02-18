@@ -27,6 +27,7 @@
  * The module provides:
  *   - get(url, headers=None, timeout=30) -> dict
  *   - post(url, data, headers=None, timeout=30) -> dict
+ *   - download(url, dest_path, headers=None, timeout=300) -> dict
  *
  * @return 0 on success, -1 on failure
  */
