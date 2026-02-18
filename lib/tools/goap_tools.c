@@ -346,14 +346,23 @@ int execute_goap_create_goal(const ToolCall *tc, ToolResult *result) {
     int rc = goal_store_insert(store, name, description, goal_state_str, queue_name, goal_id);
 
     if (rc == 0) {
+        const char *status_str = "planning";
         cJSON *persistent = cJSON_GetObjectItem(args, "persistent");
-        if (cJSON_IsTrue(persistent))
-            goal_store_update_status(store, goal_id, GOAL_STATUS_ACTIVE);
+        if (cJSON_IsTrue(persistent)) {
+            if (goal_store_update_status(store, goal_id, GOAL_STATUS_ACTIVE) != 0) {
+                tool_result_set_error(result, "Goal created but failed to set active status");
+                free(goal_state_str);
+                cJSON_Delete(args);
+                return 0;
+            }
+            status_str = "active";
+        }
 
         cJSON *resp = cJSON_CreateObject();
         cJSON_AddBoolToObject(resp, "success", cJSON_True);
         cJSON_AddStringToObject(resp, "goal_id", goal_id);
         cJSON_AddStringToObject(resp, "queue_name", queue_name);
+        cJSON_AddStringToObject(resp, "status", status_str);
         result->result = cJSON_PrintUnformatted(resp);
         result->success = 1;
         cJSON_Delete(resp);
@@ -840,19 +849,22 @@ int execute_goap_update_world_state(const ToolCall *tc, ToolResult *result) {
     int rc = goal_store_update_world_state(gs, goal_id, new_ws);
 
     if (rc == 0) {
-        char *summary_str = extract_string_param(tc->arguments, "summary");
-        if (summary_str) {
-            goal_store_update_summary(gs, goal_id, summary_str);
-            free(summary_str);
-        }
+        const char *summary_str = cJSON_GetStringValue(cJSON_GetObjectItem(args, "summary"));
+        int summary_ok = !summary_str ||
+            goal_store_update_summary(gs, goal_id, summary_str) == 0;
 
-        cJSON *resp = cJSON_CreateObject();
-        cJSON_AddBoolToObject(resp, "success", cJSON_True);
-        /* cJSON_AddItemToObject transfers ownership of world_state */
-        cJSON_AddItemToObject(resp, "world_state", world_state);
-        result->result = cJSON_PrintUnformatted(resp);
-        result->success = 1;
-        cJSON_Delete(resp); /* also frees world_state */
+        if (summary_ok) {
+            cJSON *resp = cJSON_CreateObject();
+            cJSON_AddBoolToObject(resp, "success", cJSON_True);
+            /* cJSON_AddItemToObject transfers ownership of world_state */
+            cJSON_AddItemToObject(resp, "world_state", world_state);
+            result->result = cJSON_PrintUnformatted(resp);
+            result->success = 1;
+            cJSON_Delete(resp); /* also frees world_state */
+        } else {
+            tool_result_set_error(result, "World state updated but failed to save summary");
+            cJSON_Delete(world_state);
+        }
     } else {
         tool_result_set_error(result, "Failed to update world state");
         cJSON_Delete(world_state);
