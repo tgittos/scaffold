@@ -199,6 +199,9 @@ def _version_key(version_str):
                     parts.append((_PRE_RELEASE.get(tag, -1), tag_num))
                 else:
                     parts.append((-5, rest))
+            else:
+                # Stable release: sentinel sorts above all pre-release tags
+                parts.append((0, 0))
         else:
             parts.append((-5, segment))
     return tuple(parts)

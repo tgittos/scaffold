@@ -350,6 +350,222 @@ void test_python_tool_docstring_parsing(void) {
     python_cleanup_tool_files();
 }
 
+// Test that _ralph_sys module is importable and returns correct types
+void test_sys_module_accessible(void) {
+    PythonExecutionParams params = {0};
+    params.code = strdup(
+        "import _ralph_sys\n"
+        "h = _ralph_sys.get_app_home()\n"
+        "assert isinstance(h, str), f'expected str, got {type(h)}'\n"
+        "p = _ralph_sys.get_executable_path()\n"
+        "assert p is None or isinstance(p, str)\n"
+        "print('passed')\n"
+    );
+    params.timeout_seconds = PYTHON_DEFAULT_TIMEOUT;
+
+    PythonExecutionResult result = {0};
+    int ret = execute_python_code(&params, &result);
+
+    TEST_ASSERT_EQUAL_INT(0, ret);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, result.success,
+        result.exception ? result.exception : "sys module test failed");
+    TEST_ASSERT_NOT_NULL(result.stdout_output);
+    TEST_ASSERT_NOT_NULL(strstr(result.stdout_output, "passed"));
+
+    cleanup_python_params(&params);
+    cleanup_python_result(&result);
+}
+
+// Test that _version_key orders stable releases above pre-releases
+void test_pip_version_key_ordering(void) {
+    PythonExecutionParams params = {0};
+    params.code = strdup(
+        "_ns = {}\n"
+        "with open('/zip/python_defaults/pip_install.py', 'r') as f:\n"
+        "    exec(f.read(), _ns)\n"
+        "_vk = _ns['_version_key']\n"
+        "# Stable > pre-release\n"
+        "assert _vk('1.0.0') > _vk('1.0.0rc1'), '1.0.0 > 1.0.0rc1'\n"
+        "assert _vk('1.0.0') > _vk('1.0.0b1'), '1.0.0 > 1.0.0b1'\n"
+        "assert _vk('1.0.0') > _vk('1.0.0a1'), '1.0.0 > 1.0.0a1'\n"
+        "assert _vk('1.0.0') > _vk('1.0.0dev1'), '1.0.0 > 1.0.0dev1'\n"
+        "# rc > beta > alpha > dev\n"
+        "assert _vk('1.0.0rc1') > _vk('1.0.0b1'), 'rc > beta'\n"
+        "assert _vk('1.0.0b1') > _vk('1.0.0a1'), 'beta > alpha'\n"
+        "assert _vk('1.0.0a1') > _vk('1.0.0dev1'), 'alpha > dev'\n"
+        "# Higher version > lower\n"
+        "assert _vk('2.0.0') > _vk('1.9.9'), '2.0.0 > 1.9.9'\n"
+        "assert _vk('1.1.0') > _vk('1.0.9'), '1.1.0 > 1.0.9'\n"
+        "print('passed')\n"
+    );
+    params.timeout_seconds = PYTHON_DEFAULT_TIMEOUT;
+
+    PythonExecutionResult result = {0};
+    int ret = execute_python_code(&params, &result);
+
+    TEST_ASSERT_EQUAL_INT(0, ret);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, result.success,
+        result.exception ? result.exception : "version_key ordering failed");
+    TEST_ASSERT_NOT_NULL(result.stdout_output);
+    TEST_ASSERT_NOT_NULL(strstr(result.stdout_output, "passed"));
+
+    cleanup_python_params(&params);
+    cleanup_python_result(&result);
+}
+
+// Test that _find_best_wheel selects py3-none-any and rejects native wheels
+void test_pip_find_best_wheel(void) {
+    PythonExecutionParams params = {0};
+    params.code = strdup(
+        "_ns = {}\n"
+        "with open('/zip/python_defaults/pip_install.py', 'r') as f:\n"
+        "    exec(f.read(), _ns)\n"
+        "_fbw = _ns['_find_best_wheel']\n"
+        "\n"
+        "# Synthetic PyPI simple HTML for six\n"
+        "six_html = (\n"
+        "    '<a href=\"https://files.pythonhosted.org/six-1.16.0-py2.py3-none-any.whl#sha256=abc\">six-1.16.0-py2.py3-none-any.whl</a>\\n'\n"
+        "    '<a href=\"https://files.pythonhosted.org/six-1.15.0-py2.py3-none-any.whl#sha256=def\">six-1.15.0-py2.py3-none-any.whl</a>\\n'\n"
+        ")\n"
+        "\n"
+        "# Should pick latest pure-python wheel\n"
+        "url, fname = _fbw(six_html, 'six', None)\n"
+        "assert url is not None, 'should find a wheel'\n"
+        "assert 'six-1.16.0' in fname, f'expected 1.16.0, got {fname}'\n"
+        "assert '#' not in url, 'URL should have fragment stripped'\n"
+        "\n"
+        "# With specific version\n"
+        "url2, fname2 = _fbw(six_html, 'six', '1.15.0')\n"
+        "assert '1.15.0' in fname2, f'expected 1.15.0, got {fname2}'\n"
+        "\n"
+        "# PyPI page for numpy: only native wheels, no py3-none-any\n"
+        "numpy_html = (\n"
+        "    '<a href=\"https://files.pythonhosted.org/numpy-1.26.0-cp312-cp312-linux_x86_64.whl#sha256=ghi\">numpy-1.26.0-cp312-cp312-linux_x86_64.whl</a>\\n'\n"
+        "    '<a href=\"https://files.pythonhosted.org/numpy-1.26.0-cp312-cp312-macosx_14_0_arm64.whl#sha256=jkl\">numpy-1.26.0-cp312-cp312-macosx_14_0_arm64.whl</a>\\n'\n"
+        ")\n"
+        "url3, _ = _fbw(numpy_html, 'numpy', None)\n"
+        "assert url3 is None, 'numpy should have no compatible wheel'\n"
+        "\n"
+        "print('passed')\n"
+    );
+    params.timeout_seconds = PYTHON_DEFAULT_TIMEOUT;
+
+    PythonExecutionResult result = {0};
+    int ret = execute_python_code(&params, &result);
+
+    TEST_ASSERT_EQUAL_INT(0, ret);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, result.success,
+        result.exception ? result.exception : "find_best_wheel test failed");
+    TEST_ASSERT_NOT_NULL(result.stdout_output);
+    TEST_ASSERT_NOT_NULL(strstr(result.stdout_output, "passed"));
+
+    cleanup_python_params(&params);
+    cleanup_python_result(&result);
+}
+
+// Test that _safe_extractall rejects zip entries with path traversal
+void test_pip_safe_extractall_rejects_traversal(void) {
+    PythonExecutionParams params = {0};
+    params.code = strdup(
+        "_ns = {}\n"
+        "with open('/zip/python_defaults/pip_install.py', 'r') as f:\n"
+        "    exec(f.read(), _ns)\n"
+        "_safe = _ns['_safe_extractall']\n"
+        "\n"
+        "import zipfile, io, tempfile, os\n"
+        "\n"
+        "# Create a zip with a path-traversal entry\n"
+        "buf = io.BytesIO()\n"
+        "with zipfile.ZipFile(buf, 'w') as zf:\n"
+        "    zf.writestr('../../../tmp/evil.txt', 'malicious')\n"
+        "buf.seek(0)\n"
+        "\n"
+        "with tempfile.TemporaryDirectory() as tmpdir:\n"
+        "    with zipfile.ZipFile(buf, 'r') as zf:\n"
+        "        errors = []\n"
+        "        ok = _safe(zf, tmpdir, errors)\n"
+        "        assert ok == False, f'expected False, got {ok}'\n"
+        "        assert len(errors) > 0, 'should have error'\n"
+        "        assert 'Unsafe path' in errors[0], f'unexpected error: {errors[0]}'\n"
+        "\n"
+        "# Create a zip with safe entries\n"
+        "buf2 = io.BytesIO()\n"
+        "with zipfile.ZipFile(buf2, 'w') as zf:\n"
+        "    zf.writestr('pkg/module.py', 'x = 1')\n"
+        "buf2.seek(0)\n"
+        "\n"
+        "with tempfile.TemporaryDirectory() as tmpdir:\n"
+        "    with zipfile.ZipFile(buf2, 'r') as zf:\n"
+        "        errors = []\n"
+        "        ok = _safe(zf, tmpdir, errors)\n"
+        "        assert ok == True, f'expected True, got {ok}'\n"
+        "        assert len(errors) == 0, f'unexpected errors: {errors}'\n"
+        "        assert os.path.exists(os.path.join(tmpdir, 'pkg', 'module.py'))\n"
+        "\n"
+        "print('passed')\n"
+    );
+    params.timeout_seconds = PYTHON_DEFAULT_TIMEOUT;
+
+    PythonExecutionResult result = {0};
+    int ret = execute_python_code(&params, &result);
+
+    TEST_ASSERT_EQUAL_INT(0, ret);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, result.success,
+        result.exception ? result.exception : "safe_extractall test failed");
+    TEST_ASSERT_NOT_NULL(result.stdout_output);
+    TEST_ASSERT_NOT_NULL(strstr(result.stdout_output, "passed"));
+
+    cleanup_python_params(&params);
+    cleanup_python_result(&result);
+}
+
+// Test pip_list with an empty site-packages directory
+void test_pip_list_empty_site_packages(void) {
+    PythonExecutionParams params = {0};
+    params.code = strdup(
+        "_ns = {}\n"
+        "with open('/zip/python_defaults/pip_list.py', 'r') as f:\n"
+        "    exec(f.read(), _ns)\n"
+        "_pip_list = _ns['pip_list']\n"
+        "\n"
+        "import tempfile, os\n"
+        "# Mock _ralph_sys to return a temp dir as app home\n"
+        "d = tempfile.mkdtemp()\n"
+        "sp = os.path.join(d, 'site-packages')\n"
+        "os.makedirs(sp)\n"
+        "\n"
+        "import types\n"
+        "mock_sys = types.ModuleType('_ralph_sys')\n"
+        "mock_sys.get_app_home = lambda: d\n"
+        "import sys\n"
+        "sys.modules['_ralph_sys'] = mock_sys\n"
+        "\n"
+        "result = _pip_list()\n"
+        "assert result['count'] == 0, f'expected 0, got {result[\"count\"]}'\n"
+        "assert result['packages'] == [], f'expected [], got {result[\"packages\"]}'\n"
+        "\n"
+        "# Clean up\n"
+        "os.rmdir(sp)\n"
+        "os.rmdir(d)\n"
+        "del sys.modules['_ralph_sys']\n"
+        "\n"
+        "print('passed')\n"
+    );
+    params.timeout_seconds = PYTHON_DEFAULT_TIMEOUT;
+
+    PythonExecutionResult result = {0};
+    int ret = execute_python_code(&params, &result);
+
+    TEST_ASSERT_EQUAL_INT(0, ret);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, result.success,
+        result.exception ? result.exception : "pip_list empty test failed");
+    TEST_ASSERT_NOT_NULL(result.stdout_output);
+    TEST_ASSERT_NOT_NULL(strstr(result.stdout_output, "passed"));
+
+    cleanup_python_params(&params);
+    cleanup_python_result(&result);
+}
+
 int main(void) {
     // Initialize ralph home before Python interpreter (needed for tool files path)
     app_home_init(NULL);
@@ -375,6 +591,11 @@ int main(void) {
     RUN_TEST(test_python_stdlib_math);
     RUN_TEST(test_shell_tool_exit_code_propagates);
     RUN_TEST(test_python_tool_docstring_parsing);
+    RUN_TEST(test_sys_module_accessible);
+    RUN_TEST(test_pip_version_key_ordering);
+    RUN_TEST(test_pip_find_best_wheel);
+    RUN_TEST(test_pip_safe_extractall_rejects_traversal);
+    RUN_TEST(test_pip_list_empty_site_packages);
 
     int result = UNITY_END();
 
