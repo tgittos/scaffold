@@ -334,6 +334,7 @@ $(eval $(call def_test_lib,context_mode_injection,agent/test_context_mode_inject
 $(eval $(call def_test_lib,python_tool,tools/test_python_tool,$(TOOL_SOURCES)))
 $(eval $(call def_test_lib,python_integration,tools/test_python_integration,$(TOOL_SOURCES)))
 $(eval $(call def_test_lib,http_python,network/test_http_python,$(SRCDIR)/ralph/tools/http_python.c))
+$(eval $(call def_test_lib,sys_python,tools/test_sys_python,$(SRCDIR)/ralph/tools/sys_python.c))
 $(eval $(call def_test_lib,image_attachment,network/test_image_attachment,))
 $(eval $(call def_test_lib,goap_tools,tools/test_goap_tools,))
 $(eval $(call def_test_lib,orchestrator_tool,tools/test_orchestrator_tool,))
@@ -393,6 +394,10 @@ $(TEST_http_python_TARGET): $(TEST_http_python_OBJECTS) $(LIBAGENT) $(ALL_LIBS)
 	$(CXX) -o $@ $(TEST_http_python_OBJECTS) $(LIBAGENT) $(LIBS_STANDARD)
 	$(PYTHON_TEST_EMBED)
 
+$(TEST_sys_python_TARGET): $(TEST_sys_python_OBJECTS) $(LIBAGENT) $(ALL_LIBS)
+	$(CXX) -o $@ $(TEST_sys_python_OBJECTS) $(LIBAGENT) $(LIBS_STANDARD)
+	$(PYTHON_TEST_EMBED)
+
 # =============================================================================
 # FLAT HEADER + STATIC LIBRARY LINKAGE TEST
 # =============================================================================
@@ -434,7 +439,7 @@ check: test
 # threads (message_poller, async_executor), tools_system/ralph (python_interpreter_init),
 # recap (uses timeout + SIGPIPE)
 VALGRIND_EXCLUDED := $(TEST_http_TARGET) $(TEST_python_tool_TARGET) $(TEST_python_integration_TARGET) \
-    $(TEST_http_python_TARGET) \
+    $(TEST_http_python_TARGET) $(TEST_sys_python_TARGET) \
     $(TEST_tools_system_TARGET) $(TEST_ralph_TARGET) $(TEST_recap_TARGET) \
     $(TEST_subagent_tool_TARGET) $(TEST_message_poller_TARGET) $(TEST_async_executor_TARGET) \
     $(TEST_parallel_batch_TARGET) $(TEST_orchestrator_TARGET)

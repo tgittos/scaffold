@@ -173,6 +173,75 @@ void test_post_returns_dict(void) {
     TEST_ASSERT_EQUAL_STRING("False", get_python_str("_r6_ok"));
 }
 
+void test_download_function_exists(void) {
+    PyObject *module = PyImport_ImportModule("_ralph_http");
+    TEST_ASSERT_NOT_NULL(module);
+
+    PyObject *func = PyObject_GetAttrString(module, "download");
+    TEST_ASSERT_NOT_NULL_MESSAGE(func, "download function not found");
+    TEST_ASSERT_TRUE(PyCallable_Check(func));
+
+    Py_DECREF(func);
+    Py_DECREF(module);
+}
+
+void test_download_missing_args_raises_type_error(void) {
+    PyObject *result = run_python(
+        "import _ralph_http\n"
+        "try:\n"
+        "    _ralph_http.download()\n"
+        "    _rd1 = 'no_error'\n"
+        "except TypeError:\n"
+        "    _rd1 = 'type_error'\n"
+        "except Exception as e:\n"
+        "    _rd1 = str(type(e))\n"
+    );
+    TEST_ASSERT_NOT_NULL(result);
+    Py_XDECREF(result);
+    TEST_ASSERT_EQUAL_STRING("type_error", get_python_str("_rd1"));
+}
+
+void test_download_missing_dest_raises_type_error(void) {
+    PyObject *result = run_python(
+        "import _ralph_http\n"
+        "try:\n"
+        "    _ralph_http.download('http://example.com')\n"
+        "    _rd2 = 'no_error'\n"
+        "except TypeError:\n"
+        "    _rd2 = 'type_error'\n"
+        "except Exception as e:\n"
+        "    _rd2 = str(type(e))\n"
+    );
+    TEST_ASSERT_NOT_NULL(result);
+    Py_XDECREF(result);
+    TEST_ASSERT_EQUAL_STRING("type_error", get_python_str("_rd2"));
+}
+
+void test_download_returns_dict_with_expected_keys(void) {
+    PyObject *result = run_python(
+        "import _ralph_http, tempfile, os\n"
+        "d = tempfile.mkdtemp()\n"
+        "dest = os.path.join(d, 'out.tmp')\n"
+        "r = _ralph_http.download('http://127.0.0.1:1/', dest, timeout=1)\n"
+        "_rd3_type = type(r).__name__\n"
+        "_rd3_has_ok = 'ok' in r\n"
+        "_rd3_has_bw = 'bytes_written' in r\n"
+        "_rd3_has_path = 'path' in r\n"
+        "_rd3_ok = str(r['ok'])\n"
+        "if os.path.exists(dest): os.unlink(dest)\n"
+        "os.rmdir(d)\n"
+    );
+    TEST_ASSERT_NOT_NULL(result);
+    Py_XDECREF(result);
+    TEST_ASSERT_EQUAL_STRING("dict", get_python_str("_rd3_type"));
+    TEST_ASSERT_EQUAL_STRING("False", get_python_str("_rd3_ok"));
+
+    PyObject *main_dict = PyModule_GetDict(PyImport_AddModule("__main__"));
+    TEST_ASSERT_TRUE(PyObject_IsTrue(PyDict_GetItemString(main_dict, "_rd3_has_ok")));
+    TEST_ASSERT_TRUE(PyObject_IsTrue(PyDict_GetItemString(main_dict, "_rd3_has_bw")));
+    TEST_ASSERT_TRUE(PyObject_IsTrue(PyDict_GetItemString(main_dict, "_rd3_has_path")));
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_module_imports);
@@ -184,6 +253,10 @@ int main(void) {
     RUN_TEST(test_get_bad_headers_type_raises_type_error);
     RUN_TEST(test_get_returns_dict_with_expected_keys);
     RUN_TEST(test_post_returns_dict);
+    RUN_TEST(test_download_function_exists);
+    RUN_TEST(test_download_missing_args_raises_type_error);
+    RUN_TEST(test_download_missing_dest_raises_type_error);
+    RUN_TEST(test_download_returns_dict_with_expected_keys);
 
     if (python_initialized) {
         Py_Finalize();
