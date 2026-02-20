@@ -667,6 +667,115 @@ void test_channel_has_pending_multiple_channels(void) {
     TEST_ASSERT_EQUAL(1, pending);
 }
 
+/* --- message_list_between_latest tests --- */
+
+void test_list_between_latest_returns_newest(void) {
+    char ids[10][40];
+    memset(ids, 0, sizeof(ids));
+    for (int i = 0; i < 10; i++) {
+        char content[32];
+        snprintf(content, sizeof(content), "Message %d", i);
+        message_send_direct(g_store, "alice", "bob", content, 0, ids[i]);
+    }
+
+    size_t count = 0;
+    int has_more = 0;
+    DirectMessage** msgs = message_list_between_latest(g_store, "alice", "bob",
+                                                        NULL, 3, &count, &has_more);
+    TEST_ASSERT_NOT_NULL(msgs);
+    TEST_ASSERT_EQUAL(3, count);
+    TEST_ASSERT_EQUAL(1, has_more);
+
+    /* Should be the last 3 messages in ASC order */
+    TEST_ASSERT_EQUAL_STRING("Message 7", msgs[0]->content);
+    TEST_ASSERT_EQUAL_STRING("Message 8", msgs[1]->content);
+    TEST_ASSERT_EQUAL_STRING("Message 9", msgs[2]->content);
+
+    direct_message_free_list(msgs, count);
+}
+
+void test_list_between_latest_before_cursor(void) {
+    char ids[10][40];
+    memset(ids, 0, sizeof(ids));
+    for (int i = 0; i < 10; i++) {
+        char content[32];
+        snprintf(content, sizeof(content), "Message %d", i);
+        message_send_direct(g_store, "alice", "bob", content, 0, ids[i]);
+    }
+
+    /* First: get the latest 3 */
+    size_t count1 = 0;
+    int has_more1 = 0;
+    DirectMessage** msgs1 = message_list_between_latest(g_store, "alice", "bob",
+                                                         NULL, 3, &count1, &has_more1);
+    TEST_ASSERT_EQUAL(3, count1);
+    TEST_ASSERT_EQUAL(1, has_more1);
+
+    /* Use the oldest returned ID as before_id to get the next older batch */
+    char before_id[40] = {0};
+    snprintf(before_id, sizeof(before_id), "%s", msgs1[0]->id);
+    direct_message_free_list(msgs1, count1);
+
+    size_t count2 = 0;
+    int has_more2 = 0;
+    DirectMessage** msgs2 = message_list_between_latest(g_store, "alice", "bob",
+                                                         before_id, 3, &count2, &has_more2);
+    TEST_ASSERT_NOT_NULL(msgs2);
+    TEST_ASSERT_EQUAL(3, count2);
+    TEST_ASSERT_EQUAL(1, has_more2);
+
+    TEST_ASSERT_EQUAL_STRING("Message 4", msgs2[0]->content);
+    TEST_ASSERT_EQUAL_STRING("Message 5", msgs2[1]->content);
+    TEST_ASSERT_EQUAL_STRING("Message 6", msgs2[2]->content);
+
+    direct_message_free_list(msgs2, count2);
+}
+
+void test_list_between_latest_exhausted(void) {
+    char id[40] = {0};
+    message_send_direct(g_store, "alice", "bob", "One", 0, id);
+    message_send_direct(g_store, "alice", "bob", "Two", 0, id);
+    message_send_direct(g_store, "alice", "bob", "Three", 0, id);
+
+    size_t count = 0;
+    int has_more = 0;
+    DirectMessage** msgs = message_list_between_latest(g_store, "alice", "bob",
+                                                        NULL, 5, &count, &has_more);
+    TEST_ASSERT_NOT_NULL(msgs);
+    TEST_ASSERT_EQUAL(3, count);
+    TEST_ASSERT_EQUAL(0, has_more);
+
+    TEST_ASSERT_EQUAL_STRING("One", msgs[0]->content);
+    TEST_ASSERT_EQUAL_STRING("Two", msgs[1]->content);
+    TEST_ASSERT_EQUAL_STRING("Three", msgs[2]->content);
+
+    direct_message_free_list(msgs, count);
+}
+
+void test_list_between_latest_nonexistent_cursor(void) {
+    char id[40] = {0};
+    message_send_direct(g_store, "alice", "bob", "Only message", 0, id);
+
+    size_t count = 0;
+    int has_more = 0;
+    DirectMessage** msgs = message_list_between_latest(g_store, "alice", "bob",
+                                                        "nonexistent-cursor-id", 10,
+                                                        &count, &has_more);
+    TEST_ASSERT_NULL(msgs);
+    TEST_ASSERT_EQUAL(0, count);
+    TEST_ASSERT_EQUAL(0, has_more);
+}
+
+void test_list_between_latest_empty(void) {
+    size_t count = 0;
+    int has_more = 0;
+    DirectMessage** msgs = message_list_between_latest(g_store, "alice", "bob",
+                                                        NULL, 10, &count, &has_more);
+    TEST_ASSERT_NULL(msgs);
+    TEST_ASSERT_EQUAL(0, count);
+    TEST_ASSERT_EQUAL(0, has_more);
+}
+
 int main(void) {
     UNITY_BEGIN();
 
@@ -717,6 +826,12 @@ int main(void) {
     RUN_TEST(test_list_between_nonexistent_cursor);
     RUN_TEST(test_list_between_excludes_other_conversations);
     RUN_TEST(test_list_between_reversed_agents);
+
+    RUN_TEST(test_list_between_latest_returns_newest);
+    RUN_TEST(test_list_between_latest_before_cursor);
+    RUN_TEST(test_list_between_latest_exhausted);
+    RUN_TEST(test_list_between_latest_empty);
+    RUN_TEST(test_list_between_latest_nonexistent_cursor);
 
     RUN_TEST(test_channel_has_pending_no_subscriptions);
     RUN_TEST(test_channel_has_pending_no_messages);
