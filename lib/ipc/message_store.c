@@ -336,6 +336,63 @@ DirectMessage **message_list_between(message_store_t *store,
     return (DirectMessage **)items;
 }
 
+/* Latest-first conversation listing */
+DirectMessage **message_list_between_latest(message_store_t *store,
+                                             const char *agent1, const char *agent2,
+                                             const char *before_id, size_t limit,
+                                             size_t *out_count, int *out_has_more) {
+    if (!store || !agent1 || !agent2 || !out_count || !out_has_more) return NULL;
+    *out_count = 0;
+    *out_has_more = 0;
+
+    int actual_limit = limit > 0 ? (int)limit : 100;
+    ListBetweenParams params = {
+        .agent1 = agent1,
+        .agent2 = agent2,
+        .after_id = before_id,
+        .limit = actual_limit + 1
+    };
+
+    void **items = NULL;
+    size_t count = 0;
+    int rc;
+
+    if (before_id) {
+        rc = sqlite_dal_query_list_p(store->dal,
+            "SELECT id, sender_id, recipient_id, content, created_at, read_at, expires_at FROM ("
+            "  SELECT rowid, id, sender_id, recipient_id, content, created_at, read_at, expires_at"
+            "  FROM direct_messages"
+            "  WHERE ((sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?))"
+            "    AND rowid < (SELECT rowid FROM direct_messages WHERE id = ?)"
+            "  ORDER BY rowid DESC LIMIT ?"
+            ") sub ORDER BY rowid ASC;",
+            bind_list_between_cursor, &params, map_direct_message,
+            (sqlite_item_free_t)direct_message_free, NULL, &items, &count);
+    } else {
+        rc = sqlite_dal_query_list_p(store->dal,
+            "SELECT id, sender_id, recipient_id, content, created_at, read_at, expires_at FROM ("
+            "  SELECT rowid, id, sender_id, recipient_id, content, created_at, read_at, expires_at"
+            "  FROM direct_messages"
+            "  WHERE ((sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?))"
+            "  ORDER BY rowid DESC LIMIT ?"
+            ") sub ORDER BY rowid ASC;",
+            bind_list_between, &params, map_direct_message,
+            (sqlite_item_free_t)direct_message_free, NULL, &items, &count);
+    }
+
+    if (rc != 0 || count == 0) return NULL;
+
+    if ((int)count > actual_limit) {
+        *out_has_more = 1;
+        direct_message_free((DirectMessage *)items[0]);
+        memmove(items, items + 1, (count - 1) * sizeof(void *));
+        count--;
+    }
+
+    *out_count = count;
+    return (DirectMessage **)items;
+}
+
 /* Peek/consume operations */
 static void *map_pending_message(sqlite3_stmt *stmt, void *user_data) {
     (void)user_data;

@@ -85,6 +85,16 @@ DirectMessage** message_list_between(message_store_t* store,
                                      const char* after_id, size_t limit,
                                      size_t* out_count);
 
+/* Latest-first conversation history. Returns the newest `limit` messages in ASC order.
+   When before_id is non-NULL, returns messages older than that ID.
+   out_has_more is set to 1 if older messages exist beyond this batch.
+   Does NOT mark messages as read.
+   Caller owns returned array and must free with direct_message_free_list(). */
+DirectMessage** message_list_between_latest(message_store_t* store,
+                                             const char* agent1, const char* agent2,
+                                             const char* before_id, size_t limit,
+                                             size_t* out_count, int* out_has_more);
+
 /* Peek at the oldest unread message for recipient WITHOUT marking it as read. */
 /* Caller owns returned message and must free with pending_message_free(). */
 PendingMessage* message_peek_pending(message_store_t* store, const char* recipient);
