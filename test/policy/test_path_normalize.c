@@ -144,15 +144,15 @@ void test_normalize_path_basename_env_local(void) {
     free_normalized_path(np);
 }
 
-void test_normalize_path_basename_ralph_config(void) {
-    NormalizedPath *np = normalize_path("/project/ralph.config.json");
+void test_normalize_path_basename_scaffold_config(void) {
+    NormalizedPath *np = normalize_path("/project/scaffold.config.json");
     TEST_ASSERT_NOT_NULL(np);
-    TEST_ASSERT_EQUAL_STRING("ralph.config.json", np->basename);
+    TEST_ASSERT_EQUAL_STRING("scaffold.config.json", np->basename);
     free_normalized_path(np);
 }
 
-void test_normalize_path_basename_dot_ralph_config(void) {
-    NormalizedPath *np = normalize_path("/home/.ralph/config.json");
+void test_normalize_path_basename_dot_scaffold_config(void) {
+    NormalizedPath *np = normalize_path("/home/.scaffold/config.json");
     TEST_ASSERT_NOT_NULL(np);
     TEST_ASSERT_EQUAL_STRING("config.json", np->basename);
     free_normalized_path(np);
@@ -259,7 +259,7 @@ void test_normalize_path_posix_env_case_sensitive(void) {
 void test_path_basename_cmp_equal(void) {
     TEST_ASSERT_EQUAL(0, path_basename_cmp("file.txt", "file.txt"));
     TEST_ASSERT_EQUAL(0, path_basename_cmp(".env", ".env"));
-    TEST_ASSERT_EQUAL(0, path_basename_cmp("ralph.config.json", "ralph.config.json"));
+    TEST_ASSERT_EQUAL(0, path_basename_cmp("scaffold.config.json", "scaffold.config.json"));
 }
 
 void test_path_basename_cmp_not_equal(void) {
@@ -277,13 +277,13 @@ void test_path_basename_cmp_null(void) {
 void test_path_basename_cmp_windows_case_insensitive(void) {
     TEST_ASSERT_EQUAL(0, path_basename_cmp("FILE.TXT", "file.txt"));
     TEST_ASSERT_EQUAL(0, path_basename_cmp(".ENV", ".env"));
-    TEST_ASSERT_EQUAL(0, path_basename_cmp("Ralph.Config.JSON", "ralph.config.json"));
+    TEST_ASSERT_EQUAL(0, path_basename_cmp("Scaffold.Config.JSON", "scaffold.config.json"));
 }
 #else
 void test_path_basename_cmp_posix_case_sensitive(void) {
     TEST_ASSERT_NOT_EQUAL(0, path_basename_cmp("FILE.TXT", "file.txt"));
     TEST_ASSERT_NOT_EQUAL(0, path_basename_cmp(".ENV", ".env"));
-    TEST_ASSERT_NOT_EQUAL(0, path_basename_cmp("Ralph.Config.JSON", "ralph.config.json"));
+    TEST_ASSERT_NOT_EQUAL(0, path_basename_cmp("Scaffold.Config.JSON", "scaffold.config.json"));
 }
 #endif
 
@@ -403,8 +403,8 @@ int main(void) {
     /* Basename extraction tests */
     RUN_TEST(test_normalize_path_basename_env_file);
     RUN_TEST(test_normalize_path_basename_env_local);
-    RUN_TEST(test_normalize_path_basename_ralph_config);
-    RUN_TEST(test_normalize_path_basename_dot_ralph_config);
+    RUN_TEST(test_normalize_path_basename_scaffold_config);
+    RUN_TEST(test_normalize_path_basename_dot_scaffold_config);
 
     /* Platform-specific tests */
 #ifdef _WIN32

@@ -141,10 +141,10 @@ graph TB
     %% File System
     ConversationTracker --> FileSystem[File System<br/>CONVERSATION.md]
     PromptLoader --> PromptFile[PROMPT.md]
-    ConfigSystem --> ConfigFile[Config File<br/>ralph.config.json]
-    VectorDBService --> VectorStorage[Vector Storage<br/>~/.local/ralph/]
-    DocumentStore --> DocStorage[Document JSON<br/>~/.local/ralph/documents/]
-    MetadataStore --> MetaStorage[Metadata JSON<br/>~/.local/ralph/metadata/]
+    ConfigSystem --> ConfigFile[Config File<br/>scaffold.config.json]
+    VectorDBService --> VectorStorage[Vector Storage<br/>~/.local/scaffold/]
+    DocumentStore --> DocStorage[Document JSON<br/>~/.local/scaffold/documents/]
+    MetadataStore --> MetaStorage[Metadata JSON<br/>~/.local/scaffold/metadata/]
 
     %% Styling
     classDef coreLayer fill:#e1f5fe
@@ -270,7 +270,7 @@ graph TB
     EmbedRegistry --> LocalEmbed[Local Provider<br/>LMStudio/Ollama]
 
     ConfigSvc --> EnvVars[Environment Variables]
-    ConfigSvc --> ConfigFile[ralph.config.json]
+    ConfigSvc --> ConfigFile[scaffold.config.json]
     ConfigSvc --> APIDetection[API Type Detection]
 ```
 
@@ -314,8 +314,8 @@ graph TB
     Database --> CPPRuntime[C++ Runtime]
 
     Utils -.-> FileSystem[File System]
-    Persistence -.-> JSONStorage[JSON Storage<br/>~/.local/ralph/]
-    Vector -.-> VectorStorage[Vector Storage<br/>~/.local/ralph/]
+    Persistence -.-> JSONStorage[JSON Storage<br/>~/.local/scaffold/]
+    Vector -.-> VectorStorage[Vector Storage<br/>~/.local/scaffold/]
 
     classDef layer fill:#f9f9f9,stroke:#333,stroke-width:2px
     classDef vectorLayer fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
@@ -428,7 +428,7 @@ The Model Context Protocol (MCP) client enables Ralph to connect to external too
 
 ```mermaid
 graph TB
-    MCPClient[MCP Client<br/>mcp_client.c/h] --> ConfigLoader[Config Loader<br/>ralph.config.json]
+    MCPClient[MCP Client<br/>mcp_client.c/h] --> ConfigLoader[Config Loader<br/>scaffold.config.json]
     MCPClient --> ServerManager[Server Manager]
 
     ConfigLoader --> MCPServers[mcpServers Config<br/>Server definitions]
@@ -464,7 +464,7 @@ graph TB
 - **Graceful Degradation**: MCP is optional; Ralph functions without MCP servers configured
 
 ### MCP Configuration
-MCP servers are configured in `ralph.config.json`:
+MCP servers are configured in `scaffold.config.json`:
 ```json
 {
   "mcpServers": {
@@ -706,7 +706,7 @@ graph TB
 
 ### Configuration
 
-Gates are configured in `ralph.config.json`:
+Gates are configured in `scaffold.config.json`:
 ```json
 {
   "approval_gates": {
@@ -725,7 +725,7 @@ Gates are configured in `ralph.config.json`:
 
 ## CLI Commands
 
-Interactive slash commands provide direct access to state inspection without LLM involvement. Commands are registered via `slash_commands.c` — some are always available, others are scaffold-only (registered conditionally based on `app_home_get_app_name()`).
+Interactive slash commands provide direct access to state inspection without LLM involvement. Commands are registered via `slash_commands.c`.
 
 ```mermaid
 graph TB
@@ -772,7 +772,7 @@ graph TB
 | `/agents` | `[subcommand]` | List subagents and supervisors (`show <id>`) |
 | `/model` | `[model_name]` | Switch AI models |
 | `/mode` | `[mode_name]` | Switch behavioral prompt modes |
-| `/goals` | `[subcommand]` | List GOAP goals, show details + action tree (scaffold only) |
+| `/goals` | `[subcommand]` | List GOAP goals, show details + action tree |
 
 ## Embedding Provider Abstraction
 
@@ -828,9 +828,9 @@ graph TB
     subgraph Storage Layer
         VectorDB[Vector Database<br/>vector_db.c/h]
         HNSWLib[HNSWLIB<br/>hnswlib_wrapper.h]
-        DocJSON[Document JSON<br/>~/.local/ralph/documents/]
-        MetaJSON[Metadata JSON<br/>~/.local/ralph/metadata/]
-        IndexFiles[Index Files<br/>~/.local/ralph/*.index]
+        DocJSON[Document JSON<br/>~/.local/scaffold/documents/]
+        MetaJSON[Metadata JSON<br/>~/.local/scaffold/metadata/]
+        IndexFiles[Index Files<br/>~/.local/scaffold/*.index]
     end
 
     MemoryTool --> VectorDBService
@@ -858,10 +858,10 @@ graph TB
 ### Storage Locations
 | Type | Path | Format |
 |------|------|--------|
-| Vector Indices | `~/.local/ralph/*.index` | HNSWLIB binary |
-| Index Metadata | `~/.local/ralph/*.meta` | JSON |
-| Documents | `~/.local/ralph/documents/{index}/doc_{id}.json` | JSON |
-| Chunk Metadata | `~/.local/ralph/metadata/{index}/chunk_{id}.json` | JSON |
+| Vector Indices | `~/.local/scaffold/*.index` | HNSWLIB binary |
+| Index Metadata | `~/.local/scaffold/*.meta` | JSON |
+| Documents | `~/.local/scaffold/documents/{index}/doc_{id}.json` | JSON |
+| Chunk Metadata | `~/.local/scaffold/metadata/{index}/chunk_{id}.json` | JSON |
 
 ### Index Configurations
 | Index Type | Max Elements | M | ef_construction | Use Case |
@@ -902,7 +902,7 @@ graph TB
 ### Python Tools (1 tool + file-based tools)
 - **`python`**: Execute arbitrary Python code with embedded interpreter
 
-### Python File Tools (11 tools loaded from `~/.local/ralph/tools/`)
+### Python File Tools (11 tools loaded from `~/.local/scaffold/tools/`)
 - **`read_file`**: Read file contents
 - **`write_file`**: Write content to file
 - **`append_file`**: Append content to file
@@ -931,7 +931,7 @@ graph TB
 - **`TodoWrite`**: Create, update status/priority, delete, or bulk set todos
 - **`TodoRead`**: List and filter todos by status and priority
 
-### GOAP Tools (9 tools, scaffold mode only)
+### GOAP Tools (9 tools)
 - **`goap_get_goal`**: Read goal details (description, goal state, world state, status)
 - **`goap_list_actions`**: List actions for a goal, optionally filtered by status or parent
 - **`goap_create_goal`**: Create a new goal with goal state assertions; optional `persistent` flag promotes to ACTIVE immediately
@@ -942,7 +942,7 @@ graph TB
 - **`goap_check_complete`**: Check if world_state satisfies goal_state
 - **`goap_get_action_results`**: Read completed action results (truncated for context safety)
 
-### Orchestrator Tools (6 tools, scaffold mode only)
+### Orchestrator Tools (6 tools)
 - **`execute_plan`**: Decompose a plan into GOAP goals and actions with decomposition instructions
 - **`list_goals`**: List all goals with status and world state progress
 - **`goal_status`**: Detailed goal view (world state, action tree, supervisor info)
@@ -961,7 +961,7 @@ graph TB
 
 ## Storage and Persistence
 
-- **Default Storage Location**: `~/.local/ralph/` for all vector database indices
+- **Default Storage Location**: `~/.local/scaffold/` for all vector database indices
 - **Index Configuration**: Separate configurations for memory storage vs document storage
 - **Thread Safety**: Mutex-protected singleton services for concurrent access
 - **Automatic Initialization**: Services initialize automatically on first use
@@ -972,29 +972,27 @@ graph TB
 
 ```
 src/
-├── ralph/                  # Ralph CLI (standalone agent)
-│   ├── main.c              # Entry point (CLI interface, --json, --subagent modes)
-│   └── tools/              # Python tool integration
-│       ├── python_tool.c/h     # Embedded Python interpreter
-│       ├── python_tool_files.c/h # Python file-based tools
-│       ├── python_extension.c/h  # Tool extension interface for Python
-│       ├── http_python.c/h     # Python extension for C HTTP client (_ralph_http module)
-│       ├── verified_file_python.c/h # Python extension for verified I/O
-│       ├── sys_python.c/h      # Python extension for system info (_ralph_sys module)
-│       └── python_defaults/    # Default Python tool files
-│           ├── read_file.py
-│           ├── write_file.py
-│           ├── append_file.py
-│           ├── file_info.py
-│           ├── list_dir.py
-│           ├── search_files.py
-│           ├── apply_delta.py
-│           ├── shell.py
-│           ├── web_fetch.py
-│           ├── pip_install.py
-│           └── pip_list.py
-├── scaffold/               # Scaffold CLI (full agent + orchestrator)
+├── scaffold/               # Scaffold CLI (single binary)
 │   └── main.c              # Entry point (REPL, one-shot, --supervisor, --worker, --check-update, --update)
+├── tools/                  # Python tool integration
+│   ├── python_tool.c/h     # Embedded Python interpreter
+│   ├── python_tool_files.c/h # Python file-based tools
+│   ├── python_extension.c/h  # Tool extension interface for Python
+│   ├── http_python.c/h     # Python extension for C HTTP client (_ralph_http module)
+│   ├── verified_file_python.c/h # Python extension for verified I/O
+│   ├── sys_python.c/h      # Python extension for system info (_ralph_sys module)
+│   └── python_defaults/    # Default Python tool files
+│       ├── read_file.py
+│       ├── write_file.py
+│       ├── append_file.py
+│       ├── file_info.py
+│       ├── list_dir.py
+│       ├── search_files.py
+│       ├── apply_delta.py
+│       ├── shell.py
+│       ├── web_fetch.py
+│       ├── pip_install.py
+│       └── pip_list.py
 lib/
 ├── libagent.h              # Public API for the agent library
 ├── types.h                 # Shared types (ToolCall, ToolResult, StreamingToolUse)
@@ -1099,7 +1097,7 @@ lib/
 │   ├── memory_commands.c/h # /memory slash commands
 │   ├── task_commands.c/h   # /tasks slash commands
 │   ├── agent_commands.c/h  # /agents slash commands (subagents + supervisors)
-│   ├── goal_commands.c/h   # /goals slash commands (scaffold only)
+│   ├── goal_commands.c/h   # /goals slash commands
 │   ├── model_commands.c/h  # /model slash commands
 │   ├── mode_commands.c/h   # /mode slash commands
 │   └── status_line.c/h     # Status info line (tokens, agents, mode, busy state)

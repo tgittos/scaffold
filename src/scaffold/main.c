@@ -14,7 +14,7 @@
 #include "../../lib/util/executable_path.h"
 #include "../../lib/util/app_home.h"
 #include "../../lib/util/config.h"
-#include "../ralph/tools/python_extension.h"
+#include "../tools/python_extension.h"
 #include "build/version.h"
 
 #define MAX_CLI_ALLOW_ENTRIES 64

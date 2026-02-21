@@ -7,7 +7,6 @@
 
 static char original_cwd[1024];
 static char *original_home = NULL;
-static char *original_ralph_home = NULL;
 static char *original_scaffold_home = NULL;
 
 void setUp(void) {
@@ -15,10 +14,6 @@ void setUp(void) {
     const char *home = getenv("HOME");
     if (home) {
         original_home = strdup(home);
-    }
-    const char *ralph_home = getenv("RALPH_HOME");
-    if (ralph_home) {
-        original_ralph_home = strdup(ralph_home);
     }
     const char *scaffold_home = getenv("SCAFFOLD_HOME");
     if (scaffold_home) {
@@ -37,13 +32,6 @@ void tearDown(void) {
         free(original_home);
         original_home = NULL;
     }
-    if (original_ralph_home) {
-        setenv("RALPH_HOME", original_ralph_home, 1);
-        free(original_ralph_home);
-        original_ralph_home = NULL;
-    } else {
-        unsetenv("RALPH_HOME");
-    }
     if (original_scaffold_home) {
         setenv("SCAFFOLD_HOME", original_scaffold_home, 1);
         free(original_scaffold_home);
@@ -53,9 +41,9 @@ void tearDown(void) {
     }
 }
 
-/* Test initialization with no overrides (default path) - defaults to "ralph" */
+/* Test initialization with no overrides (default path) - defaults to "scaffold" */
 void test_init_default_path(void) {
-    unsetenv("RALPH_HOME");
+    unsetenv("SCAFFOLD_HOME");
 
     TEST_ASSERT_EQUAL_INT(0, app_home_init(NULL));
     TEST_ASSERT_EQUAL_INT(1, app_home_is_initialized());
@@ -63,7 +51,7 @@ void test_init_default_path(void) {
     const char *home = app_home_get();
     TEST_ASSERT_NOT_NULL(home);
 
-    const char *suffix = "/.local/ralph";
+    const char *suffix = "/.local/scaffold";
     size_t home_len = strlen(home);
     size_t suffix_len = strlen(suffix);
     TEST_ASSERT_TRUE(home_len > suffix_len);
@@ -72,7 +60,7 @@ void test_init_default_path(void) {
 
 /* Test initialization with CLI override */
 void test_init_cli_override(void) {
-    setenv("RALPH_HOME", "/env/path", 1);
+    setenv("SCAFFOLD_HOME", "/env/path", 1);
 
     TEST_ASSERT_EQUAL_INT(0, app_home_init("/cli/path"));
 
@@ -83,7 +71,7 @@ void test_init_cli_override(void) {
 
 /* Test initialization with environment variable */
 void test_init_env_var(void) {
-    setenv("RALPH_HOME", "/env/path", 1);
+    setenv("SCAFFOLD_HOME", "/env/path", 1);
 
     TEST_ASSERT_EQUAL_INT(0, app_home_init(NULL));
 
@@ -94,7 +82,7 @@ void test_init_env_var(void) {
 
 /* Test priority: CLI > env > default */
 void test_init_priority(void) {
-    setenv("RALPH_HOME", "/env/path", 1);
+    setenv("SCAFFOLD_HOME", "/env/path", 1);
 
     TEST_ASSERT_EQUAL_INT(0, app_home_init("/cli/path"));
     TEST_ASSERT_EQUAL_STRING("/cli/path", app_home_get());
@@ -105,28 +93,28 @@ void test_init_priority(void) {
     TEST_ASSERT_EQUAL_STRING("/env/path", app_home_get());
 
     app_home_cleanup();
-    unsetenv("RALPH_HOME");
+    unsetenv("SCAFFOLD_HOME");
 
     TEST_ASSERT_EQUAL_INT(0, app_home_init(NULL));
     const char *home = app_home_get();
     TEST_ASSERT_NOT_NULL(home);
-    TEST_ASSERT_TRUE(strstr(home, ".local/ralph") != NULL);
+    TEST_ASSERT_TRUE(strstr(home, ".local/scaffold") != NULL);
 }
 
 /* Test relative path resolution */
 void test_init_relative_path(void) {
-    TEST_ASSERT_EQUAL_INT(0, app_home_init(".ralph"));
+    TEST_ASSERT_EQUAL_INT(0, app_home_init(".scaffold"));
 
     const char *home = app_home_get();
     TEST_ASSERT_NOT_NULL(home);
 
     TEST_ASSERT_EQUAL_CHAR('/', home[0]);
-    TEST_ASSERT_TRUE(strstr(home, ".ralph") != NULL);
+    TEST_ASSERT_TRUE(strstr(home, ".scaffold") != NULL);
 }
 
 /* Test relative path with ./ prefix */
 void test_init_relative_path_dot_slash(void) {
-    TEST_ASSERT_EQUAL_INT(0, app_home_init("./.ralph"));
+    TEST_ASSERT_EQUAL_INT(0, app_home_init("./.scaffold"));
 
     const char *home = app_home_get();
     TEST_ASSERT_NOT_NULL(home);
@@ -175,7 +163,7 @@ void test_app_home_get_not_initialized(void) {
 /* Test ensure_exists creates directory */
 void test_ensure_exists(void) {
     char temp_path[256];
-    snprintf(temp_path, sizeof(temp_path), "/tmp/ralph_test_%d", getpid());
+    snprintf(temp_path, sizeof(temp_path), "/tmp/scaffold_test_%d", getpid());
 
     rmdir(temp_path);
 
@@ -212,7 +200,7 @@ void test_reinit(void) {
 
 /* Test empty string override */
 void test_empty_string_override(void) {
-    setenv("RALPH_HOME", "/env/path", 1);
+    setenv("SCAFFOLD_HOME", "/env/path", 1);
 
     TEST_ASSERT_EQUAL_INT(0, app_home_init(""));
 
@@ -223,16 +211,15 @@ void test_empty_string_override(void) {
 
 /* Test custom app name changes default directory and env var */
 void test_custom_app_name(void) {
-    unsetenv("RALPH_HOME");
     unsetenv("SCAFFOLD_HOME");
 
-    app_home_set_app_name("scaffold");
+    app_home_set_app_name("myapp");
     TEST_ASSERT_EQUAL_INT(0, app_home_init(NULL));
 
     const char *home = app_home_get();
     TEST_ASSERT_NOT_NULL(home);
 
-    const char *suffix = "/.local/scaffold";
+    const char *suffix = "/.local/myapp";
     size_t home_len = strlen(home);
     size_t suffix_len = strlen(suffix);
     TEST_ASSERT_TRUE(home_len > suffix_len);
@@ -241,16 +228,16 @@ void test_custom_app_name(void) {
 
 /* Test custom app name reads correct env var */
 void test_custom_app_name_env_var(void) {
-    setenv("SCAFFOLD_HOME", "/scaffold/env", 1);
+    setenv("MYAPP_HOME", "/myapp/env", 1);
 
-    app_home_set_app_name("scaffold");
+    app_home_set_app_name("myapp");
     TEST_ASSERT_EQUAL_INT(0, app_home_init(NULL));
 
     const char *home = app_home_get();
     TEST_ASSERT_NOT_NULL(home);
-    TEST_ASSERT_EQUAL_STRING("/scaffold/env", home);
+    TEST_ASSERT_EQUAL_STRING("/myapp/env", home);
 
-    unsetenv("SCAFFOLD_HOME");
+    unsetenv("MYAPP_HOME");
 }
 
 int main(void) {

@@ -515,10 +515,10 @@ void test_get_tool_category_unknown_defaults_to_python(void) {
  * ========================================================================== */
 
 void test_protected_file_config_json(void) {
-    /* ralph.config.json should be protected */
-    TEST_ASSERT_EQUAL(1, is_protected_file("ralph.config.json"));
-    TEST_ASSERT_EQUAL(1, is_protected_file("/home/user/project/ralph.config.json"));
-    TEST_ASSERT_EQUAL(1, is_protected_file("./ralph.config.json"));
+    /* scaffold.config.json should be protected */
+    TEST_ASSERT_EQUAL(1, is_protected_file("scaffold.config.json"));
+    TEST_ASSERT_EQUAL(1, is_protected_file("/home/user/project/scaffold.config.json"));
+    TEST_ASSERT_EQUAL(1, is_protected_file("./scaffold.config.json"));
 }
 
 void test_protected_file_env_files(void) {
@@ -530,17 +530,17 @@ void test_protected_file_env_files(void) {
     TEST_ASSERT_EQUAL(1, is_protected_file(".env.development"));
 }
 
-void test_protected_file_ralph_dir_config(void) {
-    /* .ralph/config.json should be protected */
-    TEST_ASSERT_EQUAL(1, is_protected_file(".ralph/config.json"));
-    TEST_ASSERT_EQUAL(1, is_protected_file("/home/user/.ralph/config.json"));
+void test_protected_file_scaffold_dir_config(void) {
+    /* .scaffold/config.json should be protected */
+    TEST_ASSERT_EQUAL(1, is_protected_file(".scaffold/config.json"));
+    TEST_ASSERT_EQUAL(1, is_protected_file("/home/user/.scaffold/config.json"));
 }
 
 void test_non_protected_files(void) {
     /* Regular files should not be protected */
     TEST_ASSERT_EQUAL(0, is_protected_file("test.txt"));
     TEST_ASSERT_EQUAL(0, is_protected_file("/tmp/file.txt"));
-    TEST_ASSERT_EQUAL(0, is_protected_file("config.json")); /* Not ralph.config.json */
+    TEST_ASSERT_EQUAL(0, is_protected_file("config.json")); /* Not scaffold.config.json */
     TEST_ASSERT_EQUAL(0, is_protected_file("environment.txt")); /* Not .env */
 }
 
@@ -549,13 +549,13 @@ void test_non_protected_files(void) {
  * ========================================================================== */
 
 void test_format_protected_file_error_json(void) {
-    char *error = format_protected_file_error("/project/ralph.config.json");
+    char *error = format_protected_file_error("/project/scaffold.config.json");
     TEST_ASSERT_NOT_NULL(error);
 
     /* Should contain expected JSON fields */
     TEST_ASSERT_NOT_NULL(strstr(error, "\"error\""));
     TEST_ASSERT_NOT_NULL(strstr(error, "protected_file"));
-    TEST_ASSERT_NOT_NULL(strstr(error, "ralph.config.json"));
+    TEST_ASSERT_NOT_NULL(strstr(error, "scaffold.config.json"));
     TEST_ASSERT_NOT_NULL(strstr(error, "\"path\""));
 
     free(error);
@@ -719,7 +719,7 @@ int main(void) {
     // Protected Files Tests
     RUN_TEST(test_protected_file_config_json);
     RUN_TEST(test_protected_file_env_files);
-    RUN_TEST(test_protected_file_ralph_dir_config);
+    RUN_TEST(test_protected_file_scaffold_dir_config);
     RUN_TEST(test_non_protected_files);
 
     // Error Formatting Tests

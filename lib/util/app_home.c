@@ -189,5 +189,5 @@ int app_home_is_initialized(void) {
 }
 
 const char* app_home_get_app_name(void) {
-    return g_app_name ? g_app_name : "ralph";
+    return g_app_name ? g_app_name : "scaffold";
 }

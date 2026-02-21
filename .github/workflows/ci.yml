@@ -32,7 +32,7 @@ jobs:
         with:
           context: .devcontainer
           load: true
-          tags: ralph-dev:latest
+          tags: scaffold-dev:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -67,7 +67,7 @@ jobs:
             -v $HOME/.local/bin:/uv-bin:ro \
             -w /workspaces/ralph \
             -e PATH="/uv-bin:/opt/cosmos/bin:$PATH" \
-            ralph-dev:latest \
+            scaffold-dev:latest \
             bash -c "make -j$(nproc) && ./scripts/run_tests.sh -v"
 
       - name: Fix permissions for cache
@@ -77,6 +77,6 @@ jobs:
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
-          name: ralph
-          path: out/ralph
+          name: scaffold
+          path: out/scaffold
           if-no-files-found: error

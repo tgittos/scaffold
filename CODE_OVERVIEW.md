@@ -8,13 +8,10 @@ This document provides a comprehensive overview of Ralph's codebase structure an
 
 Application-specific code that uses the library layer. This is a thin wrapper around lib/.
 
-#### `src/ralph/` - Ralph CLI (Standalone Agent)
-- **`main.c`** - Application entry point with CLI argument parsing (--debug, --json, --yolo, --subagent modes). Thin wrapper that invokes lib/agent/agent.h API.
+#### `src/scaffold/` - Scaffold CLI
+- **`main.c`** - Application entry point with CLI argument parsing, GOAP orchestration, Python tools, update management, memory, sub-agents, and orchestrator-specific modes (--supervisor --goal, --worker --queue). Uses system prompt from `data/prompts/scaffold_system.txt`.
 
-#### `src/scaffold/` - Scaffold CLI (Full Agent + Orchestrator)
-- **`main.c`** - Full agent entry point with GOAP orchestration. Has the complete toolkit (Python tools, update management, memory, sub-agents) plus orchestrator-specific modes (--supervisor --goal, --worker --queue). Uses its own system prompt (`data/prompts/scaffold_system.txt`) and REPL greeting.
-
-#### `src/ralph/tools/` - Python Tool Integration
+#### `src/tools/` - Python Tool Integration
 - **`python_tool.c/h`** - Embedded Python interpreter execution
 - **`python_tool_files.c/h`** - Python file-based tool loading system
 - **`python_extension.c/h`** - Tool extension interface for Python tools integration with lib/
@@ -51,7 +48,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`conversation_state.c/h`** - Conversation history append helpers (assistant messages, tool results)
 - **`tool_batch_executor.c/h`** - Batch tool execution with approval gate integration
 - **`tool_orchestration.c/h`** - Tool call deduplication and per-batch tracking
-- **`repl.c/h`** - Read-Eval-Print-Loop for interactive mode with readline, async processing, and periodic supervisor recovery (scaffold mode)
+- **`repl.c/h`** - Read-Eval-Print-Loop for interactive mode with readline, async processing, and periodic supervisor recovery
 - **`async_executor.c/h`** - Non-blocking message processing using background thread with pipe notification
 - **`context_enhancement.c/h`** - Prompt enhancement with todo state, memory recall, and context retrieval
 - **`recap.c/h`** - Conversation recap generation (one-shot LLM calls without history persistence)
@@ -155,7 +152,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`todo_tool.c/h`** - Todo tool call handler
 - **`todo_display.c/h`** - Todo console visualization
 - **`goap_tools.c/h`** - GOAP goal/action tools for supervisors (9 tools, scaffold mode only)
-- **`orchestrator_tool.c/h`** - Orchestrator lifecycle tools: execute_plan, list_goals, goal_status, start/pause/cancel_goal (scaffold mode only)
+- **`orchestrator_tool.c/h`** - Orchestrator lifecycle tools: execute_plan, list_goals, goal_status, start/pause/cancel_goal
 - **`mode_tool.c/h`** - LLM-callable switch_mode tool for changing behavioral modes
 - **`tool_cache.c/h`** - Thread-safe tool result caching with file mtime invalidation
 
@@ -174,11 +171,11 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`spinner.c/h`** - Pulsing spinner for tool execution visual feedback
 - **`output_formatter.c/h`** - Response formatting and display for LLM responses
 - **`json_output.c/h`** - JSON output mode for programmatic integration (--json flag)
-- **`slash_commands.c/h`** - Slash command registry and dispatch (`/help`, conditional scaffold commands)
+- **`slash_commands.c/h`** - Slash command registry and dispatch (`/help`, `/goals`, etc.)
 - **`memory_commands.c/h`** - Interactive `/memory` slash commands for direct memory management
 - **`task_commands.c/h`** - `/tasks` command for viewing task store entries
 - **`agent_commands.c/h`** - `/agents` command for subagent and supervisor status
-- **`goal_commands.c/h`** - `/goals` command for GOAP goal listing and action tree display (scaffold only)
+- **`goal_commands.c/h`** - `/goals` command for GOAP goal listing and action tree display
 - **`model_commands.c/h`** - `/model` command for switching AI models
 - **`mode_commands.c/h`** - `/mode` command for switching behavioral prompt modes
 - **`status_line.c/h`** - Status info line rendering (tokens, agents, mode, busy state)
@@ -210,7 +207,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`mcp_transport_http.c`** - HTTP transport for remote MCP servers
 
 #### `lib/services/` - Service Container
-- **`services.c/h`** - Dependency injection container for service management (message store, vector DB, embeddings, task store, goal/action stores with shared SQLite DAL). GOAP stores are only created for scaffold binary (conditional on app_name).
+- **`services.c/h`** - Dependency injection container for service management (message store, vector DB, embeddings, task store, goal/action stores with shared SQLite DAL).
 
 #### `lib/updater/` - Self-Update System
 - **`updater.c/h`** - Self-update via GitHub releases (check for updates, download, apply)
@@ -372,8 +369,8 @@ The test directory mirrors the source structure:
 ### 1. Library-First Architecture
 The codebase follows a library-first design where all core functionality lives in `lib/`:
 - **libagent.h**: Public API header that exposes the entire library
-- **src/ralph/main.c**: Thin CLI wrapper that parses arguments and invokes lib/agent/agent.h
-- This enables embedding ralph functionality in other programs
+- **src/scaffold/main.c**: CLI wrapper that parses arguments and invokes lib/agent/agent.h
+- This enables embedding scaffold functionality in other programs
 
 ### 2. Agent Abstraction (lib/agent/)
 The agent module provides a clean lifecycle API:
@@ -427,7 +424,7 @@ Model Context Protocol support:
 
 ### 10. Configuration System (lib/util/config.c)
 Centralized configuration:
-- **Priority**: Local `ralph.config.json` -> User config -> Environment -> Defaults
+- **Priority**: Local `scaffold.config.json` -> User config -> Environment -> Defaults
 - **Auto-Generation**: Creates config from environment variables
 - **MCP Config**: Server definitions in `mcpServers` section
 
@@ -436,10 +433,10 @@ Centralized configuration:
 ## Development Workflow
 
 1. **Core Logic**: Start with `lib/agent/agent.h` for agent lifecycle
-2. **CLI Integration**: See `src/ralph/main.c` for argument parsing
+2. **CLI Integration**: See `src/scaffold/main.c` for argument parsing
 3. **Tool Development**: Add new tools in `lib/tools/` with corresponding tests
 4. **LLM Integration**: Extend providers in `lib/llm/providers/` or models in `lib/llm/models/`
-5. **Python Tools**: Add to `src/ralph/tools/python_defaults/` or user's `~/.local/ralph/tools/`
+5. **Python Tools**: Add to `src/tools/python_defaults/` or user's `~/.local/scaffold/tools/`
 6. **Testing**: Every module has corresponding tests in the `test/` directory structure
 
 ## Build System

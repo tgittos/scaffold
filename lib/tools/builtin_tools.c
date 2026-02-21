@@ -13,10 +13,8 @@
 #include "messaging_tool.h"
 #include "goap_tools.h"
 #include "orchestrator_tool.h"
-#include "../util/app_home.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 int register_builtin_tools(ToolRegistry *registry) {
     if (registry == NULL) {
@@ -47,14 +45,11 @@ int register_builtin_tools(ToolRegistry *registry) {
         }
     }
 
-    /* GOAP and orchestrator tools are only available in scaffold mode */
-    if (strcmp(app_home_get_app_name(), "scaffold") == 0) {
-        if (register_goap_tools(registry) != 0) {
-            fprintf(stderr, "Warning: Failed to register GOAP tools\n");
-        }
-        if (register_orchestrator_tools(registry) != 0) {
-            fprintf(stderr, "Warning: Failed to register orchestrator tools\n");
-        }
+    if (register_goap_tools(registry) != 0) {
+        fprintf(stderr, "Warning: Failed to register GOAP tools\n");
+    }
+    if (register_orchestrator_tools(registry) != 0) {
+        fprintf(stderr, "Warning: Failed to register orchestrator tools\n");
     }
 
     /* Note: Python tools are registered via tool_extension_init_all() called from

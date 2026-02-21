@@ -49,7 +49,7 @@ int agent_init(Agent* agent, const AgentConfig* config) {
     }
 
     /* Initialize home directory FIRST - services depend on it */
-    /* Always set app name (NULL resets to default "ralph") */
+    /* Always set app name (NULL resets to default "scaffold") */
     app_home_set_app_name(agent->config.app_name);
     if (app_home_init(agent->config.home_dir) != 0) {
         return -1;
@@ -343,17 +343,12 @@ int agent_run(Agent* agent) {
         case AGENT_MODE_INTERACTIVE:
         default: {
             if (!agent->config.json_mode) {
-                const char *app = app_home_get_app_name();
-                if (strcmp(app, "scaffold") == 0) {
-                    printf(TERM_BOLD "Scaffold" TERM_RESET " - AI Orchestrator\n");
-                } else {
-                    printf(TERM_BOLD "Ralph" TERM_RESET " - AI Assistant\n");
-                }
+                printf(TERM_BOLD "Scaffold" TERM_RESET " - AI Orchestrator\n");
                 printf("Type /help for commands | quit, exit, Ctrl+D to end\n\n");
             }
 
-            /* Clear stale supervisor PIDs from previous sessions (scaffold only) */
-            if (strcmp(app_home_get_app_name(), "scaffold") == 0) {
+            /* Clear stale supervisor PIDs from previous sessions */
+            {
                 goal_store_t *gs = services_get_goal_store(agent->services);
                 if (gs != NULL) {
                     orchestrator_check_stale(gs);

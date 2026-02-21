@@ -25,9 +25,9 @@
  *   - Default dir: ~/.local/<name>
  *   - Env var: <NAME>_HOME (uppercased)
  *
- * If never called, defaults to "ralph" for backwards compatibility.
+ * If never called, defaults to "scaffold".
  *
- * @param name Application name (e.g. "ralph", "scaffold")
+ * @param name Application name (e.g. "scaffold")
  */
 void app_home_set_app_name(const char *name);
 
@@ -58,7 +58,7 @@ const char* app_home_get(void);
  * Get a path within the application home directory.
  *
  * Constructs a full path by joining the home directory with the relative path.
- * Example: app_home_path("tasks.db") returns "/home/user/.local/ralph/tasks.db"
+ * Example: app_home_path("tasks.db") returns "/home/user/.local/scaffold/tasks.db"
  *
  * @param relative_path Path relative to home (without leading slash)
  * @return Newly allocated full path string (caller must free), or NULL on error
@@ -91,7 +91,7 @@ int app_home_is_initialized(void);
 /**
  * Get the current application name.
  *
- * @return Application name (e.g. "ralph", "scaffold"), never NULL
+ * @return Application name (e.g. "scaffold"), never NULL
  */
 const char* app_home_get_app_name(void);
 

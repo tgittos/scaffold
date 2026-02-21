@@ -37,7 +37,7 @@ GENERATED_DATA := $(BUILDDIR)/generated/prompt_data.h \
                   $(BUILDDIR)/generated/defaults.h \
                   $(BUILDDIR)/generated/mode_prompts.h
 
-$(GENERATED_DATA) &: data/prompts/system.txt data/prompts/scaffold_system.txt data/defaults.json scripts/gen_data.sh \
+$(GENERATED_DATA) &: data/prompts/scaffold_system.txt data/defaults.json scripts/gen_data.sh \
                      $(wildcard data/prompts/modes/*.txt)
 	@scripts/gen_data.sh "$(BUILDDIR)/generated"
 
@@ -50,39 +50,23 @@ COMPILE_DEPS += $(GENERATED_DATA)
 # Set default goal explicitly (included makefiles define targets before this)
 .DEFAULT_GOAL := all
 
-# Default target builds ralph, scaffold, libagent, and all tests
-all: $(BUILDDIR)/.ralph-linked $(BUILDDIR)/.scaffold-linked embed-python embed-python-scaffold libagent $(ALL_TEST_TARGETS)
-
-# Alias for test dependencies that reference 'ralph' directly
-ralph: $(BUILDDIR)/.ralph-linked
+# Default target builds scaffold, libagent, and all tests
+all: $(BUILDDIR)/.scaffold-linked embed-python libagent $(ALL_TEST_TARGETS)
 
 # Alias for scaffold binary
 scaffold: $(BUILDDIR)/.scaffold-linked
 
-# Linking step for ralph - produces the base binary and saves it for embedding
-$(BUILDDIR)/.ralph-linked: $(OBJECTS) $(ALL_LIBS) $(LIBAGENT) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
-	@mkdir -p $(OUTDIR)
-	@echo "Linking ralph with PDFio support"
-	$(CXX) $(LDFLAGS) -o $(TARGET) $(OBJECTS) $(LIB_OBJECTS) $(LIBS) -lpthread
-	@echo "Saving base binary for smart embedding..."
-	@uv run scripts/embed_python.py --save-base
-	@touch $@
-
 # Linking step for scaffold - produces base binary and saves it for embedding
-$(BUILDDIR)/.scaffold-linked: $(SCAFFOLD_OBJECTS) $(ALL_LIBS) $(LIBAGENT) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
+$(BUILDDIR)/.scaffold-linked: $(OBJECTS) $(ALL_LIBS) $(LIBAGENT) $(HNSWLIB_DIR)/hnswlib/hnswlib.h
 	@mkdir -p $(OUTDIR)
 	@echo "Linking scaffold"
-	$(CXX) $(LDFLAGS) -o $(SCAFFOLD_TARGET) $(SCAFFOLD_OBJECTS) $(LIB_OBJECTS) $(LIBS) -lpthread
+	$(CXX) $(LDFLAGS) -o $(TARGET) $(OBJECTS) $(LIB_OBJECTS) $(LIBS) -lpthread
 	@echo "Saving scaffold base binary for smart embedding..."
 	@uv run scripts/embed_python.py --save-base --target scaffold
 	@touch $@
 
-# Embed Python stdlib into ralph (can be run separately to re-embed)
-embed-python: $(BUILDDIR)/.ralph-linked
-	@uv run scripts/embed_python.py
-
 # Embed Python stdlib into scaffold
-embed-python-scaffold: $(BUILDDIR)/.scaffold-linked
+embed-python: $(BUILDDIR)/.scaffold-linked
 	@uv run scripts/embed_python.py --target scaffold
 
 python: $(PYTHON_LIB)
@@ -111,14 +95,14 @@ $(TESTDIR)/unity/%.o: $(TESTDIR)/unity/%.c
 
 clean:
 	rm -rf $(OUTDIR)
-	rm -f $(OBJECTS) $(SCAFFOLD_OBJECTS) $(ALL_TEST_TARGETS)
+	rm -f $(OBJECTS) $(ALL_TEST_TARGETS)
 	rm -f src/*.o src/*/*.o src/*/*/*.o test/*.o test/*/*.o test/unity/*.o
 	rm -f src/*.o.d src/*/*.o.d src/*/*/*.o.d test/*.o.d test/*/*.o.d test/unity/*.o.d lib/*.o.d lib/*/*.o.d lib/*/*/*.o.d
 	rm -f *.aarch64.elf *.com.dbg *.dbg
 	rm -f src/*.aarch64.elf src/*/*.aarch64.elf src/*.com.dbg src/*/*.com.dbg src/*.dbg src/*/*.dbg
 	rm -f test/*.aarch64.elf test/*/*.aarch64.elf test/*.com.dbg test/*/*.com.dbg test/*.dbg test/*/*.dbg
 	rm -f test/*.log test/*.trs test/test-suite.log
-	rm -f $(BUILDDIR)/.ralph-linked $(BUILDDIR)/.scaffold-linked
+	rm -f $(BUILDDIR)/.scaffold-linked
 	find build -type f ! -name 'libpython*.a' ! -path 'build/python-include/*' -delete 2>/dev/null || true
 
 clean-python:
@@ -140,7 +124,7 @@ distclean: clean
 # =============================================================================
 
 # .mk file changes trigger rebuilds (no more "rm stale binary" workaround)
-$(OBJECTS) $(SCAFFOLD_OBJECTS): Makefile mk/config.mk mk/sources.mk
+$(OBJECTS): Makefile mk/config.mk mk/sources.mk
 $(LIB_OBJECTS): Makefile mk/config.mk mk/lib.mk
 $(ALL_TEST_TARGETS): mk/tests.mk mk/config.mk
 
@@ -148,4 +132,4 @@ $(ALL_TEST_TARGETS): mk/tests.mk mk/config.mk
 -include $(wildcard src/*.o.d src/*/*.o.d src/*/*/*.o.d lib/*.o.d lib/*/*.o.d lib/*/*/*.o.d test/*.o.d test/*/*.o.d test/unity/*.o.d \
     src/*/.aarch64/*.o.d lib/*/.aarch64/*.o.d lib/*/*/.aarch64/*.o.d test/*/.aarch64/*.o.d test/unity/.aarch64/*.o.d)
 
-.PHONY: all test check check-valgrind clean clean-python distclean python embed-python embed-python-scaffold update-cacert scaffold
+.PHONY: all test check check-valgrind clean clean-python distclean python embed-python update-cacert scaffold

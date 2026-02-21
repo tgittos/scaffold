@@ -42,11 +42,9 @@ c_escape_value() {
 # 1. prompt_data.h
 # =============================================================================
 
-PROMPT1="$DATADIR/prompts/system.txt"
 PROMPT_SCAFFOLD="$DATADIR/prompts/scaffold_system.txt"
 TMP="$OUTDIR/prompt_data.h.tmp"
 
-ESCAPED1=$(c_escape < "$PROMPT1")
 ESCAPED_SCAFFOLD=$(c_escape < "$PROMPT_SCAFFOLD")
 
 {
@@ -56,8 +54,7 @@ ESCAPED_SCAFFOLD=$(c_escape < "$PROMPT_SCAFFOLD")
 
 HEOF
     # Use printf with %s to avoid shell interpretation of escaped content
-    printf 'static const char SYSTEM_PROMPT_TEXT[] = "%s";\n\n' "$ESCAPED1"
-    printf 'static const char SCAFFOLD_SYSTEM_PROMPT_TEXT[] = "%s";\n' "$ESCAPED_SCAFFOLD"
+    printf 'static const char SYSTEM_PROMPT_TEXT[] = "%s";\n' "$ESCAPED_SCAFFOLD"
     cat << 'HEOF'
 
 #endif
