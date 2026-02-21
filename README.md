@@ -1,117 +1,152 @@
 # scaffold
 
-Remember when you did your first `rails generate scaffold...`? Wasn't it magical?
+Most AI coding tools are fancy autocomplete. You type, they suggest. You chat, they respond. You're still driving.
 
-This is that, but for entire applications.
+Scaffold doesn't assist. It builds.
 
 ```bash
 wget https://github.com/tgittos/scaffold/releases/latest/download/scaffold
 chmod +x scaffold
 ./scaffold "build a minimal twitter clone as a SPA web app. use something like React or Vue \
 with a clean, responsive ui and an express backend with sqlite storage. users should be able \
-to sign up, log in, post short text messages, follow/unfollow other users, and see a timeline\
- of posts from people they follow. I want a user profile page showing their posts and \
+to sign up, log in, post short text messages, follow/unfollow other users, and see a timeline \
+of posts from people they follow. I want a user profile page showing their posts and \
 follower/following counts. JWT for auth, hash passwords with bcrypt, and keep the schema \
 simple — users, posts, and follows tables. no email verification or real-time updates. \
-focus on clean code, proper error handling, and a polished UI with loading states.
+focus on clean code, proper error handling, and a polished UI with loading states. \
 seed the database with a handful of demo users and posts so the app feels alive on \
 first launch."
 ```
 
 Describe what you want. Walk away. Come back to working software.
 
-Built on [Cosmopolitan C](https://github.com/jart/cosmopolitan) because I think it's neat.
+> **Alpha software.** Scaffold works, but it has rough edges. If you're the kind of person who runs code from a README without flinching, you're in the right place.
 
 ---
 
 ## How it works
 
-scaffold orchestrates a three-layer hierarchy of AI agents to plan and build software autonomously.
+Scaffold operates like a small software team, not a single chatbot.
 
-**The orchestrator** takes your description, figures out the overall architecture, and breaks it into a sequence of supervised goals. It doesn't write a single line of code itself — it plans and delegates.
+When you give it a description, it doesn't start writing code. It plans. It breaks your spec into goals, assigns each goal a supervisor, and the supervisors dispatch specialized workers to do the actual building. The whole thing runs autonomously — no hand-holding, no approval loops (unless you want them).
 
-**Goal supervisors** are long-lived agents that own a single goal. Each supervisor breaks its goal into discrete tasks, dispatches worker agents to execute them, checks the results, and decides what's next. When all tasks for a goal are complete, the supervisor reports back to the orchestrator and exits.
+**The orchestrator** reads your description and decomposes it into a sequence of goals. It figures out the architecture, decides what to build first, and manages the pipeline. It never writes a line of code itself.
 
-**Workers** do the actual work. Write code. Run tests. Fix the bug the tests found. Install dependencies. Each worker handles one task and exits. They're fast, focused, and disposable.
+**Goal supervisors** are long-lived agents, each responsible for a single goal. A supervisor uses [GOAP (Goal-Oriented Action Planning)](https://en.wikipedia.org/wiki/Goal-oriented_action_planning) to reason about what's done and what's next. It tracks world state — a set of boolean assertions about what exists so far — and dispatches workers until the goal state is satisfied. If a worker fails, the supervisor adapts. If a supervisor crashes, it recovers from its last known state.
 
-The orchestrator moves to the next goal when the previous one is complete. Repeat until the application exists. It's ralphs all the way down.
+**Workers** are fast, focused, and disposable. Each one handles a single task — write a migration, implement an endpoint, run the tests, fix the bug the tests found — then exits. Workers are assigned roles (implementation, testing, code review, architecture review, design review, PM review), each with a tailored system prompt that keeps them on task.
 
----
+The orchestrator advances to the next goal when the current one is verified complete. Repeat until the application exists.
 
-## What it can do
-
-- Anthropic/OpenAI-compatible providers, including local models via LM Studio or Ollama
-- Vision support — attach images to conversations for multimodal models
-- Extended thinking for models that expose reasoning (Claude, Qwen, DeepSeek)
-- Python-based filesystem, shell, and web tools out of the box
-- Semantic long-term memory across sessions via HNSWLIB vector store
-- Task tracking and management persisted to SQLite
-- MCP client with stdio, HTTP, and SSE transports, multi-server support, per-server tool namespacing
-- Sub-agents with direct and pub/sub messaging
-- Approval gates with allowlists, protected file detection, shell command parsing, and path traversal prevention
-- Project-aware via AGENTS.md context loading
-- Self-updater via GitHub releases
+It's [ralphs](https://ghuntley.com/ralph/) all the way down.
 
 ---
 
-## How to use
+## Quick start
 
-### REPL mode
-
-Talk directly to the orchestrator. Develop your specification interactively — describe the application, refine goals, answer clarifying questions. When the spec is ready, tell it to build.
+### 1. Install
 
 ```bash
+wget https://github.com/tgittos/scaffold/releases/latest/download/scaffold
+chmod +x scaffold
+```
+
+### 2. Configure
+
+```bash
+export OPENAI_API_KEY="sk-..."
+# or
+export ANTHROPIC_API_KEY="sk-ant-..."
+```
+
+### 3. Run
+
+```bash
+# Interactive mode
 ./scaffold
+
+# One-shot autonomous mode
+./scaffold "build a todo app with React and Express"
+
+# Pipe a spec file
+cat SPEC.md | ./scaffold
+
+# Full autonomy (no approval prompts)
+./scaffold --yolo "build a blog with Next.js"
 ```
 
-If things go sideways, drop into the slash commands to see what's happening:
-
-- `/goals` — current goal state
-- `/tasks` — task queue and status
-- `/agents` — active agents
-- `/memory` — what it remembers
-- `/mode` — current operating mode
-- `/model` — which LLM is in use
-
-### One-shot mode
-
-Pipe a complete spec and let it run unattended:
-
-```bash
-cat ./SOFTWARE_SPEC.md | ./scaffold
-```
-
-The orchestrator will plan and execute the full spec and continue until it's done.
-
-Both modes require tool approval by default. Bypass entirely with `--yolo`.
+See the [Getting Started guide](docs/getting-started.md) for more details.
 
 ---
 
-## Building
+## Why this exists
 
-scaffold is written in C/C++ targeting the Cosmopolitan compiler. Dependencies:
+Every AI coding tool today puts you in the driver's seat. Copilot suggests lines. Cursor chats about files. Claude Code runs commands you approve. They're all built around the same assumption: the human is the architect, the AI is the assistant.
 
-- libcurl
-- ncurses
-- mbedtls
-- readline
-- zlib
-- hnsw
-- pdfio
-- cjson
-- ossp-uuid
-- Python
-- SQLite
+Scaffold inverts this. You're the client. Scaffold is the team.
 
-### devcontainer
+You provide the spec. Scaffold provides the architect, the developers, the testers, and the project manager. Its plans aren't hidden in an LLM's context window — they're explicit GOAP goal trees, persisted to SQLite, queryable with `/goals`. You can watch it think.
 
-Rather than setting up a Cosmopolitan toolchain from scratch, use the devcontainer:
+This isn't a better copilot. It's a different thing entirely.
+
+---
+
+## Where this is going
+
+Right now, scaffold generates applications from descriptions. That's the starting point, not the destination.
+
+The ambition is a software factory. Point it at a product backlog. Feed it a roadmap. Let it build your product while you sleep. Come back in the morning, review the PRs, ship.
+
+One person with scaffold should be able to build and maintain what used to take a team.
+
+---
+
+## What's under the hood
+
+Scaffold is a single binary. No runtime dependencies. No Docker. No Python install. No npm. Download it and run it.
+
+This is possible because it's written in C and compiled with [Cosmopolitan](https://github.com/jart/cosmopolitan), which produces Actually Portable Executables — one binary that runs on Linux, macOS, Windows, FreeBSD, and OpenBSD across x86_64 and ARM64. The Python interpreter, the vector database, the PDF processor, the TLS stack — all compiled in.
+
+### Capabilities
+
+- **LLM providers**: Anthropic, OpenAI, and anything API-compatible (LM Studio, Ollama, etc.)
+- **Extended thinking**: Native support for reasoning models (Claude, Qwen, DeepSeek)
+- **Vision**: Attach images to conversations for multimodal models
+- **Tools**: 40+ built-in tools — file I/O, shell, web fetch, PDF processing, package management
+- **Memory**: Semantic long-term memory via HNSWLIB vector store, persisted across sessions
+- **MCP**: Model Context Protocol client with stdio, HTTP, and SSE transports
+- **Sub-agents**: Fork/exec process spawning with inter-agent messaging (direct + pub/sub)
+- **Task persistence**: Goals, actions, and work queues backed by SQLite
+- **Self-update**: Checks GitHub releases and updates in place
+- **Project awareness**: Reads AGENTS.md for project-specific context
+
+---
+
+## Documentation
+
+| Guide | Description |
+|-------|-------------|
+| [Getting Started](docs/getting-started.md) | Installation, first run, basic usage |
+| [Configuration](docs/configuration.md) | Config file, environment variables, API providers, approval gates |
+| [Interactive Mode](docs/interactive-mode.md) | Slash commands, image attachments, behavioral modes |
+| [Autonomous Mode](docs/autonomous-mode.md) | How the orchestrator, supervisors, and workers operate |
+| [Memory System](docs/memory.md) | Long-term semantic memory storage and retrieval |
+| [Custom Tools](docs/custom-tools.md) | Adding Python tools and customizing worker role prompts |
+| [MCP Servers](docs/mcp.md) | Connecting external tool servers via Model Context Protocol |
+| [CLI Reference](docs/cli-reference.md) | Complete command-line flag reference |
+| [Building from Source](docs/building-from-source.md) | Compiling, testing, and debugging |
+
+---
+
+## Building from source
+
+Scaffold targets the Cosmopolitan toolchain. The easiest path is the devcontainer:
 
 ```bash
 # Build the devcontainer image
 docker build -t scaffold-dev .devcontainer/
 
-# Build the project
+# Build scaffold
 docker run --rm --privileged \
     -v /your/checkout/path:/workspaces/ralph \
     -w /workspaces/ralph \
@@ -119,4 +154,16 @@ docker run --rm --privileged \
     ./scripts/build.sh
 ```
 
-The `--privileged` flag is required to register the APE binary loader for Cosmopolitan executables.
+The `--privileged` flag registers the APE binary loader for Cosmopolitan executables.
+
+### Dependencies (vendored or linked at build time)
+
+libcurl, mbedtls, readline, ncurses, zlib, cJSON, SQLite, HNSWLIB, PDFio, ossp-uuid, Python 3.12
+
+### Running tests
+
+```bash
+./scripts/build.sh && ./scripts/run_tests.sh
+```
+
+See [Building from Source](docs/building-from-source.md) for the full guide.
