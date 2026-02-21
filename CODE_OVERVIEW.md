@@ -20,13 +20,13 @@ Application-specific code that uses the library layer. This is a thin wrapper ar
 - **`sys_python.c/h`** - Python extension for system info (`_ralph_sys` module: get_executable_path, get_app_home)
 
 ##### Python Default Tools (in `python_defaults/`)
-- **`read_file.py`** - Read file contents
+- **`read_file.py`** - Read file contents with line numbers, returns dict with content/total_lines/range
 - **`write_file.py`** - Write content to file
 - **`append_file.py`** - Append content to file
 - **`file_info.py`** - Get file metadata
-- **`list_dir.py`** - List directory contents with filtering
-- **`search_files.py`** - Search files by content or pattern
-- **`apply_delta.py`** - Apply unified diff patches
+- **`list_dir.py`** - List directory contents with filtering and ISO timestamps
+- **`search_files.py`** - Search files by content/pattern with optional context lines, matched_files, total_matches_found
+- **`apply_delta.py`** - Apply delta patch operations with optional expected-content verification
 - **`shell.py`** - Shell command execution with timeout
 - **`web_fetch.py`** - Fetch and process web content
 - **`pip_install.py`** - Install pure-Python packages from PyPI (py3-none-any wheels)

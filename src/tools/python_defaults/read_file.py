@@ -11,7 +11,7 @@ def _is_traversal_path(path: str) -> bool:
     return '..' in parts
 
 
-def read_file(path: str, start_line: int = 1, end_line: int = None) -> str:
+def read_file(path: str, start_line: int = 1, end_line: int = None) -> dict:
     """Read file contents, optionally with line range.
 
     Args:
@@ -20,7 +20,7 @@ def read_file(path: str, start_line: int = 1, end_line: int = None) -> str:
         end_line: Ending line number (1-based inclusive, default: None for end of file)
 
     Returns:
-        File contents as a string
+        Dictionary with content (line-numbered text), total_lines, and range
     """
     from pathlib import Path
     import os
@@ -77,11 +77,29 @@ def read_file(path: str, start_line: int = 1, end_line: int = None) -> str:
     if content is None:
         content = p.read_text(encoding='utf-8', errors='replace')
 
-    # Apply line range if specified
-    if start_line != 1 or end_line is not None:
-        lines = content.splitlines(keepends=True)
-        start = max(0, start_line - 1)  # Convert to 0-based
-        end = end_line if end_line is not None else len(lines)
-        content = ''.join(lines[start:end])
+    all_lines = content.splitlines(keepends=True)
+    total_lines = len(all_lines)
 
-    return content
+    # Apply line range if specified
+    start = max(0, start_line - 1)  # Convert to 0-based
+    end = end_line if end_line is not None else total_lines
+    end = min(end, total_lines)
+    selected = all_lines[start:end]
+
+    # Build line-numbered content
+    numbered = []
+    for i, line in enumerate(selected, start=start + 1):
+        # Strip trailing newline for consistent formatting, then re-add
+        numbered.append(f"{i}: {line.rstrip(chr(10)).rstrip(chr(13))}")
+    numbered_content = '\n'.join(numbered)
+    if numbered:
+        numbered_content += '\n'
+
+    range_str = f"{start + 1}-{end}" if total_lines > 0 else "0-0"
+
+    return {
+        "success": True,
+        "content": numbered_content,
+        "total_lines": total_lines,
+        "range": range_str
+    }

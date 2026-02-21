@@ -903,13 +903,13 @@ graph TB
 - **`python`**: Execute arbitrary Python code with embedded interpreter
 
 ### Python File Tools (11 tools loaded from `~/.local/scaffold/tools/`)
-- **`read_file`**: Read file contents
+- **`read_file`**: Read file contents with line numbers, returns dict with content/total_lines/range
 - **`write_file`**: Write content to file
 - **`append_file`**: Append content to file
 - **`file_info`**: Get file metadata
-- **`list_dir`**: List directory contents
-- **`search_files`**: Search for files matching patterns
-- **`apply_delta`**: Apply unified diff to file
+- **`list_dir`**: List directory contents with ISO timestamps
+- **`search_files`**: Search for patterns in files with optional context lines, returns matched_files and total_matches_found
+- **`apply_delta`**: Apply delta patch operations with optional expected-content verification
 - **`shell`**: Execute shell commands
 - **`web_fetch`**: Fetch web content
 - **`pip_install`**: Install pure-Python packages from PyPI (py3-none-any wheels only)

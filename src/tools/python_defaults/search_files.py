@@ -6,7 +6,8 @@ Match: pattern
 
 MAX_FILE_SIZE = 1024 * 1024  # 1MB
 CONTEXT_CHARS = 30  # Characters of context around match
-MAX_LINE_DISPLAY = 200  # Max characters to display per line
+MAX_LINE_DISPLAY = 500  # Max characters to display per line
+MAX_CONTEXT_LINES = 10  # Maximum surrounding context lines
 
 
 def _is_traversal_path(path: str) -> bool:
@@ -17,7 +18,7 @@ def _is_traversal_path(path: str) -> bool:
 
 def search_files(path: str, pattern: str, glob_filter: str = None,
                  recursive: bool = True, case_sensitive: bool = True,
-                 max_results: int = 100) -> dict:
+                 max_results: int = 100, context_lines: int = 0) -> dict:
     """Search for pattern in files.
 
     Args:
@@ -27,9 +28,11 @@ def search_files(path: str, pattern: str, glob_filter: str = None,
         recursive: Whether to search recursively in directories (default: True)
         case_sensitive: Whether search is case sensitive (default: True)
         max_results: Maximum number of results to return (default: 100)
+        context_lines: Number of surrounding lines to include before and after each match (0-10, default: 0)
 
     Returns:
-        Dictionary with results list, total_matches, files_searched, and truncated flag
+        Dictionary with results list, total_matches, total_matches_found,
+        matched_files, files_searched, and truncated flag
     """
     from pathlib import Path
     import re
@@ -51,8 +54,13 @@ def search_files(path: str, pattern: str, glob_filter: str = None,
     except re.error as e:
         raise ValueError(f"Invalid regex pattern '{pattern}': {e}")
 
+    # Clamp context_lines
+    context_lines = max(0, min(int(context_lines), MAX_CONTEXT_LINES))
+
     results = []
     files_searched = 0
+    total_matches_found = 0
+    matched_files_set = set()
 
     # Directories to skip
     skip_dirs = {'.git', '.svn', '.hg', 'node_modules', '__pycache__',
@@ -70,10 +78,7 @@ def search_files(path: str, pattern: str, glob_filter: str = None,
         return file_path.suffix.lower() in binary_exts
 
     def search_in_file(file_path):
-        nonlocal files_searched
-
-        if len(results) >= max_results:
-            return
+        nonlocal files_searched, total_matches_found
 
         try:
             stat = file_path.stat()
@@ -82,28 +87,52 @@ def search_files(path: str, pattern: str, glob_filter: str = None,
 
             content = file_path.read_text(encoding='utf-8', errors='replace')
             files_searched += 1
+            all_lines = content.splitlines()
 
-            for line_num, line in enumerate(content.splitlines(), 1):
+            for line_idx, line in enumerate(all_lines):
+                matches = list(regex.finditer(line))
+                if not matches:
+                    continue
+
+                line_num = line_idx + 1
+                total_matches_found += len(matches)
+                file_str = str(file_path)
+                matched_files_set.add(file_str)
+
                 if len(results) >= max_results:
-                    return
+                    return  # Stop scanning this file once results are full
 
-                match = regex.search(line)
-                if match:
-                    # Get context (surrounding characters)
-                    start = max(0, match.start() - CONTEXT_CHARS)
-                    end = min(len(line), match.end() + CONTEXT_CHARS)
-                    context = line[start:end]
-                    if start > 0:
-                        context = '...' + context
-                    if end < len(line):
-                        context = context + '...'
+                # Build match context from first match on this line
+                match = matches[0]
+                start = max(0, match.start() - CONTEXT_CHARS)
+                end = min(len(line), match.end() + CONTEXT_CHARS)
+                context = line[start:end]
+                if start > 0:
+                    context = '...' + context
+                if end < len(line):
+                    context = context + '...'
 
-                    results.append({
-                        "file_path": str(file_path),
-                        "line_number": line_num,
-                        "line_content": line.strip()[:MAX_LINE_DISPLAY],
-                        "match_context": context
-                    })
+                result_entry = {
+                    "file_path": file_str,
+                    "line_number": line_num,
+                    "line_content": line.strip()[:MAX_LINE_DISPLAY],
+                    "match_context": context
+                }
+
+                if context_lines > 0:
+                    surrounding = []
+                    ctx_start = max(0, line_idx - context_lines)
+                    ctx_end = min(len(all_lines), line_idx + context_lines + 1)
+                    for ci in range(ctx_start, ctx_end):
+                        if ci == line_idx:
+                            continue
+                        surrounding.append({
+                            "line_number": ci + 1,
+                            "content": all_lines[ci][:MAX_LINE_DISPLAY]
+                        })
+                    result_entry["surrounding_lines"] = surrounding
+
+                results.append(result_entry)
         except (PermissionError, OSError, UnicodeDecodeError):
             pass  # Skip files we can't read
 
@@ -151,6 +180,8 @@ def search_files(path: str, pattern: str, glob_filter: str = None,
     return {
         "results": results,
         "total_matches": len(results),
+        "total_matches_found": total_matches_found,
+        "matched_files": sorted(matched_files_set),
         "files_searched": files_searched,
         "truncated": len(results) >= max_results
     }
