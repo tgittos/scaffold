@@ -55,15 +55,15 @@ void test_get_protected_basename_patterns_returns_array(void) {
     TEST_ASSERT_NOT_NULL(patterns);
 
     /* Should contain known protected basenames */
-    int found_ralph_config = 0;
+    int found_scaffold_config = 0;
     int found_env = 0;
 
     for (int i = 0; patterns[i]; i++) {
-        if (strcmp(patterns[i], "ralph.config.json") == 0) found_ralph_config = 1;
+        if (strcmp(patterns[i], "scaffold.config.json") == 0) found_scaffold_config = 1;
         if (strcmp(patterns[i], ".env") == 0) found_env = 1;
     }
 
-    TEST_ASSERT_EQUAL(1, found_ralph_config);
+    TEST_ASSERT_EQUAL(1, found_scaffold_config);
     TEST_ASSERT_EQUAL(1, found_env);
 }
 
@@ -86,27 +86,27 @@ void test_get_protected_glob_patterns_returns_array(void) {
     TEST_ASSERT_NOT_NULL(patterns);
 
     /* Should contain expected glob patterns */
-    int found_ralph_glob = 0;
+    int found_scaffold_glob = 0;
     int found_env_glob = 0;
-    int found_ralph_dir_glob = 0;
+    int found_scaffold_dir_glob = 0;
 
     for (int i = 0; patterns[i]; i++) {
-        if (strcmp(patterns[i], "**/ralph.config.json") == 0) found_ralph_glob = 1;
+        if (strcmp(patterns[i], "**/scaffold.config.json") == 0) found_scaffold_glob = 1;
         if (strcmp(patterns[i], "**/.env") == 0) found_env_glob = 1;
-        if (strcmp(patterns[i], "**/.ralph/config.json") == 0) found_ralph_dir_glob = 1;
+        if (strcmp(patterns[i], "**/.scaffold/config.json") == 0) found_scaffold_dir_glob = 1;
     }
 
-    TEST_ASSERT_EQUAL(1, found_ralph_glob);
+    TEST_ASSERT_EQUAL(1, found_scaffold_glob);
     TEST_ASSERT_EQUAL(1, found_env_glob);
-    TEST_ASSERT_EQUAL(1, found_ralph_dir_glob);
+    TEST_ASSERT_EQUAL(1, found_scaffold_dir_glob);
 }
 
 /* =============================================================================
  * Basename Protection Tests
  * ========================================================================== */
 
-void test_is_protected_basename_ralph_config(void) {
-    TEST_ASSERT_EQUAL(1, is_protected_basename("ralph.config.json"));
+void test_is_protected_basename_scaffold_config(void) {
+    TEST_ASSERT_EQUAL(1, is_protected_basename("scaffold.config.json"));
 }
 
 void test_is_protected_basename_env(void) {
@@ -149,13 +149,13 @@ void test_is_protected_basename_empty(void) {
  * Glob Pattern Matching Tests
  * ========================================================================== */
 
-void test_matches_protected_glob_ralph_config_root(void) {
-    TEST_ASSERT_EQUAL(1, matches_protected_glob("ralph.config.json"));
+void test_matches_protected_glob_scaffold_config_root(void) {
+    TEST_ASSERT_EQUAL(1, matches_protected_glob("scaffold.config.json"));
 }
 
-void test_matches_protected_glob_ralph_config_nested(void) {
-    TEST_ASSERT_EQUAL(1, matches_protected_glob("project/ralph.config.json"));
-    TEST_ASSERT_EQUAL(1, matches_protected_glob("/home/user/project/ralph.config.json"));
+void test_matches_protected_glob_scaffold_config_nested(void) {
+    TEST_ASSERT_EQUAL(1, matches_protected_glob("project/scaffold.config.json"));
+    TEST_ASSERT_EQUAL(1, matches_protected_glob("/home/user/project/scaffold.config.json"));
 }
 
 void test_matches_protected_glob_env_file(void) {
@@ -170,9 +170,9 @@ void test_matches_protected_glob_env_variants(void) {
     TEST_ASSERT_EQUAL(1, matches_protected_glob("/app/.env.development"));
 }
 
-void test_matches_protected_glob_ralph_dir_config(void) {
-    TEST_ASSERT_EQUAL(1, matches_protected_glob(".ralph/config.json"));
-    TEST_ASSERT_EQUAL(1, matches_protected_glob("/home/user/.ralph/config.json"));
+void test_matches_protected_glob_scaffold_dir_config(void) {
+    TEST_ASSERT_EQUAL(1, matches_protected_glob(".scaffold/config.json"));
+    TEST_ASSERT_EQUAL(1, matches_protected_glob("/home/user/.scaffold/config.json"));
 }
 
 void test_matches_protected_glob_not_protected(void) {
@@ -193,10 +193,10 @@ void test_matches_protected_glob_empty(void) {
  * Full Path Protection Tests
  * ========================================================================== */
 
-void test_is_protected_file_ralph_config(void) {
-    TEST_ASSERT_EQUAL(1, is_protected_file("ralph.config.json"));
-    TEST_ASSERT_EQUAL(1, is_protected_file("./ralph.config.json"));
-    TEST_ASSERT_EQUAL(1, is_protected_file("/project/ralph.config.json"));
+void test_is_protected_file_scaffold_config(void) {
+    TEST_ASSERT_EQUAL(1, is_protected_file("scaffold.config.json"));
+    TEST_ASSERT_EQUAL(1, is_protected_file("./scaffold.config.json"));
+    TEST_ASSERT_EQUAL(1, is_protected_file("/project/scaffold.config.json"));
 }
 
 void test_is_protected_file_env(void) {
@@ -213,9 +213,9 @@ void test_is_protected_file_env_variants(void) {
     TEST_ASSERT_EQUAL(1, is_protected_file("/app/.env.staging"));
 }
 
-void test_is_protected_file_ralph_dir_config(void) {
-    TEST_ASSERT_EQUAL(1, is_protected_file(".ralph/config.json"));
-    TEST_ASSERT_EQUAL(1, is_protected_file("/home/user/.ralph/config.json"));
+void test_is_protected_file_scaffold_dir_config(void) {
+    TEST_ASSERT_EQUAL(1, is_protected_file(".scaffold/config.json"));
+    TEST_ASSERT_EQUAL(1, is_protected_file("/home/user/.scaffold/config.json"));
 }
 
 void test_is_protected_file_not_protected(void) {
@@ -280,7 +280,7 @@ void test_inode_detection_after_refresh(void) {
     /* Create a test file */
     char path[512];
     memset(path, 0, sizeof(path)); /* Initialize to silence valgrind */
-    snprintf(path, sizeof(path), "%s/ralph.config.json", test_dir);
+    snprintf(path, sizeof(path), "%s/scaffold.config.json", test_dir);
     TEST_ASSERT_EQUAL(0, create_test_file(path));
 
     /* Force a refresh to pick up the new file */
@@ -344,26 +344,26 @@ void test_is_protected_file_similar_names(void) {
      * Note: .env.bak IS protected because it starts with .env. prefix
      * (backup files of sensitive data should also be protected).
      */
-    TEST_ASSERT_EQUAL(0, is_protected_file("ralph.config.json.bak")); /* Suffix, not exact match */
+    TEST_ASSERT_EQUAL(0, is_protected_file("scaffold.config.json.bak")); /* Suffix, not exact match */
     TEST_ASSERT_EQUAL(1, is_protected_file(".env.bak")); /* Starts with .env. - protected */
     TEST_ASSERT_EQUAL(0, is_protected_file("env")); /* Not .env */
-    TEST_ASSERT_EQUAL(0, is_protected_file("ralph_config.json")); /* Underscore, not dot */
+    TEST_ASSERT_EQUAL(0, is_protected_file("scaffold_config.json")); /* Underscore, not dot */
 }
 
 void test_is_protected_file_paths_with_protected_substring(void) {
     /* Path contains protected name but as directory, not file */
     TEST_ASSERT_EQUAL(0, is_protected_file(".env/config.json"));
-    TEST_ASSERT_EQUAL(0, is_protected_file("ralph.config.json/subdir/file.txt"));
+    TEST_ASSERT_EQUAL(0, is_protected_file("scaffold.config.json/subdir/file.txt"));
 }
 
 void test_is_protected_file_deep_paths(void) {
     /* Protected files in deep directory structures */
     TEST_ASSERT_EQUAL(1, is_protected_file("/a/b/c/d/e/f/g/.env"));
-    TEST_ASSERT_EQUAL(1, is_protected_file("/very/long/path/to/project/ralph.config.json"));
+    TEST_ASSERT_EQUAL(1, is_protected_file("/very/long/path/to/project/scaffold.config.json"));
 }
 
 void test_is_protected_basename_config_json_not_protected(void) {
-    /* Just "config.json" is not protected - needs .ralph/ parent */
+    /* Just "config.json" is not protected - needs .scaffold/ parent */
     TEST_ASSERT_EQUAL(0, is_protected_basename("config.json"));
 }
 
@@ -377,12 +377,12 @@ void test_is_protected_file_posix_case_sensitive(void) {
      * On POSIX, case matters for protected file detection.
      * Test with paths in a nonexistent directory to avoid inode cache matches.
      */
-    TEST_ASSERT_EQUAL(0, is_protected_file("/nonexistent/dir/RALPH.CONFIG.JSON"));
+    TEST_ASSERT_EQUAL(0, is_protected_file("/nonexistent/dir/SCAFFOLD.CONFIG.JSON"));
     TEST_ASSERT_EQUAL(0, is_protected_file("/nonexistent/dir/.ENV"));
     TEST_ASSERT_EQUAL(0, is_protected_file("/nonexistent/dir/.Env"));
 
     /* Also verify the lowercase variants ARE protected */
-    TEST_ASSERT_EQUAL(1, is_protected_file("/nonexistent/dir/ralph.config.json"));
+    TEST_ASSERT_EQUAL(1, is_protected_file("/nonexistent/dir/scaffold.config.json"));
     TEST_ASSERT_EQUAL(1, is_protected_file("/nonexistent/dir/.env"));
 }
 #endif
@@ -413,7 +413,7 @@ int main(void) {
     RUN_TEST(test_get_protected_glob_patterns_returns_array);
 
     /* Basename protection tests */
-    RUN_TEST(test_is_protected_basename_ralph_config);
+    RUN_TEST(test_is_protected_basename_scaffold_config);
     RUN_TEST(test_is_protected_basename_env);
     RUN_TEST(test_is_protected_basename_env_local);
     RUN_TEST(test_is_protected_basename_env_production);
@@ -424,20 +424,20 @@ int main(void) {
     RUN_TEST(test_is_protected_basename_empty);
 
     /* Glob pattern matching tests */
-    RUN_TEST(test_matches_protected_glob_ralph_config_root);
-    RUN_TEST(test_matches_protected_glob_ralph_config_nested);
+    RUN_TEST(test_matches_protected_glob_scaffold_config_root);
+    RUN_TEST(test_matches_protected_glob_scaffold_config_nested);
     RUN_TEST(test_matches_protected_glob_env_file);
     RUN_TEST(test_matches_protected_glob_env_variants);
-    RUN_TEST(test_matches_protected_glob_ralph_dir_config);
+    RUN_TEST(test_matches_protected_glob_scaffold_dir_config);
     RUN_TEST(test_matches_protected_glob_not_protected);
     RUN_TEST(test_matches_protected_glob_null);
     RUN_TEST(test_matches_protected_glob_empty);
 
     /* Full path protection tests */
-    RUN_TEST(test_is_protected_file_ralph_config);
+    RUN_TEST(test_is_protected_file_scaffold_config);
     RUN_TEST(test_is_protected_file_env);
     RUN_TEST(test_is_protected_file_env_variants);
-    RUN_TEST(test_is_protected_file_ralph_dir_config);
+    RUN_TEST(test_is_protected_file_scaffold_dir_config);
     RUN_TEST(test_is_protected_file_not_protected);
     RUN_TEST(test_is_protected_file_null);
     RUN_TEST(test_is_protected_file_empty);

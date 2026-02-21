@@ -40,7 +40,7 @@ typedef struct {
  * Initialize the configuration system
  * Loads configuration with increasing priority:
  * 1. Built-in defaults (lowest)
- * 2. $RALPH_HOME/config.json (default ~/.local/ralph/config.json)
+ * 2. $SCAFFOLD_HOME/config.json (default ~/.local/scaffold/config.json)
  * 3. Environment variables (highest, override config file values)
  *
  * @return 0 on success, -1 on error

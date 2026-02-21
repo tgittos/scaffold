@@ -2,7 +2,6 @@
 #include "recap.h"
 #include "../util/interrupt.h"
 #include "../util/debug_output.h"
-#include "../util/app_home.h"
 #include "../ui/output_formatter.h"
 #include "../ui/json_output.h"
 #include "../ui/spinner.h"
@@ -178,8 +177,7 @@ int repl_run_session(AgentSession* session, bool json_mode) {
         notify_fd = message_poller_get_notify_fd(session->message_poller);
     }
 
-    goal_store_t *recovery_gs = (strcmp(app_home_get_app_name(), "scaffold") == 0)
-        ? services_get_goal_store(session->services) : NULL;
+    goal_store_t *recovery_gs = services_get_goal_store(session->services);
     time_t last_recovery_check = time(NULL);
     const int recovery_check_interval_secs = 5;
 
@@ -307,7 +305,7 @@ void repl_show_greeting(AgentSession* session, bool json_mode) {
     if (session->session_data.conversation.count == 0) {
         debug_printf("Generating welcome message...\n");
 
-        const char *name = app_home_get_app_name();
+        const char *name = "scaffold";
         char greeting_prompt[512];
         snprintf(greeting_prompt, sizeof(greeting_prompt),
                  "This is your first interaction with this user in interactive mode. "

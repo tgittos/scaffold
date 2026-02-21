@@ -85,7 +85,7 @@ $(eval $(call def_test,approval_gate_integration,policy/test_approval_gate_integ
 $(TEST_main_TARGET): $(TEST_main_OBJECTS)
 	$(CC) -o $@ $(TEST_main_OBJECTS)
 
-$(TEST_cli_flags_TARGET): $(TEST_cli_flags_OBJECTS) $(BUILDDIR)/.ralph-linked
+$(TEST_cli_flags_TARGET): $(TEST_cli_flags_OBJECTS) $(BUILDDIR)/.scaffold-linked
 	$(CC) -o $@ $(TEST_cli_flags_OBJECTS)
 
 $(TEST_interrupt_TARGET): $(TEST_interrupt_OBJECTS)
@@ -333,8 +333,8 @@ $(eval $(call def_test_lib,mode_commands,ui/test_mode_commands,))
 $(eval $(call def_test_lib,context_mode_injection,agent/test_context_mode_injection,))
 $(eval $(call def_test_lib,python_tool,tools/test_python_tool,$(TOOL_SOURCES)))
 $(eval $(call def_test_lib,python_integration,tools/test_python_integration,$(TOOL_SOURCES)))
-$(eval $(call def_test_lib,http_python,network/test_http_python,$(SRCDIR)/ralph/tools/http_python.c))
-$(eval $(call def_test_lib,sys_python,tools/test_sys_python,$(SRCDIR)/ralph/tools/sys_python.c))
+$(eval $(call def_test_lib,http_python,network/test_http_python,$(SRCDIR)/tools/http_python.c))
+$(eval $(call def_test_lib,sys_python,tools/test_sys_python,$(SRCDIR)/tools/sys_python.c))
 $(eval $(call def_test_lib,image_attachment,network/test_image_attachment,))
 $(eval $(call def_test_lib,goap_tools,tools/test_goap_tools,))
 $(eval $(call def_test_lib,orchestrator_tool,tools/test_orchestrator_tool,))
@@ -377,7 +377,7 @@ define PYTHON_TEST_EMBED
 	EMBED_ZIP=$(CURDIR)/$(BUILDDIR)/python-embed-$$(basename $@).zip; \
 	rm -f $$EMBED_ZIP; \
 	cd $(PYTHON_STDLIB_DIR) && zip -qr $$EMBED_ZIP lib/; \
-	cd $(CURDIR)/$(SRCDIR)/ralph/tools && zip -qr $$EMBED_ZIP python_defaults/; \
+	cd $(CURDIR)/$(SRCDIR)/tools && zip -qr $$EMBED_ZIP python_defaults/; \
 	zipcopy $$EMBED_ZIP $(CURDIR)/$@; \
 	rm -f $$EMBED_ZIP
 endef

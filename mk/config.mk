@@ -9,8 +9,7 @@ CFLAGS := -Wall -Wextra -Werror -O2 -std=c11 -DHAVE_PDFIO -MMD -MP
 CXXFLAGS := -Wall -Wextra -Werror -O2 -std=c++14 -Wno-unused-parameter -Wno-unused-function -Wno-type-limits -MMD -MP
 
 OUTDIR := out
-TARGET := $(OUTDIR)/ralph
-SCAFFOLD_TARGET := $(OUTDIR)/scaffold
+TARGET := $(OUTDIR)/scaffold
 
 # Directory structure
 SRCDIR := src
@@ -80,8 +79,8 @@ INCLUDES := -I. -I$(CURL_DIR)/include -I$(MBEDTLS_DIR)/include -I$(HNSWLIB_DIR) 
     -I$(READLINE_DIR)/readline -I$(NCURSES_DIR)/include -I$(SQLITE_DIR) \
     -I$(OSSP_UUID_DIR) -I$(PYTHON_INCLUDE) \
     -I$(BUILDDIR)/generated \
-    -I$(SRCDIR) -I$(SRCDIR)/ralph -I$(SRCDIR)/llm \
-    -I$(SRCDIR)/session -I$(SRCDIR)/ralph/tools -I$(SRCDIR)/utils -I$(SRCDIR)/db \
+    -I$(SRCDIR) -I$(SRCDIR)/tools -I$(SRCDIR)/llm \
+    -I$(SRCDIR)/session -I$(SRCDIR)/utils -I$(SRCDIR)/db \
     -I$(SRCDIR)/cli
 
 TEST_INCLUDES := $(INCLUDES) -I$(TESTDIR)/unity -I$(TESTDIR) \
@@ -101,7 +100,7 @@ CACERT_SOURCE := $(LIBDIR)/network/embedded_cacert.c
 
 # Python paths
 PYTHON_STDLIB_DIR := python/build/results/py-tmp
-PYTHON_DEFAULTS_DIR := src/ralph/tools/python_defaults
+PYTHON_DEFAULTS_DIR := src/tools/python_defaults
 
 # Valgrind settings
 VALGRIND_FLAGS := --tool=memcheck --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1

@@ -17,7 +17,7 @@
 #define PROTECTED_PATH_BUFSIZE 4096
 
 static const char *PROTECTED_BASENAME_PATTERNS[] = {
-    "ralph.config.json",
+    "scaffold.config.json",
     ".env",
     NULL
 };
@@ -28,8 +28,8 @@ static const char *PROTECTED_PREFIX_PATTERNS[] = {
 };
 
 static const char *PROTECTED_GLOB_PATTERNS[] = {
-    "**/ralph.config.json",
-    "**/.ralph/config.json",
+    "**/scaffold.config.json",
+    "**/.scaffold/config.json",
     "**/.env",
     "**/.env.*",
     NULL
@@ -95,8 +95,8 @@ static int build_path(const char *dir, const char *filename, char *buffer, size_
 
 static void scan_protected_paths_in_dir(const char *base_dir) {
     static const char *SCAN_FILENAMES[] = {
-        "ralph.config.json",
-        ".ralph/config.json",
+        "scaffold.config.json",
+        ".scaffold/config.json",
         ".env",
         ".env.local",
         ".env.development",

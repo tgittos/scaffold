@@ -131,7 +131,6 @@ jobs:
           name: scaffold v${{ steps.version.outputs.version }}
           body: ${{ inputs.release_notes }}
           files: |
-            out/ralph
             out/scaffold
             out/libagent.x86_64.a
             out/libagent.aarch64.a
@@ -145,7 +144,6 @@ jobs:
           name: scaffold v${{ steps.version.outputs.version }}
           generate_release_notes: true
           files: |
-            out/ralph
             out/scaffold
             out/libagent.x86_64.a
             out/libagent.aarch64.a

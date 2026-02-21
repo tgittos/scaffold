@@ -12,17 +12,17 @@
  * Protected Files Detection Module
  *
  * Detects and blocks modification of protected configuration files:
- * - ralph.config.json (and any path ending in /ralph.config.json)
- * - .ralph/config.json
+ * - scaffold.config.json (and any path ending in /scaffold.config.json)
+ * - .scaffold/config.json
  * - .env files (.env, .env.local, .env.production, etc.)
  *
  * This protection is enforced at the tool execution layer and cannot be
  * bypassed by gate configuration or allowlist settings.
  *
  * Detection strategies:
- * 1. Basename exact match (e.g., "ralph.config.json", ".env")
+ * 1. Basename exact match (e.g., "scaffold.config.json", ".env")
  * 2. Basename prefix match (e.g., ".env.*")
- * 3. Glob pattern match (e.g., any path ending in /.ralph/config.json)
+ * 3. Glob pattern match (e.g., any path ending in /.scaffold/config.json)
  * 4. Inode-based detection (catches hardlinks and renames)
  *
  * The inode cache is refreshed periodically to detect late-created files.
@@ -128,8 +128,8 @@ int is_protected_inode(const char *path);
  * PROTECTED_INODE_REFRESH_INTERVAL seconds.
  *
  * Scanned locations include:
- * - ralph.config.json in current directory
- * - .ralph/config.json
+ * - scaffold.config.json in current directory
+ * - .scaffold/config.json
  * - .env, .env.local, .env.development, .env.production, .env.test
  * - Parent directories up to PROTECTED_INODE_SCAN_DEPTH levels
  */

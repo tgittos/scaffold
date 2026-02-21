@@ -33,8 +33,8 @@ test/unity/.aarch64/
 .env
 
 # Runtime files
-ralph.config.json
-ralph.config.json.backup
+scaffold.config.json
+scaffold.config.json.backup
 
 # Random files
 .DS_Store

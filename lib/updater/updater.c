@@ -11,7 +11,7 @@
 #include <unistd.h>
 
 #define GITHUB_OWNER "tgittos"
-#define GITHUB_REPO  "ralph"
+#define GITHUB_REPO  "scaffold"
 #define GITHUB_API_URL "https://api.github.com/repos/" GITHUB_OWNER "/" GITHUB_REPO "/releases/latest"
 
 #define COPY_BUF_SIZE 65536
@@ -44,7 +44,7 @@ updater_status_t updater_check(updater_release_t *release) {
     memset(release, 0, sizeof(*release));
 
     char user_agent[64];
-    snprintf(user_agent, sizeof(user_agent), "User-Agent: ralph/%s", RALPH_VERSION);
+    snprintf(user_agent, sizeof(user_agent), "User-Agent: scaffold/%s", RALPH_VERSION);
 
     const char *headers[] = {
         user_agent,
@@ -91,7 +91,7 @@ updater_status_t updater_check(updater_release_t *release) {
         return UP_TO_DATE;
     }
 
-    /* Find the "ralph" asset */
+    /* Find the "scaffold" asset */
     cJSON *assets = cJSON_GetObjectItem(json, "assets");
     if (!cJSON_IsArray(assets)) {
         cJSON_Delete(json);
@@ -103,7 +103,7 @@ updater_status_t updater_check(updater_release_t *release) {
     for (int i = 0; i < asset_count; i++) {
         cJSON *asset = cJSON_GetArrayItem(assets, i);
         cJSON *name = cJSON_GetObjectItem(asset, "name");
-        if (cJSON_IsString(name) && strcmp(name->valuestring, "ralph") == 0) {
+        if (cJSON_IsString(name) && strcmp(name->valuestring, "scaffold") == 0) {
             cJSON *url = cJSON_GetObjectItem(asset, "browser_download_url");
             if (cJSON_IsString(url)) {
                 snprintf(release->download_url, sizeof(release->download_url),

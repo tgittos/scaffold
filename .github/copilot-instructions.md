@@ -68,8 +68,7 @@ ralph-python/
 
 | File | Purpose |
 |------|---------|
-| `src/ralph/main.c` | Application entry point, CLI argument parsing |
-| `src/ralph/ralph.c` | Core orchestration, LLM communication loop |
+| `src/scaffold/main.c` | Application entry point, CLI argument parsing |
 | `src/tools/tools_system.c` | Tool registry and execution framework |
 | `src/llm/llm_provider.c` | Provider abstraction with URL-based detection |
 | `lib/session/conversation_tracker.c` | Conversation history with vector DB persistence |
@@ -148,7 +147,7 @@ The `-Werror` flag means all warnings are errors - code must compile cleanly.
 
 ## Configuration
 
-Ralph uses `ralph.config.json` for configuration:
+Scaffold uses `scaffold.config.json` for configuration:
 
 ```json
 {
@@ -165,9 +164,9 @@ Environment variables `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` are auto-detected
 ## Output Binaries
 
 After `make`:
-- `ralph` - Main APE fat binary (portable)
-- `ralph.com.dbg` - x86_64 debug binary (for GDB/Valgrind)
-- `ralph.aarch64.elf` - ARM64 debug binary (for GDB/Valgrind)
+- `scaffold` - Main APE fat binary (portable)
+- `scaffold.com.dbg` - x86_64 debug binary (for GDB/Valgrind)
+- `scaffold.aarch64.elf` - ARM64 debug binary (for GDB/Valgrind)
 
 ## Common Issues
 

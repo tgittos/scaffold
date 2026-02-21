@@ -21,8 +21,8 @@ char* get_executable_path(void) {
 
     if (getcwd(path, EXE_PATH_BUFFER_SIZE) != NULL) {
         size_t cwd_len = strlen(path);
-        if (cwd_len + 7 < EXE_PATH_BUFFER_SIZE) {
-            strcat(path, "/ralph");
+        if (cwd_len + 10 < EXE_PATH_BUFFER_SIZE) {
+            strcat(path, "/scaffold");
             if (access(path, X_OK) == 0) {
                 return path;
             }
@@ -30,5 +30,5 @@ char* get_executable_path(void) {
     }
 
     free(path);
-    return strdup("./ralph");
+    return strdup("./scaffold");
 }

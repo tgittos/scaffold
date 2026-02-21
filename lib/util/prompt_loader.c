@@ -1,6 +1,5 @@
 #include "prompt_loader.h"
 #include "config.h"
-#include "app_home.h"
 #include <prompt_data.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -344,9 +343,6 @@ int load_system_prompt(char **prompt_content, const char *tools_description) {
     size_t model_table_len = model_table ? strlen(model_table) : 0;
 
     const char *base_prompt = SYSTEM_PROMPT_TEXT;
-    if (strcmp(app_home_get_app_name(), "scaffold") == 0) {
-        base_prompt = SCAFFOLD_SYSTEM_PROMPT_TEXT;
-    }
 
     size_t part1_len = strlen(base_prompt);
     size_t part2_len = strlen(SYSTEM_PROMPT_PART2);

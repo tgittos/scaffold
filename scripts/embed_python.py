@@ -40,7 +40,7 @@ BUILD_DIR = RALPH_ROOT / "build"
 TEMP_ZIP = BUILD_DIR / "python-embed.zip"
 
 PYTHON_STDLIB_DIR = RALPH_ROOT / "python" / "build" / "results" / "py-tmp"
-PYTHON_DEFAULTS_DIR = RALPH_ROOT / "src" / "ralph" / "tools" / "python_defaults"
+PYTHON_DEFAULTS_DIR = RALPH_ROOT / "src" / "tools" / "python_defaults"
 
 
 def get_target_paths(name: str) -> tuple[Path, Path, Path]:
@@ -166,7 +166,7 @@ def create_embed_zip() -> Path:
         sys.exit(1)
 
     # Add defaults with python_defaults/ prefix
-    # We cd to src/ralph/tools so the zip contains python_defaults/...
+    # We cd to src/tools so the zip contains python_defaults/...
     result = run_shell(
         f"zip -qr {TEMP_ZIP.absolute()} python_defaults/",
         cwd=PYTHON_DEFAULTS_DIR.parent
@@ -259,7 +259,7 @@ def main():
     args = sys.argv[1:]
 
     # Parse --target <name> (default: ralph)
-    name = "ralph"
+    name = "scaffold"
     if "--target" in args:
         idx = args.index("--target")
         if idx + 1 < len(args):

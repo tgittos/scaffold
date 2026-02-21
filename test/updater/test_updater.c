@@ -65,7 +65,7 @@ void test_semver_compare_less(void) {
 
 #define RELEASE_JSON_TEMPLATE \
     "{\"tag_name\":\"%s\",\"prerelease\":false,\"body\":\"Release notes\"," \
-    "\"assets\":[{\"name\":\"ralph\",\"browser_download_url\":\"https://example.com/ralph\"," \
+    "\"assets\":[{\"name\":\"scaffold\",\"browser_download_url\":\"https://example.com/scaffold\"," \
     "\"size\":12345}]}"
 
 static char json_buf[2048];
@@ -82,7 +82,7 @@ void test_check_update_available(void) {
     TEST_ASSERT_EQUAL_INT(0, release.minor);
     TEST_ASSERT_EQUAL_INT(0, release.patch);
     TEST_ASSERT_EQUAL_STRING("v99.0.0", release.tag);
-    TEST_ASSERT_EQUAL_STRING("https://example.com/ralph", release.download_url);
+    TEST_ASSERT_EQUAL_STRING("https://example.com/scaffold", release.download_url);
     TEST_ASSERT_EQUAL(12345, release.asset_size);
 }
 
