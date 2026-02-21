@@ -68,7 +68,7 @@ jobs:
             -w /workspaces/ralph \
             -e PATH="/uv-bin:/opt/cosmos/bin:$PATH" \
             scaffold-dev:latest \
-            bash -c "make -j$(nproc) && ./scripts/run_tests.sh -v"
+            bash -c "./scripts/build.sh && ./scripts/run_tests.sh -v"
 
       - name: Fix permissions for cache
         if: always()
