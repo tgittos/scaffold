@@ -222,7 +222,7 @@ DirectMessage **message_receive_direct(message_store_t *store, const char *agent
     int rc = sqlite_dal_query_list_p(store->dal,
         "SELECT id, sender_id, recipient_id, content, created_at, read_at, expires_at "
         "FROM direct_messages WHERE recipient_id = ? AND read_at IS NULL "
-        "ORDER BY created_at ASC LIMIT ?;",
+        "ORDER BY rowid ASC LIMIT ?;",
         bind_text_int, &params, map_direct_message, (sqlite_item_free_t)direct_message_free,
         NULL, &items, &count);
 
@@ -422,7 +422,7 @@ PendingMessage *message_peek_pending(message_store_t *store, const char *recipie
     BindText1 params = { recipient };
     return sqlite_dal_query_one_p(store->dal,
         "SELECT id, sender_id, content, created_at FROM direct_messages "
-        "WHERE recipient_id = ? AND read_at IS NULL ORDER BY created_at ASC LIMIT 1;",
+        "WHERE recipient_id = ? AND read_at IS NULL ORDER BY rowid ASC LIMIT 1;",
         bind_text1, &params, map_pending_message, NULL);
 }
 
@@ -620,7 +620,7 @@ ChannelMessage **channel_receive(message_store_t *store, const char *channel_nam
         "FROM channel_messages cm "
         "JOIN channel_subscriptions cs ON cm.channel_id = cs.channel_id "
         "WHERE cs.agent_id = ? AND cm.channel_id = ? AND cm.created_at > cs.last_read_at "
-        "ORDER BY cm.created_at ASC LIMIT ?;",
+        "ORDER BY cm.rowid ASC LIMIT ?;",
         bind_receive_params, &params, map_channel_message, (sqlite_item_free_t)channel_message_free,
         NULL, &items, &count);
 
@@ -652,7 +652,7 @@ ChannelMessage **channel_receive_all(message_store_t *store, const char *agent_i
         "FROM channel_messages cm "
         "JOIN channel_subscriptions cs ON cm.channel_id = cs.channel_id "
         "WHERE cs.agent_id = ? AND cm.created_at > cs.last_read_at "
-        "ORDER BY cm.created_at ASC LIMIT ?;",
+        "ORDER BY cm.rowid ASC LIMIT ?;",
         bind_text_int, &params, map_channel_message, (sqlite_item_free_t)channel_message_free,
         NULL, &items, &count);
 

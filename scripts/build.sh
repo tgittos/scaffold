@@ -122,15 +122,17 @@ main() {
     local output
     local exit_code
 
+    local jobs="-j$(nproc 2>/dev/null || echo 1)"
+
     if [ $VERBOSE -eq 1 ]; then
         # Verbose: show output in real-time
-        make $TARGET 2>&1 | tee /tmp/ralph_build_$$.log
+        make $jobs $TARGET 2>&1 | tee /tmp/ralph_build_$$.log
         exit_code=${PIPESTATUS[0]}
         output=$(cat /tmp/ralph_build_$$.log)
         rm -f /tmp/ralph_build_$$.log
     else
         # Capture output
-        output=$(make $TARGET 2>&1)
+        output=$(make $jobs $TARGET 2>&1)
         exit_code=$?
     fi
 
