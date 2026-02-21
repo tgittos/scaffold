@@ -566,6 +566,273 @@ void test_pip_list_empty_site_packages(void) {
     cleanup_python_result(&result);
 }
 
+// Test that read_file returns a dict with content, total_lines, and range
+void test_read_file_returns_dict(void) {
+    TEST_ASSERT_EQUAL_INT(0, python_init_tool_files());
+    TEST_ASSERT_EQUAL_INT(0, python_load_tool_files());
+
+    PythonExecutionParams params = {0};
+    params.code = strdup(
+        "_ns = {}\n"
+        "with open('/zip/python_defaults/read_file.py', 'r') as f:\n"
+        "    exec(f.read(), _ns)\n"
+        "_read_file = _ns['read_file']\n"
+        "\n"
+        "import tempfile, os\n"
+        "tf = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)\n"
+        "tf.write('alpha\\nbeta\\ngamma\\ndelta\\n')\n"
+        "tf.close()\n"
+        "\n"
+        "# Full file read\n"
+        "r = _read_file(tf.name)\n"
+        "assert isinstance(r, dict), f'expected dict, got {type(r)}'\n"
+        "assert 'content' in r, 'missing content key'\n"
+        "assert 'total_lines' in r, 'missing total_lines key'\n"
+        "assert 'range' in r, 'missing range key'\n"
+        "assert r['total_lines'] == 4, f'expected 4 lines, got {r[\"total_lines\"]}'\n"
+        "assert r['range'] == '1-4', f'expected 1-4, got {r[\"range\"]}'\n"
+        "assert r['success'] == True, 'expected success=True'\n"
+        "assert '1: alpha' in r['content'], f'missing line numbers in content: {r[\"content\"][:100]}'\n"
+        "assert '3: gamma' in r['content'], f'missing line 3: {r[\"content\"][:200]}'\n"
+        "\n"
+        "# Ranged read\n"
+        "r2 = _read_file(tf.name, start_line=2, end_line=3)\n"
+        "assert r2['total_lines'] == 4, 'total_lines should be full file count'\n"
+        "assert r2['range'] == '2-3', f'expected 2-3, got {r2[\"range\"]}'\n"
+        "assert '2: beta' in r2['content']\n"
+        "assert '1: alpha' not in r2['content']\n"
+        "\n"
+        "# Empty file\n"
+        "ef = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)\n"
+        "ef.close()\n"
+        "r3 = _read_file(ef.name)\n"
+        "assert r3['total_lines'] == 0, f'expected 0, got {r3[\"total_lines\"]}'\n"
+        "assert r3['range'] == '0-0', f'expected 0-0, got {r3[\"range\"]}'\n"
+        "os.unlink(ef.name)\n"
+        "\n"
+        "os.unlink(tf.name)\n"
+        "print('passed')\n"
+    );
+    params.timeout_seconds = PYTHON_DEFAULT_TIMEOUT;
+
+    PythonExecutionResult result = {0};
+    int ret = execute_python_code(&params, &result);
+
+    TEST_ASSERT_EQUAL_INT(0, ret);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, result.success,
+        result.exception ? result.exception : "read_file dict test failed");
+    TEST_ASSERT_NOT_NULL(result.stdout_output);
+    TEST_ASSERT_NOT_NULL(strstr(result.stdout_output, "passed"));
+
+    cleanup_python_params(&params);
+    cleanup_python_result(&result);
+    python_cleanup_tool_files();
+}
+
+// Test search_files new features: context_lines, matched_files, total_matches_found
+void test_search_files_new_features(void) {
+    TEST_ASSERT_EQUAL_INT(0, python_init_tool_files());
+    TEST_ASSERT_EQUAL_INT(0, python_load_tool_files());
+
+    PythonExecutionParams params = {0};
+    params.code = strdup(
+        "_ns = {}\n"
+        "with open('/zip/python_defaults/search_files.py', 'r') as f:\n"
+        "    exec(f.read(), _ns)\n"
+        "_search = _ns['search_files']\n"
+        "\n"
+        "import tempfile, os\n"
+        "td = tempfile.mkdtemp()\n"
+        "fpath = os.path.join(td, 'test.txt')\n"
+        "with open(fpath, 'w') as f:\n"
+        "    f.write('line1 foo\\nline2 bar\\nline3 foo\\nline4 baz\\nline5 foo\\n')\n"
+        "\n"
+        "# Basic search\n"
+        "r = _search(td, 'foo')\n"
+        "assert 'total_matches_found' in r, 'missing total_matches_found'\n"
+        "assert 'matched_files' in r, 'missing matched_files'\n"
+        "assert r['total_matches_found'] == 3, f'expected 3 total, got {r[\"total_matches_found\"]}'\n"
+        "assert len(r['matched_files']) == 1, f'expected 1 file, got {len(r[\"matched_files\"])}'\n"
+        "assert fpath in r['matched_files'][0] or r['matched_files'][0].endswith('test.txt')\n"
+        "\n"
+        "# With context_lines\n"
+        "r2 = _search(td, 'bar', context_lines=1)\n"
+        "assert len(r2['results']) == 1\n"
+        "m = r2['results'][0]\n"
+        "assert 'surrounding_lines' in m, 'missing surrounding_lines'\n"
+        "sl = m['surrounding_lines']\n"
+        "assert len(sl) == 2, f'expected 2 surrounding lines, got {len(sl)}'\n"
+        "# Line 2 matches 'bar', so context should include lines 1 and 3\n"
+        "line_nums = [s['line_number'] for s in sl]\n"
+        "assert 1 in line_nums and 3 in line_nums, f'unexpected line nums: {line_nums}'\n"
+        "\n"
+        "# Without context_lines, no surrounding_lines key\n"
+        "r3 = _search(td, 'bar', context_lines=0)\n"
+        "assert 'surrounding_lines' not in r3['results'][0]\n"
+        "\n"
+        "# total_matches_found with max_results\n"
+        "r4 = _search(td, 'foo', max_results=1)\n"
+        "assert r4['total_matches'] == 1, 'should cap results at 1'\n"
+        "assert r4['total_matches_found'] >= 1, f'should count at least 1, got {r4[\"total_matches_found\"]}'\n"
+        "assert r4['truncated'] == True\n"
+        "\n"
+        "# finditer: multiple matches on same line\n"
+        "fpath2 = os.path.join(td, 'multi.txt')\n"
+        "with open(fpath2, 'w') as f:\n"
+        "    f.write('aaa bbb aaa\\n')\n"
+        "r5 = _search(td, 'aaa', glob_filter='multi.txt')\n"
+        "assert r5['total_matches_found'] == 2, f'finditer should find 2, got {r5[\"total_matches_found\"]}'\n"
+        "\n"
+        "# Clean up\n"
+        "os.unlink(fpath)\n"
+        "os.unlink(fpath2)\n"
+        "os.rmdir(td)\n"
+        "print('passed')\n"
+    );
+    params.timeout_seconds = PYTHON_DEFAULT_TIMEOUT;
+
+    PythonExecutionResult result = {0};
+    int ret = execute_python_code(&params, &result);
+
+    TEST_ASSERT_EQUAL_INT(0, ret);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, result.success,
+        result.exception ? result.exception : "search_files features test failed");
+    TEST_ASSERT_NOT_NULL(result.stdout_output);
+    TEST_ASSERT_NOT_NULL(strstr(result.stdout_output, "passed"));
+
+    cleanup_python_params(&params);
+    cleanup_python_result(&result);
+    python_cleanup_tool_files();
+}
+
+// Test list_dir ISO timestamps
+void test_list_dir_iso_timestamps(void) {
+    TEST_ASSERT_EQUAL_INT(0, python_init_tool_files());
+    TEST_ASSERT_EQUAL_INT(0, python_load_tool_files());
+
+    PythonExecutionParams params = {0};
+    params.code = strdup(
+        "_ns = {}\n"
+        "with open('/zip/python_defaults/list_dir.py', 'r') as f:\n"
+        "    exec(f.read(), _ns)\n"
+        "_list_dir = _ns['list_dir']\n"
+        "\n"
+        "import tempfile, os\n"
+        "td = tempfile.mkdtemp()\n"
+        "fpath = os.path.join(td, 'hello.txt')\n"
+        "with open(fpath, 'w') as f:\n"
+        "    f.write('hi')\n"
+        "\n"
+        "r = _list_dir(td)\n"
+        "assert len(r) == 1\n"
+        "entry = r[0]\n"
+        "mt = entry['modified_time']\n"
+        "assert isinstance(mt, str), f'expected str, got {type(mt)}'\n"
+        "# Should be ISO format with T separator\n"
+        "assert 'T' in mt, f'expected ISO format, got {mt}'\n"
+        "# Should parse as datetime\n"
+        "from datetime import datetime\n"
+        "datetime.fromisoformat(mt)\n"
+        "\n"
+        "os.unlink(fpath)\n"
+        "os.rmdir(td)\n"
+        "print('passed')\n"
+    );
+    params.timeout_seconds = PYTHON_DEFAULT_TIMEOUT;
+
+    PythonExecutionResult result = {0};
+    int ret = execute_python_code(&params, &result);
+
+    TEST_ASSERT_EQUAL_INT(0, ret);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, result.success,
+        result.exception ? result.exception : "list_dir ISO timestamp test failed");
+    TEST_ASSERT_NOT_NULL(result.stdout_output);
+    TEST_ASSERT_NOT_NULL(strstr(result.stdout_output, "passed"));
+
+    cleanup_python_params(&params);
+    cleanup_python_result(&result);
+    python_cleanup_tool_files();
+}
+
+// Test apply_delta expected field
+void test_apply_delta_expected_field(void) {
+    TEST_ASSERT_EQUAL_INT(0, python_init_tool_files());
+    TEST_ASSERT_EQUAL_INT(0, python_load_tool_files());
+
+    PythonExecutionParams params = {0};
+    params.code = strdup(
+        "_ns = {}\n"
+        "with open('/zip/python_defaults/apply_delta.py', 'r') as f:\n"
+        "    exec(f.read(), _ns)\n"
+        "_apply_delta = _ns['apply_delta']\n"
+        "\n"
+        "import tempfile, os\n"
+        "tf = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)\n"
+        "tf.write('line1\\nline2\\nline3\\n')\n"
+        "tf.close()\n"
+        "\n"
+        "# Replace with correct expected - should succeed\n"
+        "r = _apply_delta(tf.name, [{\n"
+        "    'type': 'replace',\n"
+        "    'start_line': 2,\n"
+        "    'end_line': 2,\n"
+        "    'content': ['NEW LINE 2'],\n"
+        "    'expected': ['line2']\n"
+        "}], create_backup=False)\n"
+        "assert r['success'] == True\n"
+        "\n"
+        "# Verify the file was modified\n"
+        "with open(tf.name) as f:\n"
+        "    c = f.read()\n"
+        "assert 'NEW LINE 2' in c\n"
+        "\n"
+        "# Replace with wrong expected - should fail\n"
+        "try:\n"
+        "    _apply_delta(tf.name, [{\n"
+        "        'type': 'replace',\n"
+        "        'start_line': 2,\n"
+        "        'end_line': 2,\n"
+        "        'content': ['SHOULD NOT APPEAR'],\n"
+        "        'expected': ['this is not what line 2 contains']\n"
+        "    }], create_backup=False)\n"
+        "    assert False, 'should have raised ValueError'\n"
+        "except ValueError as e:\n"
+        "    assert 'Content mismatch' in str(e), f'unexpected error: {e}'\n"
+        "\n"
+        "# Verify file was NOT modified by the failed operation\n"
+        "with open(tf.name) as f:\n"
+        "    c2 = f.read()\n"
+        "assert 'SHOULD NOT APPEAR' not in c2, 'file should be unchanged after failed expected'\n"
+        "assert 'NEW LINE 2' in c2, 'file should still have previous content'\n"
+        "\n"
+        "# Without expected field - should still work normally\n"
+        "r2 = _apply_delta(tf.name, [{\n"
+        "    'type': 'replace',\n"
+        "    'start_line': 1,\n"
+        "    'end_line': 1,\n"
+        "    'content': ['REPLACED LINE 1']\n"
+        "}], create_backup=False)\n"
+        "assert r2['success'] == True\n"
+        "\n"
+        "os.unlink(tf.name)\n"
+        "print('passed')\n"
+    );
+    params.timeout_seconds = PYTHON_DEFAULT_TIMEOUT;
+
+    PythonExecutionResult result = {0};
+    int ret = execute_python_code(&params, &result);
+
+    TEST_ASSERT_EQUAL_INT(0, ret);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, result.success,
+        result.exception ? result.exception : "apply_delta expected test failed");
+    TEST_ASSERT_NOT_NULL(result.stdout_output);
+    TEST_ASSERT_NOT_NULL(strstr(result.stdout_output, "passed"));
+
+    cleanup_python_params(&params);
+    cleanup_python_result(&result);
+    python_cleanup_tool_files();
+}
+
 int main(void) {
     // Initialize ralph home before Python interpreter (needed for tool files path)
     app_home_init(NULL);
@@ -596,6 +863,10 @@ int main(void) {
     RUN_TEST(test_pip_find_best_wheel);
     RUN_TEST(test_pip_safe_extractall_rejects_traversal);
     RUN_TEST(test_pip_list_empty_site_packages);
+    RUN_TEST(test_read_file_returns_dict);
+    RUN_TEST(test_search_files_new_features);
+    RUN_TEST(test_list_dir_iso_timestamps);
+    RUN_TEST(test_apply_delta_expected_field);
 
     int result = UNITY_END();
 

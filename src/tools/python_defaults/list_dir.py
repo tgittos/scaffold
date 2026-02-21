@@ -24,6 +24,7 @@ def list_dir(path: str, glob_filter: str = None, recursive: bool = False, includ
         List of dictionaries with file/directory information
     """
     from pathlib import Path
+    from datetime import datetime, timezone
     import os
 
     # Security check - prevent directory traversal
@@ -57,12 +58,15 @@ def list_dir(path: str, glob_filter: str = None, recursive: bool = False, includ
 
         try:
             stat = entry_path.stat()
+            mtime_iso = datetime.fromtimestamp(
+                stat.st_mtime, tz=timezone.utc
+            ).isoformat()
             results.append({
                 "name": entry_path.name,
                 "path": str(entry_path),
                 "is_directory": entry_path.is_dir(),
                 "size": stat.st_size if not entry_path.is_dir() else 0,
-                "modified_time": stat.st_mtime
+                "modified_time": mtime_iso
             })
             return True
         except (PermissionError, OSError):

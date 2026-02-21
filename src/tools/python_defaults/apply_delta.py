@@ -100,6 +100,21 @@ def _validate_operations(operations: list) -> None:
                         f"got {type(line).__name__}: {repr(line)[:100]}"
                     )
 
+        # Validate optional expected field for replace and delete
+        if op_type in ('replace', 'delete') and 'expected' in op:
+            expected = op['expected']
+            if not isinstance(expected, list):
+                raise ValueError(
+                    f"Operation {i} ({op_type}) has invalid expected: must be a list of strings, "
+                    f"got {type(expected).__name__}"
+                )
+            for j, line in enumerate(expected):
+                if not isinstance(line, str):
+                    raise ValueError(
+                        f"Operation {i} ({op_type}) expected[{j}] must be a string, "
+                        f"got {type(line).__name__}: {repr(line)[:100]}"
+                    )
+
 
 def apply_delta(path: str, operations: list, create_backup: bool = True) -> dict:
     """Apply delta patch operations to a file.
@@ -156,6 +171,28 @@ def apply_delta(path: str, operations: list, create_backup: bool = True) -> dict
     # Sort operations by start_line in reverse order
     # This ensures we apply changes from bottom to top, preserving line numbers
     sorted_ops = sorted(operations, key=lambda x: x.get('start_line', 0), reverse=True)
+
+    # Verify all expected content BEFORE applying any mutations
+    for op in sorted_ops:
+        op_type = op.get('type', '').lower()
+        if op_type in ('replace', 'delete') and 'expected' in op:
+            start_line = op.get('start_line', 1)
+            idx = start_line - 1
+            expected = op['expected']
+            end_line = op.get('end_line', start_line)
+            end_idx = min(end_line, len(lines))
+            actual = [l.rstrip('\n').rstrip('\r') for l in lines[idx:end_idx]]
+            if actual != expected:
+                raise ValueError(
+                    f"Content mismatch at lines {start_line}-{end_line}. "
+                    f"Expected {len(expected)} lines:\n"
+                    + '\n'.join(f"  {s}" for s in expected[:5])
+                    + ('\n  ...' if len(expected) > 5 else '')
+                    + f"\nActual {len(actual)} lines:\n"
+                    + '\n'.join(f"  {s}" for s in actual[:5])
+                    + ('\n  ...' if len(actual) > 5 else '')
+                    + "\nThe file may have changed since it was last read."
+                )
 
     operations_applied = 0
 
