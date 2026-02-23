@@ -62,7 +62,8 @@ void test_conversation_with_corrupted_messages(void) {
     
     // Try to build JSON using the actual API function
     char buffer[4096];
-    int result = build_messages_json(buffer, sizeof(buffer), "system prompt", &history, 
+    SystemPromptParts sys = { .base_prompt = "system prompt", .dynamic_context = NULL };
+    int result = build_messages_json(buffer, sizeof(buffer), &sys, &history,
                                    "user message", format_openai_message, 0);
     
     // This should fail gracefully

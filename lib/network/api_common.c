@@ -85,17 +85,22 @@ static char *format_user_message_with_images(const char *text, int is_anthropic)
     return result;
 }
 
-size_t calculate_json_payload_size(const char* model, const char* system_prompt,
-                                  const ConversationHistory* conversation,
-                                  const char* user_message, const ToolRegistry* tools) {
-    if (model == NULL || conversation == NULL) {
+size_t calculate_messages_buffer_size(const SystemPromptParts* system_prompt,
+                                     const ConversationHistory* conversation,
+                                     const char* user_message) {
+    if (conversation == NULL) {
         return 0;
     }
 
     size_t base_size = 200;
-    size_t model_len = strlen(model);
     size_t user_msg_len = user_message ? strlen(user_message) * 2 + 50 : 0;
-    size_t system_len = system_prompt ? strlen(system_prompt) * 2 + 50 : 0;
+    size_t system_len = 0;
+    if (system_prompt != NULL) {
+        if (system_prompt->base_prompt != NULL)
+            system_len += strlen(system_prompt->base_prompt) * 2 + 100;
+        if (system_prompt->dynamic_context != NULL)
+            system_len += strlen(system_prompt->dynamic_context) * 2 + 100;
+    }
     size_t history_len = 0;
 
     for (size_t i = 0; i < conversation->count; i++) {
@@ -103,7 +108,6 @@ size_t calculate_json_payload_size(const char* model, const char* system_prompt,
             conversation->data[i].content == NULL) {
             continue;
         }
-        // *2 for JSON escaping headroom, +100 for tool_call metadata fields
         size_t msg_size = strlen(conversation->data[i].role) +
                          strlen(conversation->data[i].content) * 2 + 100;
 
@@ -111,11 +115,6 @@ size_t calculate_json_payload_size(const char* model, const char* system_prompt,
             return SIZE_MAX;
         }
         history_len += msg_size;
-    }
-
-    size_t tools_len = 0;
-    if (tools != NULL && tools->functions.count > 0) {
-        tools_len = tools->functions.count * 500;
     }
 
     size_t image_len = 0;
@@ -126,20 +125,14 @@ size_t calculate_json_payload_size(const char* model, const char* system_prompt,
     }
 
     size_t total = base_size;
-    if (total > SIZE_MAX - model_len) return SIZE_MAX;
-    total += model_len;
     if (total > SIZE_MAX - user_msg_len) return SIZE_MAX;
     total += user_msg_len;
     if (total > SIZE_MAX - system_len) return SIZE_MAX;
     total += system_len;
     if (total > SIZE_MAX - history_len) return SIZE_MAX;
     total += history_len;
-    if (total > SIZE_MAX - tools_len) return SIZE_MAX;
-    total += tools_len;
     if (total > SIZE_MAX - image_len) return SIZE_MAX;
     total += image_len;
-    if (total > SIZE_MAX - 200) return SIZE_MAX;
-    total += 200;
 
     return total;
 }
@@ -388,7 +381,7 @@ int format_anthropic_message(char* buffer, size_t buffer_size,
 }
 
 int build_messages_json(char* buffer, size_t buffer_size,
-                       const char* system_prompt,
+                       const SystemPromptParts* system_prompt,
                        const ConversationHistory* conversation,
                        const char* user_message,
                        MessageFormatter formatter,
@@ -398,19 +391,39 @@ int build_messages_json(char* buffer, size_t buffer_size,
     int message_count = 0;
 
     if (system_prompt != NULL && !skip_system_in_history) {
-        ConversationMessage sys_msg = {
-            .role = "system",
-            .content = (char*)system_prompt,
-            .tool_call_id = NULL,
-            .tool_name = NULL
-        };
+        /* Emit base system prompt as first message (stable, cacheable prefix) */
+        if (system_prompt->base_prompt != NULL) {
+            ConversationMessage sys_msg = {
+                .role = "system",
+                .content = (char*)system_prompt->base_prompt,
+                .tool_call_id = NULL,
+                .tool_name = NULL
+            };
 
-        int written = formatter(current, remaining, &sys_msg, 1);
-        if (written < 0) return -1;
+            int written = formatter(current, remaining, &sys_msg, message_count == 0);
+            if (written < 0) return -1;
 
-        current += written;
-        remaining -= written;
-        message_count++;
+            current += written;
+            remaining -= written;
+            message_count++;
+        }
+
+        /* Emit dynamic context as second system message (changes per-request) */
+        if (system_prompt->dynamic_context != NULL && strlen(system_prompt->dynamic_context) > 0) {
+            ConversationMessage dyn_msg = {
+                .role = "system",
+                .content = (char*)system_prompt->dynamic_context,
+                .tool_call_id = NULL,
+                .tool_name = NULL
+            };
+
+            int written = formatter(current, remaining, &dyn_msg, message_count == 0);
+            if (written < 0) return -1;
+
+            current += written;
+            remaining -= written;
+            message_count++;
+        }
     }
 
     for (size_t i = 0; i < conversation->count; i++) {
@@ -464,7 +477,7 @@ int build_messages_json(char* buffer, size_t buffer_size,
 }
 
 int build_anthropic_messages_json(char* buffer, size_t buffer_size,
-                                 const char* system_prompt,
+                                 const SystemPromptParts* system_prompt,
                                  const ConversationHistory* conversation,
                                  const char* user_message,
                                  MessageFormatter formatter,
@@ -474,7 +487,7 @@ int build_anthropic_messages_json(char* buffer, size_t buffer_size,
                               skip_system_in_history);
 }
 
-char* build_json_payload_common(const char* model, const char* system_prompt,
+char* build_json_payload_common(const char* model, const SystemPromptParts* system_prompt,
                                const ConversationHistory* conversation,
                                const char* user_message, const char* max_tokens_param,
                                int max_tokens, const ToolRegistry* tools,
@@ -484,104 +497,118 @@ char* build_json_payload_common(const char* model, const char* system_prompt,
         return NULL;
     }
 
-    size_t total_size = calculate_json_payload_size(model, system_prompt, conversation, user_message, tools);
-    if (total_size == 0 || total_size == SIZE_MAX) {
-        return NULL;
-    }
-    char* json = malloc(total_size);
-    if (json == NULL) return NULL;
+    /* Build messages into a temporary buffer via formatters */
+    const SystemPromptParts* msg_prompt = system_at_top_level ? NULL : system_prompt;
+    size_t msg_buf_size = calculate_messages_buffer_size(msg_prompt, conversation, user_message);
+    if (msg_buf_size == 0 || msg_buf_size == SIZE_MAX) return NULL;
 
-    char* current = json;
-    size_t remaining = total_size;
+    char* msg_buffer = malloc(msg_buf_size);
+    if (msg_buffer == NULL) return NULL;
 
-    int written = snprintf(current, remaining, "{\"model\": \"%s\", \"messages\": [", model);
-    if (written < 0 || written >= (int)remaining) {
-        free(json);
-        return NULL;
-    }
-    current += written;
-    remaining -= written;
-
-    // Anthropic places system prompt at the top level, not inside the messages array
+    int msg_len;
     if (system_at_top_level) {
-        written = build_anthropic_messages_json(current, remaining,
-                                               NULL,
-                                               conversation, user_message, formatter,
-                                               system_at_top_level);
+        msg_len = build_anthropic_messages_json(msg_buffer, msg_buf_size,
+                                               NULL, conversation, user_message,
+                                               formatter, system_at_top_level);
     } else {
-        written = build_messages_json(current, remaining,
-                                     system_prompt,
-                                     conversation, user_message, formatter,
-                                     system_at_top_level);
+        msg_len = build_messages_json(msg_buffer, msg_buf_size,
+                                     system_prompt, conversation, user_message,
+                                     formatter, system_at_top_level);
     }
-    if (written < 0) {
-        free(json);
-        return NULL;
-    }
-    current += written;
-    remaining -= written;
+    if (msg_len < 0) { free(msg_buffer); return NULL; }
 
-    written = snprintf(current, remaining, "]");
-    if (written < 0 || written >= (int)remaining) {
-        free(json);
-        return NULL;
-    }
-    current += written;
-    remaining -= written;
+    /* Wrap formatter output in array brackets for cJSON_CreateRaw */
+    char* messages_raw_str = malloc((size_t)msg_len + 3);
+    if (messages_raw_str == NULL) { free(msg_buffer); return NULL; }
+    snprintf(messages_raw_str, (size_t)msg_len + 3, "[%.*s]", msg_len, msg_buffer);
+    free(msg_buffer);
 
+    /* Build the root JSON object with cJSON */
+    cJSON* root = cJSON_CreateObject();
+    if (root == NULL) { free(messages_raw_str); return NULL; }
+
+    cJSON_AddStringToObject(root, "model", model);
+
+    cJSON* messages_raw = cJSON_CreateRaw(messages_raw_str);
+    free(messages_raw_str);
+    if (messages_raw == NULL) { cJSON_Delete(root); return NULL; }
+    cJSON_AddItemToObject(root, "messages", messages_raw);
+
+    /* Anthropic: system prompt as array of content blocks with cache_control */
     if (system_at_top_level && system_prompt != NULL) {
-        char* escaped_system = json_escape_string(system_prompt);
-        if (escaped_system == NULL) {
-            free(json);
-            return NULL;
+        int has_base = system_prompt->base_prompt != NULL && strlen(system_prompt->base_prompt) > 0;
+        int has_dynamic = system_prompt->dynamic_context != NULL && strlen(system_prompt->dynamic_context) > 0;
+
+        if (has_base || has_dynamic) {
+            cJSON* system_array = cJSON_CreateArray();
+            if (system_array != NULL) {
+                if (has_base) {
+                    cJSON* base_block = cJSON_CreateObject();
+                    if (base_block != NULL) {
+                        cJSON_AddStringToObject(base_block, "type", "text");
+                        cJSON_AddStringToObject(base_block, "text", system_prompt->base_prompt);
+                        cJSON* cache_ctl = cJSON_CreateObject();
+                        if (cache_ctl != NULL) {
+                            cJSON_AddStringToObject(cache_ctl, "type", "ephemeral");
+                            cJSON_AddItemToObject(base_block, "cache_control", cache_ctl);
+                        }
+                        cJSON_AddItemToArray(system_array, base_block);
+                    }
+                }
+
+                if (has_dynamic) {
+                    cJSON* dyn_block = cJSON_CreateObject();
+                    if (dyn_block != NULL) {
+                        cJSON_AddStringToObject(dyn_block, "type", "text");
+                        cJSON_AddStringToObject(dyn_block, "text", system_prompt->dynamic_context);
+                        cJSON_AddItemToArray(system_array, dyn_block);
+                    }
+                }
+
+                cJSON_AddItemToObject(root, "system", system_array);
+            }
         }
-        written = snprintf(current, remaining, ", \"system\": \"%s\"", escaped_system);
-        free(escaped_system);
-        if (written < 0 || written >= (int)remaining) {
-            free(json);
-            return NULL;
-        }
-        current += written;
-        remaining -= written;
     }
 
     if (max_tokens > 0 && max_tokens_param != NULL) {
-        written = snprintf(current, remaining, ", \"%s\": %d", max_tokens_param, max_tokens);
-        if (written < 0 || written >= (int)remaining) {
-            free(json);
-            return NULL;
-        }
-        current += written;
-        remaining -= written;
+        cJSON_AddNumberToObject(root, max_tokens_param, max_tokens);
     }
 
     if (tools != NULL && tools->functions.count > 0 && model) {
         ModelRegistry* registry = get_model_registry();
         if (registry) {
-            char* tools_json = generate_model_tools_json(registry, model, tools);
-            if (tools_json != NULL) {
-                written = snprintf(current, remaining, ", \"tools\": %s", tools_json);
-                free(tools_json);
-                if (written < 0 || written >= (int)remaining) {
-                    free(json);
-                    return NULL;
+            char* tools_json_str = generate_model_tools_json(registry, model, tools);
+            if (tools_json_str != NULL) {
+                cJSON* tools_arr = cJSON_Parse(tools_json_str);
+                free(tools_json_str);
+
+                if (tools_arr != NULL) {
+                    /* For Anthropic, add cache_control on the last tool definition */
+                    if (system_at_top_level && cJSON_IsArray(tools_arr)) {
+                        int tool_count = cJSON_GetArraySize(tools_arr);
+                        if (tool_count > 0) {
+                            cJSON* last_tool = cJSON_GetArrayItem(tools_arr, tool_count - 1);
+                            if (last_tool != NULL) {
+                                cJSON* cache_ctl = cJSON_CreateObject();
+                                if (cache_ctl != NULL) {
+                                    cJSON_AddStringToObject(cache_ctl, "type", "ephemeral");
+                                    cJSON_AddItemToObject(last_tool, "cache_control", cache_ctl);
+                                }
+                            }
+                        }
+                    }
+                    cJSON_AddItemToObject(root, "tools", tools_arr);
                 }
-                current += written;
-                remaining -= written;
             }
         }
     }
 
-    written = snprintf(current, remaining, "}");
-    if (written < 0 || written >= (int)remaining) {
-        free(json);
-        return NULL;
-    }
-
-    return json;
+    char* result = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    return result;
 }
 
-char* build_json_payload_model_aware(const char* model, const char* system_prompt,
+char* build_json_payload_model_aware(const char* model, const SystemPromptParts* system_prompt,
                                     const ConversationHistory* conversation,
                                     const char* user_message, const char* max_tokens_param,
                                     int max_tokens, const ToolRegistry* tools,

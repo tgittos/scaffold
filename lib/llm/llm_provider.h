@@ -3,6 +3,7 @@
 
 #include "../network/http_client.h"
 #include "../network/streaming.h"
+#include "../network/api_common.h"
 #include "../util/ptrarray.h"
 
 /* Forward declarations to break cross-layer header dependencies */
@@ -28,7 +29,7 @@ typedef struct LLMProvider {
 
     char* (*build_request_json)(const struct LLMProvider* provider,
                                const char* model,
-                               const char* system_prompt,
+                               const SystemPromptParts* system_prompt,
                                const ConversationHistory* conversation,
                                const char* user_message,
                                int max_tokens,
@@ -54,7 +55,7 @@ typedef struct LLMProvider {
 
     char* (*build_streaming_request_json)(const struct LLMProvider* provider,
                                           const char* model,
-                                          const char* system_prompt,
+                                          const SystemPromptParts* system_prompt,
                                           const ConversationHistory* conversation,
                                           const char* user_message,
                                           int max_tokens,

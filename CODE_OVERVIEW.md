@@ -50,7 +50,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`tool_orchestration.c/h`** - Tool call deduplication and per-batch tracking
 - **`repl.c/h`** - Read-Eval-Print-Loop for interactive mode with readline, async processing, and periodic supervisor recovery
 - **`async_executor.c/h`** - Non-blocking message processing using background thread with pipe notification
-- **`context_enhancement.c/h`** - Prompt enhancement with todo state, memory recall, and context retrieval
+- **`context_enhancement.c/h`** - Split prompt builder: returns `EnhancedPromptParts` with session-stable base prompt and per-request dynamic context (todo state, mode, memories, context retrieval)
 - **`recap.c/h`** - Conversation recap generation (one-shot LLM calls without history persistence)
 - **`streaming_handler.c/h`** - Application-layer streaming orchestration and provider registry management
 - **`tool_executor.c/h`** - Thin entry point for tool execution workflow (init, initial batch, clear_history support, hand-off)
@@ -98,7 +98,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 
 #### `lib/network/` - Network Communication
 - **`http_client.c/h`** - HTTP client implementation using libcurl (buffered and streaming)
-- **`api_common.c/h`** - Common API utilities, JSON payload building for OpenAI/Anthropic formats
+- **`api_common.c/h`** - JSON payload building with prompt caching support (`SystemPromptParts` split, Anthropic `cache_control` markers, cJSON-based construction)
 - **`streaming.c/h`** - SSE streaming infrastructure for real-time response handling
 - **`api_error.c/h`** - Enhanced API error handling with retry logic
 - **`embedded_cacert.c/h`** - Embedded Mozilla CA certificate bundle for portable SSL/TLS

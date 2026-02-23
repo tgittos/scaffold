@@ -21,71 +21,84 @@ void tearDown(void) {
 
 void test_default_mode_no_mode_section(void) {
     g_session.current_mode = PROMPT_MODE_DEFAULT;
-    char* prompt = build_enhanced_prompt_with_context(&g_session, NULL);
-    TEST_ASSERT_NOT_NULL(prompt);
-    TEST_ASSERT_NULL(strstr(prompt, "Active Mode Instructions"));
-    free(prompt);
+    EnhancedPromptParts parts;
+    int rc = build_enhanced_prompt_parts(&g_session, NULL, &parts);
+    TEST_ASSERT_EQUAL_INT(0, rc);
+    /* Mode text goes into dynamic_context; base_prompt is just "Base prompt." */
+    if (parts.dynamic_context != NULL) {
+        TEST_ASSERT_NULL(strstr(parts.dynamic_context, "Active Mode Instructions"));
+    }
+    free_enhanced_prompt_parts(&parts);
 }
 
 void test_plan_mode_injects_text(void) {
     g_session.current_mode = PROMPT_MODE_PLAN;
-    char* prompt = build_enhanced_prompt_with_context(&g_session, NULL);
-    TEST_ASSERT_NOT_NULL(prompt);
-    TEST_ASSERT_NOT_NULL(strstr(prompt, "Active Mode Instructions"));
-    TEST_ASSERT_NOT_NULL(strstr(prompt, "PLAN mode"));
-    free(prompt);
+    EnhancedPromptParts parts;
+    int rc = build_enhanced_prompt_parts(&g_session, NULL, &parts);
+    TEST_ASSERT_EQUAL_INT(0, rc);
+    TEST_ASSERT_NOT_NULL(parts.dynamic_context);
+    TEST_ASSERT_NOT_NULL(strstr(parts.dynamic_context, "Active Mode Instructions"));
+    TEST_ASSERT_NOT_NULL(strstr(parts.dynamic_context, "PLAN mode"));
+    free_enhanced_prompt_parts(&parts);
 }
 
 void test_debug_mode_injects_text(void) {
     g_session.current_mode = PROMPT_MODE_DEBUG;
-    char* prompt = build_enhanced_prompt_with_context(&g_session, NULL);
-    TEST_ASSERT_NOT_NULL(prompt);
-    TEST_ASSERT_NOT_NULL(strstr(prompt, "DEBUG mode"));
-    free(prompt);
+    EnhancedPromptParts parts;
+    int rc = build_enhanced_prompt_parts(&g_session, NULL, &parts);
+    TEST_ASSERT_EQUAL_INT(0, rc);
+    TEST_ASSERT_NOT_NULL(parts.dynamic_context);
+    TEST_ASSERT_NOT_NULL(strstr(parts.dynamic_context, "DEBUG mode"));
+    free_enhanced_prompt_parts(&parts);
 }
 
 void test_explore_mode_injects_text(void) {
     g_session.current_mode = PROMPT_MODE_EXPLORE;
-    char* prompt = build_enhanced_prompt_with_context(&g_session, NULL);
-    TEST_ASSERT_NOT_NULL(prompt);
-    TEST_ASSERT_NOT_NULL(strstr(prompt, "EXPLORE mode"));
-    free(prompt);
+    EnhancedPromptParts parts;
+    int rc = build_enhanced_prompt_parts(&g_session, NULL, &parts);
+    TEST_ASSERT_EQUAL_INT(0, rc);
+    TEST_ASSERT_NOT_NULL(parts.dynamic_context);
+    TEST_ASSERT_NOT_NULL(strstr(parts.dynamic_context, "EXPLORE mode"));
+    free_enhanced_prompt_parts(&parts);
 }
 
 void test_review_mode_injects_text(void) {
     g_session.current_mode = PROMPT_MODE_REVIEW;
-    char* prompt = build_enhanced_prompt_with_context(&g_session, NULL);
-    TEST_ASSERT_NOT_NULL(prompt);
-    TEST_ASSERT_NOT_NULL(strstr(prompt, "REVIEW mode"));
-    free(prompt);
+    EnhancedPromptParts parts;
+    int rc = build_enhanced_prompt_parts(&g_session, NULL, &parts);
+    TEST_ASSERT_EQUAL_INT(0, rc);
+    TEST_ASSERT_NOT_NULL(parts.dynamic_context);
+    TEST_ASSERT_NOT_NULL(strstr(parts.dynamic_context, "REVIEW mode"));
+    free_enhanced_prompt_parts(&parts);
 }
 
-void test_mode_text_after_base_prompt(void) {
+void test_mode_text_in_dynamic_context(void) {
     g_session.current_mode = PROMPT_MODE_PLAN;
-    char* prompt = build_enhanced_prompt_with_context(&g_session, NULL);
-    TEST_ASSERT_NOT_NULL(prompt);
+    EnhancedPromptParts parts;
+    int rc = build_enhanced_prompt_parts(&g_session, NULL, &parts);
+    TEST_ASSERT_EQUAL_INT(0, rc);
 
-    char* base = strstr(prompt, "Base prompt.");
-    char* mode = strstr(prompt, "PLAN mode");
-    TEST_ASSERT_NOT_NULL(base);
-    TEST_ASSERT_NOT_NULL(mode);
-    TEST_ASSERT_TRUE(mode > base);
-    free(prompt);
+    /* Base prompt should be the session system prompt */
+    TEST_ASSERT_NOT_NULL(strstr(parts.base_prompt, "Base prompt."));
+    /* Mode text should be in dynamic context, not base */
+    TEST_ASSERT_NOT_NULL(strstr(parts.dynamic_context, "PLAN mode"));
+    free_enhanced_prompt_parts(&parts);
 }
 
 void test_switching_modes_changes_prompt(void) {
     g_session.current_mode = PROMPT_MODE_PLAN;
-    char* prompt1 = build_enhanced_prompt_with_context(&g_session, NULL);
-    TEST_ASSERT_NOT_NULL(strstr(prompt1, "PLAN mode"));
-    TEST_ASSERT_NULL(strstr(prompt1, "DEBUG mode"));
+    EnhancedPromptParts parts1;
+    build_enhanced_prompt_parts(&g_session, NULL, &parts1);
+    TEST_ASSERT_NOT_NULL(strstr(parts1.dynamic_context, "PLAN mode"));
 
     g_session.current_mode = PROMPT_MODE_DEBUG;
-    char* prompt2 = build_enhanced_prompt_with_context(&g_session, NULL);
-    TEST_ASSERT_NOT_NULL(strstr(prompt2, "DEBUG mode"));
-    TEST_ASSERT_NULL(strstr(prompt2, "PLAN mode"));
+    EnhancedPromptParts parts2;
+    build_enhanced_prompt_parts(&g_session, NULL, &parts2);
+    TEST_ASSERT_NOT_NULL(strstr(parts2.dynamic_context, "DEBUG mode"));
+    TEST_ASSERT_NULL(strstr(parts2.dynamic_context, "PLAN mode"));
 
-    free(prompt1);
-    free(prompt2);
+    free_enhanced_prompt_parts(&parts1);
+    free_enhanced_prompt_parts(&parts2);
 }
 
 int main(void) {
@@ -96,7 +109,7 @@ int main(void) {
     RUN_TEST(test_debug_mode_injects_text);
     RUN_TEST(test_explore_mode_injects_text);
     RUN_TEST(test_review_mode_injects_text);
-    RUN_TEST(test_mode_text_after_base_prompt);
+    RUN_TEST(test_mode_text_in_dynamic_context);
     RUN_TEST(test_switching_modes_changes_prompt);
 
     return UNITY_END();

@@ -248,8 +248,9 @@ void test_build_streaming_request_includes_stream_true(void) {
     ConversationHistory history = {0};
     init_conversation_history(&history);
 
+    SystemPromptParts sys = { .base_prompt = "You are helpful.", .dynamic_context = NULL };
     char* json = openai_provider->build_streaming_request_json(
-        openai_provider, "gpt-4", "You are helpful.", &history, "Hello", 1000, NULL);
+        openai_provider, "gpt-4", &sys, &history, "Hello", 1000, NULL);
 
     TEST_ASSERT_NOT_NULL(json);
     TEST_ASSERT_NOT_NULL(strstr(json, "\"stream\":true"));
@@ -262,8 +263,9 @@ void test_build_streaming_request_includes_stream_options(void) {
     ConversationHistory history = {0};
     init_conversation_history(&history);
 
+    SystemPromptParts sys = { .base_prompt = "You are helpful.", .dynamic_context = NULL };
     char* json = openai_provider->build_streaming_request_json(
-        openai_provider, "gpt-4", "You are helpful.", &history, "Hello", 1000, NULL);
+        openai_provider, "gpt-4", &sys, &history, "Hello", 1000, NULL);
 
     TEST_ASSERT_NOT_NULL(json);
     TEST_ASSERT_NOT_NULL(strstr(json, "\"stream_options\""));
@@ -277,8 +279,9 @@ void test_build_streaming_request_null_provider(void) {
     ConversationHistory history = {0};
     init_conversation_history(&history);
 
+    SystemPromptParts sys = { .base_prompt = "You are helpful.", .dynamic_context = NULL };
     char* json = openai_provider->build_streaming_request_json(
-        NULL, "gpt-4", "You are helpful.", &history, "Hello", 1000, NULL);
+        NULL, "gpt-4", &sys, &history, "Hello", 1000, NULL);
 
     TEST_ASSERT_NULL(json);
 
@@ -289,8 +292,9 @@ void test_build_streaming_request_null_model(void) {
     ConversationHistory history = {0};
     init_conversation_history(&history);
 
+    SystemPromptParts sys = { .base_prompt = "You are helpful.", .dynamic_context = NULL };
     char* json = openai_provider->build_streaming_request_json(
-        openai_provider, NULL, "You are helpful.", &history, "Hello", 1000, NULL);
+        openai_provider, NULL, &sys, &history, "Hello", 1000, NULL);
 
     TEST_ASSERT_NULL(json);
 

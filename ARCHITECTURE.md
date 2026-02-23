@@ -477,6 +477,40 @@ MCP servers are configured in `scaffold.config.json`:
 }
 ```
 
+## Prompt Caching Architecture
+
+System prompts are split into two parts to maximize cache hits across API requests within a session:
+
+```mermaid
+graph TB
+    Session[Session Config<br/>system_prompt] --> Enhancement[Context Enhancement<br/>context_enhancement.c]
+    Enhancement --> BasePart[Base Prompt<br/>Session-stable, cacheable]
+    Enhancement --> DynPart[Dynamic Context<br/>Todo state, mode, memories]
+
+    BasePart --> SysParts[SystemPromptParts<br/>api_common.h]
+    DynPart --> SysParts
+
+    SysParts --> OpenAIPath{OpenAI Path}
+    SysParts --> AnthropicPath{Anthropic Path}
+
+    OpenAIPath --> TwoMsgs[Two System Messages<br/>Stable prefix + dynamic]
+    AnthropicPath --> SysArray[System Content Array<br/>cache_control on base block]
+    AnthropicPath --> ToolCache[Tool Definitions<br/>cache_control on last tool]
+
+    classDef cache fill:#e8f5e8
+    classDef split fill:#e3f2fd
+    classDef path fill:#fff3e0
+
+    class BasePart,TwoMsgs,SysArray,ToolCache cache
+    class Enhancement,SysParts split
+    class OpenAIPath,AnthropicPath path
+```
+
+- **OpenAI**: Two system messages in the messages array. The first (base prompt) stays byte-identical across requests, enabling automatic prefix caching. The second carries per-request dynamic context.
+- **Anthropic**: System field is a JSON array of content blocks. The base prompt block has `cache_control: {"type": "ephemeral"}` for explicit caching. The last tool definition also gets `cache_control` to cache the full tool schema.
+- **`SystemPromptParts`** (`api_common.h`): Carries the split through the pipeline. `base_prompt` is the session-stable prefix; `dynamic_context` is nullable per-request additions.
+- **`EnhancedPromptParts`** (`context_enhancement.h`): Owned version with allocated strings, returned by `build_enhanced_prompt_parts()`.
+
 ## Streaming Response Architecture
 
 Ralph supports Server-Sent Events (SSE) streaming for real-time response display.
@@ -1008,7 +1042,7 @@ lib/
 │   ├── tool_orchestration.c/h  # Tool call deduplication and tracking
 │   ├── repl.c/h            # Read-Eval-Print-Loop for interactive mode
 │   ├── async_executor.c/h  # Non-blocking message processing thread
-│   ├── context_enhancement.c/h  # Prompt enhancement with memory/context
+│   ├── context_enhancement.c/h  # Split prompt builder (base + dynamic context)
 │   ├── recap.c/h           # Conversation recap generation
 │   ├── streaming_handler.c/h   # Streaming orchestration layer
 │   ├── tool_executor.c/h   # Tool execution entry point
@@ -1050,7 +1084,7 @@ lib/
 │       └── local_embedding_provider.c   # Local embeddings
 ├── network/                # Network layer
 │   ├── http_client.c/h     # HTTP client (cURL wrapper)
-│   ├── api_common.c/h      # API payload building
+│   ├── api_common.c/h      # API payload building with prompt caching support
 │   ├── streaming.c/h       # SSE streaming infrastructure
 │   ├── api_error.c/h       # Enhanced error handling with retries
 │   ├── embedded_cacert.c/h # Embedded Mozilla CA certificate bundle

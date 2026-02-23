@@ -74,9 +74,30 @@ void test_build_json_payload_basic(void) {
                                            format_openai_message, 0);
 
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(strstr(result, "\"model\": \"gpt-3.5-turbo\"") != NULL);
+    TEST_ASSERT_TRUE(strstr(result, "\"model\":\"gpt-3.5-turbo\"") != NULL);
     TEST_ASSERT_TRUE(strstr(result, "\"Hello\"") != NULL);
-    TEST_ASSERT_TRUE(strstr(result, "\"max_tokens\": 100") != NULL);
+    TEST_ASSERT_TRUE(strstr(result, "\"max_tokens\":100") != NULL);
+
+    free(result);
+}
+
+void test_build_json_payload_split_system_prompt(void) {
+    ConversationHistory conversation = {0};
+    ToolRegistry tools = {0};
+
+    SystemPromptParts parts = {
+        .base_prompt = "You are a helpful assistant.",
+        .dynamic_context = "Current todo: none"
+    };
+
+    char* result = build_json_payload_common("gpt-4", &parts, &conversation,
+                                           "Hello", "max_tokens", 100, &tools,
+                                           format_openai_message, 0);
+
+    TEST_ASSERT_NOT_NULL(result);
+    // OpenAI format: two separate system messages in messages array
+    TEST_ASSERT_TRUE(strstr(result, "You are a helpful assistant.") != NULL);
+    TEST_ASSERT_TRUE(strstr(result, "Current todo: none") != NULL);
 
     free(result);
 }
@@ -85,16 +106,21 @@ void test_build_json_payload_with_system_prompt(void) {
     ConversationHistory conversation = {0};
     ToolRegistry tools = {0};
 
-    char* result = build_json_payload_common("gpt-4", "You are helpful", &conversation,
+    SystemPromptParts parts = {
+        .base_prompt = "You are helpful",
+        .dynamic_context = NULL
+    };
+
+    char* result = build_json_payload_common("gpt-4", &parts, &conversation,
                                            "Hello", "max_completion_tokens", 200, &tools,
                                            format_openai_message, 0);
 
     TEST_ASSERT_NOT_NULL(result);
-    TEST_ASSERT_TRUE(strstr(result, "\"model\": \"gpt-4\"") != NULL);
+    TEST_ASSERT_TRUE(strstr(result, "\"model\":\"gpt-4\"") != NULL);
     TEST_ASSERT_TRUE(strstr(result, "\"role\":\"system\"") != NULL);
     TEST_ASSERT_TRUE(strstr(result, "You are helpful") != NULL);
     TEST_ASSERT_TRUE(strstr(result, "\"Hello\"") != NULL);
-    TEST_ASSERT_TRUE(strstr(result, "\"max_completion_tokens\": 200") != NULL);
+    TEST_ASSERT_TRUE(strstr(result, "\"max_completion_tokens\":200") != NULL);
 
     free(result);
 }
@@ -770,33 +796,68 @@ void test_build_anthropic_json_payload_basic(void) {
     TEST_ASSERT_NOT_NULL(result);
 
     // Check that payload contains expected fields
-    TEST_ASSERT_TRUE(strstr(result, "\"model\": \"claude-3-opus-20240229\"") != NULL);
+    TEST_ASSERT_TRUE(strstr(result, "\"model\":\"claude-3-opus-20240229\"") != NULL);
     TEST_ASSERT_TRUE(strstr(result, "\"messages\"") != NULL);
     TEST_ASSERT_TRUE(strstr(result, "\"Hello Anthropic\"") != NULL);
-    TEST_ASSERT_TRUE(strstr(result, "\"max_tokens\": 200") != NULL);
+    TEST_ASSERT_TRUE(strstr(result, "\"max_tokens\":200") != NULL);
 
     free(result);
 }
 
 void test_build_anthropic_json_payload_with_system(void) {
     const char *test_message = "What is 2+2?";
-    const char *system_prompt = "You are a helpful math tutor.";
     const char *model = "claude-3-opus-20240229";
     int max_tokens = 100;
 
     ConversationHistory conversation = {0};
     ToolRegistry tools = {0};
 
-    char* result = build_json_payload_common(model, system_prompt, &conversation,
+    SystemPromptParts parts = {
+        .base_prompt = "You are a helpful math tutor.",
+        .dynamic_context = NULL
+    };
+
+    char* result = build_json_payload_common(model, &parts, &conversation,
                                            test_message, "max_tokens", max_tokens, &tools,
                                            format_anthropic_message, 1);
 
     TEST_ASSERT_NOT_NULL(result);
 
-    // Check that system prompt is in the top-level system field (Anthropic format)
-    TEST_ASSERT_TRUE(strstr(result, "\"system\": \"You are a helpful math tutor.\"") != NULL);
+    // Anthropic system is now an array of content blocks with cache_control
+    TEST_ASSERT_NOT_NULL(strstr(result, "\"system\":["));
+    TEST_ASSERT_NOT_NULL(strstr(result, "You are a helpful math tutor."));
+    TEST_ASSERT_NOT_NULL(strstr(result, "\"cache_control\""));
     // Should not be in messages array
-    TEST_ASSERT_NULL(strstr(result, "\"role\": \"system\""));
+    TEST_ASSERT_NULL(strstr(result, "\"role\":\"system\""));
+
+    free(result);
+}
+
+void test_build_anthropic_json_payload_split_system(void) {
+    const char *test_message = "Hello";
+    const char *model = "claude-3-opus-20240229";
+    int max_tokens = 100;
+
+    ConversationHistory conversation = {0};
+    ToolRegistry tools = {0};
+
+    SystemPromptParts parts = {
+        .base_prompt = "You are an assistant.",
+        .dynamic_context = "Todo: buy milk"
+    };
+
+    char* result = build_json_payload_common(model, &parts, &conversation,
+                                           test_message, "max_tokens", max_tokens, &tools,
+                                           format_anthropic_message, 1);
+
+    TEST_ASSERT_NOT_NULL(result);
+
+    // System should be an array with two content blocks
+    TEST_ASSERT_NOT_NULL(strstr(result, "\"system\":["));
+    TEST_ASSERT_NOT_NULL(strstr(result, "You are an assistant."));
+    TEST_ASSERT_NOT_NULL(strstr(result, "Todo: buy milk"));
+    // First block should have cache_control
+    TEST_ASSERT_NOT_NULL(strstr(result, "\"cache_control\":{\"type\":\"ephemeral\"}"));
 
     free(result);
 }
@@ -818,7 +879,7 @@ void test_build_anthropic_json_payload_with_tools(void) {
     TEST_ASSERT_NOT_NULL(result);
 
     // Check for tools array
-    TEST_ASSERT_NOT_NULL(strstr(result, "\"tools\": ["));
+    TEST_ASSERT_NOT_NULL(strstr(result, "\"tools\":["));
 
     // Check for C-based vector_db_search tool with Anthropic format (cJSON produces no spaces after colons)
     // Note: We use vector_db_search because it's a C-based tool that doesn't require Python
@@ -828,6 +889,40 @@ void test_build_anthropic_json_payload_with_tools(void) {
     // Should not have OpenAI's function wrapper
     TEST_ASSERT_NULL(strstr(result, "\"type\":\"function\""));
     TEST_ASSERT_NULL(strstr(result, "\"type\": \"function\""));
+
+    // Last tool should have cache_control for Anthropic
+    TEST_ASSERT_NOT_NULL(strstr(result, "\"cache_control\":{\"type\":\"ephemeral\"}"));
+
+    free(result);
+    cleanup_tool_registry(&tools);
+}
+
+void test_build_anthropic_json_payload_cache_control_on_tools(void) {
+    const char *test_message = "Test";
+    const char *model = "claude-3-opus-20240229";
+    int max_tokens = 100;
+
+    ConversationHistory conversation = {0};
+    ToolRegistry tools = {0};
+    init_tool_registry(&tools);
+    register_builtin_tools(&tools);
+
+    SystemPromptParts parts = {
+        .base_prompt = "System prompt",
+        .dynamic_context = NULL
+    };
+
+    char* result = build_json_payload_common(model, &parts, &conversation,
+                                           test_message, "max_tokens", max_tokens, &tools,
+                                           format_anthropic_message, 1);
+
+    TEST_ASSERT_NOT_NULL(result);
+
+    // Verify cache_control appears on system block
+    TEST_ASSERT_NOT_NULL(strstr(result, "\"cache_control\":{\"type\":\"ephemeral\"}"));
+
+    // The tools array should exist and have cache_control on the last tool
+    TEST_ASSERT_NOT_NULL(strstr(result, "\"tools\":["));
 
     free(result);
     cleanup_tool_registry(&tools);
@@ -872,11 +967,16 @@ int main(void) {
     RUN_TEST(test_conversation_persistence_through_tools);
     RUN_TEST(test_tool_name_hardcoded_bug_fixed);
     
+    // Split system prompt tests
+    RUN_TEST(test_build_json_payload_split_system_prompt);
+
     // Anthropic tests
     RUN_TEST(test_build_anthropic_json_payload_basic);
     RUN_TEST(test_build_anthropic_json_payload_with_system);
+    RUN_TEST(test_build_anthropic_json_payload_split_system);
     RUN_TEST(test_build_anthropic_json_payload_with_tools);
+    RUN_TEST(test_build_anthropic_json_payload_cache_control_on_tools);
     RUN_TEST(test_ralph_api_type_detection);
-    
+
     return UNITY_END();
 }

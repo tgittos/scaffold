@@ -13,7 +13,7 @@
 static int openai_detect_provider(const char* api_url);
 static char* openai_build_request_json(const LLMProvider* provider,
                                       const char* model,
-                                      const char* system_prompt,
+                                      const SystemPromptParts* system_prompt,
                                       const ConversationHistory* conversation,
                                       const char* user_message,
                                       int max_tokens,
@@ -37,7 +37,7 @@ static int openai_detect_provider(const char* api_url) {
 
 static char* openai_build_request_json(const LLMProvider* provider,
                                       const char* model,
-                                      const char* system_prompt,
+                                      const SystemPromptParts* system_prompt,
                                       const ConversationHistory* conversation,
                                       const char* user_message,
                                       int max_tokens,
@@ -242,7 +242,7 @@ static int openai_parse_stream_event(const LLMProvider* provider,
  */
 static char* openai_build_streaming_request_json(const LLMProvider* provider,
                                                   const char* model,
-                                                  const char* system_prompt,
+                                                  const SystemPromptParts* system_prompt,
                                                   const ConversationHistory* conversation,
                                                   const char* user_message,
                                                   int max_tokens,

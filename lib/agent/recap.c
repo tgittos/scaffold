@@ -1,4 +1,5 @@
 #include "recap.h"
+#include "../network/api_common.h"
 #include "../network/streaming.h"
 #include "../llm/llm_provider.h"
 #include "../llm/llm_client.h"
@@ -179,10 +180,15 @@ int recap_generate(AgentSession* session, int max_messages) {
     ConversationHistory empty_history = {0};
     int max_tokens = 300;
 
+    SystemPromptParts sys_parts = {
+        .base_prompt = session->session_data.config.system_prompt,
+        .dynamic_context = NULL
+    };
+
     char* post_data = provider->build_streaming_request_json(
         provider,
         session->session_data.config.model,
-        session->session_data.config.system_prompt,
+        &sys_parts,
         &empty_history,
         recap_prompt,
         max_tokens,
