@@ -297,16 +297,21 @@ char* session_build_json_payload(const AgentSession* session,
                                   const char* user_message, int max_tokens) {
     if (session == NULL) return NULL;
 
-    char* final_prompt = build_enhanced_prompt_with_context(session, user_message);
-    if (final_prompt == NULL) return NULL;
+    EnhancedPromptParts parts;
+    if (build_enhanced_prompt_parts(session, user_message, &parts) != 0) return NULL;
 
-    char* result = build_json_payload_common(session->session_data.config.model, final_prompt,
+    SystemPromptParts sys_parts = {
+        .base_prompt = parts.base_prompt,
+        .dynamic_context = parts.dynamic_context
+    };
+
+    char* result = build_json_payload_common(session->session_data.config.model, &sys_parts,
                                              &session->session_data.conversation, user_message,
                                              session->session_data.config.max_tokens_param, max_tokens,
                                              &session->tools,
                                              format_openai_message, 0);
 
-    free(final_prompt);
+    free_enhanced_prompt_parts(&parts);
     return result;
 }
 
@@ -314,16 +319,21 @@ char* session_build_anthropic_json_payload(const AgentSession* session,
                                             const char* user_message, int max_tokens) {
     if (session == NULL) return NULL;
 
-    char* final_prompt = build_enhanced_prompt_with_context(session, user_message);
-    if (final_prompt == NULL) return NULL;
+    EnhancedPromptParts parts;
+    if (build_enhanced_prompt_parts(session, user_message, &parts) != 0) return NULL;
 
-    char* result = build_json_payload_common(session->session_data.config.model, final_prompt,
+    SystemPromptParts sys_parts = {
+        .base_prompt = parts.base_prompt,
+        .dynamic_context = parts.dynamic_context
+    };
+
+    char* result = build_json_payload_common(session->session_data.config.model, &sys_parts,
                                              &session->session_data.conversation, user_message,
                                              "max_tokens", max_tokens,
                                              &session->tools,
                                              format_anthropic_message, 1);
 
-    free(final_prompt);
+    free_enhanced_prompt_parts(&parts);
     return result;
 }
 

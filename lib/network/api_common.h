@@ -8,12 +8,20 @@ typedef struct ConversationHistory ConversationHistory;
 typedef struct ConversationMessage ConversationMessage;
 typedef struct ToolRegistry ToolRegistry;
 
+/* Split system prompt for cache-friendly API requests.
+ * base_prompt stays identical across requests in a session (cacheable prefix).
+ * dynamic_context changes per-request (todo state, mode, memories, context). */
+typedef struct {
+    const char* base_prompt;
+    const char* dynamic_context;
+} SystemPromptParts;
+
 void api_common_set_pending_images(const ImageAttachment *images, size_t count);
 void api_common_clear_pending_images(void);
 
-size_t calculate_json_payload_size(const char* model, const char* system_prompt,
-                                  const ConversationHistory* conversation,
-                                  const char* user_message, const ToolRegistry* tools);
+size_t calculate_messages_buffer_size(const SystemPromptParts* system_prompt,
+                                     const ConversationHistory* conversation,
+                                     const char* user_message);
 
 typedef int (*MessageFormatter)(char* buffer, size_t buffer_size,
                                const ConversationMessage* message,
@@ -28,27 +36,27 @@ int format_anthropic_message(char* buffer, size_t buffer_size,
                             int is_first_message);
 
 int build_messages_json(char* buffer, size_t buffer_size,
-                       const char* system_prompt,
+                       const SystemPromptParts* system_prompt,
                        const ConversationHistory* conversation,
                        const char* user_message,
                        MessageFormatter formatter,
                        int skip_system_in_history);
 
 int build_anthropic_messages_json(char* buffer, size_t buffer_size,
-                                 const char* system_prompt,
+                                 const SystemPromptParts* system_prompt,
                                  const ConversationHistory* conversation,
                                  const char* user_message,
                                  MessageFormatter formatter,
                                  int skip_system_in_history);
 
-char* build_json_payload_common(const char* model, const char* system_prompt,
+char* build_json_payload_common(const char* model, const SystemPromptParts* system_prompt,
                                const ConversationHistory* conversation,
                                const char* user_message, const char* max_tokens_param,
                                int max_tokens, const ToolRegistry* tools,
                                MessageFormatter formatter,
                                int system_at_top_level);
 
-char* build_json_payload_model_aware(const char* model, const char* system_prompt,
+char* build_json_payload_model_aware(const char* model, const SystemPromptParts* system_prompt,
                                     const ConversationHistory* conversation,
                                     const char* user_message, const char* max_tokens_param,
                                     int max_tokens, const ToolRegistry* tools,

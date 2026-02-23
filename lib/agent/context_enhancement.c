@@ -20,6 +20,14 @@ static const char* const SUMMARY_SECTION_HEADER =
     "\n\n# Prior Conversation Summary\n"
     "Summary of earlier conversation that has been compacted:\n";
 
+void free_enhanced_prompt_parts(EnhancedPromptParts* parts) {
+    if (parts == NULL) return;
+    free(parts->base_prompt);
+    free(parts->dynamic_context);
+    parts->base_prompt = NULL;
+    parts->dynamic_context = NULL;
+}
+
 static char* retrieve_relevant_memories(const char* query) {
     if (query == NULL || strlen(query) == 0) return NULL;
 
@@ -59,18 +67,17 @@ static char* retrieve_relevant_memories(const char* query) {
     return memories;
 }
 
-static char* ralph_build_enhanced_system_prompt(const AgentSession* session) {
+static int todo_list_is_empty(const char* json) {
+    return json == NULL || strcmp(json, "{\"todos\":[]}") == 0;
+}
+
+static char* build_dynamic_context(const AgentSession* session) {
     if (session == NULL) return NULL;
 
-    const char* base_prompt = session->session_data.config.system_prompt;
-    if (base_prompt == NULL) base_prompt = "";
-
     char* todo_json = todo_serialize_json((TodoList*)&session->todo_list);
-    if (todo_json == NULL) {
-        size_t len = strlen(base_prompt) + 1;
-        char* result = malloc(len);
-        if (result) strcpy(result, base_prompt);
-        return result;
+    if (todo_list_is_empty(todo_json)) {
+        free(todo_json);
+        todo_json = NULL;
     }
 
     const char* todo_section = "\n\n# Your Internal Todo List State\n"
@@ -88,40 +95,58 @@ static char* ralph_build_enhanced_system_prompt(const AgentSession* session) {
     static const char* const MODE_SECTION_HEADER = "\n\n# Active Mode Instructions\n";
     const char* mode_text = prompt_mode_get_text(session->current_mode);
 
-    size_t total_len = strlen(base_prompt) + strlen(todo_section) +
-                       strlen(todo_json) + strlen(todo_instructions) + 1;
+    if (todo_json == NULL && mode_text == NULL) {
+        return NULL;
+    }
 
+    size_t total_len = 1;
+    if (todo_json != NULL) {
+        total_len += strlen(todo_section) + strlen(todo_json) + strlen(todo_instructions);
+    }
     if (mode_text != NULL) {
         total_len += strlen(MODE_SECTION_HEADER) + strlen(mode_text);
     }
 
-    char* enhanced_prompt = malloc(total_len);
-    if (enhanced_prompt == NULL) {
+    char* dynamic = malloc(total_len);
+    if (dynamic == NULL) {
         free(todo_json);
         return NULL;
     }
 
-    snprintf(enhanced_prompt, total_len, "%s%s%s%s",
-             base_prompt, todo_section, todo_json, todo_instructions);
+    dynamic[0] = '\0';
+
+    if (todo_json != NULL) {
+        strcat(dynamic, todo_section);
+        strcat(dynamic, todo_json);
+        strcat(dynamic, todo_instructions);
+    }
 
     if (mode_text != NULL) {
-        strcat(enhanced_prompt, MODE_SECTION_HEADER);
-        strcat(enhanced_prompt, mode_text);
+        strcat(dynamic, MODE_SECTION_HEADER);
+        strcat(dynamic, mode_text);
     }
 
     free(todo_json);
-    return enhanced_prompt;
+    return dynamic;
 }
 
-char* build_enhanced_prompt_with_context(const AgentSession* session,
-                                         const char* user_message) {
-    if (session == NULL) return NULL;
+int build_enhanced_prompt_parts(const AgentSession* session,
+                                const char* user_message,
+                                EnhancedPromptParts* out) {
+    if (session == NULL || out == NULL) return -1;
 
-    char* enhanced_prompt = ralph_build_enhanced_system_prompt(session);
-    if (enhanced_prompt == NULL) return NULL;
+    out->base_prompt = NULL;
+    out->dynamic_context = NULL;
+
+    const char* base = session->session_data.config.system_prompt;
+    out->base_prompt = strdup(base ? base : "");
+    if (out->base_prompt == NULL) return -1;
+
+    char* dynamic = build_dynamic_context(session);
 
     if (user_message == NULL || strlen(user_message) == 0) {
-        return enhanced_prompt;
+        out->dynamic_context = dynamic;
+        return 0;
     }
 
     char* memories = retrieve_relevant_memories(user_message);
@@ -136,53 +161,51 @@ char* build_enhanced_prompt_with_context(const AgentSession* session,
 
     if (memories == NULL && formatted_context == NULL && !has_summary) {
         free_context_result(context);
-        return enhanced_prompt;
+        out->dynamic_context = dynamic;
+        return 0;
     }
 
-    size_t new_len = strlen(enhanced_prompt) + 1;
+    size_t new_len = 1;
+    if (dynamic != NULL) new_len += strlen(dynamic);
+    if (memories != NULL) new_len += strlen(MEMORY_SECTION_HEADER) + strlen(memories) + 2;
+    if (formatted_context != NULL) new_len += strlen(formatted_context) + 2;
+    if (has_summary) new_len += strlen(SUMMARY_SECTION_HEADER) + strlen(summary->summary_text) + 2;
 
-    if (memories != NULL) {
-        new_len += strlen(MEMORY_SECTION_HEADER) + strlen(memories) + 2;
-    }
-
-    if (formatted_context != NULL) {
-        new_len += strlen(formatted_context) + 2;
-    }
-
-    if (has_summary) {
-        new_len += strlen(SUMMARY_SECTION_HEADER) + strlen(summary->summary_text) + 2;
-    }
-
-    char* final_prompt = malloc(new_len);
-    if (final_prompt == NULL) {
+    char* final_dynamic = malloc(new_len);
+    if (final_dynamic == NULL) {
         free(memories);
         free(formatted_context);
         free_context_result(context);
-        return enhanced_prompt;
+        out->dynamic_context = dynamic;
+        return 0;
     }
 
-    strcpy(final_prompt, enhanced_prompt);
+    final_dynamic[0] = '\0';
+    if (dynamic != NULL) {
+        strcat(final_dynamic, dynamic);
+    }
 
     if (has_summary) {
-        strcat(final_prompt, SUMMARY_SECTION_HEADER);
-        strcat(final_prompt, summary->summary_text);
-        strcat(final_prompt, "\n");
+        strcat(final_dynamic, SUMMARY_SECTION_HEADER);
+        strcat(final_dynamic, summary->summary_text);
+        strcat(final_dynamic, "\n");
     }
 
     if (memories != NULL) {
-        strcat(final_prompt, MEMORY_SECTION_HEADER);
-        strcat(final_prompt, memories);
-        strcat(final_prompt, "\n");
+        strcat(final_dynamic, MEMORY_SECTION_HEADER);
+        strcat(final_dynamic, memories);
+        strcat(final_dynamic, "\n");
     }
 
     if (formatted_context != NULL) {
-        strcat(final_prompt, formatted_context);
+        strcat(final_dynamic, formatted_context);
     }
 
-    free(enhanced_prompt);
+    free(dynamic);
     free(memories);
     free(formatted_context);
     free_context_result(context);
 
-    return final_prompt;
+    out->dynamic_context = final_dynamic;
+    return 0;
 }

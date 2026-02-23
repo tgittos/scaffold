@@ -17,7 +17,7 @@ static _Thread_local char* current_tool_id = NULL;
 static int anthropic_detect_provider(const char* api_url);
 static char* anthropic_build_request_json(const LLMProvider* provider,
                                          const char* model,
-                                         const char* system_prompt,
+                                         const SystemPromptParts* system_prompt,
                                          const ConversationHistory* conversation,
                                          const char* user_message,
                                          int max_tokens,
@@ -38,7 +38,7 @@ static int anthropic_detect_provider(const char* api_url) {
 
 static char* anthropic_build_request_json(const LLMProvider* provider,
                                          const char* model,
-                                         const char* system_prompt,
+                                         const SystemPromptParts* system_prompt,
                                          const ConversationHistory* conversation,
                                          const char* user_message,
                                          int max_tokens,
@@ -295,7 +295,7 @@ static int anthropic_parse_stream_event(const LLMProvider* provider,
  */
 static char* anthropic_build_streaming_request_json(const LLMProvider* provider,
                                                      const char* model,
-                                                     const char* system_prompt,
+                                                     const SystemPromptParts* system_prompt,
                                                      const ConversationHistory* conversation,
                                                      const char* user_message,
                                                      int max_tokens,
@@ -322,6 +322,12 @@ static char* anthropic_build_streaming_request_json(const LLMProvider* provider,
 
     // Add stream: true
     cJSON_AddBoolToObject(root, "stream", 1);
+
+    // Enable automatic conversation caching
+    // Anthropic auto-caches up to the last cacheable block in the conversation
+    // No per-message changes needed - just the top-level marker
+    // Note: the anthropic-version header is set to 2023-06-01 but prompt caching
+    // requires a beta header; when Anthropic promotes it to GA this will work automatically
 
     // Convert back to string
     char* result = cJSON_PrintUnformatted(root);

@@ -287,8 +287,9 @@ void test_build_streaming_request_includes_stream_true(void) {
     ConversationHistory history = {0};
     init_conversation_history(&history);
 
+    SystemPromptParts sys = { .base_prompt = "You are helpful.", .dynamic_context = NULL };
     char* json = anthropic_provider->build_streaming_request_json(
-        anthropic_provider, "claude-3-opus-20240229", "You are helpful.", &history, "Hello", 1000, NULL);
+        anthropic_provider, "claude-3-opus-20240229", &sys, &history, "Hello", 1000, NULL);
 
     TEST_ASSERT_NOT_NULL(json);
     TEST_ASSERT_NOT_NULL(strstr(json, "\"stream\":true"));
@@ -301,8 +302,9 @@ void test_build_streaming_request_null_provider(void) {
     ConversationHistory history = {0};
     init_conversation_history(&history);
 
+    SystemPromptParts sys = { .base_prompt = "You are helpful.", .dynamic_context = NULL };
     char* json = anthropic_provider->build_streaming_request_json(
-        NULL, "claude-3-opus-20240229", "You are helpful.", &history, "Hello", 1000, NULL);
+        NULL, "claude-3-opus-20240229", &sys, &history, "Hello", 1000, NULL);
 
     TEST_ASSERT_NULL(json);
 
@@ -313,8 +315,9 @@ void test_build_streaming_request_null_model(void) {
     ConversationHistory history = {0};
     init_conversation_history(&history);
 
+    SystemPromptParts sys = { .base_prompt = "You are helpful.", .dynamic_context = NULL };
     char* json = anthropic_provider->build_streaming_request_json(
-        anthropic_provider, NULL, "You are helpful.", &history, "Hello", 1000, NULL);
+        anthropic_provider, NULL, &sys, &history, "Hello", 1000, NULL);
 
     TEST_ASSERT_NULL(json);
 
@@ -322,8 +325,9 @@ void test_build_streaming_request_null_model(void) {
 }
 
 void test_build_streaming_request_null_conversation(void) {
+    SystemPromptParts sys = { .base_prompt = "You are helpful.", .dynamic_context = NULL };
     char* json = anthropic_provider->build_streaming_request_json(
-        anthropic_provider, "claude-3-opus-20240229", "You are helpful.", NULL, "Hello", 1000, NULL);
+        anthropic_provider, "claude-3-opus-20240229", &sys, NULL, "Hello", 1000, NULL);
 
     TEST_ASSERT_NULL(json);
 }

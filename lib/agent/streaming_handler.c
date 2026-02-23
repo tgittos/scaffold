@@ -1,5 +1,6 @@
 #include "streaming_handler.h"
 #include "context_enhancement.h"
+#include "../network/api_common.h"
 #include "../util/interrupt.h"
 #include "tool_executor.h"
 #include "conversation_state.h"
@@ -90,22 +91,27 @@ int streaming_process_message(AgentSession* session, LLMProvider* provider,
         return -1;
     }
 
-    char* final_prompt = build_enhanced_prompt_with_context(session, user_message);
-    if (final_prompt == NULL) {
+    EnhancedPromptParts parts;
+    if (build_enhanced_prompt_parts(session, user_message, &parts) != 0) {
         return -1;
     }
+
+    SystemPromptParts sys_parts = {
+        .base_prompt = parts.base_prompt,
+        .dynamic_context = parts.dynamic_context
+    };
 
     char* post_data = provider->build_streaming_request_json(
         provider,
         session->session_data.config.model,
-        final_prompt,
+        &sys_parts,
         &session->session_data.conversation,
         user_message,
         max_tokens,
         &session->tools
     );
 
-    free(final_prompt);
+    free_enhanced_prompt_parts(&parts);
 
     if (post_data == NULL) {
         fprintf(stderr, "Error: Failed to build streaming JSON payload\n");
