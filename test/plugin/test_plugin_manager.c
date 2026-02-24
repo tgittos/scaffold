@@ -1,0 +1,208 @@
+#include "unity/unity.h"
+#include "plugin/plugin_manager.h"
+#include "plugin/plugin_protocol.h"
+#include "util/app_home.h"
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+void setUp(void) {}
+void tearDown(void) {}
+
+/* Helper: join two path segments via malloc */
+static char *join_path(const char *a, const char *b) {
+    size_t len = strlen(a) + 1 + strlen(b) + 1;
+    char *out = malloc(len);
+    if (out) sprintf(out, "%s/%s", a, b);
+    return out;
+}
+
+/* --- Init tests --- */
+
+static void test_init_zeroes(void) {
+    PluginManager mgr;
+    mgr.count = 42;
+    plugin_manager_init(&mgr);
+    TEST_ASSERT_EQUAL(0, mgr.count);
+    for (int i = 0; i < MAX_PLUGINS; i++) {
+        TEST_ASSERT_NULL(mgr.plugins[i].path);
+        TEST_ASSERT_EQUAL(0, mgr.plugins[i].pid);
+        TEST_ASSERT_EQUAL(0, mgr.plugins[i].initialized);
+    }
+}
+
+static void test_init_null(void) {
+    plugin_manager_init(NULL);
+}
+
+/* --- Discover tests --- */
+
+static void test_discover_missing_dir(void) {
+    char tmpdir[] = "/tmp/scaffold_test_XXXXXX";
+    TEST_ASSERT_NOT_NULL(mkdtemp(tmpdir));
+    app_home_init(tmpdir);
+
+    PluginManager mgr;
+    plugin_manager_init(&mgr);
+    TEST_ASSERT_EQUAL(0, plugin_manager_discover(&mgr));
+    TEST_ASSERT_EQUAL(0, mgr.count);
+
+    rmdir(tmpdir);
+}
+
+static void test_discover_empty_dir(void) {
+    char tmpdir[] = "/tmp/scaffold_test_XXXXXX";
+    TEST_ASSERT_NOT_NULL(mkdtemp(tmpdir));
+    app_home_init(tmpdir);
+
+    char *plugins_path = join_path(tmpdir, "plugins");
+    mkdir(plugins_path, 0755);
+
+    PluginManager mgr;
+    plugin_manager_init(&mgr);
+    TEST_ASSERT_EQUAL(0, plugin_manager_discover(&mgr));
+
+    rmdir(plugins_path);
+    free(plugins_path);
+    rmdir(tmpdir);
+}
+
+static void test_discover_finds_executables(void) {
+    char tmpdir[] = "/tmp/scaffold_test_XXXXXX";
+    TEST_ASSERT_NOT_NULL(mkdtemp(tmpdir));
+    app_home_init(tmpdir);
+
+    char *plugins_path = join_path(tmpdir, "plugins");
+    mkdir(plugins_path, 0755);
+
+    char *exe_path = join_path(plugins_path, "test-plugin");
+    FILE *f = fopen(exe_path, "w");
+    fprintf(f, "#!/bin/sh\n");
+    fclose(f);
+    chmod(exe_path, 0755);
+
+    char *noexe_path = join_path(plugins_path, "readme.txt");
+    f = fopen(noexe_path, "w");
+    fprintf(f, "not a plugin\n");
+    fclose(f);
+
+    PluginManager mgr;
+    plugin_manager_init(&mgr);
+    TEST_ASSERT_EQUAL(1, plugin_manager_discover(&mgr));
+    TEST_ASSERT_EQUAL(1, mgr.count);
+    TEST_ASSERT_NOT_NULL(mgr.plugins[0].path);
+    TEST_ASSERT_NOT_NULL(strstr(mgr.plugins[0].path, "test-plugin"));
+
+    free(mgr.plugins[0].path);
+    unlink(exe_path);
+    unlink(noexe_path);
+    free(exe_path);
+    free(noexe_path);
+    rmdir(plugins_path);
+    free(plugins_path);
+    rmdir(tmpdir);
+}
+
+static void test_discover_skips_hidden(void) {
+    char tmpdir[] = "/tmp/scaffold_test_XXXXXX";
+    TEST_ASSERT_NOT_NULL(mkdtemp(tmpdir));
+    app_home_init(tmpdir);
+
+    char *plugins_path = join_path(tmpdir, "plugins");
+    mkdir(plugins_path, 0755);
+
+    char *hidden_path = join_path(plugins_path, ".hidden-plugin");
+    FILE *f = fopen(hidden_path, "w");
+    fprintf(f, "#!/bin/sh\n");
+    fclose(f);
+    chmod(hidden_path, 0755);
+
+    PluginManager mgr;
+    plugin_manager_init(&mgr);
+    TEST_ASSERT_EQUAL(0, plugin_manager_discover(&mgr));
+
+    unlink(hidden_path);
+    free(hidden_path);
+    rmdir(plugins_path);
+    free(plugins_path);
+    rmdir(tmpdir);
+}
+
+/* --- Shutdown with no plugins --- */
+
+static void test_shutdown_empty(void) {
+    PluginManager mgr;
+    plugin_manager_init(&mgr);
+    plugin_manager_shutdown_all(&mgr);
+    TEST_ASSERT_EQUAL(0, mgr.count);
+}
+
+static void test_shutdown_null(void) {
+    plugin_manager_shutdown_all(NULL);
+}
+
+/* --- Send request with bad FDs --- */
+
+static void test_send_request_bad_fds(void) {
+    PluginProcess p;
+    memset(&p, 0, sizeof(p));
+    p.stdin_fd = -1;
+    p.stdout_fd = -1;
+
+    char *response = NULL;
+    TEST_ASSERT_EQUAL(-1, plugin_manager_send_request(&p, "{}", &response));
+    TEST_ASSERT_NULL(response);
+}
+
+/* --- Execute tool with no manager --- */
+
+static void test_execute_tool_no_manager(void) {
+    ToolCall call = { .id = "1", .name = "plugin_foo_bar", .arguments = "{}" };
+    ToolResult result = {0};
+    TEST_ASSERT_EQUAL(-1, plugin_manager_execute_tool(NULL, &call, &result));
+}
+
+static void test_execute_tool_not_plugin_name(void) {
+    PluginManager mgr;
+    plugin_manager_init(&mgr);
+
+    ToolCall call = { .id = "1", .name = "regular_tool", .arguments = "{}" };
+    ToolResult result = {0};
+    TEST_ASSERT_EQUAL(-1, plugin_manager_execute_tool(&mgr, &call, &result));
+}
+
+/* --- Get plugins dir --- */
+
+static void test_get_plugins_dir(void) {
+    char tmpdir[] = "/tmp/scaffold_test_XXXXXX";
+    TEST_ASSERT_NOT_NULL(mkdtemp(tmpdir));
+    app_home_init(tmpdir);
+
+    char *dir = plugin_manager_get_plugins_dir();
+    TEST_ASSERT_NOT_NULL(dir);
+    TEST_ASSERT_NOT_NULL(strstr(dir, "plugins"));
+    free(dir);
+
+    rmdir(tmpdir);
+}
+
+int main(void) {
+    UNITY_BEGIN();
+
+    RUN_TEST(test_init_zeroes);
+    RUN_TEST(test_init_null);
+    RUN_TEST(test_discover_missing_dir);
+    RUN_TEST(test_discover_empty_dir);
+    RUN_TEST(test_discover_finds_executables);
+    RUN_TEST(test_discover_skips_hidden);
+    RUN_TEST(test_shutdown_empty);
+    RUN_TEST(test_shutdown_null);
+    RUN_TEST(test_send_request_bad_fds);
+    RUN_TEST(test_execute_tool_no_manager);
+    RUN_TEST(test_execute_tool_not_plugin_name);
+    RUN_TEST(test_get_plugins_dir);
+
+    return UNITY_END();
+}

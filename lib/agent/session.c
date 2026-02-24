@@ -25,6 +25,8 @@
 #include "../llm/llm_client.h"
 #include "async_executor.h"
 #include "../util/config.h"
+#include "../plugin/plugin_manager.h"
+#include "../plugin/hook_dispatcher.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -156,6 +158,11 @@ int session_init(AgentSession* session) {
         subagent_manager_set_gate_config(&session->subagent_manager, &session->gate_config);
     }
 
+    /* Plugins are optional; failures are non-fatal */
+    plugin_manager_init(&session->plugin_manager);
+    plugin_manager_discover(&session->plugin_manager);
+    plugin_manager_start_all(&session->plugin_manager, &session->tools);
+
     return 0;
 
 cleanup_subsystems:
@@ -186,6 +193,8 @@ void session_cleanup(AgentSession* session) {
         message_poller_destroy(session->message_poller);
         session->message_poller = NULL;
     }
+
+    plugin_manager_shutdown_all(&session->plugin_manager);
 
     provider_registry_cleanup();
     llm_client_cleanup();
@@ -293,7 +302,7 @@ int session_execute_tool_workflow(AgentSession* session, ToolCall* tool_calls,
                                       user_message, max_tokens);
 }
 
-char* session_build_json_payload(const AgentSession* session,
+char* session_build_json_payload(AgentSession* session,
                                   const char* user_message, int max_tokens) {
     if (session == NULL) return NULL;
 
@@ -315,7 +324,7 @@ char* session_build_json_payload(const AgentSession* session,
     return result;
 }
 
-char* session_build_anthropic_json_payload(const AgentSession* session,
+char* session_build_anthropic_json_payload(AgentSession* session,
                                             const char* user_message, int max_tokens) {
     if (session == NULL) return NULL;
 
@@ -417,12 +426,28 @@ int session_process_message(AgentSession* session, const char* user_message) {
         }
     }
 
+    /* Plugin hook: post_user_input */
+    char *hook_msg = strdup(effective_message);
+    if (hook_msg) {
+        HookAction hr = hook_dispatch_post_user_input(&session->plugin_manager, session, &hook_msg);
+        if (hr == HOOK_SKIP) {
+            free(hook_msg);
+            if (has_images) {
+                api_common_clear_pending_images();
+                image_attachment_cleanup(&image_parse);
+            }
+            return 0;
+        }
+        effective_message = hook_msg;
+    }
+
     TokenConfig token_config;
     token_config_init(&token_config, session->session_data.config.context_window);
 
     TokenUsage token_usage;
     if (manage_conversation_tokens(session, effective_message, &token_config, &token_usage) != 0) {
         fprintf(stderr, "Error: Failed to calculate token allocation\n");
+        if (hook_msg != user_message) free(hook_msg);
         if (has_images) {
             api_common_clear_pending_images();
             image_attachment_cleanup(&image_parse);
@@ -445,6 +470,7 @@ int session_process_message(AgentSession* session, const char* user_message) {
     } else {
         LLMRoundTripResult rt;
         if (api_round_trip_execute(session, effective_message, max_tokens, &rt) != 0) {
+            if (hook_msg != user_message) free(hook_msg);
             if (has_images) {
                 api_common_clear_pending_images();
                 image_attachment_cleanup(&image_parse);
@@ -456,6 +482,7 @@ int session_process_message(AgentSession* session, const char* user_message) {
         api_round_trip_cleanup(&rt);
     }
 
+    if (hook_msg != user_message) free(hook_msg);
     if (has_images) {
         api_common_clear_pending_images();
         image_attachment_cleanup(&image_parse);

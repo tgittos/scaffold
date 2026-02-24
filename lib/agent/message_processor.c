@@ -5,7 +5,9 @@
 #include "../ui/output_formatter.h"
 #include "../ui/json_output.h"
 #include "../util/debug_output.h"
+#include "../plugin/hook_dispatcher.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 int message_processor_handle_response(AgentSession* session,
@@ -30,6 +32,20 @@ int message_processor_handle_response(AgentSession* session,
             debug_printf("Found %d tool calls via generic parser fallback\n", call_count);
         }
     }
+
+    /* Plugin hook: post_llm_response */
+    char *hook_text = message_content ? strdup(message_content) : NULL;
+    hook_dispatch_post_llm_response(&session->plugin_manager, session,
+                                     &hook_text, tool_calls, call_count);
+    /* Use hook_text for display if plugins transformed it */
+    if (hook_text && message_content &&
+        strcmp(hook_text, message_content) != 0) {
+        /* Plugin modified text; update parsed content for display */
+        free(result->parsed.response_content);
+        result->parsed.response_content = strdup(hook_text);
+        message_content = result->parsed.response_content;
+    }
+    free(hook_text);
 
     print_formatted_response_improved(&result->parsed);
 

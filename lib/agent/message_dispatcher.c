@@ -33,7 +33,7 @@ DispatchDecision message_dispatcher_select_mode(const AgentSession* session) {
     return BUFFERED_DECISION;
 }
 
-char* message_dispatcher_build_payload(const AgentSession* session,
+char* message_dispatcher_build_payload(AgentSession* session,
                                        const char* user_message,
                                        int max_tokens) {
     if (session == NULL) return NULL;

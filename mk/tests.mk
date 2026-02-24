@@ -340,6 +340,12 @@ $(eval $(call def_test_lib,goap_tools,tools/test_goap_tools,))
 $(eval $(call def_test_lib,orchestrator_tool,tools/test_orchestrator_tool,))
 $(eval $(call def_test_lib,goap_lifecycle,orchestrator/test_goap_lifecycle,))
 $(eval $(call def_test_lib,goap_state,orchestrator/test_goap_state,))
+$(eval $(call def_test,plugin_protocol,plugin/test_plugin_protocol,$(LIBDIR)/plugin/plugin_protocol.c))
+$(eval $(call def_test_lib,plugin_manager,plugin/test_plugin_manager,))
+$(eval $(call def_test_lib,hook_dispatcher,plugin/test_hook_dispatcher,))
+
+$(TEST_plugin_protocol_TARGET): $(TEST_plugin_protocol_OBJECTS) $(CJSON_LIB)
+	$(CC) -o $@ $(TEST_plugin_protocol_OBJECTS) $(CJSON_LIB)
 
 # Batch link rule for libagent-linked tests
 LIBAGENT_TESTS := tool_param_dsl json_output output tools_system vector_db_tool memory_tool \
@@ -349,7 +355,7 @@ LIBAGENT_TESTS := tool_param_dsl json_output output tools_system vector_db_tool 
     message_dispatcher message_processor recap parallel_batch model_commands \
     slash_commands task_commands agent_commands goal_commands mode_tool mode_commands \
     context_mode_injection image_attachment goap_tools orchestrator_tool goap_lifecycle \
-    goap_state
+    goap_state plugin_manager hook_dispatcher
 
 $(foreach t,$(LIBAGENT_TESTS),$(eval \
 $$(TEST_$(t)_TARGET): $$(TEST_$(t)_OBJECTS) $$(LIBAGENT) $$(ALL_LIBS) ; \

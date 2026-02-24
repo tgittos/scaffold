@@ -477,6 +477,99 @@ MCP servers are configured in `scaffold.config.json`:
 }
 ```
 
+## Plugin System
+
+Ralph supports a subprocess-based plugin system where plugins are standalone executables deployed to `~/.local/scaffold/plugins/`. The host discovers them at startup, spawns them as long-lived child processes, and communicates via JSON-RPC 2.0 over stdin/stdout. Plugins can register hooks into the agent pipeline and provide custom tools.
+
+```mermaid
+graph TB
+    subgraph Host Process
+        PluginMgr[Plugin Manager<br/>plugin_manager.c/h] --> HookDispatch[Hook Dispatcher<br/>hook_dispatcher.c/h]
+        PluginMgr --> PluginProto[Plugin Protocol<br/>plugin_protocol.c/h]
+        HookDispatch --> PluginProto
+    end
+
+    PluginMgr -->|fork/exec| P1[Plugin Process 1]
+    PluginMgr -->|fork/exec| P2[Plugin Process 2]
+    PluginMgr -->|fork/exec| PN[Plugin Process N]
+
+    PluginProto <-->|JSON-RPC 2.0<br/>over stdin/stdout| P1
+    PluginProto <-->|JSON-RPC 2.0| P2
+    PluginProto <-->|JSON-RPC 2.0| PN
+
+    subgraph Agent Pipeline
+        PostInput[post_user_input] --> CtxEnhance[context_enhance]
+        CtxEnhance --> PreLLM[pre_llm_send]
+        PreLLM --> PostLLM[post_llm_response]
+        PostLLM --> PreTool[pre_tool_execute]
+        PreTool --> PostTool[post_tool_execute]
+    end
+
+    HookDispatch --> PostInput
+    HookDispatch --> CtxEnhance
+    HookDispatch --> PreLLM
+    HookDispatch --> PostLLM
+    HookDispatch --> PreTool
+    HookDispatch --> PostTool
+
+    classDef host fill:#e8f5e8
+    classDef plugin fill:#fff3e0
+    classDef hook fill:#e3f2fd
+
+    class PluginMgr,HookDispatch,PluginProto host
+    class P1,P2,PN plugin
+    class PostInput,CtxEnhance,PreLLM,PostLLM,PreTool,PostTool hook
+```
+
+### Plugin Architecture
+
+Three layers:
+
+1. **Plugin Protocol** (`lib/plugin/plugin_protocol.c/h`) - JSON-RPC 2.0 message serialization for initialize, hook events, tool execution, and shutdown
+2. **Plugin Manager** (`lib/plugin/plugin_manager.c/h`) - Directory scanning, process spawning via fork/pipe, handshake, tool registration, IPC, and graceful shutdown (SIGTERM → wait → SIGKILL)
+3. **Hook Dispatcher** (`lib/plugin/hook_dispatcher.c/h`) - Routes pipeline events to subscribed plugins in priority order
+
+### Plugin Lifecycle
+
+1. **Discovery**: Scan `~/.local/scaffold/plugins/` for executable files (skip hidden files)
+2. **Spawn**: Fork/exec each plugin, set up stdin/stdout pipes for bidirectional JSON-RPC
+3. **Handshake**: Send `initialize` request, receive manifest (name, version, hooks, tools, priority)
+4. **Tool Registration**: Plugin tools registered as `plugin_<pluginname>_<toolname>` in the ToolRegistry. Plugin names must not contain underscores (the first `_` after the `plugin_` prefix is used as the delimiter)
+5. **Runtime**: Hook dispatcher routes pipeline events to subscribed plugins via IPC
+6. **Shutdown**: Send `shutdown` request, SIGTERM, wait, SIGKILL if needed
+
+### Hook Points
+
+| Hook | Location | Purpose |
+|------|----------|---------|
+| `post_user_input` | `session.c` | Transform/filter user input |
+| `context_enhance` | `context_enhancement.c` | Add dynamic context (git status, project info) |
+| `pre_llm_send` | `streaming_handler.c` | Modify system prompt before LLM request |
+| `post_llm_response` | `message_processor.c` | Transform LLM response text |
+| `pre_tool_execute` | `tool_batch_executor.c` | Intercept/block tool calls |
+| `post_tool_execute` | `tool_batch_executor.c` | Transform tool results |
+
+### Hook Dispatch Semantics
+
+- Multiple plugins can subscribe to the same hook
+- Plugins execute in priority order (lower priority number = runs earlier, default 500)
+- `"action":"continue"` passes to the next plugin in the chain
+- `"action":"stop"` halts the chain (pre_tool_execute returns a result, post_user_input discards)
+- `"action":"skip"` discards the event (post_user_input only)
+- Context enhance hooks always accumulate (stop/skip ignored)
+- 5-second timeout per plugin response via `select()`
+
+### Plugin Protocol
+
+JSON-RPC 2.0 over stdin/stdout, newline-terminated messages. Same framing as MCP stdio transport.
+
+- `initialize` → manifest (name, version, hooks, tools, priority)
+- `hook/<hook_name>` → action + transformed data
+- `tool/execute` → success + result
+- `shutdown` → acknowledgment
+
+Plugins can be written in any language that speaks the protocol (C, Python, Go, Rust, shell scripts).
+
 ## Prompt Caching Architecture
 
 System prompts are split into two parts to maximize cache hits across API requests within a session:
@@ -807,6 +900,7 @@ graph TB
 | `/model` | `[model_name]` | Switch AI models |
 | `/mode` | `[mode_name]` | Switch behavioral prompt modes |
 | `/goals` | `[subcommand]` | List GOAP goals, show details + action tree |
+| `/plugins` | - | Show loaded plugins (name, version, PID, hooks, tools) |
 
 ## Embedding Provider Abstraction
 
@@ -1106,6 +1200,10 @@ lib/
 │   ├── approval_errors.c   # Approval gate error formatting
 │   ├── verified_file_context.c/h # Thread-local verified file context
 │   └── verified_file_python.c/h  # Python extension for verified I/O
+├── plugin/                 # Plugin system
+│   ├── plugin_manager.c/h  # Plugin discovery, spawning, lifecycle, IPC
+│   ├── plugin_protocol.c/h # JSON-RPC 2.0 protocol serialization
+│   └── hook_dispatcher.c/h # Hook event routing to subscribed plugins
 ├── mcp/                    # Model Context Protocol
 │   ├── mcp_client.c/h      # MCP client implementation
 │   ├── mcp_transport.c/h   # Transport abstraction layer

@@ -200,6 +200,11 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 #### `lib/pdf/` - PDF Processing
 - **`pdf_extractor.c/h`** - PDF text extraction using PDFio library
 
+#### `lib/plugin/` - Plugin System
+- **`plugin_manager.c/h`** - Plugin discovery (scan `~/.local/scaffold/plugins/`), process spawning via fork/pipe, initialize handshake, tool registration (`plugin_<name>_<tool>`), IPC, and graceful shutdown
+- **`plugin_protocol.c/h`** - JSON-RPC 2.0 message builders (initialize, hook events, tool execute, shutdown) and response parsers (manifest, hook response, tool result)
+- **`hook_dispatcher.c/h`** - Routes pipeline events to subscribed plugins in priority order with chain semantics (continue/stop/skip)
+
 #### `lib/mcp/` - Model Context Protocol
 - **`mcp_client.c/h`** - MCP client implementation and server management
 - **`mcp_transport.c/h`** - Transport abstraction layer using strategy pattern
@@ -288,6 +293,11 @@ The test directory mirrors the source structure:
 - **`test_sqlite_dal.c`** - SQLite Data Access Layer tests
 - **`test_goal_store.c`** - GOAP goal store persistence tests (20 tests: CRUD, status transitions, world state, summary, active-goals query, supervisor PID tracking)
 - **`test_action_store.c`** - GOAP action store tests (23 tests: hierarchy, precondition matching, readiness queries, skip_pending, work_item_id correlation)
+
+#### `test/plugin/` - Plugin System Tests
+- **`test_plugin_protocol.c`** - Protocol serialization tests (16 tests: all JSON-RPC builders and response parsers)
+- **`test_plugin_manager.c`** - Plugin manager tests (12 tests: init, discover, shutdown, send_request, execute_tool)
+- **`test_hook_dispatcher.c`** - Hook dispatch tests (11 tests: no-plugin, no-subscriber, priority ordering, uninitialized skip)
 
 #### `test/mcp/` - MCP Integration Tests
 - **`test_mcp_client.c`** - MCP client functionality tests

@@ -8,6 +8,7 @@
 #include "../policy/protected_files.h"
 #include "../policy/verified_file_context.h"
 #include "../policy/atomic_file.h"
+#include "../plugin/hook_dispatcher.h"
 #include <cJSON.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -63,6 +64,12 @@ static void fill_remaining_interrupted(ToolBatchContext* ctx,
 
 static void execute_single_tool(ToolBatchContext* ctx, ToolCall* call,
                                  ToolResult* result, PreScreenEntry* entry) {
+    /* Plugin hook: pre_tool_execute */
+    if (hook_dispatch_pre_tool_execute(&ctx->session->plugin_manager,
+                                        ctx->session, call, result) == HOOK_STOP) {
+        return;
+    }
+
     if (entry->has_approved_path) {
         verified_file_context_set(&entry->approved_path);
     }
@@ -84,6 +91,10 @@ static void execute_single_tool(ToolBatchContext* ctx, ToolCall* call,
     }
 
     verified_file_context_clear();
+
+    /* Plugin hook: post_tool_execute */
+    hook_dispatch_post_tool_execute(&ctx->session->plugin_manager,
+                                    ctx->session, call, result);
 }
 
 static void* worker_thread(void* arg) {

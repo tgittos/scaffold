@@ -6,12 +6,13 @@
 #include "agent_commands.h"
 #include "goal_commands.h"
 #include "terminal.h"
+#include "../agent/session.h"
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
 
 #define MAX_SLASH_COMMANDS 16
-#define BUILTIN_COMMAND_COUNT 7
+#define BUILTIN_COMMAND_COUNT 8
 
 typedef struct {
     const char *name;
@@ -67,6 +68,60 @@ static int handle_help(const char *args, AgentSession *session) {
     return 0;
 }
 
+static int handle_plugins(const char *args, AgentSession *session) {
+    (void)args;
+    if (!session) {
+        printf("  No session available\n");
+        return 0;
+    }
+
+    PluginManager *mgr = &session->plugin_manager;
+    printf("\n" TERM_BOLD "Plugins" TERM_RESET "\n");
+    printf(TERM_SEP_LIGHT_40 "\n");
+
+    if (mgr->count == 0) {
+        printf("  No plugins loaded\n");
+        char *dir = plugin_manager_get_plugins_dir();
+        if (dir) {
+            printf("  Directory: %s\n", dir);
+            free(dir);
+        }
+        printf("\n");
+        return 0;
+    }
+
+    for (int i = 0; i < mgr->count; i++) {
+        PluginProcess *p = &mgr->plugins[i];
+        if (!p->initialized) continue;
+
+        printf("  " TERM_BOLD "%s" TERM_RESET " v%s",
+               p->manifest.name, p->manifest.version);
+        if (p->manifest.description && p->manifest.description[0]) {
+            printf(" - %s", p->manifest.description);
+        }
+        printf("\n");
+        printf("    PID: %d  Priority: %d\n", p->pid, p->manifest.priority);
+
+        if (p->manifest.hook_count > 0) {
+            printf("    Hooks: ");
+            for (int j = 0; j < p->manifest.hook_count; j++) {
+                printf("%s%s", j > 0 ? ", " : "", p->manifest.hooks[j]);
+            }
+            printf("\n");
+        }
+
+        if (p->manifest.tool_count > 0) {
+            printf("    Tools: ");
+            for (int j = 0; j < p->manifest.tool_count; j++) {
+                printf("%s%s", j > 0 ? ", " : "", p->manifest.tools[j].name);
+            }
+            printf("\n");
+        }
+    }
+    printf("\n");
+    return 0;
+}
+
 void slash_commands_init(AgentSession *session) {
     (void)session;
     _Static_assert(BUILTIN_COMMAND_COUNT <= MAX_SLASH_COMMANDS,
@@ -80,6 +135,7 @@ void slash_commands_init(AgentSession *session) {
     rc |= slash_command_register("mode", "Switch behavioral mode", process_mode_command);
     rc |= slash_command_register("agents", "View subagent status", process_agent_command);
     rc |= slash_command_register("goals", "View GOAP goals and actions", process_goals_command);
+    rc |= slash_command_register("plugins", "Show loaded plugins", handle_plugins);
     assert(rc == 0 && "Failed to register built-in slash commands");
     (void)rc;
 }

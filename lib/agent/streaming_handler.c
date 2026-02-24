@@ -10,6 +10,7 @@
 #include "../util/debug_output.h"
 #include "../llm/llm_client.h"
 #include "../ui/status_line.h"
+#include "../plugin/hook_dispatcher.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -95,6 +96,10 @@ int streaming_process_message(AgentSession* session, LLMProvider* provider,
     if (build_enhanced_prompt_parts(session, user_message, &parts) != 0) {
         return -1;
     }
+
+    /* Plugin hook: pre_llm_send */
+    hook_dispatch_pre_llm_send(&session->plugin_manager, session,
+                                &parts.base_prompt, &parts.dynamic_context);
 
     SystemPromptParts sys_parts = {
         .base_prompt = parts.base_prompt,

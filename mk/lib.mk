@@ -171,6 +171,12 @@ LIB_MCP_SOURCES := \
     $(LIBDIR)/mcp/mcp_transport_stdio.c \
     $(LIBDIR)/mcp/mcp_transport_http.c
 
+# Plugin module (subprocess-based plugin system)
+LIB_PLUGIN_SOURCES := \
+    $(LIBDIR)/plugin/plugin_protocol.c \
+    $(LIBDIR)/plugin/plugin_manager.c \
+    $(LIBDIR)/plugin/hook_dispatcher.c
+
 # Updater module
 LIB_UPDATER_SOURCES := $(LIBDIR)/updater/updater.c
 
@@ -186,8 +192,8 @@ LIB_C_SOURCES := $(LIB_IPC_SOURCES) $(LIB_UI_SOURCES) $(LIB_TOOLS_SOURCES) \
     $(LIB_AGENT_SOURCES) $(LIB_SERVICES_SOURCES) $(LIB_LLM_SOURCES) \
     $(LIB_SESSION_SOURCES) $(LIB_POLICY_SOURCES) $(LIB_DB_SOURCES) \
     $(LIB_WORKFLOW_SOURCES) $(LIB_UTIL_SOURCES) $(LIB_PDF_SOURCES) \
-    $(LIB_NETWORK_SOURCES) $(LIB_MCP_SOURCES) $(LIB_UPDATER_SOURCES) \
-    $(LIB_ORCHESTRATOR_SOURCES)
+    $(LIB_NETWORK_SOURCES) $(LIB_MCP_SOURCES) $(LIB_PLUGIN_SOURCES) \
+    $(LIB_UPDATER_SOURCES) $(LIB_ORCHESTRATOR_SOURCES)
 
 LIB_CPP_SOURCES := $(LIB_DB_CPP_SOURCES)
 

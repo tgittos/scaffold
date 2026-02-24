@@ -11,6 +11,7 @@
 #include "../policy/approval_gate.h"
 #include "../ipc/message_poller.h"
 #include "../services/services.h"
+#include "../plugin/plugin_manager.h"
 
 /* Forward declaration — full definition in llm/model_capabilities.h */
 typedef struct ModelRegistry ModelRegistry;
@@ -44,6 +45,7 @@ typedef struct AgentSession {
     ModelRegistry* model_registry;      /**< Model capability registry */
     const char* model_override;         /**< Model override from --model flag */
     PromptMode current_mode;            /**< Active behavioral prompt mode */
+    PluginManager plugin_manager;       /**< Plugin subprocess management */
 } AgentSession;
 
 /* Cleanup hooks: external code registers shutdown functions (e.g. Python interpreter). */
@@ -162,7 +164,7 @@ int session_generate_recap(AgentSession* session, int max_messages);
  * @param max_tokens Maximum tokens for response
  * @return Allocated JSON string (caller must free), or NULL on error
  */
-char* session_build_json_payload(const AgentSession* session,
+char* session_build_json_payload(AgentSession* session,
                                   const char* user_message, int max_tokens);
 
 /**
@@ -173,7 +175,7 @@ char* session_build_json_payload(const AgentSession* session,
  * @param max_tokens Maximum tokens for response
  * @return Allocated JSON string (caller must free), or NULL on error
  */
-char* session_build_anthropic_json_payload(const AgentSession* session,
+char* session_build_anthropic_json_payload(AgentSession* session,
                                             const char* user_message, int max_tokens);
 
 /**
