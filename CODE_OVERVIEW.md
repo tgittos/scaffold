@@ -72,6 +72,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`task_store.c/h`** - SQLite-based persistent task storage with hierarchies and dependencies
 - **`goal_store.c/h`** - GOAP goal persistence: goal state, world state, supervisor PID tracking, lock/unlock API for atomic read-modify-write sequences
 - **`action_store.c/h`** - GOAP action persistence: hierarchy (compound/primitive), preconditions/effects, readiness queries, work_item_id correlation for dispatch tracking
+- **`oauth2_store.c/h`** - OAuth2 token management with PKCE, AES-256-GCM encryption, vtable-based provider pattern, auto-refresh with 60s margin
 - **`sqlite_dal.c/h`** - SQLite data access layer with recursive mutex protection (supports nested locking for atomic read-modify-write), ref-counted shared connections, schema initialization, and common query patterns
 - **`hnswlib_wrapper.cpp/h`** - C++ wrapper for HNSW vector indexing
 
@@ -293,6 +294,7 @@ The test directory mirrors the source structure:
 - **`test_sqlite_dal.c`** - SQLite Data Access Layer tests
 - **`test_goal_store.c`** - GOAP goal store persistence tests (20 tests: CRUD, status transitions, world state, summary, active-goals query, supervisor PID tracking)
 - **`test_action_store.c`** - GOAP action store tests (23 tests: hierarchy, precondition matching, readiness queries, skip_pending, work_item_id correlation)
+- **`test_oauth2_store.c`** - OAuth2 store tests (28 tests: lifecycle, provider registry/validation, auth flow, pending overflow, token access, multi-provider, encryption with auto-refresh, NULL safety)
 
 #### `test/plugin/` - Plugin System Tests
 - **`test_plugin_protocol.c`** - Protocol serialization tests (16 tests: all JSON-RPC builders and response parsers)

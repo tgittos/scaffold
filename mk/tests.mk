@@ -246,6 +246,12 @@ $(TEST_goal_store_TARGET): $(TEST_goal_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_
 $(TEST_action_store_TARGET): $(TEST_action_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_action_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) $(CJSON_LIB) -lpthread -lm
 
+$(eval $(call def_test,oauth2_store,db/test_oauth2_store,\
+    $(LIBDIR)/db/oauth2_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/app_home.c))
+
+$(TEST_oauth2_store_TARGET): $(TEST_oauth2_store_OBJECTS) $(SQLITE_LIB) $(LIBS_MBEDTLS)
+	$(CC) -o $@ $(TEST_oauth2_store_OBJECTS) $(SQLITE_LIB) $(LIBS_MBEDTLS) -lpthread -lm
+
 $(eval $(call def_test,orchestrator,orchestrator/test_orchestrator,$(LIBDIR)/orchestrator/orchestrator.c $(LIBDIR)/db/goal_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/uuid_utils.c $(LIBDIR)/util/app_home.c $(LIBDIR)/util/executable_path.c $(LIBDIR)/util/process_spawn.c $(LIBDIR)/util/debug_output.c))
 
 $(TEST_orchestrator_TARGET): $(TEST_orchestrator_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) $(CJSON_LIB)

@@ -1159,6 +1159,7 @@ lib/
 │   ├── task_store.c/h      # SQLite-based persistent task storage
 │   ├── goal_store.c/h      # GOAP goal persistence (scaffold orchestration)
 │   ├── action_store.c/h    # GOAP action persistence with hierarchy, readiness queries, and work_item_id correlation
+│   ├── oauth2_store.c/h    # OAuth2 token management with PKCE, AES-256-GCM encryption, provider vtable
 │   ├── sqlite_dal.c/h      # SQLite data access layer (ref-counted, recursive mutex for nested locking)
 │   └── hnswlib_wrapper.cpp/h # C++ bridge
 ├── llm/                    # LLM core framework

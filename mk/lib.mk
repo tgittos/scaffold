@@ -147,7 +147,8 @@ LIB_DB_SOURCES := \
     $(LIBDIR)/db/document_store.c \
     $(LIBDIR)/db/task_store.c \
     $(LIBDIR)/db/goal_store.c \
-    $(LIBDIR)/db/action_store.c
+    $(LIBDIR)/db/action_store.c \
+    $(LIBDIR)/db/oauth2_store.c
 
 # Database C++ sources
 LIB_DB_CPP_SOURCES := $(LIBDIR)/db/hnswlib_wrapper.cpp
