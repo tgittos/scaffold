@@ -931,6 +931,8 @@ void test_build_anthropic_json_payload_cache_control_on_tools(void) {
 void test_ralph_api_type_detection(void) {
     TEST_ASSERT_EQUAL(API_TYPE_OPENAI,
                       session_configurator_detect_api_type("https://api.openai.com/v1/chat/completions"));
+    TEST_ASSERT_EQUAL(API_TYPE_OPENAI,
+                      session_configurator_detect_api_type("https://chatgpt.com/backend-api/codex/responses"));
     TEST_ASSERT_EQUAL(API_TYPE_ANTHROPIC,
                       session_configurator_detect_api_type("https://api.anthropic.com/v1/messages"));
     TEST_ASSERT_EQUAL(API_TYPE_LOCAL,

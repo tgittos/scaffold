@@ -39,6 +39,7 @@ graph TB
     Core --> LLMProvider[LLM Provider Abstraction<br/>llm_provider.c/h]
     LLMProvider --> ProviderRegistry[Provider Registry]
 
+    ProviderRegistry --> Codex[Codex Provider<br/>codex_provider.c]
     ProviderRegistry --> Anthropic[Anthropic Provider<br/>anthropic_provider.c]
     ProviderRegistry --> OpenAI[OpenAI Provider<br/>openai_provider.c]
     ProviderRegistry --> LocalAI[Local AI Provider<br/>local_ai_provider.c]
@@ -114,11 +115,22 @@ graph TB
     Session --> ConversationCompactor[Conversation Compactor<br/>conversation_compactor.c/h]
     ConversationTracker --> DocumentStore
 
+    %% Auth Module
+    CLI --> AuthLogin[OpenAI Login<br/>lib/auth/openai_login.c/h]
+    Core --> AuthLogin
+    AuthLogin --> OAuthProvider[OpenAI OAuth Provider<br/>openai_oauth_provider.c/h]
+    AuthLogin --> CallbackServer[OAuth Callback Server<br/>oauth_callback_server.c/h]
+    AuthLogin --> JWTDecode[JWT Decode<br/>jwt_decode.c/h]
+    AuthLogin --> OAuth2Store[OAuth2 Store<br/>oauth2_store.c/h]
+    OAuthProvider --> FormPost[HTTP Form POST<br/>http_form_post.c/h]
+
     %% Network Layer
-    Anthropic --> HTTPClient[HTTP Client<br/>http_client.c/h]
+    Codex --> HTTPClient[HTTP Client<br/>http_client.c/h]
+    Anthropic --> HTTPClient
     OpenAI --> HTTPClient
     LocalAI --> HTTPClient
     MCPClient --> HTTPClient
+    FormPost --> HTTPClient
 
     HTTPClient --> APICommon[API Common<br/>api_common.c/h]
 
@@ -157,10 +169,12 @@ graph TB
     classDef externalLayer fill:#efebe9
     classDef mcpLayer fill:#fff9c4
     classDef policyLayer fill:#ffccbc
+    classDef authLayer fill:#e8eaf6
 
     class CLI,Core,Session,ConfigSystem,MemoryCommands,ContextEnhancement,RecapModule,StreamingHandler,ToolExecutor coreLayer
     class ApprovalGate,RateLimiter,Allowlist,GatePrompter,ProtectedFiles,ShellParser,AtomicFile,SubagentApproval,PatternGen,PathNormalize policyLayer
-    class LLMProvider,ProviderRegistry,Anthropic,OpenAI,LocalAI,ModelCaps,ClaudeModel,GPTModel,ModelRegistry llmLayer
+    class LLMProvider,ProviderRegistry,Codex,Anthropic,OpenAI,LocalAI,ModelCaps,ClaudeModel,GPTModel,ModelRegistry llmLayer
+    class AuthLogin,OAuthProvider,CallbackServer,JWTDecode,OAuth2Store,FormPost authLayer
     class ToolsSystem,ToolRegistry,PythonTool,PythonFileTools,PythonDefaults,TodoTool,MemoryTool,PDFTool,VectorDBTool,SubagentTool,MessagingTool,GOAPTools,OrchestratorTool,TodoManager,TodoDisplay toolsLayer
     class ConversationTracker,TokenManager,ConversationCompactor sessionLayer
     class HTTPClient,APICommon networkLayer
@@ -397,15 +411,18 @@ graph TB
     APICall[API Request] --> LLMProvider[LLM Provider Interface]
     
     LLMProvider --> Detection{Provider Detection<br/>URL-based}
+    Detection -->|chatgpt.com/backend-api/codex| Codex[Codex Provider]
     Detection -->|api.anthropic.com| Anthropic[Anthropic Provider]
     Detection -->|api.openai.com| OpenAI[OpenAI Provider]
     Detection -->|localhost:1234| LocalAI[Local AI Provider]
-    
+
+    Codex --> CodexAPI[Codex API<br/>Responses format]
     Anthropic --> AnthropicAPI[Anthropic API<br/>Messages format]
     OpenAI --> OpenAIAPI[OpenAI API<br/>Chat completions]
     LocalAI --> LocalAPI[LM Studio API<br/>Compatible format]
     
-    AnthropicAPI --> ModelCaps[Model Capabilities]
+    CodexAPI --> ModelCaps[Model Capabilities]
+    AnthropicAPI --> ModelCaps
     OpenAIAPI --> ModelCaps
     LocalAPI --> ModelCaps
     
@@ -417,8 +434,8 @@ graph TB
     classDef capabilities fill:#e8f5e8
 
     class APICall,LLMProvider,Detection interface
-    class Anthropic,OpenAI,LocalAI provider
-    class AnthropicAPI,OpenAIAPI,LocalAPI api
+    class Codex,Anthropic,OpenAI,LocalAI provider
+    class CodexAPI,AnthropicAPI,OpenAIAPI,LocalAPI api
     class ModelCaps,Features capabilities
 ```
 
@@ -571,6 +588,60 @@ JSON-RPC 2.0 over stdin/stdout, newline-terminated messages. Same framing as MCP
 - `shutdown` → acknowledgment
 
 Plugins can be written in any language that speaks the protocol (C, Python, Go, Rust, shell scripts).
+
+## OAuth2 Authentication Architecture
+
+The auth module (`lib/auth/`) enables OAuth2 login against OpenAI/ChatGPT subscription accounts, allowing CLI tools to use subscription-based models without a separate API key.
+
+```mermaid
+graph TB
+    CLI[scaffold --login] --> LoginOrch[OpenAI Login<br/>openai_login.c]
+
+    LoginOrch --> OAuthStore[OAuth2 Store<br/>oauth2_store.c]
+    LoginOrch --> OAuthProv[OpenAI OAuth Provider<br/>openai_oauth_provider.c]
+    LoginOrch --> CallbackSrv[Callback Server<br/>oauth_callback_server.c]
+    LoginOrch --> JWT[JWT Decode<br/>jwt_decode.c]
+
+    OAuthStore --> SQLite[SQLite<br/>oauth2.db]
+    OAuthStore --> AES[AES-256-GCM<br/>Token Encryption]
+
+    OAuthProv --> FormPost[HTTP Form POST<br/>http_form_post.c]
+    FormPost --> TokenEndpoint[OpenAI Token Endpoint<br/>auth.openai.com]
+
+    CallbackSrv --> Browser[Browser OAuth Flow<br/>localhost:1455]
+
+    JWT --> AccountID[Account ID Extraction<br/>chatgpt_account_id]
+
+    %% Session integration
+    SessionConfig[Session Configurator<br/>session_configurator.c] --> LoginOrch
+    SessionConfig --> CodexProv[Codex Provider<br/>codex_provider.c]
+    CodexProv --> CodexAPI[Codex Responses API<br/>chatgpt.com/backend-api/codex]
+
+    classDef authCore fill:#e8eaf6
+    classDef security fill:#fce4ec
+    classDef external fill:#efebe9
+
+    class CLI,LoginOrch,OAuthProv,CallbackSrv,JWT,SessionConfig authCore
+    class OAuthStore,AES,SQLite security
+    class FormPost,TokenEndpoint,Browser,AccountID,CodexProv,CodexAPI external
+```
+
+### Auth Flow
+1. `scaffold --login` initiates OAuth2 Authorization Code + PKCE flow
+2. Browser opens to OpenAI auth endpoint (or URL printed for headless environments)
+3. Localhost callback server receives authorization code on port 1455
+4. Code exchanged for access/refresh tokens via form-urlencoded POST
+5. Tokens encrypted with AES-256-GCM and stored in `oauth2.db`
+6. On API requests to Codex URL, session configurator retrieves credentials
+7. JWT decoded to extract `chatgpt_account_id` for request header
+8. Refresh token rotation handled automatically (OpenAI rotates on every refresh)
+
+### Codex Responses API
+The Codex provider uses OpenAI's Responses API format (different from Chat Completions):
+- Request: `instructions` (system prompt) + `input` (message array) + `tools`
+- Response: `output` array with `output_text` and `function_call` items
+- Streaming: `response.output_text.delta` and `response.function_call_arguments.delta` events
+- Auth: `chatgpt-account-id` header alongside Bearer token
 
 ## Prompt Caching Architecture
 

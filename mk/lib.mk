@@ -81,6 +81,7 @@ LIB_LLM_SOURCES := \
     $(LIBDIR)/llm/embeddings.c \
     $(LIBDIR)/llm/embedding_provider.c \
     $(LIBDIR)/llm/embeddings_service.c \
+    $(LIBDIR)/llm/providers/codex_provider.c \
     $(LIBDIR)/llm/providers/openai_provider.c \
     $(LIBDIR)/llm/providers/anthropic_provider.c \
     $(LIBDIR)/llm/providers/local_ai_provider.c \
@@ -159,6 +160,7 @@ LIB_WORKFLOW_SOURCES := $(LIBDIR)/workflow/workflow.c
 # Network module
 LIB_NETWORK_SOURCES := \
     $(LIBDIR)/network/http_client.c \
+    $(LIBDIR)/network/http_form_post.c \
     $(LIBDIR)/network/api_common.c \
     $(LIBDIR)/network/api_error.c \
     $(LIBDIR)/network/streaming.c \
@@ -188,13 +190,20 @@ LIB_ORCHESTRATOR_SOURCES := \
     $(LIBDIR)/orchestrator/role_prompts.c \
     $(LIBDIR)/orchestrator/goap_state.c
 
+# Auth module (OAuth2 providers, JWT, login orchestration)
+LIB_AUTH_SOURCES := \
+    $(LIBDIR)/auth/jwt_decode.c \
+    $(LIBDIR)/auth/openai_oauth_provider.c \
+    $(LIBDIR)/auth/oauth_callback_server.c \
+    $(LIBDIR)/auth/openai_login.c
+
 # Combined library sources
 LIB_C_SOURCES := $(LIB_IPC_SOURCES) $(LIB_UI_SOURCES) $(LIB_TOOLS_SOURCES) \
     $(LIB_AGENT_SOURCES) $(LIB_SERVICES_SOURCES) $(LIB_LLM_SOURCES) \
     $(LIB_SESSION_SOURCES) $(LIB_POLICY_SOURCES) $(LIB_DB_SOURCES) \
     $(LIB_WORKFLOW_SOURCES) $(LIB_UTIL_SOURCES) $(LIB_PDF_SOURCES) \
     $(LIB_NETWORK_SOURCES) $(LIB_MCP_SOURCES) $(LIB_PLUGIN_SOURCES) \
-    $(LIB_UPDATER_SOURCES) $(LIB_ORCHESTRATOR_SOURCES)
+    $(LIB_UPDATER_SOURCES) $(LIB_ORCHESTRATOR_SOURCES) $(LIB_AUTH_SOURCES)
 
 LIB_CPP_SOURCES := $(LIB_DB_CPP_SOURCES)
 

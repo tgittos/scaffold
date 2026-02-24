@@ -27,7 +27,7 @@ const struct HTTPConfig DEFAULT_HTTP_CONFIG = {
     .max_redirects = 5
 };
 
-static size_t write_callback(void *contents, size_t size, size_t nmemb, void *userp)
+size_t http_write_callback(void *contents, size_t size, size_t nmemb, void *userp)
 {
     struct HTTPResponse *response = (struct HTTPResponse *)userp;
     size_t realsize = size * nmemb;
@@ -185,7 +185,7 @@ int http_post_with_config(const char *url, const char *post_data, const char **h
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_data);
         curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)strlen(post_data));
         curl_easy_setopt(curl, CURLOPT_HTTPHEADER, curl_headers);
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, http_write_callback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, response);
         curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
         curl_easy_setopt(curl, CURLOPT_HEADERDATA, &header_data);
@@ -344,7 +344,7 @@ int http_get_with_config(const char *url, const char **headers,
         if (curl_headers) {
             curl_easy_setopt(curl, CURLOPT_HTTPHEADER, curl_headers);
         }
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, http_write_callback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, response);
         curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
         curl_easy_setopt(curl, CURLOPT_HEADERDATA, &header_data);

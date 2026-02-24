@@ -40,6 +40,11 @@ typedef struct {
                                  const char *refresh_token_in,
                                  char *access_token, size_t at_len,
                                  int64_t *expires_in);
+    OAuth2Error (*refresh_token_rotate)(const char *client_id, const char *client_secret,
+                                        const char *refresh_token_in,
+                                        char *access_token, size_t at_len,
+                                        char *new_refresh_token, size_t rt_len,
+                                        int64_t *expires_in);
 } OAuth2ProviderOps;
 
 typedef struct {

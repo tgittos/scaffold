@@ -14,6 +14,7 @@
 #include "../../lib/util/executable_path.h"
 #include "../../lib/util/app_home.h"
 #include "../../lib/util/config.h"
+#include "../../lib/auth/openai_login.h"
 #include "../tools/python_extension.h"
 #include "build/version.h"
 
@@ -35,6 +36,9 @@ static void print_help(const char *program_name) {
     printf("  --json            Enable JSON output mode\n");
     printf("  --home <path>     Override home directory (default: ~/.local/scaffold)\n");
     printf("  --yolo            Disable all approval gates for this session\n");
+    printf("  --login           Log in to OpenAI via OAuth (ChatGPT subscription)\n");
+    printf("  --login-headless  Log in without opening browser (print URL only)\n");
+    printf("  --logout          Log out of OpenAI OAuth session\n");
     printf("  --check-update    Check for updates and exit\n");
     printf("  --update          Download and apply the latest update, then exit\n");
     printf("\n");
@@ -126,6 +130,9 @@ static int handle_update(void) {
 int main(int argc, char *argv[]) {
     int check_update_flag = 0;
     int update_flag = 0;
+    int login_flag = 0;
+    int login_headless_flag = 0;
+    int logout_flag = 0;
     const char *home_dir_override = NULL;
 
     for (int i = 1; i < argc; i++) {
@@ -143,9 +150,35 @@ int main(int argc, char *argv[]) {
         if (strcmp(argv[i], "--update") == 0) {
             update_flag = 1;
         }
+        if (strcmp(argv[i], "--login") == 0) {
+            login_flag = 1;
+        }
+        if (strcmp(argv[i], "--login-headless") == 0) {
+            login_flag = 1;
+            login_headless_flag = 1;
+        }
+        if (strcmp(argv[i], "--logout") == 0) {
+            logout_flag = 1;
+        }
         if (strcmp(argv[i], "--home") == 0 && i + 1 < argc) {
             home_dir_override = argv[i + 1];
         }
+    }
+
+    if (login_flag || logout_flag) {
+        app_home_set_app_name("scaffold");
+        app_home_init(home_dir_override);
+        app_home_ensure_exists();
+        char *db = app_home_path("oauth2.db");
+        int rc;
+        if (logout_flag) {
+            rc = openai_logout(db);
+        } else {
+            rc = openai_login(db, login_headless_flag);
+        }
+        free(db);
+        app_home_cleanup();
+        return rc == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
     if (check_update_flag || update_flag) {

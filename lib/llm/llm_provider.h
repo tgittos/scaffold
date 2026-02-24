@@ -72,9 +72,13 @@ int register_provider(ProviderRegistry* registry, LLMProvider* provider);
 LLMProvider* detect_provider_for_url(ProviderRegistry* registry, const char* api_url);
 void cleanup_provider_registry(ProviderRegistry* registry);
 
+int register_codex_provider(ProviderRegistry* registry);
 int register_openai_provider(ProviderRegistry* registry);
 int register_anthropic_provider(ProviderRegistry* registry);
 int register_local_ai_provider(ProviderRegistry* registry);
+
+void codex_set_account_id(const char *account_id);
+const char *codex_get_account_id(void);
 
 ProviderRegistry* get_provider_registry(void);
 void provider_registry_cleanup(void);

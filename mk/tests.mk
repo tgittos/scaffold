@@ -52,6 +52,7 @@ $(eval $(call def_test,tool_args,test_tool_args,$(LIBDIR)/policy/tool_args.c))
 $(eval $(call def_test,gate_prompter,policy/test_gate_prompter,$(LIBDIR)/policy/gate_prompter.c))
 $(eval $(call def_test,tool_cache,tools/test_tool_cache,$(LIBDIR)/tools/tool_cache.c))
 $(eval $(call def_test,prompt_mode,agent/test_prompt_mode,$(LIBDIR)/agent/prompt_mode.c))
+$(eval $(call def_test,oauth_callback_server,auth/test_oauth_callback_server,$(LIBDIR)/auth/oauth_callback_server.c))
 
 # Gate dependencies (used by multiple gate-related tests)
 GATE_DEPS := \
@@ -139,6 +140,9 @@ $(TEST_tool_cache_TARGET): $(TEST_tool_cache_OBJECTS) $(CJSON_LIB)
 $(TEST_prompt_mode_TARGET): $(TEST_prompt_mode_OBJECTS)
 	$(CC) -o $@ $(TEST_prompt_mode_OBJECTS)
 
+$(TEST_oauth_callback_server_TARGET): $(TEST_oauth_callback_server_OBJECTS)
+	$(CC) -o $@ $(TEST_oauth_callback_server_OBJECTS) -lpthread
+
 $(TEST_approval_gate_TARGET): $(TEST_approval_gate_OBJECTS) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_approval_gate_OBJECTS) $(CJSON_LIB)
 
@@ -221,6 +225,15 @@ $(TEST_http_retry_TARGET): $(TEST_http_retry_OBJECTS) $(CJSON_LIB) $(LIBS_MBEDTL
 	$(CC) -o $@ $(TEST_http_retry_OBJECTS) $(CJSON_LIB) $(LIBS_MBEDTLS) -lm
 
 # =============================================================================
+# HTTP FORM POST TEST
+# =============================================================================
+
+$(eval $(call def_test_lib,http_form_post,network/test_http_form_post,$(TESTDIR)/mock_api_server.c))
+
+$(TEST_http_form_post_TARGET): $(TEST_http_form_post_OBJECTS) $(LIBAGENT) $(ALL_LIBS)
+	$(CXX) $(LDFLAGS) -o $@ $(TEST_http_form_post_OBJECTS) $(LIBAGENT) $(LIBS) -lpthread
+
+# =============================================================================
 # SQLITE TESTS
 # =============================================================================
 
@@ -251,6 +264,23 @@ $(eval $(call def_test,oauth2_store,db/test_oauth2_store,\
 
 $(TEST_oauth2_store_TARGET): $(TEST_oauth2_store_OBJECTS) $(SQLITE_LIB) $(LIBS_MBEDTLS)
 	$(CC) -o $@ $(TEST_oauth2_store_OBJECTS) $(SQLITE_LIB) $(LIBS_MBEDTLS) -lpthread -lm
+
+$(eval $(call def_test,oauth2_refresh_rotate,db/test_oauth2_refresh_rotate,\
+    $(LIBDIR)/db/oauth2_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/app_home.c))
+
+$(TEST_oauth2_refresh_rotate_TARGET): $(TEST_oauth2_refresh_rotate_OBJECTS) $(SQLITE_LIB) $(LIBS_MBEDTLS)
+	$(CC) -o $@ $(TEST_oauth2_refresh_rotate_OBJECTS) $(SQLITE_LIB) $(LIBS_MBEDTLS) -lpthread -lm
+
+$(eval $(call def_test_lib,openai_oauth_provider,auth/test_openai_oauth_provider,\
+    $(TESTDIR)/mock_api_server.c))
+
+$(TEST_openai_oauth_provider_TARGET): $(TEST_openai_oauth_provider_OBJECTS) $(LIBAGENT) $(ALL_LIBS)
+	$(CXX) $(LDFLAGS) -o $@ $(TEST_openai_oauth_provider_OBJECTS) $(LIBAGENT) $(LIBS) -lpthread
+
+$(eval $(call def_test,jwt_decode,auth/test_jwt_decode,$(LIBDIR)/auth/jwt_decode.c))
+
+$(TEST_jwt_decode_TARGET): $(TEST_jwt_decode_OBJECTS) $(CJSON_LIB) $(LIBS_MBEDTLS)
+	$(CC) -o $@ $(TEST_jwt_decode_OBJECTS) $(CJSON_LIB) $(LIBS_MBEDTLS) -lm
 
 $(eval $(call def_test,orchestrator,orchestrator/test_orchestrator,$(LIBDIR)/orchestrator/orchestrator.c $(LIBDIR)/db/goal_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/uuid_utils.c $(LIBDIR)/util/app_home.c $(LIBDIR)/util/executable_path.c $(LIBDIR)/util/process_spawn.c $(LIBDIR)/util/debug_output.c))
 
@@ -316,6 +346,7 @@ $(eval $(call def_test_lib,rolling_summary,session/test_rolling_summary,))
 $(eval $(call def_test_lib,model_tools,llm/test_model_tools,))
 $(eval $(call def_test_lib,openai_streaming,llm/test_openai_streaming,))
 $(eval $(call def_test_lib,anthropic_streaming,llm/test_anthropic_streaming,))
+$(eval $(call def_test_lib,codex_provider,llm/test_codex_provider,))
 $(eval $(call def_test_lib,messages_array_bug,network/test_messages_array_bug,))
 $(eval $(call def_test_lib,mcp_client,mcp/test_mcp_client,))
 $(eval $(call def_test_lib,subagent_tool,tools/test_subagent_tool,))
@@ -357,7 +388,7 @@ $(TEST_plugin_protocol_TARGET): $(TEST_plugin_protocol_OBJECTS) $(CJSON_LIB)
 # Batch link rule for libagent-linked tests
 LIBAGENT_TESTS := tool_param_dsl json_output output tools_system vector_db_tool memory_tool \
     memory_mgmt token_manager conversation_compactor rolling_summary model_tools \
-    openai_streaming anthropic_streaming messages_array_bug mcp_client subagent_tool \
+    openai_streaming anthropic_streaming codex_provider messages_array_bug mcp_client subagent_tool \
     incomplete_task_bug conversation conversation_vdb tool_calls_not_stored document_store \
     message_dispatcher message_processor recap parallel_batch model_commands \
     slash_commands task_commands agent_commands goal_commands mode_tool mode_commands \
@@ -451,11 +482,13 @@ check: test
 # Excluded: HTTP (network), Python (embedded stdlib/init), subagent (fork/exec),
 # threads (message_poller, async_executor), tools_system/ralph (python_interpreter_init),
 # recap (uses timeout + SIGPIPE)
-VALGRIND_EXCLUDED := $(TEST_http_TARGET) $(TEST_python_tool_TARGET) $(TEST_python_integration_TARGET) \
+VALGRIND_EXCLUDED := $(TEST_http_TARGET) $(TEST_http_form_post_TARGET) \
+    $(TEST_python_tool_TARGET) $(TEST_python_integration_TARGET) \
     $(TEST_http_python_TARGET) $(TEST_sys_python_TARGET) \
     $(TEST_tools_system_TARGET) $(TEST_ralph_TARGET) $(TEST_recap_TARGET) \
     $(TEST_subagent_tool_TARGET) $(TEST_message_poller_TARGET) $(TEST_async_executor_TARGET) \
-    $(TEST_parallel_batch_TARGET) $(TEST_orchestrator_TARGET) $(TEST_plugin_integration_TARGET)
+    $(TEST_parallel_batch_TARGET) $(TEST_orchestrator_TARGET) $(TEST_plugin_integration_TARGET) \
+    $(TEST_oauth_callback_server_TARGET) $(TEST_openai_oauth_provider_TARGET)
 
 VALGRIND_TESTS := $(filter-out $(VALGRIND_EXCLUDED),$(ALL_TEST_TARGETS))
 

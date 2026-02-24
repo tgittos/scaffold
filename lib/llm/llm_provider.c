@@ -40,6 +40,7 @@ ProviderRegistry* get_provider_registry(void) {
         g_provider_registry = malloc(sizeof(ProviderRegistry));
         if (g_provider_registry != NULL) {
             if (init_provider_registry(g_provider_registry) == 0) {
+                register_codex_provider(g_provider_registry);
                 register_openai_provider(g_provider_registry);
                 register_anthropic_provider(g_provider_registry);
                 register_local_ai_provider(g_provider_registry);

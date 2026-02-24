@@ -298,6 +298,26 @@ static int bind_oauth2_refresh(sqlite3_stmt *stmt, void *data) {
     return 0;
 }
 
+typedef struct {
+    const char *access_token;
+    const char *refresh_token;
+    int64_t expires_at;
+    int64_t updated_at;
+    const char *provider;
+    const char *account_id;
+} BindOAuth2RefreshRotate;
+
+static int bind_oauth2_refresh_rotate(sqlite3_stmt *stmt, void *data) {
+    BindOAuth2RefreshRotate *b = data;
+    sqlite3_bind_text(stmt, 1, b->access_token, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 2, b->refresh_token, -1, SQLITE_STATIC);
+    sqlite3_bind_int64(stmt, 3, b->expires_at);
+    sqlite3_bind_int64(stmt, 4, b->updated_at);
+    sqlite3_bind_text(stmt, 5, b->provider, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 6, b->account_id, -1, SQLITE_STATIC);
+    return 0;
+}
+
 /* Row type for token SELECT queries */
 typedef struct {
     char access_token[2048];
@@ -596,51 +616,108 @@ OAuth2Error oauth2_store_get_access_token(oauth2_store_t *o, const char *provide
     }
 
     const OAuth2ProviderOps *ops = find_provider(o, provider);
-    if (!ops || !ops->refresh_token) {
+    if (!ops || (!ops->refresh_token && !ops->refresh_token_rotate)) {
         ret = OAUTH2_ERROR_PROVIDER;
         goto zeroize;
     }
 
     int64_t new_expires_in = 0;
+    char new_rt[2048] = {0};
+    int used_rotate = 0;
 
-    OAuth2Error err = ops->refresh_token(
-        client_id ? client_id : "", client_secret ? client_secret : "",
-        stored_rt, new_at, sizeof(new_at), &new_expires_in);
-
-    if (err != OAUTH2_OK) {
-        ret = OAUTH2_ERROR_EXPIRED;
-        goto zeroize;
-    }
-
-    int64_t new_expires_at = (int64_t)time(NULL) + new_expires_in;
-
-    char *enc_new_at = NULL;
-    if (o->encryption_enabled) {
-        enc_new_at = encrypt_token(o, new_at);
-        if (!enc_new_at) {
-            ret = OAUTH2_ERROR_STORAGE;
+    /* Try refresh_token_rotate first (returns new refresh token too) */
+    if (ops->refresh_token_rotate) {
+        OAuth2Error err = ops->refresh_token_rotate(
+            client_id ? client_id : "", client_secret ? client_secret : "",
+            stored_rt, new_at, sizeof(new_at), new_rt, sizeof(new_rt),
+            &new_expires_in);
+        if (err == OAUTH2_OK) {
+            used_rotate = 1;
+        } else if (!ops->refresh_token) {
+            ret = OAUTH2_ERROR_EXPIRED;
             goto zeroize;
         }
     }
 
-    BindOAuth2Refresh refresh_params = {
-        .access_token = enc_new_at ? enc_new_at : new_at,
-        .expires_at   = new_expires_at,
-        .updated_at   = (int64_t)time(NULL),
-        .provider     = provider,
-        .account_id   = account_id,
-    };
+    /* Fall back to non-rotating refresh if rotate not available or failed */
+    if (!used_rotate) {
+        OAuth2Error err = ops->refresh_token(
+            client_id ? client_id : "", client_secret ? client_secret : "",
+            stored_rt, new_at, sizeof(new_at), &new_expires_in);
+        if (err != OAUTH2_OK) {
+            ret = OAUTH2_ERROR_EXPIRED;
+            goto zeroize;
+        }
+    }
 
-    int rc = sqlite_dal_exec_p(o->dal,
-        "UPDATE oauth2_tokens SET access_token = ?, expires_at = ?, "
-        "updated_at = ? WHERE provider = ? AND account_id = ?",
-        bind_oauth2_refresh, &refresh_params);
+    int64_t new_expires_at = (int64_t)time(NULL) + new_expires_in;
 
-    free(enc_new_at);
+    if (used_rotate && new_rt[0] != '\0') {
+        /* Rotation: update both access_token and refresh_token */
+        char *enc_new_at = NULL;
+        char *enc_new_rt = NULL;
+        if (o->encryption_enabled) {
+            enc_new_at = encrypt_token(o, new_at);
+            enc_new_rt = encrypt_token(o, new_rt);
+            if (!enc_new_at || !enc_new_rt) {
+                free(enc_new_at);
+                free(enc_new_rt);
+                ret = OAUTH2_ERROR_STORAGE;
+                goto zeroize;
+            }
+        }
 
-    if (rc < 0) {
-        ret = OAUTH2_ERROR_STORAGE;
-        goto zeroize;
+        BindOAuth2RefreshRotate rotate_params = {
+            .access_token  = enc_new_at ? enc_new_at : new_at,
+            .refresh_token = enc_new_rt ? enc_new_rt : new_rt,
+            .expires_at    = new_expires_at,
+            .updated_at    = (int64_t)time(NULL),
+            .provider      = provider,
+            .account_id    = account_id,
+        };
+
+        int rc = sqlite_dal_exec_p(o->dal,
+            "UPDATE oauth2_tokens SET access_token = ?, refresh_token = ?, "
+            "expires_at = ?, updated_at = ? WHERE provider = ? AND account_id = ?",
+            bind_oauth2_refresh_rotate, &rotate_params);
+
+        free(enc_new_at);
+        free(enc_new_rt);
+
+        if (rc < 0) {
+            ret = OAUTH2_ERROR_STORAGE;
+            goto zeroize;
+        }
+    } else {
+        /* Non-rotating: update access_token only */
+        char *enc_new_at = NULL;
+        if (o->encryption_enabled) {
+            enc_new_at = encrypt_token(o, new_at);
+            if (!enc_new_at) {
+                ret = OAUTH2_ERROR_STORAGE;
+                goto zeroize;
+            }
+        }
+
+        BindOAuth2Refresh refresh_params = {
+            .access_token = enc_new_at ? enc_new_at : new_at,
+            .expires_at   = new_expires_at,
+            .updated_at   = (int64_t)time(NULL),
+            .provider     = provider,
+            .account_id   = account_id,
+        };
+
+        int rc = sqlite_dal_exec_p(o->dal,
+            "UPDATE oauth2_tokens SET access_token = ?, expires_at = ?, "
+            "updated_at = ? WHERE provider = ? AND account_id = ?",
+            bind_oauth2_refresh, &refresh_params);
+
+        free(enc_new_at);
+
+        if (rc < 0) {
+            ret = OAUTH2_ERROR_STORAGE;
+            goto zeroize;
+        }
     }
 
     snprintf(result->access_token, sizeof(result->access_token), "%s", new_at);
@@ -650,6 +727,7 @@ zeroize:
     mbedtls_platform_zeroize(stored_at, sizeof(stored_at));
     mbedtls_platform_zeroize(stored_rt, sizeof(stored_rt));
     mbedtls_platform_zeroize(new_at, sizeof(new_at));
+    mbedtls_platform_zeroize(new_rt, sizeof(new_rt));
     return ret;
 }
 

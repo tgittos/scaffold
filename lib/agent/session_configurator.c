@@ -2,16 +2,25 @@
 #include "../util/config.h"
 #include "../util/prompt_loader.h"
 #include "../util/debug_output.h"
+#include "../util/app_home.h"
 #include "../tools/tool_extension.h"
 #include "../llm/model_capabilities.h"
+#include "../llm/llm_provider.h"
 #include "../llm/embeddings_service.h"
+#include "../auth/openai_login.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+static int is_codex_url(const char *url) {
+    return url && strstr(url, "chatgpt.com/backend-api/codex") != NULL;
+}
+
 APIType session_configurator_detect_api_type(const char* api_url) {
     if (api_url == NULL) return API_TYPE_LOCAL;
 
+    if (is_codex_url(api_url))
+        return API_TYPE_OPENAI;
     if (strstr(api_url, "api.openai.com") != NULL)
         return API_TYPE_OPENAI;
     if (strstr(api_url, "api.anthropic.com") != NULL)
@@ -71,9 +80,46 @@ int session_configurator_load(AgentSession* session) {
         if (session->session_data.config.api_key == NULL) return -1;
     }
 
+    /* Codex URL: inject OAuth credentials and set account ID header */
+    if (is_codex_url(session->session_data.config.api_url)) {
+        char *db = app_home_path("oauth2.db");
+        if (db) {
+            if (!openai_is_logged_in(db)) {
+                fprintf(stderr, "Error: Codex URL requires OpenAI authentication.\n");
+                fprintf(stderr, "   Run: scaffold --login\n");
+                free(db);
+                return -1;
+            }
+            char oauth_token[2048] = {0};
+            char account_id[128] = {0};
+            if (openai_get_codex_credentials(db, oauth_token, sizeof(oauth_token),
+                                              account_id, sizeof(account_id)) == 0) {
+                free(session->session_data.config.api_key);
+                session->session_data.config.api_key = strdup(oauth_token);
+                codex_set_account_id(account_id);
+                debug_printf("Using OAuth credentials for Codex API (account: %s)\n", account_id);
+                memset(oauth_token, 0, sizeof(oauth_token));
+            } else {
+                fprintf(stderr, "Error: OAuth tokens found but credential retrieval failed.\n");
+                fprintf(stderr, "   Try: scaffold --logout && scaffold --login\n");
+                free(db);
+                return -1;
+            }
+            free(db);
+        }
+    }
+
     session->session_data.config.context_window = config->context_window;
     session->session_data.config.max_tokens = config->max_tokens;
     session->session_data.config.enable_streaming = config->enable_streaming;
+
+    /* Codex Responses API only works with streaming; the buffered code path
+       sends OpenAI Chat Completions format which Codex rejects. */
+    if (is_codex_url(session->session_data.config.api_url) &&
+        !session->session_data.config.enable_streaming) {
+        debug_printf("Forcing streaming=true for Codex API (non-streaming not supported)\n");
+        session->session_data.config.enable_streaming = 1;
+    }
 
     session->session_data.config.api_type = session_configurator_detect_api_type(
         session->session_data.config.api_url);

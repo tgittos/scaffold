@@ -31,6 +31,7 @@ int http_get(const char *url, struct HTTPResponse *response);
 int http_get_with_config(const char *url, const char **headers,
                         const struct HTTPConfig *config, struct HTTPResponse *response);
 
+size_t http_write_callback(void *contents, size_t size, size_t nmemb, void *userp);
 void cleanup_response(struct HTTPResponse *response);
 
 // =============================================================================
