@@ -309,6 +309,9 @@ char* session_build_json_payload(AgentSession* session,
     EnhancedPromptParts parts;
     if (build_enhanced_prompt_parts(session, user_message, &parts) != 0) return NULL;
 
+    hook_dispatch_pre_llm_send(&session->plugin_manager, session,
+                                &parts.base_prompt, &parts.dynamic_context);
+
     SystemPromptParts sys_parts = {
         .base_prompt = parts.base_prompt,
         .dynamic_context = parts.dynamic_context
@@ -330,6 +333,9 @@ char* session_build_anthropic_json_payload(AgentSession* session,
 
     EnhancedPromptParts parts;
     if (build_enhanced_prompt_parts(session, user_message, &parts) != 0) return NULL;
+
+    hook_dispatch_pre_llm_send(&session->plugin_manager, session,
+                                &parts.base_prompt, &parts.dynamic_context);
 
     SystemPromptParts sys_parts = {
         .base_prompt = parts.base_prompt,

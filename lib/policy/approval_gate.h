@@ -77,6 +77,7 @@ typedef enum {
     GATE_CATEGORY_SUBAGENT,     /* subagent, subagent_status */
     GATE_CATEGORY_MCP,          /* All mcp_* tools */
     GATE_CATEGORY_PYTHON,       /* python interpreter, dynamic tools */
+    GATE_CATEGORY_PLUGIN,       /* All plugin_* tools */
     GATE_CATEGORY_COUNT         /* Sentinel for array sizing */
 } GateCategory;
 

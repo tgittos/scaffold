@@ -40,7 +40,8 @@ static const GateAction DEFAULT_CATEGORY_ACTIONS[GATE_CATEGORY_COUNT] = {
     [GATE_CATEGORY_MEMORY]     = GATE_ACTION_ALLOW,
     [GATE_CATEGORY_SUBAGENT]   = GATE_ACTION_GATE,
     [GATE_CATEGORY_MCP]        = GATE_ACTION_GATE,
-    [GATE_CATEGORY_PYTHON]     = GATE_ACTION_ALLOW
+    [GATE_CATEGORY_PYTHON]     = GATE_ACTION_ALLOW,
+    [GATE_CATEGORY_PLUGIN]     = GATE_ACTION_GATE
 };
 
 static const char *CATEGORY_NAMES[GATE_CATEGORY_COUNT] = {
@@ -51,7 +52,8 @@ static const char *CATEGORY_NAMES[GATE_CATEGORY_COUNT] = {
     [GATE_CATEGORY_MEMORY]     = "memory",
     [GATE_CATEGORY_SUBAGENT]   = "subagent",
     [GATE_CATEGORY_MCP]        = "mcp",
-    [GATE_CATEGORY_PYTHON]     = "python"
+    [GATE_CATEGORY_PYTHON]     = "python",
+    [GATE_CATEGORY_PLUGIN]     = "plugin"
 };
 
 static const char *ACTION_NAMES[] = {
@@ -605,6 +607,10 @@ GateCategory get_tool_category(const char *tool_name) {
 
     if (strncmp(tool_name, "mcp_", 4) == 0) {
         return GATE_CATEGORY_MCP;
+    }
+
+    if (strncmp(tool_name, "plugin_", 7) == 0) {
+        return GATE_CATEGORY_PLUGIN;
     }
 
     if (strcmp(tool_name, "process_pdf_document") == 0) {

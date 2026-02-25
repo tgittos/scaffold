@@ -179,6 +179,32 @@ int streaming_process_message(AgentSession* session, LLMProvider* provider,
     int input_tokens = ctx->input_tokens;
     int output_tokens = ctx->output_tokens;
 
+    /* Plugin hook: post_llm_response */
+    {
+        char *hook_text = ctx->text_content ? strdup(ctx->text_content) : NULL;
+        int hook_call_count = (int)ctx->tool_uses.count;
+        ToolCall *hook_calls = NULL;
+        if (hook_call_count > 0) {
+            hook_calls = calloc(hook_call_count, sizeof(ToolCall));
+            if (hook_calls) {
+                for (int i = 0; i < hook_call_count; i++) {
+                    hook_calls[i].name = ctx->tool_uses.data[i].name;
+                    hook_calls[i].arguments = ctx->tool_uses.data[i].arguments_json;
+                }
+            }
+        }
+        hook_dispatch_post_llm_response(&session->plugin_manager, session,
+                                         &hook_text, hook_calls, hook_call_count);
+        if (hook_text && ctx->text_content &&
+            strcmp(hook_text, ctx->text_content) != 0) {
+            free(ctx->text_content);
+            ctx->text_content = strdup(hook_text);
+            ctx->text_len = strlen(ctx->text_content);
+        }
+        free(hook_text);
+        free(hook_calls);
+    }
+
     if (user_message != NULL && strlen(user_message) > 0) {
         if (append_conversation_message(&session->session_data.conversation, "user", user_message) != 0) {
             fprintf(stderr, "Warning: Failed to save user message to conversation history\n");

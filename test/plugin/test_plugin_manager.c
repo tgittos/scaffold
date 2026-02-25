@@ -173,6 +173,67 @@ static void test_execute_tool_not_plugin_name(void) {
     TEST_ASSERT_EQUAL(-1, plugin_manager_execute_tool(&mgr, &call, &result));
 }
 
+/* --- Name validation tests --- */
+
+static void test_validate_name_valid(void) {
+    TEST_ASSERT_EQUAL(0, plugin_validate_name("myplugin"));
+    TEST_ASSERT_EQUAL(0, plugin_validate_name("a"));
+    TEST_ASSERT_EQUAL(0, plugin_validate_name("my-plugin"));
+}
+
+static void test_validate_name_null(void) {
+    TEST_ASSERT_EQUAL(-1, plugin_validate_name(NULL));
+}
+
+static void test_validate_name_empty(void) {
+    TEST_ASSERT_EQUAL(-1, plugin_validate_name(""));
+}
+
+static void test_validate_name_with_underscore(void) {
+    TEST_ASSERT_EQUAL(-1, plugin_validate_name("my_plugin"));
+}
+
+static void test_validate_name_with_slash(void) {
+    TEST_ASSERT_EQUAL(-1, plugin_validate_name("my/plugin"));
+    TEST_ASSERT_EQUAL(-1, plugin_validate_name("my\\plugin"));
+}
+
+static void test_validate_name_too_long(void) {
+    char long_name[66];
+    memset(long_name, 'a', 65);
+    long_name[65] = '\0';
+    TEST_ASSERT_EQUAL(-1, plugin_validate_name(long_name));
+
+    long_name[64] = '\0';
+    TEST_ASSERT_EQUAL(0, plugin_validate_name(long_name));
+}
+
+/* --- Alive check tests --- */
+
+static void test_check_alive_not_initialized(void) {
+    PluginProcess p;
+    memset(&p, 0, sizeof(p));
+    p.pid = 0;
+    p.initialized = 0;
+    TEST_ASSERT_EQUAL(0, plugin_check_alive(&p));
+}
+
+static void test_check_alive_null(void) {
+    TEST_ASSERT_EQUAL(0, plugin_check_alive(NULL));
+}
+
+static void test_check_alive_dead_pid(void) {
+    PluginProcess p;
+    memset(&p, 0, sizeof(p));
+    p.pid = 999999;
+    p.initialized = 1;
+    p.stdin_fd = -1;
+    p.stdout_fd = -1;
+    TEST_ASSERT_EQUAL(0, plugin_check_alive(&p));
+    TEST_ASSERT_EQUAL(0, p.initialized);
+    TEST_ASSERT_EQUAL(0, p.pid);
+}
+
 /* --- Get plugins dir --- */
 
 static void test_get_plugins_dir(void) {
@@ -203,6 +264,16 @@ int main(void) {
     RUN_TEST(test_execute_tool_no_manager);
     RUN_TEST(test_execute_tool_not_plugin_name);
     RUN_TEST(test_get_plugins_dir);
+
+    RUN_TEST(test_validate_name_valid);
+    RUN_TEST(test_validate_name_null);
+    RUN_TEST(test_validate_name_empty);
+    RUN_TEST(test_validate_name_with_underscore);
+    RUN_TEST(test_validate_name_with_slash);
+    RUN_TEST(test_validate_name_too_long);
+    RUN_TEST(test_check_alive_not_initialized);
+    RUN_TEST(test_check_alive_null);
+    RUN_TEST(test_check_alive_dead_pid);
 
     return UNITY_END();
 }

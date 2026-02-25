@@ -201,7 +201,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`pdf_extractor.c/h`** - PDF text extraction using PDFio library
 
 #### `lib/plugin/` - Plugin System
-- **`plugin_manager.c/h`** - Plugin discovery (scan `~/.local/scaffold/plugins/`), process spawning via fork/pipe, initialize handshake, tool registration (`plugin_<name>_<tool>`), IPC, and graceful shutdown
+- **`plugin_manager.c/h`** - Plugin discovery (scan `~/.local/scaffold/plugins/`), process spawning via fork/pipe with O_CLOEXEC, name validation, crash detection via lazy `waitpid`, 10 MB response limit, tool registration as `plugin_<name>_<tool>` with `thread_safe=0`, IPC, and graceful shutdown
 - **`plugin_protocol.c/h`** - JSON-RPC 2.0 message builders (initialize, hook events, tool execute, shutdown) and response parsers (manifest, hook response, tool result)
 - **`hook_dispatcher.c/h`** - Routes pipeline events to subscribed plugins in priority order with chain semantics (continue/stop/skip)
 
@@ -296,7 +296,7 @@ The test directory mirrors the source structure:
 
 #### `test/plugin/` - Plugin System Tests
 - **`test_plugin_protocol.c`** - Protocol serialization tests (16 tests: all JSON-RPC builders and response parsers)
-- **`test_plugin_manager.c`** - Plugin manager tests (12 tests: init, discover, shutdown, send_request, execute_tool)
+- **`test_plugin_manager.c`** - Plugin manager tests (21 tests: init, discover, shutdown, send_request, execute_tool, name validation, alive check)
 - **`test_hook_dispatcher.c`** - Hook dispatch tests (11 tests: no-plugin, no-subscriber, priority ordering, uninitialized skip)
 
 #### `test/mcp/` - MCP Integration Tests
@@ -415,7 +415,7 @@ Conversation lifecycle handling:
 
 ### 7. Approval Gate System (lib/policy/)
 Security-aware tool execution control:
-- **Category-Based Gates**: Tools categorized as file_read, file_write, shell, network, memory, subagent, mcp, python
+- **Category-Based Gates**: Tools categorized as file_read, file_write, shell, network, memory, subagent, mcp, python, plugin
 - **Allowlist Matching**: Regex patterns for paths/URLs, shell command prefix matching
 - **Protected Files**: Hard-block access to config files via basename, glob, and inode detection
 - **Rate Limiting**: Exponential backoff after repeated denials

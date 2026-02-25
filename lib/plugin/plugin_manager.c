@@ -78,12 +78,12 @@ static int spawn_plugin(PluginProcess *plugin) {
 
     int stdin_pipe[2], stdout_pipe[2];
 
-    if (pipe(stdin_pipe) == -1) {
+    if (pipe2(stdin_pipe, O_CLOEXEC) == -1) {
         debug_printf("Plugin: failed to create stdin pipe: %s\n", strerror(errno));
         return -1;
     }
 
-    if (pipe(stdout_pipe) == -1) {
+    if (pipe2(stdout_pipe, O_CLOEXEC) == -1) {
         debug_printf("Plugin: failed to create stdout pipe: %s\n", strerror(errno));
         close(stdin_pipe[0]);
         close(stdin_pipe[1]);
@@ -105,10 +105,23 @@ static int spawn_plugin(PluginProcess *plugin) {
         dup2(stdin_pipe[0], STDIN_FILENO);
         dup2(stdout_pipe[1], STDOUT_FILENO);
 
+        int devnull = open("/dev/null", O_WRONLY);
+        if (devnull >= 0) {
+            dup2(devnull, STDERR_FILENO);
+            close(devnull);
+        }
+
         close(stdin_pipe[1]);
         close(stdout_pipe[0]);
         close(stdin_pipe[0]);
         close(stdout_pipe[1]);
+
+        /* Close inherited FDs (SQLite connections, pipes, etc.) */
+        long max_fd = sysconf(_SC_OPEN_MAX);
+        if (max_fd < 0) max_fd = 1024;
+        for (int fd = STDERR_FILENO + 1; fd < (int)max_fd; fd++) {
+            close(fd);
+        }
 
         char *argv[] = { plugin->path, NULL };
         execv(plugin->path, argv);
@@ -134,6 +147,7 @@ static int spawn_plugin(PluginProcess *plugin) {
 int plugin_manager_send_request(PluginProcess *plugin, const char *json, char **response) {
     if (!plugin || !json || !response) return -1;
     if (plugin->stdin_fd < 0 || plugin->stdout_fd < 0) return -1;
+    if (!plugin_check_alive(plugin)) return -1;
 
     *response = NULL;
 
@@ -186,6 +200,12 @@ int plugin_manager_send_request(PluginProcess *plugin, const char *json, char **
         if (sel == 0) continue;
 
         if (buf_used + 4096 >= buf_size) {
+            if (buf_size * 2 > PLUGIN_MAX_RESPONSE_BYTES) {
+                debug_printf("Plugin %s: response exceeds %d byte limit\n",
+                             plugin->path, PLUGIN_MAX_RESPONSE_BYTES);
+                free(buffer);
+                return -1;
+            }
             buf_size *= 2;
             char *nb = realloc(buffer, buf_size);
             if (!nb) { free(buffer); return -1; }
@@ -195,6 +215,12 @@ int plugin_manager_send_request(PluginProcess *plugin, const char *json, char **
         ssize_t nr = read(plugin->stdout_fd, buffer + buf_used, buf_size - buf_used - 1);
         if (nr > 0) {
             buf_used += nr;
+            if (buf_used > PLUGIN_MAX_RESPONSE_BYTES) {
+                debug_printf("Plugin %s: response exceeds %d byte limit\n",
+                             plugin->path, PLUGIN_MAX_RESPONSE_BYTES);
+                free(buffer);
+                return -1;
+            }
             if (buf_used > 0 && buffer[buf_used - 1] == '\n') break;
             continue;
         }
@@ -224,6 +250,34 @@ int plugin_manager_send_request(PluginProcess *plugin, const char *json, char **
     return 0;
 }
 
+int plugin_validate_name(const char *name) {
+    if (!name || name[0] == '\0') return -1;
+    size_t len = strlen(name);
+    if (len > 64) return -1;
+    for (size_t i = 0; i < len; i++) {
+        if (name[i] == '_' || name[i] == '/' || name[i] == '\\') return -1;
+    }
+    return 0;
+}
+
+int plugin_check_alive(PluginProcess *plugin) {
+    if (!plugin || !plugin->initialized || plugin->pid <= 0) return 0;
+
+    int status;
+    pid_t ret = waitpid(plugin->pid, &status, WNOHANG);
+    if (ret > 0 || ret < 0) {
+        debug_printf("Plugin %s: process %d exited\n",
+                     plugin->manifest.name ? plugin->manifest.name : "?",
+                     plugin->pid);
+        plugin->pid = 0;
+        plugin->initialized = 0;
+        if (plugin->stdin_fd >= 0) { close(plugin->stdin_fd); plugin->stdin_fd = -1; }
+        if (plugin->stdout_fd >= 0) { close(plugin->stdout_fd); plugin->stdout_fd = -1; }
+        return 0;
+    }
+    return 1;
+}
+
 static int handshake_plugin(PluginProcess *plugin) {
     char *init_msg = plugin_protocol_build_initialize(PLUGIN_PROTOCOL_VERSION);
     if (!init_msg) return -1;
@@ -248,6 +302,14 @@ static int handshake_plugin(PluginProcess *plugin) {
 
     if (plugin_protocol_parse_manifest(response, &plugin->manifest) != 0) {
         debug_printf("Plugin %s: invalid manifest\n", plugin->path);
+        free(response);
+        return -1;
+    }
+
+    if (plugin_validate_name(plugin->manifest.name) != 0) {
+        debug_printf("Plugin %s: invalid name '%s'\n", plugin->path,
+                     plugin->manifest.name ? plugin->manifest.name : "(null)");
+        plugin_manifest_cleanup(&plugin->manifest);
         free(response);
         return -1;
     }
@@ -309,7 +371,7 @@ int plugin_manager_start_all(PluginManager *mgr, ToolRegistry *registry) {
                 reg.name = strdup(prefixed);
                 reg.description = src->description ? strdup(src->description) : NULL;
                 reg.execute_func = plugin_execute_tool_dispatch;
-                reg.thread_safe = 1;
+                reg.thread_safe = 0;
                 reg.parameter_count = src->parameter_count;
 
                 if (src->parameter_count > 0 && src->parameters) {

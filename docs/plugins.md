@@ -203,7 +203,7 @@ Priority 900: analytics        (runs last)
 
 Plugin tools are registered as `plugin_<pluginname>_<toolname>`. For example, a plugin named `git` with a tool named `log` becomes `plugin_git_log`.
 
-Plugin names must not contain underscores (the first `_` after the `plugin_` prefix is used as the delimiter).
+Plugin names must not contain underscores, forward slashes, or backslashes, and must be 1-64 characters. This is enforced during the handshake -- plugins with invalid names are rejected. The first `_` after the `plugin_` prefix is used as the delimiter for tool routing.
 
 ## Limits
 

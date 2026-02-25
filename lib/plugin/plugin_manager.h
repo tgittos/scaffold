@@ -11,6 +11,7 @@ extern "C" {
 
 #define MAX_PLUGINS 16
 #define PLUGIN_TIMEOUT_MS 5000
+#define PLUGIN_MAX_RESPONSE_BYTES (10 * 1024 * 1024)
 
 typedef struct {
     char *path;
@@ -80,6 +81,22 @@ int plugin_manager_execute_tool(PluginManager *mgr, const ToolCall *tool_call, T
  * @return Heap-allocated path string (caller frees), or NULL on error
  */
 char *plugin_manager_get_plugins_dir(void);
+
+/**
+ * Validate a plugin name.
+ * Rejects NULL, empty, >64 chars, and names containing '_', '/', or '\'.
+ *
+ * @return 0 if valid, -1 if invalid
+ */
+int plugin_validate_name(const char *name);
+
+/**
+ * Check if a plugin process is still alive (non-blocking waitpid).
+ * If the process has exited, marks the plugin as uninitialized and closes FDs.
+ *
+ * @return 1 if alive, 0 if dead or not initialized
+ */
+int plugin_check_alive(PluginProcess *plugin);
 
 #ifdef __cplusplus
 }

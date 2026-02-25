@@ -526,16 +526,16 @@ graph TB
 Three layers:
 
 1. **Plugin Protocol** (`lib/plugin/plugin_protocol.c/h`) - JSON-RPC 2.0 message serialization for initialize, hook events, tool execution, and shutdown
-2. **Plugin Manager** (`lib/plugin/plugin_manager.c/h`) - Directory scanning, process spawning via fork/pipe, handshake, tool registration, IPC, and graceful shutdown (SIGTERM → wait → SIGKILL)
+2. **Plugin Manager** (`lib/plugin/plugin_manager.c/h`) - Directory scanning, process spawning via fork/pipe with O_CLOEXEC, handshake with name validation, tool registration (thread_safe=0 for serialized execution), crash detection via lazy `waitpid`, 10 MB response limit, and graceful shutdown (SIGTERM → wait → SIGKILL)
 3. **Hook Dispatcher** (`lib/plugin/hook_dispatcher.c/h`) - Routes pipeline events to subscribed plugins in priority order
 
 ### Plugin Lifecycle
 
 1. **Discovery**: Scan `~/.local/scaffold/plugins/` for executable files (skip hidden files)
 2. **Spawn**: Fork/exec each plugin, set up stdin/stdout pipes for bidirectional JSON-RPC
-3. **Handshake**: Send `initialize` request, receive manifest (name, version, hooks, tools, priority)
-4. **Tool Registration**: Plugin tools registered as `plugin_<pluginname>_<toolname>` in the ToolRegistry. Plugin names must not contain underscores (the first `_` after the `plugin_` prefix is used as the delimiter)
-5. **Runtime**: Hook dispatcher routes pipeline events to subscribed plugins via IPC
+3. **Handshake**: Send `initialize` request, receive manifest (name, version, hooks, tools, priority). Plugin names are validated: must not contain underscores, forward slashes, or backslashes, must be 1-64 chars
+4. **Tool Registration**: Plugin tools registered as `plugin_<pluginname>_<toolname>` in the ToolRegistry with `thread_safe=0` (serialized execution). Classified as `GATE_CATEGORY_PLUGIN` (default: gated, requires approval)
+5. **Runtime**: Hook dispatcher routes pipeline events to subscribed plugins via IPC. Crash detection via lazy `waitpid` before each request
 6. **Shutdown**: Send `shutdown` request, SIGTERM, wait, SIGKILL if needed
 
 ### Hook Points
@@ -544,8 +544,8 @@ Three layers:
 |------|----------|---------|
 | `post_user_input` | `session.c` | Transform/filter user input |
 | `context_enhance` | `context_enhancement.c` | Add dynamic context (git status, project info) |
-| `pre_llm_send` | `streaming_handler.c` | Modify system prompt before LLM request |
-| `post_llm_response` | `message_processor.c` | Transform LLM response text |
+| `pre_llm_send` | `streaming_handler.c`, `session.c` | Modify system prompt before LLM request (both streaming and buffered paths) |
+| `post_llm_response` | `streaming_handler.c`, `message_processor.c` | Transform LLM response text (both streaming and buffered paths) |
 | `pre_tool_execute` | `tool_batch_executor.c` | Intercept/block tool calls |
 | `post_tool_execute` | `tool_batch_executor.c` | Transform tool results |
 
@@ -558,6 +558,8 @@ Three layers:
 - `"action":"skip"` discards the event (post_user_input only)
 - Context enhance hooks always accumulate (stop/skip ignored)
 - 5-second timeout per plugin response via `select()`
+- 10 MB maximum response size per plugin message (OOM protection)
+- Plugin tools are serialized (`thread_safe=0`) to prevent data races on shared IPC state
 
 ### Plugin Protocol
 
@@ -812,6 +814,7 @@ graph TB
 | `subagent` | GATE | Spawning subagents |
 | `mcp` | GATE | MCP tool execution |
 | `python` | ALLOW | Python code execution |
+| `plugin` | GATE | Plugin tool execution |
 
 ### Key Components
 
