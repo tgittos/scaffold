@@ -13,6 +13,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define OAUTH2_MAX_TOKEN_LEN      2048
+#define OAUTH2_MAX_ACCOUNT_ID_LEN 128
+
 typedef struct oauth2_store oauth2_store_t;
 
 typedef enum {
@@ -39,12 +42,9 @@ typedef struct {
     OAuth2Error (*refresh_token)(const char *client_id, const char *client_secret,
                                  const char *refresh_token_in,
                                  char *access_token, size_t at_len,
+                                 char *new_refresh_token, size_t rt_len,
                                  int64_t *expires_in);
-    OAuth2Error (*refresh_token_rotate)(const char *client_id, const char *client_secret,
-                                        const char *refresh_token_in,
-                                        char *access_token, size_t at_len,
-                                        char *new_refresh_token, size_t rt_len,
-                                        int64_t *expires_in);
+    OAuth2Error (*revoke_token)(const char *client_id, const char *access_token);
 } OAuth2ProviderOps;
 
 typedef struct {
@@ -60,9 +60,12 @@ typedef struct {
 } OAuth2AuthRequest;
 
 typedef struct {
-    char access_token[2048];
+    char access_token[OAUTH2_MAX_TOKEN_LEN];
     int64_t expires_at;
 } OAuth2TokenResult;
+
+/* Error string conversion */
+const char *oauth2_error_string(OAuth2Error err);
 
 /* Lifecycle */
 oauth2_store_t *oauth2_store_create(const OAuth2Config *config);

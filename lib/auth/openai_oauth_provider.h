@@ -3,6 +3,9 @@
 
 #include "../db/oauth2_store.h"
 
+/* Keep in sync with OPENAI_REDIRECT_URI below */
+#define OAUTH_CALLBACK_PORT  1455
+
 #define OPENAI_AUTH_URL      "https://auth.openai.com/oauth/authorize"
 #define OPENAI_TOKEN_URL     "https://auth.openai.com/oauth/token"
 #define OPENAI_CLIENT_ID     "app_EMoamEEZ73f0CkXaXp7hrann"

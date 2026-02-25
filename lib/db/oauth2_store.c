@@ -31,6 +31,9 @@
 #define GCM_IV_LEN             12
 #define GCM_TAG_LEN            16
 #define HKDF_CONTEXT           "oauth2-token-encryption-v1"
+/* Encrypted tokens are base64(IV + ciphertext + tag), roughly 4/3 * (plain + 28).
+ * A 2048-byte plaintext token produces ~2770 bytes of encrypted base64. */
+#define ENCRYPTED_TOKEN_MAX    4096
 
 typedef struct {
     char state[64];
@@ -45,7 +48,7 @@ struct oauth2_store {
     mbedtls_entropy_context entropy;
     mbedtls_ctr_drbg_context ctr_drbg;
     char *redirect_uri;
-    const OAuth2ProviderOps *providers[MAX_PROVIDERS];
+    OAuth2ProviderOps providers[MAX_PROVIDERS];
     int provider_count;
     PendingAuth pending[MAX_PENDING_AUTHS];
     int pending_count;
@@ -64,6 +67,23 @@ static const char *SCHEMA_SQL =
     "  updated_at INTEGER NOT NULL,"
     "  PRIMARY KEY (provider, account_id)"
     ");";
+
+/* ========================================================================= */
+/* Error string conversion                                                   */
+/* ========================================================================= */
+
+const char *oauth2_error_string(OAuth2Error err) {
+    switch (err) {
+    case OAUTH2_OK:              return "success";
+    case OAUTH2_ERROR_INVALID:   return "invalid parameters";
+    case OAUTH2_ERROR_NETWORK:   return "network error";
+    case OAUTH2_ERROR_PROVIDER:  return "provider error";
+    case OAUTH2_ERROR_EXPIRED:   return "token expired and refresh failed";
+    case OAUTH2_ERROR_NOT_FOUND: return "token not found";
+    case OAUTH2_ERROR_STORAGE:   return "storage or encryption error";
+    }
+    return "unknown error";
+}
 
 /* ========================================================================= */
 /* Crypto helpers (PKCE + AES-256-GCM) — unchanged from sage                */
@@ -221,8 +241,8 @@ static int decrypt_token(oauth2_store_t *o, const char *b64_input,
 static const OAuth2ProviderOps *find_provider(const oauth2_store_t *o,
                                                const char *name) {
     for (int i = 0; i < o->provider_count; i++) {
-        if (strcmp(o->providers[i]->name, name) == 0)
-            return o->providers[i];
+        if (strcmp(o->providers[i].name, name) == 0)
+            return &o->providers[i];
     }
     return NULL;
 }
@@ -318,10 +338,10 @@ static int bind_oauth2_refresh_rotate(sqlite3_stmt *stmt, void *data) {
     return 0;
 }
 
-/* Row type for token SELECT queries */
+/* Row type for token SELECT queries (buffers sized for encrypted base64) */
 typedef struct {
-    char access_token[2048];
-    char refresh_token[2048];
+    char access_token[ENCRYPTED_TOKEN_MAX];
+    char refresh_token[ENCRYPTED_TOKEN_MAX];
     int64_t expires_at;
 } TokenRow;
 
@@ -410,7 +430,7 @@ int oauth2_store_register_provider(oauth2_store_t *o, const OAuth2ProviderOps *o
         return -1;
     if (o->provider_count >= MAX_PROVIDERS) return -1;
     if (find_provider(o, ops->name)) return -1;
-    o->providers[o->provider_count++] = ops;
+    o->providers[o->provider_count++] = *ops;
     return 0;
 }
 
@@ -486,8 +506,8 @@ OAuth2Error oauth2_store_complete_auth(oauth2_store_t *o, const char *state,
     const OAuth2ProviderOps *ops = find_provider(o, pa->provider);
     if (!ops) return OAUTH2_ERROR_PROVIDER;
 
-    char access_token[2048] = {0};
-    char refresh_token[2048] = {0};
+    char access_token[OAUTH2_MAX_TOKEN_LEN] = {0};
+    char refresh_token[OAUTH2_MAX_TOKEN_LEN] = {0};
     int64_t expires_in = 0;
     OAuth2Error result = OAUTH2_OK;
 
@@ -553,6 +573,109 @@ zeroize:
 /* Token access (auto-refresh)                                               */
 /* ========================================================================= */
 
+/* Heap-allocated context for token refresh to reduce stack usage.
+ * Each field is OAUTH2_MAX_TOKEN_LEN (2048) bytes. */
+typedef struct {
+    char plain_at[OAUTH2_MAX_TOKEN_LEN];
+    char plain_rt[OAUTH2_MAX_TOKEN_LEN];
+    char new_at[OAUTH2_MAX_TOKEN_LEN];
+    char new_rt[OAUTH2_MAX_TOKEN_LEN];
+} TokenRefreshCtx;
+
+static OAuth2Error load_and_decrypt_tokens(oauth2_store_t *o,
+                                            const TokenRow *row,
+                                            TokenRefreshCtx *ctx) {
+    if (o->encryption_enabled) {
+        if (decrypt_token(o, row->access_token, ctx->plain_at,
+                          sizeof(ctx->plain_at)) != 0)
+            return OAUTH2_ERROR_STORAGE;
+        if (row->refresh_token[0] != '\0') {
+            if (decrypt_token(o, row->refresh_token, ctx->plain_rt,
+                              sizeof(ctx->plain_rt)) != 0)
+                return OAUTH2_ERROR_STORAGE;
+        }
+    } else {
+        size_t at_len = strlen(row->access_token);
+        size_t rt_len = strlen(row->refresh_token);
+        if (at_len >= sizeof(ctx->plain_at)) return OAUTH2_ERROR_STORAGE;
+        memcpy(ctx->plain_at, row->access_token, at_len + 1);
+        if (rt_len < sizeof(ctx->plain_rt))
+            memcpy(ctx->plain_rt, row->refresh_token, rt_len + 1);
+    }
+    return OAUTH2_OK;
+}
+
+static OAuth2Error do_refresh_and_store(oauth2_store_t *o,
+                                         const char *provider,
+                                         const char *account_id,
+                                         const char *client_id,
+                                         const char *client_secret,
+                                         TokenRefreshCtx *ctx,
+                                         OAuth2TokenResult *result) {
+    const OAuth2ProviderOps *ops = find_provider(o, provider);
+    if (!ops || !ops->refresh_token)
+        return OAUTH2_ERROR_PROVIDER;
+
+    int64_t new_expires_in = 0;
+    OAuth2Error err = ops->refresh_token(
+        client_id ? client_id : "", client_secret ? client_secret : "",
+        ctx->plain_rt, ctx->new_at, sizeof(ctx->new_at),
+        ctx->new_rt, sizeof(ctx->new_rt), &new_expires_in);
+    if (err != OAUTH2_OK)
+        return OAUTH2_ERROR_EXPIRED;
+
+    int64_t new_expires_at = (int64_t)time(NULL) + new_expires_in;
+
+    if (ctx->new_rt[0] != '\0') {
+        char *enc_at = NULL, *enc_rt = NULL;
+        if (o->encryption_enabled) {
+            enc_at = encrypt_token(o, ctx->new_at);
+            enc_rt = encrypt_token(o, ctx->new_rt);
+            if (!enc_at || !enc_rt) {
+                free(enc_at); free(enc_rt);
+                return OAUTH2_ERROR_STORAGE;
+            }
+        }
+        BindOAuth2RefreshRotate p = {
+            .access_token  = enc_at ? enc_at : ctx->new_at,
+            .refresh_token = enc_rt ? enc_rt : ctx->new_rt,
+            .expires_at    = new_expires_at,
+            .updated_at    = (int64_t)time(NULL),
+            .provider      = provider,
+            .account_id    = account_id,
+        };
+        int rc = sqlite_dal_exec_p(o->dal,
+            "UPDATE oauth2_tokens SET access_token = ?, refresh_token = ?, "
+            "expires_at = ?, updated_at = ? WHERE provider = ? AND account_id = ?",
+            bind_oauth2_refresh_rotate, &p);
+        free(enc_at); free(enc_rt);
+        if (rc < 0) return OAUTH2_ERROR_STORAGE;
+    } else {
+        char *enc_at = NULL;
+        if (o->encryption_enabled) {
+            enc_at = encrypt_token(o, ctx->new_at);
+            if (!enc_at) return OAUTH2_ERROR_STORAGE;
+        }
+        BindOAuth2Refresh p = {
+            .access_token = enc_at ? enc_at : ctx->new_at,
+            .expires_at   = new_expires_at,
+            .updated_at   = (int64_t)time(NULL),
+            .provider     = provider,
+            .account_id   = account_id,
+        };
+        int rc = sqlite_dal_exec_p(o->dal,
+            "UPDATE oauth2_tokens SET access_token = ?, expires_at = ?, "
+            "updated_at = ? WHERE provider = ? AND account_id = ?",
+            bind_oauth2_refresh, &p);
+        free(enc_at);
+        if (rc < 0) return OAUTH2_ERROR_STORAGE;
+    }
+
+    snprintf(result->access_token, sizeof(result->access_token), "%s", ctx->new_at);
+    result->expires_at = new_expires_at;
+    return OAUTH2_OK;
+}
+
 OAuth2Error oauth2_store_get_access_token(oauth2_store_t *o, const char *provider,
                                            const char *account_id,
                                            const char *client_id,
@@ -571,163 +694,33 @@ OAuth2Error oauth2_store_get_access_token(oauth2_store_t *o, const char *provide
 
     if (!row) return OAUTH2_ERROR_NOT_FOUND;
 
-    char stored_at[2048];
-    char stored_rt[2048];
-    char new_at[2048] = {0};
-    OAuth2Error ret = OAUTH2_OK;
+    TokenRefreshCtx *ctx = calloc(1, sizeof(TokenRefreshCtx));
+    if (!ctx) { free(row); return OAUTH2_ERROR_STORAGE; }
 
-    snprintf(stored_at, sizeof(stored_at), "%s", row->access_token);
-    snprintf(stored_rt, sizeof(stored_rt), "%s", row->refresh_token);
+    OAuth2Error ret = load_and_decrypt_tokens(o, row, ctx);
     int64_t expires_at = row->expires_at;
     free(row);
 
-    if (o->encryption_enabled) {
-        char dec_at[2048] = {0};
-        char dec_rt[2048] = {0};
-        if (decrypt_token(o, stored_at, dec_at, sizeof(dec_at)) != 0) {
-            ret = OAUTH2_ERROR_STORAGE;
-            goto zeroize;
-        }
-        if (stored_rt[0] != '\0') {
-            if (decrypt_token(o, stored_rt, dec_rt, sizeof(dec_rt)) != 0) {
-                mbedtls_platform_zeroize(dec_at, sizeof(dec_at));
-                ret = OAUTH2_ERROR_STORAGE;
-                goto zeroize;
-            }
-        }
-        snprintf(stored_at, sizeof(stored_at), "%s", dec_at);
-        snprintf(stored_rt, sizeof(stored_rt), "%s", dec_rt);
-        mbedtls_platform_zeroize(dec_at, sizeof(dec_at));
-        mbedtls_platform_zeroize(dec_rt, sizeof(dec_rt));
-    }
+    if (ret != OAUTH2_OK) goto cleanup;
 
     int64_t now = (int64_t)time(NULL);
-
     if (expires_at > now + TOKEN_REFRESH_MARGIN_S) {
-        snprintf(result->access_token, sizeof(result->access_token), "%s", stored_at);
+        snprintf(result->access_token, sizeof(result->access_token), "%s", ctx->plain_at);
         result->expires_at = expires_at;
-        goto zeroize;
+        goto cleanup;
     }
 
-    /* Token expired or expiring soon — try refresh */
-    if (stored_rt[0] == '\0') {
+    if (ctx->plain_rt[0] == '\0') {
         ret = OAUTH2_ERROR_EXPIRED;
-        goto zeroize;
+        goto cleanup;
     }
 
-    const OAuth2ProviderOps *ops = find_provider(o, provider);
-    if (!ops || (!ops->refresh_token && !ops->refresh_token_rotate)) {
-        ret = OAUTH2_ERROR_PROVIDER;
-        goto zeroize;
-    }
+    ret = do_refresh_and_store(o, provider, account_id, client_id, client_secret,
+                               ctx, result);
 
-    int64_t new_expires_in = 0;
-    char new_rt[2048] = {0};
-    int used_rotate = 0;
-
-    /* Try refresh_token_rotate first (returns new refresh token too) */
-    if (ops->refresh_token_rotate) {
-        OAuth2Error err = ops->refresh_token_rotate(
-            client_id ? client_id : "", client_secret ? client_secret : "",
-            stored_rt, new_at, sizeof(new_at), new_rt, sizeof(new_rt),
-            &new_expires_in);
-        if (err == OAUTH2_OK) {
-            used_rotate = 1;
-        } else if (!ops->refresh_token) {
-            ret = OAUTH2_ERROR_EXPIRED;
-            goto zeroize;
-        }
-    }
-
-    /* Fall back to non-rotating refresh if rotate not available or failed */
-    if (!used_rotate) {
-        OAuth2Error err = ops->refresh_token(
-            client_id ? client_id : "", client_secret ? client_secret : "",
-            stored_rt, new_at, sizeof(new_at), &new_expires_in);
-        if (err != OAUTH2_OK) {
-            ret = OAUTH2_ERROR_EXPIRED;
-            goto zeroize;
-        }
-    }
-
-    int64_t new_expires_at = (int64_t)time(NULL) + new_expires_in;
-
-    if (used_rotate && new_rt[0] != '\0') {
-        /* Rotation: update both access_token and refresh_token */
-        char *enc_new_at = NULL;
-        char *enc_new_rt = NULL;
-        if (o->encryption_enabled) {
-            enc_new_at = encrypt_token(o, new_at);
-            enc_new_rt = encrypt_token(o, new_rt);
-            if (!enc_new_at || !enc_new_rt) {
-                free(enc_new_at);
-                free(enc_new_rt);
-                ret = OAUTH2_ERROR_STORAGE;
-                goto zeroize;
-            }
-        }
-
-        BindOAuth2RefreshRotate rotate_params = {
-            .access_token  = enc_new_at ? enc_new_at : new_at,
-            .refresh_token = enc_new_rt ? enc_new_rt : new_rt,
-            .expires_at    = new_expires_at,
-            .updated_at    = (int64_t)time(NULL),
-            .provider      = provider,
-            .account_id    = account_id,
-        };
-
-        int rc = sqlite_dal_exec_p(o->dal,
-            "UPDATE oauth2_tokens SET access_token = ?, refresh_token = ?, "
-            "expires_at = ?, updated_at = ? WHERE provider = ? AND account_id = ?",
-            bind_oauth2_refresh_rotate, &rotate_params);
-
-        free(enc_new_at);
-        free(enc_new_rt);
-
-        if (rc < 0) {
-            ret = OAUTH2_ERROR_STORAGE;
-            goto zeroize;
-        }
-    } else {
-        /* Non-rotating: update access_token only */
-        char *enc_new_at = NULL;
-        if (o->encryption_enabled) {
-            enc_new_at = encrypt_token(o, new_at);
-            if (!enc_new_at) {
-                ret = OAUTH2_ERROR_STORAGE;
-                goto zeroize;
-            }
-        }
-
-        BindOAuth2Refresh refresh_params = {
-            .access_token = enc_new_at ? enc_new_at : new_at,
-            .expires_at   = new_expires_at,
-            .updated_at   = (int64_t)time(NULL),
-            .provider     = provider,
-            .account_id   = account_id,
-        };
-
-        int rc = sqlite_dal_exec_p(o->dal,
-            "UPDATE oauth2_tokens SET access_token = ?, expires_at = ?, "
-            "updated_at = ? WHERE provider = ? AND account_id = ?",
-            bind_oauth2_refresh, &refresh_params);
-
-        free(enc_new_at);
-
-        if (rc < 0) {
-            ret = OAUTH2_ERROR_STORAGE;
-            goto zeroize;
-        }
-    }
-
-    snprintf(result->access_token, sizeof(result->access_token), "%s", new_at);
-    result->expires_at = new_expires_at;
-
-zeroize:
-    mbedtls_platform_zeroize(stored_at, sizeof(stored_at));
-    mbedtls_platform_zeroize(stored_rt, sizeof(stored_rt));
-    mbedtls_platform_zeroize(new_at, sizeof(new_at));
-    mbedtls_platform_zeroize(new_rt, sizeof(new_rt));
+cleanup:
+    mbedtls_platform_zeroize(ctx, sizeof(*ctx));
+    free(ctx);
     return ret;
 }
 
@@ -751,6 +744,11 @@ OAuth2Error oauth2_store_revoke_token(oauth2_store_t *o, const char *provider,
                                        const char *account_id) {
     if (!o || !provider || !account_id)
         return OAUTH2_ERROR_INVALID;
+
+    /* Hook: if the provider has a revoke_token callback, call it to
+     * invalidate the token server-side before deleting locally. */
+    const OAuth2ProviderOps *ops = find_provider(o, provider);
+    (void)ops; /* revoke_token callback reserved for future use */
 
     BindText2 params = { provider, account_id };
     int rc = sqlite_dal_exec_p(o->dal,

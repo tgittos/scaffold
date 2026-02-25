@@ -5,6 +5,22 @@
 #include <stdio.h>
 #include <string.h>
 
+static llm_credential_provider_fn g_credential_fn = NULL;
+static void *g_credential_data = NULL;
+
+void llm_client_set_credential_provider(llm_credential_provider_fn fn,
+                                         void *user_data) {
+    g_credential_fn = fn;
+    g_credential_data = user_data;
+}
+
+int llm_client_refresh_credential(char *key_buf, size_t key_buf_len) {
+    if (g_credential_fn) {
+        return g_credential_fn(key_buf, key_buf_len, g_credential_data);
+    }
+    return -1;
+}
+
 int llm_client_init(void) {
     return 0;
 }

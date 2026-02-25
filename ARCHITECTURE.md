@@ -632,16 +632,22 @@ graph TB
 3. Localhost callback server receives authorization code on port 1455
 4. Code exchanged for access/refresh tokens via form-urlencoded POST
 5. Tokens encrypted with AES-256-GCM and stored in `oauth2.db`
-6. On API requests to Codex URL, session configurator retrieves credentials
+6. On API requests to Codex URL, session configurator retrieves credentials and registers a credential provider with `llm_client` for automatic token refresh
 7. JWT decoded to extract `chatgpt_account_id` for request header
-8. Refresh token rotation handled automatically (OpenAI rotates on every refresh)
+8. Refresh token rotation handled automatically via unified `refresh_token` vtable callback (provider sets `new_refresh_token` or leaves empty for non-rotating)
+
+### Persistent Store & Session Refresh
+- Module-level `g_store` in `openai_login.c` reuses the same `oauth2_store_t` across calls for the same db_path, avoiding repeated store creation/destruction
+- `openai_refresh_credential()` is registered as a `llm_credential_provider_fn` callback with `llm_client_set_credential_provider()`, ensuring tokens are auto-refreshed before each LLM API request
+- `openai_auth_cleanup()` destroys the persistent store at shutdown
 
 ### Codex Responses API
 The Codex provider uses OpenAI's Responses API format (different from Chat Completions):
-- Request: `instructions` (system prompt) + `input` (message array) + `tools`
+- Request: `instructions` (system prompt) + `input` (message array) + `tools` (flat format: `{type, name, description, parameters}`)
 - Response: `output` array with `output_text` and `function_call` items
-- Streaming: `response.output_text.delta` and `response.function_call_arguments.delta` events
+- Streaming: `response.output_text.delta`, `response.function_call_arguments.delta`, `response.failed`, `response.incomplete`, and `error` events
 - Auth: `chatgpt-account-id` header alongside Bearer token
+- Assistant messages with embedded `tool_calls` are summarized to plain text to avoid Responses API rejection
 
 ## Prompt Caching Architecture
 

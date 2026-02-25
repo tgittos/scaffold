@@ -169,10 +169,10 @@ void test_session_load_config_basic(void) {
     TEST_ASSERT_NOT_NULL(session.session_data.config.model);
     
     // The API URL could be from environment or default - both are valid
-    // Just verify it's a reasonable URL (OpenAI or Anthropic format)
-    printf("DEBUG: API URL is: %s\n", session.session_data.config.api_url);
+    // Just verify it's a reasonable URL (OpenAI, Anthropic, or Codex format)
     TEST_ASSERT_TRUE(strstr(session.session_data.config.api_url, "/v1/chat/completions") != NULL ||
-                     strstr(session.session_data.config.api_url, "/v1/messages") != NULL);
+                     strstr(session.session_data.config.api_url, "/v1/messages") != NULL ||
+                     strstr(session.session_data.config.api_url, "/codex/responses") != NULL);
     
     // Model should be set to something reasonable
     TEST_ASSERT_TRUE(strlen(session.session_data.config.model) > 0);

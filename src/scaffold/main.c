@@ -37,7 +37,6 @@ static void print_help(const char *program_name) {
     printf("  --home <path>     Override home directory (default: ~/.local/scaffold)\n");
     printf("  --yolo            Disable all approval gates for this session\n");
     printf("  --login           Log in to OpenAI via OAuth (ChatGPT subscription)\n");
-    printf("  --login-headless  Log in without opening browser (print URL only)\n");
     printf("  --logout          Log out of OpenAI OAuth session\n");
     printf("  --check-update    Check for updates and exit\n");
     printf("  --update          Download and apply the latest update, then exit\n");
@@ -131,7 +130,6 @@ int main(int argc, char *argv[]) {
     int check_update_flag = 0;
     int update_flag = 0;
     int login_flag = 0;
-    int login_headless_flag = 0;
     int logout_flag = 0;
     const char *home_dir_override = NULL;
 
@@ -153,10 +151,6 @@ int main(int argc, char *argv[]) {
         if (strcmp(argv[i], "--login") == 0) {
             login_flag = 1;
         }
-        if (strcmp(argv[i], "--login-headless") == 0) {
-            login_flag = 1;
-            login_headless_flag = 1;
-        }
         if (strcmp(argv[i], "--logout") == 0) {
             logout_flag = 1;
         }
@@ -174,7 +168,18 @@ int main(int argc, char *argv[]) {
         if (logout_flag) {
             rc = openai_logout(db);
         } else {
-            rc = openai_login(db, login_headless_flag);
+            rc = openai_login(db);
+            if (rc == 0) {
+                config_init();
+                config_set("api_url", "https://chatgpt.com/backend-api/codex/responses");
+                char *cfg_path = app_home_path("config.json");
+                if (cfg_path) {
+                    config_save_to_file(cfg_path);
+                    free(cfg_path);
+                }
+                config_cleanup();
+                printf("API URL set to Codex endpoint.\n");
+            }
         }
         free(db);
         app_home_cleanup();
@@ -358,6 +363,7 @@ int main(int argc, char *argv[]) {
     int result = agent_run(&agent);
 
     agent_cleanup(&agent);
+    openai_auth_cleanup();
     free(loaded_system_prompt);
     return (result == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

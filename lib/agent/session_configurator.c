@@ -6,14 +6,21 @@
 #include "../tools/tool_extension.h"
 #include "../llm/model_capabilities.h"
 #include "../llm/llm_provider.h"
+#include "../llm/providers/codex_provider.h"
 #include "../llm/embeddings_service.h"
 #include "../auth/openai_login.h"
+#include "../llm/llm_client.h"
+#include <mbedtls/platform_util.h>
+#include "../db/oauth2_store.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+/* Persistent db_path for the credential provider callback */
+static char *s_codex_db_path = NULL;
+
 static int is_codex_url(const char *url) {
-    return url && strstr(url, "chatgpt.com/backend-api/codex") != NULL;
+    return url && strstr(url, CODEX_URL_PATTERN) != NULL;
 }
 
 APIType session_configurator_detect_api_type(const char* api_url) {
@@ -90,15 +97,18 @@ int session_configurator_load(AgentSession* session) {
                 free(db);
                 return -1;
             }
-            char oauth_token[2048] = {0};
-            char account_id[128] = {0};
+            char oauth_token[OAUTH2_MAX_TOKEN_LEN] = {0};
+            char account_id[OAUTH2_MAX_ACCOUNT_ID_LEN] = {0};
             if (openai_get_codex_credentials(db, oauth_token, sizeof(oauth_token),
                                               account_id, sizeof(account_id)) == 0) {
                 free(session->session_data.config.api_key);
                 session->session_data.config.api_key = strdup(oauth_token);
                 codex_set_account_id(account_id);
+                free(s_codex_db_path);
+                s_codex_db_path = strdup(db);
+                llm_client_set_credential_provider(openai_refresh_credential, s_codex_db_path);
                 debug_printf("Using OAuth credentials for Codex API (account: %s)\n", account_id);
-                memset(oauth_token, 0, sizeof(oauth_token));
+                mbedtls_platform_zeroize(oauth_token, sizeof(oauth_token));
             } else {
                 fprintf(stderr, "Error: OAuth tokens found but credential retrieval failed.\n");
                 fprintf(stderr, "   Try: scaffold --logout && scaffold --login\n");
@@ -115,10 +125,17 @@ int session_configurator_load(AgentSession* session) {
 
     /* Codex Responses API only works with streaming; the buffered code path
        sends OpenAI Chat Completions format which Codex rejects. */
-    if (is_codex_url(session->session_data.config.api_url) &&
-        !session->session_data.config.enable_streaming) {
-        debug_printf("Forcing streaming=true for Codex API (non-streaming not supported)\n");
-        session->session_data.config.enable_streaming = 1;
+    if (is_codex_url(session->session_data.config.api_url)) {
+        if (!session->session_data.config.enable_streaming) {
+            debug_printf("Forcing streaming=true for Codex API (non-streaming not supported)\n");
+            session->session_data.config.enable_streaming = 1;
+        }
+        /* Codex subscription API only accepts gpt-5.3-codex */
+        if (!config->model || strstr(config->model, "codex") == NULL) {
+            free(session->session_data.config.model);
+            session->session_data.config.model = strdup("gpt-5.3-codex");
+            debug_printf("Overriding model to gpt-5.3-codex for Codex API\n");
+        }
     }
 
     session->session_data.config.api_type = session_configurator_detect_api_type(

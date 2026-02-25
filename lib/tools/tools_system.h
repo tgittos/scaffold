@@ -102,6 +102,15 @@ int tool_set_thread_safe(ToolRegistry *registry, const char *tool_name, int thre
 char* generate_tools_json(const ToolRegistry *registry);
 
 /**
+ * Generate JSON tools array in flat format for Codex/Responses API.
+ * Produces {type, name, description, parameters} directly.
+ *
+ * @param registry Pointer to ToolRegistry structure
+ * @return Dynamically allocated JSON string, caller must free
+ */
+char* generate_tools_json_flat(const ToolRegistry *registry);
+
+/**
  * Generate JSON tools array for Anthropic API request
  *
  * @param registry Pointer to ToolRegistry structure

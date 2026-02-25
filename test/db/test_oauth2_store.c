@@ -52,11 +52,14 @@ static OAuth2Error mock_exchange_code(const char *client_id, const char *client_
 static OAuth2Error mock_refresh_token(const char *client_id, const char *client_secret,
                                        const char *refresh_token_in,
                                        char *access_token, size_t at_len,
+                                       char *new_refresh_token, size_t rt_len,
                                        int64_t *expires_in) {
     (void)client_id; (void)client_secret; (void)refresh_token_in;
     mock_refresh_called++;
     if (mock_refresh_result != OAUTH2_OK) return mock_refresh_result;
     snprintf(access_token, at_len, "refreshed_access_token");
+    if (new_refresh_token && rt_len > 0)
+        new_refresh_token[0] = '\0';
     *expires_in = 3600;
     return OAUTH2_OK;
 }

@@ -1,4 +1,6 @@
+#include "codex_provider.h"
 #include "../llm_provider.h"
+#include "../../db/oauth2_store.h"
 #include "../../network/api_common.h"
 #include "../../network/streaming.h"
 #include "../../session/conversation_tracker.h"
@@ -10,7 +12,7 @@
 #include <string.h>
 
 /* Thread-local account ID for the chatgpt-account-id header */
-static _Thread_local char tl_account_id[128] = {0};
+static _Thread_local char tl_account_id[OAUTH2_MAX_ACCOUNT_ID_LEN] = {0};
 
 void codex_set_account_id(const char *account_id) {
     if (account_id) {
@@ -26,7 +28,7 @@ const char *codex_get_account_id(void) {
 
 static int codex_detect_provider(const char *api_url) {
     if (!api_url) return 0;
-    return strstr(api_url, "chatgpt.com/backend-api/codex") != NULL;
+    return strstr(api_url, CODEX_URL_PATTERN) != NULL;
 }
 
 /* Build Responses API request JSON */
@@ -54,6 +56,8 @@ static char *codex_build_request_json(const LLMProvider *provider,
                 snprintf(combined, total, "%s\n\n%s", system_prompt->base_prompt, system_prompt->dynamic_context);
                 cJSON_AddStringToObject(root, "instructions", combined);
                 free(combined);
+            } else {
+                cJSON_AddStringToObject(root, "instructions", system_prompt->base_prompt);
             }
         } else if (system_prompt->base_prompt) {
             cJSON_AddStringToObject(root, "instructions", system_prompt->base_prompt);
@@ -81,6 +85,19 @@ static char *codex_build_request_json(const LLMProvider *provider,
                 continue;
             }
 
+            /* Assistant messages with tool_calls: summarize to plain text so
+             * the Responses API doesn't reject orphaned function calls */
+            if (strcmp(msg->role, "assistant") == 0 &&
+                strstr(msg->content, "\"tool_calls\"") != NULL) {
+                char *summary = summarize_tool_calls(msg->content);
+                cJSON *item = cJSON_CreateObject();
+                cJSON_AddStringToObject(item, "role", "assistant");
+                cJSON_AddStringToObject(item, "content", summary ? summary : msg->content);
+                cJSON_AddItemToArray(input, item);
+                free(summary);
+                continue;
+            }
+
             cJSON *item = cJSON_CreateObject();
             cJSON_AddStringToObject(item, "role", msg->role);
             cJSON_AddStringToObject(item, "content", msg->content);
@@ -98,19 +115,18 @@ static char *codex_build_request_json(const LLMProvider *provider,
 
     cJSON_AddItemToObject(root, "input", input);
 
-    if (max_tokens > 0) {
-        cJSON_AddNumberToObject(root, "max_output_tokens", max_tokens);
-    }
+    /* Codex subscription API does not support max_output_tokens */
+    (void)max_tokens;
 
-    /* Add tools if available */
+    /* Add tools in Responses API flat format:
+       {type, name, description, parameters} not {type, function: {name, ...}} */
     if (tools && tools->functions.count > 0) {
-        char *tools_json = generate_tools_json(tools);
-        if (tools_json) {
-            cJSON *tools_arr = cJSON_Parse(tools_json);
-            if (tools_arr) {
-                cJSON_AddItemToObject(root, "tools", tools_arr);
-            }
-            free(tools_json);
+        char *flat_json = generate_tools_json_flat(tools);
+        if (flat_json) {
+            cJSON *flat_arr = cJSON_Parse(flat_json);
+            free(flat_json);
+            if (flat_arr)
+                cJSON_AddItemToObject(root, "tools", flat_arr);
         }
     }
 
@@ -123,17 +139,14 @@ static int codex_build_headers(const LLMProvider *provider, const char *api_key,
                                 const char **headers, int max_headers) {
     (void)provider;
     int count = 0;
-    static _Thread_local char auth_header[2200];
-    static char content_type[] = "Content-Type: application/json";
+    static _Thread_local char auth_header[MAX_AUTH_HEADER_SIZE];
     static _Thread_local char account_header[256];
+
+    /* Content-Type is handled by http_client automatically */
 
     if (api_key && strlen(api_key) > 0 && count < max_headers - 1) {
         snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", api_key);
         headers[count++] = auth_header;
-    }
-
-    if (count < max_headers - 1) {
-        headers[count++] = content_type;
     }
 
     /* Add chatgpt-account-id header if set */
@@ -146,7 +159,9 @@ static int codex_build_headers(const LLMProvider *provider, const char *api_key,
     return count;
 }
 
-/* Parse Responses API response format */
+/* Parse Responses API response format.
+ * Required by the LLMProvider vtable but never called at runtime because
+ * the Codex provider forces streaming mode (see session_configurator.c). */
 static int codex_parse_response(const LLMProvider *provider,
                                  const char *json_response,
                                  ParsedResponse *result) {
@@ -187,6 +202,7 @@ static int codex_parse_response(const LLMProvider *provider,
                             strcmp(block_type->valuestring, "output_text") == 0) {
                             cJSON *text = cJSON_GetObjectItem(block, "text");
                             if (text && cJSON_IsString(text)) {
+                                free(result->response_content);
                                 result->response_content = strdup(text->valuestring);
                             }
                         }
@@ -272,6 +288,38 @@ static int codex_parse_stream_event(const LLMProvider *provider,
             }
         }
         streaming_emit_complete(ctx, "stop");
+    } else if (strcmp(event_type, "response.failed") == 0 ||
+               strcmp(event_type, "response.incomplete") == 0) {
+        cJSON *response = cJSON_GetObjectItem(root, "response");
+        if (response) {
+            cJSON *status_detail = cJSON_GetObjectItem(response, "status_details");
+            if (!status_detail)
+                status_detail = cJSON_GetObjectItem(response, "incomplete_details");
+            if (status_detail) {
+                cJSON *reason = cJSON_GetObjectItem(status_detail, "reason");
+                if (reason && cJSON_IsString(reason)) {
+                    streaming_emit_error(ctx, reason->valuestring);
+                } else {
+                    streaming_emit_error(ctx, event_type);
+                }
+            } else {
+                streaming_emit_error(ctx, event_type);
+            }
+        } else {
+            streaming_emit_error(ctx, event_type);
+        }
+    } else if (strcmp(event_type, "error") == 0) {
+        cJSON *error = cJSON_GetObjectItem(root, "error");
+        if (error) {
+            cJSON *msg = cJSON_GetObjectItem(error, "message");
+            if (msg && cJSON_IsString(msg)) {
+                streaming_emit_error(ctx, msg->valuestring);
+            } else {
+                streaming_emit_error(ctx, "unknown error");
+            }
+        } else {
+            streaming_emit_error(ctx, "unknown error");
+        }
     }
 
     cJSON_Delete(root);
@@ -293,7 +341,7 @@ static char *codex_build_streaming_request_json(const LLMProvider *provider,
     free(base);
     if (!root) return NULL;
 
-    cJSON_AddBoolToObject(root, "stream", 1);
+    streaming_add_params(root, STREAM_NO_STORE);
 
     char *result = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
@@ -309,11 +357,8 @@ static void codex_cleanup_stream_state(const LLMProvider *provider) {
 static LLMProvider codex_provider = {
     .capabilities = {
         .name = "Codex",
-        .max_tokens_param = "max_output_tokens",
+        .max_tokens_param = NULL,
         .supports_system_message = 1,
-        .requires_version_header = 0,
-        .auth_header_format = "Authorization: Bearer %s",
-        .version_header = NULL,
     },
     .detect_provider = codex_detect_provider,
     .build_request_json = codex_build_request_json,

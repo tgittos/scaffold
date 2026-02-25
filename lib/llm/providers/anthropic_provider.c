@@ -64,18 +64,17 @@ static int anthropic_build_headers(const LLMProvider* provider,
     }
 
     int count = 0;
-    static _Thread_local char auth_header[512];
-    static char content_type[] = "Content-Type: application/json";
+    static _Thread_local char auth_header[MAX_AUTH_HEADER_SIZE];
     static char version_header[] = "anthropic-version: 2023-06-01";
     static char beta_header[] = "anthropic-beta: prompt-caching-2024-07-31";
 
-    // Add x-api-key header if API key provided
+    /* Content-Type is handled by http_client automatically */
+
     if (api_key && strlen(api_key) > 0 && count < max_headers - 1) {
         snprintf(auth_header, sizeof(auth_header), "x-api-key: %s", api_key);
         headers[count++] = auth_header;
     }
 
-    // Add version header (required by Anthropic)
     if (count < max_headers - 1) {
         headers[count++] = version_header;
     }
@@ -83,11 +82,6 @@ static int anthropic_build_headers(const LLMProvider* provider,
     // Enable prompt caching (cache_control markers set in api_common.c)
     if (count < max_headers - 1) {
         headers[count++] = beta_header;
-    }
-
-    // Add content type header
-    if (count < max_headers - 1) {
-        headers[count++] = content_type;
     }
 
     return count;
@@ -326,8 +320,7 @@ static char* anthropic_build_streaming_request_json(const LLMProvider* provider,
         return NULL;
     }
 
-    // Add stream: true
-    cJSON_AddBoolToObject(root, "stream", 1);
+    streaming_add_params(root, 0);
 
     // Convert back to string
     char* result = cJSON_PrintUnformatted(root);
@@ -342,9 +335,6 @@ static LLMProvider anthropic_provider = {
         .name = "Anthropic",
         .max_tokens_param = "max_tokens",
         .supports_system_message = 1,
-        .requires_version_header = 1,
-        .auth_header_format = "x-api-key: %s",
-        .version_header = "anthropic-version: 2023-06-01"
     },
     .detect_provider = anthropic_detect_provider,
     .build_request_json = anthropic_build_request_json,

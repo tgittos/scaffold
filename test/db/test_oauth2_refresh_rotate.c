@@ -60,43 +60,43 @@ static OAuth2Error mock_refresh_rotate(const char *client_id, const char *client
     return OAUTH2_OK;
 }
 
-/* Non-rotating refresh (fallback) */
-static OAuth2Error mock_refresh_token(const char *client_id, const char *client_secret,
-                                       const char *refresh_token_in,
-                                       char *access_token, size_t at_len,
-                                       int64_t *expires_in) {
+/* Non-rotating refresh: returns new access token but leaves refresh token unchanged */
+static OAuth2Error mock_refresh_non_rotating(const char *client_id, const char *client_secret,
+                                              const char *refresh_token_in,
+                                              char *access_token, size_t at_len,
+                                              char *new_refresh_token, size_t rt_len,
+                                              int64_t *expires_in) {
     (void)client_id; (void)client_secret; (void)refresh_token_in;
     mock_refresh_called++;
-    snprintf(access_token, at_len, "fallback_access");
+    snprintf(access_token, at_len, "non_rotating_access");
+    if (new_refresh_token && rt_len > 0)
+        new_refresh_token[0] = '\0';
     *expires_in = 3600;
     return OAUTH2_OK;
 }
 
-/* Provider with BOTH rotate and fallback refresh */
+/* Rotating provider — like OpenAI: returns a new refresh token each time */
 static const OAuth2ProviderOps rotating_ops = {
     .name = "rotating",
     .build_auth_url = mock_build_auth_url,
     .exchange_code = mock_exchange_code,
-    .refresh_token = mock_refresh_token,
-    .refresh_token_rotate = mock_refresh_rotate,
+    .refresh_token = mock_refresh_rotate,
 };
 
-/* Provider with ONLY rotate (no fallback) — like OpenAI */
-static const OAuth2ProviderOps rotate_only_ops = {
-    .name = "rotate_only",
+/* Non-rotating provider: returns new access token, preserves refresh token */
+static const OAuth2ProviderOps non_rotating_ops = {
+    .name = "non_rotating",
+    .build_auth_url = mock_build_auth_url,
+    .exchange_code = mock_exchange_code,
+    .refresh_token = mock_refresh_non_rotating,
+};
+
+/* Provider with no refresh capability */
+static const OAuth2ProviderOps no_refresh_ops = {
+    .name = "no_refresh",
     .build_auth_url = mock_build_auth_url,
     .exchange_code = mock_exchange_code,
     .refresh_token = NULL,
-    .refresh_token_rotate = mock_refresh_rotate,
-};
-
-/* Provider with ONLY non-rotating refresh (backward compat) */
-static const OAuth2ProviderOps legacy_ops = {
-    .name = "legacy",
-    .build_auth_url = mock_build_auth_url,
-    .exchange_code = mock_exchange_code,
-    .refresh_token = mock_refresh_token,
-    .refresh_token_rotate = NULL,
 };
 
 /* ========================================================================= */
@@ -171,61 +171,60 @@ void test_rotate_stores_new_refresh_token(void) {
     sqlite3_close(db);
 }
 
-void test_rotate_fallback_to_legacy(void) {
+void test_non_rotating_preserves_refresh_token(void) {
+    oauth2_store_register_provider(g_store, &non_rotating_ops);
+    store_expired_token("non_rotating");
+
+    OAuth2TokenResult result = {0};
+    OAuth2Error err = oauth2_store_get_access_token(g_store, "non_rotating",
+                                                     "user@test.com", "client",
+                                                     "secret", &result);
+    TEST_ASSERT_EQUAL_INT(OAUTH2_OK, err);
+    TEST_ASSERT_EQUAL_STRING("non_rotating_access", result.access_token);
+    TEST_ASSERT_EQUAL_INT(0, mock_rotate_called);
+    TEST_ASSERT_EQUAL_INT(1, mock_refresh_called);
+
+    /* Verify original refresh token is preserved in DB */
+    sqlite3 *db = NULL;
+    TEST_ASSERT_EQUAL_INT(SQLITE_OK, sqlite3_open(g_test_db_path, &db));
+
+    sqlite3_stmt *stmt = NULL;
+    sqlite3_prepare_v2(db,
+        "SELECT refresh_token FROM oauth2_tokens "
+        "WHERE provider='non_rotating' AND account_id='user@test.com'",
+        -1, &stmt, NULL);
+    TEST_ASSERT_EQUAL_INT(SQLITE_ROW, sqlite3_step(stmt));
+
+    const char *stored_rt = (const char *)sqlite3_column_text(stmt, 0);
+    TEST_ASSERT_NOT_NULL(stored_rt);
+    TEST_ASSERT_EQUAL_STRING("initial_refresh", stored_rt);
+
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+}
+
+void test_refresh_failure_returns_expired(void) {
     oauth2_store_register_provider(g_store, &rotating_ops);
     store_expired_token("rotating");
 
-    /* Make rotate fail — should fall back to legacy refresh */
     mock_rotate_result = OAUTH2_ERROR_NETWORK;
 
     OAuth2TokenResult result = {0};
     OAuth2Error err = oauth2_store_get_access_token(g_store, "rotating",
                                                      "user@test.com", "client",
                                                      "secret", &result);
-    TEST_ASSERT_EQUAL_INT(OAUTH2_OK, err);
-    TEST_ASSERT_EQUAL_STRING("fallback_access", result.access_token);
-    TEST_ASSERT_EQUAL_INT(1, mock_rotate_called);
-    TEST_ASSERT_EQUAL_INT(1, mock_refresh_called);
-}
-
-void test_rotate_only_no_fallback(void) {
-    oauth2_store_register_provider(g_store, &rotate_only_ops);
-    store_expired_token("rotate_only");
-
-    OAuth2TokenResult result = {0};
-    OAuth2Error err = oauth2_store_get_access_token(g_store, "rotate_only",
-                                                     "user@test.com", "client",
-                                                     "secret", &result);
-    TEST_ASSERT_EQUAL_INT(OAUTH2_OK, err);
-    TEST_ASSERT_EQUAL_STRING("rotated_access", result.access_token);
-    TEST_ASSERT_EQUAL_INT(1, mock_rotate_called);
-}
-
-void test_rotate_only_failure_no_fallback(void) {
-    oauth2_store_register_provider(g_store, &rotate_only_ops);
-    store_expired_token("rotate_only");
-
-    mock_rotate_result = OAUTH2_ERROR_NETWORK;
-
-    OAuth2TokenResult result = {0};
-    OAuth2Error err = oauth2_store_get_access_token(g_store, "rotate_only",
-                                                     "user@test.com", "client",
-                                                     "secret", &result);
     TEST_ASSERT_EQUAL_INT(OAUTH2_ERROR_EXPIRED, err);
 }
 
-void test_legacy_backward_compat(void) {
-    oauth2_store_register_provider(g_store, &legacy_ops);
-    store_expired_token("legacy");
+void test_no_refresh_capability_returns_expired(void) {
+    oauth2_store_register_provider(g_store, &no_refresh_ops);
+    store_expired_token("no_refresh");
 
     OAuth2TokenResult result = {0};
-    OAuth2Error err = oauth2_store_get_access_token(g_store, "legacy",
+    OAuth2Error err = oauth2_store_get_access_token(g_store, "no_refresh",
                                                      "user@test.com", "client",
                                                      "secret", &result);
-    TEST_ASSERT_EQUAL_INT(OAUTH2_OK, err);
-    TEST_ASSERT_EQUAL_STRING("fallback_access", result.access_token);
-    TEST_ASSERT_EQUAL_INT(0, mock_rotate_called);
-    TEST_ASSERT_EQUAL_INT(1, mock_refresh_called);
+    TEST_ASSERT_EQUAL_INT(OAUTH2_ERROR_PROVIDER, err);
 }
 
 /* ========================================================================= */
@@ -235,9 +234,8 @@ void test_legacy_backward_compat(void) {
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_rotate_stores_new_refresh_token);
-    RUN_TEST(test_rotate_fallback_to_legacy);
-    RUN_TEST(test_rotate_only_no_fallback);
-    RUN_TEST(test_rotate_only_failure_no_fallback);
-    RUN_TEST(test_legacy_backward_compat);
+    RUN_TEST(test_non_rotating_preserves_refresh_token);
+    RUN_TEST(test_refresh_failure_returns_expired);
+    RUN_TEST(test_no_refresh_capability_returns_expired);
     return UNITY_END();
 }

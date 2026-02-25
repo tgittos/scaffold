@@ -43,7 +43,9 @@
       "Bash(./scripts/build.sh:*)",
       "Bash(xargs:*)",
       "Bash(xxd:*)",
-      "Bash(./test/test_approval_gate_integration:*)"
+      "Bash(./test/test_approval_gate_integration:*)",
+      "WebFetch(domain:developers.openai.com)",
+      "WebFetch(domain:docs.openclaw.ai)"
     ]
   },
   "spinnerTipsEnabled": false

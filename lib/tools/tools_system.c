@@ -150,6 +150,39 @@ char* generate_tools_json(const ToolRegistry *registry) {
     return tool_format_openai.generate_tools_json(registry);
 }
 
+char* generate_tools_json_flat(const ToolRegistry *registry) {
+    if (registry == NULL || registry->functions.count == 0)
+        return NULL;
+
+    char *nested = generate_tools_json(registry);
+    if (!nested) return NULL;
+
+    cJSON *arr = cJSON_Parse(nested);
+    free(nested);
+    if (!arr) return NULL;
+
+    cJSON *flat = cJSON_CreateArray();
+    cJSON *item = NULL;
+    cJSON_ArrayForEach(item, arr) {
+        cJSON *fn = cJSON_GetObjectItem(item, "function");
+        if (!fn) continue;
+        cJSON *entry = cJSON_CreateObject();
+        cJSON_AddStringToObject(entry, "type", "function");
+        cJSON *name = cJSON_GetObjectItem(fn, "name");
+        if (name) cJSON_AddStringToObject(entry, "name", name->valuestring);
+        cJSON *desc = cJSON_GetObjectItem(fn, "description");
+        if (desc) cJSON_AddStringToObject(entry, "description", desc->valuestring);
+        cJSON *params = cJSON_DetachItemFromObject(fn, "parameters");
+        if (params) cJSON_AddItemToObject(entry, "parameters", params);
+        cJSON_AddItemToArray(flat, entry);
+    }
+    cJSON_Delete(arr);
+
+    char *result = cJSON_PrintUnformatted(flat);
+    cJSON_Delete(flat);
+    return result;
+}
+
 char* generate_anthropic_tools_json(const ToolRegistry *registry) {
     return tool_format_anthropic.generate_tools_json(registry);
 }

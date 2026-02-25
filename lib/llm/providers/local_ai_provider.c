@@ -37,7 +37,8 @@ static int local_ai_detect_provider(const char* api_url) {
     if (strstr(api_url, "api.anthropic.com") != NULL ||
         strstr(api_url, "api.openai.com") != NULL ||
         strstr(api_url, "openai.azure.com") != NULL ||
-        strstr(api_url, "api.groq.com") != NULL) {
+        strstr(api_url, "api.groq.com") != NULL ||
+        strstr(api_url, "chatgpt.com") != NULL) {
         return 0;
     }
     
@@ -72,18 +73,13 @@ static int local_ai_build_headers(const LLMProvider* provider,
     }
 
     int count = 0;
-    static _Thread_local char auth_header[512];
-    static char content_type[] = "Content-Type: application/json";
+    static _Thread_local char auth_header[MAX_AUTH_HEADER_SIZE];
 
-    // Add authorization header if API key provided (some local servers require it)
+    /* Content-Type is handled by http_client automatically */
+
     if (api_key && strlen(api_key) > 0 && count < max_headers - 1) {
         snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", api_key);
         headers[count++] = auth_header;
-    }
-
-    // Add content type header
-    if (count < max_headers - 1) {
-        headers[count++] = content_type;
     }
 
     return count;
@@ -248,14 +244,7 @@ static char* local_ai_build_streaming_request_json(const LLMProvider* provider,
         return NULL;
     }
 
-    cJSON_AddBoolToObject(root, "stream", 1);
-
-    // Note: stream_options may not be supported by all local servers, but it's harmless
-    cJSON* stream_options = cJSON_CreateObject();
-    if (stream_options != NULL) {
-        cJSON_AddBoolToObject(stream_options, "include_usage", 1);
-        cJSON_AddItemToObject(root, "stream_options", stream_options);
-    }
+    streaming_add_params(root, STREAM_INCLUDE_USAGE);
 
     char* result = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
@@ -269,9 +258,6 @@ static LLMProvider local_ai_provider = {
         .name = "Local AI",
         .max_tokens_param = "max_tokens",
         .supports_system_message = 1,
-        .requires_version_header = 0,
-        .auth_header_format = "Authorization: Bearer %s",
-        .version_header = NULL
     },
     .detect_provider = local_ai_detect_provider,
     .build_request_json = local_ai_build_request_json,

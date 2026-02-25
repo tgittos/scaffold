@@ -62,18 +62,13 @@ static int openai_build_headers(const LLMProvider* provider,
     }
 
     int count = 0;
-    static _Thread_local char auth_header[512];
-    static char content_type[] = "Content-Type: application/json";
+    static _Thread_local char auth_header[MAX_AUTH_HEADER_SIZE];
 
-    // Add authorization header if API key provided and non-empty
+    /* Content-Type is handled by http_client automatically */
+
     if (api_key && strlen(api_key) > 0 && count < max_headers - 1) {
         snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", api_key);
         headers[count++] = auth_header;
-    }
-
-    // Add content type header
-    if (count < max_headers - 1) {
-        headers[count++] = content_type;
     }
 
     return count;
@@ -267,15 +262,7 @@ static char* openai_build_streaming_request_json(const LLMProvider* provider,
         return NULL;
     }
 
-    // Add stream: true
-    cJSON_AddBoolToObject(root, "stream", 1);
-
-    // Add stream_options with include_usage: true
-    cJSON* stream_options = cJSON_CreateObject();
-    if (stream_options != NULL) {
-        cJSON_AddBoolToObject(stream_options, "include_usage", 1);
-        cJSON_AddItemToObject(root, "stream_options", stream_options);
-    }
+    streaming_add_params(root, STREAM_INCLUDE_USAGE);
 
     // Convert back to string
     char* result = cJSON_PrintUnformatted(root);
@@ -290,9 +277,6 @@ static LLMProvider openai_provider = {
         .name = "OpenAI",
         .max_tokens_param = "max_completion_tokens",
         .supports_system_message = 1,
-        .requires_version_header = 0,
-        .auth_header_format = "Authorization: Bearer %s",
-        .version_header = NULL
     },
     .detect_provider = openai_detect_provider,
     .build_request_json = openai_build_request_json,

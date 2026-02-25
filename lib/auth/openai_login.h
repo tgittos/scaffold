@@ -4,15 +4,21 @@
 #include <stddef.h>
 
 /*
+ * Clean up the persistent OAuth2 store (if any).
+ * Call at shutdown or register via atexit().
+ */
+void openai_auth_cleanup(void);
+
+/*
  * Interactive OpenAI OAuth login.
  * Opens browser (or prints URL in headless mode), waits for callback,
  * exchanges code for tokens, stores encrypted in oauth2.db.
+ * Auto-detects headless environments (SSH, Codespaces, no DISPLAY).
  *
  * @param db_path  Path to the oauth2.db database
- * @param headless If non-zero, skip browser launch and print URL only
  * @return 0 on success, -1 on error
  */
-int openai_login(const char *db_path, int headless);
+int openai_login(const char *db_path);
 
 /*
  * Check if a valid OpenAI OAuth token exists.
@@ -29,6 +35,18 @@ int openai_is_logged_in(const char *db_path);
  * @return 0 on success, -1 on error
  */
 int openai_logout(const char *db_path);
+
+/*
+ * Credential provider callback for llm_client_set_credential_provider().
+ * Retrieves a fresh access token from the persistent store, auto-refreshing
+ * if expired. user_data must be a persistent db_path string.
+ *
+ * @param key_buf      Output buffer for the access token
+ * @param key_buf_len  Size of key_buf
+ * @param user_data    Pointer to the db_path string
+ * @return 0 on success, -1 on error
+ */
+int openai_refresh_credential(char *key_buf, size_t key_buf_len, void *user_data);
 
 /*
  * Get access token and account ID for Codex API requests.

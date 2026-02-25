@@ -6,6 +6,9 @@
 #include "../network/api_common.h"
 #include "../util/ptrarray.h"
 
+#define CODEX_URL_PATTERN    "chatgpt.com/backend-api/codex"
+#define MAX_AUTH_HEADER_SIZE 2200
+
 /* Forward declarations to break cross-layer header dependencies */
 typedef struct ConversationHistory ConversationHistory;
 typedef struct ToolRegistry ToolRegistry;
@@ -17,9 +20,6 @@ typedef struct {
     const char* name;
     const char* max_tokens_param;
     int supports_system_message;
-    int requires_version_header;
-    const char* auth_header_format;  /* e.g. "Authorization: Bearer %s" or "x-api-key: %s" */
-    const char* version_header;      /* NULL if provider doesn't require one */
 } ProviderCapabilities;
 
 typedef struct LLMProvider {
@@ -76,9 +76,6 @@ int register_codex_provider(ProviderRegistry* registry);
 int register_openai_provider(ProviderRegistry* registry);
 int register_anthropic_provider(ProviderRegistry* registry);
 int register_local_ai_provider(ProviderRegistry* registry);
-
-void codex_set_account_id(const char *account_id);
-const char *codex_get_account_id(void);
 
 ProviderRegistry* get_provider_registry(void);
 void provider_registry_cleanup(void);

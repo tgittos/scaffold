@@ -147,7 +147,22 @@ static char* build_simple_message_json(const char* role, const char* content) {
     return result;
 }
 
-static char* summarize_tool_calls(const char* raw_json) {
+void streaming_add_params(cJSON *root, int flags) {
+    if (!root) return;
+    cJSON_AddBoolToObject(root, "stream", 1);
+    if (flags & STREAM_INCLUDE_USAGE) {
+        cJSON *opts = cJSON_CreateObject();
+        if (opts) {
+            cJSON_AddBoolToObject(opts, "include_usage", 1);
+            cJSON_AddItemToObject(root, "stream_options", opts);
+        }
+    }
+    if (flags & STREAM_NO_STORE) {
+        cJSON_AddBoolToObject(root, "store", 0);
+    }
+}
+
+char* summarize_tool_calls(const char* raw_json) {
     cJSON* root = cJSON_Parse(raw_json);
     if (!root) return NULL;
 

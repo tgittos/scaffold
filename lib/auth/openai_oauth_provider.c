@@ -141,11 +141,11 @@ static OAuth2Error openai_exchange_code(const char *client_id, const char *clien
     return err;
 }
 
-static OAuth2Error openai_refresh_rotate(const char *client_id, const char *client_secret,
-                                          const char *refresh_token_in,
-                                          char *access_token, size_t at_len,
-                                          char *new_refresh_token, size_t rt_len,
-                                          int64_t *expires_in) {
+static OAuth2Error openai_refresh_token(const char *client_id, const char *client_secret,
+                                         const char *refresh_token_in,
+                                         char *access_token, size_t at_len,
+                                         char *new_refresh_token, size_t rt_len,
+                                         int64_t *expires_in) {
     (void)client_secret;
 
     FormField fields[] = {
@@ -169,11 +169,11 @@ static OAuth2Error openai_refresh_rotate(const char *client_id, const char *clie
 }
 
 static const OAuth2ProviderOps openai_ops = {
-    .name                 = OPENAI_PROVIDER_NAME,
-    .build_auth_url       = openai_build_auth_url,
-    .exchange_code        = openai_exchange_code,
-    .refresh_token        = NULL,
-    .refresh_token_rotate = openai_refresh_rotate,
+    .name           = OPENAI_PROVIDER_NAME,
+    .build_auth_url = openai_build_auth_url,
+    .exchange_code  = openai_exchange_code,
+    .refresh_token  = openai_refresh_token,
+    .revoke_token   = NULL,
 };
 
 const OAuth2ProviderOps *openai_oauth_provider_ops(void) {

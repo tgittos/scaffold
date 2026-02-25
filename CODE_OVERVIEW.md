@@ -9,7 +9,7 @@ This document provides a comprehensive overview of Ralph's codebase structure an
 Application-specific code that uses the library layer. This is a thin wrapper around lib/.
 
 #### `src/scaffold/` - Scaffold CLI
-- **`main.c`** - Application entry point with CLI argument parsing, GOAP orchestration, Python tools, update management, OAuth login (`--login`/`--logout`/`--login-headless`), memory, sub-agents, and orchestrator-specific modes (--supervisor --goal, --worker --queue). Uses system prompt from `data/prompts/scaffold_system.txt`.
+- **`main.c`** - Application entry point with CLI argument parsing, GOAP orchestration, Python tools, update management, OAuth login (`--login`/`--logout`, auto-sets Codex API URL on login), memory, sub-agents, and orchestrator-specific modes (--supervisor --goal, --worker --queue). Uses system prompt from `data/prompts/scaffold_system.txt`.
 
 #### `src/tools/` - Python Tool Integration
 - **`python_tool.c/h`** - Embedded Python interpreter execution
@@ -41,7 +41,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 #### `lib/agent/` - Agent Abstraction and Session Management
 - **`agent.c/h`** - Agent lifecycle management, mode selection (interactive/background/worker), configuration
 - **`session.c/h`** - Thin coordinator delegating to extracted modules below
-- **`session_configurator.c/h`** - Configuration loading: API settings, type detection (including Codex URL), OAuth credential injection for Codex, system prompt, context window
+- **`session_configurator.c/h`** - Configuration loading: API settings, type detection (including Codex URL), OAuth credential injection for Codex with credential provider registration for session-level token refresh, system prompt, context window
 - **`message_dispatcher.c/h`** - Dispatch path selection (streaming vs buffered) based on provider capabilities
 - **`message_processor.c/h`** - Buffered (non-streaming) response handling and tool call extraction
 - **`api_round_trip.c/h`** - Single LLM request-response cycle (payload build, HTTP, parse)
@@ -72,7 +72,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`task_store.c/h`** - SQLite-based persistent task storage with hierarchies and dependencies
 - **`goal_store.c/h`** - GOAP goal persistence: goal state, world state, supervisor PID tracking, lock/unlock API for atomic read-modify-write sequences
 - **`action_store.c/h`** - GOAP action persistence: hierarchy (compound/primitive), preconditions/effects, readiness queries, work_item_id correlation for dispatch tracking
-- **`oauth2_store.c/h`** - OAuth2 token management with PKCE, AES-256-GCM encryption, vtable-based provider pattern, auto-refresh with 60s margin, refresh token rotation support
+- **`oauth2_store.c/h`** - OAuth2 token management with PKCE, AES-256-GCM encryption, vtable-based provider pattern (unified `refresh_token` callback with optional rotation, nullable `revoke_token` hook), auto-refresh with 60s margin, heap-allocated refresh context, value-copied provider ops, `oauth2_error_string()` utility
 - **`sqlite_dal.c/h`** - SQLite data access layer with recursive mutex protection (supports nested locking for atomic read-modify-write), ref-counted shared connections, schema initialization, and common query patterns
 - **`hnswlib_wrapper.cpp/h`** - C++ wrapper for HNSW vector indexing
 
@@ -82,7 +82,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`embeddings.c/h`** - Low-level text embedding functionality
 - **`embedding_provider.c/h`** - Embedding provider interface and registry
 - **`embeddings_service.c/h`** - Thread-safe embedding service singleton
-- **`llm_client.c/h`** - LLM HTTP client wrapping http_client for API calls; accepts pre-built `const char** headers` from providers (enabling provider-specific auth and feature headers)
+- **`llm_client.c/h`** - LLM HTTP client wrapping http_client for API calls; accepts pre-built `const char** headers` from providers. Supports pluggable credential provider (`llm_credential_provider_fn`) for token refresh
 
 ##### `lib/llm/models/` - Model Capability Implementations
 - **`model_registry.c`** - Data-driven model registration (all models in one static table)
@@ -91,7 +91,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`response_processing.c/h`** - Thinking tag processing for reasoning models
 
 ##### `lib/llm/providers/` - API Provider Implementations
-- **`codex_provider.c`** - OpenAI Codex Responses API client (subscription-based via OAuth, `chatgpt-account-id` header, thread-local account ID)
+- **`codex_provider.c/h`** - OpenAI Codex Responses API client (subscription-based via OAuth, `chatgpt-account-id` header, thread-local account ID, flat tool format, tool_calls summarization, error/incomplete/failed stream event handling)
 - **`anthropic_provider.c`** - Anthropic API client (Messages format)
 - **`openai_provider.c`** - OpenAI API client (Chat completions)
 - **`local_ai_provider.c`** - Local AI server integration (LM Studio, Ollama)
@@ -101,7 +101,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 #### `lib/network/` - Network Communication
 - **`http_client.c/h`** - HTTP client implementation using libcurl (buffered and streaming)
 - **`http_form_post.c/h`** - Form-urlencoded POST for OAuth token endpoints (URL-encodes via `curl_easy_escape`, sets Content-Type)
-- **`api_common.c/h`** - JSON payload building with prompt caching support (`SystemPromptParts` split, Anthropic `cache_control` markers, model-aware payload construction)
+- **`api_common.c/h`** - JSON payload building with prompt caching support (`SystemPromptParts` split, Anthropic `cache_control` markers, model-aware payload construction), `summarize_tool_calls()` for converting tool_calls JSON to plain text, `streaming_add_params()` shared utility for adding stream/store params
 - **`streaming.c/h`** - SSE streaming infrastructure for real-time response handling
 - **`api_error.c/h`** - Enhanced API error handling with retry logic
 - **`embedded_cacert.c/h`** - Embedded Mozilla CA certificate bundle for portable SSL/TLS
@@ -136,7 +136,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`approval_errors.c`** - JSON error message formatting for approval gate denials
 
 #### `lib/tools/` - Tool System
-- **`tools_system.c/h`** - Core tool registry and execution framework
+- **`tools_system.c/h`** - Core tool registry and execution framework, `generate_tools_json_flat()` for Responses API flat tool format
 - **`tools.h`** - Public tools API header
 - **`tool_result_builder.c/h`** - Standardized tool result construction (builder pattern) with shared error helper
 - **`tool_param_dsl.c/h`** - Declarative table-driven tool parameter registration
@@ -221,8 +221,8 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`updater.c/h`** - Self-update via GitHub releases (check for updates, download, apply)
 
 #### `lib/auth/` - OAuth2 Authentication
-- **`openai_login.c/h`** - Login orchestrator: `openai_login()` (PKCE flow with browser/headless), `openai_logout()`, `openai_get_codex_credentials()` (token + account ID retrieval with auto-refresh)
-- **`openai_oauth_provider.c/h`** - OpenAI OAuth2 provider ops vtable: auth URL construction (PKCE + `codex_cli_simplified_flow`), code exchange, refresh token rotation
+- **`openai_login.c/h`** - Login orchestrator: `openai_login()` (PKCE flow with auto-detected headless), `openai_logout()`, `openai_get_codex_credentials()` (token + account ID retrieval), `openai_refresh_credential()` (credential provider callback for session-level refresh), `openai_auth_cleanup()` (persistent store teardown). Persistent module-level store reused across calls for the same db_path
+- **`openai_oauth_provider.c/h`** - OpenAI OAuth2 provider ops vtable: auth URL construction (PKCE + `codex_cli_simplified_flow`), code exchange, unified refresh token callback with rotation
 - **`oauth_callback_server.c/h`** - Single-request localhost HTTP server for receiving OAuth redirect on port 1455 with `select()` timeout
 - **`jwt_decode.c/h`** - JWT payload decoding: base64url decode via mbedTLS, nested claim extraction (`https://api.openai.com/auth` -> `chatgpt_account_id`)
 
@@ -261,7 +261,7 @@ The test directory mirrors the source structure:
 - **`test_model_tools.c`** - Model and tool integration tests
 - **`test_anthropic_streaming.c`** - Anthropic provider streaming tests
 - **`test_openai_streaming.c`** - OpenAI provider streaming tests
-- **`test_codex_provider.c`** - Codex Responses API provider tests (detect, headers, parse, streaming)
+- **`test_codex_provider.c`** - Codex Responses API provider tests (detect, headers, parse response/errors/multi-output, streaming text/tool/done/error events, request building with tools/tool_calls summary)
 
 #### `test/network/` - Network Layer Tests
 - **`test_http_client.c`** - HTTP client functionality tests
@@ -305,11 +305,11 @@ The test directory mirrors the source structure:
 - **`test_goal_store.c`** - GOAP goal store persistence tests (20 tests: CRUD, status transitions, world state, summary, active-goals query, supervisor PID tracking)
 - **`test_action_store.c`** - GOAP action store tests (23 tests: hierarchy, precondition matching, readiness queries, skip_pending, work_item_id correlation)
 - **`test_oauth2_store.c`** - OAuth2 store tests (28 tests: lifecycle, provider registry/validation, auth flow, pending overflow, token access, multi-provider, encryption with auto-refresh, NULL safety)
-- **`test_oauth2_refresh_rotate.c`** - OAuth2 refresh token rotation tests (rotation stores new RT, fallback to legacy, backward compat)
+- **`test_oauth2_refresh_rotate.c`** - OAuth2 refresh token tests (rotation stores new RT, non-rotating preserves RT, refresh failure, no refresh capability)
 
 #### `test/auth/` - Authentication Tests
 - **`test_jwt_decode.c`** - JWT decode tests (nested claims, missing keys, malformed JWT, null safety)
-- **`test_openai_oauth_provider.c`** - OpenAI OAuth provider tests (provider name, auth URL, vtable structure)
+- **`test_openai_oauth_provider.c`** - OpenAI OAuth provider tests (provider name, auth URL, unified vtable structure)
 - **`test_oauth_callback_server.c`** - OAuth callback server tests (success callback, error, missing params, timeout)
 
 #### `test/plugin/` - Plugin System Tests

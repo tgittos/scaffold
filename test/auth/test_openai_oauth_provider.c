@@ -60,11 +60,11 @@ void test_build_auth_url(void) {
     free(url);
 }
 
-void test_vtable_has_rotate_no_legacy(void) {
+void test_vtable_has_refresh(void) {
     const OAuth2ProviderOps *ops = openai_oauth_provider_ops();
     TEST_ASSERT_NOT_NULL(ops->exchange_code);
-    TEST_ASSERT_NULL(ops->refresh_token);
-    TEST_ASSERT_NOT_NULL(ops->refresh_token_rotate);
+    TEST_ASSERT_NOT_NULL(ops->refresh_token);
+    TEST_ASSERT_NULL(ops->revoke_token);
 }
 
 void test_null_safety(void) {
@@ -78,7 +78,7 @@ int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_provider_name);
     RUN_TEST(test_build_auth_url);
-    RUN_TEST(test_vtable_has_rotate_no_legacy);
+    RUN_TEST(test_vtable_has_refresh);
     RUN_TEST(test_null_safety);
     return UNITY_END();
 }

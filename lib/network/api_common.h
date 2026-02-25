@@ -16,6 +16,17 @@ typedef struct {
     const char* dynamic_context;
 } SystemPromptParts;
 
+char* summarize_tool_calls(const char* raw_json);
+
+/* Flags for streaming_add_params */
+#define STREAM_INCLUDE_USAGE (1 << 0)
+#define STREAM_NO_STORE      (1 << 1)
+
+/* Add streaming parameters to a cJSON root object.
+ * flags: bitmask of STREAM_INCLUDE_USAGE, STREAM_NO_STORE */
+struct cJSON;
+void streaming_add_params(struct cJSON *root, int flags);
+
 void api_common_set_pending_images(const ImageAttachment *images, size_t count);
 void api_common_clear_pending_images(void);
 
