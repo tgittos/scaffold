@@ -212,6 +212,8 @@ static void test_validate_name_valid(void) {
     TEST_ASSERT_EQUAL(0, plugin_validate_name("myplugin"));
     TEST_ASSERT_EQUAL(0, plugin_validate_name("a"));
     TEST_ASSERT_EQUAL(0, plugin_validate_name("my-plugin"));
+    TEST_ASSERT_EQUAL(0, plugin_validate_name("Plugin123"));
+    TEST_ASSERT_EQUAL(0, plugin_validate_name("x"));
 }
 
 static void test_validate_name_null(void) {
@@ -229,6 +231,20 @@ static void test_validate_name_with_underscore(void) {
 static void test_validate_name_with_slash(void) {
     TEST_ASSERT_EQUAL(-1, plugin_validate_name("my/plugin"));
     TEST_ASSERT_EQUAL(-1, plugin_validate_name("my\\plugin"));
+}
+
+static void test_validate_name_rejects_special_chars(void) {
+    TEST_ASSERT_EQUAL(-1, plugin_validate_name("bad plugin"));
+    TEST_ASSERT_EQUAL(-1, plugin_validate_name("bad;plugin"));
+    TEST_ASSERT_EQUAL(-1, plugin_validate_name("bad.plugin"));
+    TEST_ASSERT_EQUAL(-1, plugin_validate_name("bad@plugin"));
+    TEST_ASSERT_EQUAL(-1, plugin_validate_name("\"; rm -rf /"));
+}
+
+static void test_validate_name_must_start_with_letter(void) {
+    TEST_ASSERT_EQUAL(-1, plugin_validate_name("1plugin"));
+    TEST_ASSERT_EQUAL(-1, plugin_validate_name("-plugin"));
+    TEST_ASSERT_EQUAL(-1, plugin_validate_name("0"));
 }
 
 static void test_validate_name_too_long(void) {
@@ -308,6 +324,8 @@ int main(void) {
     RUN_TEST(test_check_alive_not_initialized);
     RUN_TEST(test_check_alive_null);
     RUN_TEST(test_check_alive_dead_pid);
+    RUN_TEST(test_validate_name_rejects_special_chars);
+    RUN_TEST(test_validate_name_must_start_with_letter);
 
     return UNITY_END();
 }

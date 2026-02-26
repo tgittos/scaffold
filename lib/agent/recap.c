@@ -236,10 +236,9 @@ int recap_generate(AgentSession* session, int max_messages) {
     };
 
     const char* hdrs[8] = {0};
-    int hdr_count = provider->build_headers(provider,
-                                             session->session_data.config.api_key,
-                                             hdrs, 8);
-    (void)hdr_count;
+    if (provider->build_headers) {
+        provider->build_headers(provider, session->session_data.config.api_key, hdrs, 8);
+    }
 
     int result = llm_client_send_streaming(
         session->session_data.config.api_url,

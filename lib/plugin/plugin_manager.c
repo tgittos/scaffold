@@ -127,8 +127,32 @@ static int spawn_plugin(PluginProcess *plugin) {
             close(fd);
         }
 
+        /* Sanitize environment: only pass through safe variables.
+         * Prevents leaking API keys and credentials to plugin subprocesses. */
+        static const char *safe_vars[] = {
+            "PATH", "HOME", "LANG", "LC_ALL", "TERM", "USER", "LOGNAME",
+            "TMPDIR", "TZ", NULL
+        };
+        char *safe_env[16] = {0};
+        int env_idx = 0;
+        for (int v = 0; safe_vars[v] && env_idx < 15; v++) {
+            char *val = getenv(safe_vars[v]);
+            if (val) {
+                size_t klen = strlen(safe_vars[v]);
+                size_t vlen = strlen(val);
+                char *entry = malloc(klen + 1 + vlen + 1);
+                if (entry) {
+                    memcpy(entry, safe_vars[v], klen);
+                    entry[klen] = '=';
+                    memcpy(entry + klen + 1, val, vlen + 1);
+                    safe_env[env_idx++] = entry;
+                }
+            }
+        }
+        safe_env[env_idx] = NULL;
+
         char *argv[] = { plugin->path, NULL };
-        execv(plugin->path, argv);
+        execve(plugin->path, argv, safe_env);
         _exit(1);
     }
 
@@ -258,14 +282,20 @@ int plugin_validate_name(const char *name) {
     if (!name || name[0] == '\0') return -1;
     size_t len = strlen(name);
     if (len > 64) return -1;
+    /* Must start with a letter */
+    if (!((name[0] >= 'a' && name[0] <= 'z') || (name[0] >= 'A' && name[0] <= 'Z'))) return -1;
+    /* Allowlist: [a-zA-Z0-9-] */
     for (size_t i = 0; i < len; i++) {
-        if (name[i] == '_' || name[i] == '/' || name[i] == '\\') return -1;
+        char c = name[i];
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+            (c >= '0' && c <= '9') || c == '-') continue;
+        return -1;
     }
     return 0;
 }
 
 int plugin_check_alive(PluginProcess *plugin) {
-    if (!plugin || !plugin->initialized || plugin->pid <= 0) return 0;
+    if (!plugin || plugin->pid <= 0) return 0;
 
     int status;
     pid_t ret = waitpid(plugin->pid, &status, WNOHANG);
@@ -330,6 +360,10 @@ static int handshake_plugin(PluginProcess *plugin) {
 
 int plugin_manager_start_all(PluginManager *mgr, ToolRegistry *registry) {
     if (!mgr) return -1;
+
+    /* Ignore SIGPIPE so writing to a crashed plugin's pipe returns EPIPE
+     * instead of killing the host process. */
+    signal(SIGPIPE, SIG_IGN);
 
     for (int i = 0; i < mgr->count; i++) {
         PluginProcess *p = &mgr->plugins[i];

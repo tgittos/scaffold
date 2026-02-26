@@ -1,4 +1,7 @@
 #include "message_dispatcher.h"
+#include "context_enhancement.h"
+#include "../network/api_common.h"
+#include "../plugin/hook_dispatcher.h"
 #include "../util/debug_output.h"
 #include <stdlib.h>
 
@@ -38,8 +41,27 @@ char* message_dispatcher_build_payload(AgentSession* session,
                                        int max_tokens) {
     if (session == NULL) return NULL;
 
-    if (session->session_data.config.api_type == API_TYPE_ANTHROPIC) {
-        return session_build_anthropic_json_payload(session, user_message, max_tokens);
-    }
-    return session_build_json_payload(session, user_message, max_tokens);
+    EnhancedPromptParts parts;
+    if (build_enhanced_prompt_parts(session, user_message, &parts) != 0) return NULL;
+
+    hook_dispatch_pre_llm_send(&session->plugin_manager, session,
+                                &parts.base_prompt, &parts.dynamic_context);
+
+    SystemPromptParts sys_parts = {
+        .base_prompt = parts.base_prompt,
+        .dynamic_context = parts.dynamic_context
+    };
+
+    int is_anthropic = (session->session_data.config.api_type == API_TYPE_ANTHROPIC);
+
+    char* result = build_json_payload_common(
+        session->session_data.config.model, &sys_parts,
+        &session->session_data.conversation, user_message,
+        is_anthropic ? "max_tokens" : session->session_data.config.max_tokens_param,
+        max_tokens, &session->tools,
+        is_anthropic ? format_anthropic_message : format_openai_message,
+        is_anthropic ? 1 : 0);
+
+    free_enhanced_prompt_parts(&parts);
+    return result;
 }

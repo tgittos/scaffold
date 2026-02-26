@@ -129,9 +129,8 @@ static HookAction hook_dispatch_generic(PluginManager *mgr,
 
         if (spec->apply_result) {
             spec->apply_result(ctx, &hr);
-        } else {
-            cJSON_Delete(hr.data);
         }
+        cJSON_Delete(hr.data);
 
         if (!spec->ignore_stop_skip && hr.action == HOOK_STOP) {
             final_action = HOOK_STOP;
@@ -165,10 +164,12 @@ static void post_user_input_apply(void *raw, const HookResponse *hr) {
     if (hr->data) {
         cJSON *msg = cJSON_GetObjectItem(hr->data, "message");
         if (msg && cJSON_IsString(msg)) {
-            free(*ctx->message);
-            *ctx->message = strdup(cJSON_GetStringValue(msg));
+            char *new_val = strdup(cJSON_GetStringValue(msg));
+            if (new_val) {
+                free(*ctx->message);
+                *ctx->message = new_val;
+            }
         }
-        cJSON_Delete(hr->data);
     }
 }
 
@@ -211,10 +212,12 @@ static void context_enhance_apply(void *raw, const HookResponse *hr) {
     if (hr->data) {
         cJSON *dc = cJSON_GetObjectItem(hr->data, "dynamic_context");
         if (dc && cJSON_IsString(dc)) {
-            free(*ctx->dynamic_context);
-            *ctx->dynamic_context = strdup(cJSON_GetStringValue(dc));
+            char *new_val = strdup(cJSON_GetStringValue(dc));
+            if (new_val) {
+                free(*ctx->dynamic_context);
+                *ctx->dynamic_context = new_val;
+            }
         }
-        cJSON_Delete(hr->data);
     }
 }
 
@@ -261,18 +264,23 @@ static void pre_llm_send_apply(void *raw, const HookResponse *hr) {
         if (ctx->base_prompt) {
             cJSON *bp = cJSON_GetObjectItem(hr->data, "base_prompt");
             if (bp && cJSON_IsString(bp)) {
-                free(*ctx->base_prompt);
-                *ctx->base_prompt = strdup(cJSON_GetStringValue(bp));
+                char *new_val = strdup(cJSON_GetStringValue(bp));
+                if (new_val) {
+                    free(*ctx->base_prompt);
+                    *ctx->base_prompt = new_val;
+                }
             }
         }
         if (ctx->dynamic_context) {
             cJSON *dc = cJSON_GetObjectItem(hr->data, "dynamic_context");
             if (dc && cJSON_IsString(dc)) {
-                free(*ctx->dynamic_context);
-                *ctx->dynamic_context = strdup(cJSON_GetStringValue(dc));
+                char *new_val = strdup(cJSON_GetStringValue(dc));
+                if (new_val) {
+                    free(*ctx->dynamic_context);
+                    *ctx->dynamic_context = new_val;
+                }
             }
         }
-        cJSON_Delete(hr->data);
     }
 }
 
@@ -328,11 +336,13 @@ static void post_llm_response_apply(void *raw, const HookResponse *hr) {
     if (hr->data && ctx->text) {
         cJSON *t = cJSON_GetObjectItem(hr->data, "text");
         if (t && cJSON_IsString(t)) {
-            free(*ctx->text);
-            *ctx->text = strdup(cJSON_GetStringValue(t));
+            char *new_val = strdup(cJSON_GetStringValue(t));
+            if (new_val) {
+                free(*ctx->text);
+                *ctx->text = new_val;
+            }
         }
     }
-    cJSON_Delete(hr->data);
 }
 
 HookAction hook_dispatch_post_llm_response(PluginManager *mgr,
@@ -362,7 +372,6 @@ HookAction hook_dispatch_post_llm_response(PluginManager *mgr,
 typedef struct {
     ToolCall *call;
     ToolResult *result;
-    int stopped;
 } PreToolExecuteCtx;
 
 static cJSON *pre_tool_execute_build(void *raw) {
@@ -382,9 +391,7 @@ static void pre_tool_execute_apply(void *raw, const HookResponse *hr) {
                                  ? strdup(cJSON_GetStringValue(res))
                                  : strdup("{\"blocked\":\"Plugin blocked execution\"}");
         ctx->result->success = 0;
-        ctx->stopped = 1;
     }
-    cJSON_Delete(hr->data);
 }
 
 HookAction hook_dispatch_pre_tool_execute(PluginManager *mgr,
@@ -394,7 +401,7 @@ HookAction hook_dispatch_pre_tool_execute(PluginManager *mgr,
     (void)session;
     if (!mgr || !call) return HOOK_CONTINUE;
 
-    PreToolExecuteCtx ctx = { .call = call, .result = result, .stopped = 0 };
+    PreToolExecuteCtx ctx = { .call = call, .result = result };
     HookDispatchSpec spec = {
         .hook_name = "pre_tool_execute",
         .build_params = pre_tool_execute_build,
@@ -426,10 +433,12 @@ static void post_tool_execute_apply(void *raw, const HookResponse *hr) {
     if (hr->data) {
         cJSON *res = cJSON_GetObjectItem(hr->data, "result");
         if (res && cJSON_IsString(res)) {
-            free(ctx->result->result);
-            ctx->result->result = strdup(cJSON_GetStringValue(res));
+            char *new_val = strdup(cJSON_GetStringValue(res));
+            if (new_val) {
+                free(ctx->result->result);
+                ctx->result->result = new_val;
+            }
         }
-        cJSON_Delete(hr->data);
     }
 }
 

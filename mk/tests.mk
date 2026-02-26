@@ -343,6 +343,7 @@ $(eval $(call def_test_lib,goap_state,orchestrator/test_goap_state,))
 $(eval $(call def_test,plugin_protocol,plugin/test_plugin_protocol,$(LIBDIR)/plugin/plugin_protocol.c))
 $(eval $(call def_test_lib,plugin_manager,plugin/test_plugin_manager,))
 $(eval $(call def_test_lib,hook_dispatcher,plugin/test_hook_dispatcher,))
+$(eval $(call def_test_lib,plugin_integration,plugin/test_plugin_integration,))
 
 $(TEST_plugin_protocol_TARGET): $(TEST_plugin_protocol_OBJECTS) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_plugin_protocol_OBJECTS) $(CJSON_LIB)
@@ -355,7 +356,7 @@ LIBAGENT_TESTS := tool_param_dsl json_output output tools_system vector_db_tool 
     message_dispatcher message_processor recap parallel_batch model_commands \
     slash_commands task_commands agent_commands goal_commands mode_tool mode_commands \
     context_mode_injection image_attachment goap_tools orchestrator_tool goap_lifecycle \
-    goap_state plugin_manager hook_dispatcher
+    goap_state plugin_manager hook_dispatcher plugin_integration
 
 $(foreach t,$(LIBAGENT_TESTS),$(eval \
 $$(TEST_$(t)_TARGET): $$(TEST_$(t)_OBJECTS) $$(LIBAGENT) $$(ALL_LIBS) ; \
@@ -448,7 +449,7 @@ VALGRIND_EXCLUDED := $(TEST_http_TARGET) $(TEST_python_tool_TARGET) $(TEST_pytho
     $(TEST_http_python_TARGET) $(TEST_sys_python_TARGET) \
     $(TEST_tools_system_TARGET) $(TEST_ralph_TARGET) $(TEST_recap_TARGET) \
     $(TEST_subagent_tool_TARGET) $(TEST_message_poller_TARGET) $(TEST_async_executor_TARGET) \
-    $(TEST_parallel_batch_TARGET) $(TEST_orchestrator_TARGET)
+    $(TEST_parallel_batch_TARGET) $(TEST_orchestrator_TARGET) $(TEST_plugin_integration_TARGET)
 
 VALGRIND_TESTS := $(filter-out $(VALGRIND_EXCLUDED),$(ALL_TEST_TARGETS))
 

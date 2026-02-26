@@ -157,28 +157,6 @@ void session_stop_message_polling(AgentSession* session);
 int session_generate_recap(AgentSession* session, int max_messages);
 
 /**
- * Build JSON payload for OpenAI-compatible APIs.
- *
- * @param session The session (used for config and conversation)
- * @param user_message The user's message
- * @param max_tokens Maximum tokens for response
- * @return Allocated JSON string (caller must free), or NULL on error
- */
-char* session_build_json_payload(AgentSession* session,
-                                  const char* user_message, int max_tokens);
-
-/**
- * Build JSON payload for Anthropic API.
- *
- * @param session The session
- * @param user_message The user's message
- * @param max_tokens Maximum tokens for response
- * @return Allocated JSON string (caller must free), or NULL on error
- */
-char* session_build_anthropic_json_payload(AgentSession* session,
-                                            const char* user_message, int max_tokens);
-
-/**
  * Execute a tool workflow (tool calls from LLM response).
  *
  * @param session The session

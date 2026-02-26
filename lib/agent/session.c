@@ -302,55 +302,9 @@ int session_execute_tool_workflow(AgentSession* session, ToolCall* tool_calls,
                                       user_message, max_tokens);
 }
 
-char* session_build_json_payload(AgentSession* session,
-                                  const char* user_message, int max_tokens) {
-    if (session == NULL) return NULL;
-
-    EnhancedPromptParts parts;
-    if (build_enhanced_prompt_parts(session, user_message, &parts) != 0) return NULL;
-
-    hook_dispatch_pre_llm_send(&session->plugin_manager, session,
-                                &parts.base_prompt, &parts.dynamic_context);
-
-    SystemPromptParts sys_parts = {
-        .base_prompt = parts.base_prompt,
-        .dynamic_context = parts.dynamic_context
-    };
-
-    char* result = build_json_payload_common(session->session_data.config.model, &sys_parts,
-                                             &session->session_data.conversation, user_message,
-                                             session->session_data.config.max_tokens_param, max_tokens,
-                                             &session->tools,
-                                             format_openai_message, 0);
-
-    free_enhanced_prompt_parts(&parts);
-    return result;
-}
-
-char* session_build_anthropic_json_payload(AgentSession* session,
-                                            const char* user_message, int max_tokens) {
-    if (session == NULL) return NULL;
-
-    EnhancedPromptParts parts;
-    if (build_enhanced_prompt_parts(session, user_message, &parts) != 0) return NULL;
-
-    hook_dispatch_pre_llm_send(&session->plugin_manager, session,
-                                &parts.base_prompt, &parts.dynamic_context);
-
-    SystemPromptParts sys_parts = {
-        .base_prompt = parts.base_prompt,
-        .dynamic_context = parts.dynamic_context
-    };
-
-    char* result = build_json_payload_common(session->session_data.config.model, &sys_parts,
-                                             &session->session_data.conversation, user_message,
-                                             "max_tokens", max_tokens,
-                                             &session->tools,
-                                             format_anthropic_message, 1);
-
-    free_enhanced_prompt_parts(&parts);
-    return result;
-}
+/* session_build_json_payload and session_build_anthropic_json_payload
+ * consolidated into message_dispatcher_build_payload (message_dispatcher.c)
+ * to ensure the pre_llm_send hook fires exactly once per request. */
 
 int manage_conversation_tokens(AgentSession* session, const char* user_message,
                                TokenConfig* config, TokenUsage* usage) {
