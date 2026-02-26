@@ -2,6 +2,7 @@
 #include "../util/app_home.h"
 #include "../util/debug_output.h"
 #include <cJSON.h>
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -64,6 +65,7 @@ int plugin_manager_discover(PluginManager *mgr) {
         mgr->plugins[mgr->count].stdout_fd = -1;
         mgr->plugins[mgr->count].initialized = 0;
         mgr->plugins[mgr->count].request_id = 1;
+        pthread_mutex_init(&mgr->plugins[mgr->count].ipc_lock, NULL);
         mgr->count++;
         discovered++;
 
@@ -120,11 +122,26 @@ static int spawn_plugin(PluginProcess *plugin) {
         close(stdin_pipe[0]);
         close(stdout_pipe[1]);
 
-        /* Close inherited FDs (SQLite connections, pipes, etc.) */
-        long max_fd = sysconf(_SC_OPEN_MAX);
-        if (max_fd < 0) max_fd = 1024;
-        for (int fd = STDERR_FILENO + 1; fd < (int)max_fd; fd++) {
-            close(fd);
+        /* Close inherited FDs (SQLite connections, pipes, etc.).
+         * Iterate /proc/self/fd to avoid a potentially huge brute-force loop
+         * (sysconf(_SC_OPEN_MAX) can be 1M+ on modern Linux). */
+        DIR *fddir = opendir("/proc/self/fd");
+        if (fddir) {
+            int dirfd_num = dirfd(fddir);
+            struct dirent *fde;
+            while ((fde = readdir(fddir)) != NULL) {
+                int fd = atoi(fde->d_name);
+                if (fd > STDERR_FILENO && fd != dirfd_num) {
+                    close(fd);
+                }
+            }
+            closedir(fddir);
+        } else {
+            long max_fd = sysconf(_SC_OPEN_MAX);
+            if (max_fd < 0 || max_fd > 4096) max_fd = 4096;
+            for (int fd = STDERR_FILENO + 1; fd < (int)max_fd; fd++) {
+                close(fd);
+            }
         }
 
         /* Sanitize environment: only pass through safe variables.
@@ -172,10 +189,9 @@ static int spawn_plugin(PluginProcess *plugin) {
     return 0;
 }
 
-int plugin_manager_send_request(PluginProcess *plugin, const char *json, char **response) {
+static int plugin_manager_send_request(PluginProcess *plugin, const char *json, char **response) {
     if (!plugin || !json || !response) return -1;
     if (plugin->stdin_fd < 0 || plugin->stdout_fd < 0) return -1;
-    if (!plugin_check_alive(plugin)) return -1;
 
     *response = NULL;
 
@@ -278,6 +294,37 @@ int plugin_manager_send_request(PluginProcess *plugin, const char *json, char **
     return 0;
 }
 
+int plugin_send_stamped_request(PluginProcess *plugin, const char *json_template, char **response) {
+    if (!plugin || !json_template || !response) return -1;
+
+    pthread_mutex_lock(&plugin->ipc_lock);
+
+    if (!plugin_check_alive(plugin)) {
+        pthread_mutex_unlock(&plugin->ipc_lock);
+        return -1;
+    }
+
+    cJSON *root = cJSON_Parse(json_template);
+    if (!root) {
+        pthread_mutex_unlock(&plugin->ipc_lock);
+        return -1;
+    }
+
+    cJSON_ReplaceItemInObject(root, "id", cJSON_CreateNumber(plugin->request_id++));
+    char *json = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    if (!json) {
+        pthread_mutex_unlock(&plugin->ipc_lock);
+        return -1;
+    }
+
+    int rc = plugin_manager_send_request(plugin, json, response);
+    free(json);
+
+    pthread_mutex_unlock(&plugin->ipc_lock);
+    return rc;
+}
+
 int plugin_validate_name(const char *name) {
     if (!name || name[0] == '\0') return -1;
     size_t len = strlen(name);
@@ -316,17 +363,8 @@ static int handshake_plugin(PluginProcess *plugin) {
     char *init_msg = plugin_protocol_build_initialize(PLUGIN_PROTOCOL_VERSION);
     if (!init_msg) return -1;
 
-    /* Set request id */
-    cJSON *root = cJSON_Parse(init_msg);
-    if (root) {
-        cJSON_ReplaceItemInObject(root, "id", cJSON_CreateNumber(plugin->request_id++));
-        free(init_msg);
-        init_msg = cJSON_PrintUnformatted(root);
-        cJSON_Delete(root);
-    }
-
     char *response = NULL;
-    int rc = plugin_manager_send_request(plugin, init_msg, &response);
+    int rc = plugin_send_stamped_request(plugin, init_msg, &response);
     free(init_msg);
 
     if (rc != 0 || !response) {
@@ -362,8 +400,15 @@ int plugin_manager_start_all(PluginManager *mgr, ToolRegistry *registry) {
     if (!mgr) return -1;
 
     /* Ignore SIGPIPE so writing to a crashed plugin's pipe returns EPIPE
-     * instead of killing the host process. */
-    signal(SIGPIPE, SIG_IGN);
+     * instead of killing the host process. Uses sigaction for consistency
+     * with the rest of the codebase (lib/util/interrupt.c, etc.). */
+    static int sigpipe_ignored = 0;
+    if (!sigpipe_ignored) {
+        struct sigaction sa = { .sa_handler = SIG_IGN, .sa_flags = 0 };
+        sigemptyset(&sa.sa_mask);
+        sigaction(SIGPIPE, &sa, NULL);
+        sigpipe_ignored = 1;
+    }
 
     for (int i = 0; i < mgr->count; i++) {
         PluginProcess *p = &mgr->plugins[i];
@@ -467,16 +512,8 @@ static void shutdown_plugin(PluginProcess *plugin) {
     if (plugin->stdin_fd >= 0 && plugin->initialized) {
         char *shutdown_msg = plugin_protocol_build_shutdown();
         if (shutdown_msg) {
-            cJSON *root = cJSON_Parse(shutdown_msg);
-            if (root) {
-                cJSON_ReplaceItemInObject(root, "id", cJSON_CreateNumber(plugin->request_id++));
-                free(shutdown_msg);
-                shutdown_msg = cJSON_PrintUnformatted(root);
-                cJSON_Delete(root);
-            }
-
             char *response = NULL;
-            plugin_manager_send_request(plugin, shutdown_msg, &response);
+            plugin_send_stamped_request(plugin, shutdown_msg, &response);
             free(shutdown_msg);
             free(response);
         }
@@ -512,6 +549,7 @@ static void shutdown_plugin(PluginProcess *plugin) {
     }
 
     plugin_manifest_cleanup(&plugin->manifest);
+    pthread_mutex_destroy(&plugin->ipc_lock);
     free(plugin->path);
     plugin->path = NULL;
     plugin->initialized = 0;
@@ -559,18 +597,15 @@ int plugin_manager_execute_tool(PluginManager *mgr, const ToolCall *tool_call, T
     }
 
     char *request = plugin_protocol_build_tool_execute(tool_name, tool_call->arguments);
-    if (!request) return -1;
-
-    cJSON *root = cJSON_Parse(request);
-    if (root) {
-        cJSON_ReplaceItemInObject(root, "id", cJSON_CreateNumber(target->request_id++));
-        free(request);
-        request = cJSON_PrintUnformatted(root);
-        cJSON_Delete(root);
+    if (!request) {
+        result->tool_call_id = tool_call->id ? strdup(tool_call->id) : NULL;
+        result->result = strdup("Failed to build plugin tool request");
+        result->success = 0;
+        return -1;
     }
 
     char *response = NULL;
-    int rc = plugin_manager_send_request(target, request, &response);
+    int rc = plugin_send_stamped_request(target, request, &response);
     free(request);
 
     if (rc != 0 || !response) {

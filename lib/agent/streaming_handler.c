@@ -196,15 +196,20 @@ int streaming_process_message(AgentSession* session, LLMProvider* provider,
                     hook_calls[i].name = ctx->tool_uses.data[i].name;
                     hook_calls[i].arguments = ctx->tool_uses.data[i].arguments_json;
                 }
+            } else {
+                hook_call_count = 0;
             }
         }
         hook_dispatch_post_llm_response(&session->plugin_manager, session,
                                          &hook_text, hook_calls, hook_call_count);
         if (hook_text && ctx->text_content &&
             strcmp(hook_text, ctx->text_content) != 0) {
-            free(ctx->text_content);
-            ctx->text_content = strdup(hook_text);
-            ctx->text_len = strlen(ctx->text_content);
+            char *new_text = strdup(hook_text);
+            if (new_text) {
+                free(ctx->text_content);
+                ctx->text_content = new_text;
+                ctx->text_len = strlen(new_text);
+            }
         }
         free(hook_text);
         free(hook_calls);

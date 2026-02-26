@@ -95,6 +95,7 @@ static void test_discover_finds_executables(void) {
     TEST_ASSERT_NOT_NULL(mgr.plugins[0].path);
     TEST_ASSERT_NOT_NULL(strstr(mgr.plugins[0].path, "test-plugin"));
 
+    pthread_mutex_destroy(&mgr.plugins[0].ipc_lock);
     free(mgr.plugins[0].path);
     unlink(exe_path);
     unlink(noexe_path);
@@ -176,17 +177,21 @@ static void test_shutdown_null(void) {
     plugin_manager_shutdown_all(NULL);
 }
 
-/* --- Send request with bad FDs --- */
+/* --- Send stamped request with bad FDs / dead process --- */
 
 static void test_send_request_bad_fds(void) {
     PluginProcess p;
     memset(&p, 0, sizeof(p));
     p.stdin_fd = -1;
     p.stdout_fd = -1;
+    p.pid = 0;
+    pthread_mutex_init(&p.ipc_lock, NULL);
 
     char *response = NULL;
-    TEST_ASSERT_EQUAL(-1, plugin_manager_send_request(&p, "{}", &response));
+    TEST_ASSERT_EQUAL(-1, plugin_send_stamped_request(&p, "{\"id\":0}", &response));
     TEST_ASSERT_NULL(response);
+
+    pthread_mutex_destroy(&p.ipc_lock);
 }
 
 /* --- Execute tool with no manager --- */

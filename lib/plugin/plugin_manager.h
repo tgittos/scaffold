@@ -3,6 +3,7 @@
 
 #include "plugin_protocol.h"
 #include "../tools/tools_system.h"
+#include <pthread.h>
 #include <sys/types.h>
 
 #ifdef __cplusplus
@@ -21,6 +22,7 @@ typedef struct {
     int stdout_fd;
     int initialized;
     int request_id;
+    pthread_mutex_t ipc_lock;
 } PluginProcess;
 
 typedef struct {
@@ -57,14 +59,15 @@ int plugin_manager_start_all(PluginManager *mgr, ToolRegistry *registry);
 void plugin_manager_shutdown_all(PluginManager *mgr);
 
 /**
- * Send a JSON-RPC request to a plugin and receive the response.
+ * Stamp a JSON-RPC request template with the next request ID and send it,
+ * serialized under the plugin's IPC lock. Thread-safe.
  *
  * @param plugin Target plugin process
- * @param json JSON-RPC request string
+ * @param json_template JSON-RPC string with a placeholder "id" field
  * @param response Output: heap-allocated response string (caller frees)
  * @return 0 on success, -1 on error/timeout
  */
-int plugin_manager_send_request(PluginProcess *plugin, const char *json, char **response);
+int plugin_send_stamped_request(PluginProcess *plugin, const char *json_template, char **response);
 
 /**
  * Execute a plugin-provided tool via IPC.

@@ -852,13 +852,15 @@ int execute_goap_update_world_state(const ToolCall *tc, ToolResult *result) {
     char *new_ws = cJSON_PrintUnformatted(world_state);
     int rc = goal_store_update_world_state(gs, goal_id, new_ws);
 
+    const char *summary_str = cJSON_GetStringValue(cJSON_GetObjectItem(args, "summary"));
+    int summary_ok = 1;
+    if (rc == 0 && summary_str) {
+        summary_ok = goal_store_update_summary(gs, goal_id, summary_str) == 0;
+    }
+
     goal_store_unlock(gs);
 
     if (rc == 0) {
-        const char *summary_str = cJSON_GetStringValue(cJSON_GetObjectItem(args, "summary"));
-        int summary_ok = !summary_str ||
-            goal_store_update_summary(gs, goal_id, summary_str) == 0;
-
         if (summary_ok) {
             cJSON *resp = cJSON_CreateObject();
             cJSON_AddBoolToObject(resp, "success", cJSON_True);

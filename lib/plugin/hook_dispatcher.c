@@ -51,20 +51,9 @@ static int *get_sorted_subscribers(PluginManager *mgr, const char *hook_name, in
     return indices;
 }
 
-/* Send a hook event to a plugin with proper request ID */
+/* Send a hook event to a plugin, thread-safe via plugin_send_stamped_request */
 static int send_hook_event(PluginProcess *plugin, const char *json_template, char **response) {
-    cJSON *root = cJSON_Parse(json_template);
-    if (!root) return -1;
-
-    cJSON_ReplaceItemInObject(root, "id", cJSON_CreateNumber(plugin->request_id++));
-
-    char *json = cJSON_PrintUnformatted(root);
-    cJSON_Delete(root);
-    if (!json) return -1;
-
-    int rc = plugin_manager_send_request(plugin, json, response);
-    free(json);
-    return rc;
+    return plugin_send_stamped_request(plugin, json_template, response);
 }
 
 /* ========================================================================

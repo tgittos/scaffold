@@ -78,13 +78,11 @@ static void execute_single_tool(ToolBatchContext* ctx, ToolCall* call,
 
     int tool_executed = 0;
     if (entry->is_mcp) {
-        if (mcp_client_execute_tool(&ctx->session->mcp_client,
-                                     call, result) == 0) {
+        if (mcp_client_execute_tool(&ctx->session->mcp_client, call, result) == 0) {
             tool_executed = 1;
         }
     } else if (entry->is_plugin) {
-        if (plugin_manager_execute_tool(&ctx->session->plugin_manager,
-                                         call, result) == 0) {
+        if (plugin_manager_execute_tool(&ctx->session->plugin_manager, call, result) == 0) {
             tool_executed = 1;
         }
     }
