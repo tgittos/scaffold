@@ -9,6 +9,7 @@
 #include "../policy/verified_file_context.h"
 #include "../policy/atomic_file.h"
 #include "../plugin/hook_dispatcher.h"
+#include "../plugin/plugin_manager.h"
 #include <cJSON.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -19,6 +20,7 @@ typedef struct {
     int call_index;
     int slot;
     int is_mcp;
+    int is_plugin;
     int approved;
     int thread_safe;
     ApprovedPath approved_path;
@@ -78,6 +80,11 @@ static void execute_single_tool(ToolBatchContext* ctx, ToolCall* call,
     if (entry->is_mcp) {
         if (mcp_client_execute_tool(&ctx->session->mcp_client,
                                      call, result) == 0) {
+            tool_executed = 1;
+        }
+    } else if (entry->is_plugin) {
+        if (plugin_manager_execute_tool(&ctx->session->plugin_manager,
+                                         call, result) == 0) {
             tool_executed = 1;
         }
     }
@@ -213,6 +220,7 @@ int tool_batch_execute(ToolBatchContext* ctx,
         e->call_index = i;
         e->slot = slot;
         e->is_mcp = (strncmp(calls[i].name, "mcp_", 4) == 0);
+        e->is_plugin = (strncmp(calls[i].name, "plugin_", 7) == 0);
         e->approved = 1;
         e->thread_safe = 0;
         for (size_t t = 0; t < ctx->session->tools.functions.count; t++) {

@@ -218,6 +218,11 @@ int execute_tool_call(ToolRegistry *registry, const ToolCall *tool_call, ToolRes
                 }
             }
 
+            if (func->execute_func == NULL) {
+                result->result = strdup("Tool has no execute function");
+                result->success = 0;
+                return -1;
+            }
             int rc = func->execute_func(tool_call, result);
 
             if (rc == 0 && registry->cache != NULL) {

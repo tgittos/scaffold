@@ -324,19 +324,8 @@ static int handshake_plugin(PluginProcess *plugin) {
     return 0;
 }
 
-static int plugin_execute_tool_dispatch(const ToolCall *tool_call, ToolResult *result);
-
-/*
- * Set once in plugin_manager_start_all() before any tool dispatch,
- * cleared in plugin_manager_shutdown_all() after all tools finish.
- * No concurrent writes occur; reads during tool dispatch are safe.
- */
-static PluginManager *g_plugin_manager = NULL;
-
 int plugin_manager_start_all(PluginManager *mgr, ToolRegistry *registry) {
     if (!mgr) return -1;
-
-    g_plugin_manager = mgr;
 
     for (int i = 0; i < mgr->count; i++) {
         PluginProcess *p = &mgr->plugins[i];
@@ -358,6 +347,31 @@ int plugin_manager_start_all(PluginManager *mgr, ToolRegistry *registry) {
             continue;
         }
 
+        /* Reject duplicate plugin names */
+        int duplicate = 0;
+        for (int j = 0; j < i; j++) {
+            if (!mgr->plugins[j].initialized) continue;
+            if (strcmp(mgr->plugins[j].manifest.name, p->manifest.name) == 0) {
+                fprintf(stderr, "Warning: duplicate plugin name '%s' from %s "
+                                "(already loaded from %s), shutting down duplicate\n",
+                        p->manifest.name, p->path, mgr->plugins[j].path);
+                duplicate = 1;
+                break;
+            }
+        }
+        if (duplicate) {
+            if (p->pid > 0) {
+                kill(p->pid, SIGKILL);
+                waitpid(p->pid, NULL, 0);
+                p->pid = 0;
+            }
+            if (p->stdin_fd >= 0) { close(p->stdin_fd); p->stdin_fd = -1; }
+            if (p->stdout_fd >= 0) { close(p->stdout_fd); p->stdout_fd = -1; }
+            plugin_manifest_cleanup(&p->manifest);
+            p->initialized = 0;
+            continue;
+        }
+
         /* Register plugin-provided tools */
         if (registry && p->manifest.tool_count > 0) {
             for (int j = 0; j < p->manifest.tool_count; j++) {
@@ -370,7 +384,7 @@ int plugin_manager_start_all(PluginManager *mgr, ToolRegistry *registry) {
                 ToolFunction reg = {0};
                 reg.name = strdup(prefixed);
                 reg.description = src->description ? strdup(src->description) : NULL;
-                reg.execute_func = plugin_execute_tool_dispatch;
+                reg.execute_func = NULL;
                 reg.thread_safe = 0;
                 reg.parameter_count = src->parameter_count;
 
@@ -472,7 +486,6 @@ void plugin_manager_shutdown_all(PluginManager *mgr) {
         shutdown_plugin(&mgr->plugins[i]);
     }
     mgr->count = 0;
-    g_plugin_manager = NULL;
 }
 
 int plugin_manager_execute_tool(PluginManager *mgr, const ToolCall *tool_call, ToolResult *result) {
@@ -482,6 +495,8 @@ int plugin_manager_execute_tool(PluginManager *mgr, const ToolCall *tool_call, T
     if (strncmp(tool_call->name, "plugin_", 7) != 0) return -1;
 
     const char *rest = tool_call->name + 7;
+    /* Safe: plugin_validate_name() rejects underscores in plugin names,
+     * so the first '_' in rest is always the separator. */
     const char *sep = strchr(rest, '_');
     if (!sep) return -1;
 
@@ -544,12 +559,3 @@ int plugin_manager_execute_tool(PluginManager *mgr, const ToolCall *tool_call, T
     return 0;
 }
 
-static int plugin_execute_tool_dispatch(const ToolCall *tool_call, ToolResult *result) {
-    if (!g_plugin_manager) {
-        result->tool_call_id = tool_call->id ? strdup(tool_call->id) : NULL;
-        result->result = strdup("Plugin manager not available");
-        result->success = 0;
-        return -1;
-    }
-    return plugin_manager_execute_tool(g_plugin_manager, tool_call, result);
-}

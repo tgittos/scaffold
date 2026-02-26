@@ -59,7 +59,7 @@ static int anthropic_build_headers(const LLMProvider* provider,
                                   int max_headers) {
     (void)provider; // Suppress unused parameter warning
 
-    if (max_headers < 2) {
+    if (max_headers < 4) {
         return 0; // Cannot fit required headers
     }
 
@@ -67,6 +67,7 @@ static int anthropic_build_headers(const LLMProvider* provider,
     static _Thread_local char auth_header[512];
     static char content_type[] = "Content-Type: application/json";
     static char version_header[] = "anthropic-version: 2023-06-01";
+    static char beta_header[] = "anthropic-beta: prompt-caching-2024-07-31";
 
     // Add x-api-key header if API key provided
     if (api_key && strlen(api_key) > 0 && count < max_headers - 1) {
@@ -77,6 +78,11 @@ static int anthropic_build_headers(const LLMProvider* provider,
     // Add version header (required by Anthropic)
     if (count < max_headers - 1) {
         headers[count++] = version_header;
+    }
+
+    // Enable prompt caching (cache_control markers set in api_common.c)
+    if (count < max_headers - 1) {
+        headers[count++] = beta_header;
     }
 
     // Add content type header
@@ -322,12 +328,6 @@ static char* anthropic_build_streaming_request_json(const LLMProvider* provider,
 
     // Add stream: true
     cJSON_AddBoolToObject(root, "stream", 1);
-
-    // Enable automatic conversation caching
-    // Anthropic auto-caches up to the last cacheable block in the conversation
-    // No per-message changes needed - just the top-level marker
-    // Note: the anthropic-version header is set to 2023-06-01 but prompt caching
-    // requires a beta header; when Anthropic promotes it to GA this will work automatically
 
     // Convert back to string
     char* result = cJSON_PrintUnformatted(root);

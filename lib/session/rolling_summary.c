@@ -221,8 +221,23 @@ int generate_rolling_summary(
 
     debug_printf("Summary API request: %s\n", post_data);
 
+    const char* hdrs[8] = {0};
+    ProviderRegistry* provider_reg = get_provider_registry();
+    LLMProvider* provider = provider_reg
+        ? detect_provider_for_url(provider_reg, api_url)
+        : NULL;
+    if (provider && provider->build_headers) {
+        provider->build_headers(provider, api_key, hdrs, 8);
+    } else {
+        static _Thread_local char auth_hdr[512];
+        if (api_key) {
+            snprintf(auth_hdr, sizeof(auth_hdr), "Authorization: Bearer %s", api_key);
+            hdrs[0] = auth_hdr;
+        }
+    }
+
     struct HTTPResponse response = {0};
-    int result = llm_client_send(api_url, api_key, post_data, &response);
+    int result = llm_client_send(api_url, hdrs, post_data, &response);
     free(post_data);
 
     if (result != 0) {

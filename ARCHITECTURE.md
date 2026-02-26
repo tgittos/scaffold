@@ -527,14 +527,14 @@ Three layers:
 
 1. **Plugin Protocol** (`lib/plugin/plugin_protocol.c/h`) - JSON-RPC 2.0 message serialization for initialize, hook events, tool execution, and shutdown
 2. **Plugin Manager** (`lib/plugin/plugin_manager.c/h`) - Directory scanning, process spawning via fork/pipe with O_CLOEXEC, handshake with name validation, tool registration (thread_safe=0 for serialized execution), crash detection via lazy `waitpid`, 10 MB response limit, and graceful shutdown (SIGTERM → wait → SIGKILL)
-3. **Hook Dispatcher** (`lib/plugin/hook_dispatcher.c/h`) - Routes pipeline events to subscribed plugins in priority order
+3. **Hook Dispatcher** (`lib/plugin/hook_dispatcher.c/h`) - Generic callback-driven dispatch: each hook defines a context struct, `build_params()` callback, and `apply_result()` callback. A single `hook_dispatch_generic()` loop handles subscriber ordering, event send/receive, response parsing, and STOP/SKIP/CONTINUE chain semantics
 
 ### Plugin Lifecycle
 
 1. **Discovery**: Scan `~/.local/scaffold/plugins/` for executable files (skip hidden files)
 2. **Spawn**: Fork/exec each plugin, set up stdin/stdout pipes for bidirectional JSON-RPC
-3. **Handshake**: Send `initialize` request, receive manifest (name, version, hooks, tools, priority). Plugin names are validated: must not contain underscores, forward slashes, or backslashes, must be 1-64 chars
-4. **Tool Registration**: Plugin tools registered as `plugin_<pluginname>_<toolname>` in the ToolRegistry with `thread_safe=0` (serialized execution). Classified as `GATE_CATEGORY_PLUGIN` (default: gated, requires approval)
+3. **Handshake**: Send `initialize` request, receive manifest (name, version, hooks, tools, priority). Plugin names are validated: must not contain underscores, forward slashes, or backslashes, must be 1-64 chars. Duplicate names are rejected (second plugin is killed)
+4. **Tool Registration**: Plugin tools registered as `plugin_<pluginname>_<toolname>` in the ToolRegistry as schema-only entries (`execute_func=NULL`). Execution is dispatched explicitly by `tool_batch_executor.c` via `plugin_manager_execute_tool()`, following the same pattern as MCP tools. Classified as `GATE_CATEGORY_PLUGIN` (default: gated, requires approval)
 5. **Runtime**: Hook dispatcher routes pipeline events to subscribed plugins via IPC. Crash detection via lazy `waitpid` before each request
 6. **Shutdown**: Send `shutdown` request, SIGTERM, wait, SIGKILL if needed
 
@@ -602,7 +602,7 @@ graph TB
 ```
 
 - **OpenAI**: Two system messages in the messages array. The first (base prompt) stays byte-identical across requests, enabling automatic prefix caching. The second carries per-request dynamic context.
-- **Anthropic**: System field is a JSON array of content blocks. The base prompt block has `cache_control: {"type": "ephemeral"}` for explicit caching. The last tool definition also gets `cache_control` to cache the full tool schema.
+- **Anthropic**: System field is a JSON array of content blocks. The base prompt block has `cache_control: {"type": "ephemeral"}` for explicit caching. The last tool definition also gets `cache_control` to cache the full tool schema. The `anthropic-beta: prompt-caching-2024-07-31` header is sent automatically by the Anthropic provider.
 - **`SystemPromptParts`** (`api_common.h`): Carries the split through the pipeline. `base_prompt` is the session-stable prefix; `dynamic_context` is nullable per-request additions.
 - **`EnhancedPromptParts`** (`context_enhancement.h`): Owned version with allocated strings, returned by `build_enhanced_prompt_parts()`.
 
@@ -1167,7 +1167,7 @@ lib/
 │   ├── embeddings.c/h      # Low-level embeddings API
 │   ├── embedding_provider.c/h # Embedding provider abstraction
 │   ├── embeddings_service.c/h # Embeddings singleton service
-│   ├── llm_client.c/h      # LLM HTTP client abstraction
+│   ├── llm_client.c/h      # LLM HTTP client (accepts provider-built headers)
 │   ├── models/             # Model capability implementations
 │   │   ├── model_registry.c     # Data-driven model registration
 │   │   ├── claude_model.c       # Claude format function

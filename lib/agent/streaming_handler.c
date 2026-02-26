@@ -157,9 +157,15 @@ int streaming_process_message(AgentSession* session, LLMProvider* provider,
         .low_speed_time = 30
     };
 
+    const char* hdrs[8] = {0};
+    int hdr_count = provider->build_headers(provider,
+                                             session->session_data.config.api_key,
+                                             hdrs, 8);
+    (void)hdr_count;
+
     int result = llm_client_send_streaming(
         session->session_data.config.api_url,
-        session->session_data.config.api_key,
+        hdrs,
         post_data,
         &streaming_config
     );

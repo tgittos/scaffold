@@ -453,7 +453,7 @@ int session_process_message(AgentSession* session, const char* user_message) {
     TokenUsage token_usage;
     if (manage_conversation_tokens(session, effective_message, &token_config, &token_usage) != 0) {
         fprintf(stderr, "Error: Failed to calculate token allocation\n");
-        if (hook_msg != user_message) free(hook_msg);
+        free(hook_msg);
         if (has_images) {
             api_common_clear_pending_images();
             image_attachment_cleanup(&image_parse);
@@ -476,7 +476,7 @@ int session_process_message(AgentSession* session, const char* user_message) {
     } else {
         LLMRoundTripResult rt;
         if (api_round_trip_execute(session, effective_message, max_tokens, &rt) != 0) {
-            if (hook_msg != user_message) free(hook_msg);
+            free(hook_msg);
             if (has_images) {
                 api_common_clear_pending_images();
                 image_attachment_cleanup(&image_parse);
@@ -488,7 +488,7 @@ int session_process_message(AgentSession* session, const char* user_message) {
         api_round_trip_cleanup(&rt);
     }
 
-    if (hook_msg != user_message) free(hook_msg);
+    free(hook_msg);
     if (has_images) {
         api_common_clear_pending_images();
         image_attachment_cleanup(&image_parse);

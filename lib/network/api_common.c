@@ -476,17 +476,6 @@ int build_messages_json(char* buffer, size_t buffer_size,
     return current - buffer;
 }
 
-int build_anthropic_messages_json(char* buffer, size_t buffer_size,
-                                 const SystemPromptParts* system_prompt,
-                                 const ConversationHistory* conversation,
-                                 const char* user_message,
-                                 MessageFormatter formatter,
-                                 int skip_system_in_history) {
-    return build_messages_json(buffer, buffer_size, system_prompt,
-                              conversation, user_message, formatter,
-                              skip_system_in_history);
-}
-
 char* build_json_payload_common(const char* model, const SystemPromptParts* system_prompt,
                                const ConversationHistory* conversation,
                                const char* user_message, const char* max_tokens_param,
@@ -505,16 +494,9 @@ char* build_json_payload_common(const char* model, const SystemPromptParts* syst
     char* msg_buffer = malloc(msg_buf_size);
     if (msg_buffer == NULL) return NULL;
 
-    int msg_len;
-    if (system_at_top_level) {
-        msg_len = build_anthropic_messages_json(msg_buffer, msg_buf_size,
-                                               NULL, conversation, user_message,
-                                               formatter, system_at_top_level);
-    } else {
-        msg_len = build_messages_json(msg_buffer, msg_buf_size,
-                                     system_prompt, conversation, user_message,
-                                     formatter, system_at_top_level);
-    }
+    int msg_len = build_messages_json(msg_buffer, msg_buf_size,
+                                      msg_prompt, conversation, user_message,
+                                      formatter, system_at_top_level);
     if (msg_len < 0) { free(msg_buffer); return NULL; }
 
     /* Wrap formatter output in array brackets for cJSON_CreateRaw */

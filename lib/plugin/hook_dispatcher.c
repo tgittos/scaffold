@@ -67,14 +67,32 @@ static int send_hook_event(PluginProcess *plugin, const char *json_template, cha
     return rc;
 }
 
-HookAction hook_dispatch_post_user_input(PluginManager *mgr,
-                                          struct AgentSession *session,
-                                          char **message) {
-    (void)session;
-    if (!mgr || !message || !*message) return HOOK_CONTINUE;
+/* ========================================================================
+ * Generic hook dispatch
+ *
+ * Each hook provides:
+ *   build_params() — construct the JSON params for the hook event
+ *   apply_result()  — extract response data and apply it to the caller's state
+ *
+ * The generic loop handles subscriber ordering, event send/receive, response
+ * parsing, and STOP/SKIP/CONTINUE chain semantics.
+ * ======================================================================== */
 
+typedef cJSON *(*HookBuildParams)(void *ctx);
+typedef void (*HookApplyResult)(void *ctx, const HookResponse *hr);
+
+typedef struct {
+    const char *hook_name;
+    HookBuildParams build_params;
+    HookApplyResult apply_result;
+    int ignore_stop_skip;
+} HookDispatchSpec;
+
+static HookAction hook_dispatch_generic(PluginManager *mgr,
+                                         const HookDispatchSpec *spec,
+                                         void *ctx) {
     int count = 0;
-    int *subs = get_sorted_subscribers(mgr, "post_user_input", &count);
+    int *subs = get_sorted_subscribers(mgr, spec->hook_name, &count);
     if (!subs) return HOOK_CONTINUE;
 
     HookAction final_action = HOOK_CONTINUE;
@@ -82,17 +100,16 @@ HookAction hook_dispatch_post_user_input(PluginManager *mgr,
     for (int i = 0; i < count; i++) {
         PluginProcess *p = &mgr->plugins[subs[i]];
 
-        cJSON *params = cJSON_CreateObject();
-        cJSON_AddStringToObject(params, "message", *message);
-
-        char *event = plugin_protocol_build_hook_event("post_user_input", params);
+        cJSON *params = spec->build_params(ctx);
+        char *event = plugin_protocol_build_hook_event(spec->hook_name, params);
         cJSON_Delete(params);
         if (!event) continue;
 
         char *response = NULL;
         if (send_hook_event(p, event, &response) != 0) {
             free(event);
-            debug_printf("Plugin %s: post_user_input hook timeout/error\n", p->manifest.name);
+            debug_printf("Plugin %s: %s hook timeout/error\n",
+                         p->manifest.name, spec->hook_name);
             continue;
         }
         free(event);
@@ -104,22 +121,19 @@ HookAction hook_dispatch_post_user_input(PluginManager *mgr,
         }
         free(response);
 
-        if (hr.action == HOOK_SKIP) {
+        if (!spec->ignore_stop_skip && hr.action == HOOK_SKIP) {
             cJSON_Delete(hr.data);
             final_action = HOOK_SKIP;
             break;
         }
 
-        if (hr.data) {
-            cJSON *msg = cJSON_GetObjectItem(hr.data, "message");
-            if (msg && cJSON_IsString(msg)) {
-                free(*message);
-                *message = strdup(cJSON_GetStringValue(msg));
-            }
+        if (spec->apply_result) {
+            spec->apply_result(ctx, &hr);
+        } else {
             cJSON_Delete(hr.data);
         }
 
-        if (hr.action == HOOK_STOP) {
+        if (!spec->ignore_stop_skip && hr.action == HOOK_STOP) {
             final_action = HOOK_STOP;
             break;
         }
@@ -127,6 +141,81 @@ HookAction hook_dispatch_post_user_input(PluginManager *mgr,
 
     free(subs);
     return final_action;
+}
+
+/* ========================================================================
+ * Hook-specific contexts, param builders, and result appliers
+ * ======================================================================== */
+
+/* --- post_user_input --- */
+
+typedef struct {
+    char **message;
+} PostUserInputCtx;
+
+static cJSON *post_user_input_build(void *raw) {
+    PostUserInputCtx *ctx = raw;
+    cJSON *params = cJSON_CreateObject();
+    cJSON_AddStringToObject(params, "message", *ctx->message);
+    return params;
+}
+
+static void post_user_input_apply(void *raw, const HookResponse *hr) {
+    PostUserInputCtx *ctx = raw;
+    if (hr->data) {
+        cJSON *msg = cJSON_GetObjectItem(hr->data, "message");
+        if (msg && cJSON_IsString(msg)) {
+            free(*ctx->message);
+            *ctx->message = strdup(cJSON_GetStringValue(msg));
+        }
+        cJSON_Delete(hr->data);
+    }
+}
+
+HookAction hook_dispatch_post_user_input(PluginManager *mgr,
+                                          struct AgentSession *session,
+                                          char **message) {
+    (void)session;
+    if (!mgr || !message || !*message) return HOOK_CONTINUE;
+
+    PostUserInputCtx ctx = { .message = message };
+    HookDispatchSpec spec = {
+        .hook_name = "post_user_input",
+        .build_params = post_user_input_build,
+        .apply_result = post_user_input_apply,
+        .ignore_stop_skip = 0
+    };
+    return hook_dispatch_generic(mgr, &spec, &ctx);
+}
+
+/* --- context_enhance --- */
+
+typedef struct {
+    const char *user_message;
+    char **dynamic_context;
+} ContextEnhanceCtx;
+
+static cJSON *context_enhance_build(void *raw) {
+    ContextEnhanceCtx *ctx = raw;
+    cJSON *params = cJSON_CreateObject();
+    if (ctx->user_message) {
+        cJSON_AddStringToObject(params, "user_message", ctx->user_message);
+    }
+    cJSON_AddStringToObject(params, "dynamic_context",
+                            *ctx->dynamic_context ? *ctx->dynamic_context : "");
+    return params;
+}
+
+static void context_enhance_apply(void *raw, const HookResponse *hr) {
+    ContextEnhanceCtx *ctx = raw;
+    if (hr->data) {
+        cJSON *dc = cJSON_GetObjectItem(hr->data, "dynamic_context");
+        if (dc && cJSON_IsString(dc)) {
+            free(*ctx->dynamic_context);
+            *ctx->dynamic_context = strdup(cJSON_GetStringValue(dc));
+        }
+        cJSON_Delete(hr->data);
+    }
 }
 
 HookAction hook_dispatch_context_enhance(PluginManager *mgr,
@@ -136,52 +225,55 @@ HookAction hook_dispatch_context_enhance(PluginManager *mgr,
     (void)session;
     if (!mgr || !dynamic_context) return HOOK_CONTINUE;
 
-    int count = 0;
-    int *subs = get_sorted_subscribers(mgr, "context_enhance", &count);
-    if (!subs) return HOOK_CONTINUE;
+    ContextEnhanceCtx ctx = {
+        .user_message = user_message,
+        .dynamic_context = dynamic_context
+    };
+    HookDispatchSpec spec = {
+        .hook_name = "context_enhance",
+        .build_params = context_enhance_build,
+        .apply_result = context_enhance_apply,
+        .ignore_stop_skip = 1
+    };
+    return hook_dispatch_generic(mgr, &spec, &ctx);
+}
 
-    for (int i = 0; i < count; i++) {
-        PluginProcess *p = &mgr->plugins[subs[i]];
+/* --- pre_llm_send --- */
 
-        cJSON *params = cJSON_CreateObject();
-        if (user_message) {
-            cJSON_AddStringToObject(params, "user_message", user_message);
-        }
-        cJSON_AddStringToObject(params, "dynamic_context",
-                                *dynamic_context ? *dynamic_context : "");
+typedef struct {
+    char **base_prompt;
+    char **dynamic_context;
+} PreLlmSendCtx;
 
-        char *event = plugin_protocol_build_hook_event("context_enhance", params);
-        cJSON_Delete(params);
-        if (!event) continue;
+static cJSON *pre_llm_send_build(void *raw) {
+    PreLlmSendCtx *ctx = raw;
+    cJSON *params = cJSON_CreateObject();
+    cJSON_AddStringToObject(params, "base_prompt",
+                            (ctx->base_prompt && *ctx->base_prompt) ? *ctx->base_prompt : "");
+    cJSON_AddStringToObject(params, "dynamic_context",
+                            (ctx->dynamic_context && *ctx->dynamic_context) ? *ctx->dynamic_context : "");
+    return params;
+}
 
-        char *response = NULL;
-        if (send_hook_event(p, event, &response) != 0) {
-            free(event);
-            debug_printf("Plugin %s: context_enhance hook timeout/error\n", p->manifest.name);
-            continue;
-        }
-        free(event);
-
-        HookResponse hr;
-        if (plugin_protocol_parse_hook_response(response, &hr) != 0) {
-            free(response);
-            continue;
-        }
-        free(response);
-
-        if (hr.data) {
-            cJSON *ctx = cJSON_GetObjectItem(hr.data, "dynamic_context");
-            if (ctx && cJSON_IsString(ctx)) {
-                free(*dynamic_context);
-                *dynamic_context = strdup(cJSON_GetStringValue(ctx));
+static void pre_llm_send_apply(void *raw, const HookResponse *hr) {
+    PreLlmSendCtx *ctx = raw;
+    if (hr->data) {
+        if (ctx->base_prompt) {
+            cJSON *bp = cJSON_GetObjectItem(hr->data, "base_prompt");
+            if (bp && cJSON_IsString(bp)) {
+                free(*ctx->base_prompt);
+                *ctx->base_prompt = strdup(cJSON_GetStringValue(bp));
             }
-            cJSON_Delete(hr.data);
         }
-        /* Context enhance ignores stop/skip actions */
+        if (ctx->dynamic_context) {
+            cJSON *dc = cJSON_GetObjectItem(hr->data, "dynamic_context");
+            if (dc && cJSON_IsString(dc)) {
+                free(*ctx->dynamic_context);
+                *ctx->dynamic_context = strdup(cJSON_GetStringValue(dc));
+            }
+        }
+        cJSON_Delete(hr->data);
     }
-
-    free(subs);
-    return HOOK_CONTINUE;
 }
 
 HookAction hook_dispatch_pre_llm_send(PluginManager *mgr,
@@ -191,66 +283,56 @@ HookAction hook_dispatch_pre_llm_send(PluginManager *mgr,
     (void)session;
     if (!mgr) return HOOK_CONTINUE;
 
-    int count = 0;
-    int *subs = get_sorted_subscribers(mgr, "pre_llm_send", &count);
-    if (!subs) return HOOK_CONTINUE;
+    PreLlmSendCtx ctx = {
+        .base_prompt = base_prompt,
+        .dynamic_context = dynamic_context
+    };
+    HookDispatchSpec spec = {
+        .hook_name = "pre_llm_send",
+        .build_params = pre_llm_send_build,
+        .apply_result = pre_llm_send_apply,
+        .ignore_stop_skip = 0
+    };
+    return hook_dispatch_generic(mgr, &spec, &ctx);
+}
 
-    HookAction final_action = HOOK_CONTINUE;
+/* --- post_llm_response --- */
 
-    for (int i = 0; i < count; i++) {
-        PluginProcess *p = &mgr->plugins[subs[i]];
+typedef struct {
+    char **text;
+    const ToolCall *tool_calls;
+    int call_count;
+} PostLlmResponseCtx;
 
-        cJSON *params = cJSON_CreateObject();
-        cJSON_AddStringToObject(params, "base_prompt",
-                                (base_prompt && *base_prompt) ? *base_prompt : "");
-        cJSON_AddStringToObject(params, "dynamic_context",
-                                (dynamic_context && *dynamic_context) ? *dynamic_context : "");
+static cJSON *post_llm_response_build(void *raw) {
+    PostLlmResponseCtx *ctx = raw;
+    cJSON *params = cJSON_CreateObject();
+    cJSON_AddStringToObject(params, "text",
+                            (ctx->text && *ctx->text) ? *ctx->text : "");
 
-        char *event = plugin_protocol_build_hook_event("pre_llm_send", params);
-        cJSON_Delete(params);
-        if (!event) continue;
+    cJSON *tc_array = cJSON_CreateArray();
+    for (int j = 0; j < ctx->call_count; j++) {
+        cJSON *tc = cJSON_CreateObject();
+        if (ctx->tool_calls[j].name)
+            cJSON_AddStringToObject(tc, "name", ctx->tool_calls[j].name);
+        if (ctx->tool_calls[j].arguments)
+            cJSON_AddStringToObject(tc, "arguments", ctx->tool_calls[j].arguments);
+        cJSON_AddItemToArray(tc_array, tc);
+    }
+    cJSON_AddItemToObject(params, "tool_calls", tc_array);
+    return params;
+}
 
-        char *response = NULL;
-        if (send_hook_event(p, event, &response) != 0) {
-            free(event);
-            debug_printf("Plugin %s: pre_llm_send hook timeout/error\n", p->manifest.name);
-            continue;
-        }
-        free(event);
-
-        HookResponse hr;
-        if (plugin_protocol_parse_hook_response(response, &hr) != 0) {
-            free(response);
-            continue;
-        }
-        free(response);
-
-        if (hr.data) {
-            if (base_prompt) {
-                cJSON *bp = cJSON_GetObjectItem(hr.data, "base_prompt");
-                if (bp && cJSON_IsString(bp)) {
-                    free(*base_prompt);
-                    *base_prompt = strdup(cJSON_GetStringValue(bp));
-                }
-            }
-            if (dynamic_context) {
-                cJSON *dc = cJSON_GetObjectItem(hr.data, "dynamic_context");
-                if (dc && cJSON_IsString(dc)) {
-                    free(*dynamic_context);
-                    *dynamic_context = strdup(cJSON_GetStringValue(dc));
-                }
-            }
-            cJSON_Delete(hr.data);
-        }
-
-        if (hr.action == HOOK_STOP) {
-            final_action = HOOK_STOP;
-            break;
+static void post_llm_response_apply(void *raw, const HookResponse *hr) {
+    PostLlmResponseCtx *ctx = raw;
+    if (hr->data && ctx->text) {
+        cJSON *t = cJSON_GetObjectItem(hr->data, "text");
+        if (t && cJSON_IsString(t)) {
+            free(*ctx->text);
+            *ctx->text = strdup(cJSON_GetStringValue(t));
         }
     }
-
-    free(subs);
-    return final_action;
+    cJSON_Delete(hr->data);
 }
 
 HookAction hook_dispatch_post_llm_response(PluginManager *mgr,
@@ -261,65 +343,48 @@ HookAction hook_dispatch_post_llm_response(PluginManager *mgr,
     (void)session;
     if (!mgr) return HOOK_CONTINUE;
 
-    int count = 0;
-    int *subs = get_sorted_subscribers(mgr, "post_llm_response", &count);
-    if (!subs) return HOOK_CONTINUE;
+    PostLlmResponseCtx ctx = {
+        .text = text,
+        .tool_calls = tool_calls,
+        .call_count = call_count
+    };
+    HookDispatchSpec spec = {
+        .hook_name = "post_llm_response",
+        .build_params = post_llm_response_build,
+        .apply_result = post_llm_response_apply,
+        .ignore_stop_skip = 0
+    };
+    return hook_dispatch_generic(mgr, &spec, &ctx);
+}
 
-    HookAction final_action = HOOK_CONTINUE;
+/* --- pre_tool_execute --- */
 
-    for (int i = 0; i < count; i++) {
-        PluginProcess *p = &mgr->plugins[subs[i]];
+typedef struct {
+    ToolCall *call;
+    ToolResult *result;
+    int stopped;
+} PreToolExecuteCtx;
 
-        cJSON *params = cJSON_CreateObject();
-        cJSON_AddStringToObject(params, "text", (text && *text) ? *text : "");
+static cJSON *pre_tool_execute_build(void *raw) {
+    PreToolExecuteCtx *ctx = raw;
+    cJSON *params = cJSON_CreateObject();
+    if (ctx->call->name) cJSON_AddStringToObject(params, "tool_name", ctx->call->name);
+    if (ctx->call->arguments) cJSON_AddStringToObject(params, "arguments", ctx->call->arguments);
+    return params;
+}
 
-        cJSON *tc_array = cJSON_CreateArray();
-        for (int j = 0; j < call_count; j++) {
-            cJSON *tc = cJSON_CreateObject();
-            if (tool_calls[j].name) cJSON_AddStringToObject(tc, "name", tool_calls[j].name);
-            if (tool_calls[j].arguments) cJSON_AddStringToObject(tc, "arguments", tool_calls[j].arguments);
-            cJSON_AddItemToArray(tc_array, tc);
-        }
-        cJSON_AddItemToObject(params, "tool_calls", tc_array);
-
-        char *event = plugin_protocol_build_hook_event("post_llm_response", params);
-        cJSON_Delete(params);
-        if (!event) continue;
-
-        char *response = NULL;
-        if (send_hook_event(p, event, &response) != 0) {
-            free(event);
-            debug_printf("Plugin %s: post_llm_response hook timeout/error\n", p->manifest.name);
-            continue;
-        }
-        free(event);
-
-        HookResponse hr;
-        if (plugin_protocol_parse_hook_response(response, &hr) != 0) {
-            free(response);
-            continue;
-        }
-        free(response);
-
-        if (hr.data && text) {
-            cJSON *t = cJSON_GetObjectItem(hr.data, "text");
-            if (t && cJSON_IsString(t)) {
-                free(*text);
-                *text = strdup(cJSON_GetStringValue(t));
-            }
-            cJSON_Delete(hr.data);
-        } else {
-            cJSON_Delete(hr.data);
-        }
-
-        if (hr.action == HOOK_STOP) {
-            final_action = HOOK_STOP;
-            break;
-        }
+static void pre_tool_execute_apply(void *raw, const HookResponse *hr) {
+    PreToolExecuteCtx *ctx = raw;
+    if (hr->action == HOOK_STOP && ctx->result) {
+        cJSON *res = hr->data ? cJSON_GetObjectItem(hr->data, "result") : NULL;
+        ctx->result->tool_call_id = ctx->call->id ? strdup(ctx->call->id) : NULL;
+        ctx->result->result = (res && cJSON_IsString(res))
+                                 ? strdup(cJSON_GetStringValue(res))
+                                 : strdup("{\"blocked\":\"Plugin blocked execution\"}");
+        ctx->result->success = 0;
+        ctx->stopped = 1;
     }
-
-    free(subs);
-    return final_action;
+    cJSON_Delete(hr->data);
 }
 
 HookAction hook_dispatch_pre_tool_execute(PluginManager *mgr,
@@ -329,55 +394,43 @@ HookAction hook_dispatch_pre_tool_execute(PluginManager *mgr,
     (void)session;
     if (!mgr || !call) return HOOK_CONTINUE;
 
-    int count = 0;
-    int *subs = get_sorted_subscribers(mgr, "pre_tool_execute", &count);
-    if (!subs) return HOOK_CONTINUE;
+    PreToolExecuteCtx ctx = { .call = call, .result = result, .stopped = 0 };
+    HookDispatchSpec spec = {
+        .hook_name = "pre_tool_execute",
+        .build_params = pre_tool_execute_build,
+        .apply_result = pre_tool_execute_apply,
+        .ignore_stop_skip = 0
+    };
+    return hook_dispatch_generic(mgr, &spec, &ctx);
+}
 
-    HookAction final_action = HOOK_CONTINUE;
+/* --- post_tool_execute --- */
 
-    for (int i = 0; i < count; i++) {
-        PluginProcess *p = &mgr->plugins[subs[i]];
+typedef struct {
+    const ToolCall *call;
+    ToolResult *result;
+} PostToolExecuteCtx;
 
-        cJSON *params = cJSON_CreateObject();
-        if (call->name) cJSON_AddStringToObject(params, "tool_name", call->name);
-        if (call->arguments) cJSON_AddStringToObject(params, "arguments", call->arguments);
+static cJSON *post_tool_execute_build(void *raw) {
+    PostToolExecuteCtx *ctx = raw;
+    cJSON *params = cJSON_CreateObject();
+    if (ctx->call->name) cJSON_AddStringToObject(params, "tool_name", ctx->call->name);
+    if (ctx->call->arguments) cJSON_AddStringToObject(params, "arguments", ctx->call->arguments);
+    if (ctx->result->result) cJSON_AddStringToObject(params, "result", ctx->result->result);
+    cJSON_AddBoolToObject(params, "success", ctx->result->success);
+    return params;
+}
 
-        char *event = plugin_protocol_build_hook_event("pre_tool_execute", params);
-        cJSON_Delete(params);
-        if (!event) continue;
-
-        char *response = NULL;
-        if (send_hook_event(p, event, &response) != 0) {
-            free(event);
-            debug_printf("Plugin %s: pre_tool_execute hook timeout/error\n", p->manifest.name);
-            continue;
+static void post_tool_execute_apply(void *raw, const HookResponse *hr) {
+    PostToolExecuteCtx *ctx = raw;
+    if (hr->data) {
+        cJSON *res = cJSON_GetObjectItem(hr->data, "result");
+        if (res && cJSON_IsString(res)) {
+            free(ctx->result->result);
+            ctx->result->result = strdup(cJSON_GetStringValue(res));
         }
-        free(event);
-
-        HookResponse hr;
-        if (plugin_protocol_parse_hook_response(response, &hr) != 0) {
-            free(response);
-            continue;
-        }
-        free(response);
-
-        if (hr.action == HOOK_STOP && result) {
-            cJSON *res = hr.data ? cJSON_GetObjectItem(hr.data, "result") : NULL;
-            result->tool_call_id = call->id ? strdup(call->id) : NULL;
-            result->result = (res && cJSON_IsString(res))
-                                 ? strdup(cJSON_GetStringValue(res))
-                                 : strdup("{\"blocked\":\"Plugin blocked execution\"}");
-            result->success = 0;
-            cJSON_Delete(hr.data);
-            final_action = HOOK_STOP;
-            break;
-        }
-
-        cJSON_Delete(hr.data);
+        cJSON_Delete(hr->data);
     }
-
-    free(subs);
-    return final_action;
 }
 
 HookAction hook_dispatch_post_tool_execute(PluginManager *mgr,
@@ -387,55 +440,12 @@ HookAction hook_dispatch_post_tool_execute(PluginManager *mgr,
     (void)session;
     if (!mgr || !call || !result) return HOOK_CONTINUE;
 
-    int count = 0;
-    int *subs = get_sorted_subscribers(mgr, "post_tool_execute", &count);
-    if (!subs) return HOOK_CONTINUE;
-
-    HookAction final_action = HOOK_CONTINUE;
-
-    for (int i = 0; i < count; i++) {
-        PluginProcess *p = &mgr->plugins[subs[i]];
-
-        cJSON *params = cJSON_CreateObject();
-        if (call->name) cJSON_AddStringToObject(params, "tool_name", call->name);
-        if (call->arguments) cJSON_AddStringToObject(params, "arguments", call->arguments);
-        if (result->result) cJSON_AddStringToObject(params, "result", result->result);
-        cJSON_AddBoolToObject(params, "success", result->success);
-
-        char *event = plugin_protocol_build_hook_event("post_tool_execute", params);
-        cJSON_Delete(params);
-        if (!event) continue;
-
-        char *response = NULL;
-        if (send_hook_event(p, event, &response) != 0) {
-            free(event);
-            debug_printf("Plugin %s: post_tool_execute hook timeout/error\n", p->manifest.name);
-            continue;
-        }
-        free(event);
-
-        HookResponse hr;
-        if (plugin_protocol_parse_hook_response(response, &hr) != 0) {
-            free(response);
-            continue;
-        }
-        free(response);
-
-        if (hr.data) {
-            cJSON *res = cJSON_GetObjectItem(hr.data, "result");
-            if (res && cJSON_IsString(res)) {
-                free(result->result);
-                result->result = strdup(cJSON_GetStringValue(res));
-            }
-            cJSON_Delete(hr.data);
-        }
-
-        if (hr.action == HOOK_STOP) {
-            final_action = HOOK_STOP;
-            break;
-        }
-    }
-
-    free(subs);
-    return final_action;
+    PostToolExecuteCtx ctx = { .call = call, .result = result };
+    HookDispatchSpec spec = {
+        .hook_name = "post_tool_execute",
+        .build_params = post_tool_execute_build,
+        .apply_result = post_tool_execute_apply,
+        .ignore_stop_skip = 0
+    };
+    return hook_dispatch_generic(mgr, &spec, &ctx);
 }

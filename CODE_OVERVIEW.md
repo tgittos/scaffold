@@ -46,7 +46,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`message_processor.c/h`** - Buffered (non-streaming) response handling and tool call extraction
 - **`api_round_trip.c/h`** - Single LLM request-response cycle (payload build, HTTP, parse)
 - **`conversation_state.c/h`** - Conversation history append helpers (assistant messages, tool results)
-- **`tool_batch_executor.c/h`** - Batch tool execution with approval gate integration
+- **`tool_batch_executor.c/h`** - Batch tool execution with approval gate integration; explicitly dispatches MCP and plugin tools (schema-only registry entries)
 - **`tool_orchestration.c/h`** - Tool call deduplication and per-batch tracking
 - **`repl.c/h`** - Read-Eval-Print-Loop for interactive mode with readline, async processing, and periodic supervisor recovery
 - **`async_executor.c/h`** - Non-blocking message processing using background thread with pipe notification
@@ -81,7 +81,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`embeddings.c/h`** - Low-level text embedding functionality
 - **`embedding_provider.c/h`** - Embedding provider interface and registry
 - **`embeddings_service.c/h`** - Thread-safe embedding service singleton
-- **`llm_client.c/h`** - LLM HTTP client abstraction wrapping http_client for API calls
+- **`llm_client.c/h`** - LLM HTTP client wrapping http_client for API calls; accepts pre-built `const char** headers` from providers (enabling provider-specific auth and feature headers)
 
 ##### `lib/llm/models/` - Model Capability Implementations
 - **`model_registry.c`** - Data-driven model registration (all models in one static table)
@@ -98,7 +98,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 
 #### `lib/network/` - Network Communication
 - **`http_client.c/h`** - HTTP client implementation using libcurl (buffered and streaming)
-- **`api_common.c/h`** - JSON payload building with prompt caching support (`SystemPromptParts` split, Anthropic `cache_control` markers, cJSON-based construction)
+- **`api_common.c/h`** - JSON payload building with prompt caching support (`SystemPromptParts` split, Anthropic `cache_control` markers, model-aware payload construction)
 - **`streaming.c/h`** - SSE streaming infrastructure for real-time response handling
 - **`api_error.c/h`** - Enhanced API error handling with retry logic
 - **`embedded_cacert.c/h`** - Embedded Mozilla CA certificate bundle for portable SSL/TLS
@@ -201,9 +201,9 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`pdf_extractor.c/h`** - PDF text extraction using PDFio library
 
 #### `lib/plugin/` - Plugin System
-- **`plugin_manager.c/h`** - Plugin discovery (scan `~/.local/scaffold/plugins/`), process spawning via fork/pipe with O_CLOEXEC, name validation, crash detection via lazy `waitpid`, 10 MB response limit, tool registration as `plugin_<name>_<tool>` with `thread_safe=0`, IPC, and graceful shutdown
+- **`plugin_manager.c/h`** - Plugin discovery (scan `~/.local/scaffold/plugins/`), process spawning via fork/pipe with O_CLOEXEC, name validation (rejects duplicates after handshake), crash detection via lazy `waitpid`, 10 MB response limit, schema-only tool registration as `plugin_<name>_<tool>` (execution dispatched by `tool_batch_executor.c`), IPC, and graceful shutdown
 - **`plugin_protocol.c/h`** - JSON-RPC 2.0 message builders (initialize, hook events, tool execute, shutdown) and response parsers (manifest, hook response, tool result)
-- **`hook_dispatcher.c/h`** - Routes pipeline events to subscribed plugins in priority order with chain semantics (continue/stop/skip)
+- **`hook_dispatcher.c/h`** - Generic callback-driven hook dispatch: each hook provides a context struct, `build_params()`, and `apply_result()` callback; a single `hook_dispatch_generic()` loop handles subscriber ordering, event send/receive, and STOP/SKIP/CONTINUE chain semantics
 
 #### `lib/mcp/` - Model Context Protocol
 - **`mcp_client.c/h`** - MCP client implementation and server management

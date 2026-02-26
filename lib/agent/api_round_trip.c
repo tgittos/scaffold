@@ -3,6 +3,7 @@
 #include "../util/debug_output.h"
 #include "../network/api_error.h"
 #include "../llm/llm_client.h"
+#include "../llm/llm_provider.h"
 #include "../llm/model_capabilities.h"
 #include "../network/http_client.h"
 #include "../ui/status_line.h"
@@ -30,8 +31,24 @@ int api_round_trip_execute(AgentSession* session, const char* user_message,
 
     struct HTTPResponse response = {0};
 
+    const char* hdrs[8] = {0};
+    ProviderRegistry* provider_reg = get_provider_registry();
+    LLMProvider* provider = provider_reg
+        ? detect_provider_for_url(provider_reg, session->session_data.config.api_url)
+        : NULL;
+    if (provider && provider->build_headers) {
+        provider->build_headers(provider, session->session_data.config.api_key, hdrs, 8);
+    } else {
+        static _Thread_local char auth_hdr[512];
+        if (session->session_data.config.api_key) {
+            snprintf(auth_hdr, sizeof(auth_hdr), "Authorization: Bearer %s",
+                     session->session_data.config.api_key);
+            hdrs[0] = auth_hdr;
+        }
+    }
+
     if (llm_client_send(session->session_data.config.api_url,
-                        session->session_data.config.api_key,
+                        hdrs,
                         post_data, &response) != 0) {
         status_line_set_idle();
 

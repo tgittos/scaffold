@@ -185,7 +185,9 @@ void test_async_executor_continue_completes_successfully(void) {
 
     int rc = async_executor_continue(executor);
     TEST_ASSERT_EQUAL(0, rc);
-    TEST_ASSERT_EQUAL(1, async_executor_is_running(executor));
+
+    /* Note: do NOT assert is_running==1 here. The stub returns instantly,
+     * so the thread may complete before we can check. */
 
     TEST_ASSERT_EQUAL(0, async_executor_wait(executor));
     TEST_ASSERT_EQUAL(0, async_executor_is_running(executor));

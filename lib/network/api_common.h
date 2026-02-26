@@ -42,13 +42,6 @@ int build_messages_json(char* buffer, size_t buffer_size,
                        MessageFormatter formatter,
                        int skip_system_in_history);
 
-int build_anthropic_messages_json(char* buffer, size_t buffer_size,
-                                 const SystemPromptParts* system_prompt,
-                                 const ConversationHistory* conversation,
-                                 const char* user_message,
-                                 MessageFormatter formatter,
-                                 int skip_system_in_history);
-
 char* build_json_payload_common(const char* model, const SystemPromptParts* system_prompt,
                                const ConversationHistory* conversation,
                                const char* user_message, const char* max_tokens_param,
