@@ -5,7 +5,6 @@
 #include "../tools/memory_tool.h"
 #include "../util/context_retriever.h"
 #include "../util/json_escape.h"
-#include "../plugin/hook_dispatcher.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -131,7 +130,7 @@ static char* build_dynamic_context(const AgentSession* session) {
     return dynamic;
 }
 
-int build_enhanced_prompt_parts(AgentSession* session,
+int build_enhanced_prompt_parts(const AgentSession* session,
                                 const char* user_message,
                                 EnhancedPromptParts* out) {
     if (session == NULL || out == NULL) return -1;
@@ -208,10 +207,5 @@ int build_enhanced_prompt_parts(AgentSession* session,
     free_context_result(context);
 
     out->dynamic_context = final_dynamic;
-
-    /* Plugin hook: context_enhance */
-    hook_dispatch_context_enhance(&session->plugin_manager,
-                                  session, user_message, &out->dynamic_context);
-
     return 0;
 }

@@ -40,8 +40,14 @@ int message_processor_handle_response(AgentSession* session,
     /* Use hook_text for display if plugins transformed it */
     if (hook_text && message_content &&
         strcmp(hook_text, message_content) != 0) {
-        /* Plugin modified text; update parsed content for display */
-        free(result->parsed.response_content);
+        /* Plugin modified text; update the appropriate parsed field */
+        if (result->parsed.response_content) {
+            free(result->parsed.response_content);
+        } else {
+            /* Was using thinking_content as fallback; clear stale copy */
+            free(result->parsed.thinking_content);
+            result->parsed.thinking_content = NULL;
+        }
         result->parsed.response_content = strdup(hook_text);
         message_content = result->parsed.response_content;
     }

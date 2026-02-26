@@ -543,8 +543,8 @@ Three layers:
 | Hook | Location | Purpose |
 |------|----------|---------|
 | `post_user_input` | `session.c` | Transform/filter user input |
-| `context_enhance` | `context_enhancement.c` | Add dynamic context (git status, project info) |
-| `pre_llm_send` | `streaming_handler.c`, `session.c` | Modify system prompt before LLM request (both streaming and buffered paths) |
+| `context_enhance` | `streaming_handler.c`, `message_dispatcher.c` | Add dynamic context (git status, project info) |
+| `pre_llm_send` | `streaming_handler.c`, `message_dispatcher.c` | Modify system prompt before LLM request (both streaming and buffered paths) |
 | `post_llm_response` | `streaming_handler.c`, `message_processor.c` | Transform LLM response text (both streaming and buffered paths) |
 | `pre_tool_execute` | `tool_batch_executor.c` | Intercept/block tool calls |
 | `post_tool_execute` | `tool_batch_executor.c` | Transform tool results |

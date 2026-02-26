@@ -387,6 +387,26 @@ static int handshake_plugin(PluginProcess *plugin) {
     }
 
     free(response);
+
+    /* Warn on unrecognized hook subscriptions to help plugin authors debug */
+    static const char *known_hooks[] = {
+        "post_user_input", "context_enhance", "pre_llm_send",
+        "post_llm_response", "pre_tool_execute", "post_tool_execute", NULL
+    };
+    for (int h = 0; h < plugin->manifest.hook_count; h++) {
+        int known = 0;
+        for (int k = 0; known_hooks[k]; k++) {
+            if (strcmp(plugin->manifest.hooks[h], known_hooks[k]) == 0) {
+                known = 1;
+                break;
+            }
+        }
+        if (!known) {
+            fprintf(stderr, "Warning: plugin '%s' subscribes to unknown hook '%s'\n",
+                    plugin->manifest.name, plugin->manifest.hooks[h]);
+        }
+    }
+
     plugin->initialized = 1;
 
     debug_printf("Plugin: initialized '%s' v%s (priority %d, %d hooks, %d tools)\n",

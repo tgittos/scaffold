@@ -22,7 +22,7 @@ void free_enhanced_prompt_parts(EnhancedPromptParts* parts);
  * @param out Output struct to populate
  * @return 0 on success, -1 on failure
  */
-int build_enhanced_prompt_parts(AgentSession* session,
+int build_enhanced_prompt_parts(const AgentSession* session,
                                 const char* user_message,
                                 EnhancedPromptParts* out);
 

@@ -97,6 +97,10 @@ int streaming_process_message(AgentSession* session, LLMProvider* provider,
         return -1;
     }
 
+    /* Plugin hook: context_enhance */
+    hook_dispatch_context_enhance(&session->plugin_manager, session,
+                                   user_message, &parts.dynamic_context);
+
     /* Plugin hook: pre_llm_send */
     hook_dispatch_pre_llm_send(&session->plugin_manager, session,
                                 &parts.base_prompt, &parts.dynamic_context);

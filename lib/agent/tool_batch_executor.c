@@ -76,19 +76,15 @@ static void execute_single_tool(ToolBatchContext* ctx, ToolCall* call,
         verified_file_context_set(&entry->approved_path);
     }
 
-    int tool_executed = 0;
     if (entry->is_mcp) {
         if (mcp_client_execute_tool(&ctx->session->mcp_client, call, result) == 0) {
-            tool_executed = 1;
+            debug_printf("Executed tool: %s (ID: %s)\n", call->name, call->id);
         }
     } else if (entry->is_plugin) {
         if (plugin_manager_execute_tool(&ctx->session->plugin_manager, call, result) == 0) {
-            tool_executed = 1;
+            debug_printf("Executed tool: %s (ID: %s)\n", call->name, call->id);
         }
-    }
-
-    if (!tool_executed &&
-        execute_tool_call(&ctx->session->tools, call, result) != 0) {
+    } else if (execute_tool_call(&ctx->session->tools, call, result) != 0) {
         debug_printf("Warning: Failed to execute tool call %s\n", call->name);
         fill_error_result(result, call->id, "Tool execution failed");
     } else {

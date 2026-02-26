@@ -44,6 +44,10 @@ char* message_dispatcher_build_payload(AgentSession* session,
     EnhancedPromptParts parts;
     if (build_enhanced_prompt_parts(session, user_message, &parts) != 0) return NULL;
 
+    /* Plugin hook: context_enhance */
+    hook_dispatch_context_enhance(&session->plugin_manager, session,
+                                   user_message, &parts.dynamic_context);
+
     hook_dispatch_pre_llm_send(&session->plugin_manager, session,
                                 &parts.base_prompt, &parts.dynamic_context);
 
