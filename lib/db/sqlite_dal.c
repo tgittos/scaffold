@@ -84,11 +84,16 @@ sqlite_dal_t *sqlite_dal_create(const sqlite_dal_config_t *config) {
         return NULL;
     }
 
-    if (pthread_mutex_init(&dal->mutex, NULL) != 0) {
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+    if (pthread_mutex_init(&dal->mutex, &attr) != 0) {
+        pthread_mutexattr_destroy(&attr);
         free(dal->db_path);
         free(dal);
         return NULL;
     }
+    pthread_mutexattr_destroy(&attr);
 
     int rc = sqlite3_open(dal->db_path, &dal->db);
     if (rc != SQLITE_OK) {

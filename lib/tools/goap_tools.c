@@ -824,15 +824,19 @@ int execute_goap_update_world_state(const ToolCall *tc, ToolResult *result) {
         return 0;
     }
 
+    /* Hold store lock across the read-modify-write to prevent concurrent
+     * workers from losing updates to world_state. */
+    goal_store_lock(gs);
+
     Goal *goal = goal_store_get(gs, goal_id);
     if (!goal) {
+        goal_store_unlock(gs);
         tool_result_set_error(result, "Goal not found");
         cJSON_Delete(args);
         free(goal_id);
         return 0;
     }
 
-    /* Parse current world state and merge assertions */
     cJSON *world_state = goal->world_state
         ? cJSON_Parse(goal->world_state) : cJSON_CreateObject();
     if (!world_state) world_state = cJSON_CreateObject();
@@ -848,6 +852,8 @@ int execute_goap_update_world_state(const ToolCall *tc, ToolResult *result) {
     char *new_ws = cJSON_PrintUnformatted(world_state);
     int rc = goal_store_update_world_state(gs, goal_id, new_ws);
 
+    goal_store_unlock(gs);
+
     if (rc == 0) {
         const char *summary_str = cJSON_GetStringValue(cJSON_GetObjectItem(args, "summary"));
         int summary_ok = !summary_str ||
@@ -856,11 +862,10 @@ int execute_goap_update_world_state(const ToolCall *tc, ToolResult *result) {
         if (summary_ok) {
             cJSON *resp = cJSON_CreateObject();
             cJSON_AddBoolToObject(resp, "success", cJSON_True);
-            /* cJSON_AddItemToObject transfers ownership of world_state */
             cJSON_AddItemToObject(resp, "world_state", world_state);
             result->result = cJSON_PrintUnformatted(resp);
             result->success = 1;
-            cJSON_Delete(resp); /* also frees world_state */
+            cJSON_Delete(resp);
         } else {
             tool_result_set_error(result, "World state updated but failed to save summary");
             cJSON_Delete(world_state);

@@ -295,6 +295,14 @@ void goal_free_list(Goal **goals, size_t count) {
     free(goals);
 }
 
+void goal_store_lock(goal_store_t *store) {
+    if (store && store->dal) sqlite_dal_lock(store->dal);
+}
+
+void goal_store_unlock(goal_store_t *store) {
+    if (store && store->dal) sqlite_dal_unlock(store->dal);
+}
+
 const char *goal_status_to_string(GoalStatus status) {
     switch (status) {
         case GOAL_STATUS_PLANNING:  return "planning";

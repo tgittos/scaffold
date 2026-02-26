@@ -47,10 +47,14 @@ int plugin_manager_discover(PluginManager *mgr) {
         char path[1024];
         snprintf(path, sizeof(path), "%s/%s", plugins_dir, entry->d_name);
 
-        struct stat st;
-        if (stat(path, &st) != 0) continue;
-        if (!S_ISREG(st.st_mode)) continue;
-        if (!(st.st_mode & S_IXUSR)) continue;
+        struct stat lst;
+        if (lstat(path, &lst) != 0) continue;
+        if (S_ISLNK(lst.st_mode)) {
+            debug_printf("Plugin: skipping symlink %s\n", path);
+            continue;
+        }
+        if (!S_ISREG(lst.st_mode)) continue;
+        if (!(lst.st_mode & S_IXUSR)) continue;
 
         mgr->plugins[mgr->count].path = strdup(path);
         if (!mgr->plugins[mgr->count].path) continue;

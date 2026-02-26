@@ -130,6 +130,39 @@ static void test_discover_skips_hidden(void) {
     rmdir(tmpdir);
 }
 
+static void test_discover_skips_symlinks(void) {
+    char tmpdir[] = "/tmp/scaffold_test_XXXXXX";
+    TEST_ASSERT_NOT_NULL(mkdtemp(tmpdir));
+    app_home_init(tmpdir);
+
+    char *plugins_path = join_path(tmpdir, "plugins");
+    mkdir(plugins_path, 0755);
+
+    /* Create a real executable */
+    char *real_path = join_path(tmpdir, "real-plugin");
+    FILE *f = fopen(real_path, "w");
+    fprintf(f, "#!/bin/sh\n");
+    fclose(f);
+    chmod(real_path, 0755);
+
+    /* Create a symlink to it inside plugins dir */
+    char *link_path = join_path(plugins_path, "link-plugin");
+    symlink(real_path, link_path);
+
+    PluginManager mgr;
+    plugin_manager_init(&mgr);
+    TEST_ASSERT_EQUAL(0, plugin_manager_discover(&mgr));
+    TEST_ASSERT_EQUAL(0, mgr.count);
+
+    unlink(link_path);
+    unlink(real_path);
+    free(link_path);
+    free(real_path);
+    rmdir(plugins_path);
+    free(plugins_path);
+    rmdir(tmpdir);
+}
+
 /* --- Shutdown with no plugins --- */
 
 static void test_shutdown_empty(void) {
@@ -258,6 +291,7 @@ int main(void) {
     RUN_TEST(test_discover_empty_dir);
     RUN_TEST(test_discover_finds_executables);
     RUN_TEST(test_discover_skips_hidden);
+    RUN_TEST(test_discover_skips_symlinks);
     RUN_TEST(test_shutdown_empty);
     RUN_TEST(test_shutdown_null);
     RUN_TEST(test_send_request_bad_fds);

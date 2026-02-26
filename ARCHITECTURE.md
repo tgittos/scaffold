@@ -526,12 +526,12 @@ graph TB
 Three layers:
 
 1. **Plugin Protocol** (`lib/plugin/plugin_protocol.c/h`) - JSON-RPC 2.0 message serialization for initialize, hook events, tool execution, and shutdown
-2. **Plugin Manager** (`lib/plugin/plugin_manager.c/h`) - Directory scanning, process spawning via fork/pipe with O_CLOEXEC, handshake with name validation, tool registration (thread_safe=0 for serialized execution), crash detection via lazy `waitpid`, 10 MB response limit, and graceful shutdown (SIGTERM → wait → SIGKILL)
+2. **Plugin Manager** (`lib/plugin/plugin_manager.c/h`) - Directory scanning (rejects symlinks via `lstat`), process spawning via fork/pipe with O_CLOEXEC, handshake with name validation, tool registration (thread_safe=0 for serialized execution), crash detection via lazy `waitpid`, 10 MB response limit, and graceful shutdown (SIGTERM → wait → SIGKILL)
 3. **Hook Dispatcher** (`lib/plugin/hook_dispatcher.c/h`) - Generic callback-driven dispatch: each hook defines a context struct, `build_params()` callback, and `apply_result()` callback. A single `hook_dispatch_generic()` loop handles subscriber ordering, event send/receive, response parsing, and STOP/SKIP/CONTINUE chain semantics
 
 ### Plugin Lifecycle
 
-1. **Discovery**: Scan `~/.local/scaffold/plugins/` for executable files (skip hidden files)
+1. **Discovery**: Scan `~/.local/scaffold/plugins/` for executable files (skip hidden files and symlinks)
 2. **Spawn**: Fork/exec each plugin, set up stdin/stdout pipes for bidirectional JSON-RPC
 3. **Handshake**: Send `initialize` request, receive manifest (name, version, hooks, tools, priority). Plugin names are validated: must not contain underscores, forward slashes, or backslashes, must be 1-64 chars. Duplicate names are rejected (second plugin is killed)
 4. **Tool Registration**: Plugin tools registered as `plugin_<pluginname>_<toolname>` in the ToolRegistry as schema-only entries (`execute_func=NULL`). Execution is dispatched explicitly by `tool_batch_executor.c` via `plugin_manager_execute_tool()`, following the same pattern as MCP tools. Classified as `GATE_CATEGORY_PLUGIN` (default: gated, requires approval)
@@ -1159,7 +1159,7 @@ lib/
 │   ├── task_store.c/h      # SQLite-based persistent task storage
 │   ├── goal_store.c/h      # GOAP goal persistence (scaffold orchestration)
 │   ├── action_store.c/h    # GOAP action persistence with hierarchy, readiness queries, and work_item_id correlation
-│   ├── sqlite_dal.c/h      # SQLite data access layer (ref-counted for shared DAL)
+│   ├── sqlite_dal.c/h      # SQLite data access layer (ref-counted, recursive mutex for nested locking)
 │   └── hnswlib_wrapper.cpp/h # C++ bridge
 ├── llm/                    # LLM core framework
 │   ├── llm_provider.c/h    # Provider abstraction layer

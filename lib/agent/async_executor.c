@@ -87,10 +87,9 @@ static void* executor_thread_func(void* arg) {
 
     free(executor->current_message);
     executor->current_message = NULL;
-    pthread_mutex_unlock(&executor->mutex);
-
     atomic_store(&executor->running, 0);
     pthread_cond_broadcast(&executor->cond);
+    pthread_mutex_unlock(&executor->mutex);
 
     return NULL;
 }
@@ -121,10 +120,9 @@ static void* executor_continue_func(void* arg) {
         send_event(executor, ASYNC_EVENT_COMPLETE);
     }
 
-    pthread_mutex_unlock(&executor->mutex);
-
     atomic_store(&executor->running, 0);
     pthread_cond_broadcast(&executor->cond);
+    pthread_mutex_unlock(&executor->mutex);
 
     return NULL;
 }

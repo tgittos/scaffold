@@ -49,7 +49,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`tool_batch_executor.c/h`** - Batch tool execution with approval gate integration; explicitly dispatches MCP and plugin tools (schema-only registry entries)
 - **`tool_orchestration.c/h`** - Tool call deduplication and per-batch tracking
 - **`repl.c/h`** - Read-Eval-Print-Loop for interactive mode with readline, async processing, and periodic supervisor recovery
-- **`async_executor.c/h`** - Non-blocking message processing using background thread with pipe notification
+- **`async_executor.c/h`** - Non-blocking message processing using background thread with pipe notification; running flag and condition broadcast occur inside mutex to prevent signal loss
 - **`context_enhancement.c/h`** - Split prompt builder: returns `EnhancedPromptParts` with session-stable base prompt and per-request dynamic context (todo state, mode, memories, context retrieval)
 - **`recap.c/h`** - Conversation recap generation (one-shot LLM calls without history persistence)
 - **`streaming_handler.c/h`** - Application-layer streaming orchestration and provider registry management
@@ -70,9 +70,9 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`document_store.c/h`** - High-level document storage with embeddings and JSON persistence
 - **`metadata_store.c/h`** - Chunk metadata storage layer (separate from vectors)
 - **`task_store.c/h`** - SQLite-based persistent task storage with hierarchies and dependencies
-- **`goal_store.c/h`** - GOAP goal persistence: goal state, world state, supervisor PID tracking
+- **`goal_store.c/h`** - GOAP goal persistence: goal state, world state, supervisor PID tracking, lock/unlock API for atomic read-modify-write sequences
 - **`action_store.c/h`** - GOAP action persistence: hierarchy (compound/primitive), preconditions/effects, readiness queries, work_item_id correlation for dispatch tracking
-- **`sqlite_dal.c/h`** - SQLite data access layer with mutex protection, ref-counted shared connections, schema initialization, and common query patterns
+- **`sqlite_dal.c/h`** - SQLite data access layer with recursive mutex protection (supports nested locking for atomic read-modify-write), ref-counted shared connections, schema initialization, and common query patterns
 - **`hnswlib_wrapper.cpp/h`** - C++ wrapper for HNSW vector indexing
 
 #### `lib/llm/` - LLM Core Framework
@@ -201,7 +201,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`pdf_extractor.c/h`** - PDF text extraction using PDFio library
 
 #### `lib/plugin/` - Plugin System
-- **`plugin_manager.c/h`** - Plugin discovery (scan `~/.local/scaffold/plugins/`), process spawning via fork/pipe with O_CLOEXEC, name validation (rejects duplicates after handshake), crash detection via lazy `waitpid`, 10 MB response limit, schema-only tool registration as `plugin_<name>_<tool>` (execution dispatched by `tool_batch_executor.c`), IPC, and graceful shutdown
+- **`plugin_manager.c/h`** - Plugin discovery (scan `~/.local/scaffold/plugins/`, rejects symlinks via `lstat`), process spawning via fork/pipe with O_CLOEXEC, name validation (rejects duplicates after handshake), crash detection via lazy `waitpid`, 10 MB response limit, schema-only tool registration as `plugin_<name>_<tool>` (execution dispatched by `tool_batch_executor.c`), IPC, and graceful shutdown
 - **`plugin_protocol.c/h`** - JSON-RPC 2.0 message builders (initialize, hook events, tool execute, shutdown) and response parsers (manifest, hook response, tool result)
 - **`hook_dispatcher.c/h`** - Generic callback-driven hook dispatch: each hook provides a context struct, `build_params()`, and `apply_result()` callback; a single `hook_dispatch_generic()` loop handles subscriber ordering, event send/receive, and STOP/SKIP/CONTINUE chain semantics
 
@@ -296,7 +296,7 @@ The test directory mirrors the source structure:
 
 #### `test/plugin/` - Plugin System Tests
 - **`test_plugin_protocol.c`** - Protocol serialization tests (16 tests: all JSON-RPC builders and response parsers)
-- **`test_plugin_manager.c`** - Plugin manager tests (21 tests: init, discover, shutdown, send_request, execute_tool, name validation, alive check)
+- **`test_plugin_manager.c`** - Plugin manager tests (22 tests: init, discover, symlink rejection, shutdown, send_request, execute_tool, name validation, alive check)
 - **`test_hook_dispatcher.c`** - Hook dispatch tests (11 tests: no-plugin, no-subscriber, priority ordering, uninitialized skip)
 
 #### `test/mcp/` - MCP Integration Tests

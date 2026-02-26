@@ -49,6 +49,12 @@ int goal_store_update_status(goal_store_t* store, const char* id, GoalStatus sta
 int goal_store_update_world_state(goal_store_t* store, const char* id,
                                    const char* world_state_json);
 int goal_store_update_summary(goal_store_t* store, const char* id, const char* summary);
+
+// Lock/unlock for callers that need atomic read-modify-write sequences.
+// goal_store_get and goal_store_update_* each acquire their own locks, so
+// callers performing a read+modify+write must hold the lock across all steps.
+void goal_store_lock(goal_store_t* store);
+void goal_store_unlock(goal_store_t* store);
 int goal_store_update_supervisor(goal_store_t* store, const char* id,
                                   pid_t pid, int64_t started_at);
 
