@@ -21,6 +21,7 @@
 #include "../network/api_common.h"
 #include "../network/image_attachment.h"
 #include "../session/conversation_compactor.h"
+#include "../session/rolling_summary.h"
 #include "../llm/llm_provider.h"
 #include "../llm/llm_client.h"
 #include "async_executor.h"
@@ -358,10 +359,30 @@ int manage_conversation_tokens(AgentSession* session, const char* user_message,
                 debug_printf("After trimming: %d response tokens available\n", usage->available_response_tokens);
             }
 
+            /* Check if context is still nearly full after emergency compaction */
+            if (result == 0 && config->context_window > 0) {
+                float utilization = (float)usage->total_prompt_tokens / (float)config->context_window;
+                if (utilization >= CONTEXT_FULL_THRESHOLD) {
+                    debug_printf("Context utilization %.1f%% >= %.0f%% threshold after compaction\n",
+                                 utilization * 100.0f, CONTEXT_FULL_THRESHOLD * 100.0f);
+                    return SESSION_CONTEXT_FULL;
+                }
+            }
+
             return result;
         } else {
             debug_printf("Trimming failed or ineffective, using original allocation\n");
             cleanup_compaction_result(&compact_result);
+        }
+    }
+
+    /* Final utilization check after all compaction attempts */
+    if (config->context_window > 0) {
+        float utilization = (float)usage->total_prompt_tokens / (float)config->context_window;
+        if (utilization >= CONTEXT_FULL_THRESHOLD) {
+            debug_printf("Context utilization %.1f%% >= %.0f%% threshold\n",
+                         utilization * 100.0f, CONTEXT_FULL_THRESHOLD * 100.0f);
+            return SESSION_CONTEXT_FULL;
         }
     }
 
@@ -405,7 +426,17 @@ int session_process_message(AgentSession* session, const char* user_message) {
     token_config_init(&token_config, session->session_data.config.context_window);
 
     TokenUsage token_usage;
-    if (manage_conversation_tokens(session, effective_message, &token_config, &token_usage) != 0) {
+    int token_rc = manage_conversation_tokens(session, effective_message, &token_config, &token_usage);
+    if (token_rc == SESSION_CONTEXT_FULL) {
+        debug_printf("session_process_message: context full, propagating\n");
+        free(hook_msg);
+        if (has_images) {
+            api_common_clear_pending_images();
+            image_attachment_cleanup(&image_parse);
+        }
+        return SESSION_CONTEXT_FULL;
+    }
+    if (token_rc != 0) {
         fprintf(stderr, "Error: Failed to calculate token allocation\n");
         free(hook_msg);
         if (has_images) {
@@ -457,7 +488,12 @@ int session_continue(AgentSession* session) {
     token_config_init(&token_config, session->session_data.config.context_window);
 
     TokenUsage token_usage;
-    if (manage_conversation_tokens(session, NULL, &token_config, &token_usage) != 0) {
+    int token_rc = manage_conversation_tokens(session, NULL, &token_config, &token_usage);
+    if (token_rc == SESSION_CONTEXT_FULL) {
+        debug_printf("session_continue: context full, propagating\n");
+        return SESSION_CONTEXT_FULL;
+    }
+    if (token_rc != 0) {
         fprintf(stderr, "Error: Failed to calculate token allocation\n");
         return -1;
     }

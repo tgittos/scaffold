@@ -25,10 +25,46 @@ static void supervisor_signal_handler(int sig) {
 }
 
 /**
- * Build a status summary from current goal state for the initial LLM kick.
+ * Build initial message for the PLAN phase.
+ * Instructs LLM to research, decompose into actions, and save a plan document.
  * Caller owns the returned string.
  */
-static char *build_initial_message(AgentSession *session, const char *goal_id) {
+static char *build_planner_message(AgentSession *session, const char *goal_id) {
+    goal_store_t *gs = services_get_goal_store(session->services);
+    if (gs == NULL) return NULL;
+
+    Goal *goal = goal_store_get(gs, goal_id);
+    if (goal == NULL) return NULL;
+
+    size_t buf_size = 2048 + strlen(goal->name) + strlen(goal_id)
+        + (goal->description ? strlen(goal->description) : 0)
+        + (goal->goal_state ? strlen(goal->goal_state) : 0);
+    char *msg = malloc(buf_size);
+    if (msg == NULL) { goal_free(goal); return NULL; }
+
+    snprintf(msg, buf_size,
+        "You are the PLANNER for goal \"%s\" (ID: %s).\n\n"
+        "Description: %s\n\n"
+        "Goal state (acceptance criteria):\n%s\n\n"
+        "Your job is to research and plan how to achieve this goal, then:\n"
+        "1. Decompose it into actions using goap_create_actions\n"
+        "2. Save your research findings and execution strategy using goap_save_plan_document\n\n"
+        "Do NOT dispatch actions or update world state. Focus only on planning.\n"
+        "When you have created actions and saved a plan document, your work is done.",
+        goal->name, goal_id,
+        goal->description ? goal->description : "(none)",
+        goal->goal_state ? goal->goal_state : "{}");
+
+    goal_free(goal);
+    return msg;
+}
+
+/**
+ * Build initial message for the EXECUTE phase.
+ * Includes plan_document context and instructs LLM to dispatch/verify/update.
+ * Caller owns the returned string.
+ */
+static char *build_executor_message(AgentSession *session, const char *goal_id) {
     goal_store_t *gs = services_get_goal_store(session->services);
     action_store_t *as = services_get_action_store(session->services);
     if (gs == NULL || as == NULL) return NULL;
@@ -52,16 +88,39 @@ static char *build_initial_message(AgentSession *session, const char *goal_id) {
 
     GoapProgress progress = goap_check_progress(goal->goal_state, goal->world_state);
 
-    size_t buf_size = 2048 + strlen(goal->name)
+    size_t buf_size = 2048 + strlen(goal->name) + strlen(goal_id)
         + (goal->description ? strlen(goal->description) : 0)
         + (goal->goal_state ? strlen(goal->goal_state) : 0)
-        + (goal->world_state ? strlen(goal->world_state) : 0);
+        + (goal->world_state ? strlen(goal->world_state) : 0)
+        + (goal->plan_document ? strlen(goal->plan_document) : 0)
+        + (goal->summary ? strlen(goal->summary) : 0);
     char *msg = malloc(buf_size);
     if (msg == NULL) goto cleanup;
 
-    snprintf(msg, buf_size,
-        "You are supervising goal \"%s\" (ID: %s).\n\n"
-        "Description: %s\n\n"
+    int written = snprintf(msg, buf_size,
+        "You are the EXECUTOR for goal \"%s\" (ID: %s).\n\n"
+        "Description: %s\n\n",
+        goal->name, goal_id,
+        goal->description ? goal->description : "(none)");
+    if (written < 0 || (size_t)written >= buf_size) goto cleanup_msg;
+
+    if (goal->plan_document) {
+        int n = snprintf(msg + written, buf_size - written,
+            "Plan document (from planning phase):\n%s\n\n",
+            goal->plan_document);
+        if (n > 0) written += n;
+    }
+
+    if (goal->summary) {
+        int n = snprintf(msg + written, buf_size - written,
+            "Previous progress summary:\n%s\n\n",
+            goal->summary);
+        if (n > 0) written += n;
+    }
+
+    if ((size_t)written >= buf_size) goto cleanup_msg;
+
+    snprintf(msg + written, buf_size - written,
         "Goal state (acceptance criteria):\n%s\n\n"
         "Current world state:\n%s\n\n"
         "Progress: %d/%d assertions satisfied.\n"
@@ -74,17 +133,43 @@ static char *build_initial_message(AgentSession *session, const char *goal_id) {
         "5. Update world state with goap_update_world_state for verified effects\n"
         "6. Check goal completion with goap_check_complete\n\n"
         "Begin by examining the current state and taking the next appropriate action.",
-        goal->name, goal_id,
-        goal->description ? goal->description : "(none)",
         goal->goal_state ? goal->goal_state : "{}",
         goal->world_state ? goal->world_state : "{}",
         progress.satisfied, progress.total,
         pending, running, completed, failed, action_count);
 
+    goto cleanup;
+
+cleanup_msg:
+    free(msg);
+    msg = NULL;
 cleanup:
     action_free_list(actions, action_count);
     goal_free(goal);
     return msg;
+}
+
+/**
+ * Check if the plan phase is complete: goal has a non-null plan_document
+ * AND at least one action exists in the action store.
+ */
+static bool plan_is_complete(AgentSession *session, const char *goal_id) {
+    goal_store_t *gs = services_get_goal_store(session->services);
+    action_store_t *as = services_get_action_store(session->services);
+    if (gs == NULL || as == NULL) return false;
+
+    Goal *goal = goal_store_get(gs, goal_id);
+    if (goal == NULL) return false;
+
+    bool has_plan = (goal->plan_document != NULL && goal->plan_document[0] != '\0');
+    goal_free(goal);
+    if (!has_plan) return false;
+
+    size_t action_count = 0;
+    Action **actions = action_store_list_by_goal(as, goal_id, &action_count);
+    if (actions != NULL) action_free_list(actions, action_count);
+
+    return action_count > 0;
 }
 
 /**
@@ -127,7 +212,10 @@ static int process_notifications(AgentSession *session) {
             append_conversation_message(&session->session_data.conversation,
                                         "system", notification_text);
             int rc = session_continue(session);
-            if (rc != 0) {
+            if (rc == SESSION_CONTEXT_FULL) {
+                debug_printf("Supervisor: session_continue returned context full\n");
+                result = SUPERVISOR_EXIT_CONTEXT;
+            } else if (rc != 0) {
                 debug_printf("Supervisor: session_continue returned %d\n", rc);
                 result = SUPERVISOR_EXIT_ERROR;
             }
@@ -236,7 +324,53 @@ int supervisor_recover_orphaned_actions(Services *services, const char *goal_id)
     return recovered;
 }
 
-int supervisor_run(AgentSession *session, const char *goal_id) {
+/**
+ * Handle context-full exit for any phase.
+ * Saves a summary and returns SUPERVISOR_EXIT_CONTEXT.
+ */
+static int handle_context_full_exit(AgentSession *session, const char *goal_id,
+                                     SupervisorPhase phase) {
+    const char *phase_name = (phase == SUPERVISOR_PHASE_PLAN) ? "planning" : "execution";
+    debug_printf("Supervisor: context full during %s\n", phase_name);
+    goal_store_t *gs = services_get_goal_store(session->services);
+    if (gs != NULL) {
+        char summary[128];
+        snprintf(summary, sizeof(summary),
+                 "Context full during %s, respawn needed", phase_name);
+        goal_store_update_summary(gs, goal_id, summary);
+    }
+    return SUPERVISOR_EXIT_CONTEXT;
+}
+
+/**
+ * Phase-aware completion check.
+ * Plan phase: plan_is_complete → transition to ACTIVE.
+ * Execute phase: goal_is_complete → mark COMPLETED.
+ * Returns SUPERVISOR_EXIT_COMPLETE when done, -1 to continue.
+ */
+static int check_phase_completion(AgentSession *session, const char *goal_id,
+                                   SupervisorPhase phase) {
+    goal_store_t *gs = services_get_goal_store(session->services);
+
+    if (phase == SUPERVISOR_PHASE_PLAN) {
+        if (plan_is_complete(session, goal_id)) {
+            debug_printf("Supervisor: plan complete for goal %s, transitioning to ACTIVE\n", goal_id);
+            if (gs != NULL)
+                goal_store_update_status(gs, goal_id, GOAL_STATUS_ACTIVE);
+            return SUPERVISOR_EXIT_COMPLETE;
+        }
+    } else {
+        if (goal_is_complete(session, goal_id)) {
+            debug_printf("Supervisor: goal %s complete\n", goal_id);
+            if (gs != NULL)
+                goal_store_update_status(gs, goal_id, GOAL_STATUS_COMPLETED);
+            return SUPERVISOR_EXIT_COMPLETE;
+        }
+    }
+    return -1;  /* not complete yet */
+}
+
+int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase phase) {
     if (session == NULL || goal_id == NULL) return SUPERVISOR_EXIT_ERROR;
 
     g_supervisor_running = 1;
@@ -248,14 +382,21 @@ int supervisor_run(AgentSession *session, const char *goal_id) {
     sigaction(SIGTERM, &sa, NULL);
     sigaction(SIGINT, &sa, NULL);
 
-    debug_printf("Supervisor started for goal %s\n", goal_id);
+    debug_printf("Supervisor started for goal %s (phase=%s)\n", goal_id,
+                 phase == SUPERVISOR_PHASE_PLAN ? "plan" : "execute");
 
-    int orphans = supervisor_recover_orphaned_actions(session->services, goal_id);
-    if (orphans > 0) {
-        debug_printf("Supervisor: recovered %d orphaned actions\n", orphans);
+    /* Only recover orphaned actions for executor phase */
+    if (phase == SUPERVISOR_PHASE_EXECUTE) {
+        int orphans = supervisor_recover_orphaned_actions(session->services, goal_id);
+        if (orphans > 0) {
+            debug_printf("Supervisor: recovered %d orphaned actions\n", orphans);
+        }
     }
 
-    char *initial_msg = build_initial_message(session, goal_id);
+    char *initial_msg = (phase == SUPERVISOR_PHASE_PLAN)
+        ? build_planner_message(session, goal_id)
+        : build_executor_message(session, goal_id);
+
     if (initial_msg == NULL) {
         fprintf(stderr, "Supervisor: failed to build initial message for goal %s\n", goal_id);
         return SUPERVISOR_EXIT_ERROR;
@@ -264,16 +405,18 @@ int supervisor_run(AgentSession *session, const char *goal_id) {
     int rc = session_process_message(session, initial_msg);
     free(initial_msg);
 
+    if (rc == SESSION_CONTEXT_FULL) {
+        return handle_context_full_exit(session, goal_id, phase);
+    }
+
     if (rc != 0) {
         fprintf(stderr, "Supervisor: initial session_process_message failed (%d)\n", rc);
         return SUPERVISOR_EXIT_ERROR;
     }
 
-    if (goal_is_complete(session, goal_id)) {
-        debug_printf("Supervisor: goal %s complete after initial processing\n", goal_id);
-        goal_store_t *gs = services_get_goal_store(session->services);
-        if (gs != NULL)
-            goal_store_update_status(gs, goal_id, GOAL_STATUS_COMPLETED);
+    int completion = check_phase_completion(session, goal_id, phase);
+    if (completion == SUPERVISOR_EXIT_COMPLETE) {
+        debug_printf("Supervisor: phase complete after initial processing for goal %s\n", goal_id);
         return SUPERVISOR_EXIT_COMPLETE;
     }
 
@@ -286,6 +429,7 @@ int supervisor_run(AgentSession *session, const char *goal_id) {
     const int max_consecutive_errors = 3;
 
     while (g_supervisor_running) {
+        rc = 0;  /* Reset per iteration to avoid stale context-full signals */
         fd_set read_fds;
         int max_fd = rebuild_fd_set(session, &read_fds, notify_fd);
 
@@ -321,15 +465,6 @@ int supervisor_run(AgentSession *session, const char *goal_id) {
         if (notify_fd >= 0 && ready > 0 && FD_ISSET(notify_fd, &read_fds)) {
             message_poller_clear_notification(session->message_poller);
             rc = process_notifications(session);
-            if (rc != 0) {
-                consecutive_errors++;
-                if (consecutive_errors >= max_consecutive_errors) {
-                    fprintf(stderr, "Supervisor: too many consecutive errors, exiting\n");
-                    return SUPERVISOR_EXIT_ERROR;
-                }
-            } else {
-                consecutive_errors = 0;
-            }
         }
 
         /* On timeout with subagent changes, check for notifications
@@ -337,22 +472,23 @@ int supervisor_run(AgentSession *session, const char *goal_id) {
         if (changes > 0 && !(notify_fd >= 0 && ready > 0 &&
                              FD_ISSET(notify_fd, &read_fds))) {
             rc = process_notifications(session);
-            if (rc != 0) {
-                consecutive_errors++;
-                if (consecutive_errors >= max_consecutive_errors) {
-                    fprintf(stderr, "Supervisor: too many consecutive errors, exiting\n");
-                    return SUPERVISOR_EXIT_ERROR;
-                }
-            } else {
-                consecutive_errors = 0;
-            }
         }
 
-        if (goal_is_complete(session, goal_id)) {
-            debug_printf("Supervisor: goal %s complete\n", goal_id);
-            goal_store_t *gs2 = services_get_goal_store(session->services);
-            if (gs2 != NULL)
-                goal_store_update_status(gs2, goal_id, GOAL_STATUS_COMPLETED);
+        if (rc == SUPERVISOR_EXIT_CONTEXT) {
+            return handle_context_full_exit(session, goal_id, phase);
+        }
+        if (rc != 0) {
+            consecutive_errors++;
+            if (consecutive_errors >= max_consecutive_errors) {
+                fprintf(stderr, "Supervisor: too many consecutive errors, exiting\n");
+                return SUPERVISOR_EXIT_ERROR;
+            }
+        } else {
+            consecutive_errors = 0;
+        }
+
+        completion = check_phase_completion(session, goal_id, phase);
+        if (completion == SUPERVISOR_EXIT_COMPLETE) {
             return SUPERVISOR_EXIT_COMPLETE;
         }
     }

@@ -9,7 +9,7 @@ This document provides a comprehensive overview of Ralph's codebase structure an
 Application-specific code that uses the library layer. This is a thin wrapper around lib/.
 
 #### `src/scaffold/` - Scaffold CLI
-- **`main.c`** - Application entry point with CLI argument parsing, GOAP orchestration, Python tools, update management, OAuth login (`--login`/`--logout`, auto-sets Codex API URL on login), memory, sub-agents, and orchestrator-specific modes (--supervisor --goal, --worker --queue). Uses system prompt from `data/prompts/scaffold_system.txt`.
+- **`main.c`** - Application entry point with CLI argument parsing, GOAP orchestration, Python tools, update management, OAuth login (`--login`/`--logout`, auto-sets Codex API URL on login), memory, sub-agents, and orchestrator-specific modes (--supervisor --goal, --worker --queue, --phase plan|execute). Uses system prompt from `data/prompts/scaffold_system.txt`.
 
 #### `src/tools/` - Python Tool Integration
 - **`python_tool.c/h`** - Embedded Python interpreter execution
@@ -39,8 +39,8 @@ Application-specific code that uses the library layer. This is a thin wrapper ar
 Generic, CLI-independent components that can be reused. The ralph CLI is a thin wrapper around this library.
 
 #### `lib/agent/` - Agent Abstraction and Session Management
-- **`agent.c/h`** - Agent lifecycle management, mode selection (interactive/background/worker), configuration
-- **`session.c/h`** - Thin coordinator delegating to extracted modules below
+- **`agent.c/h`** - Agent lifecycle management, mode selection (interactive/background/worker), configuration. `AgentConfig` includes `supervisor_phase` field (default -1 = auto-detect from goal status)
+- **`session.c/h`** - Thin coordinator delegating to extracted modules below, `SESSION_CONTEXT_FULL` (-3) return code for context pressure propagation
 - **`session_configurator.c/h`** - Configuration loading: API settings, type detection (including Codex URL), OAuth credential injection for Codex with credential provider registration for session-level token refresh, system prompt, context window
 - **`message_dispatcher.c/h`** - Dispatch path selection (streaming vs buffered) based on provider capabilities
 - **`message_processor.c/h`** - Buffered (non-streaming) response handling and tool call extraction
@@ -61,7 +61,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`session_manager.c/h`** - Session data structures (SessionData with config, conversation, model info)
 - **`conversation_tracker.c/h`** - Conversation history tracking with vector DB persistence
 - **`conversation_compactor.c/h`** - Intelligent conversation history compression
-- **`rolling_summary.c/h`** - Rolling conversation summary generation with compaction thresholds
+- **`rolling_summary.c/h`** - Rolling conversation summary generation with compaction thresholds, `CONTEXT_FULL_THRESHOLD` (0.92) for context pressure detection
 - **`token_manager.c/h`** - Token counting, allocation, and context window management
 
 #### `lib/db/` - Database Layer
@@ -70,7 +70,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`document_store.c/h`** - High-level document storage with embeddings and JSON persistence
 - **`metadata_store.c/h`** - Chunk metadata storage layer (separate from vectors)
 - **`task_store.c/h`** - SQLite-based persistent task storage with hierarchies and dependencies
-- **`goal_store.c/h`** - GOAP goal persistence: goal state, world state, supervisor PID tracking, lock/unlock API for atomic read-modify-write sequences
+- **`goal_store.c/h`** - GOAP goal persistence: goal state, world state, plan_document (TEXT column), supervisor PID tracking, lock/unlock API for atomic read-modify-write sequences, `goal_store_update_plan_document()`, schema migration for existing DBs
 - **`action_store.c/h`** - GOAP action persistence: hierarchy (compound/primitive), preconditions/effects, readiness queries, work_item_id correlation for dispatch tracking
 - **`oauth2_store.c/h`** - OAuth2 token management with PKCE, AES-256-GCM encryption, vtable-based provider pattern (unified `refresh_token` callback with optional rotation, nullable `revoke_token` hook), auto-refresh with 60s margin, heap-allocated refresh context, value-copied provider ops, `oauth2_error_string()` utility
 - **`sqlite_dal.c/h`** - SQLite data access layer with recursive mutex protection (supports nested locking for atomic read-modify-write), ref-counted shared connections, schema initialization, and common query patterns
@@ -154,7 +154,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`todo_manager.c/h`** - Todo data structures and operations
 - **`todo_tool.c/h`** - Todo tool call handler
 - **`todo_display.c/h`** - Todo console visualization
-- **`goap_tools.c/h`** - GOAP goal/action tools for supervisors (9 tools, scaffold mode only)
+- **`goap_tools.c/h`** - GOAP goal/action tools for supervisors (10 tools, scaffold mode only): includes `goap_save_plan_document` for persisting plan documents, `goap_get_goal` returns plan_document, `build_work_context()` injects plan_guidance from plan_document
 - **`orchestrator_tool.c/h`** - Orchestrator lifecycle tools: execute_plan, list_goals, goal_status, start/pause/cancel_goal
 - **`mode_tool.c/h`** - LLM-callable switch_mode tool for changing behavioral modes
 - **`tool_cache.c/h`** - Thread-safe tool result caching with file mtime invalidation
@@ -227,8 +227,8 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`jwt_decode.c/h`** - JWT payload decoding: base64url decode via mbedTLS, nested claim extraction (`https://api.openai.com/auth` -> `chatgpt_account_id`)
 
 #### `lib/orchestrator/` - Scaffold Orchestration
-- **`supervisor.c/h`** - Supervisor event loop: GOAP tool-driven goal progression, message-poller-based wake-on-worker-completion, orphaned action recovery on startup
-- **`orchestrator.c/h`** - Supervisor spawning (via process_spawn), liveness checks, zombie reaping, stale PID cleanup (dead processes only), respawn
+- **`supervisor.c/h`** - Supervisor event loop with `SupervisorPhase` enum (`SUPERVISOR_PHASE_PLAN`, `SUPERVISOR_PHASE_EXECUTE`): phase-aware execution via `supervisor_run(phase)`, split message builders (`build_planner_message`, `build_executor_message`), `plan_is_complete()` check, context pressure exit (`SUPERVISOR_EXIT_CONTEXT`), message-poller-based wake-on-worker-completion, orphaned action recovery on startup
+- **`orchestrator.c/h`** - Supervisor spawning (via process_spawn) with auto-detected `--phase` flag from goal status, liveness checks, zombie reaping, stale PID cleanup (dead processes only), respawn for both PLANNING and ACTIVE goals
 - **`goap_state.c/h`** - Shared GOAP state evaluation: precondition checking (`goap_preconditions_met`) and progress tracking (`goap_check_progress`) used by 5 call sites
 - **`role_prompts.c/h`** - Role-based system prompts for workers: loads from `<app_home>/prompts/<role>.md` with built-in defaults for 6 standard roles (implementation, code_review, architecture_review, design_review, pm_review, testing)
 
@@ -288,7 +288,7 @@ The test directory mirrors the source structure:
 - **`test_python_tool.c`** & **`test_python_integration.c`** - Python interpreter tests
 - **`test_subagent_tool.c`** - Subagent system tests
 - **`test_tool_param_dsl.c`** - Tool parameter DSL tests
-- **`test_goap_tools.c`** - GOAP tool unit tests (30 tests: goal/action CRUD, persistent goals, readiness, dispatch validation, world state, summary, completion checking)
+- **`test_goap_tools.c`** - GOAP tool unit tests (30+ tests: goal/action CRUD, persistent goals, readiness, dispatch validation, world state, summary, completion checking, plan document save/retrieve)
 - **`test_orchestrator_tool.c`** - Orchestrator tool unit tests (13 tests: execute_plan, list_goals, goal_status, start/pause/cancel_goal)
 - **`test_mode_tool.c`** - Mode tool switch_mode tests
 - **`test_tool_cache.c`** - Tool result caching tests
@@ -303,7 +303,7 @@ The test directory mirrors the source structure:
 - **`test_task_store.c`** - Task store persistence tests
 - **`test_message_store.c`** - Inter-agent messaging storage tests
 - **`test_sqlite_dal.c`** - SQLite Data Access Layer tests
-- **`test_goal_store.c`** - GOAP goal store persistence tests (20 tests: CRUD, status transitions, world state, summary, active-goals query, supervisor PID tracking)
+- **`test_goal_store.c`** - GOAP goal store persistence tests (20+ tests: CRUD, status transitions, world state, summary, active-goals query, supervisor PID tracking, plan_document persistence and migration)
 - **`test_action_store.c`** - GOAP action store tests (23 tests: hierarchy, precondition matching, readiness queries, skip_pending, work_item_id correlation)
 - **`test_oauth2_store.c`** - OAuth2 store tests (28 tests: lifecycle, provider registry/validation, auth flow, pending overflow, token access, multi-provider, encryption with auto-refresh, NULL safety)
 - **`test_oauth2_refresh_rotate.c`** - OAuth2 refresh token tests (rotation stores new RT, non-rotating preserves RT, refresh failure, no refresh capability)

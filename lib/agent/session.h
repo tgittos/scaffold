@@ -13,6 +13,9 @@
 #include "../services/services.h"
 #include "../plugin/plugin_manager.h"
 
+/** Returned when context window is nearly full after compaction attempts. */
+#define SESSION_CONTEXT_FULL -3
+
 /* Forward declaration — full definition in llm/model_capabilities.h */
 typedef struct ModelRegistry ModelRegistry;
 

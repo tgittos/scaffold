@@ -216,6 +216,7 @@ int main(int argc, char *argv[]) {
     char *worker_queue = NULL;
     int supervisor_mode = 0;
     char *supervisor_goal_id = NULL;
+    char *supervisor_phase_str = NULL;
     char *model_override = NULL;
     char *system_prompt_file = NULL;
 
@@ -268,6 +269,8 @@ int main(int argc, char *argv[]) {
             supervisor_mode = 1;
         } else if (strcmp(argv[i], "--goal") == 0 && i + 1 < argc) {
             supervisor_goal_id = argv[++i];
+        } else if (strcmp(argv[i], "--phase") == 0 && i + 1 < argc) {
+            supervisor_phase_str = argv[++i];
         } else if (strcmp(argv[i], "--system-prompt-file") == 0 && i + 1 < argc) {
             system_prompt_file = argv[++i];
         } else if (message_arg_index == -1 && argv[i][0] != '-') {
@@ -287,6 +290,16 @@ int main(int argc, char *argv[]) {
         }
         config.mode = AGENT_MODE_SUPERVISOR;
         config.supervisor_goal_id = supervisor_goal_id;
+        if (supervisor_phase_str != NULL) {
+            if (strcmp(supervisor_phase_str, "plan") == 0)
+                config.supervisor_phase = SUPERVISOR_PHASE_PLAN;
+            else if (strcmp(supervisor_phase_str, "execute") == 0)
+                config.supervisor_phase = SUPERVISOR_PHASE_EXECUTE;
+            else {
+                fprintf(stderr, "Error: --phase must be 'plan' or 'execute'\n");
+                return EXIT_FAILURE;
+            }
+        }
     } else if (worker_mode) {
         if (worker_queue == NULL) {
             fprintf(stderr, "Error: --worker requires --queue argument\n");

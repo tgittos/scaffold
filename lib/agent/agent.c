@@ -334,13 +334,30 @@ int agent_run(Agent* agent) {
                 return -1;
             }
 
+            /* Determine phase: explicit override or auto-detect from goal status */
+            SupervisorPhase phase;
+            if (agent->config.supervisor_phase >= 0) {
+                phase = (SupervisorPhase)agent->config.supervisor_phase;
+            } else {
+                goal_store_t *gs = services_get_goal_store(agent->services);
+                Goal *goal = gs ? goal_store_get(gs, agent->config.supervisor_goal_id) : NULL;
+                if (goal != NULL) {
+                    phase = (goal->status == GOAL_STATUS_PLANNING)
+                        ? SUPERVISOR_PHASE_PLAN : SUPERVISOR_PHASE_EXECUTE;
+                    goal_free(goal);
+                } else {
+                    phase = SUPERVISOR_PHASE_PLAN;
+                }
+            }
+
             cleanup_conversation_history(&agent->session.session_data.conversation);
             init_conversation_history(&agent->session.session_data.conversation);
 
             session_start_message_polling(&agent->session);
 
             int result = supervisor_run(&agent->session,
-                                        agent->config.supervisor_goal_id);
+                                        agent->config.supervisor_goal_id,
+                                        phase);
 
             session_stop_message_polling(&agent->session);
             return result;

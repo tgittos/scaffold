@@ -20,6 +20,13 @@ static int64_t now_millis(void) {
 int orchestrator_spawn_supervisor(goal_store_t* store, const char* goal_id) {
     if (store == NULL || goal_id == NULL) return -1;
 
+    /* Auto-detect phase from goal status */
+    Goal* goal = goal_store_get(store, goal_id);
+    if (goal == NULL) return -1;
+
+    const char* phase_str = (goal->status == GOAL_STATUS_PLANNING) ? "plan" : "execute";
+    goal_free(goal);
+
     char* exe_path = get_executable_path();
     if (exe_path == NULL) {
         fprintf(stderr, "orchestrator: failed to get executable path\n");
@@ -30,6 +37,7 @@ int orchestrator_spawn_supervisor(goal_store_t* store, const char* goal_id) {
         exe_path,
         "--supervisor",
         "--goal", (char*)goal_id,
+        "--phase", (char*)phase_str,
         "--yolo",
         NULL
     };
@@ -50,8 +58,8 @@ int orchestrator_spawn_supervisor(goal_store_t* store, const char* goal_id) {
         return -1;
     }
 
-    debug_printf("orchestrator: spawned supervisor pid=%d for goal %s\n",
-                 pid, goal_id);
+    debug_printf("orchestrator: spawned supervisor pid=%d for goal %s (phase=%s)\n",
+                 pid, goal_id, phase_str);
     return 0;
 }
 
@@ -164,21 +172,28 @@ void orchestrator_check_stale(goal_store_t* store) {
 int orchestrator_respawn_dead(goal_store_t* store) {
     if (store == NULL) return -1;
 
-    size_t count = 0;
-    Goal** goals = goal_store_list_by_status(store, GOAL_STATUS_ACTIVE, &count);
-    if (goals == NULL) return 0;
-
     int respawned = 0;
-    for (size_t i = 0; i < count; i++) {
-        if (goals[i]->supervisor_pid != 0) continue;
 
-        debug_printf("orchestrator: respawning supervisor for goal %s (%s)\n",
-                     goals[i]->id, goals[i]->name);
-        if (orchestrator_spawn_supervisor(store, goals[i]->id) == 0) {
-            respawned++;
+    /* Respawn both PLANNING and ACTIVE goals that have no running supervisor */
+    GoalStatus respawn_statuses[] = { GOAL_STATUS_PLANNING, GOAL_STATUS_ACTIVE };
+    for (int s = 0; s < 2; s++) {
+        size_t count = 0;
+        Goal** goals = goal_store_list_by_status(store, respawn_statuses[s], &count);
+        if (goals == NULL) continue;
+
+        for (size_t i = 0; i < count; i++) {
+            if (goals[i]->supervisor_pid != 0) continue;
+
+            debug_printf("orchestrator: respawning supervisor for goal %s (%s, status=%s)\n",
+                         goals[i]->id, goals[i]->name,
+                         goal_status_to_string(goals[i]->status));
+            if (orchestrator_spawn_supervisor(store, goals[i]->id) == 0) {
+                respawned++;
+            }
         }
+
+        goal_free_list(goals, count);
     }
 
-    goal_free_list(goals, count);
     return respawned;
 }

@@ -253,6 +253,58 @@ void test_goal_free_null(void) {
     goal_free_list(NULL, 0);
 }
 
+void test_goal_store_plan_document_null_initially(void) {
+    char goal_id[40];
+    goal_store_insert(g_store, "Plan Doc Test", NULL, "{}", "q1", goal_id);
+
+    Goal *goal = goal_store_get(g_store, goal_id);
+    TEST_ASSERT_NOT_NULL(goal);
+    TEST_ASSERT_NULL(goal->plan_document);
+    goal_free(goal);
+}
+
+void test_goal_store_update_plan_document(void) {
+    char goal_id[40];
+    goal_store_insert(g_store, "Plan Doc Update", NULL, "{}", "q1", goal_id);
+
+    const char *plan = "## Research\n- Found X\n- Found Y\n## Actions\n1. Do A\n2. Do B";
+    int result = goal_store_update_plan_document(g_store, goal_id, plan);
+    TEST_ASSERT_EQUAL(0, result);
+
+    Goal *goal = goal_store_get(g_store, goal_id);
+    TEST_ASSERT_NOT_NULL(goal);
+    TEST_ASSERT_NOT_NULL(goal->plan_document);
+    TEST_ASSERT_EQUAL_STRING(plan, goal->plan_document);
+    goal_free(goal);
+}
+
+void test_goal_store_update_plan_document_overwrite(void) {
+    char goal_id[40];
+    goal_store_insert(g_store, "Plan Doc Overwrite", NULL, "{}", "q1", goal_id);
+
+    goal_store_update_plan_document(g_store, goal_id, "First version");
+
+    const char *updated = "Second version with more detail";
+    int result = goal_store_update_plan_document(g_store, goal_id, updated);
+    TEST_ASSERT_EQUAL(0, result);
+
+    Goal *goal = goal_store_get(g_store, goal_id);
+    TEST_ASSERT_NOT_NULL(goal);
+    TEST_ASSERT_EQUAL_STRING(updated, goal->plan_document);
+    goal_free(goal);
+}
+
+void test_goal_store_update_plan_document_nonexistent(void) {
+    TEST_ASSERT_EQUAL(-1, goal_store_update_plan_document(g_store,
+        "nonexistent-uuid-1234-1234-123456789abc", "some plan"));
+}
+
+void test_goal_store_update_plan_document_null_params(void) {
+    TEST_ASSERT_EQUAL(-1, goal_store_update_plan_document(NULL, "id", "plan"));
+    TEST_ASSERT_EQUAL(-1, goal_store_update_plan_document(g_store, NULL, "plan"));
+    TEST_ASSERT_EQUAL(-1, goal_store_update_plan_document(g_store, "id", NULL));
+}
+
 int main(void) {
     UNITY_BEGIN();
 
@@ -276,6 +328,11 @@ int main(void) {
     RUN_TEST(test_goal_store_has_active_goals_after_completed);
     RUN_TEST(test_goal_store_has_active_goals_null);
     RUN_TEST(test_goal_free_null);
+    RUN_TEST(test_goal_store_plan_document_null_initially);
+    RUN_TEST(test_goal_store_update_plan_document);
+    RUN_TEST(test_goal_store_update_plan_document_overwrite);
+    RUN_TEST(test_goal_store_update_plan_document_nonexistent);
+    RUN_TEST(test_goal_store_update_plan_document_null_params);
 
     return UNITY_END();
 }

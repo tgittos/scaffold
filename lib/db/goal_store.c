@@ -22,13 +22,18 @@ static const char *SCHEMA_SQL =
     "    supervisor_pid INTEGER DEFAULT 0,"
     "    supervisor_started_at INTEGER DEFAULT 0,"
     "    created_at INTEGER NOT NULL,"
-    "    updated_at INTEGER NOT NULL"
+    "    updated_at INTEGER NOT NULL,"
+    "    plan_document TEXT"
     ");"
     "CREATE INDEX IF NOT EXISTS idx_goals_status ON goals(status);";
 
+static const char *MIGRATION_ADD_PLAN_DOCUMENT =
+    "ALTER TABLE goals ADD COLUMN plan_document TEXT;";
+
 #define GOAL_COLUMNS \
     "id, name, description, goal_state, world_state, summary, " \
-    "status, supervisor_pid, queue_name, supervisor_started_at, created_at, updated_at"
+    "status, supervisor_pid, queue_name, supervisor_started_at, created_at, updated_at, " \
+    "plan_document"
 
 #define GOAL_COL_ID                  0
 #define GOAL_COL_NAME                1
@@ -42,6 +47,7 @@ static const char *SCHEMA_SQL =
 #define GOAL_COL_SUPERVISOR_STARTED  9
 #define GOAL_COL_CREATED_AT         10
 #define GOAL_COL_UPDATED_AT         11
+#define GOAL_COL_PLAN_DOCUMENT      12
 
 static void *map_goal(sqlite3_stmt *stmt, void *user_data) {
     (void)user_data;
@@ -75,6 +81,12 @@ static void *map_goal(sqlite3_stmt *stmt, void *user_data) {
     if (summary) {
         goal->summary = strdup(summary);
         if (!goal->summary) { free(goal->world_state); free(goal->goal_state); free(goal->description); free(goal); return NULL; }
+    }
+
+    const char *plan_document = (const char *)sqlite3_column_text(stmt, GOAL_COL_PLAN_DOCUMENT);
+    if (plan_document) {
+        goal->plan_document = strdup(plan_document);
+        if (!goal->plan_document) { free(goal->summary); free(goal->world_state); free(goal->goal_state); free(goal->description); free(goal); return NULL; }
     }
 
     goal->status = (GoalStatus)sqlite3_column_int(stmt, GOAL_COL_STATUS);
@@ -129,6 +141,10 @@ goal_store_t *goal_store_create(const char *db_path) {
         free(store);
         return NULL;
     }
+
+    /* Migration: add plan_document column to existing databases. */
+    sqlite_dal_exec(store->dal, MIGRATION_ADD_PLAN_DOCUMENT);
+
     return store;
 }
 
@@ -142,6 +158,9 @@ goal_store_t *goal_store_create_with_dal(sqlite_dal_t *dal) {
         free(store);
         return NULL;
     }
+
+    /* Migration: add plan_document column to existing databases. */
+    sqlite_dal_exec(dal, MIGRATION_ADD_PLAN_DOCUMENT);
 
     store->dal = sqlite_dal_retain(dal);
     return store;
@@ -231,6 +250,16 @@ int goal_store_update_summary(goal_store_t *store, const char *id, const char *s
     return (changes > 0) ? 0 : -1;
 }
 
+int goal_store_update_plan_document(goal_store_t *store, const char *id,
+                                     const char *plan_document) {
+    if (!store || !id || !plan_document) return -1;
+    BindTextInt64Text params = { plan_document, time(NULL), id };
+    int changes = sqlite_dal_exec_p(store->dal,
+        "UPDATE goals SET plan_document = ?, updated_at = ? WHERE id = ?;",
+        bind_text_int64_text, &params);
+    return (changes > 0) ? 0 : -1;
+}
+
 int goal_store_update_supervisor(goal_store_t *store, const char *id,
                                   pid_t pid, int64_t started_at) {
     if (!store || !id) return -1;
@@ -286,6 +315,7 @@ void goal_free(Goal *goal) {
     free(goal->goal_state);
     free(goal->world_state);
     free(goal->summary);
+    free(goal->plan_document);
     free(goal);
 }
 

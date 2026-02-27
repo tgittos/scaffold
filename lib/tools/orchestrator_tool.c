@@ -356,31 +356,40 @@ int execute_start_goal(const ToolCall *tc, ToolResult *result) {
     }
 
     GoalStatus original_status = goal->status;
-    int rc = goal_store_update_status(gs, goal_id, GOAL_STATUS_ACTIVE);
-    if (rc != 0) {
-        tool_result_set_error(result, "Failed to activate goal");
-        goal_free(goal);
-        free(goal_id);
-        return 0;
+
+    /* PAUSED goals resume as ACTIVE (they were previously planned).
+     * PLANNING goals stay PLANNING — the planner phase will transition
+     * them to ACTIVE after plan_is_complete() fires. */
+    if (original_status == GOAL_STATUS_PAUSED) {
+        int rc = goal_store_update_status(gs, goal_id, GOAL_STATUS_ACTIVE);
+        if (rc != 0) {
+            tool_result_set_error(result, "Failed to activate goal");
+            goal_free(goal);
+            free(goal_id);
+            return 0;
+        }
     }
 
-    rc = orchestrator_spawn_supervisor(gs, goal_id);
+    int rc = orchestrator_spawn_supervisor(gs, goal_id);
     if (rc != 0) {
         tool_result_set_error(result, "Failed to spawn supervisor");
-        goal_store_update_status(gs, goal_id, original_status);
+        if (original_status == GOAL_STATUS_PAUSED)
+            goal_store_update_status(gs, goal_id, original_status);
         goal_free(goal);
         free(goal_id);
         return 0;
     }
 
-    /* Re-read to get the updated PID */
+    /* Re-read to get the updated PID and current status */
     goal_free(goal);
     goal = goal_store_get(gs, goal_id);
+
+    const char *status_str = goal ? goal_status_to_string(goal->status) : "unknown";
 
     cJSON *json = cJSON_CreateObject();
     cJSON_AddBoolToObject(json, "success", cJSON_True);
     cJSON_AddStringToObject(json, "goal_id", goal_id);
-    cJSON_AddStringToObject(json, "status", "active");
+    cJSON_AddStringToObject(json, "status", status_str);
     if (goal)
         cJSON_AddNumberToObject(json, "supervisor_pid", (double)goal->supervisor_pid);
 

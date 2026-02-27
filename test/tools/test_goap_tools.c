@@ -891,6 +891,84 @@ void test_get_action_results_truncation(void) {
 }
 
 /* ========================================================================
+ * goap_save_plan_document
+ * ======================================================================== */
+
+void test_save_plan_document(void) {
+    char goal_id[40];
+    create_test_goal(goal_id);
+
+    char args[512];
+    snprintf(args, sizeof(args),
+        "{\"goal_id\":\"%s\",\"plan_document\":\"## Plan\\n1. Do X\\n2. Do Y\"}",
+        goal_id);
+    ToolCall tc = make_tc("pd1", "goap_save_plan_document", args);
+    ToolResult tr = {0};
+
+    TEST_ASSERT_EQUAL(0, execute_goap_save_plan_document(&tc, &tr));
+    TEST_ASSERT_EQUAL(1, tr.success);
+
+    cJSON *resp = parse_result(&tr);
+    TEST_ASSERT_TRUE(cJSON_IsTrue(cJSON_GetObjectItem(resp, "success")));
+    TEST_ASSERT_EQUAL_STRING(goal_id,
+        cJSON_GetStringValue(cJSON_GetObjectItem(resp, "goal_id")));
+    cJSON_Delete(resp);
+
+    /* Verify persisted in store — cJSON converts \n escapes to real newlines */
+    Goal *goal = goal_store_get(gs, goal_id);
+    TEST_ASSERT_NOT_NULL(goal);
+    TEST_ASSERT_NOT_NULL(goal->plan_document);
+    TEST_ASSERT_EQUAL_STRING("## Plan\n1. Do X\n2. Do Y", goal->plan_document);
+    goal_free(goal);
+
+    free_tc(&tc);
+    free_tr(&tr);
+}
+
+void test_save_plan_document_missing_params(void) {
+    ToolCall tc = make_tc("pd2", "goap_save_plan_document",
+        "{\"goal_id\":\"some-id\"}");
+    ToolResult tr = {0};
+
+    TEST_ASSERT_EQUAL(0, execute_goap_save_plan_document(&tc, &tr));
+    TEST_ASSERT_EQUAL(0, tr.success);
+    free_tc(&tc);
+    free_tr(&tr);
+}
+
+void test_save_plan_document_nonexistent_goal(void) {
+    ToolCall tc = make_tc("pd3", "goap_save_plan_document",
+        "{\"goal_id\":\"nonexistent\",\"plan_document\":\"some plan\"}");
+    ToolResult tr = {0};
+
+    TEST_ASSERT_EQUAL(0, execute_goap_save_plan_document(&tc, &tr));
+    TEST_ASSERT_EQUAL(0, tr.success);
+    free_tc(&tc);
+    free_tr(&tr);
+}
+
+void test_get_goal_includes_plan_document(void) {
+    char goal_id[40];
+    create_test_goal(goal_id);
+    goal_store_update_plan_document(gs, goal_id, "My detailed plan");
+
+    char args[128];
+    snprintf(args, sizeof(args), "{\"goal_id\":\"%s\"}", goal_id);
+    ToolCall tc = make_tc("pd4", "goap_get_goal", args);
+    ToolResult tr = {0};
+
+    TEST_ASSERT_EQUAL(0, execute_goap_get_goal(&tc, &tr));
+    TEST_ASSERT_EQUAL(1, tr.success);
+
+    cJSON *resp = parse_result(&tr);
+    TEST_ASSERT_EQUAL_STRING("My detailed plan",
+        cJSON_GetStringValue(cJSON_GetObjectItem(resp, "plan_document")));
+    cJSON_Delete(resp);
+    free_tc(&tc);
+    free_tr(&tr);
+}
+
+/* ========================================================================
  * Runner
  * ======================================================================== */
 
@@ -944,6 +1022,12 @@ int main(void) {
     RUN_TEST(test_get_action_results);
     RUN_TEST(test_get_action_results_with_filter);
     RUN_TEST(test_get_action_results_truncation);
+
+    /* goap_save_plan_document */
+    RUN_TEST(test_save_plan_document);
+    RUN_TEST(test_save_plan_document_missing_params);
+    RUN_TEST(test_save_plan_document_nonexistent_goal);
+    RUN_TEST(test_get_goal_includes_plan_document);
 
     return UNITY_END();
 }

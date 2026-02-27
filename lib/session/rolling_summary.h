@@ -9,6 +9,7 @@
 // Compaction thresholds as fractions of context window
 #define COMPACTION_TRIGGER_THRESHOLD 0.75f   // Trigger when context reaches 75%
 #define COMPACTION_TARGET_THRESHOLD 0.35f    // Trim down to 35% of context
+#define CONTEXT_FULL_THRESHOLD 0.92f         // Context nearly full (above compaction trigger)
 
 typedef struct {
     char* summary_text;

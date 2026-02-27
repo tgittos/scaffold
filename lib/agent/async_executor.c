@@ -1,4 +1,5 @@
 #include "async_executor.h"
+#include "session.h"
 #include "../util/interrupt.h"
 #include "../util/debug_output.h"
 #include "../ipc/pipe_notifier.h"
@@ -76,6 +77,10 @@ static void* executor_thread_func(void* arg) {
     if (atomic_load(&executor->cancel_requested) || result == -2) {
         debug_printf("async_executor: Execution was cancelled\n");
         send_event(executor, ASYNC_EVENT_INTERRUPTED);
+    } else if (result == SESSION_CONTEXT_FULL) {
+        debug_printf("async_executor: Context window full\n");
+        executor->last_error = strdup("Context window full. Try /compact or start a new session.");
+        send_event(executor, ASYNC_EVENT_ERROR);
     } else if (result != 0) {
         debug_printf("async_executor: Execution failed with result %d\n", result);
         executor->last_error = strdup("Message processing failed");

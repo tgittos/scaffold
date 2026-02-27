@@ -8,6 +8,7 @@
 #include "../ui/status_line.h"
 #include "../util/debug_output.h"
 #include "../session/token_manager.h"
+#include "session.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,7 +35,12 @@ int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx) {
         TokenConfig token_config;
         token_config_init(&token_config, session->session_data.config.context_window);
         TokenUsage token_usage;
-        if (manage_conversation_tokens(session, "", &token_config, &token_usage) != 0) {
+        int token_rc = manage_conversation_tokens(session, "", &token_config, &token_usage);
+        if (token_rc == SESSION_CONTEXT_FULL) {
+            debug_printf("iterative_loop: context full, propagating\n");
+            return SESSION_CONTEXT_FULL;
+        }
+        if (token_rc != 0) {
             fprintf(stderr, "Error: Failed to calculate token allocation for tool loop iteration %d\n", loop_count);
             return -1;
         }

@@ -827,6 +827,71 @@ When a subagent completes (success, failure, or timeout), the parent harness aut
 
 Subagents do not have access to messaging tools - the parent harness handles all notification automatically.
 
+## Supervisor Phase Architecture
+
+Supervisors operate in two distinct phases, enabling plan-then-execute workflows for GOAP goals.
+
+```mermaid
+graph TB
+    Orchestrator[Orchestrator<br/>orchestrator.c] --> PhaseDetect{Auto-Detect Phase<br/>from Goal Status}
+    PhaseDetect -->|PLANNING| SpawnPlan[Spawn Supervisor<br/>--phase plan]
+    PhaseDetect -->|ACTIVE| SpawnExec[Spawn Supervisor<br/>--phase execute]
+
+    SpawnPlan --> PlanPhase[Plan Phase<br/>SUPERVISOR_PHASE_PLAN]
+    SpawnExec --> ExecPhase[Execute Phase<br/>SUPERVISOR_PHASE_EXECUTE]
+
+    PlanPhase --> BuildPlanMsg[build_planner_message<br/>Goal + decomposition instructions]
+    PlanPhase --> PlanTools[GOAP Tools:<br/>create_actions, save_plan_document]
+    PlanPhase --> PlanComplete{plan_is_complete?<br/>Actions exist}
+    PlanComplete -->|Yes| GoalActive[Goal → ACTIVE<br/>Supervisor exits]
+    PlanComplete -->|No| PlanLoop[Continue planning]
+
+    ExecPhase --> BuildExecMsg[build_executor_message<br/>Work context + plan_guidance]
+    ExecPhase --> ExecTools[GOAP Tools:<br/>dispatch_action, update_world_state]
+    ExecPhase --> ExecComplete{Goal complete?}
+    ExecComplete -->|Yes| GoalDone[Goal → COMPLETED]
+    ExecComplete -->|No| ExecLoop[Continue executing]
+
+    %% Context pressure
+    ExecPhase --> ContextCheck{Context > 92%?}
+    ContextCheck -->|Yes| ContextExit[SUPERVISOR_EXIT_CONTEXT<br/>Supervisor exits for respawn]
+    PlanPhase --> ContextCheck
+
+    classDef plan fill:#e3f2fd
+    classDef exec fill:#e8f5e8
+    classDef detect fill:#fff3e0
+    classDef exit fill:#ffcdd2
+
+    class PlanPhase,BuildPlanMsg,PlanTools,PlanComplete,PlanLoop plan
+    class ExecPhase,BuildExecMsg,ExecTools,ExecComplete,ExecLoop exec
+    class Orchestrator,PhaseDetect,SpawnPlan,SpawnExec detect
+    class ContextExit,GoalActive,GoalDone exit
+```
+
+### Phase Lifecycle
+
+1. **Orchestrator spawns supervisor** with auto-detected `--phase` flag based on goal status (PLANNING = plan, ACTIVE = execute)
+2. **Plan phase**: Supervisor builds a planner message with goal description and decomposition instructions. The LLM creates actions and optionally saves a plan document via `goap_save_plan_document`. When `plan_is_complete()` detects actions exist, the goal transitions to ACTIVE and the supervisor exits
+3. **Execute phase**: Supervisor builds an executor message with work context and `plan_guidance` (from the goal's `plan_document`). The LLM dispatches actions to workers and updates world state. Goal completion triggers COMPLETED status
+4. **Respawn**: Orchestrator respawns dead supervisors for both PLANNING and ACTIVE goals, re-detecting the appropriate phase
+
+### Context Pressure Detection
+
+Context detection prevents supervisors from running out of context window space:
+
+- **Threshold**: `CONTEXT_FULL_THRESHOLD` (0.92 = 92% of context window)
+- **Signal**: `SESSION_CONTEXT_FULL` (-3) propagated through the call chain: `manage_conversation_tokens` -> `session_process_message`/`session_continue` -> `iterative_loop_run` -> `tool_executor_run_workflow` -> `process_notifications` -> `supervisor_run`
+- **Exit**: Supervisor exits with `SUPERVISOR_EXIT_CONTEXT`, allowing the orchestrator to respawn it with a fresh context
+
+### Plan Document
+
+Goals have an optional `plan_document` field (TEXT column in SQLite, `char*` in Goal struct) for persisting structured plan guidance across supervisor restarts:
+
+- **Saved via**: `goap_save_plan_document` tool
+- **Read via**: `goap_get_goal` (included in response)
+- **Injected as**: `plan_guidance` in `build_work_context()` during execute phase
+- **Schema migration**: Existing databases auto-migrate to add the `plan_document` column
+
 ## Approval Gate System
 
 Ralph implements a comprehensive approval gate system that controls tool execution based on security categories and user preferences.
@@ -1139,8 +1204,8 @@ graph TB
 - **`TodoWrite`**: Create, update status/priority, delete, or bulk set todos
 - **`TodoRead`**: List and filter todos by status and priority
 
-### GOAP Tools (9 tools)
-- **`goap_get_goal`**: Read goal details (description, goal state, world state, status)
+### GOAP Tools (10 tools)
+- **`goap_get_goal`**: Read goal details (description, goal state, world state, status, plan_document)
 - **`goap_list_actions`**: List actions for a goal, optionally filtered by status or parent
 - **`goap_create_goal`**: Create a new goal with goal state assertions; optional `persistent` flag promotes to ACTIVE immediately
 - **`goap_create_actions`**: Batch-create actions with preconditions and effects
@@ -1149,6 +1214,7 @@ graph TB
 - **`goap_update_world_state`**: Merge boolean assertions into goal's world state; optional `summary` for progress notes
 - **`goap_check_complete`**: Check if world_state satisfies goal_state
 - **`goap_get_action_results`**: Read completed action results (truncated for context safety)
+- **`goap_save_plan_document`**: Save a plan document to a goal for persistent plan guidance
 
 ### Orchestrator Tools (6 tools)
 - **`execute_plan`**: Decompose a plan into GOAP goals and actions with decomposition instructions
@@ -1181,7 +1247,7 @@ graph TB
 ```
 src/
 ├── scaffold/               # Scaffold CLI (single binary)
-│   └── main.c              # Entry point (REPL, one-shot, --supervisor, --worker, --check-update, --update)
+│   └── main.c              # Entry point (REPL, one-shot, --supervisor, --worker, --phase plan|execute, --check-update, --update)
 ├── tools/                  # Python tool integration
 │   ├── python_tool.c/h     # Embedded Python interpreter
 │   ├── python_tool_files.c/h # Python file-based tools
@@ -1206,7 +1272,7 @@ lib/
 ├── types.h                 # Shared types (ToolCall, ToolResult, StreamingToolUse)
 ├── agent/                  # Agent abstraction and session management
 │   ├── agent.c/h           # Agent lifecycle (init, run, cleanup)
-│   ├── session.c/h         # Thin coordinator delegating to extracted modules
+│   ├── session.c/h         # Thin coordinator delegating to extracted modules, SESSION_CONTEXT_FULL (-3) propagation
 │   ├── session_configurator.c/h # Configuration loading and API type detection
 │   ├── message_dispatcher.c/h  # Dispatch path selection (streaming vs buffered)
 │   ├── message_processor.c/h   # Buffered response handling
@@ -1227,14 +1293,14 @@ lib/
 │   ├── conversation_tracker.c/h # Conversation persistence
 │   ├── token_manager.c/h   # Token counting/allocation
 │   ├── conversation_compactor.c/h # Context trimming
-│   └── rolling_summary.c/h # Rolling conversation summary generation
+│   └── rolling_summary.c/h # Rolling conversation summary generation, CONTEXT_FULL_THRESHOLD (0.92)
 ├── db/                     # Database layer
 │   ├── vector_db.c/h       # Low-level HNSWLIB wrapper
 │   ├── vector_db_service.c/h # Thread-safe singleton service
 │   ├── document_store.c/h  # High-level document storage
 │   ├── metadata_store.c/h  # Chunk metadata storage
 │   ├── task_store.c/h      # SQLite-based persistent task storage
-│   ├── goal_store.c/h      # GOAP goal persistence (scaffold orchestration)
+│   ├── goal_store.c/h      # GOAP goal persistence (scaffold orchestration), plan_document column, schema migration
 │   ├── action_store.c/h    # GOAP action persistence with hierarchy, readiness queries, and work_item_id correlation
 │   ├── oauth2_store.c/h    # OAuth2 token management with PKCE, AES-256-GCM encryption, provider vtable
 │   ├── sqlite_dal.c/h      # SQLite data access layer (ref-counted, recursive mutex for nested locking)
@@ -1336,7 +1402,7 @@ lib/
 │   ├── subagent_tool.c/h   # Subagent process spawning
 │   ├── subagent_process.c/h    # Subagent I/O and lifecycle
 │   ├── messaging_tool.c/h  # Inter-agent messaging (6 tools)
-│   ├── goap_tools.c/h      # GOAP goal/action tools for supervisors (9 tools, scaffold only)
+│   ├── goap_tools.c/h      # GOAP goal/action tools for supervisors (10 tools, scaffold only)
 │   ├── orchestrator_tool.c/h # Orchestrator lifecycle tools (6 tools, scaffold only)
 │   ├── mode_tool.c/h       # LLM-callable switch_mode tool
 │   ├── tool_cache.c/h      # Thread-safe tool result caching with file mtime invalidation
@@ -1364,8 +1430,8 @@ lib/
 ├── updater/               # Self-update system
 │   └── updater.c/h        # GitHub releases check, download, and apply
 ├── orchestrator/          # Scaffold orchestration layer
-│   ├── supervisor.c/h     # Supervisor event loop (GOAP tool-driven goal progression, orphaned action recovery)
-│   ├── orchestrator.c/h   # Supervisor spawning (via process_spawn), monitoring, stale-PID cleanup (dead-only), and lifecycle
+│   ├── supervisor.c/h     # Supervisor event loop with phase-aware execution (plan/execute), context pressure exit, orphaned action recovery
+│   ├── orchestrator.c/h   # Supervisor spawning (via process_spawn) with auto-detected --phase flag, monitoring, stale-PID cleanup (dead-only), respawn for PLANNING+ACTIVE goals
 │   ├── goap_state.c/h     # Shared GOAP state evaluation (precondition checking, progress tracking)
 │   └── role_prompts.c/h   # Role-based system prompts for workers (file override + built-in defaults)
 └── workflow/               # Task queue

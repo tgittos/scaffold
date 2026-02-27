@@ -59,6 +59,7 @@ source .env && out/scaffold --yolo "your message"
 | `--home <path>` | Override home directory (default: `~/.local/scaffold`) |
 | `--login` | Log in to OpenAI via OAuth (ChatGPT subscription) |
 | `--logout` | Log out of OpenAI OAuth session |
+| `--phase plan\|execute` | Set supervisor phase (default: auto-detect from goal status) |
 
 ## Development Environment
 

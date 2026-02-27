@@ -8,6 +8,11 @@
 #define SUPERVISOR_EXIT_ERROR      -1
 #define SUPERVISOR_EXIT_CONTEXT    -3
 
+typedef enum {
+    SUPERVISOR_PHASE_PLAN    = 0,
+    SUPERVISOR_PHASE_EXECUTE = 1
+} SupervisorPhase;
+
 /**
  * Recover orphaned RUNNING actions for a goal.
  *
@@ -38,10 +43,11 @@ int supervisor_recover_orphaned_actions(Services *services, const char *goal_id)
  *
  * @param session  Initialized session with services wired and message polling started
  * @param goal_id  UUID of the goal to supervise
+ * @param phase    SUPERVISOR_PHASE_PLAN or SUPERVISOR_PHASE_EXECUTE
  * @return SUPERVISOR_EXIT_COMPLETE (0) on goal completion,
  *         SUPERVISOR_EXIT_ERROR (-1) on failure,
  *         SUPERVISOR_EXIT_CONTEXT (-3) if context window filled up (respawn needed)
  */
-int supervisor_run(AgentSession *session, const char *goal_id);
+int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase phase);
 
 #endif /* SUPERVISOR_H */

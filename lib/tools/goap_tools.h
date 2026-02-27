@@ -19,5 +19,6 @@ int execute_goap_dispatch_action(const ToolCall *tc, ToolResult *result);
 int execute_goap_update_world_state(const ToolCall *tc, ToolResult *result);
 int execute_goap_check_complete(const ToolCall *tc, ToolResult *result);
 int execute_goap_get_action_results(const ToolCall *tc, ToolResult *result);
+int execute_goap_save_plan_document(const ToolCall *tc, ToolResult *result);
 
 #endif /* GOAP_TOOLS_H */

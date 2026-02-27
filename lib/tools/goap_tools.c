@@ -83,6 +83,11 @@ static const ParamDef GET_ACTION_RESULTS_PARAMS[] = {
     {"action_ids", "array", "Optional: specific action IDs to get results for (omit for all completed)", NULL, 0},
 };
 
+static const ParamDef SAVE_PLAN_DOCUMENT_PARAMS[] = {
+    {"goal_id", "string", "ID of the goal", NULL, 1},
+    {"plan_document", "string", "The plan document text (research findings, decomposition strategy, execution notes)", NULL, 1},
+};
+
 /* ========================================================================
  * Tool definitions table
  * ======================================================================== */
@@ -115,6 +120,9 @@ static const ToolDef GOAP_TOOLS[] = {
     {"goap_get_action_results",
      "Get results from completed actions for a goal (results truncated to prevent context blowup)",
      GET_ACTION_RESULTS_PARAMS, 2, execute_goap_get_action_results},
+    {"goap_save_plan_document",
+     "Save a plan document (research findings, decomposition strategy) for a goal",
+     SAVE_PLAN_DOCUMENT_PARAMS, 2, execute_goap_save_plan_document},
 };
 
 #define GOAP_TOOL_COUNT (sizeof(GOAP_TOOLS) / sizeof(GOAP_TOOLS[0]))
@@ -200,6 +208,8 @@ int execute_goap_get_goal(const ToolCall *tc, ToolResult *result) {
         cJSON_AddStringToObject(json, "queue_name", goal->queue_name);
     if (goal->summary)
         cJSON_AddStringToObject(json, "summary", goal->summary);
+    if (goal->plan_document)
+        cJSON_AddStringToObject(json, "plan_document", goal->plan_document);
 
     if (goal->goal_state) {
         cJSON *gs_obj = cJSON_Parse(goal->goal_state);
@@ -545,6 +555,23 @@ static char *build_work_context(const Goal *goal, action_store_t *as,
     if (goal->world_state) {
         cJSON *ws = cJSON_Parse(goal->world_state);
         if (ws) cJSON_AddItemToObject(ctx, "world_state", ws);
+    }
+
+    /* Include plan guidance from planning phase if available */
+    if (goal->plan_document) {
+        size_t plen = strlen(goal->plan_document);
+        if (plen > MAX_RESULT_PREVIEW) {
+            char *trunc = malloc(MAX_RESULT_PREVIEW + 20);
+            if (trunc) {
+                snprintf(trunc, MAX_RESULT_PREVIEW + 20,
+                         "%.*s...[truncated]",
+                         (int)MAX_RESULT_PREVIEW, goal->plan_document);
+                cJSON_AddStringToObject(ctx, "plan_guidance", trunc);
+                free(trunc);
+            }
+        } else {
+            cJSON_AddStringToObject(ctx, "plan_guidance", goal->plan_document);
+        }
     }
 
     /* Collect results from completed actions whose effects overlap with
@@ -1032,5 +1059,49 @@ int execute_goap_get_action_results(const ToolCall *tc, ToolResult *result) {
     if (args) cJSON_Delete(args);
     action_free_list(actions, count);
     free(goal_id);
+    return 0;
+}
+
+/* ========================================================================
+ * goap_save_plan_document
+ * ======================================================================== */
+
+int execute_goap_save_plan_document(const ToolCall *tc, ToolResult *result) {
+    if (!tc || !result) return -1;
+    result->tool_call_id = safe_strdup(tc->id);
+
+    char *goal_id = extract_string_param(tc->arguments, "goal_id");
+    char *plan_doc = extract_string_param(tc->arguments, "plan_document");
+
+    if (!goal_id || !plan_doc) {
+        tool_result_set_error(result, "Missing required parameters: goal_id, plan_document");
+        free(goal_id);
+        free(plan_doc);
+        return 0;
+    }
+
+    goal_store_t *gs = services_get_goal_store(g_services);
+    if (!gs) {
+        tool_result_set_error(result, "Goal store not available");
+        free(goal_id);
+        free(plan_doc);
+        return 0;
+    }
+
+    int rc = goal_store_update_plan_document(gs, goal_id, plan_doc);
+
+    if (rc == 0) {
+        cJSON *resp = cJSON_CreateObject();
+        cJSON_AddBoolToObject(resp, "success", cJSON_True);
+        cJSON_AddStringToObject(resp, "goal_id", goal_id);
+        result->result = cJSON_PrintUnformatted(resp);
+        result->success = 1;
+        cJSON_Delete(resp);
+    } else {
+        tool_result_set_error(result, "Failed to save plan document");
+    }
+
+    free(goal_id);
+    free(plan_doc);
     return 0;
 }

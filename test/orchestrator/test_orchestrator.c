@@ -219,11 +219,65 @@ void test_check_stale_old_running_not_cleared(void) {
     waitpid(pid, NULL, 0);
 }
 
-void test_respawn_dead_no_active_goals(void) {
+void test_respawn_dead_no_respawnable_goals(void) {
     char goal_id[40];
     create_test_goal("test", goal_id);
+    /* Set to PAUSED — only PLANNING and ACTIVE goals are respawned */
+    goal_store_update_status(g_store, goal_id, GOAL_STATUS_PAUSED);
     int count = orchestrator_respawn_dead(g_store);
     TEST_ASSERT_EQUAL(0, count);
+}
+
+void test_respawn_dead_planning_goal(void) {
+    char goal_id[40];
+    create_test_goal("planning goal", goal_id);
+    /* Goals start in PLANNING status — should be respawned when pid=0 */
+    TEST_ASSERT_EQUAL(GOAL_STATUS_PLANNING, GOAL_STATUS_PLANNING);
+
+    Goal *goal = goal_store_get(g_store, goal_id);
+    TEST_ASSERT_NOT_NULL(goal);
+    TEST_ASSERT_EQUAL(GOAL_STATUS_PLANNING, goal->status);
+    TEST_ASSERT_EQUAL(0, goal->supervisor_pid);
+    goal_free(goal);
+
+    int count = orchestrator_respawn_dead(g_store);
+    TEST_ASSERT_EQUAL(1, count);
+
+    /* Verify a supervisor was assigned */
+    goal = goal_store_get(g_store, goal_id);
+    TEST_ASSERT_NOT_NULL(goal);
+    TEST_ASSERT_TRUE(goal->supervisor_pid > 0);
+
+    /* Clean up spawned process */
+    if (goal->supervisor_pid > 0) {
+        kill(goal->supervisor_pid, SIGKILL);
+        waitpid(goal->supervisor_pid, NULL, 0);
+    }
+    goal_free(goal);
+}
+
+void test_respawn_dead_both_planning_and_active(void) {
+    char id1[40], id2[40];
+    create_test_goal("planning", id1);
+    create_test_goal("active", id2);
+    goal_store_update_status(g_store, id2, GOAL_STATUS_ACTIVE);
+
+    int count = orchestrator_respawn_dead(g_store);
+    TEST_ASSERT_EQUAL(2, count);
+
+    /* Clean up */
+    Goal *g1 = goal_store_get(g_store, id1);
+    Goal *g2 = goal_store_get(g_store, id2);
+    if (g1 && g1->supervisor_pid > 0) {
+        kill(g1->supervisor_pid, SIGKILL);
+        waitpid(g1->supervisor_pid, NULL, 0);
+    }
+    if (g2 && g2->supervisor_pid > 0) {
+        kill(g2->supervisor_pid, SIGKILL);
+        waitpid(g2->supervisor_pid, NULL, 0);
+    }
+    goal_free(g1);
+    goal_free(g2);
 }
 
 void test_null_params(void) {
@@ -251,7 +305,9 @@ int main(void) {
     RUN_TEST(test_check_stale_dead_pid);
     RUN_TEST(test_check_stale_recent_running_not_cleared);
     RUN_TEST(test_check_stale_old_running_not_cleared);
-    RUN_TEST(test_respawn_dead_no_active_goals);
+    RUN_TEST(test_respawn_dead_no_respawnable_goals);
+    RUN_TEST(test_respawn_dead_planning_goal);
+    RUN_TEST(test_respawn_dead_both_planning_and_active);
     RUN_TEST(test_null_params);
 
     return UNITY_END();

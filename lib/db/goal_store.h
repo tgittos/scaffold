@@ -21,6 +21,7 @@ typedef struct {
     char* goal_state;
     char* world_state;
     char* summary;
+    char* plan_document;
     GoalStatus status;
     char queue_name[64];
     pid_t supervisor_pid;
@@ -49,6 +50,8 @@ int goal_store_update_status(goal_store_t* store, const char* id, GoalStatus sta
 int goal_store_update_world_state(goal_store_t* store, const char* id,
                                    const char* world_state_json);
 int goal_store_update_summary(goal_store_t* store, const char* id, const char* summary);
+int goal_store_update_plan_document(goal_store_t* store, const char* id,
+                                     const char* plan_document);
 
 // Lock/unlock for callers that need atomic read-modify-write sequences.
 // goal_store_get and goal_store_update_* each acquire their own locks, so

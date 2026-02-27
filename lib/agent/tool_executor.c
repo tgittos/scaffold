@@ -4,6 +4,7 @@
 #include "tool_batch_executor.h"
 #include "conversation_state.h"
 #include "iterative_loop.h"
+#include "session.h"
 #include "../session/conversation_tracker.h"
 #include "../util/debug_output.h"
 #include <stdlib.h>
@@ -65,6 +66,14 @@ int tool_executor_run_workflow(AgentSession* session, ToolCall* tool_calls, int 
     }
 
     int result = iterative_loop_run(session, &ctx);
+
+    // Context full is a special signal that must propagate to the supervisor
+    if (result == SESSION_CONTEXT_FULL) {
+        debug_printf("tool_executor: context full, propagating\n");
+        cleanup_tool_results(results, call_count);
+        tool_orchestration_cleanup(&ctx);
+        return SESSION_CONTEXT_FULL;
+    }
 
     // Follow-up loop failure is non-fatal since initial tools already executed
     if (result != 0) {

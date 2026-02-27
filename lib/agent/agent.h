@@ -26,6 +26,7 @@
 #include "../ipc/ipc.h"
 #include "../tools/tools.h"
 #include "../services/services.h"
+#include "../orchestrator/supervisor.h"
 
 
 #ifdef __cplusplus
@@ -102,6 +103,9 @@ typedef struct AgentConfig {
     /** Goal ID for SUPERVISOR mode */
     const char* supervisor_goal_id;
 
+    /** Supervisor phase override (-1 = auto-detect from goal status) */
+    int supervisor_phase;
+
     /** Model override (tier name or raw model ID) from --model flag */
     const char* model_override;
 
@@ -143,6 +147,7 @@ static inline AgentConfig agent_config_default(void) {
     config.yolo = false;
     config.no_auto_messages = false;
     config.message_poll_interval_ms = 0;  /* Use default */
+    config.supervisor_phase = -1;         /* Auto-detect from goal status */
     config.services = NULL;               /* Use default singletons */
     return config;
 }

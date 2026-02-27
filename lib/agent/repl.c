@@ -98,7 +98,9 @@ static void repl_line_callback(char* line) {
 
     printf("\n");
     int result = session_process_message(g_repl_session, line);
-    if (result == -1) {
+    if (result == SESSION_CONTEXT_FULL) {
+        fprintf(stderr, "\nContext window full. Try /compact or start a new session.\n");
+    } else if (result == -1) {
         fprintf(stderr, "Error: Failed to process message\n");
     }
 
@@ -152,7 +154,10 @@ static void process_pending_notifications(AgentSession* session) {
             debug_printf("Processing %d incoming messages\n", total_count);
             append_conversation_message(&session->session_data.conversation,
                                         "system", notification_text);
-            session_continue(session);
+            int cont_rc = session_continue(session);
+            if (cont_rc == SESSION_CONTEXT_FULL) {
+                fprintf(stderr, "\nContext window full. Try /compact or start a new session.\n");
+            }
             free(notification_text);
         } else {
             display_message_notification_clear();
