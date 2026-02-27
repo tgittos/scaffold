@@ -7,6 +7,7 @@ Scaffold doesn't assist. It builds.
 ```bash
 wget https://github.com/tgittos/scaffold/releases/latest/download/scaffold
 chmod +x scaffold
+./scaffold --login
 ./scaffold "build a minimal twitter clone as a SPA web app. use something like React or Vue \
 with a clean, responsive ui and an express backend with sqlite storage. users should be able \
 to sign up, log in, post short text messages, follow/unfollow other users, and see a timeline \
