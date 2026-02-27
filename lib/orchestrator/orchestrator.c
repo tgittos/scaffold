@@ -20,7 +20,6 @@ static int64_t now_millis(void) {
 int orchestrator_spawn_supervisor(goal_store_t* store, const char* goal_id) {
     if (store == NULL || goal_id == NULL) return -1;
 
-    /* Auto-detect phase from goal status */
     Goal* goal = goal_store_get(store, goal_id);
     if (goal == NULL) return -1;
 
@@ -174,7 +173,6 @@ int orchestrator_respawn_dead(goal_store_t* store) {
 
     int respawned = 0;
 
-    /* Respawn both PLANNING and ACTIVE goals that have no running supervisor */
     GoalStatus respawn_statuses[] = { GOAL_STATUS_PLANNING, GOAL_STATUS_ACTIVE };
     for (int s = 0; s < 2; s++) {
         size_t count = 0;

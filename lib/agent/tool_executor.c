@@ -15,8 +15,8 @@ int tool_executor_run_workflow(AgentSession* session, ToolCall* tool_calls, int 
         return -1;
     }
 
-    (void)user_message;  /* unused parameter */
-    (void)max_tokens;    /* unused parameter */
+    (void)user_message;
+    (void)max_tokens;
 
     debug_printf("Executing %d tool call(s)...\n", call_count);
 
@@ -75,7 +75,7 @@ int tool_executor_run_workflow(AgentSession* session, ToolCall* tool_calls, int 
         return SESSION_CONTEXT_FULL;
     }
 
-    // Follow-up loop failure is non-fatal since initial tools already executed
+    /* Initial tools are already in conversation history; retrying would corrupt state */
     if (result != 0) {
         debug_printf("Follow-up tool loop failed, but initial tools executed successfully\n");
         result = 0;

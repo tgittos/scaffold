@@ -27,7 +27,6 @@
 #include <unistd.h>
 #include <readline/history.h>
 
-/* Signal handler for worker graceful shutdown */
 static volatile sig_atomic_t g_worker_running = 1;
 
 static void worker_signal_handler(int signum) {
@@ -55,7 +54,6 @@ int agent_init(Agent* agent, const AgentConfig* config) {
     }
 
     /* Initialize home directory FIRST - services depend on it */
-    /* Always set app name (NULL resets to default "scaffold") */
     app_home_set_app_name(agent->config.app_name);
     if (app_home_init(agent->config.home_dir) != 0) {
         return -1;
@@ -334,7 +332,6 @@ int agent_run(Agent* agent) {
                 return -1;
             }
 
-            /* Determine phase: explicit override or auto-detect from goal status */
             SupervisorPhase phase;
             if (agent->config.supervisor_phase >= 0) {
                 phase = (SupervisorPhase)agent->config.supervisor_phase;

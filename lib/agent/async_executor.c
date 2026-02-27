@@ -191,12 +191,10 @@ void async_executor_destroy(async_executor_t* executor) {
     }
     pthread_mutex_unlock(&g_executor_mutex);
 
-    /* Cancel any running execution and wait for thread to finish */
     if (atomic_load(&executor->running)) {
         async_executor_cancel(executor);
     }
 
-    /* Join the thread if it was ever started */
     if (atomic_load(&executor->thread_started)) {
         pthread_join(executor->thread, NULL);
         atomic_store(&executor->thread_started, 0);
@@ -224,7 +222,7 @@ int async_executor_start(async_executor_t* executor, const char* message) {
         return -1;
     }
 
-    /* Join any previous thread before starting a new one */
+    /* Avoid thread leak before reusing executor->thread */
     if (atomic_load(&executor->thread_started)) {
         pthread_join(executor->thread, NULL);
         atomic_store(&executor->thread_started, 0);
@@ -272,7 +270,7 @@ int async_executor_continue(async_executor_t* executor) {
         return -1;
     }
 
-    /* Join any previous thread before starting a new one */
+    /* Avoid thread leak before reusing executor->thread */
     if (atomic_load(&executor->thread_started)) {
         pthread_join(executor->thread, NULL);
         atomic_store(&executor->thread_started, 0);
@@ -367,7 +365,7 @@ int async_executor_wait(async_executor_t* executor) {
     }
     pthread_mutex_unlock(&executor->mutex);
 
-    /* Join the thread to ensure it has fully exited */
+    /* Guard: thread may never have been created if cancelled before pthread_create */
     if (atomic_load(&executor->thread_started)) {
         pthread_join(executor->thread, NULL);
         atomic_store(&executor->thread_started, 0);

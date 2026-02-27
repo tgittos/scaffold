@@ -54,10 +54,18 @@ chmod +x scaffold
 ### 2. Configure
 
 ```bash
+# Use your ChatGPT subscription (recommended — flat rate, no per-token fees)
+./scaffold --login
+
+# Or use an API key
 export OPENAI_API_KEY="sk-..."
 # or
 export ANTHROPIC_API_KEY="sk-ant-..."
 ```
+
+`--login` opens a browser, authenticates via OpenAI OAuth, and stores your session locally. After that, scaffold routes through the Codex API using your ChatGPT subscription — no API key needed, no per-token billing. `--logout` when you're done.
+
+> **Note:** Semantic memory requires an API key for embeddings even when using Codex login. Set `OPENAI_API_KEY` alongside `--login` if you want long-term memory across sessions.
 
 ### 3. Run
 
@@ -112,13 +120,15 @@ This is possible because it's written in C and compiled with [Cosmopolitan](http
 
 ### Capabilities
 
-- **LLM providers**: Anthropic, OpenAI, and anything API-compatible (LM Studio, Ollama, etc.)
+- **LLM providers**: Anthropic, OpenAI, Codex (ChatGPT subscription via OAuth), and anything API-compatible (LM Studio, Ollama, etc.)
+- **Codex auth**: Log in with your ChatGPT subscription instead of paying per-token. OAuth2 with PKCE, encrypted token storage, automatic refresh.
 - **Extended thinking**: Native support for reasoning models (Claude, Qwen, DeepSeek)
+- **Prompt caching**: Split system prompts for Anthropic and OpenAI to maximize cache hits, reducing latency and cost
 - **Vision**: Attach images to conversations for multimodal models
 - **Tools**: 54 built-in tools — file I/O, shell, web fetch, PDF processing, package management
 - **Memory**: Semantic long-term memory via HNSWLIB vector store, persisted across sessions
 - **MCP**: Model Context Protocol client with stdio, HTTP, and SSE transports
-- **Plugins**: JSON-RPC 2.0 plugin protocol — hook into the pipeline and register custom tools in any language
+- **Plugins**: JSON-RPC 2.0 plugin protocol — drop executables into `~/.local/scaffold/plugins/`, register custom tools in any language
 - **Sub-agents**: Fork/exec process spawning with inter-agent messaging (direct + pub/sub)
 - **Task persistence**: Goals, actions, and work queues backed by SQLite
 - **Self-update**: Checks GitHub releases and updates in place

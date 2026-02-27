@@ -136,7 +136,7 @@ int session_init(AgentSession* session) {
                                           SUBAGENT_TIMEOUT_DEFAULT) != 0) {
         fprintf(stderr, "Warning: Failed to initialize subagent manager\n");
     } else {
-        /* Connect spawn callback for immediate fd_set rebuild in interactive mode */
+        /* Wake select() immediately when a subagent spawns so it adds the new fd */
         subagent_manager_set_spawn_callback(&session->subagent_manager, on_subagent_spawn, NULL);
         if (register_subagent_tool(&session->tools, &session->subagent_manager) != 0) {
             fprintf(stderr, "Warning: Failed to register subagent tool\n");
@@ -304,9 +304,8 @@ int session_execute_tool_workflow(AgentSession* session, ToolCall* tool_calls,
                                       user_message, max_tokens);
 }
 
-/* session_build_json_payload and session_build_anthropic_json_payload
- * consolidated into message_dispatcher_build_payload (message_dispatcher.c)
- * to ensure the pre_llm_send hook fires exactly once per request. */
+/* All payload construction routes through message_dispatcher_build_payload()
+ * to guarantee the pre_llm_send plugin hook fires exactly once per request. */
 
 int manage_conversation_tokens(AgentSession* session, const char* user_message,
                                TokenConfig* config, TokenUsage* usage) {

@@ -324,7 +324,6 @@ int main(int argc, char *argv[]) {
 
     config.model_override = model_override;
 
-    /* Read system prompt from file if provided */
     char *loaded_system_prompt = NULL;
     if (system_prompt_file != NULL) {
         FILE *fp = fopen(system_prompt_file, "r");

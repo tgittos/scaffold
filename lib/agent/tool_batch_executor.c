@@ -66,7 +66,6 @@ static void fill_remaining_interrupted(ToolBatchContext* ctx,
 
 static void execute_single_tool(ToolBatchContext* ctx, ToolCall* call,
                                  ToolResult* result, PreScreenEntry* entry) {
-    /* Plugin hook: pre_tool_execute */
     if (hook_dispatch_pre_tool_execute(&ctx->session->plugin_manager,
                                         ctx->session, call, result) == HOOK_STOP) {
         return;
@@ -93,7 +92,6 @@ static void execute_single_tool(ToolBatchContext* ctx, ToolCall* call,
 
     verified_file_context_clear();
 
-    /* Plugin hook: post_tool_execute */
     hook_dispatch_post_tool_execute(&ctx->session->plugin_manager,
                                     ctx->session, call, result);
 }
@@ -121,9 +119,7 @@ int tool_batch_execute(ToolBatchContext* ctx,
 
     force_protected_inode_refresh();
 
-    /* ================================================================
-     * Phase 1: Pre-screen (serial) — dedup, subagent limits, approval
-     * ================================================================ */
+    /* Phase 1: Pre-screen (serial) — dedup, subagent limits, approval */
     PreScreenEntry* approved = calloc(call_count, sizeof(PreScreenEntry));
     if (approved == NULL) {
         *executed_count = 0;
@@ -249,9 +245,7 @@ int tool_batch_execute(ToolBatchContext* ctx,
         return status;
     }
 
-    /* ================================================================
-     * Phase 2: Execute (parallel for 2+ thread-safe tools, else serial)
-     * ================================================================ */
+    /* Phase 2: Execute (parallel for 2+ thread-safe tools, else serial) */
     int all_thread_safe = 1;
     for (int k = 0; k < approved_count; k++) {
         if (!approved[k].thread_safe) {
@@ -328,9 +322,7 @@ int tool_batch_execute(ToolBatchContext* ctx,
         status = -2;
     }
 
-    /* ================================================================
-     * Phase 3: Post-process (serial) — log results in original order
-     * ================================================================ */
+    /* Phase 3: Post-process (serial) — log results in original order */
     for (int k = 0; k < approved_count; k++) {
         PreScreenEntry* e = &approved[k];
         int i = e->call_index;

@@ -23,7 +23,7 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 
-/* Global state for readline callbacks */
+/* readline callbacks take no user_data, so REPL state must be module-level globals */
 static volatile int g_repl_running = 1;
 static AgentSession* g_repl_session = NULL;
 static char* g_current_prompt = NULL;

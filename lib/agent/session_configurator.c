@@ -89,7 +89,6 @@ int session_configurator_load(AgentSession* session) {
         if (session->session_data.config.api_key == NULL) return -1;
     }
 
-    /* Codex URL: inject OAuth credentials and set account ID header */
     if (is_codex_url(session->session_data.config.api_url)) {
         char *db = app_home_path("oauth2.db");
         if (db) {
@@ -151,7 +150,7 @@ int session_configurator_load(AgentSession* session) {
         break;
     }
 
-    /* 8192 is the fallback context window; upgrade to model-specific size when available */
+    /* 8192 is the "not configured" sentinel; replace with model-specific window when available */
     if (session->session_data.config.context_window == 8192) {
         ModelRegistry* registry = session->model_registry;
         if (registry && session->session_data.config.model) {

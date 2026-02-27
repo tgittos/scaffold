@@ -63,7 +63,7 @@ static char* format_recent_messages_for_recap(const ConversationHistory* history
         int written = snprintf(buffer + offset, buffer_size - offset,
                               "**%s**: %s\n\n", role, content);
         if (written < 0 || (size_t)written >= buffer_size - offset) {
-            break; // Buffer full
+            break;
         }
         offset += written;
     }

@@ -426,6 +426,7 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
     }
 
     int consecutive_errors = 0;
+    /* Single failures may be transient notification issues; give up after 3 */
     const int max_consecutive_errors = 3;
 
     while (g_supervisor_running) {
@@ -449,7 +450,6 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
             debug_printf("Supervisor: %d subagent state changes detected\n", changes);
         }
 
-        /* Handle approval requests from subagent workers */
         SubagentManager *mgr = &session->subagent_manager;
         for (size_t i = 0; i < mgr->subagents.count; i++) {
             Subagent *sub = &mgr->subagents.data[i];
@@ -461,7 +461,6 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
             }
         }
 
-        /* Handle message poller notifications */
         if (notify_fd >= 0 && ready > 0 && FD_ISSET(notify_fd, &read_fds)) {
             message_poller_clear_notification(session->message_poller);
             rc = process_notifications(session);

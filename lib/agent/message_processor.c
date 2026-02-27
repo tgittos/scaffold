@@ -20,7 +20,7 @@ int message_processor_handle_response(AgentSession* session,
                                   result->parsed.response_content :
                                   result->parsed.thinking_content;
 
-    /* Take ownership of tool calls from the round-trip result */
+    /* Steal ownership; null out result fields so api_round_trip_cleanup() won't double-free */
     ToolCall* tool_calls = result->tool_calls;
     int call_count = result->tool_call_count;
     result->tool_calls = NULL;
@@ -33,14 +33,11 @@ int message_processor_handle_response(AgentSession* session,
         }
     }
 
-    /* Plugin hook: post_llm_response */
     char *hook_text = message_content ? strdup(message_content) : NULL;
     hook_dispatch_post_llm_response(&session->plugin_manager, session,
                                      &hook_text, tool_calls, call_count);
-    /* Use hook_text for display if plugins transformed it */
     if (hook_text && message_content &&
         strcmp(hook_text, message_content) != 0) {
-        /* Plugin modified text; update the appropriate parsed field */
         if (result->parsed.response_content) {
             free(result->parsed.response_content);
         } else {
