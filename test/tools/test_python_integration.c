@@ -1,6 +1,6 @@
 #include "unity.h"
-#include "../../src/tools/python_tool.h"
-#include "../../src/tools/python_tool_files.h"
+#include "tools/python_tool.h"
+#include "tools/python_tool_files.h"
 #include "lib/tools/tools_system.h"
 #include "util/app_home.h"
 #include <string.h>

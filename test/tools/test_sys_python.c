@@ -1,5 +1,5 @@
 #include "unity/unity.h"
-#include "sys_python.h"
+#include "tools/sys_python.h"
 #include "util/app_home.h"
 #include <Python.h>
 #include <string.h>
