@@ -8,8 +8,6 @@
 #ifndef LIB_SERVICES_SERVICES_H
 #define LIB_SERVICES_SERVICES_H
 
-#include <stdbool.h>
-
 /* Service types */
 #include "../ipc/message_store.h"
 #include "db/vector_db_service.h"
@@ -53,9 +51,6 @@ typedef struct Services {
 
     /** Action store for GOAP action persistence */
     action_store_t* action_store;
-
-    /** Reserved for future use */
-    bool use_singletons;
 } Services;
 
 /**

@@ -1239,6 +1239,11 @@ lib/
 │   ├── oauth2_store.c/h    # OAuth2 token management with PKCE, AES-256-GCM encryption, provider vtable
 │   ├── sqlite_dal.c/h      # SQLite data access layer (ref-counted, recursive mutex for nested locking)
 │   └── hnswlib_wrapper.cpp/h # C++ bridge
+├── auth/                   # OAuth2 authentication
+│   ├── openai_login.c/h    # Login orchestrator (PKCE flow, logout, credential retrieval)
+│   ├── openai_oauth_provider.c/h # OpenAI OAuth2 provider vtable
+│   ├── oauth_callback_server.c/h # Localhost HTTP callback server
+│   └── jwt_decode.c/h      # JWT payload decoding
 ├── llm/                    # LLM core framework
 │   ├── llm_provider.c/h    # Provider abstraction layer
 │   ├── model_capabilities.c/h # Model capability detection
@@ -1252,6 +1257,7 @@ lib/
 │   │   ├── gpt_model.c          # GPT format function
 │   │   └── response_processing.c/h  # Thinking tag processing
 │   └── providers/          # API provider implementations
+│       ├── codex_provider.c/h    # OpenAI Codex Responses API (subscription-based via OAuth)
 │       ├── anthropic_provider.c  # Anthropic API client
 │       ├── openai_provider.c     # OpenAI API client
 │       ├── local_ai_provider.c   # Local AI server integration
@@ -1259,6 +1265,7 @@ lib/
 │       └── local_embedding_provider.c   # Local embeddings
 ├── network/                # Network layer
 │   ├── http_client.c/h     # HTTP client (cURL wrapper)
+│   ├── http_form_post.c/h  # Form-urlencoded POST for OAuth token endpoints
 │   ├── api_common.c/h      # API payload building with prompt caching support
 │   ├── streaming.c/h       # SSE streaming infrastructure
 │   ├── api_error.c/h       # Enhanced error handling with retries
@@ -1279,8 +1286,7 @@ lib/
 │   ├── atomic_file.c/h     # TOCTOU-safe file operations
 │   ├── subagent_approval.c/h # Subagent approval proxy
 │   ├── approval_errors.c   # Approval gate error formatting
-│   ├── verified_file_context.c/h # Thread-local verified file context
-│   └── verified_file_python.c/h  # Python extension for verified I/O
+│   └── verified_file_context.c/h # Thread-local verified file context
 ├── plugin/                 # Plugin system
 │   ├── plugin_manager.c/h  # Plugin discovery, spawning, lifecycle, IPC
 │   ├── plugin_protocol.c/h # JSON-RPC 2.0 protocol serialization

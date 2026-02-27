@@ -292,6 +292,7 @@ The test directory mirrors the source structure:
 - **`test_orchestrator_tool.c`** - Orchestrator tool unit tests (13 tests: execute_plan, list_goals, goal_status, start/pause/cancel_goal)
 - **`test_mode_tool.c`** - Mode tool switch_mode tests
 - **`test_tool_cache.c`** - Tool result caching tests
+- **`test_sys_python.c`** - Python system info extension tests
 
 #### `test/pdf/` - PDF Processing Tests
 - **`test_pdf_extractor.c`** - PDF extraction functionality tests
@@ -315,6 +316,7 @@ The test directory mirrors the source structure:
 #### `test/plugin/` - Plugin System Tests
 - **`test_plugin_protocol.c`** - Protocol serialization tests (16 tests: all JSON-RPC builders and response parsers)
 - **`test_plugin_manager.c`** - Plugin manager tests (22 tests: init, discover, symlink rejection, shutdown, send_request, execute_tool, name validation, alive check)
+- **`test_plugin_integration.c`** - Plugin integration tests
 - **`test_hook_dispatcher.c`** - Hook dispatch tests (11 tests: no-plugin, no-subscriber, priority ordering, uninitialized skip)
 
 #### `test/mcp/` - MCP Integration Tests

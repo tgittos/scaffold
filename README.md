@@ -71,6 +71,9 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 # Pipe a spec file
 cat SPEC.md | ./scaffold
 
+# Select a specific model
+./scaffold --model gpt-4o "build a blog with Next.js"
+
 # Full autonomy (no approval prompts)
 ./scaffold --yolo "build a blog with Next.js"
 ```
@@ -112,9 +115,10 @@ This is possible because it's written in C and compiled with [Cosmopolitan](http
 - **LLM providers**: Anthropic, OpenAI, and anything API-compatible (LM Studio, Ollama, etc.)
 - **Extended thinking**: Native support for reasoning models (Claude, Qwen, DeepSeek)
 - **Vision**: Attach images to conversations for multimodal models
-- **Tools**: 40+ built-in tools — file I/O, shell, web fetch, PDF processing, package management
+- **Tools**: 54 built-in tools — file I/O, shell, web fetch, PDF processing, package management
 - **Memory**: Semantic long-term memory via HNSWLIB vector store, persisted across sessions
 - **MCP**: Model Context Protocol client with stdio, HTTP, and SSE transports
+- **Plugins**: JSON-RPC 2.0 plugin protocol — hook into the pipeline and register custom tools in any language
 - **Sub-agents**: Fork/exec process spawning with inter-agent messaging (direct + pub/sub)
 - **Task persistence**: Goals, actions, and work queues backed by SQLite
 - **Self-update**: Checks GitHub releases and updates in place
@@ -133,6 +137,7 @@ This is possible because it's written in C and compiled with [Cosmopolitan](http
 | [Memory System](docs/memory.md) | Long-term semantic memory storage and retrieval |
 | [Custom Tools](docs/custom-tools.md) | Adding Python tools and customizing worker role prompts |
 | [MCP Servers](docs/mcp.md) | Connecting external tool servers via Model Context Protocol |
+| [Plugins](docs/plugins.md) | Building and installing plugins with the JSON-RPC 2.0 protocol |
 | [CLI Reference](docs/cli-reference.md) | Complete command-line flag reference |
 | [Building from Source](docs/building-from-source.md) | Compiling, testing, and debugging |
 

@@ -16,6 +16,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define CODEX_DEFAULT_MODEL "gpt-5.3-codex"
+
 /* Persistent db_path for the credential provider callback */
 static char *s_codex_db_path = NULL;
 
@@ -130,10 +132,10 @@ int session_configurator_load(AgentSession* session) {
             debug_printf("Forcing streaming=true for Codex API (non-streaming not supported)\n");
             session->session_data.config.enable_streaming = 1;
         }
-        /* Codex subscription API only accepts gpt-5.3-codex */
+        /* Codex subscription API only accepts the default Codex model */
         free(session->session_data.config.model);
-        session->session_data.config.model = strdup("gpt-5.3-codex");
-        debug_printf("Forcing model to gpt-5.3-codex for Codex API\n");
+        session->session_data.config.model = strdup(CODEX_DEFAULT_MODEL);
+        debug_printf("Forcing model to %s for Codex API\n", CODEX_DEFAULT_MODEL);
     }
 
     session->session_data.config.api_type = session_configurator_detect_api_type(
@@ -167,4 +169,9 @@ int session_configurator_load(AgentSession* session) {
     }
 
     return 0;
+}
+
+void session_configurator_cleanup(void) {
+    free(s_codex_db_path);
+    s_codex_db_path = NULL;
 }

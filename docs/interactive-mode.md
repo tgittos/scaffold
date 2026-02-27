@@ -160,6 +160,17 @@ Switched to debug mode
 | `debug` | Reproduces problems first, forms and tests hypotheses, checks error messages, fixes root causes |
 | `review` | Checks for memory leaks, null derefs, buffer overflows, error handling gaps, thread safety, logic errors |
 
+### `/plugins` -- Plugin status
+
+View loaded plugins and their status.
+
+```
+> /plugins
+Plugins:
+  my-linter     RUNNING  PID 54321  tools: 2
+  code-metrics  RUNNING  PID 54322  tools: 1
+```
+
 ## Image attachments
 
 Attach images to your messages using the `@` prefix:

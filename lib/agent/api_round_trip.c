@@ -31,6 +31,13 @@ int api_round_trip_execute(AgentSession* session, const char* user_message,
 
     struct HTTPResponse response = {0};
 
+    /* Refresh credential before building headers if a provider is registered */
+    char refreshed_key[4096];
+    if (llm_client_refresh_credential(refreshed_key, sizeof(refreshed_key)) == 0) {
+        free(session->session_data.config.api_key);
+        session->session_data.config.api_key = strdup(refreshed_key);
+    }
+
     const char* hdrs[8] = {0};
     ProviderRegistry* provider_reg = get_provider_registry();
     LLMProvider* provider = provider_reg

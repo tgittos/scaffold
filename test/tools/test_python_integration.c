@@ -834,7 +834,7 @@ void test_apply_delta_expected_field(void) {
 }
 
 int main(void) {
-    // Initialize ralph home before Python interpreter (needed for tool files path)
+    // Initialize app home before Python interpreter (needed for tool files path)
     app_home_init(NULL);
 
     // Initialize interpreter once for all tests

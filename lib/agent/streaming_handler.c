@@ -154,6 +154,13 @@ int streaming_process_message(AgentSession* session, LLMProvider* provider,
         .low_speed_time = 30
     };
 
+    /* Refresh credential before building headers if a provider is registered */
+    char refreshed_key[4096];
+    if (llm_client_refresh_credential(refreshed_key, sizeof(refreshed_key)) == 0) {
+        free(session->session_data.config.api_key);
+        session->session_data.config.api_key = strdup(refreshed_key);
+    }
+
     const char* hdrs[8] = {0};
     if (provider->build_headers) {
         provider->build_headers(provider, session->session_data.config.api_key, hdrs, 8);

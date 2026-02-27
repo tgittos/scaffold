@@ -11,8 +11,8 @@
  * - System prompt: Defines the agent's role/behavior
  * - Services: Injected dependencies (message store, vector DB, etc.)
  *
- * This allows different binaries (ralph, ralph-orchestrator, workers)
- * to be thin wrappers that configure and invoke the same library.
+ * This allows different binaries to be thin wrappers that configure
+ * and invoke the same library.
  */
 
 #ifndef LIB_AGENT_AGENT_H
@@ -57,7 +57,7 @@ typedef enum {
  * All string fields are copied; caller retains ownership of originals.
  */
 typedef struct AgentConfig {
-    /** Application name ("ralph", "scaffold", etc.) — sets home dir default */
+    /** Application name (e.g. "scaffold") — sets home dir default */
     const char* app_name;
 
     /** Home directory override (uses default if NULL) */

@@ -15,6 +15,7 @@
 #include <signal.h>
 #include <errno.h>
 #include <time.h>
+#include <sys/resource.h>
 
 char *plugin_manager_get_plugins_dir(void) {
     return app_home_path("plugins");
@@ -109,6 +110,18 @@ static int spawn_plugin(PluginProcess *plugin) {
 
     if (pid == 0) {
         /* Child process */
+
+        /* Cap resources for the plugin subprocess */
+        struct rlimit rl;
+        rl.rlim_cur = 256 * 1024 * 1024; rl.rlim_max = 256 * 1024 * 1024;
+        setrlimit(RLIMIT_AS, &rl);    /* 256MB virtual memory */
+        rl.rlim_cur = 30; rl.rlim_max = 30;
+        setrlimit(RLIMIT_CPU, &rl);   /* 30s CPU time */
+        rl.rlim_cur = 10; rl.rlim_max = 10;
+        setrlimit(RLIMIT_NPROC, &rl); /* 10 child processes */
+        rl.rlim_cur = 50 * 1024 * 1024; rl.rlim_max = 50 * 1024 * 1024;
+        setrlimit(RLIMIT_FSIZE, &rl); /* 50MB file size */
+
         dup2(stdin_pipe[0], STDIN_FILENO);
         dup2(stdout_pipe[1], STDOUT_FILENO);
 

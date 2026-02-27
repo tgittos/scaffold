@@ -123,13 +123,25 @@ jobs:
       - name: Push tag
         run: git push origin "${{ steps.version.outputs.tag }}"
 
+      - name: Prepare release notes
+        if: inputs.release_notes != ''
+        id: notes
+        env:
+          RAW_NOTES: ${{ inputs.release_notes }}
+        run: |
+          EOF_MARKER=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+          echo "body<<${EOF_MARKER}" >> "$GITHUB_OUTPUT"
+          printf '%b' "$RAW_NOTES" >> "$GITHUB_OUTPUT"
+          echo "" >> "$GITHUB_OUTPUT"
+          echo "${EOF_MARKER}" >> "$GITHUB_OUTPUT"
+
       - name: Create Release (with custom notes)
         if: inputs.release_notes != ''
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: scaffold v${{ steps.version.outputs.version }}
-          body: ${{ inputs.release_notes }}
+          body: ${{ steps.notes.outputs.body }}
           files: |
             out/scaffold
             out/libagent.x86_64.a

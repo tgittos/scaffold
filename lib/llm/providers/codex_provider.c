@@ -86,7 +86,16 @@ static char *codex_build_request_json(const LLMProvider *provider,
             }
 
             /* Assistant messages with tool_calls: emit structured function_call
-             * items so the Responses API can correlate with function_call_output */
+             * items so the Responses API can correlate with function_call_output.
+             *
+             * Heuristic: detect tool calls via strstr for "tool_calls" in the
+             * serialized message content. This works because gpt_model.c always
+             * serializes assistant tool-call messages as JSON with a top-level
+             * "tool_calls" key. A false positive could occur if the literal
+             * text "tool_calls" appears in normal message content, but the
+             * fallback path (cJSON_Parse failure -> plain assistant message)
+             * handles that safely. This is a known limitation; a future refactor
+             * should add a structured field on ConversationMessage instead. */
             if (strcmp(msg->role, "assistant") == 0 &&
                 strstr(msg->content, "\"tool_calls\"") != NULL) {
                 cJSON *parsed = cJSON_Parse(msg->content);
@@ -202,6 +211,9 @@ static int codex_parse_response(const LLMProvider *provider,
                                  ParsedResponse *result) {
     (void)provider;
     if (!json_response || !result) return -1;
+
+    fprintf(stderr, "Warning: codex_parse_response called in non-streaming mode; "
+            "tool calls will be ignored\n");
 
     cJSON *root = cJSON_Parse(json_response);
     if (!root) return -1;

@@ -34,7 +34,7 @@ If `MESSAGE` is provided, scaffold processes it and exits (one-shot mode). Witho
 |------|-------------|
 | `--yolo` | Disable all approval gates for this session |
 | `--allow <spec>` | Add an allowlist entry (see below) |
-| `--allow-category=<cat>` | Allow an entire category (`file_read`, `file_write`, `shell`, `network`, `memory`, `subagent`, `mcp`, `python`) |
+| `--allow-category=<cat>` | Allow an entire category (`file_read`, `file_write`, `shell`, `network`, `memory`, `subagent`, `mcp`, `python`, `plugin`) |
 
 #### `--allow` format
 
@@ -47,6 +47,13 @@ Shell command prefix:
 ```bash
 ./scaffold --allow "shell:npm,install"
 ```
+
+### Authentication
+
+| Flag | Description |
+|------|-------------|
+| `--login` | Log in to OpenAI via OAuth (ChatGPT subscription) |
+| `--logout` | Log out of OpenAI OAuth session |
 
 ### Updates
 
@@ -102,6 +109,12 @@ cat SPEC.md | ./scaffold
 
 # Allow specific file writes
 ./scaffold --allow "write_file:^src/.*" "add logging to the server"
+
+# Log in with ChatGPT subscription (no API key needed)
+./scaffold --login
+
+# Log out of OAuth session
+./scaffold --logout
 ```
 
 ## Exit codes

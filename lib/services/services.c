@@ -31,8 +31,6 @@ Services* services_create_default(void) {
         services->action_store = action_store_create(NULL);
     }
 
-    services->use_singletons = false;
-
     return services;
 }
 
@@ -50,7 +48,6 @@ Services* services_create_empty(void) {
     services->metadata_store = NULL;
     services->goal_store = NULL;
     services->action_store = NULL;
-    services->use_singletons = false;
 
     return services;
 }

@@ -31,6 +31,20 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 
 That's it. Scaffold auto-detects your provider and configures itself.
 
+### Using a ChatGPT subscription (no API key needed)
+
+If you have a ChatGPT subscription, log in via OAuth:
+
+```bash
+scaffold --login
+```
+
+This opens your browser for authentication. Once logged in, scaffold uses your subscription to access models through the Codex API. To log out:
+
+```bash
+scaffold --logout
+```
+
 For local models (LM Studio, Ollama, etc.), create a config file instead -- see [Configuration](configuration.md).
 
 ## Quick Start

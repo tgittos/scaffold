@@ -11,6 +11,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <pthread.h>
 
 #define CALLBACK_TIMEOUT 300
 #define ENCRYPTION_SALT  "scaffold-oauth2-v1"
@@ -46,16 +47,29 @@ static void derive_encryption_key(unsigned char out[ENCRYPTION_KEY_LEN]) {
 /* Module-level persistent store — reused across calls for the same db_path */
 static oauth2_store_t *g_store = NULL;
 static char *g_store_db_path = NULL;
+static pthread_mutex_t g_store_mutex;
+static pthread_once_t g_store_mutex_once = PTHREAD_ONCE_INIT;
+
+static void init_store_mutex(void) {
+    pthread_mutex_init(&g_store_mutex, NULL);
+}
+
+static void ensure_store_mutex(void) {
+    pthread_once(&g_store_mutex_once, init_store_mutex);
+}
 
 static oauth2_store_t *get_or_create_store(const char *db_path);
 
 void openai_auth_cleanup(void) {
+    ensure_store_mutex();
+    pthread_mutex_lock(&g_store_mutex);
     if (g_store) {
         oauth2_store_destroy(g_store);
         g_store = NULL;
     }
     free(g_store_db_path);
     g_store_db_path = NULL;
+    pthread_mutex_unlock(&g_store_mutex);
 }
 
 static int is_headless_env(void) {
@@ -107,20 +121,33 @@ static oauth2_store_t *create_store(const char *db_path) {
 }
 
 static oauth2_store_t *get_or_create_store(const char *db_path) {
-    if (g_store && g_store_db_path && strcmp(g_store_db_path, db_path) == 0)
+    ensure_store_mutex();
+    pthread_mutex_lock(&g_store_mutex);
+    if (g_store && g_store_db_path && strcmp(g_store_db_path, db_path) == 0) {
+        pthread_mutex_unlock(&g_store_mutex);
         return g_store;
+    }
 
-    openai_auth_cleanup();
+    /* Tear down inline (not via openai_auth_cleanup which re-locks) */
+    if (g_store) {
+        oauth2_store_destroy(g_store);
+        g_store = NULL;
+    }
+    free(g_store_db_path);
+    g_store_db_path = NULL;
+
     g_store = create_store(db_path);
     if (g_store)
         g_store_db_path = strdup(db_path);
-    return g_store;
+    oauth2_store_t *ret = g_store;
+    pthread_mutex_unlock(&g_store_mutex);
+    return ret;
 }
 
 int openai_login(const char *db_path) {
     if (!db_path) return -1;
 
-    oauth2_store_t *store = create_store(db_path);
+    oauth2_store_t *store = get_or_create_store(db_path);
     if (!store) {
         fprintf(stderr, "Error: Failed to initialize OAuth2 store\n");
         return -1;
@@ -132,7 +159,6 @@ int openai_login(const char *db_path) {
                                                OPENAI_CLIENT_ID, OPENAI_SCOPE, &auth);
     if (err != OAUTH2_OK) {
         fprintf(stderr, "Error: Failed to begin OAuth2 authorization\n");
-        oauth2_store_destroy(store);
         return -1;
     }
 
@@ -154,14 +180,12 @@ int openai_login(const char *db_path) {
         } else {
             fprintf(stderr, "Authentication timed out or failed.\n");
         }
-        oauth2_store_destroy(store);
         return -1;
     }
 
     /* Verify the round-tripped state matches what we sent (CSRF protection) */
     if (strcmp(auth.state, callback.state) != 0) {
         fprintf(stderr, "Error: OAuth state mismatch (possible CSRF attack)\n");
-        oauth2_store_destroy(store);
         return -1;
     }
 
@@ -170,7 +194,6 @@ int openai_login(const char *db_path) {
                                       OPENAI_CLIENT_ID, "", DEFAULT_ACCOUNT);
     if (err != OAUTH2_OK) {
         fprintf(stderr, "Error: Failed to exchange authorization code\n");
-        oauth2_store_destroy(store);
         return -1;
     }
 
@@ -192,11 +215,9 @@ int openai_login(const char *db_path) {
     } else {
         fprintf(stderr, "Login completed but token verification failed: %s\n",
                 oauth2_error_string(err));
-        oauth2_store_destroy(store);
         return -1;
     }
 
-    oauth2_store_destroy(store);
     return 0;
 }
 

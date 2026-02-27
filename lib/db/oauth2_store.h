@@ -3,7 +3,6 @@
  *
  * Generic OAuth2 framework with PKCE, AES-256-GCM token encryption,
  * SQLite-backed storage, and a vtable-based provider pattern.
- * Ported from sage's oauth2.h, adapted to scaffold's sqlite_dal abstraction.
  */
 
 #ifndef OAUTH2_STORE_H
@@ -93,6 +92,7 @@ bool oauth2_store_has_token(oauth2_store_t *o, const char *provider,
                              const char *account_id);
 OAuth2Error oauth2_store_revoke_token(oauth2_store_t *o, const char *provider,
                                        const char *account_id);
+/* Exposed for testing — forces expiry of all pending auth states */
 void oauth2_store_expire_pending(oauth2_store_t *o);
 
 #endif /* OAUTH2_STORE_H */

@@ -32,8 +32,8 @@ int http_form_post(const char *url, const FormField *fields, int count,
     size_t body_len = 0;
 
     for (int i = 0; i < count; i++) {
-        char *escaped = curl_easy_escape(curl, fields[i].value, 0);
-        if (!escaped) {
+        char *escaped_key = curl_easy_escape(curl, fields[i].key, 0);
+        if (!escaped_key) {
             free(body);
             curl_easy_cleanup(curl);
             free(response->data);
@@ -41,13 +41,24 @@ int http_form_post(const char *url, const FormField *fields, int count,
             return -1;
         }
 
-        size_t key_len = strlen(fields[i].key);
-        size_t val_len = strlen(escaped);
+        char *escaped_val = curl_easy_escape(curl, fields[i].value, 0);
+        if (!escaped_val) {
+            curl_free(escaped_key);
+            free(body);
+            curl_easy_cleanup(curl);
+            free(response->data);
+            response->data = NULL;
+            return -1;
+        }
+
+        size_t key_len = strlen(escaped_key);
+        size_t val_len = strlen(escaped_val);
         size_t segment_len = key_len + 1 + val_len + (i < count - 1 ? 1 : 0);
 
         char *new_body = realloc(body, body_len + segment_len + 1);
         if (!new_body) {
-            curl_free(escaped);
+            curl_free(escaped_key);
+            curl_free(escaped_val);
             free(body);
             curl_easy_cleanup(curl);
             free(response->data);
@@ -57,9 +68,10 @@ int http_form_post(const char *url, const FormField *fields, int count,
         body = new_body;
 
         int written = snprintf(body + body_len, segment_len + 1, "%s=%s%s",
-                               fields[i].key, escaped, i < count - 1 ? "&" : "");
+                               escaped_key, escaped_val, i < count - 1 ? "&" : "");
         body_len += written;
-        curl_free(escaped);
+        curl_free(escaped_key);
+        curl_free(escaped_val);
     }
 
     struct curl_slist *headers = curl_slist_append(NULL, "Content-Type: application/x-www-form-urlencoded");

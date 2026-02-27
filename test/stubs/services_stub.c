@@ -34,7 +34,6 @@ Services* services_create_empty(void) {
     services->metadata_store = NULL;
     services->goal_store = NULL;
     services->action_store = NULL;
-    services->use_singletons = false;
 
     return services;
 }

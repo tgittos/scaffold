@@ -33,9 +33,9 @@ static void *send_callback_request(void *arg) {
 
     write(fd, request, strlen(request));
 
-    /* Read and discard response */
+    /* Drain entire response before closing to avoid SIGPIPE on server */
     char buf[4096];
-    read(fd, buf, sizeof(buf));
+    while (read(fd, buf, sizeof(buf)) > 0) {}
 
     close(fd);
     return NULL;
@@ -63,7 +63,7 @@ static void *send_callback_custom_port(void *arg) {
 
     write(fd, request, strlen(request));
     char buf[4096];
-    read(fd, buf, sizeof(buf));
+    while (read(fd, buf, sizeof(buf)) > 0) {}
     close(fd);
     return NULL;
 }

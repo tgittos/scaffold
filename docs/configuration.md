@@ -93,6 +93,7 @@ Scaffold auto-detects your LLM provider from the API URL:
 |-------------|----------|
 | `api.anthropic.com` | Anthropic |
 | `api.openai.com` | OpenAI |
+| `chatgpt.com/backend-api/codex` | Codex (via `--login` OAuth) |
 | `localhost:*` | Local AI (LM Studio, Ollama, etc.) |
 
 ### Using local models
@@ -136,6 +137,7 @@ Each tool belongs to a category with a default action:
 | `subagent` | gate | `subagent` |
 | `mcp` | gate | MCP tool calls |
 | `python` | allow | `python` |
+| `plugin` | gate | Plugin tool calls |
 
 Actions:
 - **allow** -- Execute automatically without prompting

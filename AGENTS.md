@@ -38,7 +38,7 @@ source .env && out/scaffold "your message here"
 source .env && echo "your message" | out/scaffold
 
 # With specific model
-source .env && out/scaffold --model codex-mini "your message"
+source .env && out/scaffold --model gpt-4o "your message"
 
 # With debug HTTP traffic
 source .env && out/scaffold --debug "your message"
@@ -55,7 +55,7 @@ source .env && out/scaffold --yolo "your message"
 | `--no-stream` | Disable response streaming |
 | `--json` | Enable JSON output mode |
 | `--yolo` | Disable all approval gates for this session |
-| `--model <name>` | Select model (e.g. `codex-mini`) |
+| `--model <name>` | Select model (e.g. `gpt-4o`) |
 | `--home <path>` | Override home directory (default: `~/.local/scaffold`) |
 | `--login` | Log in to OpenAI via OAuth (ChatGPT subscription) |
 | `--logout` | Log out of OpenAI OAuth session |
@@ -65,6 +65,7 @@ source .env && out/scaffold --yolo "your message"
 - Docker devcontainer with Cosmopolitan toolchain pre-configured
 - `.env` has API credentials - **never read it**, only source it
 - Use `apt` to install tooling only, not libraries (breaks portability)
+- **Python**: Use `uv` for Python package/project management. Install it if not already present (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
 
 ## Code Style
 

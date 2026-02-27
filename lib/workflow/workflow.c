@@ -65,7 +65,7 @@ WorkQueue* work_queue_create(const char* name) {
     strncpy(queue->name, name, sizeof(queue->name) - 1);
     queue->name[sizeof(queue->name) - 1] = '\0';
 
-    /* Open database in ralph home directory */
+    /* Open database in app home directory */
     char db_path[512];
     const char* home = app_home_get();
     snprintf(db_path, sizeof(db_path), "%s/work_queues.db", home);

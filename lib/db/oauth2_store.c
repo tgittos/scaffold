@@ -1,13 +1,14 @@
 /*
  * oauth2_store.c - OAuth2 Token Store Implementation
  *
- * Ported from sage's oauth2.c, adapted to use scaffold's sqlite_dal abstraction.
- * Crypto (PKCE, AES-256-GCM, HKDF) via mbedTLS — unchanged from sage.
+ * SQLite-backed OAuth2 token storage with PKCE, AES-256-GCM encryption,
+ * and HKDF key derivation via mbedTLS. Uses scaffold's sqlite_dal abstraction.
  */
 
 #include "oauth2_store.h"
 #include "sqlite_dal.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -86,7 +87,7 @@ const char *oauth2_error_string(OAuth2Error err) {
 }
 
 /* ========================================================================= */
-/* Crypto helpers (PKCE + AES-256-GCM) — unchanged from sage                */
+/* Crypto helpers (PKCE + AES-256-GCM)                                       */
 /* ========================================================================= */
 
 static int base64url_encode(const unsigned char *in, size_t in_len,
@@ -235,7 +236,7 @@ static int decrypt_token(oauth2_store_t *o, const char *b64_input,
 }
 
 /* ========================================================================= */
-/* In-memory pending auth helpers — unchanged from sage                      */
+/* In-memory pending auth helpers                                            */
 /* ========================================================================= */
 
 static const OAuth2ProviderOps *find_provider(const oauth2_store_t *o,
@@ -745,10 +746,36 @@ OAuth2Error oauth2_store_revoke_token(oauth2_store_t *o, const char *provider,
     if (!o || !provider || !account_id)
         return OAUTH2_ERROR_INVALID;
 
-    /* Hook: if the provider has a revoke_token callback, call it to
-     * invalidate the token server-side before deleting locally. */
+    /* If the provider has a revoke_token callback, retrieve the access token
+     * and call it to invalidate server-side before deleting locally. */
     const OAuth2ProviderOps *ops = find_provider(o, provider);
-    (void)ops; /* revoke_token callback reserved for future use */
+    if (ops && ops->revoke_token) {
+        BindText2 select_params = { provider, account_id };
+        TokenRow *row = sqlite_dal_query_one_p(o->dal,
+            "SELECT access_token, refresh_token, expires_at FROM oauth2_tokens "
+            "WHERE provider = ? AND account_id = ?",
+            bind_text2, &select_params, map_token_row, NULL);
+
+        if (row) {
+            char plain_at[ENCRYPTED_TOKEN_MAX] = {0};
+            if (o->encryption_enabled) {
+                decrypt_token(o, row->access_token, plain_at, sizeof(plain_at));
+            } else {
+                memcpy(plain_at, row->access_token, sizeof(plain_at));
+            }
+            free(row);
+
+            if (plain_at[0] != '\0') {
+                OAuth2Error rev_err = ops->revoke_token(NULL, plain_at);
+                if (rev_err != OAUTH2_OK) {
+                    fprintf(stderr, "Warning: server-side token revocation failed "
+                            "for provider '%s': %s\n", provider,
+                            oauth2_error_string(rev_err));
+                }
+            }
+            mbedtls_platform_zeroize(plain_at, sizeof(plain_at));
+        }
+    }
 
     BindText2 params = { provider, account_id };
     int rc = sqlite_dal_exec_p(o->dal,
@@ -758,6 +785,7 @@ OAuth2Error oauth2_store_revoke_token(oauth2_store_t *o, const char *provider,
     return (rc >= 0) ? OAUTH2_OK : OAUTH2_ERROR_STORAGE;
 }
 
+/* Exposed for testing — forces expiry of all pending auth states */
 void oauth2_store_expire_pending(oauth2_store_t *o) {
     if (!o) return;
     expire_pending_auths(o);

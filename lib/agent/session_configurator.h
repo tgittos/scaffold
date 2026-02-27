@@ -16,4 +16,10 @@ int session_configurator_load(AgentSession* session);
 
 APIType session_configurator_detect_api_type(const char* api_url);
 
+/**
+ * Free module-level state (e.g. cached db path for credential provider).
+ * Safe to call multiple times.
+ */
+void session_configurator_cleanup(void);
+
 #endif

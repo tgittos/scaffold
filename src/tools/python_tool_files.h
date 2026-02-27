@@ -4,7 +4,7 @@
 #include "lib/tools/tools_system.h"
 
 /**
- * Directory name where Python tool files are stored (relative to ralph home)
+ * Directory name where Python tool files are stored (relative to scaffold home)
  */
 #define PYTHON_TOOLS_DIR_NAME "tools"
 
@@ -32,12 +32,12 @@ typedef struct {
 typedef struct {
     PythonToolDef *tools;
     int count;
-    char *tools_dir;        // Path to ~/.local/ralph/tools/
+    char *tools_dir;        // Path to ~/.local/scaffold/tools/
 } PythonToolRegistry;
 
 /**
  * Initialize Python tool files system.
- * Creates ~/.local/ralph/tools/ if it doesn't exist and
+ * Creates ~/.local/scaffold/tools/ if it doesn't exist and
  * extracts default tools from embedded /zip/python_defaults/ if needed.
  *
  * @return 0 on success, -1 on failure
@@ -45,7 +45,7 @@ typedef struct {
 int python_init_tool_files(void);
 
 /**
- * Load all Python tool files from ~/.local/ralph/tools/ into the
+ * Load all Python tool files from ~/.local/scaffold/tools/ into the
  * Python interpreter's global scope.
  *
  * Must be called after python_interpreter_init().
@@ -102,7 +102,7 @@ const char* python_tool_get_match_arg(const char *name);
 /**
  * Get the path to the Python tools directory.
  *
- * @return Path to ~/.local/ralph/tools/ or NULL if not initialized
+ * @return Path to ~/.local/scaffold/tools/ or NULL if not initialized
  */
 const char* python_get_tools_dir(void);
 
