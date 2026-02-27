@@ -22,9 +22,10 @@ typedef struct {
 } ModelDataEntry;
 
 static const ModelDataEntry MODEL_DATA[] = {
+    { "codex",    "openai",    400000, 0, NULL,      NULL },
     { "gpt",      "openai",    128000, 0, NULL,      NULL },
-    { "o1",       "openai",    128000, 0, NULL,      NULL },
-    { "o4",       "openai",    128000, 0, NULL,      NULL },
+    { "o1",       "openai",    200000, 0, NULL,      NULL },
+    { "o4",       "openai",    200000, 0, NULL,      NULL },
     { "qwen",     "openai",     32768, 1, "<think>", "</think>" },
     { "deepseek", "openai",    128000, 1, "<think>", "</think>" },
     { "claude",   "anthropic", 200000, 0, NULL,      NULL },

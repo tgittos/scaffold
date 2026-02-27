@@ -647,7 +647,7 @@ The Codex provider uses OpenAI's Responses API format (different from Chat Compl
 - Response: `output` array with `output_text` and `function_call` items
 - Streaming: `response.output_text.delta`, `response.function_call_arguments.delta`, `response.failed`, `response.incomplete`, and `error` events
 - Auth: `chatgpt-account-id` header alongside Bearer token
-- Assistant messages with embedded `tool_calls` are summarized to plain text to avoid Responses API rejection
+- Assistant messages with embedded `tool_calls` are expanded into structured `function_call` items (with `call_id`, `name`, `arguments`) so the API can correlate them with subsequent `function_call_output` items
 
 ## Prompt Caching Architecture
 

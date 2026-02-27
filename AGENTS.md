@@ -1,11 +1,11 @@
 # ralph Project
 
 Portable C codebase compiled with Cosmopolitan. Source in `src/`, tests in `test/` (using vendored `unity`).
-See `@ARCHITECTURE.md` and `@CODE_OVERVIEW.md` for design docs. Use `ripgrep` to find existing implementations.
+See `@COSMOPOLITAN.md`, `@ARCHITECTURE.md`, `@CODE_OVERVIEW.md` for design docs.
 
 Always update docs (AGENTS.md, `@ARCHITECTURE.md` and `@CODE_OVERVIEW.md`) before you commit.
 
-## Build Commands
+## Build & Run
 
 | Command | Description |
 |---------|-------------|
@@ -16,14 +16,55 @@ Always update docs (AGENTS.md, `@ARCHITECTURE.md` and `@CODE_OVERVIEW.md`) befor
 | `make check-valgrind` | Memory safety check |
 | `make update-cacert` | Refresh CA certificates (then `./scripts/build.sh clean && ./scripts/build.sh`) |
 
+### Output binaries
+
+Build produces binaries in `out/`:
+- **`out/scaffold`** - Main cross-platform fat binary. Use this to run the app.
+- `out/scaffold.aarch64.elf` - ARM64 debug binary (for valgrind/gdb on ARM)
+- `out/scaffold.com.dbg` - x86_64 debug binary (for valgrind/gdb on x86)
+
+`build/` contains intermediate artifacts (object files, `scaffold.base` pre-embedding binary). Do not run from `build/`.
+
+### Running
+
+```bash
+# Interactive mode
+source .env && out/scaffold
+
+# One-shot mode (process single message and exit)
+source .env && out/scaffold "your message here"
+
+# Pipe input
+source .env && echo "your message" | out/scaffold
+
+# With specific model
+source .env && out/scaffold --model codex-mini "your message"
+
+# With debug HTTP traffic
+source .env && out/scaffold --debug "your message"
+
+# Disable approval gates
+source .env && out/scaffold --yolo "your message"
+```
+
+### CLI flags
+
+| Flag | Description |
+|------|-------------|
+| `--debug` | Show HTTP traffic to LLM providers |
+| `--no-stream` | Disable response streaming |
+| `--json` | Enable JSON output mode |
+| `--yolo` | Disable all approval gates for this session |
+| `--model <name>` | Select model (e.g. `codex-mini`) |
+| `--home <path>` | Override home directory (default: `~/.local/scaffold`) |
+| `--login` | Log in to OpenAI via OAuth (ChatGPT subscription) |
+| `--logout` | Log out of OpenAI OAuth session |
+
 ## Development Environment
 
 - Docker devcontainer with Cosmopolitan toolchain pre-configured
 - `.env` has API credentials - **never read it**, only source it
-- Use `apt` for tooling only, not libraries (breaks portability)
-- `--debug` flag shows HTTP traffic to LLM providers
-- **Uses OpenAI, not Anthropic** - debug tool parsing in `openai_provider.c`, `parse_tool_calls` in `tools_system.c`
-- Approval gates: `--yolo` disables all prompts for the session
+- Use `apt` to install tooling only, not libraries (breaks portability)
 
 ## Code Style
 
@@ -64,15 +105,10 @@ Always update docs (AGENTS.md, `@ARCHITECTURE.md` and `@CODE_OVERVIEW.md`) befor
 ./scripts/run_tests.sh foo    # Pattern match
 ```
 
-### Valgrind Exclusions
-
-- **Subagent tests**: fork/exec causes cascading process explosion
-- **Python tests**: Platform ELF binaries lack embedded stdlib
-- **SIGPIPE in timeout tests**: Expected, ignore it
-
 ## Debugging
 
 Standard C debug tools work. Use platform-specific binaries: `.aarch64.elf` (ARM64) or `.com.dbg` (x86_64).
+Use these binaries **only** for debugging. Use the cross platform fat binary at all other times.
 
 **Tracing**: `--ftrace` (function calls), `--strace` (syscalls). Use `-mdbg` for complete ftrace output.
 
@@ -91,7 +127,3 @@ valgrind --leak-check=full ./test/test_foo.com.dbg      # x86_64
 **Dev builds**: On non-tagged commits, `git describe` produces versions like `0.1.0-14-gabcdef`, giving a natural dev version with distance from the last release.
 
 **Build-time version header** (`build/version.h`): Provides `RALPH_VERSION`, `RALPH_GIT_HASH`, `RALPH_GIT_DIRTY`, `RALPH_BUILD_VERSION`. Uses compare-and-swap to avoid unnecessary recompilation.
-
-## Technology
-
-C compiled with Cosmopolitan in Docker devcontainer. Libraries: mbedtls (TLS), unity (testing), SQLite (storage), HNSWLIB (vectors), PDFio (PDF), cJSON (JSON), ossp-uuid (UUIDs). Debug tools: valgrind, gdb.

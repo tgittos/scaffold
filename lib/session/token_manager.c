@@ -193,6 +193,8 @@ int calculate_token_allocation(const SessionData* session, const char* user_mess
 
         if (strstr(session->config.model, "claude") != NULL) {
             max_response_cap = 60000;
+        } else if (strstr(session->config.model, "codex") != NULL) {
+            max_response_cap = 16000;
         } else if (strstr(session->config.model, "gpt") != NULL) {
             max_response_cap = 4000;
         } else if (strstr(session->config.model, "deepseek") != NULL) {

@@ -91,7 +91,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`response_processing.c/h`** - Thinking tag processing for reasoning models
 
 ##### `lib/llm/providers/` - API Provider Implementations
-- **`codex_provider.c/h`** - OpenAI Codex Responses API client (subscription-based via OAuth, `chatgpt-account-id` header, thread-local account ID, flat tool format, tool_calls summarization, error/incomplete/failed stream event handling)
+- **`codex_provider.c/h`** - OpenAI Codex Responses API client (subscription-based via OAuth, `chatgpt-account-id` header, thread-local account ID, flat tool format, structured function_call emission for tool call round-trips, error/incomplete/failed stream event handling)
 - **`anthropic_provider.c`** - Anthropic API client (Messages format)
 - **`openai_provider.c`** - OpenAI API client (Chat completions)
 - **`local_ai_provider.c`** - Local AI server integration (LM Studio, Ollama)
@@ -261,7 +261,7 @@ The test directory mirrors the source structure:
 - **`test_model_tools.c`** - Model and tool integration tests
 - **`test_anthropic_streaming.c`** - Anthropic provider streaming tests
 - **`test_openai_streaming.c`** - OpenAI provider streaming tests
-- **`test_codex_provider.c`** - Codex Responses API provider tests (detect, headers, parse response/errors/multi-output, streaming text/tool/done/error events, request building with tools/tool_calls summary)
+- **`test_codex_provider.c`** - Codex Responses API provider tests (detect, headers, parse response/errors/multi-output, streaming text/tool/done/error events, request building with tools/structured function_call emission/tool round-trips)
 
 #### `test/network/` - Network Layer Tests
 - **`test_http_client.c`** - HTTP client functionality tests

@@ -85,16 +85,51 @@ static char *codex_build_request_json(const LLMProvider *provider,
                 continue;
             }
 
-            /* Assistant messages with tool_calls: summarize to plain text so
-             * the Responses API doesn't reject orphaned function calls */
+            /* Assistant messages with tool_calls: emit structured function_call
+             * items so the Responses API can correlate with function_call_output */
             if (strcmp(msg->role, "assistant") == 0 &&
                 strstr(msg->content, "\"tool_calls\"") != NULL) {
-                char *summary = summarize_tool_calls(msg->content);
-                cJSON *item = cJSON_CreateObject();
-                cJSON_AddStringToObject(item, "role", "assistant");
-                cJSON_AddStringToObject(item, "content", summary ? summary : msg->content);
-                cJSON_AddItemToArray(input, item);
-                free(summary);
+                cJSON *parsed = cJSON_Parse(msg->content);
+                if (parsed) {
+                    /* Emit assistant text content if present */
+                    cJSON *content_val = cJSON_GetObjectItem(parsed, "content");
+                    if (content_val && cJSON_IsString(content_val) &&
+                        content_val->valuestring[0] != '\0') {
+                        cJSON *text_item = cJSON_CreateObject();
+                        cJSON_AddStringToObject(text_item, "role", "assistant");
+                        cJSON_AddStringToObject(text_item, "content", content_val->valuestring);
+                        cJSON_AddItemToArray(input, text_item);
+                    }
+                    /* Emit each tool call as a separate function_call item */
+                    cJSON *tool_calls = cJSON_GetObjectItem(parsed, "tool_calls");
+                    if (tool_calls && cJSON_IsArray(tool_calls)) {
+                        int tc_count = cJSON_GetArraySize(tool_calls);
+                        for (int t = 0; t < tc_count; t++) {
+                            cJSON *tc = cJSON_GetArrayItem(tool_calls, t);
+                            cJSON *tc_id = cJSON_GetObjectItem(tc, "id");
+                            cJSON *fn = cJSON_GetObjectItem(tc, "function");
+                            if (!fn || !tc_id || !cJSON_IsString(tc_id)) continue;
+                            cJSON *fn_name = cJSON_GetObjectItem(fn, "name");
+                            cJSON *fn_args = cJSON_GetObjectItem(fn, "arguments");
+
+                            cJSON *fc_item = cJSON_CreateObject();
+                            cJSON_AddStringToObject(fc_item, "type", "function_call");
+                            cJSON_AddStringToObject(fc_item, "call_id", tc_id->valuestring);
+                            if (fn_name && cJSON_IsString(fn_name))
+                                cJSON_AddStringToObject(fc_item, "name", fn_name->valuestring);
+                            if (fn_args && cJSON_IsString(fn_args))
+                                cJSON_AddStringToObject(fc_item, "arguments", fn_args->valuestring);
+                            cJSON_AddItemToArray(input, fc_item);
+                        }
+                    }
+                    cJSON_Delete(parsed);
+                } else {
+                    /* Parse failed: fall back to plain assistant message */
+                    cJSON *item = cJSON_CreateObject();
+                    cJSON_AddStringToObject(item, "role", "assistant");
+                    cJSON_AddStringToObject(item, "content", msg->content);
+                    cJSON_AddItemToArray(input, item);
+                }
                 continue;
             }
 

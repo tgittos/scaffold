@@ -131,11 +131,9 @@ int session_configurator_load(AgentSession* session) {
             session->session_data.config.enable_streaming = 1;
         }
         /* Codex subscription API only accepts gpt-5.3-codex */
-        if (!config->model || strstr(config->model, "codex") == NULL) {
-            free(session->session_data.config.model);
-            session->session_data.config.model = strdup("gpt-5.3-codex");
-            debug_printf("Overriding model to gpt-5.3-codex for Codex API\n");
-        }
+        free(session->session_data.config.model);
+        session->session_data.config.model = strdup("gpt-5.3-codex");
+        debug_printf("Forcing model to gpt-5.3-codex for Codex API\n");
     }
 
     session->session_data.config.api_type = session_configurator_detect_api_type(

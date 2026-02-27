@@ -4,6 +4,7 @@
 #include "session/conversation_tracker.h"
 #include "ui/output_formatter.h"
 #include "network/streaming.h"
+#include <cJSON.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -278,16 +279,18 @@ void test_codex_parse_stream_error_events(void) {
     streaming_context_free(ctx3);
 }
 
-void test_codex_build_request_with_tool_calls_summary(void) {
+void test_codex_build_request_with_tool_calls(void) {
     ProviderRegistry *registry = get_provider_registry();
     LLMProvider *provider = detect_provider_for_url(registry, "https://chatgpt.com/backend-api/codex/responses");
     TEST_ASSERT_NOT_NULL(provider);
 
     ConversationHistory history = {0};
-    /* Simulate assistant message with embedded tool_calls JSON */
+    /* Production format from gpt_format_assistant_tool_message() */
     const char *assistant_with_tools =
-        "{\"tool_calls\":[{\"id\":\"call_1\",\"function\":{\"name\":\"read_file\","
-        "\"arguments\":\"{\\\"path\\\":\\\"test.c\\\"}\"}}]}";
+        "{\"role\": \"assistant\", \"content\": null, "
+        "\"tool_calls\": [{\"id\": \"call_1\", \"type\": \"function\", "
+        "\"function\": {\"name\": \"read_file\", "
+        "\"arguments\": \"{\\\"path\\\":\\\"test.c\\\"}\"}}]}";
     append_conversation_message(&history, "assistant", assistant_with_tools);
 
     SystemPromptParts prompt = { .base_prompt = "You are helpful.", .dynamic_context = NULL };
@@ -295,8 +298,214 @@ void test_codex_build_request_with_tool_calls_summary(void) {
                                                 &history, "summarize", 1024, NULL);
     TEST_ASSERT_NOT_NULL(json);
 
-    /* Should contain assistant role but NOT raw tool_calls JSON */
+    /* Should emit a function_call item, not summarized text */
+    TEST_ASSERT_NOT_NULL(strstr(json, "\"type\":\"function_call\""));
+    TEST_ASSERT_NOT_NULL(strstr(json, "\"call_id\":\"call_1\""));
+    TEST_ASSERT_NOT_NULL(strstr(json, "\"name\":\"read_file\""));
+    /* Should NOT contain summarized text */
+    TEST_ASSERT_NULL(strstr(json, "Calling read_file"));
+
+    free(json);
+    cleanup_conversation_history(&history);
+}
+
+void test_codex_build_request_tool_calls_with_content(void) {
+    ProviderRegistry *registry = get_provider_registry();
+    LLMProvider *provider = detect_provider_for_url(registry, "https://chatgpt.com/backend-api/codex/responses");
+    TEST_ASSERT_NOT_NULL(provider);
+
+    ConversationHistory history = {0};
+    /* Production format with text content AND tool_calls */
+    const char *assistant_with_both =
+        "{\"role\": \"assistant\", \"content\": \"Let me check that file.\", "
+        "\"tool_calls\": [{\"id\": \"call_2\", \"type\": \"function\", "
+        "\"function\": {\"name\": \"read_file\", "
+        "\"arguments\": \"{\\\"path\\\":\\\"main.c\\\"}\"}}]}";
+    append_conversation_message(&history, "assistant", assistant_with_both);
+
+    SystemPromptParts prompt = { .base_prompt = "You are helpful.", .dynamic_context = NULL };
+    char *json = provider->build_request_json(provider, "codex-mini", &prompt,
+                                                &history, "ok", 1024, NULL);
+    TEST_ASSERT_NOT_NULL(json);
+
+    /* Should emit both an assistant text item and a function_call item */
     TEST_ASSERT_NOT_NULL(strstr(json, "\"role\":\"assistant\""));
+    TEST_ASSERT_NOT_NULL(strstr(json, "Let me check that file."));
+    TEST_ASSERT_NOT_NULL(strstr(json, "\"type\":\"function_call\""));
+    TEST_ASSERT_NOT_NULL(strstr(json, "\"call_id\":\"call_2\""));
+
+    free(json);
+    cleanup_conversation_history(&history);
+}
+
+void test_codex_build_request_tool_calls_null_content(void) {
+    ProviderRegistry *registry = get_provider_registry();
+    LLMProvider *provider = detect_provider_for_url(registry, "https://chatgpt.com/backend-api/codex/responses");
+    TEST_ASSERT_NOT_NULL(provider);
+
+    ConversationHistory history = {0};
+    /* Production format with explicit null content */
+    const char *assistant_null_content =
+        "{\"role\": \"assistant\", \"content\": null, "
+        "\"tool_calls\": [{\"id\": \"call_3\", \"type\": \"function\", "
+        "\"function\": {\"name\": \"write_file\", "
+        "\"arguments\": \"{\\\"path\\\":\\\"out.txt\\\"}\"}}]}";
+    append_conversation_message(&history, "assistant", assistant_null_content);
+
+    SystemPromptParts prompt = { .base_prompt = "You are helpful.", .dynamic_context = NULL };
+    char *json = provider->build_request_json(provider, "codex-mini", &prompt,
+                                                &history, "ok", 1024, NULL);
+    TEST_ASSERT_NOT_NULL(json);
+
+    /* Should emit function_call but NO assistant text item */
+    TEST_ASSERT_NOT_NULL(strstr(json, "\"type\":\"function_call\""));
+    TEST_ASSERT_NOT_NULL(strstr(json, "\"call_id\":\"call_3\""));
+
+    /* Parse and check: no assistant role item should exist */
+    cJSON *root = cJSON_Parse(json);
+    TEST_ASSERT_NOT_NULL(root);
+    cJSON *input = cJSON_GetObjectItem(root, "input");
+    TEST_ASSERT_NOT_NULL(input);
+    int found_assistant_text = 0;
+    int arr_size = cJSON_GetArraySize(input);
+    for (int i = 0; i < arr_size; i++) {
+        cJSON *item = cJSON_GetArrayItem(input, i);
+        cJSON *role = cJSON_GetObjectItem(item, "role");
+        if (role && cJSON_IsString(role) && strcmp(role->valuestring, "assistant") == 0) {
+            found_assistant_text = 1;
+        }
+    }
+    TEST_ASSERT_FALSE(found_assistant_text);
+    cJSON_Delete(root);
+
+    free(json);
+    cleanup_conversation_history(&history);
+}
+
+void test_codex_build_request_multiple_tool_calls(void) {
+    ProviderRegistry *registry = get_provider_registry();
+    LLMProvider *provider = detect_provider_for_url(registry, "https://chatgpt.com/backend-api/codex/responses");
+    TEST_ASSERT_NOT_NULL(provider);
+
+    ConversationHistory history = {0};
+    /* Production format with two tool calls */
+    const char *assistant_multi =
+        "{\"role\": \"assistant\", \"content\": null, \"tool_calls\": ["
+        "{\"id\": \"call_a\", \"type\": \"function\", "
+        "\"function\": {\"name\": \"read_file\", \"arguments\": \"{\\\"path\\\":\\\"a.c\\\"}\"}},"
+        "{\"id\": \"call_b\", \"type\": \"function\", "
+        "\"function\": {\"name\": \"write_file\", \"arguments\": \"{\\\"path\\\":\\\"b.c\\\"}\"}}"
+        "]}";
+    append_conversation_message(&history, "assistant", assistant_multi);
+
+    SystemPromptParts prompt = { .base_prompt = "You are helpful.", .dynamic_context = NULL };
+    char *json = provider->build_request_json(provider, "codex-mini", &prompt,
+                                                &history, "ok", 1024, NULL);
+    TEST_ASSERT_NOT_NULL(json);
+
+    /* Should produce two separate function_call items */
+    TEST_ASSERT_NOT_NULL(strstr(json, "\"call_id\":\"call_a\""));
+    TEST_ASSERT_NOT_NULL(strstr(json, "\"call_id\":\"call_b\""));
+    TEST_ASSERT_NOT_NULL(strstr(json, "\"name\":\"read_file\""));
+    TEST_ASSERT_NOT_NULL(strstr(json, "\"name\":\"write_file\""));
+
+    /* Count function_call occurrences */
+    int fc_count = 0;
+    const char *p = json;
+    while ((p = strstr(p, "\"type\":\"function_call\"")) != NULL) {
+        fc_count++;
+        p++;
+    }
+    TEST_ASSERT_EQUAL_INT(2, fc_count);
+
+    free(json);
+    cleanup_conversation_history(&history);
+}
+
+void test_codex_build_request_full_tool_roundtrip(void) {
+    ProviderRegistry *registry = get_provider_registry();
+    LLMProvider *provider = detect_provider_for_url(registry, "https://chatgpt.com/backend-api/codex/responses");
+    TEST_ASSERT_NOT_NULL(provider);
+
+    ConversationHistory history = {0};
+
+    /* user -> assistant(tool_calls) -> tool(result) using production format */
+    append_conversation_message(&history, "user", "Read test.c");
+
+    const char *assistant_tc =
+        "{\"role\": \"assistant\", \"content\": null, "
+        "\"tool_calls\": [{\"id\": \"call_rt1\", \"type\": \"function\", "
+        "\"function\": {\"name\": \"read_file\", "
+        "\"arguments\": \"{\\\"path\\\":\\\"test.c\\\"}\"}}]}";
+    append_conversation_message(&history, "assistant", assistant_tc);
+
+    append_tool_message(&history, "int main() {}", "call_rt1", "read_file");
+
+    SystemPromptParts prompt = { .base_prompt = "You are helpful.", .dynamic_context = NULL };
+    char *json = provider->build_request_json(provider, "codex-mini", &prompt,
+                                                &history, "Now explain it", 1024, NULL);
+    TEST_ASSERT_NOT_NULL(json);
+
+    /* Parse the full request to verify ordering and structure */
+    cJSON *root = cJSON_Parse(json);
+    TEST_ASSERT_NOT_NULL(root);
+    cJSON *input = cJSON_GetObjectItem(root, "input");
+    TEST_ASSERT_NOT_NULL(input);
+
+    int arr_size = cJSON_GetArraySize(input);
+    /* Expect: user, function_call, function_call_output, user (current msg) */
+    TEST_ASSERT_GREATER_OR_EQUAL(4, arr_size);
+
+    /* Find function_call and function_call_output indices */
+    int fc_idx = -1, fco_idx = -1;
+    for (int i = 0; i < arr_size; i++) {
+        cJSON *item = cJSON_GetArrayItem(input, i);
+        cJSON *type = cJSON_GetObjectItem(item, "type");
+        if (type && cJSON_IsString(type)) {
+            if (strcmp(type->valuestring, "function_call") == 0) fc_idx = i;
+            if (strcmp(type->valuestring, "function_call_output") == 0) fco_idx = i;
+        }
+    }
+
+    /* function_call must come before function_call_output */
+    TEST_ASSERT_NOT_EQUAL(-1, fc_idx);
+    TEST_ASSERT_NOT_EQUAL(-1, fco_idx);
+    TEST_ASSERT_TRUE(fc_idx < fco_idx);
+
+    /* Both must reference the same call_id */
+    cJSON *fc_item = cJSON_GetArrayItem(input, fc_idx);
+    cJSON *fco_item = cJSON_GetArrayItem(input, fco_idx);
+    cJSON *fc_call_id = cJSON_GetObjectItem(fc_item, "call_id");
+    cJSON *fco_call_id = cJSON_GetObjectItem(fco_item, "call_id");
+    TEST_ASSERT_NOT_NULL(fc_call_id);
+    TEST_ASSERT_NOT_NULL(fco_call_id);
+    TEST_ASSERT_EQUAL_STRING("call_rt1", fc_call_id->valuestring);
+    TEST_ASSERT_EQUAL_STRING("call_rt1", fco_call_id->valuestring);
+
+    cJSON_Delete(root);
+    free(json);
+    cleanup_conversation_history(&history);
+}
+
+void test_codex_build_request_tool_calls_parse_failure(void) {
+    ProviderRegistry *registry = get_provider_registry();
+    LLMProvider *provider = detect_provider_for_url(registry, "https://chatgpt.com/backend-api/codex/responses");
+    TEST_ASSERT_NOT_NULL(provider);
+
+    ConversationHistory history = {0};
+    /* Malformed JSON that contains "tool_calls" but won't parse */
+    const char *broken_json = "{\"tool_calls\": [incomplete";
+    append_conversation_message(&history, "assistant", broken_json);
+
+    SystemPromptParts prompt = { .base_prompt = "You are helpful.", .dynamic_context = NULL };
+    char *json = provider->build_request_json(provider, "codex-mini", &prompt,
+                                                &history, "ok", 1024, NULL);
+    TEST_ASSERT_NOT_NULL(json);
+
+    /* Fallback: should emit as plain assistant message */
+    TEST_ASSERT_NOT_NULL(strstr(json, "\"role\":\"assistant\""));
+    /* Should NOT have function_call items */
+    TEST_ASSERT_NULL(strstr(json, "\"type\":\"function_call\""));
 
     free(json);
     cleanup_conversation_history(&history);
@@ -342,7 +551,12 @@ int main(void) {
     RUN_TEST(test_codex_parse_stream_done_sentinel);
     RUN_TEST(test_codex_parse_stream_null_empty);
     RUN_TEST(test_codex_parse_stream_error_events);
-    RUN_TEST(test_codex_build_request_with_tool_calls_summary);
+    RUN_TEST(test_codex_build_request_with_tool_calls);
+    RUN_TEST(test_codex_build_request_tool_calls_with_content);
+    RUN_TEST(test_codex_build_request_tool_calls_null_content);
+    RUN_TEST(test_codex_build_request_multiple_tool_calls);
+    RUN_TEST(test_codex_build_request_full_tool_roundtrip);
+    RUN_TEST(test_codex_build_request_tool_calls_parse_failure);
     RUN_TEST(test_codex_build_request_with_tool_result);
     return UNITY_END();
 }
