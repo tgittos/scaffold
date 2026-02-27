@@ -51,29 +51,6 @@ typedef struct AgentSession {
     PluginManager plugin_manager;       /**< Plugin subprocess management */
 } AgentSession;
 
-/* Cleanup hooks: external code registers shutdown functions (e.g. Python interpreter). */
-
-/**
- * Cleanup hook function signature.
- * Called during session_cleanup() before internal cleanup.
- */
-typedef void (*SessionCleanupHook)(AgentSession *session);
-
-/**
- * Register a cleanup hook to be called during session_cleanup().
- * Hooks are called in LIFO order (last registered = first called).
- *
- * @param hook Function to call during cleanup
- * @return 0 on success, -1 if max hooks reached
- */
-int session_register_cleanup_hook(SessionCleanupHook hook);
-
-/**
- * Unregister all cleanup hooks.
- * Called during final cleanup or testing.
- */
-void session_unregister_all_hooks(void);
-
 /**
  * Initialize an agent session.
  * Sets up all subsystems: tools, MCP, subagents, approval gates, etc.

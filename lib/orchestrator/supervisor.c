@@ -9,7 +9,6 @@
 #include "db/goal_store.h"
 #include "db/action_store.h"
 #include "services/services.h"
-#include <cJSON.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>

@@ -55,8 +55,7 @@ int orchestrator_kill_supervisor(goal_store_t* store, const char* goal_id);
  * Check for stale supervisors on startup.
  *
  * Scans goals with non-zero supervisor_pid. If the process doesn't
- * exist (kill returns ESRCH), clears the PID. Guards against PID
- * recycling by treating supervisors older than 1 hour as stale.
+ * exist (kill returns ESRCH), clears the PID.
  *
  * @param store  Goal store
  */

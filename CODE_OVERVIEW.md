@@ -246,7 +246,6 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 The test directory mirrors the source structure:
 
 #### `test/ralph/` - Core Functionality Tests
-- **`test_main.c`** - Main application tests
 - **`test_ralph.c`** - Core Ralph functionality tests
 - **`test_cli_flags.c`** - CLI flag parsing tests
 - **`test_recap.c`** - Recap generation tests

@@ -130,10 +130,6 @@ action_store_t *action_store_create_with_dal(sqlite_dal_t *dal) {
     return store;
 }
 
-sqlite_dal_t *action_store_get_dal(action_store_t *store) {
-    return store ? store->dal : NULL;
-}
-
 void action_store_destroy(action_store_t *store) {
     if (store == NULL) return;
     sqlite_dal_destroy(store->dal);

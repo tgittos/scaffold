@@ -33,7 +33,6 @@ endef
 # MINIMAL TESTS (no external libraries)
 # =============================================================================
 
-$(eval $(call def_test,main,ralph/test_main,))
 $(eval $(call def_test,cli_flags,ralph/test_cli_flags,))
 $(eval $(call def_test,interrupt,ralph/test_interrupt,$(LIBDIR)/util/interrupt.c))
 $(eval $(call def_test,async_executor,ralph/test_async_executor,$(LIBDIR)/agent/async_executor.c $(LIBDIR)/util/interrupt.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/ipc/pipe_notifier.c $(TESTDIR)/stubs/ralph_stub.c))
@@ -82,9 +81,6 @@ $(eval $(call def_test,shell_parser_cmd,policy/test_shell_parser_cmd,$(LIBDIR)/p
 $(eval $(call def_test,shell_parser_ps,policy/test_shell_parser_ps,$(LIBDIR)/policy/shell_parser_ps.c $(LIBDIR)/policy/shell_parser.c $(LIBDIR)/policy/shell_parser_cmd.c))
 $(eval $(call def_test,subagent_approval,policy/test_subagent_approval,$(GATE_DEPS)))
 $(eval $(call def_test,approval_gate_integration,policy/test_approval_gate_integration,$(GATE_DEPS) $(TESTDIR)/stubs/python_tool_stub.c))
-
-$(TEST_main_TARGET): $(TEST_main_OBJECTS)
-	$(CC) -o $@ $(TEST_main_OBJECTS)
 
 $(TEST_cli_flags_TARGET): $(TEST_cli_flags_OBJECTS) $(BUILDDIR)/.scaffold-linked
 	$(CC) -o $@ $(TEST_cli_flags_OBJECTS)
@@ -327,7 +323,7 @@ $(TEST_vector_db_TARGET): $(TEST_vector_db_OBJECTS) $(HNSWLIB_DIR)/hnswlib/hnswl
 	$(CXX) -o $@ $(TEST_vector_db_OBJECTS) -lpthread -lm
 
 # =============================================================================
-# LIBRALPH-LINKED TESTS
+# LIBAGENT-LINKED TESTS
 # =============================================================================
 
 # Mock embeddings sources for tests that need mocked embedding API

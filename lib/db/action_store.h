@@ -35,7 +35,6 @@ typedef struct sqlite_dal sqlite_dal_t;
 
 action_store_t* action_store_create(const char* db_path);
 action_store_t* action_store_create_with_dal(sqlite_dal_t* dal);
-sqlite_dal_t* action_store_get_dal(action_store_t* store);
 void action_store_destroy(action_store_t* store);
 
 // parent_action_id may be NULL for top-level actions.

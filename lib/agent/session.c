@@ -33,26 +33,6 @@
 #include <string.h>
 #include <time.h>
 
-#define MAX_CLEANUP_HOOKS 8
-static SessionCleanupHook g_cleanup_hooks[MAX_CLEANUP_HOOKS];
-static int g_cleanup_hook_count = 0;
-
-int session_register_cleanup_hook(SessionCleanupHook hook) {
-    if (hook == NULL) {
-        return -1;
-    }
-    if (g_cleanup_hook_count >= MAX_CLEANUP_HOOKS) {
-        fprintf(stderr, "Warning: Maximum cleanup hooks (%d) reached\n", MAX_CLEANUP_HOOKS);
-        return -1;
-    }
-    g_cleanup_hooks[g_cleanup_hook_count++] = hook;
-    return 0;
-}
-
-void session_unregister_all_hooks(void) {
-    g_cleanup_hook_count = 0;
-}
-
 /**
  * Callback invoked when a subagent spawns to notify the async executor's select loop.
  * This allows the main thread to immediately rebuild its fd_set to include the new
@@ -182,12 +162,6 @@ cleanup_session_data:
 
 void session_cleanup(AgentSession* session) {
     if (session == NULL) return;
-
-    for (int i = g_cleanup_hook_count - 1; i >= 0; i--) {
-        if (g_cleanup_hooks[i] != NULL) {
-            g_cleanup_hooks[i](session);
-        }
-    }
 
     if (session->message_poller != NULL) {
         message_poller_stop(session->message_poller);
