@@ -45,7 +45,9 @@
       "Bash(xxd:*)",
       "Bash(./test/test_approval_gate_integration:*)",
       "WebFetch(domain:developers.openai.com)",
-      "WebFetch(domain:docs.openclaw.ai)"
+      "WebFetch(domain:docs.openclaw.ai)",
+      "WebFetch(domain:platform.openai.com)",
+      "WebFetch(domain:github.com)"
     ]
   },
   "spinnerTipsEnabled": false
