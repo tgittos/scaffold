@@ -12,7 +12,8 @@
 #include <curl/curl.h>
 
 /* Embedded CA bundle ensures portable SSL across all platforms */
-static void configure_ssl_certs(CURL *curl) {
+void http_configure_ssl(void *curl_handle) {
+    CURL *curl = (CURL *)curl_handle;
     struct curl_blob blob;
     blob.data = (void *)embedded_cacert_data;
     blob.len = embedded_cacert_size;
@@ -156,7 +157,7 @@ int http_post_with_config(const char *url, const char *post_data, const char **h
             response->data = NULL;
             return -1;
         }
-        configure_ssl_certs(curl);
+        http_configure_ssl(curl);
 
         curl_headers = curl_slist_append(NULL, "Content-Type: application/json");
         if (curl_headers == NULL) {
@@ -323,7 +324,7 @@ int http_get_with_config(const char *url, const char **headers,
             response->data = NULL;
             return -1;
         }
-        configure_ssl_certs(curl);
+        http_configure_ssl(curl);
 
         curl_headers = NULL;
         if (headers != NULL) {
@@ -495,7 +496,7 @@ int http_download_file(const char *url, const char **headers,
             unlink(dest_path);
             return -1;
         }
-        configure_ssl_certs(curl);
+        http_configure_ssl(curl);
 
         curl_headers = NULL;
         if (headers != NULL) {
@@ -630,7 +631,7 @@ int http_post_streaming(const char *url, const char *post_data,
         fprintf(stderr, "Error: Failed to initialize curl for streaming\n");
         return -1;
     }
-    configure_ssl_certs(curl);
+    http_configure_ssl(curl);
 
     curl_headers = curl_slist_append(NULL, "Content-Type: application/json");
     if (curl_headers == NULL) {

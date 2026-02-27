@@ -501,7 +501,7 @@ int plugin_manager_start_all(PluginManager *mgr, ToolRegistry *registry) {
                 ToolFunction *src = &p->manifest.tools[j];
 
                 char prefixed[256];
-                snprintf(prefixed, sizeof(prefixed), "plugin_%s_%s",
+                snprintf(prefixed, sizeof(prefixed), PLUGIN_TOOL_PREFIX "%s_%s",
                          p->manifest.name, src->name);
 
                 ToolFunction reg = {0};
@@ -608,9 +608,9 @@ int plugin_manager_execute_tool(PluginManager *mgr, const ToolCall *tool_call, T
     if (!mgr || !tool_call || !result) return -1;
 
     /* Tool name format: plugin_<pluginname>_<toolname> */
-    if (strncmp(tool_call->name, "plugin_", 7) != 0) return -1;
+    if (strncmp(tool_call->name, PLUGIN_TOOL_PREFIX, PLUGIN_TOOL_PREFIX_LEN) != 0) return -1;
 
-    const char *rest = tool_call->name + 7;
+    const char *rest = tool_call->name + PLUGIN_TOOL_PREFIX_LEN;
     /* Safe: plugin_validate_name() rejects underscores in plugin names,
      * so the first '_' in rest is always the separator. */
     const char *sep = strchr(rest, '_');

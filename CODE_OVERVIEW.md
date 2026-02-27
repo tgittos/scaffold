@@ -129,7 +129,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 ##### TOCTOU Protection
 - **`atomic_file.c/h`** - Atomic file operations with O_NOFOLLOW, O_EXCL, inode verification
 - **`verified_file_context.c/h`** - Thread-local storage for approved path context
-- **`verified_file_python.c/h`** - Python extension for TOCTOU-safe file operations
+- See also `src/tools/verified_file_python.c/h` for the Python extension that uses this subsystem
 
 ##### Subagent Support
 - **`subagent_approval.c/h`** - IPC-based approval proxying for child processes

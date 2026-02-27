@@ -199,6 +199,7 @@ void session_cleanup(AgentSession* session) {
 
     provider_registry_cleanup();
     llm_client_cleanup();
+    session_configurator_cleanup();
 
     tool_extension_shutdown_all();
 

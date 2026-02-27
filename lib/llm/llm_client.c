@@ -34,6 +34,8 @@ int llm_client_init(void) {
 }
 
 void llm_client_cleanup(void) {
+    g_credential_fn = NULL;
+    g_credential_data = NULL;
     if (s_curl_initialized) {
         curl_global_cleanup();
         s_curl_initialized = false;

@@ -10,6 +10,7 @@ typedef struct ConversationMessage {
     char *content;
     char *tool_call_id; // nullable, only set for "tool" role
     char *tool_name;    // nullable, only set for "tool" role
+    int has_tool_calls; // 1 if assistant message contains serialized tool_calls
 } ConversationMessage;
 
 DARRAY_DECLARE(ConversationHistory, ConversationMessage)

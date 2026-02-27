@@ -214,7 +214,7 @@ int tool_batch_execute(ToolBatchContext* ctx,
         e->call_index = i;
         e->slot = slot;
         e->is_mcp = (strncmp(calls[i].name, "mcp_", 4) == 0);
-        e->is_plugin = (strncmp(calls[i].name, "plugin_", 7) == 0);
+        e->is_plugin = (strncmp(calls[i].name, PLUGIN_TOOL_PREFIX, PLUGIN_TOOL_PREFIX_LEN) == 0);
         e->approved = 1;
         e->thread_safe = 0;
         for (size_t t = 0; t < ctx->session->tools.functions.count; t++) {

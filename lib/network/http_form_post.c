@@ -1,17 +1,8 @@
 #include "http_form_post.h"
-#include "embedded_cacert.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <curl/curl.h>
-
-static void configure_form_ssl(CURL *curl) {
-    struct curl_blob blob;
-    blob.data = (void *)embedded_cacert_data;
-    blob.len = embedded_cacert_size;
-    blob.flags = CURL_BLOB_NOCOPY;
-    curl_easy_setopt(curl, CURLOPT_CAINFO_BLOB, &blob);
-}
 
 int http_form_post(const char *url, const FormField *fields, int count,
                    struct HTTPResponse *response) {
@@ -25,7 +16,7 @@ int http_form_post(const char *url, const FormField *fields, int count,
     CURL *curl = curl_easy_init();
     if (!curl) { free(response->data); response->data = NULL; return -1; }
 
-    configure_form_ssl(curl);
+    http_configure_ssl(curl);
 
     /* Build form body: key=urlencoded_value&... */
     char *body = NULL;

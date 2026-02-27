@@ -153,8 +153,8 @@ docker build -t scaffold-dev .devcontainer/
 
 # Build scaffold
 docker run --rm --privileged \
-    -v /your/checkout/path:/workspaces/ralph \
-    -w /workspaces/ralph \
+    -v /your/checkout/path:/workspaces/ralph/scaffold \
+    -w /workspaces/ralph/scaffold \
     scaffold-dev \
     ./scripts/build.sh
 ```

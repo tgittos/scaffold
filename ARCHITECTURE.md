@@ -199,7 +199,7 @@ sequenceDiagram
     participant Network as HTTP Client
     participant LLM as External LLM API
     
-    User->>CLI: ralph "remember project uses Redis"
+    User->>CLI: scaffold "remember project uses Redis"
     CLI->>Core: Initialize session
     Core->>Session: Load conversation history
     Core->>VectorDB: Initialize vector services
@@ -247,13 +247,13 @@ graph LR
 ### 3. Session-Based Design
 ```mermaid
 graph TB
-    RalphSession[Ralph Session<br/>Central Context] --> SessionData[Session Data<br/>Core State]
-    RalphSession --> ConvHistory[Conversation History]
-    RalphSession --> ToolReg[Tool Registry]
-    RalphSession --> ProvReg[Provider Registry]
-    RalphSession --> TokenMgmt[Token Management]
-    RalphSession --> VectorServices[Vector Services<br/>Singleton Access]
-    RalphSession --> MCPClient[MCP Client<br/>External Tools]
+    AgentSession[Agent Session<br/>Central Context] --> SessionData[Session Data<br/>Core State]
+    AgentSession --> ConvHistory[Conversation History]
+    AgentSession --> ToolReg[Tool Registry]
+    AgentSession --> ProvReg[Provider Registry]
+    AgentSession --> TokenMgmt[Token Management]
+    AgentSession --> VectorServices[Vector Services<br/>Singleton Access]
+    AgentSession --> MCPClient[MCP Client<br/>External Tools]
 
     SessionData --> Config[Configuration]
     SessionData --> CurrentProvider[Current Provider]
@@ -271,7 +271,9 @@ graph TB
 graph TB
     Services[Service Layer<br/>Singleton Management] --> VectorDBSvc[Vector DB Service<br/>Thread-safe singleton]
     Services --> EmbeddingsSvc[Embeddings Service<br/>API abstraction]
-    Services --> ConfigSvc[Config Service<br/>Global singleton]
+    Services --> TaskStoreSvc[Task Store<br/>SQLite-backed]
+    Services --> GoalActionSvc[Goal/Action Stores<br/>Shared SQLite DAL]
+    Services --> MessageStoreSvc[Message Store<br/>Inter-agent IPC]
 
     VectorDBSvc --> IndexMgmt[Index Management<br/>Multiple indices]
     VectorDBSvc --> VectorOps[Vector Operations<br/>CRUD operations]
@@ -282,10 +284,6 @@ graph TB
     EmbeddingsSvc --> EmbedRegistry[Embedding Provider Registry]
     EmbedRegistry --> OpenAIEmbed[OpenAI Provider<br/>text-embedding-3-small]
     EmbedRegistry --> LocalEmbed[Local Provider<br/>LMStudio/Ollama]
-
-    ConfigSvc --> EnvVars[Environment Variables]
-    ConfigSvc --> ConfigFile[scaffold.config.json]
-    ConfigSvc --> APIDetection[API Type Detection]
 ```
 
 ## Module Dependencies
@@ -299,12 +297,14 @@ graph TB
     Core --> Vector[Vector Layer]
     Core --> MCP[MCP Layer]
     Core --> Policy[Policy Layer<br/>Approval Gates]
+    Core --> Plugin[Plugin Layer<br/>JSON-RPC 2.0]
+    Core --> IPC[IPC Layer<br/>Inter-Agent Messaging]
 
     Tools --> Policy
     Policy --> Utils
 
     CLI[CLI Layer<br/>main.c] --> Core
-    CLI --> Vector
+    CLI --> Auth[Auth Layer<br/>OAuth2/PKCE]
 
     MCP --> Network[Network Layer]
     MCP --> Tools
@@ -312,20 +312,31 @@ graph TB
     LLM --> Network
     LLM --> Utils
 
+    Auth --> Network
+    Auth --> DB
+
+    Plugin --> IPC
+    Plugin --> Tools
+
     Tools --> Utils
     Tools --> Vector
 
     Session --> Utils
     Session --> Vector
 
+    Core --> Orchestrator[Orchestrator Layer<br/>Supervisor/Worker]
+    Core --> Workflow[Workflow Layer<br/>Task Queue]
+    Orchestrator --> DB
+    Workflow --> DB
+
     Vector --> Network
     Vector --> Utils
-    Vector --> Database[Database Layer<br/>HNSWLIB]
+    Vector --> DB[Database Layer<br/>SQLite/HNSWLIB]
     Vector --> Document[Document Processing<br/>PDFio]
     Vector --> Persistence[Persistence Layer<br/>Document/Metadata Store]
 
     Network --> External[External Libraries<br/>cURL, mbedTLS]
-    Database --> CPPRuntime[C++ Runtime]
+    DB --> CPPRuntime[C++ Runtime]
 
     Utils -.-> FileSystem[File System]
     Persistence -.-> JSONStorage[JSON Storage<br/>~/.local/scaffold/]
@@ -337,6 +348,9 @@ graph TB
     classDef mcpLayer fill:#fff9c4,stroke:#f9a825,stroke-width:2px
     classDef cliLayer fill:#e1f5fe,stroke:#0288d1,stroke-width:2px
     classDef policyLayer fill:#ffccbc,stroke:#e64a19,stroke-width:2px
+    classDef pluginLayer fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    classDef authLayer fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef orchLayer fill:#fff3e0,stroke:#e65100,stroke-width:2px
 
     class Core,LLM,Tools,Session,Utils,Network layer
     class Policy policyLayer
@@ -344,6 +358,11 @@ graph TB
     class External,FileSystem,Database,Document,CPPRuntime,VectorStorage,JSONStorage external
     class MCP mcpLayer
     class CLI cliLayer
+    class Plugin pluginLayer
+    class Auth authLayer
+    class IPC pluginLayer
+    class DB external
+    class Orchestrator,Workflow orchLayer
 ```
 
 ## Tool System Architecture
@@ -371,7 +390,7 @@ graph TB
     DefaultTools --> SearchOp[Search Files<br/>search_files.py]
     DefaultTools --> PipTools[Package Management<br/>pip_install/pip_list]
 
-    SubagentTool --> ChildProcess[Child Ralph Process<br/>fork/exec]
+    SubagentTool --> ChildProcess[Child Scaffold Process<br/>fork/exec]
 
     TodoTools --> TodoMgr[Todo Manager<br/>In-memory state]
 
@@ -727,14 +746,14 @@ Ralph can spawn child processes to execute tasks in parallel.
 
 ```mermaid
 graph TB
-    ParentRalph[Parent Ralph] --> SubagentTool[Subagent Tool<br/>subagent_tool.c]
+    ParentScaffold[Parent Scaffold] --> SubagentTool[Subagent Tool<br/>subagent_tool.c]
     SubagentTool --> SubagentMgr[Subagent Manager]
 
     SubagentMgr --> Spawn[subagent_spawn]
     Spawn --> Fork[fork + exec]
-    Fork --> ChildRalph[Child Ralph<br/>--subagent mode]
+    Fork --> ChildScaffold[Child Scaffold<br/>--subagent mode]
 
-    ChildRalph --> TaskExec[Execute Task]
+    ChildScaffold --> TaskExec[Execute Task]
     TaskExec --> Output[Capture Output]
     Output --> Pipe[stdout pipe]
     Pipe --> Poll[subagent_poll_all]
@@ -747,9 +766,9 @@ graph TB
     classDef subagent fill:#e8f5e8
     classDef child fill:#fff3e0
 
-    class ParentRalph,SubagentTool,SubagentMgr parent
+    class ParentScaffold,SubagentTool,SubagentMgr parent
     class Spawn,Fork,Poll,StatusTool,GetStatus subagent
-    class ChildRalph,TaskExec,Output,Pipe,Status child
+    class ChildScaffold,TaskExec,Output,Pipe,Status child
 ```
 
 ### Subagent Configuration
@@ -767,8 +786,8 @@ Ralph supports inter-agent communication through a messaging system that enables
 ```mermaid
 graph TB
     subgraph Parent Agent
-        ParentRalph[Parent Ralph] --> MessagePoller[Message Poller<br/>message_poller.c/h]
-        ParentRalph --> MessagingTool[Messaging Tool<br/>messaging_tool.c/h]
+        ParentScaffold[Parent Scaffold] --> MessagePoller[Message Poller<br/>message_poller.c/h]
+        ParentScaffold --> MessagingTool[Messaging Tool<br/>messaging_tool.c/h]
         MessagePoller --> NotifyFmt[Notification Formatter<br/>notification_formatter.c/h]
     end
 
@@ -779,22 +798,22 @@ graph TB
     end
 
     subgraph Child Agent
-        ChildRalph[Child Ralph<br/>--subagent mode]
+        ChildScaffold[Child Scaffold<br/>--subagent mode]
         SubagentNotify[Subagent Notify<br/>Auto-completion message]
     end
 
     MessagingTool --> MessageStore
     MessagePoller --> MessageStore
     SubagentNotify --> MessageStore
-    MessageStore --> ParentRalph
+    MessageStore --> ParentScaffold
 
     classDef parent fill:#e1f5fe
     classDef store fill:#e3f2fd
     classDef child fill:#fff3e0
 
-    class ParentRalph,MessagePoller,MessagingTool,NotifyFmt parent
+    class ParentScaffold,MessagePoller,MessagingTool,NotifyFmt parent
     class MessageStore,DirectMsgs,Channels store
-    class ChildRalph,SubagentNotify child
+    class ChildScaffold,SubagentNotify child
 ```
 
 ### Messaging Components
@@ -1033,6 +1052,7 @@ graph TB
 ### Available Slash Commands
 | Command | Arguments | Description |
 |---------|-----------|-------------|
+| `/help` | - | Show available slash commands |
 | `/memory help` | - | Display help message |
 | `/memory list` | `[index_name]` | List chunks from index (default: long_term_memory) |
 | `/memory search` | `<query>` | Search chunks by content/metadata |
@@ -1189,7 +1209,7 @@ graph TB
 - **`pip_list`**: List installed Python packages from site-packages
 
 ### Subagent Tools (2 tools)
-- **`subagent`**: Spawn a child ralph process for parallel task execution
+- **`subagent`**: Spawn a child scaffold process for parallel task execution
 - **`subagent_status`**: Query the status of a running subagent
 
 ### Messaging Tools (6 tools)

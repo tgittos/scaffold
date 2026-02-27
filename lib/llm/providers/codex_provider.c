@@ -1,6 +1,5 @@
 #include "codex_provider.h"
 #include "../llm_provider.h"
-#include "../../db/oauth2_store.h"
 #include "../../network/api_common.h"
 #include "../../network/streaming.h"
 #include "../../session/conversation_tracker.h"
@@ -11,8 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Thread-local account ID for the chatgpt-account-id header */
-static _Thread_local char tl_account_id[OAUTH2_MAX_ACCOUNT_ID_LEN] = {0};
+static _Thread_local char tl_account_id[CODEX_MAX_ACCOUNT_ID_LEN] = {0};
 
 void codex_set_account_id(const char *account_id) {
     if (account_id) {
@@ -86,18 +84,8 @@ static char *codex_build_request_json(const LLMProvider *provider,
             }
 
             /* Assistant messages with tool_calls: emit structured function_call
-             * items so the Responses API can correlate with function_call_output.
-             *
-             * Heuristic: detect tool calls via strstr for "tool_calls" in the
-             * serialized message content. This works because gpt_model.c always
-             * serializes assistant tool-call messages as JSON with a top-level
-             * "tool_calls" key. A false positive could occur if the literal
-             * text "tool_calls" appears in normal message content, but the
-             * fallback path (cJSON_Parse failure -> plain assistant message)
-             * handles that safely. This is a known limitation; a future refactor
-             * should add a structured field on ConversationMessage instead. */
-            if (strcmp(msg->role, "assistant") == 0 &&
-                strstr(msg->content, "\"tool_calls\"") != NULL) {
+             * items so the Responses API can correlate with function_call_output. */
+            if (strcmp(msg->role, "assistant") == 0 && msg->has_tool_calls) {
                 cJSON *parsed = cJSON_Parse(msg->content);
                 if (parsed) {
                     /* Emit assistant text content if present */

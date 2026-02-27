@@ -33,6 +33,7 @@ int http_get_with_config(const char *url, const char **headers,
 
 size_t http_write_callback(void *contents, size_t size, size_t nmemb, void *userp);
 void cleanup_response(struct HTTPResponse *response);
+void http_configure_ssl(void *curl_handle);
 
 // =============================================================================
 // File Download Functions

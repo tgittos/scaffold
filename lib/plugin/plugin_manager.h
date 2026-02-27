@@ -13,6 +13,8 @@ extern "C" {
 #define MAX_PLUGINS 16
 #define PLUGIN_TIMEOUT_MS 5000
 #define PLUGIN_MAX_RESPONSE_BYTES (10 * 1024 * 1024)
+#define PLUGIN_TOOL_PREFIX "plugin_"
+#define PLUGIN_TOOL_PREFIX_LEN 7
 
 typedef struct {
     char *path;

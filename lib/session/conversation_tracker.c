@@ -322,6 +322,7 @@ static int add_message_to_history(ConversationHistory *history, const char *role
             if (json) {
                 cJSON* tool_calls = cJSON_GetObjectItem(json, "tool_calls");
                 if (tool_calls && cJSON_IsArray(tool_calls)) {
+                    history->data[history->count - 1].has_tool_calls = 1;
                     // Strip tool_calls from long-term storage -- only store the
                     // natural language content. Tool calls are ephemeral.
                     cJSON* content_item = cJSON_GetObjectItem(json, "content");

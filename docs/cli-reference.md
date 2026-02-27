@@ -82,6 +82,7 @@ These are used by scaffold's agent system and are not typically invoked directly
 | `--queue <name>` | Worker queue name |
 | `--supervisor` | Run in supervisor mode (requires `--goal`) |
 | `--goal <id>` | Goal ID for supervisor |
+| `--phase plan\|execute` | Set supervisor phase (default: auto-detect from goal status) |
 
 ## Examples
 
