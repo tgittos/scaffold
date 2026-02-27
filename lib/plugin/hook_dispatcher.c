@@ -375,7 +375,9 @@ static void pre_tool_execute_apply(void *raw, const HookResponse *hr) {
     PreToolExecuteCtx *ctx = raw;
     if (hr->action == HOOK_STOP && ctx->result) {
         cJSON *res = hr->data ? cJSON_GetObjectItem(hr->data, "result") : NULL;
+        free(ctx->result->tool_call_id);
         ctx->result->tool_call_id = ctx->call->id ? strdup(ctx->call->id) : NULL;
+        free(ctx->result->result);
         ctx->result->result = (res && cJSON_IsString(res))
                                  ? strdup(cJSON_GetStringValue(res))
                                  : strdup("{\"blocked\":\"Plugin blocked execution\"}");

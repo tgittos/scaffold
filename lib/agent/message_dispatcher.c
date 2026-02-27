@@ -36,20 +36,29 @@ DispatchDecision message_dispatcher_select_mode(const AgentSession* session) {
     return BUFFERED_DECISION;
 }
 
+int message_dispatcher_prepare_prompt(AgentSession* session,
+                                      const char* user_message,
+                                      EnhancedPromptParts* parts) {
+    if (session == NULL || parts == NULL) return -1;
+
+    if (build_enhanced_prompt_parts(session, user_message, parts) != 0) return -1;
+
+    hook_dispatch_context_enhance(&session->plugin_manager, session,
+                                   user_message, &parts->dynamic_context);
+
+    hook_dispatch_pre_llm_send(&session->plugin_manager, session,
+                                &parts->base_prompt, &parts->dynamic_context);
+
+    return 0;
+}
+
 char* message_dispatcher_build_payload(AgentSession* session,
                                        const char* user_message,
                                        int max_tokens) {
     if (session == NULL) return NULL;
 
     EnhancedPromptParts parts;
-    if (build_enhanced_prompt_parts(session, user_message, &parts) != 0) return NULL;
-
-    /* Plugin hook: context_enhance */
-    hook_dispatch_context_enhance(&session->plugin_manager, session,
-                                   user_message, &parts.dynamic_context);
-
-    hook_dispatch_pre_llm_send(&session->plugin_manager, session,
-                                &parts.base_prompt, &parts.dynamic_context);
+    if (message_dispatcher_prepare_prompt(session, user_message, &parts) != 0) return NULL;
 
     SystemPromptParts sys_parts = {
         .base_prompt = parts.base_prompt,

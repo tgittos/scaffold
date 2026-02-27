@@ -14,6 +14,7 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <errno.h>
+#include <time.h>
 
 char *plugin_manager_get_plugins_dir(void) {
     return app_home_path("plugins");
@@ -217,23 +218,40 @@ static int plugin_manager_send_request(PluginProcess *plugin, const char *json, 
         return -1;
     }
 
-    /* Read response with timeout */
+    /* Read response with wall-clock timeout */
     fd_set read_fds;
-    struct timeval timeout;
-    int max_retries = PLUGIN_TIMEOUT_MS / 100;
+    struct timeval tv;
+
+    struct timespec deadline;
+    clock_gettime(CLOCK_MONOTONIC, &deadline);
+    deadline.tv_sec += PLUGIN_TIMEOUT_MS / 1000;
+    deadline.tv_nsec += (PLUGIN_TIMEOUT_MS % 1000) * 1000000L;
+    if (deadline.tv_nsec >= 1000000000L) {
+        deadline.tv_sec++;
+        deadline.tv_nsec -= 1000000000L;
+    }
 
     size_t buf_size = 8192;
     size_t buf_used = 0;
     char *buffer = malloc(buf_size);
     if (!buffer) return -1;
 
-    for (int i = 0; i < max_retries; i++) {
+    for (;;) {
+        struct timespec now;
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        long remaining_ms = (deadline.tv_sec - now.tv_sec) * 1000
+                          + (deadline.tv_nsec - now.tv_nsec) / 1000000;
+        if (remaining_ms <= 0) break;
+
+        /* Cap each select at 100ms for responsiveness */
+        if (remaining_ms > 100) remaining_ms = 100;
+
         FD_ZERO(&read_fds);
         FD_SET(plugin->stdout_fd, &read_fds);
-        timeout.tv_sec = 0;
-        timeout.tv_usec = 100000;
+        tv.tv_sec = remaining_ms / 1000;
+        tv.tv_usec = (remaining_ms % 1000) * 1000;
 
-        int sel = select(plugin->stdout_fd + 1, &read_fds, NULL, NULL, &timeout);
+        int sel = select(plugin->stdout_fd + 1, &read_fds, NULL, NULL, &tv);
         if (sel < 0) {
             if (errno == EINTR) continue;
             debug_printf("Plugin %s: select failed: %s\n", plugin->path, strerror(errno));
@@ -418,17 +436,6 @@ static int handshake_plugin(PluginProcess *plugin) {
 
 int plugin_manager_start_all(PluginManager *mgr, ToolRegistry *registry) {
     if (!mgr) return -1;
-
-    /* Ignore SIGPIPE so writing to a crashed plugin's pipe returns EPIPE
-     * instead of killing the host process. Uses sigaction for consistency
-     * with the rest of the codebase (lib/util/interrupt.c, etc.). */
-    static int sigpipe_ignored = 0;
-    if (!sigpipe_ignored) {
-        struct sigaction sa = { .sa_handler = SIG_IGN, .sa_flags = 0 };
-        sigemptyset(&sa.sa_mask);
-        sigaction(SIGPIPE, &sa, NULL);
-        sigpipe_ignored = 1;
-    }
 
     for (int i = 0; i < mgr->count; i++) {
         PluginProcess *p = &mgr->plugins[i];

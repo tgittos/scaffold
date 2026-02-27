@@ -1,5 +1,6 @@
 #include "streaming_handler.h"
 #include "context_enhancement.h"
+#include "message_dispatcher.h"
 #include "../network/api_common.h"
 #include "../util/interrupt.h"
 #include "tool_executor.h"
@@ -93,17 +94,9 @@ int streaming_process_message(AgentSession* session, LLMProvider* provider,
     }
 
     EnhancedPromptParts parts;
-    if (build_enhanced_prompt_parts(session, user_message, &parts) != 0) {
+    if (message_dispatcher_prepare_prompt(session, user_message, &parts) != 0) {
         return -1;
     }
-
-    /* Plugin hook: context_enhance */
-    hook_dispatch_context_enhance(&session->plugin_manager, session,
-                                   user_message, &parts.dynamic_context);
-
-    /* Plugin hook: pre_llm_send */
-    hook_dispatch_pre_llm_send(&session->plugin_manager, session,
-                                &parts.base_prompt, &parts.dynamic_context);
 
     SystemPromptParts sys_parts = {
         .base_prompt = parts.base_prompt,
@@ -197,8 +190,10 @@ int streaming_process_message(AgentSession* session, LLMProvider* provider,
             hook_calls = calloc(hook_call_count, sizeof(ToolCall));
             if (hook_calls) {
                 for (int i = 0; i < hook_call_count; i++) {
-                    hook_calls[i].name = ctx->tool_uses.data[i].name;
-                    hook_calls[i].arguments = ctx->tool_uses.data[i].arguments_json;
+                    hook_calls[i].name = ctx->tool_uses.data[i].name
+                                             ? strdup(ctx->tool_uses.data[i].name) : NULL;
+                    hook_calls[i].arguments = ctx->tool_uses.data[i].arguments_json
+                                                  ? strdup(ctx->tool_uses.data[i].arguments_json) : NULL;
                 }
             } else {
                 hook_call_count = 0;
@@ -216,7 +211,13 @@ int streaming_process_message(AgentSession* session, LLMProvider* provider,
             }
         }
         free(hook_text);
-        free(hook_calls);
+        if (hook_calls) {
+            for (int i = 0; i < hook_call_count; i++) {
+                free(hook_calls[i].name);
+                free(hook_calls[i].arguments);
+            }
+            free(hook_calls);
+        }
     }
 
     if (user_message != NULL && strlen(user_message) > 0) {

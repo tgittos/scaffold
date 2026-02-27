@@ -40,6 +40,12 @@ int agent_init(Agent* agent, const AgentConfig* config) {
         return -1;
     }
 
+    /* Ignore SIGPIPE process-wide so writes to broken pipes (crashed plugins,
+     * closed sockets) return EPIPE instead of killing the process. */
+    struct sigaction sa_pipe = { .sa_handler = SIG_IGN, .sa_flags = 0 };
+    sigemptyset(&sa_pipe.sa_mask);
+    sigaction(SIGPIPE, &sa_pipe, NULL);
+
     memset(agent, 0, sizeof(Agent));
 
     if (config != NULL) {

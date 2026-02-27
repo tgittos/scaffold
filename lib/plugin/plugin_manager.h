@@ -87,7 +87,7 @@ char *plugin_manager_get_plugins_dir(void);
 
 /**
  * Validate a plugin name.
- * Rejects NULL, empty, >64 chars, and names containing '_', '/', or '\'.
+ * Must start with a letter, be 1-64 chars, and contain only [a-zA-Z0-9-].
  *
  * @return 0 if valid, -1 if invalid
  */
