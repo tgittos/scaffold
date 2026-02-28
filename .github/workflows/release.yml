@@ -16,6 +16,10 @@ on:
           - patch
           - minor
           - major
+      version_override:
+        description: 'Hard-coded version (e.g. 0.2.3) — skips bump calculation'
+        required: false
+        type: string
       release_notes:
         description: 'Release notes (leave empty for auto-generated)'
         required: false
@@ -43,21 +47,25 @@ jobs:
       - name: Calculate version
         id: version
         run: |
-          LATEST=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || echo "v0.0.0")
-          MAJOR=$(echo "$LATEST" | sed 's/^v//' | cut -d. -f1)
-          MINOR=$(echo "$LATEST" | sed 's/^v//' | cut -d. -f2)
-          PATCH=$(echo "$LATEST" | sed 's/^v//' | cut -d. -f3)
+          if [ -n "${{ inputs.version_override }}" ]; then
+            NEW="${{ inputs.version_override }}"
+          else
+            LATEST=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || echo "v0.0.0")
+            MAJOR=$(echo "$LATEST" | sed 's/^v//' | cut -d. -f1)
+            MINOR=$(echo "$LATEST" | sed 's/^v//' | cut -d. -f2)
+            PATCH=$(echo "$LATEST" | sed 's/^v//' | cut -d. -f3)
 
-          case "${{ inputs.bump }}" in
-            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
-            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
-            patch) PATCH=$((PATCH + 1)) ;;
-          esac
+            case "${{ inputs.bump }}" in
+              major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+              minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+              patch) PATCH=$((PATCH + 1)) ;;
+            esac
 
-          NEW="${MAJOR}.${MINOR}.${PATCH}"
+            NEW="${MAJOR}.${MINOR}.${PATCH}"
+          fi
           echo "version=${NEW}" >> "$GITHUB_OUTPUT"
           echo "tag=v${NEW}" >> "$GITHUB_OUTPUT"
-          echo "Releasing: v${NEW} (was ${LATEST})"
+          echo "Releasing: v${NEW}"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
