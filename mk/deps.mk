@@ -45,7 +45,8 @@ $(CURL_LIB): $(MBEDTLS_LIB1) $(MBEDTLS_LIB2) $(MBEDTLS_LIB3)
 		--disable-pop3 --disable-smb \
 		--disable-gopher --disable-manual --disable-ipv6 --disable-ftp \
 		--disable-file --disable-ntlm --disable-crypto-auth --disable-digest-auth \
-		--disable-negotiate-auth --with-mbedtls --without-zlib --without-brotli \
+		--disable-negotiate-auth --enable-imap --enable-smtp \
+		--with-mbedtls --without-zlib --without-brotli \
 		--without-zstd --without-libpsl --without-nghttp2 && \
 	$(MAKE) CC="$(CC)"
 
