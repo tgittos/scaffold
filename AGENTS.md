@@ -51,7 +51,10 @@ source .env && out/scaffold --yolo "your message"
 
 | Flag | Description |
 |------|-------------|
-| `--debug` | Show HTTP traffic to LLM providers |
+| `--debug` | Enable all debug logging (backward compat: LOG_DEBUG + all modules) |
+| `--log <level>` | Set log level: error, warn, info, debug |
+| `--log-module <mods>` | Filter log modules (comma-separated): agent, tool, llm, http, context, policy, goap, mcp, db, ipc, plugin |
+| `--log-http-body` | Enable raw HTTP body logging (CURLOPT_VERBOSE) |
 | `--no-stream` | Disable response streaming |
 | `--json` | Enable JSON output mode |
 | `--yolo` | Disable all approval gates for this session |

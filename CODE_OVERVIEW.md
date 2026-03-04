@@ -190,7 +190,8 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`interrupt.c/h`** - Cooperative Ctrl+C cancellation with signal handling
 - **`common_utils.c/h`** - General utility functions (string ops, JSON extraction)
 - **`json_escape.c/h`** - JSON string escaping utilities
-- **`debug_output.c/h`** - Conditional debug logging with ANSI colors
+- **`log.c/h`** - Leveled, module-tagged structured logging (LOG_ERROR/WARN/INFO/DEBUG with per-module filtering)
+- **`debug_output.c/h`** - JSON summarization helpers (legacy; used by log.c)
 - **`document_chunker.c/h`** - Intelligent text chunking for embeddings
 - **`config.c/h`** - Configuration management with cascading priority (local -> user -> env -> defaults)
 - **`prompt_loader.c/h`** - System prompt loading (core + AGENTS.md)
@@ -330,6 +331,7 @@ The test directory mirrors the source structure:
 - **`test_prompt_loader.c`** - Prompt loading tests
 - **`test_config.c`** - Configuration system tests
 - **`test_json_output.c`** - JSON output mode tests
+- **`test_log.c`** - Structured logging system tests (level/module filtering, parsing)
 - **`test_debug_output.c`** - Debug output tests
 - **`test_app_home.c`** - Application home directory management tests
 - **`test_pipe_notifier.c`** - Pipe notifier async notification tests

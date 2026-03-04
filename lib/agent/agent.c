@@ -1,8 +1,11 @@
+#define LOG_MODULE     LOG_MOD_AGENT
+#define LOG_MODULE_STR "agent"
+#include "../util/log.h"
 #include "agent.h"
 #include "repl.h"
 #include "../workflow/workflow.h"
 #include "../session/conversation_tracker.h"
-#include "../util/debug_output.h"
+#include "../util/ansi_codes.h"
 #include "../ui/output_formatter.h"
 #include "../ui/json_output.h"
 #include "../util/app_home.h"
@@ -71,7 +74,28 @@ int agent_init(Agent* agent, const AgentConfig* config) {
         agent->owns_services = true;
     }
 
-    debug_init(agent->config.debug);
+    /* Initialize structured logging.
+     * --debug (legacy) maps to LOG_DEBUG + all modules.
+     * --log <level> takes priority over --debug. */
+    {
+        LogLevel lvl;
+        uint32_t mods;
+
+        if (agent->config.log_level >= 0) {
+            lvl  = (LogLevel)agent->config.log_level;
+            mods = agent->config.log_modules ? agent->config.log_modules
+                                             : (uint32_t)LOG_MOD_ALL;
+        } else if (agent->config.debug) {
+            lvl  = LOG_DEBUG;
+            mods = (uint32_t)LOG_MOD_ALL;
+        } else {
+            lvl  = LOG_ERROR;
+            mods = 0;
+        }
+
+        log_init(lvl, mods);
+        log_http_body_enabled = agent->config.log_http_body;
+    }
 
     /* For BACKGROUND mode (subagent), set env var BEFORE session init
      * so tool registration knows to skip subagent tools */
@@ -148,21 +172,21 @@ int agent_load_config(Agent* agent) {
 
     if (agent->config.yolo) {
         approval_gate_enable_yolo(&agent->session.gate_config);
-        debug_printf("Approval gates disabled (yolo mode)\n");
+        LOG_INFO("Approval gates disabled (yolo mode)");
     }
 
     for (int i = 0; i < agent->config.allow_category_count; i++) {
         if (approval_gate_set_category_action(&agent->session.gate_config,
                                               agent->config.allow_categories[i],
                                               GATE_ACTION_ALLOW) != 0) {
-            debug_printf("Warning: Unknown category '%s'\n", agent->config.allow_categories[i]);
+            LOG_WARN("Warning: Unknown category '%s'", agent->config.allow_categories[i]);
         }
     }
 
     for (int i = 0; i < agent->config.allow_entry_count; i++) {
         if (approval_gate_add_cli_allow(&agent->session.gate_config,
                                         agent->config.allow_entries[i]) != 0) {
-            debug_printf("Warning: Invalid allow entry '%s'\n", agent->config.allow_entries[i]);
+            LOG_WARN("Warning: Invalid allow entry '%s'", agent->config.allow_entries[i]);
         }
     }
 
@@ -251,7 +275,7 @@ int agent_run(Agent* agent) {
                 return -1;
             }
 
-            debug_printf("Worker started for queue '%s'\n", agent->config.worker_queue_name);
+            LOG_INFO("Worker started for queue '%s'", agent->config.worker_queue_name);
 
             int items_processed = 0;
             int errors = 0;
@@ -262,8 +286,8 @@ int agent_run(Agent* agent) {
                     break;
                 }
 
-                debug_printf("Worker claimed item %s: %s\n", item->id,
-                             item->task_description ? item->task_description : "(no description)");
+                LOG_INFO("Worker claimed item %s: %s", item->id,
+                         item->task_description ? item->task_description : "(no description)");
 
                 char* message = NULL;
                 if (item->context != NULL && strlen(item->context) > 0) {
@@ -303,24 +327,24 @@ int agent_run(Agent* agent) {
                     }
                     work_queue_complete(queue, item->id, worker_result);
                     items_processed++;
-                    debug_printf("Worker completed item %s\n", item->id);
+                    LOG_INFO("Worker completed item %s", item->id);
                 } else if (result == -2) {
                     work_queue_complete(queue, item->id, "Task interrupted by user");
-                    debug_printf("Worker item %s interrupted by user\n", item->id);
+                    LOG_INFO("Worker item %s interrupted by user", item->id);
                 } else {
                     char error_msg[128];
                     snprintf(error_msg, sizeof(error_msg),
                              "Task processing failed with code %d", result);
                     work_queue_fail(queue, item->id, error_msg);
                     errors++;
-                    debug_printf("Worker failed item %s: %s\n", item->id, error_msg);
+                    LOG_ERROR("Worker failed item %s: %s", item->id, error_msg);
                 }
 
                 work_item_free(item);
             }
 
-            debug_printf("Worker shutting down: %d items processed, %d errors\n",
-                         items_processed, errors);
+            LOG_INFO("Worker shutting down: %d items processed, %d errors",
+                     items_processed, errors);
 
             work_queue_destroy(queue);
             return (errors > 0) ? -1 : 0;

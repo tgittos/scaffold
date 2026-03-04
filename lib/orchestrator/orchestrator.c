@@ -1,7 +1,9 @@
+#define LOG_MODULE     LOG_MOD_GOAP
+#define LOG_MODULE_STR "goap"
+#include "../util/log.h"
 #include "orchestrator.h"
 #include "../util/executable_path.h"
 #include "../util/process_spawn.h"
-#include "../util/debug_output.h"
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
@@ -57,7 +59,7 @@ int orchestrator_spawn_supervisor(goal_store_t* store, const char* goal_id) {
         return -1;
     }
 
-    debug_printf("orchestrator: spawned supervisor pid=%d for goal %s (phase=%s)\n",
+    LOG_INFO("orchestrator: spawned supervisor pid=%d for goal %s (phase=%s)",
                  pid, goal_id, phase_str);
     return 0;
 }
@@ -95,14 +97,14 @@ void orchestrator_reap_supervisors(goal_store_t* store) {
         int status;
         pid_t result = waitpid(pid, &status, WNOHANG);
         if (result == pid) {
-            debug_printf("orchestrator: reaped supervisor pid=%d for goal %s "
-                         "(exit=%d)\n", pid, goals[i]->id,
+            LOG_INFO("orchestrator: reaped supervisor pid=%d for goal %s "
+                         "(exit=%d)", pid, goals[i]->id,
                          WIFEXITED(status) ? WEXITSTATUS(status) : -1);
             goal_store_update_supervisor(store, goals[i]->id, 0, 0);
         } else if (result == -1) {
             if (kill(pid, 0) != 0 && errno == ESRCH) {
-                debug_printf("orchestrator: supervisor pid=%d for goal %s "
-                             "no longer exists\n", pid, goals[i]->id);
+                LOG_DEBUG("orchestrator: supervisor pid=%d for goal %s "
+                             "no longer exists", pid, goals[i]->id);
                 goal_store_update_supervisor(store, goals[i]->id, 0, 0);
             }
         }
@@ -142,7 +144,7 @@ int orchestrator_kill_supervisor(goal_store_t* store, const char* goal_id) {
     goal_store_update_supervisor(store, goal_id, 0, 0);
     goal_store_update_status(store, goal_id, GOAL_STATUS_PAUSED);
 
-    debug_printf("orchestrator: killed supervisor pid=%d for goal %s\n",
+    LOG_INFO("orchestrator: killed supervisor pid=%d for goal %s",
                  pid, goal_id);
     return 0;
 }
@@ -159,8 +161,8 @@ void orchestrator_check_stale(goal_store_t* store) {
         if (pid <= 0) continue;
 
         if (kill(pid, 0) != 0 && errno == ESRCH) {
-            debug_printf("orchestrator: clearing dead supervisor pid=%d "
-                         "for goal %s\n", pid, goals[i]->id);
+            LOG_DEBUG("orchestrator: clearing dead supervisor pid=%d "
+                         "for goal %s", pid, goals[i]->id);
             goal_store_update_supervisor(store, goals[i]->id, 0, 0);
         }
     }
@@ -182,7 +184,7 @@ int orchestrator_respawn_dead(goal_store_t* store) {
         for (size_t i = 0; i < count; i++) {
             if (goals[i]->supervisor_pid != 0) continue;
 
-            debug_printf("orchestrator: respawning supervisor for goal %s (%s, status=%s)\n",
+            LOG_INFO("orchestrator: respawning supervisor for goal %s (%s, status=%s)",
                          goals[i]->id, goals[i]->name,
                          goal_status_to_string(goals[i]->status));
             if (orchestrator_spawn_supervisor(store, goals[i]->id) == 0) {

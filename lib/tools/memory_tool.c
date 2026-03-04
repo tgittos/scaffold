@@ -5,7 +5,6 @@
 #include "services/services.h"
 #include "../util/common_utils.h"
 #include "../util/json_escape.h"
-#include "../util/debug_output.h"
 #include "tool_result_builder.h"
 #include <stdio.h>
 #include <stdlib.h>

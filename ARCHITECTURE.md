@@ -141,7 +141,8 @@ graph TB
     APICommon --> JSONEscape
     ConversationTracker --> cJSON[cJSON Library]
 
-    Core --> DebugOutput[Debug Output<br/>debug_output.c/h]
+    Core --> LogSystem[Structured Logging<br/>log.c/h]
+    LogSystem --> DebugOutput[Debug Helpers<br/>debug_output.c/h]
 
     %% External Dependencies
     HTTPClient --> cURL[cURL Library]
@@ -1438,7 +1439,8 @@ lib/
 │   ├── interrupt.c/h       # Cooperative Ctrl+C cancellation handling
 │   ├── common_utils.c/h    # General utilities
 │   ├── json_escape.c/h     # JSON escaping
-│   ├── debug_output.c/h    # Debug logging
+│   ├── log.c/h             # Leveled, module-tagged structured logging
+│   ├── debug_output.c/h    # JSON summarization helpers (legacy)
 │   ├── document_chunker.c/h # Text chunking
 │   ├── config.c/h          # Configuration management
 │   ├── prompt_loader.c/h   # System prompt loading

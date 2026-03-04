@@ -1,7 +1,9 @@
+#define LOG_MODULE     LOG_MOD_CONTEXT
+#define LOG_MODULE_STR "context"
+#include "../util/log.h"
 #include "conversation_compactor.h"
 #include "rolling_summary.h"
 #include "token_manager.h"
-#include "../util/debug_output.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,7 +32,7 @@ int should_background_compact(const ConversationHistory* conversation,
     }
     
     if (current_token_count >= config->background_threshold) {
-        debug_printf("Background trimming triggered: %d tokens >= %d threshold\n", 
+        LOG_INFO("Background trimming triggered: %d tokens >= %d threshold",
                     current_token_count, config->background_threshold);
         return 1;
     }
@@ -84,9 +86,9 @@ int background_compact_conversation(SessionData* session,
         return COMPACT_SUCCESS_NO_WORK;
     }
 
-    debug_printf("Background conversation trimming (%d tokens >= %d threshold)\n",
+    LOG_INFO("Background conversation trimming (%d tokens >= %d threshold)",
                 current_tokens, config->background_threshold);
-    debug_printf("Removing oldest messages to maintain performance (full history preserved in vector DB)\n");
+    LOG_INFO("Removing oldest messages to maintain performance (full history preserved in vector DB)");
 
     int target_tokens = (int)(session->config.context_window * COMPACTION_TARGET_THRESHOLD);
 
@@ -101,7 +103,7 @@ int background_compact_conversation(SessionData* session,
     if (messages_to_trim >= MIN_MESSAGES_FOR_SUMMARY &&
         session->config.api_url != NULL &&
         session->config.model != NULL) {
-        debug_printf("Generating rolling summary for %d messages before trimming\n", messages_to_trim);
+        LOG_INFO("Generating rolling summary for %d messages before trimming", messages_to_trim);
 
         char* new_summary = NULL;
         int summary_result = generate_rolling_summary(
@@ -125,11 +127,11 @@ int background_compact_conversation(SessionData* session,
             session->rolling_summary.estimated_tokens =
                 estimate_token_count(new_summary, &sum_token_config);
 
-            debug_printf("Rolling summary updated (%d total messages summarized, ~%d tokens)\n",
+            LOG_DEBUG("Rolling summary updated (%d total messages summarized, ~%d tokens)",
                         session->rolling_summary.messages_summarized,
                         session->rolling_summary.estimated_tokens);
         } else {
-            debug_printf("Failed to generate rolling summary, proceeding with trim anyway\n");
+            LOG_ERROR("Failed to generate rolling summary, proceeding with trim anyway");
         }
     }
 
@@ -142,11 +144,11 @@ int background_compact_conversation(SessionData* session,
         result->messages_after_trimming = session->conversation.count;
         result->tokens_saved = tokens_saved;
 
-        debug_printf("Background trimming complete: removed %d messages (saved ~%d tokens)\n",
+        LOG_DEBUG("Background trimming complete: removed %d messages (saved ~%d tokens)",
                     messages_trimmed, tokens_saved);
-        debug_printf("Full conversation history remains available in vector database\n");
+        LOG_DEBUG("Full conversation history remains available in vector database");
 
-        debug_printf("Background trimming: removed %d messages, %d remaining\n",
+        LOG_DEBUG("Background trimming: removed %d messages, %d remaining",
                     messages_trimmed, (int)session->conversation.count);
 
         return COMPACT_SUCCESS_TRIMMED;
@@ -177,8 +179,8 @@ int compact_conversation(SessionData* session,
         return COMPACT_SUCCESS_NO_WORK;
     }
 
-    debug_printf("Context window approaching limit (%d/%d tokens)\n", current_tokens, target_token_count);
-    debug_printf("Trimming conversation to maintain performance (full history preserved in vector DB)\n");
+    LOG_INFO("Context window approaching limit (%d/%d tokens)", current_tokens, target_token_count);
+    LOG_INFO("Trimming conversation to maintain performance (full history preserved in vector DB)");
 
     int messages_trimmed = trim_conversation_for_tokens(&session->conversation, &token_config, target_token_count, session->config.system_prompt);
 
@@ -189,11 +191,11 @@ int compact_conversation(SessionData* session,
         result->messages_after_trimming = session->conversation.count;
         result->tokens_saved = tokens_saved;
 
-        debug_printf("Emergency trimming complete: removed %d messages (saved ~%d tokens)\n",
+        LOG_DEBUG("Emergency trimming complete: removed %d messages (saved ~%d tokens)",
                     messages_trimmed, tokens_saved);
-        debug_printf("Full conversation history remains available in vector database\n");
+        LOG_DEBUG("Full conversation history remains available in vector database");
 
-        debug_printf("Emergency trimming: removed %d messages, %d remaining\n",
+        LOG_DEBUG("Emergency trimming: removed %d messages, %zu remaining",
                     messages_trimmed, session->conversation.count);
 
         return COMPACT_SUCCESS_TRIMMED;

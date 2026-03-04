@@ -1,66 +1,11 @@
 #include <stdio.h>
-#include <stdarg.h>
 #include <stdbool.h>
-#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 #include <cJSON.h>
 #include "debug_output.h"
 
-bool debug_enabled = false;
-
-static pthread_mutex_t debug_mutex;
-static pthread_once_t debug_mutex_once = {0};
-
-static void debug_mutex_init(void) {
-    pthread_mutex_init(&debug_mutex, NULL);
-}
-
 #define LARGE_ARRAY_THRESHOLD 10
-
-void debug_init(bool enable_debug) {
-    debug_enabled = enable_debug;
-}
-
-void debug_printf(const char *format, ...) {
-    if (!debug_enabled) {
-        return;
-    }
-
-    pthread_once(&debug_mutex_once, debug_mutex_init);
-
-    va_list args;
-    va_start(args, format);
-
-    pthread_mutex_lock(&debug_mutex);
-    fprintf(stderr, DEBUG_COLOR_YELLOW);
-    vfprintf(stderr, format, args);
-    fprintf(stderr, DEBUG_COLOR_RESET);
-    pthread_mutex_unlock(&debug_mutex);
-
-    va_end(args);
-}
-
-void debug_fprintf(FILE *stream, const char *format, ...) {
-    (void)stream;
-
-    if (!debug_enabled) {
-        return;
-    }
-
-    pthread_once(&debug_mutex_once, debug_mutex_init);
-
-    va_list args;
-    va_start(args, format);
-
-    pthread_mutex_lock(&debug_mutex);
-    fprintf(stderr, DEBUG_COLOR_YELLOW);
-    vfprintf(stderr, format, args);
-    fprintf(stderr, DEBUG_COLOR_RESET);
-    pthread_mutex_unlock(&debug_mutex);
-
-    va_end(args);
-}
 
 static bool is_numeric_array(const cJSON *array) {
     if (!cJSON_IsArray(array)) {
@@ -135,18 +80,4 @@ char* debug_summarize_json(const char *json) {
     cJSON_Delete(root);
 
     return result;
-}
-
-void debug_printf_json(const char *prefix, const char *json) {
-    if (!debug_enabled) {
-        return;
-    }
-
-    char *summarized = debug_summarize_json(json);
-    if (summarized != NULL) {
-        debug_printf("%s%s\n", prefix ? prefix : "", summarized);
-        free(summarized);
-    } else {
-        debug_printf("%s%s\n", prefix ? prefix : "", json ? json : "(null)");
-    }
 }

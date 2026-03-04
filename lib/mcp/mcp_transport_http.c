@@ -5,9 +5,12 @@
  * Also used for SSE servers (which use HTTP for requests).
  */
 
+#define LOG_MODULE     LOG_MOD_MCP
+#define LOG_MODULE_STR "mcp"
+#include "../util/log.h"
 #include "mcp_transport.h"
-#include "util/debug_output.h"
 #include "network/http_client.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -67,12 +70,12 @@ static int http_connect(MCPTransport *transport, const MCPServerConfig *config) 
     }
 
     if (config->type != MCP_SERVER_HTTP && config->type != MCP_SERVER_SSE) {
-        debug_printf("HTTP transport: wrong server type\n");
+        LOG_ERROR("HTTP transport: wrong server type");
         return -1;
     }
 
     if (!config->url) {
-        debug_printf("HTTP transport: no URL specified\n");
+        LOG_ERROR("HTTP transport: no URL specified");
         return -1;
     }
 
@@ -83,14 +86,14 @@ static int http_connect(MCPTransport *transport, const MCPServerConfig *config) 
 
     /* Pre-build headers for reuse across requests */
     if (build_headers(data, config) != 0) {
-        debug_printf("HTTP transport: failed to build headers\n");
+        LOG_ERROR("HTTP transport: failed to build headers");
         return -1;
     }
 
     transport->config = config;
     transport->connected = 1;
 
-    debug_printf("HTTP transport: initialized for %s\n", config->name);
+    LOG_INFO("HTTP transport: initialized for %s", config->name);
     return 0;
 }
 
@@ -106,7 +109,7 @@ static int http_disconnect(MCPTransport *transport) {
 
     transport->connected = 0;
 
-    debug_printf("HTTP transport: disconnected\n");
+    LOG_INFO("HTTP transport: disconnected");
     return 0;
 }
 
@@ -116,7 +119,7 @@ static int http_send_request(MCPTransport *transport, const char *request, char 
     }
 
     if (!transport->config || !transport->config->url) {
-        debug_printf("HTTP transport: not configured\n");
+        LOG_ERROR("HTTP transport: not configured");
         return -1;
     }
 
@@ -136,7 +139,7 @@ static int http_send_request(MCPTransport *transport, const char *request, char 
     );
 
     if (result != 0) {
-        debug_printf("HTTP transport: POST request failed\n");
+        LOG_ERROR("HTTP transport: POST request failed");
         if (http_response.data) {
             free(http_response.data);
         }
@@ -144,7 +147,7 @@ static int http_send_request(MCPTransport *transport, const char *request, char 
     }
 
     if (!http_response.data || http_response.size == 0) {
-        debug_printf("HTTP transport: empty response\n");
+        LOG_ERROR("HTTP transport: empty response");
         if (http_response.data) {
             free(http_response.data);
         }

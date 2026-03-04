@@ -1,6 +1,8 @@
+#define LOG_MODULE     LOG_MOD_CONTEXT
+#define LOG_MODULE_STR "context"
+#include "../util/log.h"
 #include "token_manager.h"
 #include "session_manager.h"
-#include "../util/debug_output.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -75,17 +77,17 @@ int validate_token_config(const TokenConfig* config) {
     if (config == NULL) return -1;
     
     if (config->context_window <= 0) {
-        debug_printf("Invalid context window configuration\n");
+        LOG_ERROR("Invalid context window configuration");
         return -1;
     }
-    
+
     if (config->min_response_tokens <= 0 || config->min_response_tokens >= config->context_window) {
-        debug_printf("Invalid min_response_tokens configuration\n");
+        LOG_ERROR("Invalid min_response_tokens configuration");
         return -1;
     }
-    
+
     if (config->chars_per_token <= 0) {
-        debug_printf("Invalid chars_per_token configuration\n");
+        LOG_ERROR("Invalid chars_per_token configuration");
         return -1;
     }
     
@@ -106,7 +108,7 @@ int trim_conversation_for_tokens(ConversationHistory* conversation,
         current_tokens += TOKEN_OVERHEAD_PER_MESSAGE;
     }
     
-    debug_printf("Current conversation tokens: %d, max allowed: %d\n", current_tokens, max_prompt_tokens);
+    LOG_DEBUG("Current conversation tokens: %d, max allowed: %d", current_tokens, max_prompt_tokens);
     
     /* Prefer trimming non-tool messages to avoid breaking tool call/response pairs */
     while (current_tokens > max_prompt_tokens && conversation->count > 0) {
@@ -138,11 +140,11 @@ int trim_conversation_for_tokens(ConversationHistory* conversation,
 
         trimmed_count++;
 
-        debug_printf("Trimmed message %d, remaining tokens: %d\n", remove_index, current_tokens);
+        LOG_DEBUG("Trimmed message %d, remaining tokens: %d", remove_index, current_tokens);
     }
     
     if (trimmed_count > 0) {
-        debug_printf("Trimmed %d messages to fit token limit\n", trimmed_count);
+        LOG_DEBUG("Trimmed %d messages to fit token limit", trimmed_count);
     }
     
     return trimmed_count;
@@ -205,15 +207,15 @@ int calculate_token_allocation(const SessionData* session, const char* user_mess
         
         if (max_response_cap > 0 && available_tokens > max_response_cap) {
             available_tokens = max_response_cap;
-            debug_printf("Applied model-specific response token cap: %d tokens for model %s\n", 
+            LOG_DEBUG("Applied model-specific response token cap: %d tokens for model %s",
                         max_response_cap, session->config.model);
         }
     }
     
     usage->available_response_tokens = available_tokens;
     
-    debug_printf("Token allocation - Prompt: %d, Response: %d, Safety: %d, Context: %d\n",
-                usage->total_prompt_tokens, usage->available_response_tokens, 
+    LOG_DEBUG("Token allocation - Prompt: %d, Response: %d, Safety: %d, Context: %d",
+                usage->total_prompt_tokens, usage->available_response_tokens,
                 usage->safety_buffer_used, usage->context_window_used);
     
     return 0;

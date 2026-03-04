@@ -1,7 +1,9 @@
+#define LOG_MODULE     LOG_MOD_AGENT
+#define LOG_MODULE_STR "agent"
+#include "../util/log.h"
 #include "async_executor.h"
 #include "session.h"
 #include "../util/interrupt.h"
-#include "../util/debug_output.h"
 #include "../ipc/pipe_notifier.h"
 #include <stdlib.h>
 #include <string.h>
@@ -44,7 +46,7 @@ struct async_executor {
 
 static void send_event(async_executor_t* executor, AsyncEventType event) {
     if (pipe_notifier_send(&executor->notifier, (char)event) != 0) {
-        debug_printf("async_executor: Failed to write event %c to pipe: %s\n",
+        LOG_ERROR("async_executor: Failed to write event %c to pipe: %s",
                      (char)event, strerror(errno));
     }
 }
@@ -52,7 +54,7 @@ static void send_event(async_executor_t* executor, AsyncEventType event) {
 static void* executor_thread_func(void* arg) {
     async_executor_t* executor = (async_executor_t*)arg;
 
-    debug_printf("async_executor: Thread started for message: %.50s...\n",
+    LOG_INFO("async_executor: Thread started for message: %.50s...",
                  executor->current_message ? executor->current_message : "(null)");
 
     if (executor->current_message == NULL) {
@@ -75,18 +77,18 @@ static void* executor_thread_func(void* arg) {
     }
 
     if (atomic_load(&executor->cancel_requested) || result == -2) {
-        debug_printf("async_executor: Execution was cancelled\n");
+        LOG_INFO("async_executor: Execution was cancelled");
         send_event(executor, ASYNC_EVENT_INTERRUPTED);
     } else if (result == SESSION_CONTEXT_FULL) {
-        debug_printf("async_executor: Context window full\n");
+        LOG_INFO("async_executor: Context window full");
         executor->last_error = strdup("Context window full. Try /compact or start a new session.");
         send_event(executor, ASYNC_EVENT_ERROR);
     } else if (result != 0) {
-        debug_printf("async_executor: Execution failed with result %d\n", result);
+        LOG_ERROR("async_executor: Execution failed with result %d", result);
         executor->last_error = strdup("Message processing failed");
         send_event(executor, ASYNC_EVENT_ERROR);
     } else {
-        debug_printf("async_executor: Execution completed successfully\n");
+        LOG_INFO("async_executor: Execution completed successfully");
         send_event(executor, ASYNC_EVENT_COMPLETE);
     }
 
@@ -102,7 +104,7 @@ static void* executor_thread_func(void* arg) {
 static void* executor_continue_func(void* arg) {
     async_executor_t* executor = (async_executor_t*)arg;
 
-    debug_printf("async_executor: Continue thread started\n");
+    LOG_INFO("async_executor: Continue thread started");
 
     int result = session_continue(executor->session);
 
@@ -114,14 +116,14 @@ static void* executor_continue_func(void* arg) {
     }
 
     if (atomic_load(&executor->cancel_requested) || result == -2) {
-        debug_printf("async_executor: Continue was cancelled\n");
+        LOG_INFO("async_executor: Continue was cancelled");
         send_event(executor, ASYNC_EVENT_INTERRUPTED);
     } else if (result != 0) {
-        debug_printf("async_executor: Continue failed with result %d\n", result);
+        LOG_ERROR("async_executor: Continue failed with result %d", result);
         executor->last_error = strdup("Session continue failed");
         send_event(executor, ASYNC_EVENT_ERROR);
     } else {
-        debug_printf("async_executor: Continue completed successfully\n");
+        LOG_INFO("async_executor: Continue completed successfully");
         send_event(executor, ASYNC_EVENT_COMPLETE);
     }
 
@@ -175,7 +177,7 @@ async_executor_t* async_executor_create(AgentSession* session) {
     g_active_executor = executor;
     pthread_mutex_unlock(&g_executor_mutex);
 
-    debug_printf("async_executor: Created with notify fd %d\n", executor->notifier.read_fd);
+    LOG_DEBUG("async_executor: Created with notify fd %d", executor->notifier.read_fd);
     return executor;
 }
 
@@ -209,7 +211,7 @@ void async_executor_destroy(async_executor_t* executor) {
     free(executor->last_error);
     free(executor);
 
-    debug_printf("async_executor: Destroyed\n");
+    LOG_DEBUG("async_executor: Destroyed");
 }
 
 int async_executor_start(async_executor_t* executor, const char* message) {
@@ -218,7 +220,7 @@ int async_executor_start(async_executor_t* executor, const char* message) {
     }
 
     if (atomic_load(&executor->running)) {
-        debug_printf("async_executor: Cannot start, already running\n");
+        LOG_DEBUG("async_executor: Cannot start, already running");
         return -1;
     }
 
@@ -256,7 +258,7 @@ int async_executor_start(async_executor_t* executor, const char* message) {
 
     atomic_store(&executor->thread_started, 1);
 
-    debug_printf("async_executor: Started processing message\n");
+    LOG_INFO("async_executor: Started processing message");
     return 0;
 }
 
@@ -266,7 +268,7 @@ int async_executor_continue(async_executor_t* executor) {
     }
 
     if (atomic_load(&executor->running)) {
-        debug_printf("async_executor: Cannot continue, already running\n");
+        LOG_DEBUG("async_executor: Cannot continue, already running");
         return -1;
     }
 
@@ -293,7 +295,7 @@ int async_executor_continue(async_executor_t* executor) {
 
     atomic_store(&executor->thread_started, 1);
 
-    debug_printf("async_executor: Started continue processing\n");
+    LOG_INFO("async_executor: Started continue processing");
     return 0;
 }
 
@@ -312,7 +314,7 @@ int async_executor_process_events(async_executor_t* executor) {
     char event;
     int result = pipe_notifier_recv(&executor->notifier, &event);
     if (result == 1) {
-        debug_printf("async_executor: Received event '%c'\n", event);
+        LOG_DEBUG("async_executor: Received event '%c'", event);
         return (int)event;
     }
     if (result == 0) {
@@ -337,7 +339,7 @@ void async_executor_cancel(async_executor_t* executor) {
         return;
     }
 
-    debug_printf("async_executor: Cancel requested\n");
+    LOG_INFO("async_executor: Cancel requested");
     atomic_store(&executor->cancel_requested, 1);
 
     /* Also set the global interrupt flag so existing interrupt_pending() checks
@@ -359,7 +361,7 @@ int async_executor_wait(async_executor_t* executor) {
         int rc = pthread_cond_timedwait(&executor->cond, &executor->mutex, &ts);
         if (rc == ETIMEDOUT) {
             pthread_mutex_unlock(&executor->mutex);
-            debug_printf("async_executor: Wait timed out\n");
+            LOG_WARN("async_executor: Wait timed out");
             return -1;
         }
     }

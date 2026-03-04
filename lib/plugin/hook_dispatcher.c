@@ -1,6 +1,8 @@
+#define LOG_MODULE     LOG_MOD_PLUGIN
+#define LOG_MODULE_STR "plugin"
+#include "../util/log.h"
 #include "hook_dispatcher.h"
 #include "../agent/session.h"
-#include "../util/debug_output.h"
 #include <cJSON.h>
 #include <stdlib.h>
 #include <string.h>
@@ -97,8 +99,8 @@ static HookAction hook_dispatch_generic(PluginManager *mgr,
         char *response = NULL;
         if (send_hook_event(p, event, &response) != 0) {
             free(event);
-            debug_printf("Plugin %s: %s hook timeout/error\n",
-                         p->manifest.name, spec->hook_name);
+            LOG_WARN("Plugin %s: %s hook timeout/error",
+                     p->manifest.name, spec->hook_name);
             continue;
         }
         free(event);

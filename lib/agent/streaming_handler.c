@@ -1,3 +1,6 @@
+#define LOG_MODULE     LOG_MOD_AGENT
+#define LOG_MODULE_STR "agent"
+#include "../util/log.h"
 #include "streaming_handler.h"
 #include "context_enhancement.h"
 #include "message_dispatcher.h"
@@ -8,7 +11,6 @@
 #include "../network/streaming.h"
 #include "../ui/output_formatter.h"
 #include "../ui/json_output.h"
-#include "../util/debug_output.h"
 #include "../llm/llm_client.h"
 #include "../ui/status_line.h"
 #include "../plugin/hook_dispatcher.h"
@@ -120,7 +122,7 @@ int streaming_process_message(AgentSession* session, LLMProvider* provider,
         return -1;
     }
 
-    debug_printf("Streaming POST data: %s\n\n", post_data);
+    LOG_DEBUG("Streaming POST data: %s", post_data);
 
     StreamingContext* ctx = streaming_context_create();
     if (ctx == NULL) {

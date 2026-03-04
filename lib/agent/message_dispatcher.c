@@ -1,8 +1,10 @@
+#define LOG_MODULE     LOG_MOD_AGENT
+#define LOG_MODULE_STR "agent"
+#include "../util/log.h"
 #include "message_dispatcher.h"
 #include "context_enhancement.h"
 #include "../network/api_common.h"
 #include "../plugin/hook_dispatcher.h"
-#include "../util/debug_output.h"
 #include <stdlib.h>
 
 static const DispatchDecision BUFFERED_DECISION = { .mode = DISPATCH_BUFFERED, .provider = NULL };
@@ -11,7 +13,7 @@ DispatchDecision message_dispatcher_select_mode(const AgentSession* session) {
     if (session == NULL) return BUFFERED_DECISION;
 
     if (!session->session_data.config.enable_streaming) {
-        debug_printf("Using buffered mode (streaming disabled via configuration)\n");
+        LOG_DEBUG("Using buffered mode (streaming disabled via configuration)");
         return BUFFERED_DECISION;
     }
 
@@ -28,11 +30,11 @@ DispatchDecision message_dispatcher_select_mode(const AgentSession* session) {
                                        provider->parse_stream_event != NULL;
 
     if (provider_supports_streaming) {
-        debug_printf("Using streaming mode for provider: %s\n", provider->capabilities.name);
+        LOG_DEBUG("Using streaming mode for provider: %s", provider->capabilities.name);
         return (DispatchDecision){ .mode = DISPATCH_STREAMING, .provider = provider };
     }
 
-    debug_printf("Using buffered mode (provider does not support streaming)\n");
+    LOG_DEBUG("Using buffered mode (provider does not support streaming)");
     return BUFFERED_DECISION;
 }
 

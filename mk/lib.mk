@@ -126,6 +126,7 @@ LIB_UTIL_SOURCES := \
     $(LIBDIR)/util/uuid_utils.c \
     $(LIBDIR)/util/common_utils.c \
     $(LIBDIR)/util/json_escape.c \
+    $(LIBDIR)/util/log.c \
     $(LIBDIR)/util/debug_output.c \
     $(LIBDIR)/util/document_chunker.c \
     $(LIBDIR)/util/interrupt.c \

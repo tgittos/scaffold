@@ -1,6 +1,8 @@
+#define LOG_MODULE     LOG_MOD_PLUGIN
+#define LOG_MODULE_STR "plugin"
+#include "../util/log.h"
 #include "plugin_manager.h"
 #include "../util/app_home.h"
-#include "../util/debug_output.h"
 #include <cJSON.h>
 #include <pthread.h>
 #include <stdlib.h>
@@ -31,13 +33,13 @@ int plugin_manager_discover(PluginManager *mgr) {
 
     char *plugins_dir = plugin_manager_get_plugins_dir();
     if (!plugins_dir) {
-        debug_printf("Plugin: failed to resolve plugins directory\n");
+        LOG_ERROR("Plugin: failed to resolve plugins directory");
         return 0;
     }
 
     DIR *dir = opendir(plugins_dir);
     if (!dir) {
-        debug_printf("Plugin: no plugins directory at %s\n", plugins_dir);
+        LOG_DEBUG("Plugin: no plugins directory at %s", plugins_dir);
         free(plugins_dir);
         return 0;
     }
@@ -53,7 +55,7 @@ int plugin_manager_discover(PluginManager *mgr) {
         struct stat lst;
         if (lstat(path, &lst) != 0) continue;
         if (S_ISLNK(lst.st_mode)) {
-            debug_printf("Plugin: skipping symlink %s\n", path);
+            LOG_DEBUG("Plugin: skipping symlink %s", path);
             continue;
         }
         if (!S_ISREG(lst.st_mode)) continue;
@@ -71,13 +73,13 @@ int plugin_manager_discover(PluginManager *mgr) {
         mgr->count++;
         discovered++;
 
-        debug_printf("Plugin: discovered %s\n", path);
+        LOG_DEBUG("Plugin: discovered %s", path);
     }
 
     closedir(dir);
     free(plugins_dir);
 
-    debug_printf("Plugin: discovered %d plugin(s)\n", discovered);
+    LOG_INFO("Plugin: discovered %d plugin(s)", discovered);
     return discovered;
 }
 
@@ -87,12 +89,12 @@ static int spawn_plugin(PluginProcess *plugin) {
     int stdin_pipe[2], stdout_pipe[2];
 
     if (pipe2(stdin_pipe, O_CLOEXEC) == -1) {
-        debug_printf("Plugin: failed to create stdin pipe: %s\n", strerror(errno));
+        LOG_ERROR("Plugin: failed to create stdin pipe: %s", strerror(errno));
         return -1;
     }
 
     if (pipe2(stdout_pipe, O_CLOEXEC) == -1) {
-        debug_printf("Plugin: failed to create stdout pipe: %s\n", strerror(errno));
+        LOG_ERROR("Plugin: failed to create stdout pipe: %s", strerror(errno));
         close(stdin_pipe[0]);
         close(stdin_pipe[1]);
         return -1;
@@ -100,7 +102,7 @@ static int spawn_plugin(PluginProcess *plugin) {
 
     pid_t pid = fork();
     if (pid == -1) {
-        debug_printf("Plugin: fork failed: %s\n", strerror(errno));
+        LOG_ERROR("Plugin: fork failed: %s", strerror(errno));
         close(stdin_pipe[0]);
         close(stdin_pipe[1]);
         close(stdout_pipe[0]);
@@ -199,7 +201,7 @@ static int spawn_plugin(PluginProcess *plugin) {
     int flags = fcntl(plugin->stdout_fd, F_GETFL, 0);
     fcntl(plugin->stdout_fd, F_SETFL, flags | O_NONBLOCK);
 
-    debug_printf("Plugin: spawned %s (pid %d)\n", plugin->path, pid);
+    LOG_INFO("Plugin: spawned %s (pid %d)", plugin->path, pid);
     return 0;
 }
 
@@ -216,7 +218,7 @@ static int plugin_manager_send_request(PluginProcess *plugin, const char *json, 
         ssize_t w = write(plugin->stdin_fd, json + total, json_len - total);
         if (w < 0) {
             if (errno == EINTR) continue;
-            debug_printf("Plugin %s: write failed: %s\n", plugin->path, strerror(errno));
+            LOG_ERROR("Plugin %s: write failed: %s", plugin->path, strerror(errno));
             return -1;
         }
         total += w;
@@ -227,7 +229,7 @@ static int plugin_manager_send_request(PluginProcess *plugin, const char *json, 
         nw = write(plugin->stdin_fd, "\n", 1);
     } while (nw < 0 && errno == EINTR);
     if (nw != 1) {
-        debug_printf("Plugin %s: newline write failed\n", plugin->path);
+        LOG_ERROR("Plugin %s: newline write failed", plugin->path);
         return -1;
     }
 
@@ -267,7 +269,7 @@ static int plugin_manager_send_request(PluginProcess *plugin, const char *json, 
         int sel = select(plugin->stdout_fd + 1, &read_fds, NULL, NULL, &tv);
         if (sel < 0) {
             if (errno == EINTR) continue;
-            debug_printf("Plugin %s: select failed: %s\n", plugin->path, strerror(errno));
+            LOG_ERROR("Plugin %s: select failed: %s", plugin->path, strerror(errno));
             free(buffer);
             return -1;
         }
@@ -276,8 +278,8 @@ static int plugin_manager_send_request(PluginProcess *plugin, const char *json, 
 
         if (buf_used + 4096 >= buf_size) {
             if (buf_size * 2 > PLUGIN_MAX_RESPONSE_BYTES) {
-                debug_printf("Plugin %s: response exceeds %d byte limit\n",
-                             plugin->path, PLUGIN_MAX_RESPONSE_BYTES);
+                LOG_ERROR("Plugin %s: response exceeds %d byte limit",
+                          plugin->path, PLUGIN_MAX_RESPONSE_BYTES);
                 free(buffer);
                 return -1;
             }
@@ -291,8 +293,8 @@ static int plugin_manager_send_request(PluginProcess *plugin, const char *json, 
         if (nr > 0) {
             buf_used += nr;
             if (buf_used > PLUGIN_MAX_RESPONSE_BYTES) {
-                debug_printf("Plugin %s: response exceeds %d byte limit\n",
-                             plugin->path, PLUGIN_MAX_RESPONSE_BYTES);
+                LOG_ERROR("Plugin %s: response exceeds %d byte limit",
+                          plugin->path, PLUGIN_MAX_RESPONSE_BYTES);
                 free(buffer);
                 return -1;
             }
@@ -302,20 +304,20 @@ static int plugin_manager_send_request(PluginProcess *plugin, const char *json, 
 
         if (nr < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) continue;
-            debug_printf("Plugin %s: read error: %s\n", plugin->path, strerror(errno));
+            LOG_ERROR("Plugin %s: read error: %s", plugin->path, strerror(errno));
             free(buffer);
             return -1;
         }
 
         /* EOF */
         if (buf_used > 0) break;
-        debug_printf("Plugin %s: unexpected EOF\n", plugin->path);
+        LOG_ERROR("Plugin %s: unexpected EOF", plugin->path);
         free(buffer);
         return -1;
     }
 
     if (buf_used == 0) {
-        debug_printf("Plugin %s: timeout waiting for response\n", plugin->path);
+        LOG_WARN("Plugin %s: timeout waiting for response", plugin->path);
         free(buffer);
         return -1;
     }
@@ -378,9 +380,9 @@ int plugin_check_alive(PluginProcess *plugin) {
     int status;
     pid_t ret = waitpid(plugin->pid, &status, WNOHANG);
     if (ret > 0 || ret < 0) {
-        debug_printf("Plugin %s: process %d exited\n",
-                     plugin->manifest.name ? plugin->manifest.name : "?",
-                     plugin->pid);
+        LOG_DEBUG("Plugin %s: process %d exited",
+                  plugin->manifest.name ? plugin->manifest.name : "?",
+                  plugin->pid);
         plugin->pid = 0;
         plugin->initialized = 0;
         if (plugin->stdin_fd >= 0) { close(plugin->stdin_fd); plugin->stdin_fd = -1; }
@@ -399,19 +401,19 @@ static int handshake_plugin(PluginProcess *plugin) {
     free(init_msg);
 
     if (rc != 0 || !response) {
-        debug_printf("Plugin %s: handshake failed\n", plugin->path);
+        LOG_ERROR("Plugin %s: handshake failed", plugin->path);
         return -1;
     }
 
     if (plugin_protocol_parse_manifest(response, &plugin->manifest) != 0) {
-        debug_printf("Plugin %s: invalid manifest\n", plugin->path);
+        LOG_ERROR("Plugin %s: invalid manifest", plugin->path);
         free(response);
         return -1;
     }
 
     if (plugin_validate_name(plugin->manifest.name) != 0) {
-        debug_printf("Plugin %s: invalid name '%s'\n", plugin->path,
-                     plugin->manifest.name ? plugin->manifest.name : "(null)");
+        LOG_ERROR("Plugin %s: invalid name '%s'", plugin->path,
+                  plugin->manifest.name ? plugin->manifest.name : "(null)");
         plugin_manifest_cleanup(&plugin->manifest);
         free(response);
         return -1;
@@ -440,10 +442,10 @@ static int handshake_plugin(PluginProcess *plugin) {
 
     plugin->initialized = 1;
 
-    debug_printf("Plugin: initialized '%s' v%s (priority %d, %d hooks, %d tools)\n",
-                 plugin->manifest.name, plugin->manifest.version,
-                 plugin->manifest.priority, plugin->manifest.hook_count,
-                 plugin->manifest.tool_count);
+    LOG_INFO("Plugin: initialized '%s' v%s (priority %d, %d hooks, %d tools)",
+             plugin->manifest.name, plugin->manifest.version,
+             plugin->manifest.priority, plugin->manifest.hook_count,
+             plugin->manifest.tool_count);
     return 0;
 }
 
@@ -454,12 +456,12 @@ int plugin_manager_start_all(PluginManager *mgr, ToolRegistry *registry) {
         PluginProcess *p = &mgr->plugins[i];
 
         if (spawn_plugin(p) != 0) {
-            debug_printf("Plugin: failed to spawn %s\n", p->path);
+            LOG_ERROR("Plugin: failed to spawn %s", p->path);
             continue;
         }
 
         if (handshake_plugin(p) != 0) {
-            debug_printf("Plugin: failed to handshake %s, killing\n", p->path);
+            LOG_ERROR("Plugin: failed to handshake %s, killing", p->path);
             if (p->pid > 0) {
                 kill(p->pid, SIGKILL);
                 waitpid(p->pid, NULL, 0);
@@ -527,7 +529,7 @@ int plugin_manager_start_all(PluginManager *mgr, ToolRegistry *registry) {
                 }
 
                 if (ToolFunctionArray_push(&registry->functions, reg) != 0) {
-                    debug_printf("Plugin: failed to register tool %s\n", prefixed);
+                    LOG_ERROR("Plugin: failed to register tool %s", prefixed);
                     free(reg.name);
                     free(reg.description);
                     for (int k = 0; k < reg.parameter_count; k++) {
@@ -537,7 +539,7 @@ int plugin_manager_start_all(PluginManager *mgr, ToolRegistry *registry) {
                     }
                     free(reg.parameters);
                 } else {
-                    debug_printf("Plugin: registered tool %s\n", prefixed);
+                    LOG_DEBUG("Plugin: registered tool %s", prefixed);
                 }
             }
         }

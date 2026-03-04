@@ -1,6 +1,8 @@
+#define LOG_MODULE     LOG_MOD_AGENT
+#define LOG_MODULE_STR "agent"
+#include "../util/log.h"
 #include "api_round_trip.h"
 #include "message_dispatcher.h"
-#include "../util/debug_output.h"
 #include "../network/api_error.h"
 #include "../llm/llm_client.h"
 #include "../llm/llm_provider.h"
@@ -27,7 +29,7 @@ int api_round_trip_execute(AgentSession* session, const char* user_message,
 
     status_line_set_busy("Requesting...");
 
-    debug_printf("POST data length: %zu\n", strlen(post_data));
+    LOG_DEBUG("POST data length: %zu", strlen(post_data));
 
     struct HTTPResponse response = {0};
 
@@ -67,10 +69,10 @@ int api_round_trip_execute(AgentSession* session, const char* user_message,
             fprintf(stderr, "   (Retried %d times)\n", err.attempts_made);
         }
 
-        debug_printf("HTTP status: %ld, Error: %s\n",
+        LOG_DEBUG("HTTP status: %ld, Error: %s",
                     err.http_status, err.error_message);
         if (response.data != NULL) {
-            debug_printf("Response body: %s\n", response.data);
+            LOG_DEBUG("Response body: %s", response.data);
         }
 
         cleanup_response(&response);
@@ -103,9 +105,7 @@ int api_round_trip_execute(AgentSession* session, const char* user_message,
             fprintf(stderr, "   Please set OPENAI_API_KEY or ANTHROPIC_API_KEY environment variable\n");
         } else if (strstr(response.data, "\"error\"") != NULL) {
             fprintf(stderr, "API request failed.\n");
-            if (debug_enabled) {
-                fprintf(stderr, "Debug: %s\n", response.data);
-            }
+            LOG_DEBUG("API error response: %s", response.data);
         } else {
             fprintf(stderr, "Error: Failed to parse API response\n");
             printf("%s\n", response.data);
@@ -132,7 +132,7 @@ int api_round_trip_execute(AgentSession* session, const char* user_message,
                                    content, &result->tool_calls,
                                    &result->tool_call_count) == 0 &&
             result->tool_call_count > 0) {
-            debug_printf("Found %d tool calls in message content (custom format)\n",
+            LOG_DEBUG("Found %d tool calls in message content (custom format)",
                         result->tool_call_count);
         }
     }

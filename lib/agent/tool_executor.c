@@ -1,3 +1,7 @@
+#define LOG_MODULE     LOG_MOD_AGENT
+#define LOG_MODULE_STR "agent"
+#include "../util/log.h"
+
 #include "tool_executor.h"
 #include "session.h"
 #include "tool_orchestration.h"
@@ -6,7 +10,6 @@
 #include "iterative_loop.h"
 #include "session.h"
 #include "../session/conversation_tracker.h"
-#include "../util/debug_output.h"
 #include <stdlib.h>
 
 int tool_executor_run_workflow(AgentSession* session, ToolCall* tool_calls, int call_count,
@@ -18,7 +21,7 @@ int tool_executor_run_workflow(AgentSession* session, ToolCall* tool_calls, int 
     (void)user_message;
     (void)max_tokens;
 
-    debug_printf("Executing %d tool call(s)...\n", call_count);
+    LOG_INFO("Executing %d tool call(s)", call_count);
 
     ToolOrchestrationContext ctx;
     if (tool_orchestration_init(&ctx, &session->gate_config) != 0) {
@@ -40,8 +43,8 @@ int tool_executor_run_workflow(AgentSession* session, ToolCall* tool_calls, int 
      * clears planning context before decomposition begins). */
     for (int i = 0; i < call_count; i++) {
         if (results[i].clear_history) {
-            debug_printf("Tool %s requested conversation clear\n",
-                         tool_calls[i].name ? tool_calls[i].name : "?");
+            LOG_INFO("Tool %s requested conversation clear",
+                     tool_calls[i].name ? tool_calls[i].name : "?");
             cleanup_conversation_history(&session->session_data.conversation);
             init_conversation_history(&session->session_data.conversation);
             /* Re-append the assistant message with tool calls so the
@@ -69,7 +72,7 @@ int tool_executor_run_workflow(AgentSession* session, ToolCall* tool_calls, int 
 
     // Context full is a special signal that must propagate to the supervisor
     if (result == SESSION_CONTEXT_FULL) {
-        debug_printf("tool_executor: context full, propagating\n");
+        LOG_WARN("tool_executor: context full, propagating");
         cleanup_tool_results(results, call_count);
         tool_orchestration_cleanup(&ctx);
         return SESSION_CONTEXT_FULL;
@@ -77,7 +80,7 @@ int tool_executor_run_workflow(AgentSession* session, ToolCall* tool_calls, int 
 
     /* Initial tools are already in conversation history; retrying would corrupt state */
     if (result != 0) {
-        debug_printf("Follow-up tool loop failed, but initial tools executed successfully\n");
+        LOG_WARN("Follow-up tool loop failed, but initial tools executed successfully");
         result = 0;
     }
 

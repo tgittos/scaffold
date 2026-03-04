@@ -35,10 +35,10 @@ endef
 
 $(eval $(call def_test,cli_flags,ralph/test_cli_flags,))
 $(eval $(call def_test,interrupt,ralph/test_interrupt,$(LIBDIR)/util/interrupt.c))
-$(eval $(call def_test,async_executor,ralph/test_async_executor,$(LIBDIR)/agent/async_executor.c $(LIBDIR)/util/interrupt.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/ipc/pipe_notifier.c $(TESTDIR)/stubs/ralph_stub.c))
+$(eval $(call def_test,async_executor,ralph/test_async_executor,$(LIBDIR)/agent/async_executor.c $(LIBDIR)/util/interrupt.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/util/log.c $(LIBDIR)/ipc/pipe_notifier.c $(TESTDIR)/stubs/ralph_stub.c))
 $(eval $(call def_test,pipe_notifier,utils/test_pipe_notifier,$(LIBDIR)/ipc/pipe_notifier.c))
 $(eval $(call def_test,agent_identity,ralph/test_agent_identity,$(LIBDIR)/ipc/agent_identity.c))
-$(eval $(call def_test,prompt,utils/test_prompt_loader,$(LIBDIR)/util/prompt_loader.c $(LIBDIR)/util/app_home.c $(LIBDIR)/util/config.c $(LIBDIR)/util/debug_output.c))
+$(eval $(call def_test,prompt,utils/test_prompt_loader,$(LIBDIR)/util/prompt_loader.c $(LIBDIR)/util/app_home.c $(LIBDIR)/util/config.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/util/log.c))
 $(eval $(call def_test,app_home,utils/test_app_home,$(LIBDIR)/util/app_home.c))
 $(eval $(call def_test,todo_manager,tools/test_todo_manager,$(LIBDIR)/tools/todo_manager.c))
 $(eval $(call def_test,document_chunker,test_document_chunker,$(LIBDIR)/util/document_chunker.c $(LIBDIR)/util/common_utils.c))
@@ -68,6 +68,7 @@ GATE_DEPS := \
     $(LIBDIR)/policy/subagent_approval.c \
     $(LIBDIR)/policy/tool_args.c \
     $(LIBDIR)/util/debug_output.c \
+    $(LIBDIR)/util/log.c \
     $(LIBDIR)/util/app_home.c \
     $(LIBDIR)/util/json_escape.c
 
@@ -98,7 +99,7 @@ $(TEST_agent_identity_TARGET): $(TEST_agent_identity_OBJECTS)
 	$(CC) -o $@ $(TEST_agent_identity_OBJECTS) -lpthread
 
 $(TEST_prompt_TARGET): $(TEST_prompt_OBJECTS) $(CJSON_LIB)
-	$(CC) -o $@ $(TEST_prompt_OBJECTS) $(CJSON_LIB)
+	$(CC) -o $@ $(TEST_prompt_OBJECTS) $(CJSON_LIB) -lpthread
 
 $(TEST_app_home_TARGET): $(TEST_app_home_OBJECTS)
 	$(CC) -o $@ $(TEST_app_home_OBJECTS)
@@ -140,7 +141,7 @@ $(TEST_oauth_callback_server_TARGET): $(TEST_oauth_callback_server_OBJECTS)
 	$(CC) -o $@ $(TEST_oauth_callback_server_OBJECTS) -lpthread
 
 $(TEST_approval_gate_TARGET): $(TEST_approval_gate_OBJECTS) $(CJSON_LIB)
-	$(CC) -o $@ $(TEST_approval_gate_OBJECTS) $(CJSON_LIB)
+	$(CC) -o $@ $(TEST_approval_gate_OBJECTS) $(CJSON_LIB) -lpthread
 
 $(TEST_atomic_file_TARGET): $(TEST_atomic_file_OBJECTS)
 	$(CC) -o $@ $(TEST_atomic_file_OBJECTS)
@@ -164,10 +165,10 @@ $(TEST_shell_parser_ps_TARGET): $(TEST_shell_parser_ps_OBJECTS)
 	$(CC) -o $@ $(TEST_shell_parser_ps_OBJECTS)
 
 $(TEST_subagent_approval_TARGET): $(TEST_subagent_approval_OBJECTS) $(CJSON_LIB)
-	$(CC) -o $@ $(TEST_subagent_approval_OBJECTS) $(CJSON_LIB)
+	$(CC) -o $@ $(TEST_subagent_approval_OBJECTS) $(CJSON_LIB) -lpthread
 
 $(TEST_approval_gate_integration_TARGET): $(TEST_approval_gate_integration_OBJECTS) $(CJSON_LIB)
-	$(CC) -o $@ $(TEST_approval_gate_integration_OBJECTS) $(CJSON_LIB)
+	$(CC) -o $@ $(TEST_approval_gate_integration_OBJECTS) $(CJSON_LIB) -lpthread
 
 # =============================================================================
 # UPDATER TEST
@@ -184,17 +185,21 @@ $(TEST_updater_TARGET): $(TEST_updater_OBJECTS) $(CJSON_LIB)
 # CJSON TESTS
 # =============================================================================
 
-$(eval $(call def_test,config,utils/test_config,$(LIBDIR)/util/config.c $(LIBDIR)/util/app_home.c $(LIBDIR)/util/debug_output.c))
+$(eval $(call def_test,config,utils/test_config,$(LIBDIR)/util/config.c $(LIBDIR)/util/app_home.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/util/log.c))
 $(eval $(call def_test,debug_output,utils/test_debug_output,$(LIBDIR)/util/debug_output.c))
+$(eval $(call def_test,log,utils/test_log,$(LIBDIR)/util/log.c $(LIBDIR)/util/debug_output.c))
 $(eval $(call def_test,spinner,utils/test_spinner,$(LIBDIR)/ui/terminal.c $(LIBDIR)/ui/spinner.c $(LIBDIR)/util/common_utils.c $(TESTDIR)/stubs/output_formatter_stub.c))
 $(eval $(call def_test,terminal,utils/test_terminal,$(LIBDIR)/ui/terminal.c $(LIBDIR)/util/common_utils.c $(TESTDIR)/stubs/output_formatter_stub.c))
 $(eval $(call def_test_lib,slash_commands,ui/test_slash_commands,))
 
 $(TEST_config_TARGET): $(TEST_config_OBJECTS) $(CJSON_LIB)
-	$(CC) -o $@ $(TEST_config_OBJECTS) $(CJSON_LIB)
+	$(CC) -o $@ $(TEST_config_OBJECTS) $(CJSON_LIB) -lpthread
 
 $(TEST_debug_output_TARGET): $(TEST_debug_output_OBJECTS) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_debug_output_OBJECTS) $(CJSON_LIB)
+
+$(TEST_log_TARGET): $(TEST_log_OBJECTS) $(CJSON_LIB)
+	$(CC) -o $@ $(TEST_log_OBJECTS) $(CJSON_LIB) -lpthread
 
 $(TEST_spinner_TARGET): $(TEST_spinner_OBJECTS) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_spinner_OBJECTS) $(CJSON_LIB) -lpthread
@@ -215,10 +220,10 @@ $(TEST_pdf_extractor_TARGET): $(TEST_pdf_extractor_OBJECTS) $(PDFIO_LIB) $(ZLIB_
 # HTTP RETRY TEST
 # =============================================================================
 
-$(eval $(call def_test,http_retry,network/test_http_retry,$(LIBDIR)/network/api_error.c $(LIBDIR)/util/config.c $(LIBDIR)/util/app_home.c $(LIBDIR)/util/debug_output.c))
+$(eval $(call def_test,http_retry,network/test_http_retry,$(LIBDIR)/network/api_error.c $(LIBDIR)/util/config.c $(LIBDIR)/util/app_home.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/util/log.c))
 
 $(TEST_http_retry_TARGET): $(TEST_http_retry_OBJECTS) $(CJSON_LIB) $(LIBS_MBEDTLS)
-	$(CC) -o $@ $(TEST_http_retry_OBJECTS) $(CJSON_LIB) $(LIBS_MBEDTLS) -lm
+	$(CC) -o $@ $(TEST_http_retry_OBJECTS) $(CJSON_LIB) $(LIBS_MBEDTLS) -lm -lpthread
 
 # =============================================================================
 # HTTP FORM POST TEST
@@ -278,7 +283,7 @@ $(eval $(call def_test,jwt_decode,auth/test_jwt_decode,$(LIBDIR)/auth/jwt_decode
 $(TEST_jwt_decode_TARGET): $(TEST_jwt_decode_OBJECTS) $(CJSON_LIB) $(LIBS_MBEDTLS)
 	$(CC) -o $@ $(TEST_jwt_decode_OBJECTS) $(CJSON_LIB) $(LIBS_MBEDTLS) -lm
 
-$(eval $(call def_test,orchestrator,orchestrator/test_orchestrator,$(LIBDIR)/orchestrator/orchestrator.c $(LIBDIR)/db/goal_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/uuid_utils.c $(LIBDIR)/util/app_home.c $(LIBDIR)/util/executable_path.c $(LIBDIR)/util/process_spawn.c $(LIBDIR)/util/debug_output.c))
+$(eval $(call def_test,orchestrator,orchestrator/test_orchestrator,$(LIBDIR)/orchestrator/orchestrator.c $(LIBDIR)/db/goal_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/uuid_utils.c $(LIBDIR)/util/app_home.c $(LIBDIR)/util/executable_path.c $(LIBDIR)/util/process_spawn.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/util/log.c))
 
 $(TEST_orchestrator_TARGET): $(TEST_orchestrator_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_orchestrator_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) $(CJSON_LIB) -lpthread -lm

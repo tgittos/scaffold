@@ -3,7 +3,9 @@
 #include "embedded_cacert.h"
 #include "../util/interrupt.h"
 #include "../util/config.h"
-#include "../util/debug_output.h"
+#define LOG_MODULE     LOG_MOD_HTTP
+#define LOG_MODULE_STR "http"
+#include "../util/log.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -196,7 +198,7 @@ int http_post_with_config(const char *url, const char *post_data, const char **h
         curl_easy_setopt(curl, CURLOPT_MAXREDIRS, config->max_redirects);
         curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, interrupt_progress_callback);
         curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
-        if (debug_enabled) {
+        if (log_http_body_enabled) {
             curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
         }
 
@@ -223,7 +225,7 @@ int http_post_with_config(const char *url, const char *post_data, const char **h
         }
 
         if (res == CURLE_ABORTED_BY_CALLBACK) {
-            debug_printf("HTTP request aborted by user interrupt\n");
+            LOG_DEBUG("HTTP request aborted by user interrupt");
             return_code = -2;
             break;
         }
@@ -235,11 +237,11 @@ int http_post_with_config(const char *url, const char *post_data, const char **h
             set_last_api_error(&api_err);
 
             if (res != CURLE_OK) {
-                debug_printf("API request failed: %s (attempt %d/%d)\n",
-                            curl_easy_strerror(res), attempt + 1, max_retries + 1);
+                LOG_ERROR("API request failed: %s (attempt %d/%d)",
+                         curl_easy_strerror(res), attempt + 1, max_retries + 1);
             } else {
-                debug_printf("API request failed with HTTP %ld (attempt %d/%d)\n",
-                            http_status, attempt + 1, max_retries + 1);
+                LOG_ERROR("API request failed with HTTP %ld (attempt %d/%d)",
+                         http_status, attempt + 1, max_retries + 1);
             }
             return_code = -1;
             break;
@@ -248,13 +250,13 @@ int http_post_with_config(const char *url, const char *post_data, const char **h
         int delay_ms;
         if (header_data.retry_after_seconds > 0) {
             delay_ms = header_data.retry_after_seconds * 1000;
-            debug_printf("API returned Retry-After: %d seconds\n", header_data.retry_after_seconds);
+            LOG_WARN("API returned Retry-After: %d seconds", header_data.retry_after_seconds);
         } else {
             delay_ms = calculate_retry_delay(attempt, base_delay_ms, backoff_factor);
         }
 
-        debug_printf("API request failed (attempt %d/%d), retrying in %dms...\n",
-                    attempt + 1, max_retries + 1, delay_ms);
+        LOG_WARN("API request failed (attempt %d/%d), retrying in %dms...",
+                 attempt + 1, max_retries + 1, delay_ms);
 
         usleep(delay_ms * 1000);
 
@@ -355,6 +357,9 @@ int http_get_with_config(const char *url, const char **headers,
         curl_easy_setopt(curl, CURLOPT_MAXREDIRS, config->max_redirects);
         curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, interrupt_progress_callback);
         curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+        if (log_http_body_enabled) {
+            curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+        }
 
         res = curl_easy_perform(curl);
 
@@ -381,7 +386,7 @@ int http_get_with_config(const char *url, const char **headers,
         }
 
         if (res == CURLE_ABORTED_BY_CALLBACK) {
-            debug_printf("HTTP GET request aborted by user interrupt\n");
+            LOG_DEBUG("HTTP GET request aborted by user interrupt");
             return_code = -2;
             break;
         }
@@ -393,11 +398,11 @@ int http_get_with_config(const char *url, const char **headers,
             set_last_api_error(&api_err);
 
             if (res != CURLE_OK) {
-                debug_printf("API request failed: %s (attempt %d/%d)\n",
-                            curl_easy_strerror(res), attempt + 1, max_retries + 1);
+                LOG_ERROR("API request failed: %s (attempt %d/%d)",
+                         curl_easy_strerror(res), attempt + 1, max_retries + 1);
             } else {
-                debug_printf("API request failed with HTTP %ld (attempt %d/%d)\n",
-                            http_status, attempt + 1, max_retries + 1);
+                LOG_ERROR("API request failed with HTTP %ld (attempt %d/%d)",
+                         http_status, attempt + 1, max_retries + 1);
             }
             return_code = -1;
             break;
@@ -406,13 +411,13 @@ int http_get_with_config(const char *url, const char **headers,
         int delay_ms;
         if (header_data.retry_after_seconds > 0) {
             delay_ms = header_data.retry_after_seconds * 1000;
-            debug_printf("API returned Retry-After: %d seconds\n", header_data.retry_after_seconds);
+            LOG_WARN("API returned Retry-After: %d seconds", header_data.retry_after_seconds);
         } else {
             delay_ms = calculate_retry_delay(attempt, base_delay_ms, backoff_factor);
         }
 
-        debug_printf("API request failed (attempt %d/%d), retrying in %dms...\n",
-                    attempt + 1, max_retries + 1, delay_ms);
+        LOG_WARN("API request failed (attempt %d/%d), retrying in %dms...",
+                 attempt + 1, max_retries + 1, delay_ms);
 
         usleep(delay_ms * 1000);
 
@@ -672,6 +677,9 @@ int http_post_streaming(const char *url, const char *post_data,
     curl_easy_setopt(curl, CURLOPT_MAXREDIRS, config->base.max_redirects);
     curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, interrupt_progress_callback);
     curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+    if (log_http_body_enabled) {
+        curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+    }
 
     res = curl_easy_perform(curl);
 
@@ -683,21 +691,21 @@ int http_post_streaming(const char *url, const char *post_data,
     curl_easy_cleanup(curl);
 
     if (res == CURLE_ABORTED_BY_CALLBACK) {
-        debug_printf("Streaming request aborted by user interrupt\n");
+        LOG_DEBUG("Streaming request aborted by user interrupt");
         return -2;
     }
 
     if (res != CURLE_OK) {
         api_error_set(&api_err, http_status, res, 1);
         set_last_api_error(&api_err);
-        debug_printf("Streaming request failed: %s\n", curl_easy_strerror(res));
+        LOG_ERROR("Streaming request failed: %s", curl_easy_strerror(res));
         return -1;
     }
 
     if (http_status < 200 || http_status >= 400) {
         api_error_set(&api_err, http_status, res, 1);
         set_last_api_error(&api_err);
-        debug_printf("Streaming request failed with HTTP %ld\n", http_status);
+        LOG_ERROR("Streaming request failed with HTTP %ld", http_status);
         return -1;
     }
 

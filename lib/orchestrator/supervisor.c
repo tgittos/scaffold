@@ -1,3 +1,6 @@
+#define LOG_MODULE     LOG_MOD_GOAP
+#define LOG_MODULE_STR "goap"
+#include "../util/log.h"
 #include "supervisor.h"
 #include "goap_state.h"
 #include "../ipc/message_poller.h"
@@ -5,7 +8,6 @@
 #include "../ipc/notification_formatter.h"
 #include "../session/conversation_tracker.h"
 #include "../tools/subagent_tool.h"
-#include "../util/debug_output.h"
 #include "db/goal_store.h"
 #include "db/action_store.h"
 #include "services/services.h"
@@ -207,15 +209,15 @@ static int process_notifications(AgentSession *session) {
     if (total_count > 0) {
         char *notification_text = notification_format_for_llm(bundle);
         if (notification_text != NULL) {
-            debug_printf("Supervisor: processing %d incoming messages\n", total_count);
+            LOG_INFO("Supervisor: processing %d incoming messages", total_count);
             append_conversation_message(&session->session_data.conversation,
                                         "system", notification_text);
             int rc = session_continue(session);
             if (rc == SESSION_CONTEXT_FULL) {
-                debug_printf("Supervisor: session_continue returned context full\n");
+                LOG_WARN("Supervisor: session_continue returned context full");
                 result = SUPERVISOR_EXIT_CONTEXT;
             } else if (rc != 0) {
-                debug_printf("Supervisor: session_continue returned %d\n", rc);
+                LOG_ERROR("Supervisor: session_continue returned %d", rc);
                 result = SUPERVISOR_EXIT_ERROR;
             }
             free(notification_text);
@@ -330,7 +332,7 @@ int supervisor_recover_orphaned_actions(Services *services, const char *goal_id)
 static int handle_context_full_exit(AgentSession *session, const char *goal_id,
                                      SupervisorPhase phase) {
     const char *phase_name = (phase == SUPERVISOR_PHASE_PLAN) ? "planning" : "execution";
-    debug_printf("Supervisor: context full during %s\n", phase_name);
+    LOG_WARN("Supervisor: context full during %s", phase_name);
     goal_store_t *gs = services_get_goal_store(session->services);
     if (gs != NULL) {
         char summary[128];
@@ -353,14 +355,14 @@ static int check_phase_completion(AgentSession *session, const char *goal_id,
 
     if (phase == SUPERVISOR_PHASE_PLAN) {
         if (plan_is_complete(session, goal_id)) {
-            debug_printf("Supervisor: plan complete for goal %s, transitioning to ACTIVE\n", goal_id);
+            LOG_INFO("Supervisor: plan complete for goal %s, transitioning to ACTIVE", goal_id);
             if (gs != NULL)
                 goal_store_update_status(gs, goal_id, GOAL_STATUS_ACTIVE);
             return SUPERVISOR_EXIT_COMPLETE;
         }
     } else {
         if (goal_is_complete(session, goal_id)) {
-            debug_printf("Supervisor: goal %s complete\n", goal_id);
+            LOG_INFO("Supervisor: goal %s complete", goal_id);
             if (gs != NULL)
                 goal_store_update_status(gs, goal_id, GOAL_STATUS_COMPLETED);
             return SUPERVISOR_EXIT_COMPLETE;
@@ -381,14 +383,14 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
     sigaction(SIGTERM, &sa, NULL);
     sigaction(SIGINT, &sa, NULL);
 
-    debug_printf("Supervisor started for goal %s (phase=%s)\n", goal_id,
+    LOG_INFO("Supervisor started for goal %s (phase=%s)", goal_id,
                  phase == SUPERVISOR_PHASE_PLAN ? "plan" : "execute");
 
     /* Only recover orphaned actions for executor phase */
     if (phase == SUPERVISOR_PHASE_EXECUTE) {
         int orphans = supervisor_recover_orphaned_actions(session->services, goal_id);
         if (orphans > 0) {
-            debug_printf("Supervisor: recovered %d orphaned actions\n", orphans);
+            LOG_INFO("Supervisor: recovered %d orphaned actions", orphans);
         }
     }
 
@@ -415,7 +417,7 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
 
     int completion = check_phase_completion(session, goal_id, phase);
     if (completion == SUPERVISOR_EXIT_COMPLETE) {
-        debug_printf("Supervisor: phase complete after initial processing for goal %s\n", goal_id);
+        LOG_INFO("Supervisor: phase complete after initial processing for goal %s", goal_id);
         return SUPERVISOR_EXIT_COMPLETE;
     }
 
@@ -446,7 +448,7 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
 
         int changes = subagent_poll_all(&session->subagent_manager);
         if (changes > 0) {
-            debug_printf("Supervisor: %d subagent state changes detected\n", changes);
+            LOG_DEBUG("Supervisor: %d subagent state changes detected", changes);
         }
 
         SubagentManager *mgr = &session->subagent_manager;
@@ -491,6 +493,6 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
         }
     }
 
-    debug_printf("Supervisor: shutting down (signal received)\n");
+    LOG_INFO("Supervisor: shutting down (signal received)");
     return SUPERVISOR_EXIT_ERROR;
 }

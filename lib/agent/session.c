@@ -1,4 +1,8 @@
 /* lib/ boundary: this file must not depend on src/. */
+#define LOG_MODULE     LOG_MOD_AGENT
+#define LOG_MODULE_STR "agent"
+#include "../util/log.h"
+
 #include "session.h"
 #include "session_configurator.h"
 #include "message_dispatcher.h"
@@ -13,7 +17,6 @@
 #include "../tools/mode_tool.h"
 #include "../tools/tool_extension.h"
 #include "../tools/messaging_tool.h"
-#include "../util/debug_output.h"
 #include "../util/uuid_utils.h"
 #include "../session/conversation_tracker.h"
 #include "../session/session_manager.h"
@@ -224,12 +227,12 @@ int session_start_message_polling(AgentSession* session) {
     }
 
     if (!session->polling_config.auto_poll_enabled) {
-        debug_printf("Message polling disabled by configuration\n");
+        LOG_DEBUG("Message polling disabled by configuration");
         return 0;
     }
 
     if (services_get_message_store(session->services) == NULL) {
-        debug_printf("Message store unavailable, skipping message polling\n");
+        LOG_DEBUG("Message store unavailable, skipping message polling");
         return 0;
     }
 
@@ -252,7 +255,7 @@ int session_start_message_polling(AgentSession* session) {
         return -1;
     }
 
-    debug_printf("Message polling started (interval: %dms)\n", session->polling_config.poll_interval_ms);
+    LOG_INFO("Message polling started (interval: %dms)", session->polling_config.poll_interval_ms);
     return 0;
 }
 
@@ -264,7 +267,7 @@ void session_stop_message_polling(AgentSession* session) {
     message_poller_stop(session->message_poller);
     message_poller_destroy(session->message_poller);
     session->message_poller = NULL;
-    debug_printf("Message polling stopped\n");
+    LOG_DEBUG("Message polling stopped");
 }
 
 int session_generate_recap(AgentSession* session, int max_messages) {
@@ -303,21 +306,21 @@ int manage_conversation_tokens(AgentSession* session, const char* user_message,
     int background_status = background_compact_conversation(&session->session_data, &compact_config, &background_result);
 
     if (background_status == 0 && background_result.tokens_saved > 0) {
-        debug_printf("Background trimming saved %d tokens, recalculating allocation\n", background_result.tokens_saved);
+        LOG_DEBUG("Background trimming saved %d tokens, recalculating allocation", background_result.tokens_saved);
         cleanup_compaction_result(&background_result);
 
         result = calculate_token_allocation(&session->session_data, user_message, config, usage);
         if (result != 0) {
             return result;
         }
-        debug_printf("After background trimming: %d response tokens available\n", usage->available_response_tokens);
+        LOG_DEBUG("After background trimming: %d response tokens available", usage->available_response_tokens);
     } else if (background_status == 0) {
         cleanup_compaction_result(&background_result);
     }
 
     if (usage->available_response_tokens < config->min_response_tokens * 2) {
-        debug_printf("Available response tokens (%d) below comfortable threshold, attempting emergency trimming\n",
-                     usage->available_response_tokens);
+        LOG_WARN("Available response tokens (%d) below comfortable threshold, attempting emergency trimming",
+                 usage->available_response_tokens);
 
         int target_tokens = (int)(config->context_window * 0.7);
 
@@ -325,27 +328,27 @@ int manage_conversation_tokens(AgentSession* session, const char* user_message,
         int compact_status = compact_conversation(&session->session_data, &compact_config, target_tokens, &compact_result);
 
         if (compact_status == 0 && compact_result.tokens_saved > 0) {
-            debug_printf("Trimming saved %d tokens, recalculating allocation\n", compact_result.tokens_saved);
+            LOG_DEBUG("Trimming saved %d tokens, recalculating allocation", compact_result.tokens_saved);
             cleanup_compaction_result(&compact_result);
 
             result = calculate_token_allocation(&session->session_data, user_message, config, usage);
             if (result == 0) {
-                debug_printf("After trimming: %d response tokens available\n", usage->available_response_tokens);
+                LOG_DEBUG("After trimming: %d response tokens available", usage->available_response_tokens);
             }
 
             /* Check if context is still nearly full after emergency compaction */
             if (result == 0 && config->context_window > 0) {
                 float utilization = (float)usage->total_prompt_tokens / (float)config->context_window;
                 if (utilization >= CONTEXT_FULL_THRESHOLD) {
-                    debug_printf("Context utilization %.1f%% >= %.0f%% threshold after compaction\n",
-                                 utilization * 100.0f, CONTEXT_FULL_THRESHOLD * 100.0f);
+                    LOG_WARN("Context utilization %.1f%% >= %.0f%% threshold after compaction",
+                             utilization * 100.0f, CONTEXT_FULL_THRESHOLD * 100.0f);
                     return SESSION_CONTEXT_FULL;
                 }
             }
 
             return result;
         } else {
-            debug_printf("Trimming failed or ineffective, using original allocation\n");
+            LOG_DEBUG("Trimming failed or ineffective, using original allocation");
             cleanup_compaction_result(&compact_result);
         }
     }
@@ -354,8 +357,8 @@ int manage_conversation_tokens(AgentSession* session, const char* user_message,
     if (config->context_window > 0) {
         float utilization = (float)usage->total_prompt_tokens / (float)config->context_window;
         if (utilization >= CONTEXT_FULL_THRESHOLD) {
-            debug_printf("Context utilization %.1f%% >= %.0f%% threshold\n",
-                         utilization * 100.0f, CONTEXT_FULL_THRESHOLD * 100.0f);
+            LOG_WARN("Context utilization %.1f%% >= %.0f%% threshold",
+                 utilization * 100.0f, CONTEXT_FULL_THRESHOLD * 100.0f);
             return SESSION_CONTEXT_FULL;
         }
     }
@@ -402,7 +405,7 @@ int session_process_message(AgentSession* session, const char* user_message) {
     TokenUsage token_usage;
     int token_rc = manage_conversation_tokens(session, effective_message, &token_config, &token_usage);
     if (token_rc == SESSION_CONTEXT_FULL) {
-        debug_printf("session_process_message: context full, propagating\n");
+        LOG_WARN("session_process_message: context full, propagating");
         free(hook_msg);
         if (has_images) {
             api_common_clear_pending_images();
@@ -425,8 +428,8 @@ int session_process_message(AgentSession* session, const char* user_message) {
         max_tokens = token_usage.available_response_tokens;
     }
 
-    debug_printf("Using token allocation - Response tokens: %d, Safety buffer: %d, Context window: %d\n",
-                 max_tokens, token_usage.safety_buffer_used, token_usage.context_window_used);
+    LOG_DEBUG("Token allocation: response=%d, safety_buffer=%d, context_window=%d",
+              max_tokens, token_usage.safety_buffer_used, token_usage.context_window_used);
 
     int result;
     DispatchDecision dispatch = message_dispatcher_select_mode(session);
@@ -464,7 +467,7 @@ int session_continue(AgentSession* session) {
     TokenUsage token_usage;
     int token_rc = manage_conversation_tokens(session, NULL, &token_config, &token_usage);
     if (token_rc == SESSION_CONTEXT_FULL) {
-        debug_printf("session_continue: context full, propagating\n");
+        LOG_WARN("session_continue: context full, propagating");
         return SESSION_CONTEXT_FULL;
     }
     if (token_rc != 0) {
@@ -477,7 +480,7 @@ int session_continue(AgentSession* session) {
         max_tokens = token_usage.available_response_tokens;
     }
 
-    debug_printf("session_continue: triggering LLM with current conversation\n");
+    LOG_DEBUG("session_continue: triggering LLM with current conversation");
 
     DispatchDecision dispatch = message_dispatcher_select_mode(session);
     if (dispatch.mode == DISPATCH_STREAMING) {

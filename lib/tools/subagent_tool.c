@@ -1,7 +1,6 @@
 #include "subagent_tool.h"
 #include "subagent_process.h"
 #include "../util/json_escape.h"
-#include "../util/debug_output.h"
 #include "../util/interrupt.h"
 #include "../util/config.h"
 #include "../policy/subagent_approval.h"

@@ -15,6 +15,7 @@
 #include "../../lib/util/app_home.h"
 #include "../../lib/util/config.h"
 #include "../../lib/auth/openai_login.h"
+#include "../../lib/util/log.h"
 #include "../../lib/db/oauth2_store.h"
 #include <mbedtls/platform_util.h>
 #include "../tools/python_extension.h"
@@ -33,7 +34,10 @@ static void print_help(const char *program_name) {
     printf("Options:\n");
     printf("  -h, --help        Show this help message and exit\n");
     printf("  -v, --version     Show version information and exit\n");
-    printf("  --debug           Enable debug output (shows HTTP requests)\n");
+    printf("  --debug           Enable all debug output (legacy, same as --log debug)\n");
+    printf("  --log <level>     Set log level: error, warn, info, debug\n");
+    printf("  --log-module <m>  Comma-separated module filter (e.g. tool,goap,http)\n");
+    printf("  --log-http-body   Enable raw HTTP body logging (CURLOPT_VERBOSE)\n");
     printf("  --no-stream       Disable response streaming\n");
     printf("  --json            Enable JSON output mode\n");
     printf("  --home <path>     Override home directory (default: ~/.local/scaffold)\n");
@@ -246,6 +250,9 @@ int main(int argc, char *argv[]) {
     const char *cli_allow_categories[MAX_CLI_ALLOW_CATEGORIES];
     int cli_allow_category_count = 0;
 
+    const char *log_level_str = NULL;
+    const char *log_module_str = NULL;
+
     int message_arg_index = -1;
     int subagent_mode = 0;
     char *subagent_task = NULL;
@@ -261,6 +268,12 @@ int main(int argc, char *argv[]) {
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--debug") == 0) {
             config.debug = true;
+        } else if (strcmp(argv[i], "--log") == 0 && i + 1 < argc) {
+            log_level_str = argv[++i];
+        } else if (strcmp(argv[i], "--log-module") == 0 && i + 1 < argc) {
+            log_module_str = argv[++i];
+        } else if (strcmp(argv[i], "--log-http-body") == 0) {
+            config.log_http_body = true;
         } else if (strcmp(argv[i], "--no-stream") == 0) {
             config.no_stream = true;
         } else if (strcmp(argv[i], "--json") == 0) {
@@ -361,6 +374,24 @@ int main(int argc, char *argv[]) {
     }
 
     config.model_override = model_override;
+
+    if (log_level_str != NULL) {
+        int lvl = log_parse_level(log_level_str);
+        if (lvl < 0) {
+            fprintf(stderr, "Error: Invalid log level '%s' (use error/warn/info/debug)\n",
+                    log_level_str);
+            return EXIT_FAILURE;
+        }
+        config.log_level = lvl;
+    }
+    if (log_module_str != NULL) {
+        uint32_t mods = log_parse_modules(log_module_str);
+        if (mods == 0) {
+            fprintf(stderr, "Error: No valid modules in '%s'\n", log_module_str);
+            return EXIT_FAILURE;
+        }
+        config.log_modules = mods;
+    }
 
     char *loaded_system_prompt = NULL;
     if (system_prompt_file != NULL) {

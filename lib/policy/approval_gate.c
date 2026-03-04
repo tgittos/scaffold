@@ -1,3 +1,6 @@
+#define LOG_MODULE     LOG_MOD_POLICY
+#define LOG_MODULE_STR "policy"
+#include "../util/log.h"
 #include "approval_gate.h"
 #include "gate_prompter.h"
 #include "pattern_generator.h"
@@ -15,7 +18,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "../util/debug_output.h"
 #include "../util/app_home.h"
 
 static ApprovalGateCallbacks g_gate_callbacks = {0};
@@ -322,8 +324,8 @@ int approval_gate_init(ApprovalGateConfig *config) {
         if (access(config_path, R_OK) == 0) {
             int load_result = approval_gate_load_from_file(config, config_path);
             if (load_result != 0) {
-                debug_printf("Warning: Failed to parse approval_gates from %s, "
-                             "using defaults\n", config_path);
+                LOG_WARN("Warning: Failed to parse approval_gates from %s, "
+                         "using defaults", config_path);
             }
         }
         free(config_path);

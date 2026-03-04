@@ -1,7 +1,9 @@
+#define LOG_MODULE     LOG_MOD_AGENT
+#define LOG_MODULE_STR "agent"
+#include "../util/log.h"
 #include "session_configurator.h"
 #include "../util/config.h"
 #include "../util/prompt_loader.h"
-#include "../util/debug_output.h"
 #include "../util/app_home.h"
 #include "../tools/tool_extension.h"
 #include "../llm/model_capabilities.h"
@@ -102,7 +104,7 @@ int session_configurator_load(AgentSession* session) {
             session->session_data.config.api_url =
                 strdup("https://" CODEX_URL_PATTERN "/responses");
         }
-        debug_printf("Using CODEX_API_KEY env var for Codex API (account: %s)\n",
+        LOG_DEBUG("Using CODEX_API_KEY env var for Codex API (account: %s)",
                      env_account_id ? env_account_id : "none");
     } else if (is_codex_url(session->session_data.config.api_url)) {
         char *db = app_home_path("oauth2.db");
@@ -123,7 +125,7 @@ int session_configurator_load(AgentSession* session) {
                 free(s_codex_db_path);
                 s_codex_db_path = strdup(db);
                 llm_client_set_credential_provider(openai_refresh_credential, s_codex_db_path);
-                debug_printf("Using OAuth credentials for Codex API (account: %s)\n", account_id);
+                LOG_DEBUG("Using OAuth credentials for Codex API (account: %s)", account_id);
                 mbedtls_platform_zeroize(oauth_token, sizeof(oauth_token));
             } else {
                 fprintf(stderr, "Error: OAuth tokens found but credential retrieval failed.\n");
@@ -143,13 +145,13 @@ int session_configurator_load(AgentSession* session) {
        sends OpenAI Chat Completions format which Codex rejects. */
     if (is_codex_url(session->session_data.config.api_url)) {
         if (!session->session_data.config.enable_streaming) {
-            debug_printf("Forcing streaming=true for Codex API (non-streaming not supported)\n");
+            LOG_DEBUG("Forcing streaming=true for Codex API (non-streaming not supported)");
             session->session_data.config.enable_streaming = 1;
         }
         /* Codex subscription API only accepts the default Codex model */
         free(session->session_data.config.model);
         session->session_data.config.model = strdup(CODEX_DEFAULT_MODEL);
-        debug_printf("Forcing model to %s for Codex API\n", CODEX_DEFAULT_MODEL);
+        LOG_DEBUG("Forcing model to %s for Codex API", CODEX_DEFAULT_MODEL);
     }
 
     session->session_data.config.api_type = session_configurator_detect_api_type(
@@ -172,10 +174,10 @@ int session_configurator_load(AgentSession* session) {
             ModelCapabilities* model = detect_model_capabilities(registry, session->session_data.config.model);
             if (model && model->max_context_length > 0) {
                 session->session_data.config.context_window = model->max_context_length;
-                debug_printf("Auto-configured context window from model capabilities: %d tokens for model %s\n",
+                LOG_DEBUG("Auto-configured context window from model capabilities: %d tokens for model %s",
                             model->max_context_length, session->session_data.config.model);
             } else {
-                debug_printf("Using default context window (%d tokens) - no model capabilities found for model %s\n",
+                LOG_DEBUG("Using default context window (%d tokens) - no model capabilities found for model %s",
                             session->session_data.config.context_window,
                             session->session_data.config.model ? session->session_data.config.model : "unknown");
             }

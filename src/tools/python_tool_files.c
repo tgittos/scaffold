@@ -1,7 +1,9 @@
+#define LOG_MODULE     LOG_MOD_TOOL
+#define LOG_MODULE_STR "tool"
+#include "../../lib/util/log.h"
 #include "python_tool_files.h"
 #include "python_tool.h"
 #include "util/app_home.h"
-#include "util/debug_output.h"
 #include <Python.h>
 #include <cJSON.h>
 #include <stdio.h>
@@ -599,12 +601,12 @@ int execute_python_file_tool_call(const ToolCall *tool_call, ToolResult *result)
 
     cJSON *args = cJSON_Parse(tool_call->arguments);
     if (args == NULL) {
-        debug_printf("[DEBUG] Failed to parse arguments for %s\n", tool_call->name);
-        debug_printf("[DEBUG] Arguments string: '%s'\n",
-                     tool_call->arguments ? tool_call->arguments : "(NULL)");
+        LOG_DEBUG("Failed to parse arguments for %s", tool_call->name);
+        LOG_DEBUG("Arguments string: '%s'",
+                  tool_call->arguments ? tool_call->arguments : "(NULL)");
         const char *error_ptr = cJSON_GetErrorPtr();
-        debug_printf("[DEBUG] cJSON error near: '%s'\n",
-                     error_ptr ? error_ptr : "(unknown)");
+        LOG_DEBUG("cJSON error near: '%s'",
+                  error_ptr ? error_ptr : "(unknown)");
 
         result->result = strdup("{\"error\": \"Failed to parse arguments\", \"success\": false}");
         result->success = 0;

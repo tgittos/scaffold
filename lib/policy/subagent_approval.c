@@ -1,3 +1,6 @@
+#define LOG_MODULE     LOG_MOD_POLICY
+#define LOG_MODULE_STR "policy"
+#include "../util/log.h"
 #include "approval_gate.h"
 #include "pattern_generator.h"
 
@@ -12,9 +15,8 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-#include "../util/debug_output.h"
 
-#define DEBUG_PRINT(...) debug_printf(__VA_ARGS__)
+#define DEBUG_PRINT(...) LOG_DEBUG(__VA_ARGS__)
 #define DEBUG_ERROR(...) fprintf(stderr, __VA_ARGS__), fprintf(stderr, "\n")
 
 #define APPROVAL_TIMEOUT_MS 300000

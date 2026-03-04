@@ -1,3 +1,6 @@
+#define LOG_MODULE     LOG_MOD_CONTEXT
+#define LOG_MODULE_STR "context"
+#include "../util/log.h"
 #include "conversation_tracker.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,7 +10,6 @@
 #include "../db/document_store.h"
 #include "../db/vector_db_service.h"
 #include "../services/services.h"
-#include "../util/debug_output.h"
 
 static Services* g_services = NULL;
 
@@ -351,7 +353,7 @@ static int add_message_to_history(ConversationHistory *history, const char *role
             if (store != NULL) {
                 int index_result = document_store_ensure_index(store, CONVERSATION_INDEX, CONVERSATION_EMBEDDING_DIM, 10000);
                 if (index_result != 0) {
-                    debug_printf("Warning: Failed to ensure conversation index\n");
+                    LOG_WARN("Failed to ensure conversation index");
                 }
 
                 cJSON *metadata = cJSON_CreateObject();
@@ -363,7 +365,7 @@ static int add_message_to_history(ConversationHistory *history, const char *role
                 if (metadata_json) {
                     int add_result = vector_db_service_add_text(g_services, CONVERSATION_INDEX, content_to_store, "conversation", role, metadata_json);
                     if (add_result != 0) {
-                        debug_printf("Warning: Failed to add conversation message to document store\n");
+                        LOG_WARN("Failed to add conversation message to document store");
                     }
                     free(metadata_json);
                 }

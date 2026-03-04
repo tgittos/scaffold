@@ -1,3 +1,7 @@
+#define LOG_MODULE     LOG_MOD_AGENT
+#define LOG_MODULE_STR "agent"
+#include "../util/log.h"
+
 #include "iterative_loop.h"
 #include "api_round_trip.h"
 #include "tool_batch_executor.h"
@@ -6,7 +10,6 @@
 #include "../ui/output_formatter.h"
 #include "../ui/json_output.h"
 #include "../ui/status_line.h"
-#include "../util/debug_output.h"
 #include "../session/token_manager.h"
 #include "session.h"
 #include <stdio.h>
@@ -20,7 +23,7 @@ int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx) {
 
     int loop_count = 0;
 
-    debug_printf("Starting iterative tool calling loop\n");
+    LOG_INFO("Starting iterative tool calling loop");
 
     while (1) {
         loop_count++;
@@ -30,14 +33,14 @@ int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx) {
             return -1;
         }
         tool_orchestration_reset_batch(ctx);
-        debug_printf("Tool calling loop iteration %d\n", loop_count);
+        LOG_DEBUG("Tool calling loop iteration %d", loop_count);
 
         TokenConfig token_config;
         token_config_init(&token_config, session->session_data.config.context_window);
         TokenUsage token_usage;
         int token_rc = manage_conversation_tokens(session, "", &token_config, &token_usage);
         if (token_rc == SESSION_CONTEXT_FULL) {
-            debug_printf("iterative_loop: context full, propagating\n");
+            LOG_WARN("iterative_loop: context full, propagating");
             return SESSION_CONTEXT_FULL;
         }
         if (token_rc != 0) {
@@ -46,10 +49,10 @@ int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx) {
         }
 
         int iteration_max_tokens = token_usage.available_response_tokens;
-        debug_printf("Using %d max_tokens for tool loop iteration %d\n", iteration_max_tokens, loop_count);
+        LOG_DEBUG("Using %d max_tokens for tool loop iteration %d", iteration_max_tokens, loop_count);
 
         LLMRoundTripResult rt;
-        debug_printf("Making API request for tool loop iteration %d\n", loop_count);
+        LOG_DEBUG("Making API request for tool loop iteration %d", loop_count);
         if (api_round_trip_execute(session, "", iteration_max_tokens, &rt) != 0) {
             return -1;
         }
@@ -96,7 +99,7 @@ int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx) {
         }
 
         if (call_count == 0) {
-            debug_printf("No more tool calls found - ending tool loop after %d iterations\n", loop_count);
+            LOG_INFO("No more tool calls - ending loop after %d iterations", loop_count);
             if (!session->session_data.config.json_output_mode) {
                 if (rt.parsed.thinking_content != NULL) {
                     display_streaming_thinking(rt.parsed.thinking_content,
@@ -124,13 +127,13 @@ int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx) {
         }
 
         if (new_tool_calls == 0) {
-            debug_printf("All %d tool calls already executed - ending loop to prevent infinite iteration\n", call_count);
+            LOG_INFO("All %d tool calls already executed - ending loop to prevent infinite iteration", call_count);
             cleanup_tool_calls(tool_calls, call_count);
             return 0;
         }
 
-        debug_printf("Found %d new tool calls (out of %d total) in iteration %d - executing them\n",
-                    new_tool_calls, call_count, loop_count);
+        LOG_DEBUG("Found %d new tool calls (out of %d total) in iteration %d",
+                  new_tool_calls, call_count, loop_count);
 
         ToolResult *results = calloc(call_count, sizeof(ToolResult));
         if (results == NULL) {

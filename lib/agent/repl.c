@@ -1,7 +1,10 @@
+#define LOG_MODULE     LOG_MOD_AGENT
+#define LOG_MODULE_STR "agent"
+#include "../util/log.h"
 #include "repl.h"
 #include "recap.h"
+#include "../util/ansi_codes.h"
 #include "../util/interrupt.h"
-#include "../util/debug_output.h"
 #include "../ui/output_formatter.h"
 #include "../ui/json_output.h"
 #include "../ui/spinner.h"
@@ -151,7 +154,7 @@ static void process_pending_notifications(AgentSession* session) {
         }
         char* notification_text = notification_format_for_llm(bundle);
         if (notification_text != NULL) {
-            debug_printf("Processing %d incoming messages\n", total_count);
+            LOG_DEBUG("Processing %d incoming messages", total_count);
             append_conversation_message(&session->session_data.conversation,
                                         "system", notification_text);
             int cont_rc = session_continue(session);
@@ -251,7 +254,7 @@ int repl_run_session(AgentSession* session, bool json_mode) {
                 orchestrator_reap_supervisors(recovery_gs);
                 int respawned = orchestrator_respawn_dead(recovery_gs);
                 if (respawned > 0) {
-                    debug_printf("REPL: respawned %d dead supervisors\n",
+                    LOG_INFO("REPL: respawned %d dead supervisors",
                                  respawned);
                 }
             }
@@ -308,7 +311,7 @@ void repl_show_greeting(AgentSession* session, bool json_mode) {
     }
 
     if (session->session_data.conversation.count == 0) {
-        debug_printf("Generating welcome message...\n");
+        LOG_DEBUG("Generating welcome message...");
 
         const char *name = "scaffold";
         char greeting_prompt[512];
@@ -324,7 +327,7 @@ void repl_show_greeting(AgentSession* session, bool json_mode) {
             printf("Hello! I'm %s, your AI assistant. What can I help you with today?\n", name);
         }
     } else {
-        debug_printf("Generating recap of recent conversation (%d messages)...\n",
+        LOG_DEBUG("Generating recap of recent conversation (%zu messages)...",
                      session->session_data.conversation.count);
 
         int result = session_generate_recap(session, 5);
