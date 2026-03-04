@@ -10,7 +10,6 @@ from pathlib import Path
 
 from scaffold_evals.common.config import load_config
 from scaffold_evals.common.scaffold_runner import extract_last_assistant_text, run_scaffold
-from scaffold_evals.contextbench.prompt import build_prompt
 
 
 def load_questions(questions_path: Path) -> list[dict]:
@@ -45,13 +44,11 @@ def run_question(
 
     print(f"[contextbench] Running {qid}...", flush=True)
 
-    system_prompt = build_prompt(qtext)
     home_dir = workdir / "homes" / str(qid)
 
     result = run_scaffold(
         message=qtext,
         working_dir=data_dir,
-        system_prompt=system_prompt,
         scaffold_binary=scaffold_binary,
         model=model,
         home_dir=home_dir,

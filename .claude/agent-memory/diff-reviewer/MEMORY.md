@@ -11,7 +11,9 @@ Notes:
 - `LLMProvider` vtable uses `SystemPromptParts*` in build_request_json and build_streaming_request_json
 - OAuth2 store uses `mbedtls_platform_zeroize` for sensitive data cleanup
 - Plugin system uses JSON-RPC 2.0 over stdin/stdout pipes with `plugin_send_stamped_request` for thread-safe IPC
-- `session_configurator_cleanup()` exists but is never called -- potential memory leak of `s_codex_db_path`
+- FIXED: `session_configurator_cleanup()` is now called in session.c:202 (develop branch)
+- Structured logging: `log.h` defines both enum values (LOG_ERROR=0) and macros (LOG_ERROR(...)) -- safe due to C preprocessor self-reference prohibition
+- `pthread_once_t` in log.c initialized with `{0}` instead of `PTHREAD_ONCE_INIT` -- inconsistent with rest of codebase
 - Goal store uses inline migration (`ALTER TABLE ... ADD COLUMN`) that silently fails if column exists
 - `g_credential_data` in llm_client.c is a dangling pointer risk if the backing string is freed
 

@@ -278,6 +278,12 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
         "                p['required'] = False\n"
         "            # Use parsed docstring description or fall back to param name\n"
         "            p['description'] = arg_descriptions.get(name, name)\n"
+        "            # Check for {PARAM}_ITEMS_SCHEMA constant for array item schemas\n"
+        "            if p['type'] == 'array':\n"
+        "                schema_var = name.upper() + '_ITEMS_SCHEMA'\n"
+        "                schema_val = globals().get(schema_var)\n"
+        "                if schema_val and isinstance(schema_val, dict):\n"
+        "                    p['items_schema'] = json.dumps(schema_val)\n"
         "            params.append(p)\n"
         "        return json.dumps({\n"
         "            'name': func_name,\n"
@@ -385,6 +391,7 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
                 cJSON *p_type = cJSON_GetObjectItem(param, "type");
                 cJSON *p_desc = cJSON_GetObjectItem(param, "description");
                 cJSON *p_req = cJSON_GetObjectItem(param, "required");
+                cJSON *p_items = cJSON_GetObjectItem(param, "items_schema");
 
                 if (cJSON_IsString(p_name)) {
                     tool_def->parameters[i].name = strdup(p_name->valuestring);
@@ -398,6 +405,10 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
                 tool_def->parameters[i].required = cJSON_IsTrue(p_req) ? 1 : 0;
                 tool_def->parameters[i].enum_values = NULL;
                 tool_def->parameters[i].enum_count = 0;
+                tool_def->parameters[i].items_schema = NULL;
+                if (cJSON_IsString(p_items) && p_items->valuestring != NULL) {
+                    tool_def->parameters[i].items_schema = strdup(p_items->valuestring);
+                }
             }
         }
     }
@@ -431,6 +442,7 @@ int python_load_tool_files(void) {
                     free(tool->parameters[j].name);
                     free(tool->parameters[j].type);
                     free(tool->parameters[j].description);
+                    free(tool->parameters[j].items_schema);
                 }
                 free(tool->parameters);
             }
@@ -559,6 +571,7 @@ int python_register_tool_schemas(ToolRegistry *registry) {
                 params[j].required = tool->parameters[j].required;
                 params[j].enum_values = NULL;
                 params[j].enum_count = 0;
+                params[j].items_schema = tool->parameters[j].items_schema ? strdup(tool->parameters[j].items_schema) : NULL;
             }
         }
 
@@ -571,6 +584,7 @@ int python_register_tool_schemas(ToolRegistry *registry) {
                 free(params[j].name);
                 free(params[j].type);
                 free(params[j].description);
+                free(params[j].items_schema);
             }
             free(params);
         }
@@ -889,6 +903,7 @@ void python_cleanup_tool_files(void) {
                     free(tool->parameters[j].name);
                     free(tool->parameters[j].type);
                     free(tool->parameters[j].description);
+                    free(tool->parameters[j].items_schema);
                 }
                 free(tool->parameters);
             }

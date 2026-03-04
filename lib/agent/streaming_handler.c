@@ -2,6 +2,7 @@
 #define LOG_MODULE_STR "agent"
 #include "../util/log.h"
 #include "streaming_handler.h"
+#include "api_round_trip.h"
 #include "context_enhancement.h"
 #include "message_dispatcher.h"
 #include "../network/api_common.h"
@@ -281,4 +282,110 @@ int streaming_process_message(AgentSession* session, LLMProvider* provider,
 
     streaming_context_free(ctx);
     return result;
+}
+
+int streaming_round_trip_execute(AgentSession* session, LLMProvider* provider,
+                                  const char* user_message, int max_tokens,
+                                  LLMRoundTripResult* result) {
+    if (session == NULL || provider == NULL || result == NULL) return -1;
+
+    memset(result, 0, sizeof(*result));
+
+    EnhancedPromptParts parts;
+    if (message_dispatcher_prepare_prompt(session, user_message, &parts) != 0) return -1;
+
+    SystemPromptParts sys_parts = {
+        .base_prompt = parts.base_prompt,
+        .dynamic_context = parts.dynamic_context
+    };
+
+    char* post_data = provider->build_streaming_request_json(
+        provider, session->session_data.config.model,
+        &sys_parts, &session->session_data.conversation,
+        user_message, max_tokens, &session->tools);
+
+    free_enhanced_prompt_parts(&parts);
+    if (post_data == NULL) return -1;
+
+    LOG_DEBUG("Streaming round-trip POST data length: %zu", strlen(post_data));
+
+    StreamingContext* ctx = streaming_context_create();
+    if (ctx == NULL) { free(post_data); return -1; }
+
+    StreamingSSEUserData sse_user_data = { .ctx = ctx, .provider = provider };
+    ctx->user_data = &sse_user_data;
+    ctx->on_text_chunk = streaming_text_callback;
+    ctx->on_thinking_chunk = streaming_thinking_callback;
+    ctx->on_tool_use_start = streaming_tool_start_callback;
+    ctx->on_tool_use_delta = streaming_tool_delta_callback;
+    ctx->on_stream_end = streaming_end_callback;
+    ctx->on_error = streaming_error_callback;
+    ctx->on_sse_data = streaming_sse_data_callback;
+
+    status_line_set_busy("Requesting...");
+    display_streaming_init();
+
+    struct StreamingHTTPConfig streaming_config = {
+        .base = DEFAULT_HTTP_CONFIG,
+        .stream_callback = stream_http_callback,
+        .callback_data = ctx,
+        .low_speed_limit = 1,
+        .low_speed_time = 30
+    };
+
+    char refreshed_key[4096];
+    if (llm_client_refresh_credential(refreshed_key, sizeof(refreshed_key)) == 0) {
+        free(session->session_data.config.api_key);
+        session->session_data.config.api_key = strdup(refreshed_key);
+    }
+
+    const char* hdrs[8] = {0};
+    if (provider->build_headers) {
+        provider->build_headers(provider, session->session_data.config.api_key, hdrs, 8);
+    }
+
+    int http_rc = llm_client_send_streaming(
+        session->session_data.config.api_url, hdrs, post_data, &streaming_config);
+
+    free(post_data);
+
+    if (http_rc != 0) {
+        status_line_set_idle();
+        if (provider->cleanup_stream_state) provider->cleanup_stream_state(provider);
+        streaming_context_free(ctx);
+        return -1;
+    }
+
+    status_line_set_idle();
+
+    /* Fill LLMRoundTripResult from streaming context */
+    result->parsed.prompt_tokens = ctx->input_tokens;
+    result->parsed.completion_tokens = ctx->output_tokens;
+    result->parsed.response_content = ctx->text_content ? strdup(ctx->text_content) : NULL;
+    result->parsed.thinking_content = ctx->thinking_content && ctx->thinking_len > 0
+                                        ? strdup(ctx->thinking_content) : NULL;
+
+    if (ctx->tool_uses.count > (size_t)INT_MAX) {
+        fprintf(stderr, "Error: Too many tool calls (%zu exceeds INT_MAX)\n", ctx->tool_uses.count);
+        streaming_context_free(ctx);
+        return -1;
+    }
+    if (ctx->tool_uses.count > 0) {
+        int count = (int)ctx->tool_uses.count;
+        ToolCall* calls = calloc(count, sizeof(ToolCall));
+        if (!calls) {
+            streaming_context_free(ctx);
+            return -1;
+        }
+        for (int i = 0; i < count; i++) {
+            calls[i].id = ctx->tool_uses.data[i].id ? strdup(ctx->tool_uses.data[i].id) : NULL;
+            calls[i].name = ctx->tool_uses.data[i].name ? strdup(ctx->tool_uses.data[i].name) : NULL;
+            calls[i].arguments = ctx->tool_uses.data[i].arguments_json ? strdup(ctx->tool_uses.data[i].arguments_json) : NULL;
+        }
+        result->tool_calls = calls;
+        result->tool_call_count = count;
+    }
+
+    streaming_context_free(ctx);
+    return 0;
 }

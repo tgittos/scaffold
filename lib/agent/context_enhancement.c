@@ -86,11 +86,9 @@ static char* build_dynamic_context(const AgentSession* session) {
                               "Your current internal todo list state is:\n\n";
 
     const char* todo_instructions = "\n\nTODO SYSTEM USAGE:\n"
-                                   "- Use TodoWrite to track tasks when the user requests task tracking\n"
-                                   "- Update task status (in_progress, completed) as you work on them\n"
-                                   "- Only execute tasks if the user explicitly asks you to do so\n"
-                                   "- Creating a todo list does NOT mean you should start implementing the tasks\n"
-                                   "- Follow the user's actual request, not the existence of todos";
+                                   "- Use TodoWrite to break medium/complex tasks into steps and track progress\n"
+                                   "- Update task status (in_progress, completed) as you work through them\n"
+                                   "- Work through your todo items — they are YOUR execution plan, not a proposal";
 
     static const char* const MODE_SECTION_HEADER = "\n\n# Active Mode Instructions\n";
     const char* mode_text = prompt_mode_get_text(session->current_mode);

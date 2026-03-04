@@ -6,6 +6,32 @@ Match: path
 
 VALID_OP_TYPES = {'insert', 'delete', 'replace'}
 
+# JSON Schema for the operations array items - used by schema extractor
+OPERATIONS_ITEMS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "type": {
+            "type": "string",
+            "enum": ["insert", "delete", "replace"],
+            "description": "Operation type"
+        },
+        "start_line": {
+            "type": "number",
+            "description": "1-based line number where operation begins"
+        },
+        "end_line": {
+            "type": "number",
+            "description": "1-based end line number (inclusive, required for delete/replace)"
+        },
+        "content": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Lines to insert or replace with (required for insert/replace)"
+        }
+    },
+    "required": ["type", "start_line"]
+}
+
 
 def _is_traversal_path(path: str) -> bool:
     """Check if path contains directory traversal attempts."""
@@ -116,7 +142,7 @@ def _validate_operations(operations: list) -> None:
                     )
 
 
-def apply_delta(path: str, operations: list, create_backup: bool = True) -> dict:
+def apply_delta(path: str, operations: list, create_backup: bool = False) -> dict:
     """Apply delta patch operations to a file.
 
     Args:
@@ -129,7 +155,7 @@ def apply_delta(path: str, operations: list, create_backup: bool = True) -> dict
             For insert: inserts content BEFORE start_line (use start_line=1 to insert at beginning)
             For delete: removes lines from start_line to end_line (inclusive)
             For replace: replaces lines from start_line to end_line with content
-        create_backup: Whether to create a backup before modifying (default: True)
+        create_backup: Whether to create a backup before modifying (default: False)
 
     Returns:
         Dictionary with success status, path, operations_applied, backup_path, and new_line_count

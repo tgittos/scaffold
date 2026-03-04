@@ -47,7 +47,13 @@
       "WebFetch(domain:developers.openai.com)",
       "WebFetch(domain:docs.openclaw.ai)",
       "WebFetch(domain:platform.openai.com)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.tbench.ai)",
+      "WebFetch(domain:harborframework.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:tbench.ai)",
+      "WebFetch(domain:www.swebench.com)",
+      "WebFetch(domain:www.letta.com)"
     ]
   },
   "spinnerTipsEnabled": false

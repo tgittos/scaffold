@@ -116,7 +116,8 @@ void test_codex_parse_stream_completed(void) {
     streaming_context_free(ctx);
 }
 
-void test_codex_parse_stream_tool_call(void) {
+/* Happy path: added → deltas (with item_id, not call_id) → output_item.done */
+void test_codex_parse_stream_tool_call_full_sequence(void) {
     ProviderRegistry *registry = get_provider_registry();
     LLMProvider *provider = detect_provider_for_url(registry, "https://chatgpt.com/backend-api/codex/responses");
     TEST_ASSERT_NOT_NULL(provider);
@@ -124,19 +125,142 @@ void test_codex_parse_stream_tool_call(void) {
     StreamingContext *ctx = streaming_context_create();
     TEST_ASSERT_NOT_NULL(ctx);
 
-    /* Tool call start with name and call_id */
-    const char *start_event =
-        "{\"type\":\"response.function_call_arguments.delta\","
-        "\"call_id\":\"call_abc123\",\"name\":\"read_file\",\"delta\":\"{\\\"path\\\": \\\"\"}";
-    int rc = provider->parse_stream_event(provider, ctx, start_event, strlen(start_event));
-    TEST_ASSERT_EQUAL_INT(0, rc);
+    /* 1. output_item.added registers the tool */
+    const char *added =
+        "{\"type\":\"response.output_item.added\","
+        "\"item\":{\"type\":\"function_call\",\"call_id\":\"call_1\",\"name\":\"read_file\"}}";
+    TEST_ASSERT_EQUAL_INT(0, provider->parse_stream_event(provider, ctx, added, strlen(added)));
+    TEST_ASSERT_EQUAL(1, ctx->tool_uses.count);
 
-    /* Subsequent delta */
-    const char *delta_event =
+    /* 2. deltas use item_id (not call_id) — these go through current_tool_index */
+    const char *delta1 =
         "{\"type\":\"response.function_call_arguments.delta\","
-        "\"call_id\":\"call_abc123\",\"delta\":\"test.c\\\"}\"}";
-    rc = provider->parse_stream_event(provider, ctx, delta_event, strlen(delta_event));
-    TEST_ASSERT_EQUAL_INT(0, rc);
+        "\"item_id\":\"fc_1\",\"delta\":\"{\\\"path\\\":\"}";
+    TEST_ASSERT_EQUAL_INT(0, provider->parse_stream_event(provider, ctx, delta1, strlen(delta1)));
+
+    const char *delta2 =
+        "{\"type\":\"response.function_call_arguments.delta\","
+        "\"item_id\":\"fc_1\",\"delta\":\"\\\"test.c\\\"}\"}";
+    TEST_ASSERT_EQUAL_INT(0, provider->parse_stream_event(provider, ctx, delta2, strlen(delta2)));
+
+    /* 3. output_item.done delivers the authoritative complete item */
+    const char *done =
+        "{\"type\":\"response.output_item.done\","
+        "\"item\":{\"type\":\"function_call\",\"call_id\":\"call_1\","
+        "\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"test.c\\\"}\"}}";
+    TEST_ASSERT_EQUAL_INT(0, provider->parse_stream_event(provider, ctx, done, strlen(done)));
+
+    /* Verify: 1 tool, correct id/name/arguments */
+    TEST_ASSERT_EQUAL(1, ctx->tool_uses.count);
+    TEST_ASSERT_EQUAL_STRING("call_1", ctx->tool_uses.data[0].id);
+    TEST_ASSERT_EQUAL_STRING("read_file", ctx->tool_uses.data[0].name);
+    TEST_ASSERT_EQUAL_STRING("{\"path\":\"test.c\"}", ctx->tool_uses.data[0].arguments_json);
+
+    streaming_context_free(ctx);
+}
+
+/* No deltas at all — just added + done (observed in eval logs) */
+void test_codex_parse_stream_tool_call_done_only(void) {
+    ProviderRegistry *registry = get_provider_registry();
+    LLMProvider *provider = detect_provider_for_url(registry, "https://chatgpt.com/backend-api/codex/responses");
+    TEST_ASSERT_NOT_NULL(provider);
+
+    StreamingContext *ctx = streaming_context_create();
+    TEST_ASSERT_NOT_NULL(ctx);
+
+    const char *added =
+        "{\"type\":\"response.output_item.added\","
+        "\"item\":{\"type\":\"function_call\",\"call_id\":\"call_1\",\"name\":\"list_dir\"}}";
+    TEST_ASSERT_EQUAL_INT(0, provider->parse_stream_event(provider, ctx, added, strlen(added)));
+
+    const char *done =
+        "{\"type\":\"response.output_item.done\","
+        "\"item\":{\"type\":\"function_call\",\"call_id\":\"call_1\","
+        "\"name\":\"list_dir\",\"arguments\":\"{\\\"path\\\":\\\".\\\"}\"}}";
+    TEST_ASSERT_EQUAL_INT(0, provider->parse_stream_event(provider, ctx, done, strlen(done)));
+
+    TEST_ASSERT_EQUAL(1, ctx->tool_uses.count);
+    TEST_ASSERT_EQUAL_STRING("call_1", ctx->tool_uses.data[0].id);
+    TEST_ASSERT_EQUAL_STRING("list_dir", ctx->tool_uses.data[0].name);
+    TEST_ASSERT_EQUAL_STRING("{\"path\":\".\"}", ctx->tool_uses.data[0].arguments_json);
+
+    streaming_context_free(ctx);
+}
+
+/* Two tools in sequence */
+void test_codex_parse_stream_multiple_tool_calls(void) {
+    ProviderRegistry *registry = get_provider_registry();
+    LLMProvider *provider = detect_provider_for_url(registry, "https://chatgpt.com/backend-api/codex/responses");
+    TEST_ASSERT_NOT_NULL(provider);
+
+    StreamingContext *ctx = streaming_context_create();
+    TEST_ASSERT_NOT_NULL(ctx);
+
+    /* Tool 1: added → delta → done */
+    const char *added1 =
+        "{\"type\":\"response.output_item.added\","
+        "\"item\":{\"type\":\"function_call\",\"call_id\":\"call_a\",\"name\":\"read_file\"}}";
+    TEST_ASSERT_EQUAL_INT(0, provider->parse_stream_event(provider, ctx, added1, strlen(added1)));
+
+    const char *delta1 =
+        "{\"type\":\"response.function_call_arguments.delta\","
+        "\"item_id\":\"fc_a\",\"delta\":\"{\\\"path\\\":\\\"a.c\\\"}\"}";
+    TEST_ASSERT_EQUAL_INT(0, provider->parse_stream_event(provider, ctx, delta1, strlen(delta1)));
+
+    const char *done1 =
+        "{\"type\":\"response.output_item.done\","
+        "\"item\":{\"type\":\"function_call\",\"call_id\":\"call_a\","
+        "\"name\":\"read_file\",\"arguments\":\"{\\\"path\\\":\\\"a.c\\\"}\"}}";
+    TEST_ASSERT_EQUAL_INT(0, provider->parse_stream_event(provider, ctx, done1, strlen(done1)));
+
+    /* Tool 2: added → delta → done */
+    const char *added2 =
+        "{\"type\":\"response.output_item.added\","
+        "\"item\":{\"type\":\"function_call\",\"call_id\":\"call_b\",\"name\":\"write_file\"}}";
+    TEST_ASSERT_EQUAL_INT(0, provider->parse_stream_event(provider, ctx, added2, strlen(added2)));
+
+    const char *delta2 =
+        "{\"type\":\"response.function_call_arguments.delta\","
+        "\"item_id\":\"fc_b\",\"delta\":\"{\\\"path\\\":\\\"b.c\\\"}\"}";
+    TEST_ASSERT_EQUAL_INT(0, provider->parse_stream_event(provider, ctx, delta2, strlen(delta2)));
+
+    const char *done2 =
+        "{\"type\":\"response.output_item.done\","
+        "\"item\":{\"type\":\"function_call\",\"call_id\":\"call_b\","
+        "\"name\":\"write_file\",\"arguments\":\"{\\\"path\\\":\\\"b.c\\\"}\"}}";
+    TEST_ASSERT_EQUAL_INT(0, provider->parse_stream_event(provider, ctx, done2, strlen(done2)));
+
+    TEST_ASSERT_EQUAL(2, ctx->tool_uses.count);
+    TEST_ASSERT_EQUAL_STRING("call_a", ctx->tool_uses.data[0].id);
+    TEST_ASSERT_EQUAL_STRING("read_file", ctx->tool_uses.data[0].name);
+    TEST_ASSERT_EQUAL_STRING("{\"path\":\"a.c\"}", ctx->tool_uses.data[0].arguments_json);
+    TEST_ASSERT_EQUAL_STRING("call_b", ctx->tool_uses.data[1].id);
+    TEST_ASSERT_EQUAL_STRING("write_file", ctx->tool_uses.data[1].name);
+    TEST_ASSERT_EQUAL_STRING("{\"path\":\"b.c\"}", ctx->tool_uses.data[1].arguments_json);
+
+    streaming_context_free(ctx);
+}
+
+/* Robustness: output_item.done arrives without prior output_item.added */
+void test_codex_parse_stream_tool_call_done_without_added(void) {
+    ProviderRegistry *registry = get_provider_registry();
+    LLMProvider *provider = detect_provider_for_url(registry, "https://chatgpt.com/backend-api/codex/responses");
+    TEST_ASSERT_NOT_NULL(provider);
+
+    StreamingContext *ctx = streaming_context_create();
+    TEST_ASSERT_NOT_NULL(ctx);
+
+    /* Skip output_item.added entirely — done should register the tool */
+    const char *done =
+        "{\"type\":\"response.output_item.done\","
+        "\"item\":{\"type\":\"function_call\",\"call_id\":\"call_x\","
+        "\"name\":\"shell\",\"arguments\":\"{\\\"cmd\\\":\\\"ls\\\"}\"}}";
+    TEST_ASSERT_EQUAL_INT(0, provider->parse_stream_event(provider, ctx, done, strlen(done)));
+
+    TEST_ASSERT_EQUAL(1, ctx->tool_uses.count);
+    TEST_ASSERT_EQUAL_STRING("call_x", ctx->tool_uses.data[0].id);
+    TEST_ASSERT_EQUAL_STRING("shell", ctx->tool_uses.data[0].name);
+    TEST_ASSERT_EQUAL_STRING("{\"cmd\":\"ls\"}", ctx->tool_uses.data[0].arguments_json);
 
     streaming_context_free(ctx);
 }
@@ -487,6 +611,105 @@ void test_codex_build_request_full_tool_roundtrip(void) {
     cleanup_conversation_history(&history);
 }
 
+/* Regression: iterative loop passes user_message="" for follow-up rounds.
+ * The Codex provider must NOT add an empty user message to the input array,
+ * as it creates a spurious user turn that causes the model to stop calling tools. */
+void test_codex_build_request_empty_user_message_omitted(void) {
+    ProviderRegistry *registry = get_provider_registry();
+    LLMProvider *provider = detect_provider_for_url(registry, "https://chatgpt.com/backend-api/codex/responses");
+    TEST_ASSERT_NOT_NULL(provider);
+
+    ConversationHistory history = {0};
+
+    /* Simulate: user asked a question, assistant called a tool, result came back */
+    append_conversation_message(&history, "user", "Fix the bug in validators.py");
+
+    const char *assistant_tc =
+        "{\"role\": \"assistant\", \"content\": null, "
+        "\"tool_calls\": [{\"id\": \"call_1\", \"type\": \"function\", "
+        "\"function\": {\"name\": \"read_file\", "
+        "\"arguments\": \"{\\\"path\\\":\\\"validators.py\\\"}\"}}]}";
+    append_conversation_message(&history, "assistant", assistant_tc);
+
+    append_tool_message(&history, "class URLValidator: ...", "call_1", "read_file");
+
+    SystemPromptParts prompt = { .base_prompt = "You are helpful.", .dynamic_context = NULL };
+
+    /* Empty string — this is what the iterative loop passes */
+    char *json = provider->build_request_json(provider, "codex-mini", &prompt,
+                                                &history, "", 1024, NULL);
+    TEST_ASSERT_NOT_NULL(json);
+
+    cJSON *root = cJSON_Parse(json);
+    TEST_ASSERT_NOT_NULL(root);
+    cJSON *input = cJSON_GetObjectItem(root, "input");
+    TEST_ASSERT_NOT_NULL(input);
+
+    /* The last item must NOT be an empty user message */
+    int arr_size = cJSON_GetArraySize(input);
+    TEST_ASSERT_GREATER_OR_EQUAL(3, arr_size);
+
+    cJSON *last = cJSON_GetArrayItem(input, arr_size - 1);
+    TEST_ASSERT_NOT_NULL(last);
+    cJSON *last_role = cJSON_GetObjectItem(last, "role");
+    /* Last item should be function_call_output, not a user message */
+    if (last_role && cJSON_IsString(last_role)) {
+        TEST_ASSERT_TRUE(strcmp(last_role->valuestring, "user") != 0);
+    }
+
+    /* Also verify: no empty-content user messages anywhere */
+    for (int i = 0; i < arr_size; i++) {
+        cJSON *item = cJSON_GetArrayItem(input, i);
+        cJSON *role = cJSON_GetObjectItem(item, "role");
+        cJSON *content = cJSON_GetObjectItem(item, "content");
+        if (role && cJSON_IsString(role) && strcmp(role->valuestring, "user") == 0) {
+            TEST_ASSERT_NOT_NULL(content);
+            TEST_ASSERT_TRUE(cJSON_IsString(content));
+            TEST_ASSERT_TRUE(strlen(content->valuestring) > 0);
+        }
+    }
+
+    cJSON_Delete(root);
+    free(json);
+    cleanup_conversation_history(&history);
+}
+
+/* Same test with NULL user_message */
+void test_codex_build_request_null_user_message_omitted(void) {
+    ProviderRegistry *registry = get_provider_registry();
+    LLMProvider *provider = detect_provider_for_url(registry, "https://chatgpt.com/backend-api/codex/responses");
+    TEST_ASSERT_NOT_NULL(provider);
+
+    ConversationHistory history = {0};
+    append_conversation_message(&history, "user", "Fix the bug");
+
+    SystemPromptParts prompt = { .base_prompt = "You are helpful.", .dynamic_context = NULL };
+    char *json = provider->build_request_json(provider, "codex-mini", &prompt,
+                                                &history, NULL, 1024, NULL);
+    TEST_ASSERT_NOT_NULL(json);
+
+    cJSON *root = cJSON_Parse(json);
+    TEST_ASSERT_NOT_NULL(root);
+    cJSON *input = cJSON_GetObjectItem(root, "input");
+    TEST_ASSERT_NOT_NULL(input);
+
+    /* Should have exactly 1 user message (from history), not 2 */
+    int user_count = 0;
+    int arr_size = cJSON_GetArraySize(input);
+    for (int i = 0; i < arr_size; i++) {
+        cJSON *item = cJSON_GetArrayItem(input, i);
+        cJSON *role = cJSON_GetObjectItem(item, "role");
+        if (role && cJSON_IsString(role) && strcmp(role->valuestring, "user") == 0) {
+            user_count++;
+        }
+    }
+    TEST_ASSERT_EQUAL_INT(1, user_count);
+
+    cJSON_Delete(root);
+    free(json);
+    cleanup_conversation_history(&history);
+}
+
 void test_codex_build_request_tool_calls_parse_failure(void) {
     ProviderRegistry *registry = get_provider_registry();
     LLMProvider *provider = detect_provider_for_url(registry, "https://chatgpt.com/backend-api/codex/responses");
@@ -547,7 +770,10 @@ int main(void) {
     RUN_TEST(test_codex_build_streaming_request);
     RUN_TEST(test_codex_parse_stream_text_delta);
     RUN_TEST(test_codex_parse_stream_completed);
-    RUN_TEST(test_codex_parse_stream_tool_call);
+    RUN_TEST(test_codex_parse_stream_tool_call_full_sequence);
+    RUN_TEST(test_codex_parse_stream_tool_call_done_only);
+    RUN_TEST(test_codex_parse_stream_multiple_tool_calls);
+    RUN_TEST(test_codex_parse_stream_tool_call_done_without_added);
     RUN_TEST(test_codex_parse_stream_done_sentinel);
     RUN_TEST(test_codex_parse_stream_null_empty);
     RUN_TEST(test_codex_parse_stream_error_events);
@@ -556,6 +782,8 @@ int main(void) {
     RUN_TEST(test_codex_build_request_tool_calls_null_content);
     RUN_TEST(test_codex_build_request_multiple_tool_calls);
     RUN_TEST(test_codex_build_request_full_tool_roundtrip);
+    RUN_TEST(test_codex_build_request_empty_user_message_omitted);
+    RUN_TEST(test_codex_build_request_null_user_message_omitted);
     RUN_TEST(test_codex_build_request_tool_calls_parse_failure);
     RUN_TEST(test_codex_build_request_with_tool_result);
     return UNITY_END();

@@ -95,6 +95,13 @@ def shell(command: str, working_dir: str = None, timeout: int = 30,
     start = time.time()
     timed_out = False
 
+    # Build a clean environment for child processes.
+    # Scaffold's embedded Python sets PYTHONHOME=/zip which breaks any
+    # system Python invoked by the agent (e.g. `python -m pytest`).
+    import os as _os
+    clean_env = {k: v for k, v in _os.environ.items()
+                 if k not in ("PYTHONHOME", "PYTHONDONTWRITEBYTECODE")}
+
     try:
         result = subprocess.run(
             command,
@@ -102,7 +109,8 @@ def shell(command: str, working_dir: str = None, timeout: int = 30,
             cwd=working_dir,
             capture_output=True,
             text=True,
-            timeout=timeout
+            timeout=timeout,
+            env=clean_env,
         )
 
         stdout = result.stdout

@@ -1,3 +1,6 @@
+#define LOG_MODULE     LOG_MOD_LLM
+#define LOG_MODULE_STR "llm"
+#include "../../util/log.h"
 #include "codex_provider.h"
 #include "../llm_provider.h"
 #include "../../network/api_common.h"
@@ -137,8 +140,8 @@ static char *codex_build_request_json(const LLMProvider *provider,
         }
     }
 
-    /* Add current user message */
-    if (user_message) {
+    /* Add current user message (skip empty strings from iterative loop) */
+    if (user_message && user_message[0] != '\0') {
         cJSON *msg = cJSON_CreateObject();
         cJSON_AddStringToObject(msg, "role", "user");
         cJSON_AddStringToObject(msg, "content", user_message);
@@ -290,25 +293,89 @@ static int codex_parse_stream_event(const LLMProvider *provider,
     }
 
     const char *event_type = type->valuestring;
+    LOG_DEBUG("Codex stream event: %s", event_type);
 
     if (strcmp(event_type, "response.output_text.delta") == 0) {
         cJSON *delta = cJSON_GetObjectItem(root, "delta");
         if (delta && cJSON_IsString(delta)) {
             streaming_emit_text(ctx, delta->valuestring, strlen(delta->valuestring));
         }
-    } else if (strcmp(event_type, "response.function_call_arguments.delta") == 0) {
-        cJSON *delta = cJSON_GetObjectItem(root, "delta");
-        cJSON *call_id = cJSON_GetObjectItem(root, "call_id");
-        cJSON *name = cJSON_GetObjectItem(root, "name");
-
-        /* If we have a name, this is the start of a new tool call */
-        if (name && cJSON_IsString(name) && call_id && cJSON_IsString(call_id)) {
-            streaming_emit_tool_start(ctx, call_id->valuestring, name->valuestring);
+    } else if (strcmp(event_type, "response.output_item.added") == 0) {
+        /* The Responses API sends tool name + call_id in this event,
+         * NOT in function_call_arguments.delta. */
+        cJSON *item = cJSON_GetObjectItem(root, "item");
+        if (item) {
+            cJSON *item_type = cJSON_GetObjectItem(item, "type");
+            if (item_type && cJSON_IsString(item_type) &&
+                strcmp(item_type->valuestring, "function_call") == 0) {
+                cJSON *call_id = cJSON_GetObjectItem(item, "call_id");
+                cJSON *name = cJSON_GetObjectItem(item, "name");
+                if (call_id && cJSON_IsString(call_id) &&
+                    name && cJSON_IsString(name)) {
+                    streaming_emit_tool_start(ctx, call_id->valuestring,
+                                               name->valuestring);
+                }
+            }
         }
-
-        if (delta && cJSON_IsString(delta) && call_id && cJSON_IsString(call_id)) {
-            streaming_emit_tool_delta(ctx, call_id->valuestring,
-                                       delta->valuestring, strlen(delta->valuestring));
+    } else if (strcmp(event_type, "response.function_call_arguments.delta") == 0) {
+        /* Responses API uses item_id (not call_id) in delta events.
+         * Since events are sequential per-tool, use current_tool_index
+         * to resolve the stored call_id for the streaming layer. */
+        cJSON *delta = cJSON_GetObjectItem(root, "delta");
+        if (delta && cJSON_IsString(delta) &&
+            ctx->current_tool_index >= 0 &&
+            (size_t)ctx->current_tool_index < ctx->tool_uses.count) {
+            const char *tool_id = ctx->tool_uses.data[ctx->current_tool_index].id;
+            if (tool_id) {
+                streaming_emit_tool_delta(ctx, tool_id,
+                                           delta->valuestring, strlen(delta->valuestring));
+            }
+        }
+    } else if (strcmp(event_type, "response.function_call_arguments.done") == 0) {
+        /* Complete arguments — replace whatever deltas accumulated (or fill
+         * in if deltas were empty).  Uses current_tool_index like delta. */
+        cJSON *arguments = cJSON_GetObjectItem(root, "arguments");
+        if (arguments && cJSON_IsString(arguments) &&
+            ctx->current_tool_index >= 0 &&
+            (size_t)ctx->current_tool_index < ctx->tool_uses.count) {
+            const char *tool_id = ctx->tool_uses.data[ctx->current_tool_index].id;
+            if (tool_id) {
+                streaming_replace_tool_arguments(ctx, tool_id,
+                                                  arguments->valuestring);
+            }
+        }
+    } else if (strcmp(event_type, "response.output_item.done") == 0) {
+        /* Authoritative source for complete tool call data.
+         * The Codex subscription API sends item_id (not call_id) in
+         * function_call_arguments events, so delta accumulation may fail.
+         * This event delivers the final item with all fields populated. */
+        cJSON *item = cJSON_GetObjectItem(root, "item");
+        if (item) {
+            cJSON *item_type = cJSON_GetObjectItem(item, "type");
+            if (item_type && cJSON_IsString(item_type) &&
+                strcmp(item_type->valuestring, "function_call") == 0) {
+                cJSON *call_id = cJSON_GetObjectItem(item, "call_id");
+                cJSON *name = cJSON_GetObjectItem(item, "name");
+                cJSON *arguments = cJSON_GetObjectItem(item, "arguments");
+                if (call_id && cJSON_IsString(call_id) &&
+                    name && cJSON_IsString(name)) {
+                    /* If tool wasn't registered by output_item.added, register now */
+                    int found = 0;
+                    for (size_t i = 0; i < ctx->tool_uses.count; i++) {
+                        if (ctx->tool_uses.data[i].id &&
+                            strcmp(ctx->tool_uses.data[i].id, call_id->valuestring) == 0) {
+                            found = 1;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        streaming_emit_tool_start(ctx, call_id->valuestring,
+                                                   name->valuestring);
+                    }
+                    streaming_replace_tool_arguments(ctx, call_id->valuestring,
+                        arguments && cJSON_IsString(arguments) ? arguments->valuestring : "{}");
+                }
+            }
         }
     } else if (strcmp(event_type, "response.completed") == 0) {
         /* Extract usage from the completed event */

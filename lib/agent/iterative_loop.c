@@ -4,6 +4,8 @@
 
 #include "iterative_loop.h"
 #include "api_round_trip.h"
+#include "streaming_handler.h"
+#include "message_dispatcher.h"
 #include "tool_batch_executor.h"
 #include "conversation_state.h"
 #include "tool_orchestration.h"
@@ -53,7 +55,16 @@ int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx) {
 
         LLMRoundTripResult rt;
         LOG_DEBUG("Making API request for tool loop iteration %d", loop_count);
-        if (api_round_trip_execute(session, "", iteration_max_tokens, &rt) != 0) {
+
+        DispatchDecision dispatch = message_dispatcher_select_mode(session);
+        int rt_rc;
+        if (dispatch.mode == DISPATCH_STREAMING && dispatch.provider != NULL) {
+            rt_rc = streaming_round_trip_execute(session, dispatch.provider,
+                                                  "", iteration_max_tokens, &rt);
+        } else {
+            rt_rc = api_round_trip_execute(session, "", iteration_max_tokens, &rt);
+        }
+        if (rt_rc != 0) {
             return -1;
         }
 

@@ -458,6 +458,14 @@ def retrieve_results(
     local_output_dir: str,
 ) -> None:
     """Download predictions and evaluation results from the droplet."""
+    import shutil
+
+    # Remove stale results from previous runs so old files don't linger
+    for subdir in ("scaffold_logs", "results", "eval_logs"):
+        stale = os.path.join(local_output_dir, subdir)
+        if os.path.isdir(stale):
+            shutil.rmtree(stale)
+
     os.makedirs(local_output_dir, exist_ok=True)
 
     print(f"\n[results] Retrieving results to {local_output_dir}/...")
@@ -758,7 +766,7 @@ def main() -> None:
 
         # 8. Run benchmark (generate predictions) — always in debug mode
         run_benchmark(
-            ip, key_path, args.benchmark, args.model,
+            ip, key_path, args.benchmark, effective_model,
             instance_ids, args.max_instances, args.timeout,
             local_output_dir=args.output,
         )

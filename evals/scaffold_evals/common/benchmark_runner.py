@@ -7,7 +7,6 @@ import json
 import sys
 import traceback
 from pathlib import Path
-from typing import Callable
 
 from scaffold_evals.common.config import load_config
 from scaffold_evals.common.instance_loader import load_instances, setup_repo
@@ -23,8 +22,6 @@ def run_patch_instance(
     timeout: int,
     env_vars: dict[str, str],
     benchmark_name: str,
-    message: str,
-    prompt_builder: Callable[[str], str],
     scaffold_home: Path | None = None,
     debug: bool = False,
 ) -> dict:
@@ -38,13 +35,11 @@ def run_patch_instance(
     repo_dir = setup_repo(instance, workdir)
 
     issue_text = instance.get("problem_statement", "")
-    system_prompt = prompt_builder(issue_text)
 
     home_dir = workdir / "homes" / instance_id.replace("/", "__")
     result = run_scaffold(
-        message=message,
+        message=issue_text,
         working_dir=repo_dir,
-        system_prompt=system_prompt,
         scaffold_binary=scaffold_binary,
         model=model,
         home_dir=home_dir,
@@ -85,8 +80,6 @@ def run_patch_benchmark(
     default_dataset: str,
     default_timeout: int,
     default_workdir: str,
-    message: str,
-    prompt_builder: Callable[[str], str],
 ) -> None:
     """Main entry point for patch-based benchmarks (swebench/feabench)."""
     parser = argparse.ArgumentParser(
@@ -150,8 +143,6 @@ def run_patch_benchmark(
                 timeout=args.timeout,
                 env_vars=config.env_vars,
                 benchmark_name=benchmark_name,
-                message=message,
-                prompt_builder=prompt_builder,
                 scaffold_home=scaffold_home,
                 debug=args.debug,
             )

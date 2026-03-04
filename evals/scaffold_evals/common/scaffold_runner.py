@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import subprocess
-import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -36,7 +34,6 @@ def _sync_auth(scaffold_home: Path, instance_home: Path) -> None:
 def run_scaffold(
     message: str,
     working_dir: Path,
-    system_prompt: str,
     scaffold_binary: str = "out/scaffold",
     model: str | None = None,
     home_dir: Path | None = None,
@@ -47,26 +44,16 @@ def run_scaffold(
 ) -> ScaffoldResult:
     """Invoke scaffold binary in single-shot JSON mode.
 
-    Writes system prompt to a temp file (scaffold reads and unlinks it),
-    runs the binary, and parses JSONL output.
+    Uses scaffold's built-in system prompt. The message is passed as
+    the user message (typically the issue/feature description).
 
     If scaffold_home is provided, OAuth credentials (oauth2.db) are copied
     from it into home_dir so the instance can reuse an existing login.
     """
-    # Write system prompt to temp file
-    fd, prompt_path = tempfile.mkstemp(suffix=".txt", prefix="scaffold_prompt_")
-    try:
-        with os.fdopen(fd, "w") as f:
-            f.write(system_prompt)
-    except Exception:
-        os.close(fd)
-        raise
-
     cmd = [
         "bash", str(scaffold_binary),
         "--json",
         "--yolo",
-        "--system-prompt-file", prompt_path,
     ]
 
     if debug:
@@ -100,9 +87,6 @@ def run_scaffold(
         )
     except Exception:
         raise
-    finally:
-        # Clean up temp file if scaffold didn't get to it
-        Path(prompt_path).unlink(missing_ok=True)
 
     return _parse_output(proc)
 

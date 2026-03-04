@@ -49,8 +49,21 @@ def load_config(config_path: Path | None = None) -> EvalConfig:
     config.anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", raw.get("anthropic_api_key", ""))
     config.github_token = os.environ.get("GITHUB_TOKEN", raw.get("github_token", ""))
 
-    # Build env vars dict for subprocess
-    config.env_vars = {k: v for k, v in os.environ.items()}
+    # Build env vars dict for subprocess.
+    # Strip venv variables so the eval harness's own venv doesn't leak into
+    # scaffold's child processes (the agent's shell tool would resolve `python`
+    # to the harness venv interpreter instead of the system Python).
+    venv_dir = os.environ.get("VIRTUAL_ENV", "")
+    config.env_vars = {}
+    for k, v in os.environ.items():
+        if k in ("VIRTUAL_ENV", "PYTHONHOME", "PYTHONDONTWRITEBYTECODE"):
+            continue
+        if k == "PATH" and venv_dir:
+            v = os.pathsep.join(
+                p for p in v.split(os.pathsep)
+                if not p.startswith(venv_dir)
+            )
+        config.env_vars[k] = v
     if config.openai_api_key:
         config.env_vars["OPENAI_API_KEY"] = config.openai_api_key
     if config.anthropic_api_key:
