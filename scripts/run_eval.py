@@ -235,18 +235,44 @@ def ssh_run(
     key_path: str,
     cmd: str,
     check: bool = True,
+    log_path: str | None = None,
 ) -> int:
     """Run a command over SSH, streaming output to local terminal.
 
     Environment variables are sourced from /root/.eval_env on the droplet
     (written by upload_env_file), keeping secrets out of process args.
+
+    If log_path is provided, output is tee'd to the file while still streaming
+    to the terminal.
     """
     prefixed = f"[ -f /root/.eval_env ] && . /root/.eval_env; {cmd}"
     full_cmd = ["ssh", *_ssh_opts(key_path), f"root@{ip}", prefixed]
-    result = subprocess.run(full_cmd)
-    if check and result.returncode != 0:
-        raise subprocess.CalledProcessError(result.returncode, cmd)
-    return result.returncode
+
+    if log_path:
+        parent = os.path.dirname(log_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        with open(log_path, "w", buffering=1) as log_file:
+            proc = subprocess.Popen(
+                full_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            )
+            try:
+                for line in iter(proc.stdout.readline, b""):
+                    decoded = line.decode("utf-8", errors="replace")
+                    sys.stdout.write(decoded)
+                    sys.stdout.flush()
+                    log_file.write(decoded)
+            finally:
+                proc.stdout.close()
+                proc.wait()
+            returncode = proc.returncode
+    else:
+        result = subprocess.run(full_cmd)
+        returncode = result.returncode
+
+    if check and returncode != 0:
+        raise subprocess.CalledProcessError(returncode, cmd)
+    return returncode
 
 
 def upload_env_file(ip: str, key_path: str, env: dict[str, str]) -> None:
@@ -364,6 +390,7 @@ def run_benchmark(
     instance_ids: list[str] | None,
     max_instances: int | None,
     timeout: int | None,
+    local_output_dir: str,
 ) -> None:
     """Generate predictions on the remote droplet."""
     print(f"\n[benchmark] Running {benchmark} (model={model})...")
@@ -376,6 +403,7 @@ def run_benchmark(
         f"--model {model}",
         f"--workdir {MOUNT_POINT}/work",
         f"--output {MOUNT_POINT}/predictions.jsonl",
+        "--debug",
     ]
 
     if instance_ids:
@@ -385,8 +413,9 @@ def run_benchmark(
     if timeout is not None:
         cmd_parts.append(f"--timeout {timeout}")
 
-    ssh_run(ip, key_path, " ".join(cmd_parts))
-    print("[benchmark] Predictions complete")
+    session_log = os.path.join(local_output_dir, "session.log")
+    ssh_run(ip, key_path, " ".join(cmd_parts), log_path=session_log)
+    print(f"[benchmark] Predictions complete (session log: {session_log})")
 
 
 EVAL_DATASETS = {
@@ -727,10 +756,11 @@ def main() -> None:
         # 7. Upload env file (keeps secrets out of process args)
         upload_env_file(ip, key_path, remote_env)
 
-        # 8. Run benchmark (generate predictions)
+        # 8. Run benchmark (generate predictions) — always in debug mode
         run_benchmark(
             ip, key_path, args.benchmark, args.model,
             instance_ids, args.max_instances, args.timeout,
+            local_output_dir=args.output,
         )
 
         # 9. Score predictions

@@ -36,6 +36,7 @@ def run_question(
     timeout: int,
     env_vars: dict[str, str],
     scaffold_home: Path | None = None,
+    debug: bool = False,
 ) -> dict:
     """Run scaffold on a single Context-Bench question."""
     qid = question["id"]
@@ -57,6 +58,7 @@ def run_question(
         scaffold_home=scaffold_home,
         timeout=timeout,
         env_vars=env_vars,
+        debug=debug,
     )
 
     answer = extract_last_assistant_text(result.messages)
@@ -82,6 +84,10 @@ def main() -> None:
     parser.add_argument("--workdir", default="/tmp/eval/contextbench", help="Working directory")
     parser.add_argument("--timeout", type=int, default=300, help="Per-question timeout in seconds")
     parser.add_argument("--config", type=Path, help="TOML config file")
+    parser.add_argument(
+        "--debug", action="store_true",
+        help="Run scaffold in debug mode (enables verbose logging)",
+    )
     parser.add_argument(
         "--scaffold-home", type=Path,
         default=Path.home() / ".local" / "scaffold",
@@ -119,6 +125,7 @@ def main() -> None:
                 timeout=args.timeout,
                 env_vars=config.env_vars,
                 scaffold_home=scaffold_home,
+                debug=args.debug,
             )
             with open(output_path, "a") as f:
                 f.write(json.dumps(result) + "\n")

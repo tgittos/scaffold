@@ -26,6 +26,7 @@ def run_patch_instance(
     message: str,
     prompt_builder: Callable[[str], str],
     scaffold_home: Path | None = None,
+    debug: bool = False,
 ) -> dict:
     """Run scaffold on a patch-based benchmark instance (swebench/feabench).
 
@@ -50,6 +51,7 @@ def run_patch_instance(
         scaffold_home=scaffold_home,
         timeout=timeout,
         env_vars=env_vars,
+        debug=debug,
     )
 
     patch = extract_patch(repo_dir)
@@ -103,6 +105,10 @@ def run_patch_benchmark(
     )
     parser.add_argument("--config", type=Path, help="TOML config file")
     parser.add_argument(
+        "--debug", action="store_true",
+        help="Run scaffold in debug mode (enables verbose logging)",
+    )
+    parser.add_argument(
         "--scaffold-home", type=Path,
         default=Path.home() / ".local" / "scaffold",
         help="Scaffold home dir to sync OAuth credentials from (default: ~/.local/scaffold)",
@@ -147,6 +153,7 @@ def run_patch_benchmark(
                 message=message,
                 prompt_builder=prompt_builder,
                 scaffold_home=scaffold_home,
+                debug=args.debug,
             )
             with open(output_path, "a") as f:
                 f.write(json.dumps(prediction) + "\n")

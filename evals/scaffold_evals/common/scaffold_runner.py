@@ -43,6 +43,7 @@ def run_scaffold(
     scaffold_home: Path | None = None,
     timeout: int = 600,
     env_vars: dict[str, str] | None = None,
+    debug: bool = False,
 ) -> ScaffoldResult:
     """Invoke scaffold binary in single-shot JSON mode.
 
@@ -67,6 +68,9 @@ def run_scaffold(
         "--yolo",
         "--system-prompt-file", prompt_path,
     ]
+
+    if debug:
+        cmd.insert(2, "--debug")
 
     if model:
         cmd.extend(["--model", model])
