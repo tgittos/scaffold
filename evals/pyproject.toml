@@ -1,0 +1,26 @@
+[project]
+name = "scaffold-evals"
+version = "0.1.0"
+description = "Evaluation harness for scaffold AI agent"
+requires-python = ">=3.10"
+dependencies = [
+    "datasets>=2.14",
+    "tomli>=2.0; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+swebench = ["swebench>=2.1"]
+feabench = ["swebench>=2.1"]
+contextbench = []
+
+[project.scripts]
+scaffold-eval-swebench = "scaffold_evals.swebench.runner:main"
+scaffold-eval-feabench = "scaffold_evals.feabench.runner:main"
+scaffold-eval-contextbench = "scaffold_evals.contextbench.runner:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["scaffold_evals"]

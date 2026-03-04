@@ -41,7 +41,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 #### `lib/agent/` - Agent Abstraction and Session Management
 - **`agent.c/h`** - Agent lifecycle management, mode selection (interactive/background/worker), configuration. `AgentConfig` includes `supervisor_phase` field (default -1 = auto-detect from goal status)
 - **`session.c/h`** - Thin coordinator delegating to extracted modules below, `SESSION_CONTEXT_FULL` (-3) return code for context pressure propagation
-- **`session_configurator.c/h`** - Configuration loading: API settings, type detection (including Codex URL), OAuth credential injection for Codex with credential provider registration for session-level token refresh, system prompt, context window
+- **`session_configurator.c/h`** - Configuration loading: API settings, type detection (including Codex URL), OAuth credential injection for Codex with credential provider registration for session-level token refresh, system prompt, context window. Supports `CODEX_API_KEY`/`CODEX_ACCOUNT_ID` env vars as alternative to oauth2.db (enables portable Codex auth for eval pipeline)
 - **`message_dispatcher.c/h`** - Dispatch path selection (streaming vs buffered) based on provider capabilities
 - **`message_processor.c/h`** - Buffered (non-streaming) response handling and tool call extraction
 - **`api_round_trip.c/h`** - Single LLM request-response cycle (payload build, HTTP, parse)
@@ -467,6 +467,30 @@ Centralized configuration:
 4. **LLM Integration**: Extend providers in `lib/llm/providers/` or models in `lib/llm/models/`
 5. **Python Tools**: Add to `src/tools/python_defaults/` or user's `~/.local/scaffold/tools/`
 6. **Testing**: Every module has corresponding tests in the `test/` directory structure
+
+## Evaluation Harness (`evals/`)
+
+A Python project (`uv`-managed) that measures scaffold's performance on coding benchmarks by invoking the C binary via `subprocess` in single-shot mode.
+
+### Benchmarks
+- **SWE-bench Verified** (500 instances) — Fix real GitHub issues, produce patches, run SWE-bench evaluation harness
+- **FEA-Bench** (1,401 instances) — Implement features in real repos, same patch format as SWE-bench
+- **Context-Bench** (Letta) — Answer questions by chaining file reads and searches
+
+### Structure
+- **`scaffold_evals/common/`** — Shared utilities: config loading, scaffold binary invocation + JSONL parsing, git patch extraction, HuggingFace dataset loading + repo setup
+- **`scaffold_evals/swebench/`** — SWE-bench runner, prompt builder, evaluation wrapper
+- **`scaffold_evals/feabench/`** — FEA-bench runner and prompt builder
+- **`scaffold_evals/contextbench/`** — Context-bench runner and prompt builder
+- **`prompts/`** — System prompt templates for each benchmark
+
+### How It Works
+Each benchmark instance invokes scaffold as: `out/scaffold --json --yolo --system-prompt-file <prompt> --home <isolated_dir> --model <model> "<message>"` with `cwd` set to the target repo. The harness parses JSONL output, extracts patches via `git diff`, and writes predictions in the format expected by upstream evaluation tools.
+
+### Entry Points
+- `scaffold-eval-swebench` — SWE-bench runner CLI
+- `scaffold-eval-feabench` — FEA-bench runner CLI
+- `scaffold-eval-contextbench` — Context-bench runner CLI
 
 ## Build System
 

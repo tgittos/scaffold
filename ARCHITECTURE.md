@@ -1457,3 +1457,30 @@ lib/
 └── workflow/               # Task queue
     └── workflow.c/h        # SQLite-backed work queue (workers spawned via subagent system)
 ```
+
+### Evaluation Harness
+
+```
+evals/                         # Evaluation harness (Python, uv-managed)
+├── pyproject.toml             # Package definition with per-benchmark extras
+├── prompts/                   # System prompt templates
+│   ├── swebench_system.txt    # SWE-bench bug-fix prompt
+│   ├── feabench_system.txt    # FEA-bench feature implementation prompt
+│   └── contextbench_system.txt # Context-bench information retrieval prompt
+└── scaffold_evals/            # Python package
+    ├── common/                # Shared utilities
+    │   ├── config.py          # TOML config + env var overrides
+    │   ├── scaffold_runner.py # Invoke scaffold binary, parse JSONL output
+    │   ├── patch_extractor.py # git add -A && git diff --cached
+    │   └── instance_loader.py # HuggingFace dataset loading + repo setup
+    ├── swebench/              # SWE-bench Verified (500 instances)
+    │   ├── runner.py          # CLI entry point: load, run, extract patches
+    │   ├── prompt.py          # System prompt builder
+    │   └── evaluate.py        # Wrapper around swebench.harness.run_evaluation
+    ├── feabench/              # FEA-Bench (1,401 instances)
+    │   ├── runner.py          # CLI entry point (900s timeout)
+    │   └── prompt.py          # Feature implementation prompt builder
+    └── contextbench/          # Context-Bench (Letta)
+        ├── runner.py          # CLI entry point (question answering)
+        └── prompt.py          # Information retrieval prompt builder
+```

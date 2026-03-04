@@ -89,7 +89,22 @@ int session_configurator_load(AgentSession* session) {
         if (session->session_data.config.api_key == NULL) return -1;
     }
 
-    if (is_codex_url(session->session_data.config.api_url)) {
+    const char *env_codex_key = getenv("CODEX_API_KEY");
+    if (env_codex_key) {
+        const char *env_account_id = getenv("CODEX_ACCOUNT_ID");
+        free(session->session_data.config.api_key);
+        session->session_data.config.api_key = strdup(env_codex_key);
+        if (env_account_id) {
+            codex_set_account_id(env_account_id);
+        }
+        if (!is_codex_url(session->session_data.config.api_url)) {
+            free(session->session_data.config.api_url);
+            session->session_data.config.api_url =
+                strdup("https://" CODEX_URL_PATTERN "/responses");
+        }
+        debug_printf("Using CODEX_API_KEY env var for Codex API (account: %s)\n",
+                     env_account_id ? env_account_id : "none");
+    } else if (is_codex_url(session->session_data.config.api_url)) {
         char *db = app_home_path("oauth2.db");
         if (db) {
             if (!openai_is_logged_in(db)) {

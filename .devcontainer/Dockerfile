@@ -24,6 +24,8 @@ RUN touch ~/.bashrc && chmod +x ~/.bashrc
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
 RUN . ~/.nvm/nvm.sh && . ~/.bashrc && nvm install node && npm i -g @anthropic-ai/claude-code
 
+RUN curl -sL "https://github.com/digitalocean/doctl/releases/download/v1.151.0/doctl-1.151.0-linux-amd64.tar.gz" | tar xz -C /usr/local/bin
+
 RUN wget https://cosmo.zip/pub/cosmocc/cosmocc-4.0.2.zip && \
     unzip cosmocc-4.0.2.zip -d /opt/cosmos && \
     rm cosmocc-4.0.2.zip

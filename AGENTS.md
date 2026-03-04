@@ -59,7 +59,16 @@ source .env && out/scaffold --yolo "your message"
 | `--home <path>` | Override home directory (default: `~/.local/scaffold`) |
 | `--login` | Log in to OpenAI via OAuth (ChatGPT subscription) |
 | `--logout` | Log out of OpenAI OAuth session |
+| `--export-codex-token` | Print Codex OAuth token as JSON and exit (hidden; for eval pipeline) |
 | `--phase plan\|execute` | Set supervisor phase (default: auto-detect from goal status) |
+
+### Codex Token Portability
+
+OAuth tokens in `oauth2.db` are encrypted with a host-specific key (salt + uid + hostname), making them non-portable across machines. For the eval pipeline:
+
+- **`--export-codex-token`**: Decrypts and prints `{"token":"...","account_id":"..."}` to stdout. Run locally where the tokens were created.
+- **`CODEX_API_KEY`**: When set, scaffold uses this as the Codex API token instead of oauth2.db. Also sets the API URL to the Codex endpoint automatically.
+- **`CODEX_ACCOUNT_ID`**: Paired with `CODEX_API_KEY` to set the Codex account context.
 
 ## Development Environment
 

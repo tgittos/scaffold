@@ -150,6 +150,7 @@ This is possible because it's written in C and compiled with [Cosmopolitan](http
 | [MCP Servers](docs/mcp.md) | Connecting external tool servers via Model Context Protocol |
 | [Plugins](docs/plugins.md) | Building and installing plugins with the JSON-RPC 2.0 protocol |
 | [CLI Reference](docs/cli-reference.md) | Complete command-line flag reference |
+| [Evaluations](docs/evals.md) | Benchmarking scaffold on SWE-bench, FEA-Bench, and Context-Bench |
 | [Building from Source](docs/building-from-source.md) | Compiling, testing, and debugging |
 
 ---

@@ -15,6 +15,8 @@
 #include "../../lib/util/app_home.h"
 #include "../../lib/util/config.h"
 #include "../../lib/auth/openai_login.h"
+#include "../../lib/db/oauth2_store.h"
+#include <mbedtls/platform_util.h>
 #include "../tools/python_extension.h"
 #include "build/version.h"
 
@@ -131,6 +133,7 @@ int main(int argc, char *argv[]) {
     int update_flag = 0;
     int login_flag = 0;
     int logout_flag = 0;
+    int export_codex_token_flag = 0;
     const char *home_dir_override = NULL;
 
     for (int i = 1; i < argc; i++) {
@@ -153,6 +156,9 @@ int main(int argc, char *argv[]) {
         }
         if (strcmp(argv[i], "--logout") == 0) {
             logout_flag = 1;
+        }
+        if (strcmp(argv[i], "--export-codex-token") == 0) {
+            export_codex_token_flag = 1;
         }
         if (strcmp(argv[i], "--home") == 0 && i + 1 < argc) {
             home_dir_override = argv[i + 1];
@@ -184,6 +190,38 @@ int main(int argc, char *argv[]) {
         free(db);
         app_home_cleanup();
         return rc == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
+    if (export_codex_token_flag) {
+        app_home_set_app_name("scaffold");
+        app_home_init(home_dir_override);
+        app_home_ensure_exists();
+        char *db = app_home_path("oauth2.db");
+        if (!db) {
+            fprintf(stderr, "Error: Could not resolve oauth2.db path\n");
+            app_home_cleanup();
+            return EXIT_FAILURE;
+        }
+        if (!openai_is_logged_in(db)) {
+            fprintf(stderr, "Error: Not logged in. Run: scaffold --login\n");
+            free(db);
+            app_home_cleanup();
+            return EXIT_FAILURE;
+        }
+        char token[OAUTH2_MAX_TOKEN_LEN] = {0};
+        char account_id[OAUTH2_MAX_ACCOUNT_ID_LEN] = {0};
+        if (openai_get_codex_credentials(db, token, sizeof(token),
+                                          account_id, sizeof(account_id)) != 0) {
+            fprintf(stderr, "Error: Failed to retrieve Codex credentials\n");
+            free(db);
+            app_home_cleanup();
+            return EXIT_FAILURE;
+        }
+        printf("{\"token\":\"%s\",\"account_id\":\"%s\"}\n", token, account_id);
+        mbedtls_platform_zeroize(token, sizeof(token));
+        free(db);
+        app_home_cleanup();
+        return EXIT_SUCCESS;
     }
 
     if (check_update_flag || update_flag) {
