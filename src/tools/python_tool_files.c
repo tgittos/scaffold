@@ -22,15 +22,12 @@ static int tool_files_initialized = 0;
 static const char *DEFAULT_TOOL_NAMES[] = {
     "read_file",
     "write_file",
-    "append_file",
     "list_dir",
     "search_files",
-    "file_info",
     "apply_patch",
     "shell",
     "web_fetch",
-    "pip_install",
-    "pip_list",
+    "pip",
     NULL
 };
 

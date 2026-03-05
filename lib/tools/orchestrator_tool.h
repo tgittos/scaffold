@@ -14,5 +14,6 @@ int execute_goal_status(const ToolCall *tc, ToolResult *result);
 int execute_start_goal(const ToolCall *tc, ToolResult *result);
 int execute_pause_goal(const ToolCall *tc, ToolResult *result);
 int execute_cancel_goal(const ToolCall *tc, ToolResult *result);
+int execute_orchestrator_dispatch(const ToolCall *tc, ToolResult *result);
 
 #endif /* ORCHESTRATOR_TOOL_H */

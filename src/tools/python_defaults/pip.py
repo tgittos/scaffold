@@ -1,7 +1,6 @@
-"""Install pure-Python packages from PyPI.
+"""Package management: install pure-Python packages or list installed packages.
 
 Gate: network
-Match: package
 """
 
 import os
@@ -13,7 +12,27 @@ import zipfile
 _MAX_DEPTH = 10
 
 
-def pip_install(package: str, version: str = None, force: bool = False) -> dict:
+def pip(action: str = "install", package: str = None, version: str = None, force: bool = False) -> dict:
+    """Manage pure-Python packages in scaffold's internal interpreter.
+
+    Args:
+        action: "install" to install a package, "list" to list installed packages
+        package: Package name to install (required for action="install")
+        version: Specific version to install (default: latest, only for install)
+        force: Force reinstall even if already installed (only for install)
+
+    Returns:
+        Dictionary with results
+    """
+    if action == "install":
+        return _do_install(package, version, force)
+    elif action == "list":
+        return _do_list()
+    else:
+        raise ValueError(f"Invalid action: {action} (must be 'install' or 'list')")
+
+
+def _do_install(package, version, force):
     """Install a pure-Python package into scaffold's internal interpreter.
 
     WARNING: This installs into scaffold's embedded Python, NOT the system
@@ -23,17 +42,12 @@ def pip_install(package: str, version: str = None, force: bool = False) -> dict:
         pip3 install <package>  OR  python3 -m pip install <package>
 
     Only supports pure-Python (py3-none-any) wheels. C extensions are rejected.
-
-    Args:
-        package: Package name to install (e.g. "six", "requests")
-        version: Specific version to install (default: latest)
-        force: Force reinstall even if already installed
-
-    Returns:
-        Dictionary with success status, installed packages, and any errors
     """
     import _ralph_http
     import _ralph_sys
+
+    if not package:
+        return {"success": False, "installed": [], "errors": ["Package name is required for install"]}
 
     app_home = _ralph_sys.get_app_home()
     if not app_home:
@@ -46,21 +60,6 @@ def pip_install(package: str, version: str = None, force: bool = False) -> dict:
     errors = []
     seen = set()
 
-    def _normalize(name):
-        return re.sub(r'[-_.]+', '-', name).lower()
-
-    def _is_installed(name):
-        norm = _normalize(name)
-        if not os.path.isdir(site_packages):
-            return False
-        for entry in os.listdir(site_packages):
-            if entry.endswith(".dist-info"):
-                dist_name = _name_from_dist_info(
-                    os.path.join(site_packages, entry))
-                if dist_name and _normalize(dist_name) == norm:
-                    return True
-        return False
-
     def _install_one(name, ver=None, depth=0):
         if depth > _MAX_DEPTH:
             errors.append(f"Dependency depth limit exceeded for '{name}'")
@@ -71,7 +70,7 @@ def pip_install(package: str, version: str = None, force: bool = False) -> dict:
             return
         seen.add(norm)
 
-        if not force and _is_installed(name):
+        if not force and _is_installed(name, site_packages):
             return
 
         simple_url = f"https://pypi.org/simple/{name}/"
@@ -119,6 +118,64 @@ def pip_install(package: str, version: str = None, force: bool = False) -> dict:
     }
 
 
+def _do_list():
+    """List all installed pure-Python packages."""
+    import _ralph_sys
+
+    app_home = _ralph_sys.get_app_home()
+    if not app_home:
+        return {"packages": [], "count": 0}
+
+    site_packages = os.path.join(app_home, "site-packages")
+    if not os.path.isdir(site_packages):
+        return {"packages": [], "count": 0}
+
+    packages = []
+    for entry in sorted(os.listdir(site_packages)):
+        if not entry.endswith(".dist-info"):
+            continue
+
+        meta_path = os.path.join(site_packages, entry, "METADATA")
+        name = None
+        version = None
+
+        if os.path.exists(meta_path):
+            with open(meta_path, 'r', encoding='utf-8', errors='replace') as f:
+                for line in f:
+                    if line.startswith("Name:"):
+                        name = line.split(":", 1)[1].strip()
+                    elif line.startswith("Version:"):
+                        version = line.split(":", 1)[1].strip()
+                    if name and version:
+                        break
+
+        if name:
+            packages.append({
+                "name": name,
+                "version": version or "unknown",
+                "location": site_packages
+            })
+
+    return {"packages": packages, "count": len(packages)}
+
+
+def _normalize(name):
+    return re.sub(r'[-_.]+', '-', name).lower()
+
+
+def _is_installed(name, site_packages):
+    norm = _normalize(name)
+    if not os.path.isdir(site_packages):
+        return False
+    for entry in os.listdir(site_packages):
+        if entry.endswith(".dist-info"):
+            dist_name = _name_from_dist_info(
+                os.path.join(site_packages, entry))
+            if dist_name and _normalize(dist_name) == norm:
+                return True
+    return False
+
+
 def _safe_extractall(zf, dest, errors):
     """Extract zip contents after validating all paths stay within dest."""
     real_dest = os.path.realpath(dest)
@@ -157,7 +214,7 @@ def _find_best_wheel(html, package_name, target_version):
         if not (py_tag.startswith("py3") or py_tag.startswith("py2.py3")):
             continue
 
-        # name_version is "{name}-{version}" — split at last hyphen for version
+        # name_version is "{name}-{version}" -- split at last hyphen for version
         nv_parts = name_version.rsplit("-", 1)
         if len(nv_parts) != 2:
             continue

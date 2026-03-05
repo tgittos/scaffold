@@ -90,7 +90,7 @@ void test_execute_plan(void) {
     TEST_ASSERT_NOT_NULL(inst);
     TEST_ASSERT_NOT_NULL(strstr(inst, "DECOMPOSITION MODE"));
     TEST_ASSERT_NOT_NULL(strstr(inst, "Twitter clone"));
-    TEST_ASSERT_NOT_NULL(strstr(inst, "goap_create_goal"));
+    TEST_ASSERT_NOT_NULL(strstr(inst, "create_goal"));
     TEST_ASSERT_NOT_NULL(strstr(inst, "start_goal"));
 
     cJSON_Delete(resp);

@@ -384,12 +384,12 @@ graph TB
     PythonTool --> PythonInterpreter[Embedded Python<br/>Interpreter]
 
     PythonFileTools --> DefaultTools[Default Tools<br/>python_defaults/]
-    DefaultTools --> FileOps[File Operations<br/>read/write/append/delta]
+    DefaultTools --> FileOps[File Operations<br/>read/write/apply_patch]
     DefaultTools --> ShellOp[Shell Execution<br/>shell.py]
     DefaultTools --> WebFetch[Web Fetch<br/>web_fetch.py]
     DefaultTools --> DirOps[Directory Operations<br/>list_dir.py]
     DefaultTools --> SearchOp[Search Files<br/>search_files.py]
-    DefaultTools --> PipTools[Package Management<br/>pip_install/pip_list]
+    DefaultTools --> PipTools[Package Management<br/>pip.py]
 
     SubagentTool --> ChildProcess[Child Scaffold Process<br/>fork/exec]
 
@@ -1196,63 +1196,38 @@ graph TB
 ### Python Tools (1 tool + file-based tools)
 - **`python`**: Execute arbitrary Python code with embedded interpreter
 
-### Python File Tools (11 tools loaded from `~/.local/scaffold/tools/`)
+### Python File Tools (8 tools loaded from `~/.local/scaffold/tools/`)
 - **`read_file`**: Read file contents with line numbers, returns dict with content/total_lines/range
-- **`write_file`**: Write content to file
-- **`append_file`**: Append content to file
-- **`file_info`**: Get file metadata
+- **`write_file`**: Write or append content to file (mode: "write" or "append")
 - **`list_dir`**: List directory contents with ISO timestamps
 - **`search_files`**: Search for patterns in files with optional context lines, returns matched_files and total_matches_found
 - **`apply_patch`**: Apply text patches to files using a unified-diff-like format
 - **`shell`**: Execute shell commands
 - **`web_fetch`**: Fetch web content
-- **`pip_install`**: Install pure-Python packages from PyPI (py3-none-any wheels only)
-- **`pip_list`**: List installed Python packages from site-packages
+- **`pip`**: Package management (action: "install" or "list") — install pure-Python packages from PyPI or list installed packages
 
 ### Subagent Tools (2 tools)
 - **`subagent`**: Spawn a child scaffold process for parallel task execution
 - **`subagent_status`**: Query the status of a running subagent
 
-### Messaging Tools (6 tools)
-- **`get_agent_info`**: Get current agent ID and parent information
-- **`send_message`**: Send a direct message to another agent
-- **`check_messages`**: Check for and receive pending direct messages
-- **`subscribe_channel`**: Subscribe to a pub/sub channel
-- **`publish_channel`**: Publish a message to a channel
-- **`check_channel_messages`**: Receive messages from subscribed channels
+### Messaging Tool (1 dispatch tool)
+- **`messaging`**: Inter-agent messaging (operation: send_message, check_messages, subscribe_channel, publish_channel, check_channel_messages, get_agent_info)
 
 ### Todo Tools (2 tools)
 - **`TodoWrite`**: Create, update status/priority, delete, or bulk set todos
 - **`TodoRead`**: List and filter todos by status and priority
 
-### GOAP Tools (10 tools)
-- **`goap_get_goal`**: Read goal details (description, goal state, world state, status, plan_document)
-- **`goap_list_actions`**: List actions for a goal, optionally filtered by status or parent
-- **`goap_create_goal`**: Create a new goal with goal state assertions; optional `persistent` flag promotes to ACTIVE immediately
-- **`goap_create_actions`**: Batch-create actions with preconditions and effects
-- **`goap_update_action`**: Update action status and result
-- **`goap_dispatch_action`**: Dispatch primitive action to worker (enqueue + spawn)
-- **`goap_update_world_state`**: Merge boolean assertions into goal's world state; optional `summary` for progress notes
-- **`goap_check_complete`**: Check if world_state satisfies goal_state
-- **`goap_get_action_results`**: Read completed action results (truncated for context safety)
-- **`goap_save_plan_document`**: Save a plan document to a goal for persistent plan guidance
+### GOAP Tool (1 dispatch tool)
+- **`goap`**: Goal/action management for supervisors (operation: get_goal, list_actions, create_goal, create_actions, update_action, dispatch_action, update_world_state, check_complete, get_action_results, save_plan_document)
 
-### Orchestrator Tools (6 tools)
-- **`execute_plan`**: Decompose a plan into GOAP goals and actions with decomposition instructions
-- **`list_goals`**: List all goals with status and world state progress
-- **`goal_status`**: Detailed goal view (world state, action tree, supervisor info)
-- **`start_goal`**: Activate a goal and spawn its supervisor process
-- **`pause_goal`**: Pause a goal by stopping its supervisor
-- **`cancel_goal`**: Cancel a goal by killing its supervisor
+### Orchestrator Tool (1 dispatch tool)
+- **`orchestrator`**: Orchestrator lifecycle management (operation: execute_plan, list_goals, goal_status, start_goal, pause_goal, cancel_goal)
 
 ### Mode Tools (1 tool)
 - **`switch_mode`**: Switch behavioral prompt mode (plan, explore, debug, review, default)
 
-### Vector Database Tools (13 tools)
-- **Index Management**: `vector_db_create_index`, `vector_db_delete_index`, `vector_db_list_indices`
-- **Vector Operations**: `vector_db_add_vector`, `vector_db_update_vector`, `vector_db_delete_vector`, `vector_db_get_vector`
-- **Search Operations**: `vector_db_search`, `vector_db_search_text`, `vector_db_search_by_time`
-- **Text Operations**: `vector_db_add_text`, `vector_db_add_chunked_text`, `vector_db_add_pdf_document`
+### Vector Database Tool (1 dispatch tool)
+- **`vector_db`**: Vector database operations (operation: create_index, delete_index, list_indices, add_vector, update_vector, delete_vector, get_vector, search, add_text, add_chunked_text, add_pdf_document, search_text, search_by_time)
 
 ## Storage and Persistence
 
@@ -1278,16 +1253,13 @@ src/
 │   ├── sys_python.c/h      # Python extension for system info (_ralph_sys module)
 │   └── python_defaults/    # Default Python tool files
 │       ├── read_file.py
-│       ├── write_file.py
-│       ├── append_file.py
-│       ├── file_info.py
+│       ├── write_file.py    # Write or append (mode parameter)
 │       ├── list_dir.py
 │       ├── search_files.py
 │       ├── apply_patch.py
 │       ├── shell.py
 │       ├── web_fetch.py
-│       ├── pip_install.py
-│       └── pip_list.py
+│       └── pip.py           # Package management (action: install/list)
 lib/
 ├── libagent.h              # Public API for the agent library
 ├── types.h                 # Shared types (ToolCall, ToolResult, StreamingToolUse)
@@ -1419,12 +1391,12 @@ lib/
 │   ├── builtin_tools.c/h   # Built-in tool registration
 │   ├── memory_tool.c/h     # Semantic memory (remember, recall_memories, forget_memory)
 │   ├── pdf_tool.c/h        # PDF processing tool
-│   ├── vector_db_tool.c/h  # Vector DB operations (13 tools)
+│   ├── vector_db_tool.c/h  # Vector DB dispatch tool (1 tool, 13 operations)
 │   ├── subagent_tool.c/h   # Subagent process spawning
 │   ├── subagent_process.c/h    # Subagent I/O and lifecycle
-│   ├── messaging_tool.c/h  # Inter-agent messaging (6 tools)
-│   ├── goap_tools.c/h      # GOAP goal/action tools for supervisors (10 tools, scaffold only)
-│   ├── orchestrator_tool.c/h # Orchestrator lifecycle tools (6 tools, scaffold only)
+│   ├── messaging_tool.c/h  # Messaging dispatch tool (1 tool, 6 operations)
+│   ├── goap_tools.c/h      # GOAP dispatch tool (1 tool, 10 operations, scaffold only)
+│   ├── orchestrator_tool.c/h # Orchestrator dispatch tool (1 tool, 6 operations, scaffold only)
 │   ├── mode_tool.c/h       # LLM-callable switch_mode tool
 │   ├── tool_cache.c/h      # Thread-safe tool result caching with file mtime invalidation
 │   ├── todo_manager.c/h    # Todo data structures
@@ -1486,4 +1458,14 @@ evals/                         # Evaluation harness (Python, uv-managed)
     └── contextbench/          # Context-Bench (Letta)
         ├── runner.py          # CLI entry point (question answering)
         └── prompt.py          # Information retrieval prompt builder
+
+benchmarks/                    # Benchmark tracking data
+├── instances/
+│   └── swebench.txt           # Valid instance IDs (guard rail, one per line)
+└── results.json               # Accumulated pass/fail results per model
+
+scripts/run_eval.py            # Also handles benchmark tracking:
+                               #   --next N / --retry-failed N (instance selection)
+                               #   --render (regenerate BENCHMARKS.md scorecard)
+                               #   Auto-imports results after scoring
 ```

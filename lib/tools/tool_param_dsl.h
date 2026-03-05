@@ -66,4 +66,29 @@ int register_tools_from_defs(ToolRegistry *registry, const ToolDef *defs, int co
  */
 int count_enum_values(const char **enum_values);
 
+/*
+ * OperationDispatchEntry - Maps an operation name to a handler function.
+ * Used with dispatch_by_operation for table-driven dispatch.
+ */
+typedef struct {
+    const char *name;
+    tool_execute_func_t handler;
+} OperationDispatchEntry;
+
+/*
+ * Dispatch a tool call by its "operation" parameter.
+ *
+ * Extracts the "operation" string from tc->arguments, looks it up in the
+ * dispatch table, and calls the matching handler. On missing or unknown
+ * operation, sets an error result with details.
+ *
+ * @param tc       The tool call
+ * @param result   Output result
+ * @param table    Array of {name, handler} entries
+ * @param count    Number of entries in the table
+ * @return         Handler return code, or 0 on dispatch error
+ */
+int dispatch_by_operation(const ToolCall *tc, ToolResult *result,
+                          const OperationDispatchEntry *table, int count);
+
 #endif /* TOOL_PARAM_DSL_H */

@@ -48,8 +48,8 @@ static char *build_planner_message(AgentSession *session, const char *goal_id) {
         "Description: %s\n\n"
         "Goal state (acceptance criteria):\n%s\n\n"
         "Your job is to research and plan how to achieve this goal, then:\n"
-        "1. Decompose it into actions using goap_create_actions\n"
-        "2. Save your research findings and execution strategy using goap_save_plan_document\n\n"
+        "1. Decompose it into actions using goap(operation=\"create_actions\")\n"
+        "2. Save your research findings and execution strategy using goap(operation=\"save_plan_document\")\n\n"
         "Do NOT dispatch actions or update world state. Focus only on planning.\n"
         "When you have created actions and saved a plan document, your work is done.",
         goal->name, goal_id,
@@ -126,13 +126,13 @@ static char *build_executor_message(AgentSession *session, const char *goal_id) 
         "Current world state:\n%s\n\n"
         "Progress: %d/%d assertions satisfied.\n"
         "Actions: %d pending, %d running, %d completed, %d failed (total: %zu).\n\n"
-        "Use GOAP tools to progress this goal to completion:\n"
-        "1. Check for ready actions with goap_list_actions (status=\"pending\")\n"
-        "2. Decompose ready compound actions into children with goap_create_actions\n"
-        "3. Dispatch ready primitive actions to workers with goap_dispatch_action\n"
-        "4. When workers complete, verify their effects with goap_get_action_results\n"
-        "5. Update world state with goap_update_world_state for verified effects\n"
-        "6. Check goal completion with goap_check_complete\n\n"
+        "Use the goap tool to progress this goal to completion:\n"
+        "1. Check for ready actions with goap(operation=\"list_actions\", status=\"pending\")\n"
+        "2. Decompose ready compound actions into children with goap(operation=\"create_actions\")\n"
+        "3. Dispatch ready primitive actions to workers with goap(operation=\"dispatch_action\")\n"
+        "4. When workers complete, verify their effects with goap(operation=\"get_action_results\")\n"
+        "5. Update world state with goap(operation=\"update_world_state\") for verified effects\n"
+        "6. Check goal completion with goap(operation=\"check_complete\")\n\n"
         "Begin by examining the current state and taking the next appropriate action.",
         goal->goal_state ? goal->goal_state : "{}",
         goal->world_state ? goal->world_state : "{}",

@@ -230,8 +230,8 @@ void test_session_execute_tool_workflow_null_parameters(void) {
 
     // Initialize valid tool call for testing (use C-based tool that doesn't require Python)
     tool_calls[0].id = "test_id";
-    tool_calls[0].name = "vector_db_list_indices";
-    tool_calls[0].arguments = "{}";
+    tool_calls[0].name = "vector_db";
+    tool_calls[0].arguments = "{\"operation\":\"list_indices\"}";
 
     session_init(&session);
     session_load_config(&session);
@@ -284,8 +284,8 @@ void test_session_execute_tool_workflow_api_failure_resilience(void) {
 
     // Initialize with a C-based tool call that will succeed (doesn't require Python)
     tool_calls[0].id = "test_tool_id_123";
-    tool_calls[0].name = "vector_db_list_indices";
-    tool_calls[0].arguments = "{}";
+    tool_calls[0].name = "vector_db";
+    tool_calls[0].arguments = "{\"operation\":\"list_indices\"}";
 
     session_init(&session);
     session_load_config(&session);
@@ -294,7 +294,7 @@ void test_session_execute_tool_workflow_api_failure_resilience(void) {
     session.session_data.config.api_url = strdup("http://127.0.0.1:8888/v1/chat/completions");
 
     // Execute tool workflow - this should return 0 (success) because:
-    // 1. Tool execution succeeds (vector_db_list_indices returns list of indices)
+    // 1. Tool execution succeeds (vector_db list_indices returns list of indices)
     // 2. Tool results are added to conversation history
     // 3. Follow-up API request fails (mock server drops connection)
     // 4. Function returns 0 anyway because tools executed successfully
@@ -314,8 +314,8 @@ void test_session_execute_tool_workflow_api_failure_resilience(void) {
         if (strcmp(session.session_data.conversation.data[i].role, "tool") == 0) {
             found_tool_result = 1;
             TEST_ASSERT_EQUAL_STRING("test_tool_id_123", session.session_data.conversation.data[i].tool_call_id);
-            TEST_ASSERT_EQUAL_STRING("vector_db_list_indices", session.session_data.conversation.data[i].tool_name);
-            // vector_db_list_indices returns JSON with indices array (may be empty)
+            TEST_ASSERT_EQUAL_STRING("vector_db", session.session_data.conversation.data[i].tool_name);
+            // vector_db list_indices returns JSON with indices array (may be empty)
             TEST_ASSERT_TRUE(strstr(session.session_data.conversation.data[i].content, "indices") != NULL);
             break;
         }
@@ -401,8 +401,8 @@ void test_tool_execution_without_api_server(void) {
 
     // Setup C-based tool call that will succeed locally (doesn't require Python)
     tool_calls[0].id = "test_no_api_123";
-    tool_calls[0].name = "vector_db_list_indices";
-    tool_calls[0].arguments = "{}";
+    tool_calls[0].name = "vector_db";
+    tool_calls[0].arguments = "{\"operation\":\"list_indices\"}";
 
     session_init(&session);
     session_load_config(&session);
@@ -469,8 +469,8 @@ void test_tool_execution_with_network_timeout(void) {
 
     // Setup C-based tool call (doesn't require Python)
     tool_calls[0].id = "timeout_test_123";
-    tool_calls[0].name = "vector_db_list_indices";
-    tool_calls[0].arguments = "{}";
+    tool_calls[0].name = "vector_db";
+    tool_calls[0].arguments = "{\"operation\":\"list_indices\"}";
 
     session_init(&session);
     session_load_config(&session);
@@ -525,8 +525,8 @@ void test_tool_execution_with_auth_failure(void) {
 
     // Use C-based tool (doesn't require Python)
     tool_calls[0].id = "auth_fail_test_123";
-    tool_calls[0].name = "vector_db_list_indices";
-    tool_calls[0].arguments = "{}";
+    tool_calls[0].name = "vector_db";
+    tool_calls[0].arguments = "{\"operation\":\"list_indices\"}";
 
     session_init(&session);
     session_load_config(&session);
@@ -578,8 +578,8 @@ void test_graceful_degradation_on_api_errors(void) {
 
     // Use C-based tool (doesn't require Python)
     tool_calls[0].id = "server_error_test_123";
-    tool_calls[0].name = "vector_db_list_indices";
-    tool_calls[0].arguments = "{}";
+    tool_calls[0].name = "vector_db";
+    tool_calls[0].arguments = "{\"operation\":\"list_indices\"}";
 
     session_init(&session);
     session_load_config(&session);
@@ -656,13 +656,13 @@ void test_sequential_tool_execution(void) {
 
     // Setup first C-based tool call (doesn't require Python)
     tool_calls[0].id = "seq_test_1";
-    tool_calls[0].name = "vector_db_list_indices";
-    tool_calls[0].arguments = "{}";
+    tool_calls[0].name = "vector_db";
+    tool_calls[0].arguments = "{\"operation\":\"list_indices\"}";
 
     // Setup second C-based tool call (different tool to verify both execute)
     tool_calls[1].id = "seq_test_2";
-    tool_calls[1].name = "vector_db_list_indices";
-    tool_calls[1].arguments = "{}";
+    tool_calls[1].name = "vector_db";
+    tool_calls[1].arguments = "{\"operation\":\"list_indices\"}";
 
     session_init(&session);
     session_load_config(&session);
@@ -739,10 +739,10 @@ void test_tool_name_hardcoded_bug_fixed(void) {
     ToolCall tool_calls[1];
 
 
-    // Setup C-based tool call - this should now have tool_name "vector_db_list_indices" not "tool_name"
+    // Setup C-based tool call - this should now have tool_name "vector_db" not "tool_name"
     tool_calls[0].id = "toolu_01DdpdffBNXNqfWFDUCtY7Jc";  // Same ID from CONVERSATION.md
-    tool_calls[0].name = "vector_db_list_indices";  // This is the ACTUAL tool name that should be saved
-    tool_calls[0].arguments = "{}";
+    tool_calls[0].name = "vector_db";  // This is the ACTUAL tool name that should be saved
+    tool_calls[0].arguments = "{\"operation\":\"list_indices\"}";
 
     session_init(&session);
     session_load_config(&session);
@@ -766,8 +766,8 @@ void test_tool_name_hardcoded_bug_fixed(void) {
             found_tool_result = 1;
             printf("DEBUG: Fixed tool message has tool_name: '%s'\n", session.session_data.conversation.data[i].tool_name);
 
-            // BUG FIX VERIFICATION: tool_name should now be "vector_db_list_indices", NOT "tool_name"
-            TEST_ASSERT_EQUAL_STRING("vector_db_list_indices", session.session_data.conversation.data[i].tool_name);
+            // BUG FIX VERIFICATION: tool_name should now be "vector_db", NOT "tool_name"
+            TEST_ASSERT_EQUAL_STRING("vector_db", session.session_data.conversation.data[i].tool_name);
             TEST_ASSERT_EQUAL_STRING("toolu_01DdpdffBNXNqfWFDUCtY7Jc", session.session_data.conversation.data[i].tool_call_id);
 
             // Verify it's NOT the hardcoded bug value anymore
@@ -881,9 +881,8 @@ void test_build_anthropic_json_payload_with_tools(void) {
     // Check for tools array
     TEST_ASSERT_NOT_NULL(strstr(result, "\"tools\":["));
 
-    // Check for C-based vector_db_search tool with Anthropic format (cJSON produces no spaces after colons)
-    // Note: We use vector_db_search because it's a C-based tool that doesn't require Python
-    TEST_ASSERT_NOT_NULL(strstr(result, "\"name\":\"vector_db_search\""));
+    // Check for C-based vector_db tool with Anthropic format (cJSON produces no spaces after colons)
+    TEST_ASSERT_NOT_NULL(strstr(result, "\"name\":\"vector_db\""));
     TEST_ASSERT_NOT_NULL(strstr(result, "\"input_schema\""));
 
     // Should not have OpenAI's function wrapper

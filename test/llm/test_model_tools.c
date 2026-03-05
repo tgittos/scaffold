@@ -77,7 +77,7 @@ void test_qwen_model_tool_generation(void) {
     TEST_ASSERT_NOT_NULL(strstr(tools_json, "\"type\": \"function\""));
     TEST_ASSERT_NOT_NULL(strstr(tools_json, "\"function\""));
     // Use C-based tool that doesn't require Python
-    TEST_ASSERT_NOT_NULL(strstr(tools_json, "vector_db_search"));
+    TEST_ASSERT_NOT_NULL(strstr(tools_json, "vector_db"));
 
     free(tools_json);
 }

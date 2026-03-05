@@ -21,16 +21,13 @@ Application-specific code that uses the library layer. This is a thin wrapper ar
 
 ##### Python Default Tools (in `python_defaults/`)
 - **`read_file.py`** - Read file contents with line numbers, returns dict with content/total_lines/range
-- **`write_file.py`** - Write content to file
-- **`append_file.py`** - Append content to file
-- **`file_info.py`** - Get file metadata
+- **`write_file.py`** - Write or append content to file (mode parameter: "write" or "append")
 - **`list_dir.py`** - List directory contents with filtering and ISO timestamps
 - **`search_files.py`** - Search files by content/pattern with optional context lines, matched_files, total_matches_found
 - **`apply_patch.py`** - Apply text patches to files using a unified-diff-like format
 - **`shell.py`** - Shell command execution with timeout
 - **`web_fetch.py`** - Fetch and process web content
-- **`pip_install.py`** - Install pure-Python packages from PyPI (py3-none-any wheels)
-- **`pip_list.py`** - List installed Python packages from site-packages
+- **`pip.py`** - Package management: install pure-Python packages or list installed packages (action parameter: "install" or "list")
 
 ---
 
@@ -147,15 +144,15 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`builtin_tools.c/h`** - Registration of built-in tools
 - **`memory_tool.c/h`** - Persistent semantic memory (remember, recall_memories, forget_memory)
 - **`pdf_tool.c/h`** - PDF processing and vector indexing
-- **`vector_db_tool.c/h`** - Vector database operations (13 tools)
+- **`vector_db_tool.c/h`** - Vector database dispatch tool (single `vector_db` tool with `operation` enum: create_index, delete_index, list_indices, add_vector, update_vector, delete_vector, get_vector, search, add_text, add_chunked_text, add_pdf_document, search_text, search_by_time)
 - **`subagent_tool.c/h`** - Subagent process spawning and management
 - **`subagent_process.c/h`** - Subagent process I/O and lifecycle management
-- **`messaging_tool.c/h`** - Inter-agent messaging (6 tools)
+- **`messaging_tool.c/h`** - Inter-agent messaging dispatch tool (single `messaging` tool with `operation` enum: send_message, check_messages, subscribe_channel, publish_channel, check_channel_messages, get_agent_info)
 - **`todo_manager.c/h`** - Todo data structures and operations
 - **`todo_tool.c/h`** - Todo tool call handler
 - **`todo_display.c/h`** - Todo console visualization
-- **`goap_tools.c/h`** - GOAP goal/action tools for supervisors (10 tools, scaffold mode only): includes `goap_save_plan_document` for persisting plan documents, `goap_get_goal` returns plan_document, `build_work_context()` injects plan_guidance from plan_document
-- **`orchestrator_tool.c/h`** - Orchestrator lifecycle tools: execute_plan, list_goals, goal_status, start/pause/cancel_goal
+- **`goap_tools.c/h`** - GOAP dispatch tool for supervisors (single `goap` tool with `operation` enum: get_goal, list_actions, create_goal, create_actions, update_action, dispatch_action, update_world_state, check_complete, get_action_results, save_plan_document). Includes plan_document persistence and plan_guidance injection via `build_work_context()`
+- **`orchestrator_tool.c/h`** - Orchestrator dispatch tool (single `orchestrator` tool with `operation` enum: execute_plan, list_goals, goal_status, start_goal, pause_goal, cancel_goal)
 - **`mode_tool.c/h`** - LLM-callable switch_mode tool for changing behavioral modes
 - **`tool_cache.c/h`** - Thread-safe tool result caching with file mtime invalidation
 
@@ -497,6 +494,9 @@ All benchmarks parse JSONL output and write predictions in the format expected b
 - `scaffold-eval-swebench` — SWE-bench runner CLI
 - `scaffold-eval-feabench` — FEA-bench runner CLI
 - `scaffold-eval-contextbench` — Context-bench runner CLI
+
+### Benchmark Tracking
+Results are tracked in `benchmarks/results.json` (pass/fail per instance per model). Instance registries in `benchmarks/instances/*.txt` serve as guard rails for valid instance IDs. `scripts/run_eval.py` auto-imports results after scoring and regenerates `BENCHMARKS.md`. Supports `--next N` (pick untested instances), `--retry-failed N` (retry failures), and `--render` (regenerate scorecard only).
 
 ## Build System
 

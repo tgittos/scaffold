@@ -69,11 +69,11 @@ typedef enum {
  * Each category can be independently configured with a GateAction.
  */
 typedef enum {
-    GATE_CATEGORY_FILE_WRITE,   /* write_file, append_file, apply_patch */
-    GATE_CATEGORY_FILE_READ,    /* read_file, file_info, list_dir, search_files */
+    GATE_CATEGORY_FILE_WRITE,   /* write_file, apply_patch */
+    GATE_CATEGORY_FILE_READ,    /* read_file, list_dir, search_files */
     GATE_CATEGORY_SHELL,        /* shell command execution */
-    GATE_CATEGORY_NETWORK,      /* web_fetch and network operations */
-    GATE_CATEGORY_MEMORY,       /* remember, recall_memories, forget_memory, vector_db_*, todo */
+    GATE_CATEGORY_NETWORK,      /* web_fetch, pip (install) */
+    GATE_CATEGORY_MEMORY,       /* remember, recall_memories, forget_memory, vector_db, goap, orchestrator, messaging, todo */
     GATE_CATEGORY_SUBAGENT,     /* subagent, subagent_status */
     GATE_CATEGORY_MCP,          /* All mcp_* tools */
     GATE_CATEGORY_PYTHON,       /* python interpreter, dynamic tools */

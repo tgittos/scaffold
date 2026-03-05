@@ -346,9 +346,9 @@ void test_generate_anthropic_tools_json_with_tools(void) {
     // Check for input_schema instead of parameters
     TEST_ASSERT_NOT_NULL(strstr(json, "\"input_schema\""));
 
-    // Check for vector_db_search tool (cJSON produces no spaces after colons)
-    // Note: We use vector_db_search because it's a C-based tool that doesn't require Python
-    TEST_ASSERT_NOT_NULL(strstr(json, "\"name\":\"vector_db_search\""));
+    // Check for vector_db tool (cJSON produces no spaces after colons)
+    // Note: We use vector_db because it's a C-based tool that doesn't require Python
+    TEST_ASSERT_NOT_NULL(strstr(json, "\"name\":\"vector_db\""));
 
     free(json);
     cleanup_tool_registry(&registry);
@@ -442,14 +442,12 @@ void test_parse_anthropic_tool_calls_null_parameters(void) {
 void test_get_tool_category_file_write(void) {
     /* File write tools should be in FILE_WRITE category */
     TEST_ASSERT_EQUAL(GATE_CATEGORY_FILE_WRITE, get_tool_category("write_file"));
-    TEST_ASSERT_EQUAL(GATE_CATEGORY_FILE_WRITE, get_tool_category("append_file"));
     TEST_ASSERT_EQUAL(GATE_CATEGORY_FILE_WRITE, get_tool_category("apply_patch"));
 }
 
 void test_get_tool_category_file_read(void) {
     /* File read tools should be in FILE_READ category */
     TEST_ASSERT_EQUAL(GATE_CATEGORY_FILE_READ, get_tool_category("read_file"));
-    TEST_ASSERT_EQUAL(GATE_CATEGORY_FILE_READ, get_tool_category("file_info"));
     TEST_ASSERT_EQUAL(GATE_CATEGORY_FILE_READ, get_tool_category("list_dir"));
     TEST_ASSERT_EQUAL(GATE_CATEGORY_FILE_READ, get_tool_category("search_files"));
 }
@@ -470,8 +468,8 @@ void test_get_tool_category_memory(void) {
     TEST_ASSERT_EQUAL(GATE_CATEGORY_MEMORY, get_tool_category("recall_memories"));
     TEST_ASSERT_EQUAL(GATE_CATEGORY_MEMORY, get_tool_category("forget_memory"));
     TEST_ASSERT_EQUAL(GATE_CATEGORY_MEMORY, get_tool_category("todo"));
-    TEST_ASSERT_EQUAL(GATE_CATEGORY_MEMORY, get_tool_category("vector_db_search"));
-    TEST_ASSERT_EQUAL(GATE_CATEGORY_MEMORY, get_tool_category("vector_db_add"));
+    TEST_ASSERT_EQUAL(GATE_CATEGORY_MEMORY, get_tool_category("vector_db"));
+    TEST_ASSERT_EQUAL(GATE_CATEGORY_MEMORY, get_tool_category("goap"));
 }
 
 void test_get_tool_category_subagent(void) {

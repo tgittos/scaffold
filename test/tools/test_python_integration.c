@@ -374,7 +374,7 @@ void test_pip_version_key_ordering(void) {
     PythonExecutionParams params = {0};
     params.code = strdup(
         "_ns = {}\n"
-        "with open('/zip/python_defaults/pip_install.py', 'r') as f:\n"
+        "with open('/zip/python_defaults/pip.py', 'r') as f:\n"
         "    exec(f.read(), _ns)\n"
         "_vk = _ns['_version_key']\n"
         "# Stable > pre-release\n"
@@ -411,7 +411,7 @@ void test_pip_find_best_wheel(void) {
     PythonExecutionParams params = {0};
     params.code = strdup(
         "_ns = {}\n"
-        "with open('/zip/python_defaults/pip_install.py', 'r') as f:\n"
+        "with open('/zip/python_defaults/pip.py', 'r') as f:\n"
         "    exec(f.read(), _ns)\n"
         "_fbw = _ns['_find_best_wheel']\n"
         "\n"
@@ -461,7 +461,7 @@ void test_pip_safe_extractall_rejects_traversal(void) {
     PythonExecutionParams params = {0};
     params.code = strdup(
         "_ns = {}\n"
-        "with open('/zip/python_defaults/pip_install.py', 'r') as f:\n"
+        "with open('/zip/python_defaults/pip.py', 'r') as f:\n"
         "    exec(f.read(), _ns)\n"
         "_safe = _ns['_safe_extractall']\n"
         "\n"
@@ -517,9 +517,9 @@ void test_pip_list_empty_site_packages(void) {
     PythonExecutionParams params = {0};
     params.code = strdup(
         "_ns = {}\n"
-        "with open('/zip/python_defaults/pip_list.py', 'r') as f:\n"
+        "with open('/zip/python_defaults/pip.py', 'r') as f:\n"
         "    exec(f.read(), _ns)\n"
-        "_pip_list = _ns['pip_list']\n"
+        "_pip = _ns['pip']\n"
         "\n"
         "import tempfile, os\n"
         "# Mock _ralph_sys to return a temp dir as app home\n"
@@ -533,7 +533,7 @@ void test_pip_list_empty_site_packages(void) {
         "import sys\n"
         "sys.modules['_ralph_sys'] = mock_sys\n"
         "\n"
-        "result = _pip_list()\n"
+        "result = _pip(action='list')\n"
         "assert result['count'] == 0, f'expected 0, got {result[\"count\"]}'\n"
         "assert result['packages'] == [], f'expected [], got {result[\"packages\"]}'\n"
         "\n"

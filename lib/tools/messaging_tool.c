@@ -3,6 +3,7 @@
 #include "../services/services.h"
 #include "../util/common_utils.h"
 #include "../util/json_escape.h"
+#include "tool_param_dsl.h"
 #include "tool_result_builder.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -594,168 +595,42 @@ int execute_check_channel_messages_tool_call(const ToolCall *tool_call, ToolResu
     return 0;
 }
 
-static void free_tool_params(ToolParameter* params, int count) {
-    for (int i = 0; i < count; i++) {
-        free(params[i].name);
-        free(params[i].type);
-        free(params[i].description);
-    }
+static const char *MESSAGING_OPERATIONS[] = {
+    "send_message", "check_messages", "subscribe_channel",
+    "publish_channel", "check_channel_messages", "get_agent_info", NULL
+};
+
+static const ParamDef MESSAGING_DISPATCH_PARAMS[] = {
+    {"operation", "string", "Operation to perform: send_message, check_messages, subscribe_channel, publish_channel, check_channel_messages, get_agent_info", MESSAGING_OPERATIONS, 1},
+    {"recipient_id", "string", "Agent ID to send message to (send_message)", NULL, 0},
+    {"content", "string", "Message content (send_message, publish_channel)", NULL, 0},
+    {"ttl_seconds", "number", "Time-to-live in seconds, 0 = no expiry (send_message)", NULL, 0},
+    {"max_count", "number", "Maximum messages to retrieve (check_messages, check_channel_messages, default: 10)", NULL, 0},
+    {"channel", "string", "Channel name (subscribe_channel, publish_channel, check_channel_messages)", NULL, 0},
+    {"create_if_missing", "string", "Set to 'true' to create channel if it doesn't exist (subscribe_channel)", NULL, 0},
+    {"description", "string", "Channel description when creating (subscribe_channel)", NULL, 0},
+};
+
+static const ToolDef MESSAGING_TOOL_DEF = {
+    "messaging", "Inter-agent messaging: send/check direct messages, subscribe/publish channels, check channel messages, get agent info. Use 'operation' to select the action.",
+    MESSAGING_DISPATCH_PARAMS, sizeof(MESSAGING_DISPATCH_PARAMS) / sizeof(MESSAGING_DISPATCH_PARAMS[0]), execute_messaging_dispatch
+};
+
+static const OperationDispatchEntry MESSAGING_DISPATCH[] = {
+    {"send_message",           execute_send_message_tool_call},
+    {"check_messages",         execute_check_messages_tool_call},
+    {"subscribe_channel",      execute_subscribe_channel_tool_call},
+    {"publish_channel",        execute_publish_channel_tool_call},
+    {"check_channel_messages", execute_check_channel_messages_tool_call},
+    {"get_agent_info",         execute_get_agent_info_tool_call},
+};
+
+int execute_messaging_dispatch(const ToolCall *tool_call, ToolResult *result) {
+    return dispatch_by_operation(tool_call, result, MESSAGING_DISPATCH,
+        sizeof(MESSAGING_DISPATCH) / sizeof(MESSAGING_DISPATCH[0]));
 }
 
 int register_messaging_tools(ToolRegistry *registry) {
     if (registry == NULL) return -1;
-    int rc;
-
-    // send_message tool
-    ToolParameter send_params[3];
-    memset(send_params, 0, sizeof(send_params));
-
-    send_params[0].name = strdup("recipient_id");
-    send_params[0].type = strdup("string");
-    send_params[0].description = strdup("The ID of the agent to send the message to");
-    send_params[0].required = 1;
-
-    send_params[1].name = strdup("content");
-    send_params[1].type = strdup("string");
-    send_params[1].description = strdup("The message content to send");
-    send_params[1].required = 1;
-
-    send_params[2].name = strdup("ttl_seconds");
-    send_params[2].type = strdup("number");
-    send_params[2].description = strdup("Time-to-live in seconds (0 = no expiry)");
-    send_params[2].required = 0;
-
-    for (int i = 0; i < 3; i++) {
-        if (send_params[i].name == NULL || send_params[i].type == NULL ||
-            send_params[i].description == NULL) {
-            free_tool_params(send_params, 3);
-            return -1;
-        }
-    }
-
-    rc = register_tool(registry, "send_message",
-                       "Send a direct message to another agent by ID",
-                       send_params, 3, execute_send_message_tool_call);
-    free_tool_params(send_params, 3);
-    if (rc != 0) return -1;
-
-    // check_messages tool
-    ToolParameter check_params[1];
-    memset(check_params, 0, sizeof(check_params));
-
-    check_params[0].name = strdup("max_count");
-    check_params[0].type = strdup("number");
-    check_params[0].description = strdup("Maximum number of messages to retrieve (default: 10)");
-    check_params[0].required = 0;
-
-    if (check_params[0].name == NULL || check_params[0].type == NULL ||
-        check_params[0].description == NULL) {
-        free_tool_params(check_params, 1);
-        return -1;
-    }
-
-    rc = register_tool(registry, "check_messages",
-                       "Check for pending direct messages sent to this agent",
-                       check_params, 1, execute_check_messages_tool_call);
-    free_tool_params(check_params, 1);
-    if (rc != 0) return -1;
-
-    // subscribe_channel tool
-    ToolParameter sub_params[3];
-    memset(sub_params, 0, sizeof(sub_params));
-
-    sub_params[0].name = strdup("channel");
-    sub_params[0].type = strdup("string");
-    sub_params[0].description = strdup("The channel name to subscribe to");
-    sub_params[0].required = 1;
-
-    sub_params[1].name = strdup("create_if_missing");
-    sub_params[1].type = strdup("string");
-    sub_params[1].description = strdup("Set to 'true' to create the channel if it doesn't exist");
-    sub_params[1].required = 0;
-
-    sub_params[2].name = strdup("description");
-    sub_params[2].type = strdup("string");
-    sub_params[2].description = strdup("Description for the channel (only used when creating)");
-    sub_params[2].required = 0;
-
-    for (int i = 0; i < 3; i++) {
-        if (sub_params[i].name == NULL || sub_params[i].type == NULL ||
-            sub_params[i].description == NULL) {
-            free_tool_params(sub_params, 3);
-            return -1;
-        }
-    }
-
-    rc = register_tool(registry, "subscribe_channel",
-                       "Subscribe to a pub/sub channel to receive broadcast messages",
-                       sub_params, 3, execute_subscribe_channel_tool_call);
-    free_tool_params(sub_params, 3);
-    if (rc != 0) return -1;
-
-    // publish_channel tool
-    ToolParameter pub_params[2];
-    memset(pub_params, 0, sizeof(pub_params));
-
-    pub_params[0].name = strdup("channel");
-    pub_params[0].type = strdup("string");
-    pub_params[0].description = strdup("The channel name to publish to");
-    pub_params[0].required = 1;
-
-    pub_params[1].name = strdup("content");
-    pub_params[1].type = strdup("string");
-    pub_params[1].description = strdup("The message content to broadcast");
-    pub_params[1].required = 1;
-
-    for (int i = 0; i < 2; i++) {
-        if (pub_params[i].name == NULL || pub_params[i].type == NULL ||
-            pub_params[i].description == NULL) {
-            free_tool_params(pub_params, 2);
-            return -1;
-        }
-    }
-
-    rc = register_tool(registry, "publish_channel",
-                       "Publish a message to a channel (broadcast to all subscribers)",
-                       pub_params, 2, execute_publish_channel_tool_call);
-    free_tool_params(pub_params, 2);
-    if (rc != 0) return -1;
-
-    // check_channel_messages tool
-    ToolParameter check_ch_params[2];
-    memset(check_ch_params, 0, sizeof(check_ch_params));
-
-    check_ch_params[0].name = strdup("channel");
-    check_ch_params[0].type = strdup("string");
-    check_ch_params[0].description = strdup("Specific channel to check (omit for all subscribed channels)");
-    check_ch_params[0].required = 0;
-
-    check_ch_params[1].name = strdup("max_count");
-    check_ch_params[1].type = strdup("number");
-    check_ch_params[1].description = strdup("Maximum number of messages to retrieve (default: 10)");
-    check_ch_params[1].required = 0;
-
-    for (int i = 0; i < 2; i++) {
-        if (check_ch_params[i].name == NULL || check_ch_params[i].type == NULL ||
-            check_ch_params[i].description == NULL) {
-            free_tool_params(check_ch_params, 2);
-            return -1;
-        }
-    }
-
-    rc = register_tool(registry, "check_channel_messages",
-                       "Check for unread messages from subscribed channels",
-                       check_ch_params, 2, execute_check_channel_messages_tool_call);
-    free_tool_params(check_ch_params, 2);
-    if (rc != 0) return -1;
-
-    // get_agent_info tool (no parameters)
-    rc = register_tool(registry, "get_agent_info",
-                       "Get this agent's ID and parent agent ID (if running as a subagent). "
-                       "Use this to discover your agent_id for sharing with other agents, "
-                       "or to get your parent's ID to send messages back to them.",
-                       NULL, 0, execute_get_agent_info_tool_call);
-    if (rc != 0) return -1;
-
-    return 0;
+    return register_tool_from_def(registry, &MESSAGING_TOOL_DEF);
 }

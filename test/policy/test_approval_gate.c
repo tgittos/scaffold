@@ -273,9 +273,10 @@ void test_get_tool_category_memory_tools(void) {
 }
 
 void test_get_tool_category_vector_db_prefix(void) {
-    TEST_ASSERT_EQUAL(GATE_CATEGORY_MEMORY, get_tool_category("vector_db_add"));
-    TEST_ASSERT_EQUAL(GATE_CATEGORY_MEMORY, get_tool_category("vector_db_search"));
-    TEST_ASSERT_EQUAL(GATE_CATEGORY_MEMORY, get_tool_category("vector_db_delete"));
+    TEST_ASSERT_EQUAL(GATE_CATEGORY_MEMORY, get_tool_category("vector_db"));
+    TEST_ASSERT_EQUAL(GATE_CATEGORY_MEMORY, get_tool_category("messaging"));
+    TEST_ASSERT_EQUAL(GATE_CATEGORY_MEMORY, get_tool_category("goap"));
+    TEST_ASSERT_EQUAL(GATE_CATEGORY_MEMORY, get_tool_category("orchestrator"));
 }
 
 void test_get_tool_category_mcp_prefix(void) {
@@ -287,11 +288,9 @@ void test_get_tool_category_file_tools(void) {
     TEST_ASSERT_EQUAL(GATE_CATEGORY_FILE_READ, get_tool_category("read_file"));
     TEST_ASSERT_EQUAL(GATE_CATEGORY_FILE_READ, get_tool_category("list_dir"));
     TEST_ASSERT_EQUAL(GATE_CATEGORY_FILE_READ, get_tool_category("search_files"));
-    TEST_ASSERT_EQUAL(GATE_CATEGORY_FILE_READ, get_tool_category("file_info"));
     TEST_ASSERT_EQUAL(GATE_CATEGORY_FILE_READ, get_tool_category("process_pdf_document"));
 
     TEST_ASSERT_EQUAL(GATE_CATEGORY_FILE_WRITE, get_tool_category("write_file"));
-    TEST_ASSERT_EQUAL(GATE_CATEGORY_FILE_WRITE, get_tool_category("append_file"));
     TEST_ASSERT_EQUAL(GATE_CATEGORY_FILE_WRITE, get_tool_category("apply_patch"));
 }
 
@@ -500,7 +499,7 @@ void test_allowlist_requires_tool_match(void) {
 
     ToolCall wrong_tool = {
         .id = "call_1",
-        .name = "append_file",  /* Different tool */
+        .name = "apply_patch",  /* Different tool */
         .arguments = "anything"
     };
 

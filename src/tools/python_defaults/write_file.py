@@ -13,12 +13,13 @@ def _is_traversal_path(path: str) -> bool:
     return '..' in parts
 
 
-def write_file(path: str, content: str, backup: bool = False) -> dict:
+def write_file(path: str, content: str, mode: str = "write", backup: bool = False) -> dict:
     """Write content to file.
 
     Args:
         path: Path to the file to write
         content: Content to write
+        mode: "write" to overwrite or "append" to append (default: "write")
         backup: Whether to create a backup if file exists (default: False)
 
     Returns:
@@ -32,6 +33,13 @@ def write_file(path: str, content: str, backup: bool = False) -> dict:
     # Security check - prevent directory traversal
     if _is_traversal_path(path):
         raise ValueError("Invalid path: directory traversal not allowed")
+
+    # Validate mode
+    if mode not in ("write", "append"):
+        raise ValueError(f"Invalid mode: {mode} (must be 'write' or 'append')")
+
+    open_mode = 'a' if mode == "append" else 'w'
+    bytes_key = "bytes_appended" if mode == "append" else "bytes_written"
 
     # Check content size limit
     content_bytes = content.encode('utf-8')
@@ -55,13 +63,13 @@ def write_file(path: str, content: str, backup: bool = False) -> dict:
                 # Create parent directories if needed
                 p.parent.mkdir(parents=True, exist_ok=True)
                 # Use the verified file context for atomic open
-                fd = _ralph_verified_io.open_verified(str(p), 'w')
-                with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                fd = _ralph_verified_io.open_verified(str(p), open_mode)
+                with os.fdopen(fd, open_mode, encoding='utf-8') as f:
                     f.write(content)
                 return {
                     "success": True,
                     "path": str(p),
-                    "bytes_written": len(content_bytes),
+                    bytes_key: len(content_bytes),
                     "verified": True
                 }
     except ImportError:
@@ -84,10 +92,14 @@ def write_file(path: str, content: str, backup: bool = False) -> dict:
     p.parent.mkdir(parents=True, exist_ok=True)
 
     # Fall back to standard file I/O (when gates disabled or no context)
-    p.write_text(content, encoding='utf-8')
+    if mode == "append":
+        with open(p, 'a', encoding='utf-8') as f:
+            f.write(content)
+    else:
+        p.write_text(content, encoding='utf-8')
 
     return {
         "success": True,
         "path": str(p),
-        "bytes_written": len(content_bytes)
+        bytes_key: len(content_bytes)
     }

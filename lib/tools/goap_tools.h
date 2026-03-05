@@ -10,6 +10,7 @@ int register_goap_tools(ToolRegistry *registry);
 void goap_tools_set_services(struct Services *services);
 void goap_tools_set_subagent_manager(struct SubagentManager *mgr);
 
+int execute_goap_dispatch(const ToolCall *tc, ToolResult *result);
 int execute_goap_get_goal(const ToolCall *tc, ToolResult *result);
 int execute_goap_list_actions(const ToolCall *tc, ToolResult *result);
 int execute_goap_create_goal(const ToolCall *tc, ToolResult *result);

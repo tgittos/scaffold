@@ -57,125 +57,64 @@ static char *document_results_to_json(document_search_results_t *search_results)
     return result;
 }
 
-/* Parameter definitions for vector_db_create_index */
-static const ParamDef CREATE_INDEX_PARAMS[] = {
-    {"index_name", "string", "Name of the index to create", NULL, 1},
-    {"dimension", "number", "Dimension of vectors", NULL, 1},
-    {"max_elements", "number", "Maximum number of elements", NULL, 0},
-    {"M", "number", "M parameter for HNSW algorithm (default: 16)", NULL, 0},
-    {"ef_construction", "number", "Construction parameter (default: 200)", NULL, 0},
-    {"metric", "string", "Distance metric: 'l2', 'cosine', or 'ip' (default: 'l2')", NULL, 0},
+static const char *VECTOR_DB_OPERATIONS[] = {
+    "create_index", "delete_index", "list_indices",
+    "add_vector", "update_vector", "delete_vector", "get_vector",
+    "search", "add_text", "add_chunked_text", "add_pdf_document",
+    "search_text", "search_by_time", NULL
 };
 
-/* Parameter definitions for vector_db_delete_index */
-static const ParamDef DELETE_INDEX_PARAMS[] = {
-    {"index_name", "string", "Name of the index to delete", NULL, 1},
-};
-
-/* Parameter definitions for vector_db_add_vector */
-static const ParamDef ADD_VECTOR_PARAMS[] = {
-    {"index_name", "string", "Name of the index", NULL, 1},
-    {"vector", "array", "Vector data as array of numbers", NULL, 1},
-    {"metadata", "object", "Optional metadata to store with vector", NULL, 0},
-};
-
-/* Parameter definitions for vector_db_update_vector */
-static const ParamDef UPDATE_VECTOR_PARAMS[] = {
-    {"index_name", "string", "Name of the index", NULL, 1},
-    {"label", "number", "Label/ID of the vector to update", NULL, 1},
-    {"vector", "array", "New vector data", NULL, 1},
-    {"metadata", "object", "Optional new metadata", NULL, 0},
-};
-
-/* Parameter definitions for vector_db_delete_vector */
-static const ParamDef DELETE_VECTOR_PARAMS[] = {
-    {"index_name", "string", "Name of the index", NULL, 1},
-    {"label", "number", "Label/ID of the vector to delete", NULL, 1},
-};
-
-/* Parameter definitions for vector_db_get_vector */
-static const ParamDef GET_VECTOR_PARAMS[] = {
-    {"index_name", "string", "Name of the index", NULL, 1},
-    {"label", "number", "Label/ID of the vector to retrieve", NULL, 1},
-};
-
-/* Parameter definitions for vector_db_search */
-static const ParamDef SEARCH_PARAMS[] = {
-    {"index_name", "string", "Name of the index to search", NULL, 1},
-    {"query_vector", "array", "Query vector data", NULL, 1},
-    {"k", "number", "Number of nearest neighbors to return", NULL, 1},
-};
-
-/* Parameter definitions for vector_db_add_text */
-static const ParamDef ADD_TEXT_PARAMS[] = {
-    {"index_name", "string", "Name of the index", NULL, 1},
-    {"text", "string", "Text content to embed and store", NULL, 1},
-    {"metadata", "object", "Optional metadata to store with the text", NULL, 0},
-};
-
-/* Parameter definitions for vector_db_add_chunked_text */
-static const ParamDef ADD_CHUNKED_TEXT_PARAMS[] = {
-    {"index_name", "string", "Name of the index", NULL, 1},
-    {"text", "string", "Text content to chunk, embed and store", NULL, 1},
-    {"max_chunk_size", "number", "Maximum size of each chunk (default: 1000)", NULL, 0},
-    {"overlap_size", "number", "Overlap between chunks (default: 200)", NULL, 0},
-    {"metadata", "object", "Optional metadata to store with each chunk", NULL, 0},
-};
-
-/* Parameter definitions for vector_db_add_pdf_document */
-static const ParamDef ADD_PDF_DOCUMENT_PARAMS[] = {
-    {"index_name", "string", "Name of the index", NULL, 1},
-    {"pdf_path", "string", "Path to the PDF file to extract, chunk and store", NULL, 1},
-    {"max_chunk_size", "number", "Maximum size of each chunk (default: 1500)", NULL, 0},
-    {"overlap_size", "number", "Overlap between chunks (default: 300)", NULL, 0},
-};
-
-/* Parameter definitions for vector_db_search_text */
-static const ParamDef SEARCH_TEXT_PARAMS[] = {
-    {"index_name", "string", "Name of the index to search", NULL, 1},
-    {"query", "string", "Query text to search for", NULL, 1},
-    {"k", "number", "Number of results to return (default: 5)", NULL, 0},
-};
-
-/* Parameter definitions for vector_db_search_by_time */
-static const ParamDef SEARCH_BY_TIME_PARAMS[] = {
-    {"index_name", "string", "Name of the index to search", NULL, 1},
-    {"start_time", "number", "Start timestamp (Unix epoch, default: 0)", NULL, 0},
-    {"end_time", "number", "End timestamp (Unix epoch, default: now)", NULL, 0},
-    {"limit", "number", "Maximum number of results (default: 100)", NULL, 0},
+static const ParamDef VECTOR_DB_DISPATCH_PARAMS[] = {
+    {"operation", "string", "Operation to perform: create_index, delete_index, list_indices, add_vector, update_vector, delete_vector, get_vector, search, add_text, add_chunked_text, add_pdf_document, search_text, search_by_time", VECTOR_DB_OPERATIONS, 1},
+    {"index_name", "string", "Name of the index", NULL, 0},
+    {"dimension", "number", "Dimension of vectors (create_index)", NULL, 0},
+    {"max_elements", "number", "Maximum number of elements (create_index, default: 10000)", NULL, 0},
+    {"M", "number", "M parameter for HNSW algorithm (create_index, default: 16)", NULL, 0},
+    {"ef_construction", "number", "Construction parameter (create_index, default: 200)", NULL, 0},
+    {"metric", "string", "Distance metric: 'l2', 'cosine', or 'ip' (create_index, default: 'l2')", NULL, 0},
+    {"vector", "array", "Vector data as array of numbers (add_vector, update_vector)", NULL, 0},
+    {"metadata", "object", "Metadata to store (add_vector, add_text, add_chunked_text)", NULL, 0},
+    {"label", "number", "Label/ID of the vector (update_vector, delete_vector, get_vector)", NULL, 0},
+    {"query_vector", "array", "Query vector data (search)", NULL, 0},
+    {"k", "number", "Number of results to return (search, search_text)", NULL, 0},
+    {"text", "string", "Text content (add_text, add_chunked_text)", NULL, 0},
+    {"query", "string", "Query text (search_text)", NULL, 0},
+    {"pdf_path", "string", "Path to PDF file (add_pdf_document)", NULL, 0},
+    {"max_chunk_size", "number", "Maximum chunk size (add_chunked_text, add_pdf_document)", NULL, 0},
+    {"overlap_size", "number", "Overlap between chunks (add_chunked_text, add_pdf_document)", NULL, 0},
+    {"start_time", "number", "Start timestamp (search_by_time)", NULL, 0},
+    {"end_time", "number", "End timestamp (search_by_time)", NULL, 0},
+    {"limit", "number", "Maximum results (search_by_time, default: 100)", NULL, 0},
 };
 
 /* Tool definitions table */
 static const ToolDef VECTOR_DB_TOOLS[] = {
-    {"vector_db_create_index", "Create a new vector index",
-     CREATE_INDEX_PARAMS, 6, execute_vector_db_create_index_tool_call},
-    {"vector_db_delete_index", "Delete an existing vector index",
-     DELETE_INDEX_PARAMS, 1, execute_vector_db_delete_index_tool_call},
-    {"vector_db_list_indices", "List all vector indices",
-     NULL, 0, execute_vector_db_list_indices_tool_call},
-    {"vector_db_add_vector", "Add a vector to an index",
-     ADD_VECTOR_PARAMS, 3, execute_vector_db_add_vector_tool_call},
-    {"vector_db_update_vector", "Update an existing vector",
-     UPDATE_VECTOR_PARAMS, 4, execute_vector_db_update_vector_tool_call},
-    {"vector_db_delete_vector", "Delete a vector from an index",
-     DELETE_VECTOR_PARAMS, 2, execute_vector_db_delete_vector_tool_call},
-    {"vector_db_get_vector", "Retrieve a vector by label",
-     GET_VECTOR_PARAMS, 2, execute_vector_db_get_vector_tool_call},
-    {"vector_db_search", "Search for nearest neighbors",
-     SEARCH_PARAMS, 3, execute_vector_db_search_tool_call},
-    {"vector_db_add_text", "Add text content to index by generating embeddings",
-     ADD_TEXT_PARAMS, 3, execute_vector_db_add_text_tool_call},
-    {"vector_db_add_chunked_text", "Add long text content by chunking, embedding and storing each chunk",
-     ADD_CHUNKED_TEXT_PARAMS, 5, execute_vector_db_add_chunked_text_tool_call},
-    {"vector_db_add_pdf_document", "Extract text from PDF, chunk it, and store chunks as embeddings",
-     ADD_PDF_DOCUMENT_PARAMS, 4, execute_vector_db_add_pdf_document_tool_call},
-    {"vector_db_search_text", "Search for similar text content in the vector database",
-     SEARCH_TEXT_PARAMS, 3, execute_vector_db_search_text_tool_call},
-    {"vector_db_search_by_time", "Search for documents within a time range",
-     SEARCH_BY_TIME_PARAMS, 4, execute_vector_db_search_by_time_tool_call},
+    {"vector_db", "Vector database operations: create/delete indices, add/update/delete/get vectors, search by vector/text/time, add text/chunked text/PDF documents. Use the 'operation' parameter to select the action.",
+     VECTOR_DB_DISPATCH_PARAMS, sizeof(VECTOR_DB_DISPATCH_PARAMS) / sizeof(VECTOR_DB_DISPATCH_PARAMS[0]), execute_vector_db_dispatch},
 };
 
 #define VECTOR_DB_TOOL_COUNT (sizeof(VECTOR_DB_TOOLS) / sizeof(VECTOR_DB_TOOLS[0]))
+
+static const OperationDispatchEntry VECTOR_DB_DISPATCH[] = {
+    {"create_index",    execute_vector_db_create_index_tool_call},
+    {"delete_index",    execute_vector_db_delete_index_tool_call},
+    {"list_indices",    execute_vector_db_list_indices_tool_call},
+    {"add_vector",      execute_vector_db_add_vector_tool_call},
+    {"update_vector",   execute_vector_db_update_vector_tool_call},
+    {"delete_vector",   execute_vector_db_delete_vector_tool_call},
+    {"get_vector",      execute_vector_db_get_vector_tool_call},
+    {"search",          execute_vector_db_search_tool_call},
+    {"add_text",        execute_vector_db_add_text_tool_call},
+    {"add_chunked_text", execute_vector_db_add_chunked_text_tool_call},
+    {"add_pdf_document", execute_vector_db_add_pdf_document_tool_call},
+    {"search_text",     execute_vector_db_search_text_tool_call},
+    {"search_by_time",  execute_vector_db_search_by_time_tool_call},
+};
+
+int execute_vector_db_dispatch(const ToolCall *tool_call, ToolResult *result) {
+    return dispatch_by_operation(tool_call, result, VECTOR_DB_DISPATCH,
+        sizeof(VECTOR_DB_DISPATCH) / sizeof(VECTOR_DB_DISPATCH[0]));
+}
 
 int register_vector_db_tool(ToolRegistry *registry) {
     if (registry == NULL) {

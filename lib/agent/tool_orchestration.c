@@ -12,14 +12,12 @@
 static int is_file_write_tool(const char *tool_name) {
     if (tool_name == NULL) return 0;
     return (strcmp(tool_name, "write_file") == 0 ||
-            strcmp(tool_name, "append_file") == 0 ||
             strcmp(tool_name, "apply_patch") == 0);
 }
 
 static int is_file_tool(const char *tool_name) {
     if (tool_name == NULL) return 0;
     return (strcmp(tool_name, "write_file") == 0 ||
-            strcmp(tool_name, "append_file") == 0 ||
             strcmp(tool_name, "apply_patch") == 0 ||
             strcmp(tool_name, "read_file") == 0);
 }

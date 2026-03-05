@@ -49,8 +49,7 @@ static char *format_tool_summary(const ToolCall *tool_call) {
     }
 
     if ((strcmp(tool_call->name, "write_file") == 0 ||
-         strcmp(tool_call->name, "read_file") == 0 ||
-         strcmp(tool_call->name, "append_file") == 0) &&
+         strcmp(tool_call->name, "read_file") == 0) &&
         tool_call->arguments != NULL) {
         cJSON *args = cJSON_Parse(tool_call->arguments);
         if (args != NULL) {
