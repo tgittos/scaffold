@@ -188,8 +188,29 @@ def _apply_hunk(lines, hunk_lines, file_path):
 def apply_patch(patch: str) -> dict:
     """Apply a text patch to one or more files.
 
+    Format:
+        *** Begin Patch
+        *** Update File: path/to/file.py
+        @@ anchor line
+         context line (space prefix = must match existing line)
+        -line to remove
+        +line to add
+         context line
+        *** Add File: path/to/new_file.py
+        +first line
+        +second line
+        *** Delete File: path/to/old_file.py
+        *** End Patch
+
+    Rules:
+        - @@ finds the first matching line in the file (not a line number)
+        - Space-prefixed lines are context that must match existing content
+        - Use - to remove lines, + to add lines
+        - Multiple @@ anchors narrow the search scope progressively
+        - Read the file first to get accurate context and anchor lines
+
     Args:
-        patch: Patch string using the patch format with *** Begin Patch / *** End Patch delimiters
+        patch: Patch string in the format above
 
     Returns:
         Dictionary with success status and list of files modified
