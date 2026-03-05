@@ -204,9 +204,14 @@ def run_scaffold_in_container(
     # Append an exit-code sentinel so we can recover it from the output
     # (exec_run_with_timeout does not return the exit code)
     inner = " ".join(parts)
+    # Activate the conda testbed env so the agent sees the correct Python
+    # (with all project dependencies pre-installed) on PATH.
+    # We prepend the conda env's bin dir directly to PATH rather than using
+    # `conda activate`, because scaffold inherits PATH at exec time and
+    # its shell tool copies os.environ for child processes.
     cmd = [
         "bash", "-c",
-        f"source /root/.eval_env && {inner}; echo \"__EXIT_CODE:$?\"",
+        f"source /root/.eval_env && export PATH=/opt/miniconda3/envs/testbed/bin:$PATH; {inner}; echo \"__EXIT_CODE:$?\"",
     ]
 
     output, timed_out, elapsed = exec_run_with_timeout(container, cmd, timeout)

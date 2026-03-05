@@ -30,5 +30,17 @@
 - Mode prompts should be <100 tokens each — behavioral constraints only
 - Remove: implementation details, meta-instructions, reference material that belongs elsewhere
 
+### The "Narration Trap" (Explain-Instead-of-Act)
+- Most critical failure mode for autonomous coding agents on complex tasks
+- Agent reads code, identifies fix, then WRITES A DESCRIPTION instead of calling tools
+- Root cause: model's conversational training dominates when analysis is complex
+- Simple tasks don't trigger it because the model goes straight to the tool call
+- Fix requires THREE reinforcing elements (any one alone is insufficient):
+  1. Identity framing: "no human is reading your output, only tool calls matter"
+  2. Explicit prohibition: "never describe a change you could apply" (CRITICAL label helps)
+  3. Self-check heuristic: "if you haven't called a write tool, you're not done"
+- Weak phrasings that DON'T work: "be autonomous", "prefer action", "solve don't describe"
+- These fail because the model interprets "describing" as "being vague" not "writing prose instead of calling tools"
+
 ## File References
 - `agent-prompt-patterns.md` - Detailed patterns for autonomous coding agents

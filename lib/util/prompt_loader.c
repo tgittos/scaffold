@@ -33,17 +33,13 @@ static char *get_platform_info(void) {
         cwd_str = cwd;
     }
 
-    const char *path_env = getenv("PATH");
-    const char *path_str = path_env ? path_env : "not set";
-
     const char *format =
         "\n## Platform Information:\n"
         "- Architecture: %s\n"
         "- Operating System: %s\n"
-        "- Working Directory: %s\n"
-        "- PATH: %s\n";
+        "- Working Directory: %s\n";
 
-    int size = snprintf(NULL, 0, format, arch, os_name, cwd_str, path_str);
+    int size = snprintf(NULL, 0, format, arch, os_name, cwd_str);
     if (size < 0) {
         return NULL;
     }
@@ -53,7 +49,7 @@ static char *get_platform_info(void) {
         return NULL;
     }
 
-    snprintf(result, (size_t)size + 1, format, arch, os_name, cwd_str, path_str);
+    snprintf(result, (size_t)size + 1, format, arch, os_name, cwd_str);
     return result;
 }
 

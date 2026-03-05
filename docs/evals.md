@@ -77,6 +77,9 @@ Options:
   --region REGION            DO region (default: sfo3)
   --keep                     Don't tear down droplet after run
   --scaffold-home DIR        Scaffold home to sync OAuth from (default: ~/.local/scaffold)
+  --next N                   Pick next N untested instances for the model
+  --retry-failed N           Pick N previously failed instances for the model
+  --render                   Regenerate BENCHMARKS.md from results (no eval run)
 ```
 
 ### Environment Variables
@@ -281,3 +284,36 @@ evals/
       runner.py                      # Context-bench CLI entry point
       prompt.py                      # Prompt builder
 ```
+
+## Benchmark Tracking
+
+Results are tracked in data files under `benchmarks/`:
+
+```
+benchmarks/
+  instances/
+    swebench.txt          # Valid instance IDs (one per line, guard rail)
+  results.json            # Accumulated pass/fail results per model
+```
+
+After each eval run, `run_eval.py` automatically:
+1. Parses the SWE-bench report for resolved/unresolved instance IDs
+2. Merges results into `benchmarks/results.json` (additive, never overwrites)
+3. Regenerates `BENCHMARKS.md` as a scorecard
+
+### Instance selection
+
+Instead of manually specifying instance IDs, use `--next` or `--retry-failed`:
+
+```bash
+# Run next 5 untested instances for the current model
+./scripts/run_eval.py swebench --profile dev --next 5
+
+# Retry 3 previously failed instances
+./scripts/run_eval.py swebench --profile dev --retry-failed 3
+
+# Just regenerate the scorecard (no eval run)
+./scripts/run_eval.py swebench --render
+```
+
+These flags are mutually exclusive with `-i` (explicit instance IDs).

@@ -652,39 +652,43 @@ def update_benchmark_results(
     output_dir: str, benchmark: str, model: str, run_id: str,
 ) -> None:
     """Parse eval report and merge results into benchmarks/results.json."""
-    # Find the run report: eval_results/results/<model>.<run_id>.json
+    resolved = set()
+    unresolved = set()
+
+    # Strategy 1: Look for a summary report in eval_results/results/
     results_dir = Path(output_dir) / "results"
-    if not results_dir.exists():
-        print("[benchmark] No results directory found, skipping result update")
-        return
-
-    # Look for the report file
-    report_file = None
-    for pattern in [f"{run_id}.json", f"*.{run_id}.json"]:
-        matches = list(results_dir.glob(pattern))
-        if matches:
-            report_file = matches[0]
-            break
-
-    # Also check for results in subdirectories (SWE-bench creates nested dirs)
-    if not report_file:
-        for f in results_dir.rglob("*.json"):
-            if run_id in f.name:
-                report_file = f
+    if results_dir.exists():
+        report_file = None
+        for pattern in [f"{run_id}.json", f"*.{run_id}.json"]:
+            matches = list(results_dir.glob(pattern))
+            if matches:
+                report_file = matches[0]
                 break
+        if not report_file:
+            for f in results_dir.rglob("*.json"):
+                if run_id in f.name:
+                    report_file = f
+                    break
+        if report_file:
+            print(f"[benchmark] Reading report: {report_file}")
+            report = json.loads(report_file.read_text())
+            resolved = set(report.get("resolved_ids", report.get("resolved", [])))
+            unresolved = set(report.get("unresolved_ids", report.get("unresolved", [])))
 
-    if not report_file:
-        print(f"[benchmark] No report file found matching run_id={run_id}")
-        return
-
-    print(f"[benchmark] Reading report: {report_file}")
-    report = json.loads(report_file.read_text())
-
-    resolved = set(report.get("resolved_ids", report.get("resolved", [])))
-    unresolved = set(report.get("unresolved_ids", report.get("unresolved", [])))
+    # Strategy 2: Aggregate per-instance report.json files from eval_logs
+    if not resolved and not unresolved:
+        eval_logs = Path(output_dir) / "eval_logs" / "run_evaluation"
+        if eval_logs.exists():
+            for report_file in eval_logs.rglob("report.json"):
+                report = json.loads(report_file.read_text())
+                for iid, info in report.items():
+                    if info.get("resolved"):
+                        resolved.add(iid)
+                    else:
+                        unresolved.add(iid)
 
     if not resolved and not unresolved:
-        print("[benchmark] Report has no resolved/unresolved IDs, skipping")
+        print(f"[benchmark] No report file found matching run_id={run_id}")
         return
 
     # Merge into results.json
