@@ -53,7 +53,8 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:tbench.ai)",
       "WebFetch(domain:www.swebench.com)",
-      "WebFetch(domain:www.letta.com)"
+      "WebFetch(domain:www.letta.com)",
+      "Bash(doctl compute:*)"
     ]
   },
   "spinnerTipsEnabled": false

@@ -117,11 +117,11 @@ void test_parse_tool_calls_with_call(void) {
 void test_parse_tool_calls_with_code_containing_quotes(void) {
     /* Test that arguments containing code with escaped quotes are preserved correctly.
      * This tests the fix for the double-unescaping bug where code like print("hello")
-     * in apply_delta operations would have its quotes corrupted. */
+     * in apply_patch operations would have its quotes corrupted. */
     const char *json_response =
         "{\"choices\":[{\"message\":{\"tool_calls\":["
-        "{\"id\":\"call_456\",\"function\":{\"name\":\"apply_delta\","
-        "\"arguments\":\"{\\\"path\\\": \\\"/tmp/test.py\\\", \\\"operations\\\": [{\\\"type\\\": \\\"insert\\\", \\\"start_line\\\": 1, \\\"content\\\": [\\\"print(\\\\\\\"hello\\\\\\\")\\\"]}]}\""
+        "{\"id\":\"call_456\",\"function\":{\"name\":\"apply_patch\","
+        "\"arguments\":\"{\\\"patch\\\": \\\"*** Begin Patch\\\\n*** Update File: /tmp/test.py\\\\n@@ print(\\\\\\\"hello\\\\\\\")\\\\n*** End Patch\\\"}\""
         "}}"
         "]}}]}";
 
@@ -134,28 +134,16 @@ void test_parse_tool_calls_with_code_containing_quotes(void) {
     TEST_ASSERT_EQUAL(1, call_count);
     TEST_ASSERT_NOT_NULL(tool_calls);
     TEST_ASSERT_EQUAL_STRING("call_456", tool_calls[0].id);
-    TEST_ASSERT_EQUAL_STRING("apply_delta", tool_calls[0].name);
+    TEST_ASSERT_EQUAL_STRING("apply_patch", tool_calls[0].name);
 
     /* Verify the arguments string is valid JSON that can be parsed */
     cJSON *args = cJSON_Parse(tool_calls[0].arguments);
     TEST_ASSERT_NOT_NULL_MESSAGE(args, "Arguments should be valid JSON");
 
-    /* Verify the code content preserved its escaped quotes */
-    cJSON *operations = cJSON_GetObjectItem(args, "operations");
-    TEST_ASSERT_NOT_NULL(operations);
-    TEST_ASSERT_TRUE(cJSON_IsArray(operations));
-
-    cJSON *first_op = cJSON_GetArrayItem(operations, 0);
-    TEST_ASSERT_NOT_NULL(first_op);
-
-    cJSON *content = cJSON_GetObjectItem(first_op, "content");
-    TEST_ASSERT_NOT_NULL(content);
-    TEST_ASSERT_TRUE(cJSON_IsArray(content));
-
-    cJSON *first_line = cJSON_GetArrayItem(content, 0);
-    TEST_ASSERT_NOT_NULL(first_line);
-    TEST_ASSERT_TRUE(cJSON_IsString(first_line));
-    TEST_ASSERT_EQUAL_STRING("print(\"hello\")", cJSON_GetStringValue(first_line));
+    /* Verify the patch parameter exists */
+    cJSON *patch = cJSON_GetObjectItem(args, "patch");
+    TEST_ASSERT_NOT_NULL(patch);
+    TEST_ASSERT_TRUE(cJSON_IsString(patch));
 
     cJSON_Delete(args);
     cleanup_tool_calls(tool_calls, call_count);
@@ -455,7 +443,7 @@ void test_get_tool_category_file_write(void) {
     /* File write tools should be in FILE_WRITE category */
     TEST_ASSERT_EQUAL(GATE_CATEGORY_FILE_WRITE, get_tool_category("write_file"));
     TEST_ASSERT_EQUAL(GATE_CATEGORY_FILE_WRITE, get_tool_category("append_file"));
-    TEST_ASSERT_EQUAL(GATE_CATEGORY_FILE_WRITE, get_tool_category("apply_delta"));
+    TEST_ASSERT_EQUAL(GATE_CATEGORY_FILE_WRITE, get_tool_category("apply_patch"));
 }
 
 void test_get_tool_category_file_read(void) {

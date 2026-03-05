@@ -1203,7 +1203,7 @@ graph TB
 - **`file_info`**: Get file metadata
 - **`list_dir`**: List directory contents with ISO timestamps
 - **`search_files`**: Search for patterns in files with optional context lines, returns matched_files and total_matches_found
-- **`apply_delta`**: Apply delta patch operations with optional expected-content verification
+- **`apply_patch`**: Apply text patches to files using a unified-diff-like format
 - **`shell`**: Execute shell commands
 - **`web_fetch`**: Fetch web content
 - **`pip_install`**: Install pure-Python packages from PyPI (py3-none-any wheels only)
@@ -1283,7 +1283,7 @@ src/
 │       ├── file_info.py
 │       ├── list_dir.py
 │       ├── search_files.py
-│       ├── apply_delta.py
+│       ├── apply_patch.py
 │       ├── shell.py
 │       ├── web_fetch.py
 │       ├── pip_install.py
@@ -1472,8 +1472,9 @@ evals/                         # Evaluation harness (Python, uv-managed)
 └── scaffold_evals/            # Python package
     ├── common/                # Shared utilities
     │   ├── config.py          # TOML config + env var overrides
-    │   ├── scaffold_runner.py # Invoke scaffold binary, parse JSONL output
-    │   ├── patch_extractor.py # git add -A && git diff --cached
+    │   ├── benchmark_runner.py # Orchestrates instance runs (Docker or bare repo)
+    │   ├── scaffold_runner.py # Invoke scaffold binary (subprocess or Docker exec)
+    │   ├── patch_extractor.py # Extract diffs (local git or Docker container)
     │   └── instance_loader.py # HuggingFace dataset loading + repo setup
     ├── swebench/              # SWE-bench Verified (500 instances)
     │   ├── runner.py          # CLI entry point: load, run, extract patches

@@ -1,4 +1,4 @@
-"""Common benchmark runner logic shared across swebench, feabench, and contextbench."""
+"""Common benchmark runner logic shared across swebench and feabench."""
 
 from __future__ import annotations
 
@@ -9,9 +9,13 @@ import traceback
 from pathlib import Path
 
 from scaffold_evals.common.config import load_config
-from scaffold_evals.common.instance_loader import load_instances, setup_repo
-from scaffold_evals.common.patch_extractor import extract_patch
-from scaffold_evals.common.scaffold_runner import run_scaffold
+from scaffold_evals.common.instance_loader import load_instances
+from scaffold_evals.common.patch_extractor import extract_patch_from_container
+from scaffold_evals.common.scaffold_runner import run_scaffold_in_container
+
+
+# SWE-bench Docker namespace for pre-built images on Docker Hub
+_SWEBENCH_NAMESPACE = "swebench"
 
 
 def run_patch_instance(
@@ -25,31 +29,18 @@ def run_patch_instance(
     scaffold_home: Path | None = None,
     debug: bool = False,
 ) -> dict:
-    """Run scaffold on a patch-based benchmark instance (swebench/feabench).
+    """Run scaffold on a benchmark instance inside a SWE-bench Docker container.
 
-    Returns a prediction dict with instance_id, model_name_or_path, model_patch.
+    The container has project dependencies pre-installed so the agent can
+    run tests to verify its work. Returns a prediction dict.
     """
     instance_id = instance["instance_id"]
     print(f"[{benchmark_name}] Running {instance_id}...", flush=True)
 
-    repo_dir = setup_repo(instance, workdir)
-
-    issue_text = instance.get("problem_statement", "")
-
-    home_dir = workdir / "homes" / instance_id.replace("/", "__")
-    result = run_scaffold(
-        message=issue_text,
-        working_dir=repo_dir,
-        scaffold_binary=scaffold_binary,
-        model=model,
-        home_dir=home_dir,
-        scaffold_home=scaffold_home,
-        timeout=timeout,
-        env_vars=env_vars,
-        debug=debug,
+    result, patch = _run_in_docker(
+        instance, scaffold_binary, model, workdir, timeout,
+        env_vars, scaffold_home, debug, benchmark_name,
     )
-
-    patch = extract_patch(repo_dir)
 
     print(
         f"[{benchmark_name}] {instance_id}: exit={result.exit_code}, "
@@ -73,6 +64,92 @@ def run_patch_instance(
         "model_name_or_path": model,
         "model_patch": patch,
     }
+
+
+def _run_in_docker(instance, scaffold_binary, model, workdir, timeout,
+                   env_vars, scaffold_home, debug, benchmark_name):
+    """Run scaffold inside a SWE-bench Docker container."""
+    import docker
+    from swebench.harness.docker_build import build_instance_images
+    from swebench.harness.docker_utils import (
+        cleanup_container,
+        copy_to_container,
+    )
+    from swebench.harness.test_spec.test_spec import make_test_spec
+
+    instance_id = instance["instance_id"]
+    client = docker.from_env()
+
+    # Build/pull the instance image (base -> env -> instance, cached)
+    spec = make_test_spec(instance, namespace=_SWEBENCH_NAMESPACE)
+
+    # Try to pull the pre-built instance image from Docker Hub first.
+    # SWE-bench publishes images under the "swebench" namespace, but their
+    # build functions never pull — they build from scratch (which OOMs on
+    # small droplets). If we can pull the instance image, we skip the build
+    # entirely.
+    image_ready = False
+    try:
+        client.images.get(spec.instance_image_key)
+        image_ready = True
+    except docker.errors.ImageNotFound:
+        print(f"[{benchmark_name}] Pulling {spec.instance_image_key}...", flush=True)
+        try:
+            client.images.pull(spec.instance_image_key)
+            image_ready = True
+        except docker.errors.APIError as e:
+            print(f"[{benchmark_name}] Pull failed ({e}), building locally...", flush=True)
+
+    if not image_ready:
+        print(f"[{benchmark_name}] Building image {spec.instance_image_key}...", flush=True)
+        build_instance_images(
+            client=client,
+            dataset=[instance],
+            namespace=_SWEBENCH_NAMESPACE,
+            tag="latest",
+            env_image_tag="latest",
+            max_workers=1,
+        )
+
+    container = None
+    try:
+        # Start container
+        container = client.containers.create(
+            image=spec.instance_image_key,
+            user="root",
+            detach=True,
+            command="tail -f /dev/null",
+            platform=spec.platform,
+        )
+        container.start()
+        print(f"[{benchmark_name}] Container {container.short_id} started", flush=True)
+
+        # Copy scaffold binary into container
+        scaffold_path = Path(scaffold_binary).resolve()
+        copy_to_container(
+            container, scaffold_path, Path("/usr/local/bin/scaffold")
+        )
+        container.exec_run("chmod +x /usr/local/bin/scaffold")
+
+        # Run scaffold
+        issue_text = instance.get("problem_statement", "")
+        result = run_scaffold_in_container(
+            container=container,
+            message=issue_text,
+            model=model,
+            env_vars=env_vars,
+            scaffold_home=scaffold_home,
+            timeout=timeout,
+            debug=debug,
+        )
+
+        # Extract patch
+        patch = extract_patch_from_container(container)
+
+        return result, patch
+    finally:
+        if container:
+            cleanup_container(client, container, None)
 
 
 def run_patch_benchmark(

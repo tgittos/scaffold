@@ -315,27 +315,20 @@ void test_python_tool_docstring_parsing(void) {
     init_tool_registry(&file_registry);
     TEST_ASSERT_EQUAL_INT(0, python_register_tool_schemas(&file_registry));
 
-    // Find the apply_delta tool
-    int found_apply_delta = 0;
+    // Find the apply_patch tool
+    int found_apply_patch = 0;
     for (size_t i = 0; i < file_registry.functions.count; i++) {
-        if (strcmp(file_registry.functions.data[i].name, "apply_delta") == 0) {
-            found_apply_delta = 1;
+        if (strcmp(file_registry.functions.data[i].name, "apply_patch") == 0) {
+            found_apply_patch = 1;
 
-            // Check that 'operations' parameter has a real description
-            // (not just "operations" which was the old broken behavior)
+            // Check that 'patch' parameter exists with a real description
             for (int j = 0; j < file_registry.functions.data[i].parameter_count; j++) {
-                if (strcmp(file_registry.functions.data[i].parameters[j].name, "operations") == 0) {
+                if (strcmp(file_registry.functions.data[i].parameters[j].name, "patch") == 0) {
                     const char *desc = file_registry.functions.data[i].parameters[j].description;
                     TEST_ASSERT_NOT_NULL(desc);
-                    // Description should contain details about the operations format
                     TEST_ASSERT_NOT_NULL_MESSAGE(
-                        strstr(desc, "delta"),
-                        "operations description should mention 'delta'"
-                    );
-                    // Should mention the operation structure details
-                    TEST_ASSERT_NOT_NULL_MESSAGE(
-                        strstr(desc, "type"),
-                        "operations description should mention 'type' field"
+                        strstr(desc, "patch"),
+                        "patch description should mention 'patch'"
                     );
                     break;
                 }
@@ -344,7 +337,7 @@ void test_python_tool_docstring_parsing(void) {
         }
     }
 
-    TEST_ASSERT_TRUE_MESSAGE(found_apply_delta, "apply_delta tool should be registered");
+    TEST_ASSERT_TRUE_MESSAGE(found_apply_patch, "apply_patch tool should be registered");
 
     cleanup_tool_registry(&file_registry);
     python_cleanup_tool_files();
@@ -754,67 +747,128 @@ void test_list_dir_iso_timestamps(void) {
     python_cleanup_tool_files();
 }
 
-// Test apply_delta expected field
-void test_apply_delta_expected_field(void) {
+// Test apply_patch basic operations
+void test_apply_patch_basic(void) {
     TEST_ASSERT_EQUAL_INT(0, python_init_tool_files());
     TEST_ASSERT_EQUAL_INT(0, python_load_tool_files());
 
     PythonExecutionParams params = {0};
     params.code = strdup(
         "_ns = {}\n"
-        "with open('/zip/python_defaults/apply_delta.py', 'r') as f:\n"
+        "with open('/zip/python_defaults/apply_patch.py', 'r') as f:\n"
         "    exec(f.read(), _ns)\n"
-        "_apply_delta = _ns['apply_delta']\n"
+        "_apply_patch = _ns['apply_patch']\n"
         "\n"
         "import tempfile, os\n"
+        "\n"
+        "# --- Test 1: Basic single-hunk update (replace line) ---\n"
         "tf = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)\n"
         "tf.write('line1\\nline2\\nline3\\n')\n"
         "tf.close()\n"
         "\n"
-        "# Replace with correct expected - should succeed\n"
-        "r = _apply_delta(tf.name, [{\n"
-        "    'type': 'replace',\n"
-        "    'start_line': 2,\n"
-        "    'end_line': 2,\n"
-        "    'content': ['NEW LINE 2'],\n"
-        "    'expected': ['line2']\n"
-        "}], create_backup=False)\n"
-        "assert r['success'] == True\n"
-        "\n"
-        "# Verify the file was modified\n"
+        "patch = ('*** Begin Patch\\n'\n"
+        "         '*** Update File: ' + tf.name + '\\n'\n"
+        "         '@@ line1\\n'\n"
+        "         ' line2\\n'\n"
+        "         '-line3\\n'\n"
+        "         '+line3_replaced\\n'\n"
+        "         '*** End Patch')\n"
+        "r = _apply_patch(patch)\n"
+        "assert r['success'] == True, f'basic update failed: {r}'\n"
         "with open(tf.name) as f:\n"
         "    c = f.read()\n"
-        "assert 'NEW LINE 2' in c\n"
+        "assert 'line3_replaced' in c, f'replacement not found: {c}'\n"
+        "assert 'line1' in c, 'line1 should be preserved'\n"
+        "assert 'line2' in c, 'line2 should be preserved'\n"
         "\n"
-        "# Replace with wrong expected - should fail\n"
+        "# --- Test 2: Multi-hunk update on same file ---\n"
+        "tf2 = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)\n"
+        "tf2.write('aaa\\nbbb\\nccc\\nddd\\neee\\n')\n"
+        "tf2.close()\n"
+        "\n"
+        "patch2 = ('*** Begin Patch\\n'\n"
+        "          '*** Update File: ' + tf2.name + '\\n'\n"
+        "          '@@ aaa\\n'\n"
+        "          '-bbb\\n'\n"
+        "          '+BBB\\n'\n"
+        "          '@@ ddd\\n'\n"
+        "          '-eee\\n'\n"
+        "          '+EEE\\n'\n"
+        "          '*** End Patch')\n"
+        "r2 = _apply_patch(patch2)\n"
+        "assert r2['success'] == True\n"
+        "with open(tf2.name) as f:\n"
+        "    c2 = f.read()\n"
+        "assert 'BBB' in c2 and 'EEE' in c2, f'multi-hunk failed: {c2}'\n"
+        "\n"
+        "# --- Test 3: Add new file ---\n"
+        "new_file = tf.name + '.new'\n"
+        "if os.path.exists(new_file):\n"
+        "    os.unlink(new_file)\n"
+        "patch3 = ('*** Begin Patch\\n'\n"
+        "          '*** Add File: ' + new_file + '\\n'\n"
+        "          '+new line 1\\n'\n"
+        "          '+new line 2\\n'\n"
+        "          '*** End Patch')\n"
+        "r3 = _apply_patch(patch3)\n"
+        "assert r3['success'] == True\n"
+        "assert os.path.exists(new_file), 'new file should exist'\n"
+        "with open(new_file) as f:\n"
+        "    c3 = f.read()\n"
+        "assert 'new line 1' in c3 and 'new line 2' in c3\n"
+        "\n"
+        "# --- Test 4: Delete file ---\n"
+        "patch4 = ('*** Begin Patch\\n'\n"
+        "          '*** Delete File: ' + new_file + '\\n'\n"
+        "          '*** End Patch')\n"
+        "r4 = _apply_patch(patch4)\n"
+        "assert r4['success'] == True\n"
+        "assert not os.path.exists(new_file), 'file should be deleted'\n"
+        "\n"
+        "# --- Test 5: Context mismatch error ---\n"
+        "tf5 = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)\n"
+        "tf5.write('alpha\\nbeta\\ngamma\\n')\n"
+        "tf5.close()\n"
+        "patch5 = ('*** Begin Patch\\n'\n"
+        "          '*** Update File: ' + tf5.name + '\\n'\n"
+        "          '@@ nonexistent_anchor\\n'\n"
+        "          '-beta\\n'\n"
+        "          '+BETA\\n'\n"
+        "          '*** End Patch')\n"
         "try:\n"
-        "    _apply_delta(tf.name, [{\n"
-        "        'type': 'replace',\n"
-        "        'start_line': 2,\n"
-        "        'end_line': 2,\n"
-        "        'content': ['SHOULD NOT APPEAR'],\n"
-        "        'expected': ['this is not what line 2 contains']\n"
-        "    }], create_backup=False)\n"
+        "    _apply_patch(patch5)\n"
         "    assert False, 'should have raised ValueError'\n"
         "except ValueError as e:\n"
-        "    assert 'Content mismatch' in str(e), f'unexpected error: {e}'\n"
+        "    assert 'Anchor not found' in str(e), f'unexpected error: {e}'\n"
         "\n"
-        "# Verify file was NOT modified by the failed operation\n"
-        "with open(tf.name) as f:\n"
-        "    c2 = f.read()\n"
-        "assert 'SHOULD NOT APPEAR' not in c2, 'file should be unchanged after failed expected'\n"
-        "assert 'NEW LINE 2' in c2, 'file should still have previous content'\n"
+        "# --- Test 6: Multi-file patch ---\n"
+        "tf6a = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)\n"
+        "tf6a.write('file_a_line1\\nfile_a_line2\\n')\n"
+        "tf6a.close()\n"
+        "tf6b = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)\n"
+        "tf6b.write('file_b_line1\\nfile_b_line2\\n')\n"
+        "tf6b.close()\n"
+        "patch6 = ('*** Begin Patch\\n'\n"
+        "          '*** Update File: ' + tf6a.name + '\\n'\n"
+        "          '-file_a_line1\\n'\n"
+        "          '+FILE_A_LINE1\\n'\n"
+        "          '*** Update File: ' + tf6b.name + '\\n'\n"
+        "          '-file_b_line1\\n'\n"
+        "          '+FILE_B_LINE1\\n'\n"
+        "          '*** End Patch')\n"
+        "r6 = _apply_patch(patch6)\n"
+        "assert r6['success'] == True\n"
+        "assert len(r6['files_modified']) == 2\n"
+        "with open(tf6a.name) as f:\n"
+        "    assert 'FILE_A_LINE1' in f.read()\n"
+        "with open(tf6b.name) as f:\n"
+        "    assert 'FILE_B_LINE1' in f.read()\n"
         "\n"
-        "# Without expected field - should still work normally\n"
-        "r2 = _apply_delta(tf.name, [{\n"
-        "    'type': 'replace',\n"
-        "    'start_line': 1,\n"
-        "    'end_line': 1,\n"
-        "    'content': ['REPLACED LINE 1']\n"
-        "}], create_backup=False)\n"
-        "assert r2['success'] == True\n"
+        "# Cleanup\n"
+        "for f in [tf.name, tf2.name, tf5.name, tf6a.name, tf6b.name]:\n"
+        "    if os.path.exists(f):\n"
+        "        os.unlink(f)\n"
         "\n"
-        "os.unlink(tf.name)\n"
         "print('passed')\n"
     );
     params.timeout_seconds = PYTHON_DEFAULT_TIMEOUT;
@@ -824,7 +878,7 @@ void test_apply_delta_expected_field(void) {
 
     TEST_ASSERT_EQUAL_INT(0, ret);
     TEST_ASSERT_EQUAL_INT_MESSAGE(1, result.success,
-        result.exception ? result.exception : "apply_delta expected test failed");
+        result.exception ? result.exception : "apply_patch test failed");
     TEST_ASSERT_NOT_NULL(result.stdout_output);
     TEST_ASSERT_NOT_NULL(strstr(result.stdout_output, "passed"));
 
@@ -866,7 +920,7 @@ int main(void) {
     RUN_TEST(test_read_file_returns_dict);
     RUN_TEST(test_search_files_new_features);
     RUN_TEST(test_list_dir_iso_timestamps);
-    RUN_TEST(test_apply_delta_expected_field);
+    RUN_TEST(test_apply_patch_basic);
 
     int result = UNITY_END();
 

@@ -26,7 +26,7 @@ Application-specific code that uses the library layer. This is a thin wrapper ar
 - **`file_info.py`** - Get file metadata
 - **`list_dir.py`** - List directory contents with filtering and ISO timestamps
 - **`search_files.py`** - Search files by content/pattern with optional context lines, matched_files, total_matches_found
-- **`apply_delta.py`** - Apply delta patch operations with optional expected-content verification
+- **`apply_patch.py`** - Apply text patches to files using a unified-diff-like format
 - **`shell.py`** - Shell command execution with timeout
 - **`web_fetch.py`** - Fetch and process web content
 - **`pip_install.py`** - Install pure-Python packages from PyPI (py3-none-any wheels)
@@ -487,7 +487,11 @@ A Python project (`uv`-managed) that measures scaffold's performance on coding b
 - **`prompts/`** — System prompt templates for each benchmark
 
 ### How It Works
-Each benchmark instance invokes scaffold as: `out/scaffold --json --yolo --system-prompt-file <prompt> --home <isolated_dir> --model <model> "<message>"` with `cwd` set to the target repo. The harness parses JSONL output, extracts patches via `git diff`, and writes predictions in the format expected by upstream evaluation tools.
+For SWE-bench and FEA-bench instances, scaffold runs inside SWE-bench Docker containers that have project dependencies pre-installed (conda `testbed` env). The harness builds/pulls the instance image via `swebench.harness.docker_build`, starts a container, copies the scaffold binary in, and executes it with `exec_run_with_timeout`. This lets the agent run tests to verify its work. Patches are extracted via `git diff` inside the container.
+
+For other benchmarks (contextbench), scaffold runs on a bare git checkout via subprocess.
+
+All benchmarks parse JSONL output and write predictions in the format expected by upstream evaluation tools.
 
 ### Entry Points
 - `scaffold-eval-swebench` — SWE-bench runner CLI

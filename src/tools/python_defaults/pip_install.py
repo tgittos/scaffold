@@ -14,11 +14,15 @@ _MAX_DEPTH = 10
 
 
 def pip_install(package: str, version: str = None, force: bool = False) -> dict:
-    """Install a pure-Python package from PyPI.
+    """Install a pure-Python package into scaffold's internal interpreter.
 
-    Downloads and installs packages that have py3-none-any wheels.
-    C extension packages are rejected with a clear error message.
-    Dependencies listed in METADATA Requires-Dist are installed recursively.
+    WARNING: This installs into scaffold's embedded Python, NOT the system
+    Python. Packages installed here are NOT available to python3/pip3 commands
+    run via the shell tool. To install packages for the project's Python
+    environment (e.g. test dependencies), use shell() with:
+        pip3 install <package>  OR  python3 -m pip install <package>
+
+    Only supports pure-Python (py3-none-any) wheels. C extensions are rejected.
 
     Args:
         package: Package name to install (e.g. "six", "requests")

@@ -38,13 +38,13 @@ The `scripts/run_eval.py` script provisions a DigitalOcean droplet, runs the ful
 source .env
 
 # Single SWE-bench instance (dev profile — small droplet)
-./scripts/run_eval.py swebench --profile dev -i django__django-16379
+./scripts/run_eval.py swebench --profile dev -i django__django-10097
 
 # Full FEA-bench run (prod profile — 16 vCPUs, 500 GB storage)
 ./scripts/run_eval.py feabench --profile prod -m gpt-4o
 
 # Keep droplet alive after run (for debugging)
-./scripts/run_eval.py swebench --profile dev -i django__django-16379 --keep
+./scripts/run_eval.py swebench --profile dev -i django__django-10097 --keep
 ```
 
 Results are saved to `eval_results/` (or the directory specified by `-o`):
@@ -139,7 +139,7 @@ uv run scaffold-eval-swebench \
     --scaffold-binary ../out/scaffold \
     --model claude-sonnet-4-20250514 \
     --output predictions.jsonl \
-    --instance-ids django__django-16379 sympy__sympy-20442
+    --instance-ids django__django-10097 sympy__sympy-20442
 
 # Run first 10 instances
 uv run scaffold-eval-swebench \
@@ -183,7 +183,7 @@ Context-bench questions file is JSONL with one object per line:
 The runners produce a `predictions.jsonl` file compatible with the [SWE-bench evaluation harness](https://github.com/princeton-nlp/SWE-bench). Each line contains:
 
 ```json
-{"instance_id": "django__django-16379", "model_name_or_path": "claude-sonnet-4-20250514", "model_patch": "diff --git a/..."}
+{"instance_id": "django__django-10097", "model_name_or_path": "claude-sonnet-4-20250514", "model_patch": "diff --git a/..."}
 ```
 
 To evaluate predictions manually (requires Docker and significant disk space):

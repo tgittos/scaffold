@@ -69,7 +69,7 @@ typedef enum {
  * Each category can be independently configured with a GateAction.
  */
 typedef enum {
-    GATE_CATEGORY_FILE_WRITE,   /* write_file, append_file, apply_delta */
+    GATE_CATEGORY_FILE_WRITE,   /* write_file, append_file, apply_patch */
     GATE_CATEGORY_FILE_READ,    /* read_file, file_info, list_dir, search_files */
     GATE_CATEGORY_SHELL,        /* shell command execution */
     GATE_CATEGORY_NETWORK,      /* web_fetch and network operations */

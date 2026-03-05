@@ -641,7 +641,7 @@ GateCategory get_tool_category(const char *tool_name) {
 
     if (strcmp(tool_name, "write_file") == 0 ||
         strcmp(tool_name, "append_file") == 0 ||
-        strcmp(tool_name, "apply_delta") == 0) {
+        strcmp(tool_name, "apply_patch") == 0) {
         return GATE_CATEGORY_FILE_WRITE;
     }
 

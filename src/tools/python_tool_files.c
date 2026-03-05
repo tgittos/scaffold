@@ -26,7 +26,7 @@ static const char *DEFAULT_TOOL_NAMES[] = {
     "list_dir",
     "search_files",
     "file_info",
-    "apply_delta",
+    "apply_patch",
     "shell",
     "web_fetch",
     "pip_install",
@@ -142,6 +142,69 @@ static int extract_default_tools(const char *tools_dir) {
         }
 
         free(content);
+    }
+
+    // Clean up stale tool files: if a .py file in the tools dir is NOT in
+    // DEFAULT_TOOL_NAMES but matches its embedded /zip/ counterpart exactly,
+    // it's a leftover from a previous version — delete it.
+    DIR *cleanup_dir = opendir(tools_dir);
+    if (cleanup_dir != NULL) {
+        struct dirent *entry;
+        while ((entry = readdir(cleanup_dir)) != NULL) {
+            if (entry->d_name[0] == '.') continue;
+            size_t name_len = strlen(entry->d_name);
+            if (name_len < 4 || strcmp(entry->d_name + name_len - 3, ".py") != 0) continue;
+
+            // Extract base name (without .py)
+            char base_name[256];
+            strncpy(base_name, entry->d_name, sizeof(base_name) - 1);
+            base_name[sizeof(base_name) - 1] = '\0';
+            if (name_len - 3 < sizeof(base_name)) {
+                base_name[name_len - 3] = '\0';
+            }
+
+            // Check if this tool is in DEFAULT_TOOL_NAMES
+            int is_current = 0;
+            for (int j = 0; DEFAULT_TOOL_NAMES[j] != NULL; j++) {
+                if (strcmp(base_name, DEFAULT_TOOL_NAMES[j]) == 0) {
+                    is_current = 1;
+                    break;
+                }
+            }
+            if (is_current) continue;
+
+            // Not a current tool — check if it matches the embedded version
+            char *embedded_content = read_embedded_file(entry->d_name);
+            if (embedded_content == NULL) continue;  // No embedded version, user-created tool
+
+            char dest_path[512];
+            snprintf(dest_path, sizeof(dest_path), "%s/%s", tools_dir, entry->d_name);
+
+            FILE *f = fopen(dest_path, "r");
+            if (f != NULL) {
+                fseek(f, 0, SEEK_END);
+                long size = ftell(f);
+                fseek(f, 0, SEEK_SET);
+
+                if (size > 0 && size <= 1024 * 1024) {
+                    char *disk_content = malloc(size + 1);
+                    if (disk_content != NULL) {
+                        size_t read_bytes = fread(disk_content, 1, size, f);
+                        disk_content[read_bytes] = '\0';
+                        if (strcmp(disk_content, embedded_content) == 0) {
+                            // Exact match — safe to remove stale tool
+                            fclose(f);
+                            f = NULL;
+                            unlink(dest_path);
+                        }
+                        free(disk_content);
+                    }
+                }
+                if (f != NULL) fclose(f);
+            }
+            free(embedded_content);
+        }
+        closedir(cleanup_dir);
     }
 
     return extracted;

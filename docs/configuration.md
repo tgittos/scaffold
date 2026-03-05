@@ -130,7 +130,7 @@ Each tool belongs to a category with a default action:
 | Category | Default | Tools |
 |----------|---------|-------|
 | `file_read` | allow | `read_file`, `file_info`, `list_dir`, `search_files` |
-| `file_write` | gate | `write_file`, `append_file`, `apply_delta` |
+| `file_write` | gate | `write_file`, `append_file`, `apply_patch` |
 | `shell` | gate | `shell` |
 | `network` | gate | `web_fetch` |
 | `memory` | allow | `remember`, `recall_memories`, vector DB, messaging |
