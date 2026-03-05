@@ -42,7 +42,9 @@ void test_api_error_retryable_http_status(void) {
     TEST_ASSERT_EQUAL(0, api_error_is_retryable(401, CURLE_OK));  // Unauthorized
     TEST_ASSERT_EQUAL(0, api_error_is_retryable(403, CURLE_OK));  // Forbidden
     TEST_ASSERT_EQUAL(0, api_error_is_retryable(404, CURLE_OK));  // Not found
-    TEST_ASSERT_EQUAL(0, api_error_is_retryable(500, CURLE_OK));  // Internal server error
+
+    // 500 Internal Server Error is retryable (transient upstream failure)
+    TEST_ASSERT_EQUAL(1, api_error_is_retryable(500, CURLE_OK));
 }
 
 // Test api_error_init

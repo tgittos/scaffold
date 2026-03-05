@@ -614,6 +614,57 @@ static size_t streaming_write_callback(void *contents, size_t size, size_t nmemb
     return total;
 }
 
+struct StreamingGateData {
+    const struct StreamingHTTPConfig *user_config;
+    long http_status;
+    int data_forwarded;
+    int retry_after_seconds;
+};
+
+static size_t streaming_gate_callback(void *contents, size_t size, size_t nmemb, void *userp)
+{
+    struct StreamingGateData *gate = (struct StreamingGateData *)userp;
+    size_t total = size * nmemb;
+
+    /* Only forward body data to the user callback on 2xx responses.
+     * On error responses, silently consume the body so the SSE parser
+     * buffer stays clean for a potential retry. */
+    if (gate->http_status >= 200 && gate->http_status < 400) {
+        gate->data_forwarded = 1;
+        return streaming_write_callback(contents, size, nmemb, (void *)gate->user_config);
+    }
+
+    return total;
+}
+
+static size_t streaming_status_header_callback(char *buffer, size_t size, size_t nitems,
+                                                void *userdata)
+{
+    struct StreamingGateData *gate = (struct StreamingGateData *)userdata;
+    size_t realsize = size * nitems;
+
+    /* Parse "HTTP/x.y STATUS" or "HTTP/2 STATUS" from the status line */
+    if (realsize >= 10 && strncmp(buffer, "HTTP/", 5) == 0) {
+        const char *p = buffer + 5;
+        while (p < buffer + realsize && *p != ' ') p++;
+        if (p < buffer + realsize) {
+            gate->http_status = atol(p + 1);
+        }
+    }
+
+    if (realsize > 13 && strncasecmp(buffer, "Retry-After:", 12) == 0) {
+        const char *value = buffer + 12;
+        while (*value == ' ' || *value == '\t') value++;
+
+        int seconds = atoi(value);
+        if (seconds > 0 && seconds <= 300) {
+            gate->retry_after_seconds = seconds;
+        }
+    }
+
+    return realsize;
+}
+
 int http_post_streaming(const char *url, const char *post_data,
                        const char **headers,
                        const struct StreamingHTTPConfig *config)
@@ -621,6 +672,7 @@ int http_post_streaming(const char *url, const char *post_data,
     CURL *curl = NULL;
     CURLcode res = CURLE_OK;
     long http_status = 0;
+    int return_code = 0;
     struct curl_slist *curl_headers = NULL;
     APIError api_err;
 
@@ -629,85 +681,151 @@ int http_post_streaming(const char *url, const char *post_data,
         return -1;
     }
 
+    int max_retries = config_get_int("api_max_retries", 3);
+    int base_delay_ms = config_get_int("api_retry_delay_ms", 1000);
+    float backoff_factor = config_get_float("api_backoff_factor", 2.0f);
+
+    static int seeded = 0;
+    if (!seeded) {
+        srand((unsigned int)time(NULL));
+        seeded = 1;
+    }
+
     clear_last_api_error();
 
-    curl = curl_easy_init();
-    if (curl == NULL) {
-        fprintf(stderr, "Error: Failed to initialize curl for streaming\n");
-        return -1;
-    }
-    http_configure_ssl(curl);
+    struct StreamingGateData gate = {
+        .user_config = config,
+        .http_status = 0,
+        .data_forwarded = 0,
+        .retry_after_seconds = 0
+    };
 
-    curl_headers = curl_slist_append(NULL, "Content-Type: application/json");
-    if (curl_headers == NULL) {
-        fprintf(stderr, "Error: Failed to set default headers for streaming\n");
-        curl_easy_cleanup(curl);
-        return -1;
-    }
+    int attempt = 0;
+    while (attempt <= max_retries) {
+        gate.http_status = 0;
+        gate.data_forwarded = 0;
+        gate.retry_after_seconds = 0;
 
-    if (headers != NULL) {
-        for (int i = 0; headers[i] != NULL; i++) {
-            curl_headers = curl_slist_append(curl_headers, headers[i]);
-            if (curl_headers == NULL) {
-                fprintf(stderr, "Error: Failed to set custom header: %s\n", headers[i]);
-                curl_easy_cleanup(curl);
-                return -1;
+        curl = curl_easy_init();
+        if (curl == NULL) {
+            fprintf(stderr, "Error: Failed to initialize curl for streaming\n");
+            return -1;
+        }
+        http_configure_ssl(curl);
+
+        curl_headers = curl_slist_append(NULL, "Content-Type: application/json");
+        if (curl_headers == NULL) {
+            fprintf(stderr, "Error: Failed to set default headers for streaming\n");
+            curl_easy_cleanup(curl);
+            return -1;
+        }
+
+        if (headers != NULL) {
+            for (int i = 0; headers[i] != NULL; i++) {
+                curl_headers = curl_slist_append(curl_headers, headers[i]);
+                if (curl_headers == NULL) {
+                    fprintf(stderr, "Error: Failed to set custom header: %s\n", headers[i]);
+                    curl_easy_cleanup(curl);
+                    return -1;
+                }
             }
         }
+
+        curl_easy_setopt(curl, CURLOPT_URL, url);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_data);
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, curl_headers);
+
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, streaming_gate_callback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &gate);
+        curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, streaming_status_header_callback);
+        curl_easy_setopt(curl, CURLOPT_HEADERDATA, &gate);
+
+        if (config->base.timeout_seconds > 0) {
+            curl_easy_setopt(curl, CURLOPT_TIMEOUT, config->base.timeout_seconds);
+        }
+        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, config->base.connect_timeout_seconds);
+
+        if (config->low_speed_limit > 0) {
+            curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, config->low_speed_limit);
+            curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, config->low_speed_time);
+        }
+
+        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, config->base.follow_redirects ? 1L : 0L);
+        curl_easy_setopt(curl, CURLOPT_MAXREDIRS, config->base.max_redirects);
+        curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, interrupt_progress_callback);
+        curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+        if (log_http_body_enabled) {
+            curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+        }
+
+        res = curl_easy_perform(curl);
+
+        http_status = 0;
+        if (res == CURLE_OK) {
+            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_status);
+        }
+
+        curl_slist_free_all(curl_headers);
+        curl_headers = NULL;
+        curl_easy_cleanup(curl);
+        curl = NULL;
+
+        if (res == CURLE_OK && http_status >= 200 && http_status < 400) {
+            return_code = 0;
+            break;
+        }
+
+        if (res == CURLE_ABORTED_BY_CALLBACK) {
+            LOG_DEBUG("Streaming request aborted by user interrupt");
+            return_code = -2;
+            break;
+        }
+
+        /* Never retry if we already forwarded data to the streaming consumer —
+         * the SSE parser state cannot be rewound. */
+        if (gate.data_forwarded) {
+            api_error_set(&api_err, http_status, res, attempt + 1);
+            set_last_api_error(&api_err);
+            if (res != CURLE_OK) {
+                LOG_ERROR("Streaming request failed mid-stream: %s", curl_easy_strerror(res));
+            } else {
+                LOG_ERROR("Streaming request failed mid-stream with HTTP %ld", http_status);
+            }
+            return_code = -1;
+            break;
+        }
+
+        int is_retryable = api_error_is_retryable(http_status, res);
+
+        if (!is_retryable || attempt == max_retries) {
+            api_error_set(&api_err, http_status, res, attempt + 1);
+            set_last_api_error(&api_err);
+
+            if (res != CURLE_OK) {
+                LOG_ERROR("Streaming request failed: %s (attempt %d/%d)",
+                         curl_easy_strerror(res), attempt + 1, max_retries + 1);
+            } else {
+                LOG_ERROR("Streaming request failed with HTTP %ld (attempt %d/%d)",
+                         http_status, attempt + 1, max_retries + 1);
+            }
+            return_code = -1;
+            break;
+        }
+
+        int delay_ms;
+        if (gate.retry_after_seconds > 0) {
+            delay_ms = gate.retry_after_seconds * 1000;
+            LOG_WARN("API returned Retry-After: %d seconds", gate.retry_after_seconds);
+        } else {
+            delay_ms = calculate_retry_delay(attempt, base_delay_ms, backoff_factor);
+        }
+
+        LOG_WARN("Streaming request failed (attempt %d/%d), retrying in %dms...",
+                 attempt + 1, max_retries + 1, delay_ms);
+
+        usleep(delay_ms * 1000);
+        attempt++;
     }
 
-    curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_data);
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, curl_headers);
-
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, streaming_write_callback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)config);
-
-    if (config->base.timeout_seconds > 0) {
-        curl_easy_setopt(curl, CURLOPT_TIMEOUT, config->base.timeout_seconds);
-    }
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, config->base.connect_timeout_seconds);
-
-    if (config->low_speed_limit > 0) {
-        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, config->low_speed_limit);
-        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, config->low_speed_time);
-    }
-
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, config->base.follow_redirects ? 1L : 0L);
-    curl_easy_setopt(curl, CURLOPT_MAXREDIRS, config->base.max_redirects);
-    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, interrupt_progress_callback);
-    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
-    if (log_http_body_enabled) {
-        curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
-    }
-
-    res = curl_easy_perform(curl);
-
-    if (res == CURLE_OK) {
-        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_status);
-    }
-
-    curl_slist_free_all(curl_headers);
-    curl_easy_cleanup(curl);
-
-    if (res == CURLE_ABORTED_BY_CALLBACK) {
-        LOG_DEBUG("Streaming request aborted by user interrupt");
-        return -2;
-    }
-
-    if (res != CURLE_OK) {
-        api_error_set(&api_err, http_status, res, 1);
-        set_last_api_error(&api_err);
-        LOG_ERROR("Streaming request failed: %s", curl_easy_strerror(res));
-        return -1;
-    }
-
-    if (http_status < 200 || http_status >= 400) {
-        api_error_set(&api_err, http_status, res, 1);
-        set_last_api_error(&api_err);
-        LOG_ERROR("Streaming request failed with HTTP %ld", http_status);
-        return -1;
-    }
-
-    return 0;
+    return return_code;
 }

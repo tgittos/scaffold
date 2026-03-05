@@ -29,6 +29,7 @@ int api_error_is_retryable(long http_status, CURLcode curl_code)
     }
 
     if (http_status == 429 ||
+        http_status == 500 ||
         http_status == 502 ||
         http_status == 503 ||
         http_status == 504) {
