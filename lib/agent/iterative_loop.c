@@ -17,6 +17,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+
+#define STREAM_RETRY_MAX 3
 
 int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx) {
     if (session == NULL || ctx == NULL) {
@@ -24,6 +27,7 @@ int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx) {
     }
 
     int loop_count = 0;
+    int stream_retries = 0;
 
     LOG_INFO("Starting iterative tool calling loop");
 
@@ -65,8 +69,18 @@ int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx) {
             rt_rc = api_round_trip_execute(session, "", iteration_max_tokens, &rt);
         }
         if (rt_rc != 0) {
+            stream_retries++;
+            if (stream_retries <= STREAM_RETRY_MAX) {
+                int delay_ms = 1000 * (1 << (stream_retries - 1));
+                LOG_WARN("API request failed in tool loop iteration %d, retry %d/%d in %dms",
+                         loop_count, stream_retries, STREAM_RETRY_MAX, delay_ms);
+                usleep(delay_ms * 1000);
+                loop_count--;
+                continue;
+            }
             return -1;
         }
+        stream_retries = 0;
 
         const char* assistant_content = rt.parsed.response_content ?
                                         rt.parsed.response_content :

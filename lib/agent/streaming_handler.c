@@ -321,6 +321,14 @@ int streaming_round_trip_execute(AgentSession* session, LLMProvider* provider,
                                                     max_tokens, &sse_user_data);
     if (ctx == NULL) return -1;
 
+    if (ctx->state == STREAM_STATE_ERROR) {
+        LOG_ERROR("Streaming request failed: %s",
+                  ctx->error_message ? ctx->error_message : "unknown error");
+        status_line_set_idle();
+        streaming_context_free(ctx);
+        return -1;
+    }
+
     status_line_set_idle();
 
     /* Fill LLMRoundTripResult from streaming context */
