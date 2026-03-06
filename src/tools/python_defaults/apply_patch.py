@@ -11,176 +11,156 @@ def _is_traversal_path(path: str) -> bool:
     return '..' in parts
 
 
-def _find_anchor(lines, anchor, start=0):
-    """Find the first line matching anchor text, starting from start index."""
-    anchor_stripped = anchor.strip()
-    for i in range(start, len(lines)):
-        if lines[i].rstrip('\n').rstrip('\r').strip() == anchor_stripped:
+def _seek_sequence(lines, pattern, start=0):
+    """Find the first contiguous occurrence of pattern lines within lines.
+
+    Comparison strips trailing whitespace.  Returns the index of the first
+    matching line, or -1 if not found.
+    """
+    if not pattern:
+        return start
+    plen = len(pattern)
+    for i in range(start, len(lines) - plen + 1):
+        ok = True
+        for j in range(plen):
+            if lines[i + j].rstrip('\n\r') != pattern[j].rstrip('\n\r'):
+                ok = False
+                break
+        if ok:
             return i
     return -1
+
+
+def _parse_chunks(hunk_lines):
+    """Parse hunk lines into chunks, each with optional anchor + old/new lines.
+
+    Follows the Codex apply_patch grammar:
+      - @@ with text  -> chunk with change_context
+      - @@ bare       -> chunk with change_context=None
+      - ' ' prefix    -> context line (goes into both old_lines and new_lines)
+      - '-' prefix    -> removed line (old_lines only)
+      - '+' prefix    -> added line (new_lines only)
+      - empty line    -> context (both old and new, as empty string)
+    """
+    chunks = []
+    pending_anchor = None   # set when we see @@, consumed by next diff block
+    first_chunk = True
+
+    i = 0
+    while i < len(hunk_lines):
+        line = hunk_lines[i]
+
+        # Check for @@ anchor
+        if line.startswith('@@'):
+            text = line[2:].strip()
+            pending_anchor = text if text else None
+            i += 1
+            first_chunk = False
+            continue
+
+        # Must be a diff line (' ', '-', '+', or empty)
+        old_lines = []
+        new_lines = []
+        while i < len(hunk_lines):
+            dl = hunk_lines[i]
+            if dl.startswith('@@'):
+                break
+            if dl == '':
+                # Empty line = context
+                old_lines.append('')
+                new_lines.append('')
+            elif dl[0] == ' ':
+                old_lines.append(dl[1:])
+                new_lines.append(dl[1:])
+            elif dl[0] == '-':
+                old_lines.append(dl[1:])
+            elif dl[0] == '+':
+                new_lines.append(dl[1:])
+            else:
+                if not old_lines and not new_lines and first_chunk:
+                    # Tolerate missing @@ on first chunk (lenient)
+                    old_lines.append(dl)
+                    new_lines.append(dl)
+                else:
+                    break
+            i += 1
+
+        if old_lines or new_lines:
+            chunks.append((pending_anchor, old_lines, new_lines))
+            pending_anchor = None
+            first_chunk = False
+
+    return chunks
 
 
 def _apply_hunk(lines, hunk_lines, file_path):
     """Apply a single hunk (set of changes with optional @@ anchors) to lines.
 
-    Returns modified lines list.
+    Uses Codex-style block find-and-replace: for each chunk, find old_lines as
+    a contiguous sequence in the file and replace with new_lines.
     """
-    # Parse the hunk into segments separated by @@ anchors
-    # Each segment has: anchor (optional), context/add/remove lines
-    segments = []
-    current_anchor = None
-    current_ops = []
-
-    for line in hunk_lines:
-        if line.startswith('@@'):
-            if current_ops:
-                segments.append((current_anchor, current_ops))
-                current_ops = []
-            current_anchor = line[2:].strip()
-        else:
-            current_ops.append(line)
-
-    if current_ops:
-        segments.append((current_anchor, current_ops))
-
-    if not segments:
+    chunks = _parse_chunks(hunk_lines)
+    if not chunks:
         return lines
 
-    # For nested @@ anchors, each narrows the search scope
-    search_start = 0
+    # Collect (start_idx, old_len, new_lines) replacements
+    replacements = []
+    line_index = 0
 
-    for anchor, ops in segments:
+    for anchor, old, new in chunks:
+        # If chunk has an anchor, seek to it first
         if anchor:
-            anchor_idx = _find_anchor(lines, anchor, search_start)
-            if anchor_idx == -1:
+            anchor_stripped = anchor.strip()
+            idx = -1
+            for k in range(line_index, len(lines)):
+                if lines[k].rstrip('\n\r').strip() == anchor_stripped:
+                    idx = k
+                    break
+            if idx == -1:
                 raise ValueError(
                     f"Anchor not found in {file_path}: '{anchor}'. "
                     f"The file may have changed since you last read it. "
                     f"Use read_file to get current contents."
                 )
-            # Start applying changes after the anchor line
-            search_start = anchor_idx + 1
+            line_index = idx + 1
 
-        # Now apply the operations starting from search_start
-        # We need to match context lines to find exact position
-        pos = search_start
+        if not old:
+            # Pure addition — insert at current position (or end of file)
+            insert_at = len(lines) if line_index >= len(lines) else line_index
+            replacements.append((insert_at, 0, new))
+            continue
 
-        # Find the position by matching leading context lines
-        context_lines = []
-        for op_line in ops:
-            if op_line.startswith(' '):
-                context_lines.append(op_line[1:])
-            else:
-                break
+        # Find old_lines contiguously in the file starting from line_index
+        found = _seek_sequence(lines, old, line_index)
 
-        if context_lines:
-            # Search for context match starting from pos
-            found = False
-            for try_pos in range(pos, len(lines)):
-                match = True
-                for ci, ctx in enumerate(context_lines):
-                    if try_pos + ci >= len(lines):
-                        match = False
-                        break
-                    actual = lines[try_pos + ci].rstrip('\n').rstrip('\r')
-                    if actual != ctx.rstrip('\n').rstrip('\r'):
-                        match = False
-                        break
-                if match:
-                    pos = try_pos
-                    found = True
-                    break
-            if not found:
-                # Try from beginning if anchor didn't help
-                if search_start > 0:
-                    for try_pos in range(0, search_start):
-                        match = True
-                        for ci, ctx in enumerate(context_lines):
-                            if try_pos + ci >= len(lines):
-                                match = False
-                                break
-                            actual = lines[try_pos + ci].rstrip('\n').rstrip('\r')
-                            if actual != ctx.rstrip('\n').rstrip('\r'):
-                                match = False
-                                break
-                        if match:
-                            pos = try_pos
-                            found = True
-                            break
-                if not found:
-                    expected_ctx = '\n'.join(f'  {c}' for c in context_lines[:5])
-                    raise ValueError(
-                        f"Context mismatch in {file_path}. Expected:\n{expected_ctx}\n"
-                        f"The file may have changed. Use read_file to get current contents."
-                    )
+        # Retry without trailing empty line (handles EOF edge case)
+        if found == -1 and old and old[-1] == '':
+            trimmed_old = old[:-1]
+            trimmed_new = new[:-1] if new and new[-1] == '' else new
+            found = _seek_sequence(lines, trimmed_old, line_index)
+            if found != -1:
+                old = trimmed_old
+                new = trimmed_new
 
-        # Apply operations at pos
-        new_lines = []
-        i = 0  # index into ops
-        file_idx = pos  # current position in file
+        if found == -1:
+            snippet = '\n'.join(f'  {l}' for l in old[:5])
+            raise ValueError(
+                f"Failed to find expected lines in {file_path}:\n{snippet}\n"
+                f"Use read_file to get current contents."
+            )
 
-        # Add everything before pos
-        new_lines.extend(lines[:pos])
+        replacements.append((found, len(old), new))
+        line_index = found + len(old)
 
-        while i < len(ops):
-            op_line = ops[i]
-            if op_line.startswith(' '):
-                # Context line - verify and keep
-                expected = op_line[1:]
-                if file_idx < len(lines):
-                    actual = lines[file_idx].rstrip('\n').rstrip('\r')
-                    exp_clean = expected.rstrip('\n').rstrip('\r')
-                    if actual != exp_clean:
-                        raise ValueError(
-                            f"Context mismatch in {file_path} at line {file_idx + 1}. "
-                            f"Expected: '{exp_clean}'\n"
-                            f"Actual:   '{actual}'\n"
-                            f"Use read_file to get current contents."
-                        )
-                    new_lines.append(lines[file_idx])
-                    file_idx += 1
-                else:
-                    raise ValueError(
-                        f"Context mismatch in {file_path}: file ended at line {file_idx + 1} "
-                        f"but expected: '{expected.rstrip()}'"
-                    )
-                i += 1
-            elif op_line.startswith('-'):
-                # Remove line - verify content matches
-                removed = op_line[1:]
-                if file_idx < len(lines):
-                    actual = lines[file_idx].rstrip('\n').rstrip('\r')
-                    exp_clean = removed.rstrip('\n').rstrip('\r')
-                    if actual != exp_clean:
-                        raise ValueError(
-                            f"Remove mismatch in {file_path} at line {file_idx + 1}. "
-                            f"Expected to remove: '{exp_clean}'\n"
-                            f"Actual line:        '{actual}'\n"
-                            f"Use read_file to get current contents."
-                        )
-                    file_idx += 1  # skip this line
-                i += 1
-            elif op_line.startswith('+'):
-                # Add line
-                added = op_line[1:]
-                if not added.endswith('\n'):
-                    added += '\n'
-                new_lines.append(added)
-                i += 1
-            else:
-                raise ValueError(
-                    f"Invalid patch line in {file_path} at hunk line {i + 1}: "
-                    f"'{op_line}'. Lines must start with ' ' (context), "
-                    f"'+' (add), '-' (remove), or '@@' (anchor)."
-                )
-
-        # Add remaining lines after the hunk
-        new_lines.extend(lines[file_idx:])
-        lines = new_lines
-        # Update search_start for any subsequent segments
-        search_start = pos + sum(
-            1 for op in ops if op.startswith(' ') or op.startswith('+')
-        )
+    # Apply replacements in reverse order so indices stay valid
+    for start_idx, old_len, new_segment in reversed(replacements):
+        # Remove old lines
+        del lines[start_idx:start_idx + old_len]
+        # Insert new lines (with newline endings)
+        for offset, nl in enumerate(new_segment):
+            if not nl.endswith('\n'):
+                nl += '\n'
+            lines.insert(start_idx + offset, nl)
 
     return lines
 

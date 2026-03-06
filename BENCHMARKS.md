@@ -7,14 +7,14 @@
 ### Summary
 | Model | Passed | Failed | Pending | Pass Rate |
 |-------|--------|--------|---------|-----------|
-| gpt-5.3-codex | 2 | 3 | 495 | 40.0% |
+| gpt-5.3-codex | 3 | 2 | 495 | 60.0% |
 
 ### Results
 | Instance | gpt-5.3-codex |
 |----------|---------------|
 | astropy__astropy-12907 | :white_check_mark: 2026-03-05 |
-| astropy__astropy-13236 | :x: 2026-03-05 |
-| astropy__astropy-13453 | :x: 2026-03-05 |
+| astropy__astropy-13236 | :x: 2026-03-06 |
+| astropy__astropy-13453 | :white_check_mark: 2026-03-05 |
 | django__django-10097 | :white_check_mark: 2026-03-04 |
 | django__django-10554 | :x: 2026-03-04 |
 

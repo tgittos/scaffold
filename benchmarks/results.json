@@ -8,14 +8,14 @@
     },
     "astropy__astropy-13236": {
       "gpt-5.3-codex": {
-        "date": "2026-03-05",
+        "date": "2026-03-06",
         "result": "fail"
       }
     },
     "astropy__astropy-13453": {
       "gpt-5.3-codex": {
         "date": "2026-03-05",
-        "result": "fail"
+        "result": "pass"
       }
     },
     "django__django-10097": {

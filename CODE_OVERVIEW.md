@@ -13,7 +13,7 @@ Application-specific code that uses the library layer. This is a thin wrapper ar
 
 #### `src/tools/` - Python Tool Integration
 - **`python_tool.c/h`** - Embedded Python interpreter execution
-- **`python_tool_files.c/h`** - Python file-based tool loading system
+- **`python_tool_files.c/h`** - Python file-based tool loading system (supports freeform tool invocation for tools with Match: directive)
 - **`python_extension.c/h`** - Tool extension interface for Python tools integration with lib/
 - **`http_python.c/h`** - Python extension for C HTTP client (`_ralph_http` module: get, post, download)
 - **`verified_file_python.c/h`** - Python extension for TOCTOU-safe file operations (`_ralph_verified_io` module)
@@ -24,7 +24,7 @@ Application-specific code that uses the library layer. This is a thin wrapper ar
 - **`write_file.py`** - Write or append content to file (mode parameter: "write" or "append")
 - **`list_dir.py`** - List directory contents with filtering and ISO timestamps
 - **`search_files.py`** - Search files by content/pattern with optional context lines, matched_files, total_matches_found
-- **`apply_patch.py`** - Apply text patches to files using a unified-diff-like format
+- **`apply_patch.py`** - Apply text patches using Codex-compatible block find-and-replace format
 - **`shell.py`** - Shell command execution with timeout
 - **`web_fetch.py`** - Fetch and process web content
 - **`pip.py`** - Package management: install pure-Python packages or list installed packages (action parameter: "install" or "list")

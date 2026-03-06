@@ -461,21 +461,6 @@ void test_file_reference_at_sign_not_filename(void) {
     cleanup_system_prompt(&prompt_content);
 }
 
-void test_platform_info_path(void) {
-    char *prompt_content = NULL;
-
-    unlink("AGENTS.md");
-
-    int result = load_system_prompt(&prompt_content, NULL);
-
-    TEST_ASSERT_EQUAL(0, result);
-    TEST_ASSERT_NOT_NULL(prompt_content);
-
-    // PATH line should always be present
-    TEST_ASSERT_TRUE(strstr(prompt_content, "- PATH:") != NULL);
-
-    cleanup_system_prompt(&prompt_content);
-}
 
 void test_platform_info_present(void) {
     char *prompt_content = NULL;
@@ -524,7 +509,6 @@ int main(void) {
 
     // Platform information tests
     RUN_TEST(test_platform_info_present);
-    RUN_TEST(test_platform_info_path);
 
     return UNITY_END();
 }

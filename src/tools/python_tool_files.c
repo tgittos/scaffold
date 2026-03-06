@@ -673,14 +673,35 @@ int execute_python_file_tool_call(const ToolCall *tool_call, ToolResult *result)
         return 0;
     }
 
-    cJSON *args = cJSON_Parse(tool_call->arguments);
+    // Freeform tool support: if the tool has a match_arg and arguments is not
+    // JSON (doesn't start with '{'), treat the raw arguments string as the
+    // value of the match_arg parameter, bypassing JSON parsing.  This is how
+    // Codex models send apply_patch — raw patch text without JSON wrapping.
+    const char *match_arg = python_tool_get_match_arg(tool_call->name);
+    int freeform = (match_arg != NULL && tool_call->arguments != NULL
+                    && tool_call->arguments[0] != '\0'
+                    && tool_call->arguments[0] != '{');
+
+    cJSON *args = NULL;
+    if (freeform) {
+        // Synthesize a JSON object with the match_arg as key
+        args = cJSON_CreateObject();
+        if (args != NULL) {
+            cJSON_AddStringToObject(args, match_arg, tool_call->arguments);
+        }
+    } else {
+        args = cJSON_Parse(tool_call->arguments);
+    }
+
     if (args == NULL) {
         LOG_DEBUG("Failed to parse arguments for %s", tool_call->name);
         LOG_DEBUG("Arguments string: '%s'",
                   tool_call->arguments ? tool_call->arguments : "(NULL)");
-        const char *error_ptr = cJSON_GetErrorPtr();
-        LOG_DEBUG("cJSON error near: '%s'",
-                  error_ptr ? error_ptr : "(unknown)");
+        if (!freeform) {
+            const char *error_ptr = cJSON_GetErrorPtr();
+            LOG_DEBUG("cJSON error near: '%s'",
+                      error_ptr ? error_ptr : "(unknown)");
+        }
 
         result->result = strdup("{\"error\": \"Failed to parse arguments\", \"success\": false}");
         result->success = 0;

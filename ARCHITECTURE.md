@@ -1201,7 +1201,7 @@ graph TB
 - **`write_file`**: Write or append content to file (mode: "write" or "append")
 - **`list_dir`**: List directory contents with ISO timestamps
 - **`search_files`**: Search for patterns in files with optional context lines, returns matched_files and total_matches_found
-- **`apply_patch`**: Apply text patches to files using a unified-diff-like format
+- **`apply_patch`**: Apply text patches using Codex-compatible block find-and-replace format (supports freeform invocation)
 - **`shell`**: Execute shell commands
 - **`web_fetch`**: Fetch web content
 - **`pip`**: Package management (action: "install" or "list") — install pure-Python packages from PyPI or list installed packages
