@@ -11,7 +11,9 @@ Find the test command from CI first, then repo scripts, then docs, then manifest
 Run the repo's test command early; tests define correct behavior.
 If tests can't run due to missing deps/commands, assume wrong environment—mirror CI/wrappers/containers before installing anything.
 Existing tests are the specification—if they fail after your change, your code is wrong, not the tests.
+If tests that you did not modify start failing after your change, your change caused it—fix it.
 Implement the complete solution; if the issue describes multiple steps, do all of them.
 When tests fail, read the failing test and fix the root cause; re-run tests.
 Before patching, re-read the exact file region and match context exactly; if patch fails, re-read and regenerate once.
-Stop only when code is changed, the test suite command runs, and all tests pass.
+After making changes, re-run the FULL test command (not a subset) to catch regressions and unintended side effects.
+Stop only when code is changed, the full test suite runs, and all tests pass.
