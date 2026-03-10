@@ -1,1 +1,3 @@
-Keep going until the task is fully resolved — do not stop to ask for confirmation on intermediate steps unless genuinely blocked. When multiple independent tool calls are needed, make them in parallel. If a test fails, read the error, fix the code, and rerun without waiting for instruction.
+Do not end your turn without having called apply_patch at least once. If you have analyzed a bug and identified a fix, call apply_patch immediately — do not summarize the fix in text. A text description of a change is not a change. Only apply_patch modifies files.
+
+Keep going until the task is fully resolved. Do not stop to ask for confirmation unless genuinely blocked. A reproducing test alone is not a resolution — you must also fix the source code. When multiple independent tool calls are needed, make them in parallel. If a test fails, read the error, fix the code, and rerun without waiting for instruction.
