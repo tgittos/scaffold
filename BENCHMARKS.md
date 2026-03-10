@@ -16,7 +16,7 @@
 | astropy__astropy-13236 | :x: 2026-03-06 |
 | astropy__astropy-13453 | :white_check_mark: 2026-03-05 |
 | django__django-10097 | :white_check_mark: 2026-03-04 |
-| django__django-10554 | :x: 2026-03-04 |
+| django__django-10554 | :x: 2026-03-10 |
 
 ### Instance Registry
 <details><summary>All 500 valid instance IDs</summary>

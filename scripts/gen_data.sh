@@ -142,3 +142,33 @@ HEOF
 } > "$TMP"
 
 swap_if_changed "$TMP" "$OUTDIR/mode_prompts.h"
+
+# =============================================================================
+# 4. provider_prompts.h
+# =============================================================================
+
+PROVIDERS_DIR="$DATADIR/prompts/providers"
+TMP="$OUTDIR/provider_prompts.h.tmp"
+
+{
+    cat << 'HEOF'
+#ifndef PROVIDER_PROMPTS_H
+#define PROVIDER_PROMPTS_H
+
+HEOF
+
+    for provider in openai anthropic local; do
+        PROVIDER_FILE="$PROVIDERS_DIR/${provider}.txt"
+        if [ -f "$PROVIDER_FILE" ]; then
+            UPPER=$(echo "$provider" | tr 'a-z' 'A-Z')
+            ESCAPED=$(c_escape < "$PROVIDER_FILE")
+            printf 'static const char PROVIDER_PROMPT_%s[] = "%s";\n\n' "$UPPER" "$ESCAPED"
+        fi
+    done
+
+    cat << 'HEOF'
+#endif
+HEOF
+} > "$TMP"
+
+swap_if_changed "$TMP" "$OUTDIR/provider_prompts.h"

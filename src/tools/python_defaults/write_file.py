@@ -14,7 +14,7 @@ def _is_traversal_path(path: str) -> bool:
 
 
 def write_file(path: str, content: str, mode: str = "write", backup: bool = False) -> dict:
-    """Write content to file.
+    """Create a new file or overwrite/append to an existing file. For surgical edits to existing files, prefer apply_patch — it is safer and preserves surrounding code.
 
     Args:
         path: Path to the file to write

@@ -49,7 +49,7 @@ void tearDown(void) {
 }
 
 void test_load_system_prompt_with_null_parameter(void) {
-    int result = load_system_prompt(NULL, NULL);
+    int result = load_system_prompt(NULL);
     TEST_ASSERT_EQUAL(-1, result);
 }
 
@@ -59,7 +59,7 @@ void test_load_system_prompt_file_not_exists(void) {
     // Ensure AGENTS.md doesn't exist
     unlink("AGENTS.md");
     
-    int result = load_system_prompt(&prompt_content, NULL);
+    int result = load_system_prompt(&prompt_content);
     
     // Should succeed with just the core system prompt
     TEST_ASSERT_EQUAL(0, result);
@@ -81,7 +81,7 @@ void test_load_system_prompt_simple_content(void) {
     fprintf(test_file, "You are a helpful assistant.");
     fclose(test_file);
     
-    int result = load_system_prompt(&prompt_content, NULL);
+    int result = load_system_prompt(&prompt_content);
     
     TEST_ASSERT_EQUAL(0, result);
     TEST_ASSERT_NOT_NULL(prompt_content);
@@ -104,7 +104,7 @@ void test_load_system_prompt_with_trailing_newlines(void) {
     fprintf(test_file, "You are a helpful assistant.\n\n\n");
     fclose(test_file);
     
-    int result = load_system_prompt(&prompt_content, NULL);
+    int result = load_system_prompt(&prompt_content);
     
     TEST_ASSERT_EQUAL(0, result);
     TEST_ASSERT_NOT_NULL(prompt_content);
@@ -127,7 +127,7 @@ void test_load_system_prompt_multiline_content(void) {
     fprintf(test_file, "You are a helpful assistant.\nAlways be polite and informative.\nRespond concisely.");
     fclose(test_file);
     
-    int result = load_system_prompt(&prompt_content, NULL);
+    int result = load_system_prompt(&prompt_content);
     
     TEST_ASSERT_EQUAL(0, result);
     TEST_ASSERT_NOT_NULL(prompt_content);
@@ -147,7 +147,7 @@ void test_load_system_prompt_empty_file(void) {
     TEST_ASSERT_NOT_NULL(test_file);
     fclose(test_file);
     
-    int result = load_system_prompt(&prompt_content, NULL);
+    int result = load_system_prompt(&prompt_content);
     
     TEST_ASSERT_EQUAL(0, result);
     TEST_ASSERT_NOT_NULL(prompt_content);
@@ -168,7 +168,7 @@ void test_load_system_prompt_with_whitespace_only(void) {
     fprintf(test_file, "   \n\t\n  \r\n");
     fclose(test_file);
     
-    int result = load_system_prompt(&prompt_content, NULL);
+    int result = load_system_prompt(&prompt_content);
     
     TEST_ASSERT_EQUAL(0, result);
     TEST_ASSERT_NOT_NULL(prompt_content);
@@ -203,7 +203,7 @@ void test_cleanup_system_prompt_with_allocated_content(void) {
     fprintf(test_file, "Test content");
     fclose(test_file);
     
-    int result = load_system_prompt(&prompt_content, NULL);
+    int result = load_system_prompt(&prompt_content);
     TEST_ASSERT_EQUAL(0, result);
     TEST_ASSERT_NOT_NULL(prompt_content);
     
@@ -224,7 +224,7 @@ void test_load_system_prompt_large_content(void) {
     }
     fclose(test_file);
     
-    int result = load_system_prompt(&prompt_content, NULL);
+    int result = load_system_prompt(&prompt_content);
     
     TEST_ASSERT_EQUAL(0, result);
     TEST_ASSERT_NOT_NULL(prompt_content);
@@ -243,7 +243,7 @@ void test_core_system_prompt_always_present(void) {
 
     // Test with no file
     unlink("AGENTS.md");
-    int result = load_system_prompt(&prompt_content, NULL);
+    int result = load_system_prompt(&prompt_content);
     TEST_ASSERT_EQUAL(0, result);
     TEST_ASSERT_NOT_NULL(prompt_content);
 
@@ -269,7 +269,7 @@ void test_file_reference_expansion_simple(void) {
     fprintf(test_file, "See @DETAILS.md for more info.");
     fclose(test_file);
 
-    int result = load_system_prompt(&prompt_content, NULL);
+    int result = load_system_prompt(&prompt_content);
 
     TEST_ASSERT_EQUAL(0, result);
     TEST_ASSERT_NOT_NULL(prompt_content);
@@ -294,7 +294,7 @@ void test_file_reference_missing_file_silent_fail(void) {
     fprintf(test_file, "See @NONEXISTENT.md for details.");
     fclose(test_file);
 
-    int result = load_system_prompt(&prompt_content, NULL);
+    int result = load_system_prompt(&prompt_content);
 
     TEST_ASSERT_EQUAL(0, result);
     TEST_ASSERT_NOT_NULL(prompt_content);
@@ -325,7 +325,7 @@ void test_file_reference_multiple_references(void) {
     fprintf(test_file, "First: @FILE1.md\nSecond: @FILE2.md");
     fclose(test_file);
 
-    int result = load_system_prompt(&prompt_content, NULL);
+    int result = load_system_prompt(&prompt_content);
 
     TEST_ASSERT_EQUAL(0, result);
     TEST_ASSERT_NOT_NULL(prompt_content);
@@ -357,7 +357,7 @@ void test_file_reference_with_subdirectory(void) {
     fprintf(test_file, "See @subdir/NESTED.md for nested content.");
     fclose(test_file);
 
-    int result = load_system_prompt(&prompt_content, NULL);
+    int result = load_system_prompt(&prompt_content);
 
     TEST_ASSERT_EQUAL(0, result);
     TEST_ASSERT_NOT_NULL(prompt_content);
@@ -392,7 +392,7 @@ void test_file_reference_no_recursive_expansion(void) {
     fprintf(test_file, "See @OUTER.md for info.");
     fclose(test_file);
 
-    int result = load_system_prompt(&prompt_content, NULL);
+    int result = load_system_prompt(&prompt_content);
 
     TEST_ASSERT_EQUAL(0, result);
     TEST_ASSERT_NOT_NULL(prompt_content);
@@ -424,7 +424,7 @@ void test_file_reference_mixed_existing_and_missing(void) {
     fprintf(test_file, "File 1: @EXISTS.md\nFile 2: @MISSING.md");
     fclose(test_file);
 
-    int result = load_system_prompt(&prompt_content, NULL);
+    int result = load_system_prompt(&prompt_content);
 
     TEST_ASSERT_EQUAL(0, result);
     TEST_ASSERT_NOT_NULL(prompt_content);
@@ -448,7 +448,7 @@ void test_file_reference_at_sign_not_filename(void) {
     fprintf(test_file, "Email: user@example.com\nTwitter: @handle\nPrice: $5 @ store");
     fclose(test_file);
 
-    int result = load_system_prompt(&prompt_content, NULL);
+    int result = load_system_prompt(&prompt_content);
 
     TEST_ASSERT_EQUAL(0, result);
     TEST_ASSERT_NOT_NULL(prompt_content);
@@ -468,7 +468,7 @@ void test_platform_info_present(void) {
     // Ensure no AGENTS.md file
     unlink("AGENTS.md");
 
-    int result = load_system_prompt(&prompt_content, NULL);
+    int result = load_system_prompt(&prompt_content);
 
     TEST_ASSERT_EQUAL(0, result);
     TEST_ASSERT_NOT_NULL(prompt_content);

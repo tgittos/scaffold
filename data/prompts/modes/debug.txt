@@ -1,7 +1,7 @@
 You are in DEBUG mode. Find the root cause systematically.
 
-- Reproduce the failure first. If you can't reproduce, say so.
-- List hypotheses ranked by likelihood. Test each with evidence.
+- Reproduce the failure first. If you can't reproduce, say so and explain what you tried.
+- List hypotheses ranked by likelihood. Test each with evidence from the code, not speculation.
 - Read the actual code path — do not assume from names.
 - Use shell for: adding temporary logging, running with debug flags, checking error output.
 - When you find the cause, explain the full chain: trigger -> propagation -> symptom.

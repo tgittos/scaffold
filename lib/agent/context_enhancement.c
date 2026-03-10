@@ -1,3 +1,6 @@
+#define LOG_MODULE     LOG_MOD_CONTEXT
+#define LOG_MODULE_STR "context"
+#include "../util/log.h"
 #include "context_enhancement.h"
 #include "prompt_mode.h"
 #include "../session/rolling_summary.h"
@@ -5,9 +8,19 @@
 #include "../tools/memory_tool.h"
 #include "../util/context_retriever.h"
 #include "../util/json_escape.h"
+#include <provider_prompts.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+static const char* get_provider_addendum(const char* model) {
+    if (!model) return PROVIDER_PROMPT_LOCAL;
+    if (strstr(model, "claude")) return PROVIDER_PROMPT_ANTHROPIC;
+    if (strstr(model, "gpt") || strstr(model, "o1-") || strstr(model, "o3") ||
+        strstr(model, "o4") || strstr(model, "codex"))
+        return PROVIDER_PROMPT_OPENAI;
+    return PROVIDER_PROMPT_LOCAL;
+}
 
 #define MEMORY_RECALL_DEFAULT_K 3
 #define MEMORY_ARGS_JSON_OVERHEAD 64  // {"query": "", "k": N}
@@ -93,7 +106,15 @@ static char* build_dynamic_context(const AgentSession* session) {
     static const char* const MODE_SECTION_HEADER = "\n\n# Active Mode Instructions\n";
     const char* mode_text = prompt_mode_get_text(session->current_mode);
 
-    if (todo_json == NULL && mode_text == NULL) {
+    static const char* const PROVIDER_SECTION_HEADER = "\n\n# Provider Notes\n";
+    const char* provider_text = get_provider_addendum(session->session_data.config.model);
+
+    LOG_DEBUG("Dynamic context: todos=%s, mode=%s, provider=%s",
+              todo_json ? "yes" : "no",
+              mode_text ? prompt_mode_name(session->current_mode) : "none",
+              session->session_data.config.model ? session->session_data.config.model : "unknown");
+
+    if (todo_json == NULL && mode_text == NULL && provider_text == NULL) {
         return NULL;
     }
 
@@ -103,6 +124,9 @@ static char* build_dynamic_context(const AgentSession* session) {
     }
     if (mode_text != NULL) {
         total_len += strlen(MODE_SECTION_HEADER) + strlen(mode_text);
+    }
+    if (provider_text != NULL) {
+        total_len += strlen(PROVIDER_SECTION_HEADER) + strlen(provider_text);
     }
 
     char* dynamic = malloc(total_len);
@@ -122,6 +146,11 @@ static char* build_dynamic_context(const AgentSession* session) {
     if (mode_text != NULL) {
         strcat(dynamic, MODE_SECTION_HEADER);
         strcat(dynamic, mode_text);
+    }
+
+    if (provider_text != NULL) {
+        strcat(dynamic, PROVIDER_SECTION_HEADER);
+        strcat(dynamic, provider_text);
     }
 
     free(todo_json);
@@ -146,6 +175,9 @@ int build_enhanced_prompt_parts(const AgentSession* session,
         out->dynamic_context = dynamic;
         return 0;
     }
+
+    LOG_DEBUG("Enhanced prompt: base=%zu chars, dynamic=%zu chars",
+              strlen(out->base_prompt), dynamic ? strlen(dynamic) : 0);
 
     char* memories = retrieve_relevant_memories(user_message);
     context_result_t* context = retrieve_relevant_context(user_message, CONTEXT_RETRIEVAL_LIMIT);

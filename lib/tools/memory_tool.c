@@ -363,7 +363,9 @@ int register_memory_tools(ToolRegistry *registry) {
     }
 
     result = register_tool(registry, "remember",
-                          "Store important information in long-term memory for future reference",
+                          "Store information in long-term memory for semantic retrieval. "
+                          "Use for key facts, user preferences, project conventions, or corrections. "
+                          "Do not store transient or easily re-derivable information.",
                           remember_parameters, 4, execute_remember_tool_call);
 
     for (int i = 0; i < 4; i++) {
@@ -405,7 +407,9 @@ int register_memory_tools(ToolRegistry *registry) {
     }
 
     result = register_tool(registry, "recall_memories",
-                          "Search and retrieve relevant memories based on a query",
+                          "Search long-term memory using semantic similarity. "
+                          "Returns the most relevant stored memories for a natural-language query. "
+                          "Use at session start to recall user preferences or context from prior conversations.",
                           recall_parameters, 2, execute_recall_memories_tool_call);
 
     for (int i = 0; i < 2; i++) {
@@ -436,7 +440,8 @@ int register_memory_tools(ToolRegistry *registry) {
     }
 
     result = register_tool(registry, "forget_memory",
-                          "Delete a specific memory from long-term storage by its ID",
+                          "Delete a memory from long-term storage by ID. "
+                          "Use recall_memories first to find and confirm the ID before deleting.",
                           forget_parameters, 1, execute_forget_memory_tool_call);
 
     free(forget_parameters[0].name);

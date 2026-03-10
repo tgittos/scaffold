@@ -19,7 +19,7 @@ def _is_traversal_path(path: str) -> bool:
 
 def shell(command: str, working_dir: str = None, timeout: int = 30,
           capture_stderr: bool = True) -> dict:
-    """Execute shell command.
+    """Execute a shell command and return stdout/stderr. Use for builds, tests, git operations, and system tasks. Prefer dedicated tools (read_file, search_files, apply_patch) over shell equivalents. Avoid interactive commands (vim, less) — they will hang.
 
     Args:
         command: Shell command to execute

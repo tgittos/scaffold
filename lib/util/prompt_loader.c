@@ -292,7 +292,7 @@ char* generate_model_tier_table(void) {
     return result;
 }
 
-int load_system_prompt(char **prompt_content, const char *tools_description) {
+int load_system_prompt(char **prompt_content) {
     if (prompt_content == NULL) {
         return -1;
     }
@@ -335,8 +335,6 @@ int load_system_prompt(char **prompt_content, const char *tools_description) {
         fclose(file);
     }
 
-    size_t tools_len = tools_description ? strlen(tools_description) : 0;
-
     char *platform_info = get_platform_info();
     size_t platform_len = platform_info ? strlen(platform_info) : 0;
 
@@ -348,7 +346,7 @@ int load_system_prompt(char **prompt_content, const char *tools_description) {
     size_t part1_len = strlen(base_prompt);
     size_t part2_len = strlen(SYSTEM_PROMPT_PART2);
     size_t user_len = user_prompt ? strlen(user_prompt) : 0;
-    size_t total_len = part1_len + platform_len + model_table_len + tools_len + part2_len + user_len + 1;
+    size_t total_len = part1_len + platform_len + model_table_len + part2_len + user_len + 1;
 
     char *combined_prompt = malloc(total_len);
     if (combined_prompt == NULL) {
@@ -368,10 +366,6 @@ int load_system_prompt(char **prompt_content, const char *tools_description) {
     if (model_table != NULL) {
         strcat(combined_prompt, model_table);
         free(model_table);
-    }
-
-    if (tools_description != NULL) {
-        strcat(combined_prompt, tools_description);
     }
 
     strcat(combined_prompt, SYSTEM_PROMPT_PART2);

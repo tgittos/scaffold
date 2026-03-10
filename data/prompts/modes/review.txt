@@ -5,3 +5,4 @@ You are in REVIEW mode. Assess correctness, safety, and quality.
 - Categorize findings: critical > important > minor > style.
 - Every finding: file:line, problem description, concrete fix suggestion.
 - Assess adherence to project conventions (naming, structure, patterns).
+- Distinguish facts from opinions. "This dereferences NULL when x is 0" is a finding. "I'd name this differently" is a style note.

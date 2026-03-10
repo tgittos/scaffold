@@ -420,7 +420,9 @@ int register_todo_tool(ToolRegistry* registry, TodoList* todo_list, Services* se
     }
     
     int result = register_tool(registry, "TodoWrite",
-                              "Write/replace the task list. Use for complex multi-step work requiring systematic tracking. Pass the complete list of tasks.",
+                              "Write/replace the entire task list. Use for complex multi-step work requiring systematic tracking. "
+                              "Pass the complete list — this replaces all existing tasks. "
+                              "Always call TodoRead first to avoid overwriting tasks you are not aware of.",
                               parameters, 1, execute_todo_tool_call);
 
     free(parameters[0].name);
@@ -433,7 +435,8 @@ int register_todo_tool(ToolRegistry* registry, TodoList* todo_list, Services* se
     }
 
     result = register_tool(registry, "TodoRead",
-                          "Read the current task list. Use this to check what tasks exist before modifying them.",
+                          "Read the current task list with all task IDs, statuses, and priorities. "
+                          "Always call this before TodoWrite to see current state.",
                           NULL, 0, execute_todo_tool_call);
 
     return result;

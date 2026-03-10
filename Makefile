@@ -35,10 +35,12 @@ COMPILE_DEPS += $(VERSION_HEADER)
 
 GENERATED_DATA := $(BUILDDIR)/generated/prompt_data.h \
                   $(BUILDDIR)/generated/defaults.h \
-                  $(BUILDDIR)/generated/mode_prompts.h
+                  $(BUILDDIR)/generated/mode_prompts.h \
+                  $(BUILDDIR)/generated/provider_prompts.h
 
 $(GENERATED_DATA) &: data/prompts/scaffold_system.txt data/defaults.json scripts/gen_data.sh \
-                     $(wildcard data/prompts/modes/*.txt)
+                     $(wildcard data/prompts/modes/*.txt) \
+                     $(wildcard data/prompts/providers/*.txt)
 	@scripts/gen_data.sh "$(BUILDDIR)/generated"
 
 COMPILE_DEPS += $(GENERATED_DATA)

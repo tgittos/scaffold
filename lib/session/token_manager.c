@@ -189,29 +189,6 @@ int calculate_token_allocation(const SessionData* session, const char* user_mess
     
     int available_tokens = effective_context_window - total_prompt_tokens - safety_buffer;
 
-    /* Provider-specific max output limits are independent of context window */
-    if (session->config.model) {
-        int max_response_cap = -1;
-
-        if (strstr(session->config.model, "claude") != NULL) {
-            max_response_cap = 60000;
-        } else if (strstr(session->config.model, "codex") != NULL) {
-            max_response_cap = 16000;
-        } else if (strstr(session->config.model, "gpt") != NULL) {
-            max_response_cap = 4000;
-        } else if (strstr(session->config.model, "deepseek") != NULL) {
-            max_response_cap = 8000;
-        } else if (strstr(session->config.model, "qwen") != NULL) {
-            max_response_cap = 8000;
-        }
-        
-        if (max_response_cap > 0 && available_tokens > max_response_cap) {
-            available_tokens = max_response_cap;
-            LOG_DEBUG("Applied model-specific response token cap: %d tokens for model %s",
-                        max_response_cap, session->config.model);
-        }
-    }
-    
     usage->available_response_tokens = available_tokens;
     
     LOG_DEBUG("Token allocation - Prompt: %d, Response: %d, Safety: %d, Context: %d",

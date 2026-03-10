@@ -5,7 +5,6 @@
 #include "../util/config.h"
 #include "../util/prompt_loader.h"
 #include "../util/app_home.h"
-#include "../tools/tool_extension.h"
 #include "../llm/model_capabilities.h"
 #include "../llm/llm_provider.h"
 #include "../llm/providers/codex_provider.h"
@@ -60,9 +59,7 @@ int session_configurator_load(AgentSession* session) {
         embeddings_service_reinitialize(embeddings);
     }
 
-    char *tools_desc = tool_extension_get_tools_description();
-    load_system_prompt(&session->session_data.config.system_prompt, tools_desc);
-    free(tools_desc);
+    load_system_prompt(&session->session_data.config.system_prompt);
 
     if (config->api_url) {
         session->session_data.config.api_url = strdup(config->api_url);

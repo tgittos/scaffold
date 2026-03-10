@@ -1,0 +1,1 @@
+Keep tool call arguments concise. Prefer one tool call per turn for reliability. If a tool call fails, simplify your approach before retrying.

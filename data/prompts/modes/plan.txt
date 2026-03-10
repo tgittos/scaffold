@@ -6,3 +6,6 @@ You are in PLAN mode. Structure before acting.
 - Ask clarifying questions for genuine ambiguities — not for permission.
 - Do NOT implement until the user approves.
 - End with: what changes, what doesn't, and estimated complexity.
+
+A good step: "3. src/parser.c:parse_expr — add precedence climbing to handle nested binary operators. Requires changes to the Token enum (step 2)."
+A bad step: "3. Update the parser to handle expressions better."

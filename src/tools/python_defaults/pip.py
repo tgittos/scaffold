@@ -13,7 +13,7 @@ _MAX_DEPTH = 10
 
 
 def pip(action: str = "install", package: str = None, version: str = None, force: bool = False) -> dict:
-    """Manage pure-Python packages in scaffold's internal interpreter.
+    """Install or list pure-Python packages in scaffold's embedded interpreter. Only works with pure-Python wheels (no C extensions). Use action='install' with a package name, or action='list' to see installed packages.
 
     Args:
         action: "install" to install a package, "list" to list installed packages

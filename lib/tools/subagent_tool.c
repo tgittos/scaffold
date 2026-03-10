@@ -729,10 +729,11 @@ int register_subagent_tool(ToolRegistry *registry, SubagentManager *manager) {
     }
 
     int result = register_tool(registry, "subagent",
-                              "Spawn a background subagent process to execute a delegated task. "
-                              "The subagent runs with fresh context and cannot spawn additional subagents. "
-                              "Results are automatically sent to you when the subagent completes - "
-                              "no need to poll or wait for messages.",
+                              "Spawn a background subagent to execute a delegated task independently. "
+                              "The subagent runs with fresh context and its own tool access (except spawning further subagents). "
+                              "Results are delivered as a message when complete — do not poll. "
+                              "Use for parallelizable work like searching code, running tests, or independent subtasks. "
+                              "Keep task descriptions self-contained since the subagent has no access to your conversation.",
                               parameters, 3, execute_subagent_tool_call);
 
     for (int i = 0; i < 3; i++) {

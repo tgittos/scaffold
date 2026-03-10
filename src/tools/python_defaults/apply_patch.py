@@ -166,7 +166,7 @@ def _apply_hunk(lines, hunk_lines, file_path):
 
 
 def apply_patch(patch: str) -> dict:
-    """Apply a text patch to one or more files.
+    """Apply a patch to create, edit, or delete files. Preferred tool for editing existing code — finds and replaces specific blocks precisely. Always read the target file first to ensure context lines match. Include enough context lines for unambiguous matching.
 
     Format:
         *** Begin Patch
