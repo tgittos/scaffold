@@ -219,8 +219,9 @@ run_test() {
         passed=0
     fi
 
-    # Output result
-    echo "$test_name|$passed|$tests|$failures|$ignored|$duration|$segfault|$output"
+    # Output metadata on first line, then full output on subsequent lines
+    echo "$test_name|$passed|$tests|$failures|$ignored|$duration|$segfault"
+    echo "$output"
 }
 
 # Main execution
@@ -266,11 +267,16 @@ main() {
         # Show progress
         print_progress $current $total "$test_name" "running"
 
-        # Run test
-        local result=$(run_test "$test_path")
+        # Run test — first line is metadata, rest is output
+        local result
+        result=$(run_test "$test_path")
+        local meta
+        meta=$(echo "$result" | head -1)
+        local output
+        output=$(echo "$result" | tail -n +2)
 
-        # Parse result
-        IFS='|' read -r name is_passed tests failures ignored duration segfault output <<< "$result"
+        # Parse metadata
+        IFS='|' read -r name is_passed tests failures ignored duration segfault <<< "$meta"
 
         total_tests=$((total_tests + tests))
         total_failures=$((total_failures + failures))
