@@ -28,6 +28,8 @@ static const char *DEFAULT_TOOL_NAMES[] = {
     "shell",
     "web_fetch",
     "pip",
+    "search_history",
+    "show_structure",
     NULL
 };
 
