@@ -252,7 +252,7 @@ int channel_has_pending(message_store_t *store, const char *agent_id) {
     return sqlite_dal_exists_p(store->dal,
         "SELECT 1 FROM channel_messages cm "
         "JOIN channel_subscriptions cs ON cm.channel_id = cs.channel_id "
-        "WHERE cs.agent_id = ? AND cm.created_at > cs.last_read_at LIMIT 1;",
+        "WHERE cs.agent_id = ? AND cm.rowid > cs.last_read_at LIMIT 1;",
         bind_text1, &params);
 }
 
@@ -619,17 +619,34 @@ ChannelMessage **channel_receive(message_store_t *store, const char *channel_nam
         "SELECT cm.id, cm.channel_id, cm.sender_id, cm.content, cm.created_at "
         "FROM channel_messages cm "
         "JOIN channel_subscriptions cs ON cm.channel_id = cs.channel_id "
-        "WHERE cs.agent_id = ? AND cm.channel_id = ? AND cm.created_at > cs.last_read_at "
+        "WHERE cs.agent_id = ? AND cm.channel_id = ? AND cm.rowid > cs.last_read_at "
         "ORDER BY cm.rowid ASC LIMIT ?;",
         bind_receive_params, &params, map_channel_message, (sqlite_item_free_t)channel_message_free,
         NULL, &items, &count);
 
     if (rc != 0 || count == 0) return NULL;
 
-    /* Set last_read_at to the latest message's timestamp, not wall clock.
-     * Using wall clock could miss messages published in the same millisecond. */
+    /* Track last_read_at as the rowid of the latest consumed message.
+     * Using rowid instead of created_at avoids missing messages published
+     * within the same millisecond (rowid is monotonically increasing). */
     ChannelMessage *last = (ChannelMessage *)items[count - 1];
-    BindInt64Text2 mark_params = { last->created_at, channel_name, agent_id };
+    /* Retrieve the rowid of the last message */
+    int64_t last_rowid = 0;
+    sqlite_dal_lock(store->dal);
+    sqlite3 *db = sqlite_dal_get_db(store->dal);
+    sqlite3_stmt *rowid_stmt = NULL;
+    if (sqlite3_prepare_v2(db,
+            "SELECT rowid FROM channel_messages WHERE id = ?;",
+            -1, &rowid_stmt, NULL) == SQLITE_OK) {
+        sqlite3_bind_text(rowid_stmt, 1, last->id, -1, SQLITE_STATIC);
+        if (sqlite3_step(rowid_stmt) == SQLITE_ROW) {
+            last_rowid = sqlite3_column_int64(rowid_stmt, 0);
+        }
+        sqlite3_finalize(rowid_stmt);
+    }
+    sqlite_dal_unlock(store->dal);
+
+    BindInt64Text2 mark_params = { last_rowid, channel_name, agent_id };
     sqlite_dal_exec_p(store->dal,
         "UPDATE channel_subscriptions SET last_read_at = ? WHERE channel_id = ? AND agent_id = ?;",
         bind_int64_text2, &mark_params);
@@ -651,16 +668,31 @@ ChannelMessage **channel_receive_all(message_store_t *store, const char *agent_i
         "SELECT cm.id, cm.channel_id, cm.sender_id, cm.content, cm.created_at "
         "FROM channel_messages cm "
         "JOIN channel_subscriptions cs ON cm.channel_id = cs.channel_id "
-        "WHERE cs.agent_id = ? AND cm.created_at > cs.last_read_at "
+        "WHERE cs.agent_id = ? AND cm.rowid > cs.last_read_at "
         "ORDER BY cm.rowid ASC LIMIT ?;",
         bind_text_int, &params, map_channel_message, (sqlite_item_free_t)channel_message_free,
         NULL, &items, &count);
 
     if (rc != 0 || count == 0) return NULL;
 
-    /* Set last_read_at to the latest message's timestamp, not wall clock. */
+    /* Track by rowid of the latest consumed message (monotonically increasing). */
     ChannelMessage *last = (ChannelMessage *)items[count - 1];
-    BindInt64Text mark_params = { last->created_at, agent_id };
+    int64_t last_rowid = 0;
+    sqlite_dal_lock(store->dal);
+    sqlite3 *db = sqlite_dal_get_db(store->dal);
+    sqlite3_stmt *rowid_stmt = NULL;
+    if (sqlite3_prepare_v2(db,
+            "SELECT rowid FROM channel_messages WHERE id = ?;",
+            -1, &rowid_stmt, NULL) == SQLITE_OK) {
+        sqlite3_bind_text(rowid_stmt, 1, last->id, -1, SQLITE_STATIC);
+        if (sqlite3_step(rowid_stmt) == SQLITE_ROW) {
+            last_rowid = sqlite3_column_int64(rowid_stmt, 0);
+        }
+        sqlite3_finalize(rowid_stmt);
+    }
+    sqlite_dal_unlock(store->dal);
+
+    BindInt64Text mark_params = { last_rowid, agent_id };
     sqlite_dal_exec_p(store->dal,
         "UPDATE channel_subscriptions SET last_read_at = ? WHERE agent_id = ?;",
         bind_int64_text, &mark_params);
