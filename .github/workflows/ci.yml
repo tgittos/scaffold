@@ -41,7 +41,6 @@ jobs:
         with:
           path: |
             deps/
-            build/
             python/build/
           key: deps-${{ hashFiles('mk/config.mk', 'mk/deps.mk', 'python/Makefile') }}
           restore-keys: |
