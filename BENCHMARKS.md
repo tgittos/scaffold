@@ -7,16 +7,26 @@
 ### Summary
 | Model | Passed | Failed | Pending | Pass Rate |
 |-------|--------|--------|---------|-----------|
-| gpt-5.3-codex | 3 | 2 | 495 | 60.0% |
+| gpt-5.3-codex | 8 | 7 | 485 | 53.3% |
 
 ### Results
 | Instance | gpt-5.3-codex |
 |----------|---------------|
 | astropy__astropy-12907 | :white_check_mark: 2026-03-05 |
-| astropy__astropy-13236 | :x: 2026-03-06 |
+| astropy__astropy-13033 | :x: 2026-03-11 |
+| astropy__astropy-13236 | :x: 2026-03-11 |
+| astropy__astropy-13398 | :x: 2026-03-11 |
 | astropy__astropy-13453 | :white_check_mark: 2026-03-05 |
+| astropy__astropy-13579 | :white_check_mark: 2026-03-11 |
+| astropy__astropy-13977 | :x: 2026-03-11 |
+| astropy__astropy-14096 | :white_check_mark: 2026-03-11 |
 | django__django-10097 | :white_check_mark: 2026-03-04 |
-| django__django-10554 | :x: 2026-03-10 |
+| django__django-10554 | :x: 2026-03-11 |
+| django__django-10880 | :white_check_mark: 2026-03-11 |
+| django__django-10914 | :white_check_mark: 2026-03-11 |
+| django__django-10973 | :x: 2026-03-11 |
+| django__django-10999 | :x: 2026-03-11 |
+| django__django-11066 | :white_check_mark: 2026-03-11 |
 
 ### Instance Registry
 <details><summary>All 500 valid instance IDs</summary>

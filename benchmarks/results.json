@@ -6,15 +6,45 @@
         "result": "pass"
       }
     },
+    "astropy__astropy-13033": {
+      "gpt-5.3-codex": {
+        "date": "2026-03-11",
+        "result": "fail"
+      }
+    },
     "astropy__astropy-13236": {
       "gpt-5.3-codex": {
-        "date": "2026-03-06",
+        "date": "2026-03-11",
+        "result": "fail"
+      }
+    },
+    "astropy__astropy-13398": {
+      "gpt-5.3-codex": {
+        "date": "2026-03-11",
         "result": "fail"
       }
     },
     "astropy__astropy-13453": {
       "gpt-5.3-codex": {
         "date": "2026-03-05",
+        "result": "pass"
+      }
+    },
+    "astropy__astropy-13579": {
+      "gpt-5.3-codex": {
+        "date": "2026-03-11",
+        "result": "pass"
+      }
+    },
+    "astropy__astropy-13977": {
+      "gpt-5.3-codex": {
+        "date": "2026-03-11",
+        "result": "fail"
+      }
+    },
+    "astropy__astropy-14096": {
+      "gpt-5.3-codex": {
+        "date": "2026-03-11",
         "result": "pass"
       }
     },
@@ -26,8 +56,38 @@
     },
     "django__django-10554": {
       "gpt-5.3-codex": {
-        "date": "2026-03-10",
+        "date": "2026-03-11",
         "result": "fail"
+      }
+    },
+    "django__django-10880": {
+      "gpt-5.3-codex": {
+        "date": "2026-03-11",
+        "result": "pass"
+      }
+    },
+    "django__django-10914": {
+      "gpt-5.3-codex": {
+        "date": "2026-03-11",
+        "result": "pass"
+      }
+    },
+    "django__django-10973": {
+      "gpt-5.3-codex": {
+        "date": "2026-03-11",
+        "result": "fail"
+      }
+    },
+    "django__django-10999": {
+      "gpt-5.3-codex": {
+        "date": "2026-03-11",
+        "result": "fail"
+      }
+    },
+    "django__django-11066": {
+      "gpt-5.3-codex": {
+        "date": "2026-03-11",
+        "result": "pass"
       }
     }
   }
