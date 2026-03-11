@@ -179,7 +179,7 @@ def search_history(path: str, operation: str = "log", pattern: str = None,
                    line_end: int = None, max_results: int = 20,
                    author: str = None, since: str = None,
                    regex: bool = False) -> dict:
-    """Search git history to understand how code evolved. Use 'pickaxe' to find commits that added or removed a code pattern — this is the most powerful operation. Use 'blame' to see who last changed specific lines. Use 'log' for recent file history. Use 'diff' to inspect a specific commit.
+    """Search git history to understand why code is the way it is. Before changing code you don't fully understand, use 'blame' to see who last changed specific lines and why, or 'pickaxe' to find the commit that introduced a pattern. Use 'log' for recent file history and 'diff' to inspect a specific commit. Prefer this over shell git commands — it returns structured data and handles edge cases.
 
     Args:
         path: Repository path or file path to search in

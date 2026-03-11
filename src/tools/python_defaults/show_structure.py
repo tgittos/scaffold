@@ -481,7 +481,7 @@ def _op_exports(path, depth, language_filter):
 
 def show_structure(path: str, operation: str = "outline", depth: int = 2,
                    language: str = None, symbol: str = None) -> dict:
-    """Analyze code structure without reading full files. Use 'outline' to see classes, functions, and methods in a file or directory. Use 'imports' to map module dependencies. Use 'hierarchy' to see class inheritance. Use 'exports' to see public API surface. Helps you understand codebase architecture before making changes.
+    """Get an overview of code structure without reading full file contents. Use this before read_file when you need to understand a module's shape — what classes exist, what methods they have, how files relate. Use 'outline' to see all classes, functions, and methods with line numbers. Use 'imports' to map dependencies between modules. Use 'hierarchy' for class inheritance. Use 'exports' for public API surface. Returns structured data, not source code — much cheaper than reading entire files.
 
     Args:
         path: File or directory to analyze
