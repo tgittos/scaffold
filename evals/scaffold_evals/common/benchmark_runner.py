@@ -133,9 +133,14 @@ def _run_in_docker(instance, scaffold_binary, model, workdir, timeout,
 
         # Run scaffold
         issue_text = instance.get("problem_statement", "")
+        message = (
+            "Resolve the following issue in this repository by making the "
+            "necessary code changes. Verify your fix is correct.\n\n"
+            f"<issue>\n{issue_text}\n</issue>"
+        )
         result = run_scaffold_in_container(
             container=container,
-            message=issue_text,
+            message=message,
             model=model,
             env_vars=env_vars,
             scaffold_home=scaffold_home,
