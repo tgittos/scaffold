@@ -134,9 +134,13 @@ def _run_in_docker(instance, scaffold_binary, model, workdir, timeout,
         # Run scaffold
         issue_text = instance.get("problem_statement", "")
         message = (
-            "Resolve the following issue in this repository by making the "
-            "necessary code changes. Verify your fix is correct.\n\n"
-            f"<issue>\n{issue_text}\n</issue>"
+            "Resolve the following issue in this repository.\n\n"
+            f"<issue>\n{issue_text}\n</issue>\n\n"
+            "The fix may not belong where the error appears. Before "
+            "patching, check how the module handles analogous cases "
+            "and make sure you are fixing the root cause, not "
+            "suppressing a symptom. Read the tests for the affected "
+            "code — they show intended behavior and edge cases."
         )
         result = run_scaffold_in_container(
             container=container,

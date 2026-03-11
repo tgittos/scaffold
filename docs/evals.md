@@ -79,6 +79,7 @@ Options:
   --scaffold-home DIR        Scaffold home to sync OAuth from (default: ~/.local/scaffold)
   --next N                   Pick next N untested instances for the model
   --retry-failed N           Pick N previously failed instances for the model
+  --filter PREFIX            Filter instances by ID prefix (with --next/--retry-failed)
   --render                   Regenerate BENCHMARKS.md from results (no eval run)
 ```
 
@@ -309,11 +310,14 @@ Instead of manually specifying instance IDs, use `--next` or `--retry-failed`:
 # Run next 5 untested instances for the current model
 ./scripts/run_eval.py swebench --profile dev --next 5
 
-# Retry 3 previously failed instances
-./scripts/run_eval.py swebench --profile dev --retry-failed 3
+# Run next 5 untested django instances only
+./scripts/run_eval.py swebench --profile dev --next 5 --filter django
+
+# Retry failed astropy instances
+./scripts/run_eval.py swebench --profile dev --retry-failed 3 --filter astropy
 
 # Just regenerate the scorecard (no eval run)
 ./scripts/run_eval.py swebench --render
 ```
 
-These flags are mutually exclusive with `-i` (explicit instance IDs).
+`--next` and `--retry-failed` are mutually exclusive with `-i`. `--filter` takes a prefix string and restricts which instances are considered (e.g., `django`, `astropy__astropy`, `sympy`).

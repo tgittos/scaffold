@@ -625,10 +625,12 @@ def load_registry(benchmark: str) -> list[str]:
 
 def select_instances(
     benchmark: str, model: str, mode: str, count: int,
+    filter_prefix: str | None = None,
 ) -> list[str]:
     """Select instances based on mode ('next' or 'retry-failed').
 
     Returns up to `count` instance IDs from the registry that match the mode.
+    If filter_prefix is given, only considers instances whose ID starts with it.
     """
     registry = load_registry(benchmark)
     results = load_results().get(benchmark, {})
@@ -637,6 +639,8 @@ def select_instances(
     for instance_id in registry:
         if len(selected) >= count:
             break
+        if filter_prefix and not instance_id.startswith(filter_prefix):
+            continue
         instance_results = results.get(instance_id, {})
         model_result = instance_results.get(model)
 
@@ -883,6 +887,11 @@ def parse_args() -> argparse.Namespace:
         help="Pick N previously failed instances for the given model",
     )
     parser.add_argument(
+        "--filter",
+        metavar="PREFIX",
+        help="Filter instances by ID prefix (e.g. 'django', 'astropy__astropy'). Used with --next/--retry-failed.",
+    )
+    parser.add_argument(
         "--render",
         action="store_true",
         help="Regenerate BENCHMARKS.md from current results (no eval run)",
@@ -907,6 +916,10 @@ def main() -> None:
     selection_flags = sum(1 for f in [args.instance_ids, args.next, args.retry_failed] if f)
     if selection_flags > 1:
         print("Error: --next, --retry-failed, and -i are mutually exclusive.", file=sys.stderr)
+        sys.exit(1)
+
+    if args.filter and not (args.next or args.retry_failed):
+        print("Error: --filter requires --next or --retry-failed.", file=sys.stderr)
         sys.exit(1)
 
     # Validate environment
@@ -971,7 +984,7 @@ def main() -> None:
     elif args.next or args.retry_failed:
         mode = "next" if args.next else "retry-failed"
         count = args.next or args.retry_failed
-        instance_ids = select_instances(args.benchmark, effective_model, mode, count)
+        instance_ids = select_instances(args.benchmark, effective_model, mode, count, args.filter)
         if not instance_ids:
             print(f"[benchmark] No instances matched --{mode.replace('-', '_')} for model={effective_model}")
             return

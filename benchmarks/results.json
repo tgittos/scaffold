@@ -48,6 +48,36 @@
         "result": "pass"
       }
     },
+    "astropy__astropy-14182": {
+      "gpt-5.3-codex": {
+        "date": "2026-03-11",
+        "result": "fail"
+      }
+    },
+    "astropy__astropy-14309": {
+      "gpt-5.3-codex": {
+        "date": "2026-03-11",
+        "result": "pass"
+      }
+    },
+    "astropy__astropy-14365": {
+      "gpt-5.3-codex": {
+        "date": "2026-03-11",
+        "result": "fail"
+      }
+    },
+    "astropy__astropy-14369": {
+      "gpt-5.3-codex": {
+        "date": "2026-03-11",
+        "result": "fail"
+      }
+    },
+    "astropy__astropy-14508": {
+      "gpt-5.3-codex": {
+        "date": "2026-03-11",
+        "result": "pass"
+      }
+    },
     "django__django-10097": {
       "gpt-5.3-codex": {
         "date": "2026-03-04",
@@ -85,6 +115,66 @@
       }
     },
     "django__django-11066": {
+      "gpt-5.3-codex": {
+        "date": "2026-03-11",
+        "result": "pass"
+      }
+    },
+    "django__django-11087": {
+      "gpt-5.3-codex": {
+        "date": "2026-03-11",
+        "result": "fail"
+      }
+    },
+    "django__django-11095": {
+      "gpt-5.3-codex": {
+        "date": "2026-03-11",
+        "result": "pass"
+      }
+    },
+    "django__django-11099": {
+      "gpt-5.3-codex": {
+        "date": "2026-03-11",
+        "result": "pass"
+      }
+    },
+    "django__django-11119": {
+      "gpt-5.3-codex": {
+        "date": "2026-03-11",
+        "result": "pass"
+      }
+    },
+    "django__django-11133": {
+      "gpt-5.3-codex": {
+        "date": "2026-03-11",
+        "result": "pass"
+      }
+    },
+    "django__django-11138": {
+      "gpt-5.3-codex": {
+        "date": "2026-03-11",
+        "result": "fail"
+      }
+    },
+    "django__django-11141": {
+      "gpt-5.3-codex": {
+        "date": "2026-03-11",
+        "result": "fail"
+      }
+    },
+    "django__django-11149": {
+      "gpt-5.3-codex": {
+        "date": "2026-03-11",
+        "result": "fail"
+      }
+    },
+    "django__django-11163": {
+      "gpt-5.3-codex": {
+        "date": "2026-03-11",
+        "result": "pass"
+      }
+    },
+    "django__django-11179": {
       "gpt-5.3-codex": {
         "date": "2026-03-11",
         "result": "pass"

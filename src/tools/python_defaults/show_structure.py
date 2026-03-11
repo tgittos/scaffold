@@ -136,7 +136,13 @@ def _collect_files(path, depth, max_files):
 
 
 def _extract_symbols(content, lang):
-    """Extract symbols from file content using language patterns."""
+    """Extract symbols from file content using language patterns.
+
+    For languages with class/method structure (Python, Java, Ruby), methods
+    are nested under their parent class as a 'methods' list rather than
+    appearing as flat top-level symbols.  This keeps outlines compact for
+    large files.
+    """
     patterns = PATTERNS.get(lang)
     if not patterns:
         return []
@@ -155,10 +161,8 @@ def _extract_symbols(content, lang):
                 return i
         return len(lines)
 
-    # Track current class for method association (Python/Java/Ruby)
-    current_class = None
-    current_class_indent = -1
-
+    # First pass: collect raw symbols with their line numbers
+    raw = []
     for kind, regex in patterns.items():
         for m in regex.finditer(content):
             line_num = _offset_to_line(m.start())
@@ -169,28 +173,27 @@ def _extract_symbols(content, lang):
                 sym = {"type": "class", "name": name, "line": line_num}
                 if bases:
                     sym["bases"] = [b.strip() for b in bases.split(",")]
-                symbols.append(sym)
+                raw.append(sym)
 
             elif kind == "function":
                 name = m.group(m.lastindex) if m.lastindex else m.group(1)
-                symbols.append({"type": "function", "name": name, "line": line_num})
+                raw.append({"type": "function", "name": name, "line": line_num})
 
             elif kind == "method":
                 if lang == "python":
-                    indent = len(m.group(1))
                     name = m.group(2)
-                    symbols.append({"type": "method", "name": name, "line": line_num})
+                    raw.append({"type": "method", "name": name, "line": line_num})
                 else:
                     name = m.group(1)
-                    symbols.append({"type": "method", "name": name, "line": line_num})
+                    raw.append({"type": "method", "name": name, "line": line_num})
 
             elif kind == "arrow":
                 name = m.group(1)
-                symbols.append({"type": "function", "name": name, "line": line_num})
+                raw.append({"type": "function", "name": name, "line": line_num})
 
             elif kind in ("struct", "enum", "trait", "interface", "module", "typedef"):
                 name = m.group(1)
-                symbols.append({"type": kind, "name": name, "line": line_num})
+                raw.append({"type": kind, "name": name, "line": line_num})
 
             elif kind == "impl":
                 trait = m.group(1) if m.lastindex >= 2 and m.group(1) else None
@@ -198,21 +201,54 @@ def _extract_symbols(content, lang):
                 sym = {"type": "impl", "name": target, "line": line_num}
                 if trait:
                     sym["trait"] = trait
-                symbols.append(sym)
+                raw.append(sym)
 
             elif kind == "constant" or kind == "define":
                 name = m.group(1)
-                symbols.append({"type": "constant", "name": name, "line": line_num})
+                raw.append({"type": "constant", "name": name, "line": line_num})
 
             elif kind == "mod":
                 name = m.group(1)
-                symbols.append({"type": "module", "name": name, "line": line_num})
+                raw.append({"type": "module", "name": name, "line": line_num})
 
-            if len(symbols) >= MAX_SYMBOLS_PER_FILE:
+            if len(raw) >= MAX_SYMBOLS_PER_FILE:
                 break
 
     # Sort by line number
-    symbols.sort(key=lambda s: s["line"])
+    raw.sort(key=lambda s: s["line"])
+
+    # Second pass: nest methods under their parent class.
+    # A method belongs to the most recent class that appears before it.
+    if lang in ("python", "java", "ruby"):
+        classes = [(i, s) for i, s in enumerate(raw) if s["type"] == "class"]
+        # Build class line ranges: each class owns lines until the next class
+        class_ranges = []
+        for ci, (idx, cls) in enumerate(classes):
+            start = cls["line"]
+            if ci + 1 < len(classes):
+                end = classes[ci + 1][1]["line"] - 1
+            else:
+                end = len(lines) + 1
+            class_ranges.append((start, end, cls))
+
+        claimed = set()
+        for start, end, cls in class_ranges:
+            methods = []
+            for s in raw:
+                if s["type"] == "method" and start < s["line"] <= end:
+                    methods.append({"name": s["name"], "line": s["line"]})
+                    claimed.add(id(s))
+            if methods:
+                cls["methods"] = methods
+
+        # Output: classes (with nested methods) and non-method top-level symbols
+        for s in raw:
+            if s["type"] == "method" and id(s) in claimed:
+                continue
+            symbols.append(s)
+    else:
+        symbols = raw
+
     return symbols
 
 
