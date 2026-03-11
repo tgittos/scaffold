@@ -190,7 +190,7 @@ def apply_patch(patch: str) -> dict:
         - Read the file first to get accurate context and anchor lines
 
     Args:
-        patch: Patch string in the format above
+        patch: Complete patch text in the format described above
 
     Returns:
         Dictionary with success status and list of files modified
