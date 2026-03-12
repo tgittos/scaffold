@@ -24,7 +24,7 @@ Application-specific code that uses the library layer. This is a thin wrapper ar
 - **`write_file.py`** - Write or append content to file (mode parameter: "write" or "append")
 - **`list_dir.py`** - List directory contents with filtering and ISO timestamps
 - **`search_files.py`** - Search files by content/pattern with optional context lines, matched_files, total_matches_found
-- **`apply_patch.py`** - Apply text patches using Codex-compatible block find-and-replace format
+- **`apply_patch.py`** - Apply text patches using Codex-compatible block find-and-replace format; appends "run the relevant tests" hint to success details
 - **`shell.py`** - Shell command execution with timeout
 - **`web_fetch.py`** - Fetch and process web content
 - **`pip.py`** - Package management: install pure-Python packages or list installed packages (action parameter: "install" or "list")
@@ -50,8 +50,8 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`context_enhancement.c/h`** - Split prompt builder: returns `EnhancedPromptParts` with session-stable base prompt and per-request dynamic context (todo state, mode, memories, context retrieval)
 - **`recap.c/h`** - Conversation recap generation (one-shot LLM calls without history persistence)
 - **`streaming_handler.c/h`** - Application-layer streaming orchestration and provider registry management
-- **`tool_executor.c/h`** - Thin entry point for tool execution workflow (init, initial batch, clear_history support, hand-off)
-- **`iterative_loop.c/h`** - Iterative tool-calling loop for follow-up LLM rounds
+- **`tool_executor.c/h`** - Thin entry point for tool execution workflow (init, initial batch, clear_history support, hand-off). Creates `LoopWorkflowState`, scans initial tool batch for workflow state (`apply_patch`/`shell` calls), passes it to `iterative_loop_run`
+- **`iterative_loop.c/h`** - Iterative tool-calling loop for follow-up LLM rounds. `LoopWorkflowState` tracks `has_patched`, `has_tested_since_patch`, `nudge_count`. Nudge guard: when model returns zero tool calls but has patched without testing (and `nudge_count < ITERATIVE_LOOP_MAX_NUDGES` (2)), injects a user message pushing the model to run tests instead of exiting. After each tool batch, scans tool names to update workflow state
 - **`prompt_mode.c/h`** - Behavioral prompt mode definitions and parsing (plan, explore, debug, review)
 
 #### `lib/session/` - Session Data Management
@@ -477,7 +477,7 @@ A Python project (`uv`-managed) that measures scaffold's performance on coding b
 - **Context-Bench** (Letta) — Answer questions by chaining file reads and searches
 
 ### Structure
-- **`scaffold_evals/common/`** — Shared utilities: config loading, scaffold binary invocation + JSONL parsing, git patch extraction, HuggingFace dataset loading + repo setup
+- **`scaffold_evals/common/`** — Shared utilities: config loading, scaffold binary invocation + JSONL parsing, git patch extraction, HuggingFace dataset loading + repo setup. `benchmark_runner.py` pre-seeds repo orientation (directory structure + test file locations) as a `<repo-context>` block in the user message before the `<issue>` block
 - **`scaffold_evals/swebench/`** — SWE-bench runner, prompt builder, evaluation wrapper
 - **`scaffold_evals/feabench/`** — FEA-bench runner and prompt builder
 - **`scaffold_evals/contextbench/`** — Context-bench runner and prompt builder

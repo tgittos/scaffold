@@ -14,6 +14,7 @@
 #include "../ui/status_line.h"
 #include "../session/token_manager.h"
 #include "session.h"
+#include "../session/conversation_tracker.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,8 +22,9 @@
 
 #define STREAM_RETRY_MAX 3
 
-int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx) {
-    if (session == NULL || ctx == NULL) {
+int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx,
+                       LoopWorkflowState* wf_state) {
+    if (session == NULL || ctx == NULL || wf_state == NULL) {
         return -1;
     }
 
@@ -137,6 +139,26 @@ int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx) {
                 display_streaming_complete(rt.parsed.prompt_tokens,
                                            rt.parsed.completion_tokens);
             }
+
+            /* Nudge: if the model patched but never tested, push it back */
+            if (wf_state->has_patched && !wf_state->has_tested_since_patch &&
+                wf_state->nudge_count < ITERATIVE_LOOP_MAX_NUDGES) {
+                const char *nudge_msg =
+                    "You applied a patch but haven't verified it. "
+                    "Run the relevant tests to confirm your fix works "
+                    "and doesn't break existing behavior.";
+                LOG_INFO("Nudging model to test (nudge %d/%d)",
+                         wf_state->nudge_count + 1, ITERATIVE_LOOP_MAX_NUDGES);
+                append_conversation_message(
+                    &session->session_data.conversation, "user", nudge_msg);
+                if (session->session_data.config.json_output_mode) {
+                    json_output_system("nudge", nudge_msg);
+                }
+                wf_state->nudge_count++;
+                api_round_trip_cleanup(&rt);
+                continue;
+            }
+
             api_round_trip_cleanup(&rt);
             return 0;
         }
@@ -180,6 +202,17 @@ int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx) {
 
         conversation_append_tool_results(session, results, executed_count,
                                          tool_calls, tool_call_indices);
+
+        /* Track workflow state: did this batch patch or test? */
+        for (int i = 0; i < call_count; i++) {
+            if (tool_calls[i].name == NULL) continue;
+            if (strcmp(tool_calls[i].name, "apply_patch") == 0) {
+                wf_state->has_patched = 1;
+                wf_state->has_tested_since_patch = 0;
+            } else if (strcmp(tool_calls[i].name, "shell") == 0) {
+                wf_state->has_tested_since_patch = 1;
+            }
+        }
 
         if (batch_status != 0) {
             free(tool_call_indices);

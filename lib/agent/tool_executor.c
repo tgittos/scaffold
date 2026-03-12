@@ -11,6 +11,7 @@
 #include "session.h"
 #include "../session/conversation_tracker.h"
 #include <stdlib.h>
+#include <string.h>
 
 int tool_executor_run_workflow(AgentSession* session, ToolCall* tool_calls, int call_count,
                                const char* user_message, int max_tokens) {
@@ -68,7 +69,19 @@ int tool_executor_run_workflow(AgentSession* session, ToolCall* tool_calls, int 
         tool_orchestration_mark_executed(&ctx, tool_calls[i].id);
     }
 
-    int result = iterative_loop_run(session, &ctx);
+    /* Track workflow state from initial tool batch */
+    LoopWorkflowState wf_state = {0};
+    for (int i = 0; i < call_count; i++) {
+        if (tool_calls[i].name == NULL) continue;
+        if (strcmp(tool_calls[i].name, "apply_patch") == 0) {
+            wf_state.has_patched = 1;
+            wf_state.has_tested_since_patch = 0;
+        } else if (strcmp(tool_calls[i].name, "shell") == 0) {
+            wf_state.has_tested_since_patch = 1;
+        }
+    }
+
+    int result = iterative_loop_run(session, &ctx, &wf_state);
 
     // Context full is a special signal that must propagate to the supervisor
     if (result == SESSION_CONTEXT_FULL) {

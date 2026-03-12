@@ -310,6 +310,8 @@ def apply_patch(patch: str) -> dict:
             files_modified.append(file_path)
             details.append(f"Updated {file_path}")
 
+    details.append("Now run the relevant tests to verify your fix.")
+
     return {
         "success": True,
         "files_modified": files_modified,

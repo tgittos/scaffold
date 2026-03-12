@@ -1201,7 +1201,7 @@ graph TB
 - **`write_file`**: Write or append content to file (mode: "write" or "append")
 - **`list_dir`**: List directory contents with ISO timestamps
 - **`search_files`**: Search for patterns in files with optional context lines, returns matched_files and total_matches_found
-- **`apply_patch`**: Apply text patches using Codex-compatible block find-and-replace format (supports freeform invocation)
+- **`apply_patch`**: Apply text patches using Codex-compatible block find-and-replace format (supports freeform invocation); appends "run the relevant tests" hint to success details
 - **`shell`**: Execute shell commands
 - **`web_fetch`**: Fetch web content
 - **`pip`**: Package management (action: "install" or "list") — install pure-Python packages from PyPI or list installed packages
@@ -1278,8 +1278,8 @@ lib/
 │   ├── context_enhancement.c/h  # Split prompt builder (base + dynamic context)
 │   ├── recap.c/h           # Conversation recap generation
 │   ├── streaming_handler.c/h   # Streaming orchestration layer
-│   ├── tool_executor.c/h   # Tool execution entry point
-│   ├── iterative_loop.c/h  # Iterative tool-calling loop
+│   ├── tool_executor.c/h   # Tool execution entry point (creates LoopWorkflowState, passes to iterative loop)
+│   ├── iterative_loop.c/h  # Iterative tool-calling loop with workflow state tracking and nudge guard
 │   └── prompt_mode.c/h     # Behavioral prompt mode definitions (plan, explore, debug, review)
 ├── session/                # Session data management
 │   ├── session_manager.c/h # Session data structures
@@ -1444,7 +1444,7 @@ evals/                         # Evaluation harness (Python, uv-managed)
 └── scaffold_evals/            # Python package
     ├── common/                # Shared utilities
     │   ├── config.py          # TOML config + env var overrides
-    │   ├── benchmark_runner.py # Orchestrates instance runs (Docker or bare repo)
+    │   ├── benchmark_runner.py # Orchestrates instance runs (Docker or bare repo), pre-seeds repo context in user message
     │   ├── scaffold_runner.py # Invoke scaffold binary (subprocess or Docker exec)
     │   ├── patch_extractor.py # Extract diffs (local git or Docker container)
     │   └── instance_loader.py # HuggingFace dataset loading + repo setup

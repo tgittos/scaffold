@@ -131,10 +131,35 @@ def _run_in_docker(instance, scaffold_binary, model, workdir, timeout,
         )
         container.exec_run("chmod +x /usr/local/bin/scaffold")
 
+        # Gather repo orientation context
+        repo_context = ""
+        try:
+            _, dir_raw = container.exec_run(
+                ["find", "/testbed", "-maxdepth", "2", "-type", "d",
+                 "-not", "-path", "*/.git/*"], demux=True)
+            _, test_raw = container.exec_run(
+                ["find", "/testbed", "-path", "*/test*", "-name", "*.py",
+                 "-not", "-path", "*/.git/*"], demux=True)
+            dir_text = (dir_raw[0] or b"").decode("utf-8", errors="replace")
+            test_text = (test_raw[0] or b"").decode("utf-8", errors="replace")
+            # Cap each to 50 lines
+            dir_lines = "\n".join(dir_text.strip().splitlines()[:50])
+            test_lines = "\n".join(test_text.strip().splitlines()[:50])
+            if dir_lines or test_lines:
+                repo_context = (
+                    "<repo-context>\n"
+                    f"Directory structure:\n{dir_lines}\n\n"
+                    f"Test files:\n{test_lines}\n"
+                    "</repo-context>\n\n"
+                )
+        except Exception:
+            pass  # Non-fatal; proceed without context
+
         # Run scaffold
         issue_text = instance.get("problem_statement", "")
         message = (
             "Resolve the following issue in this repository.\n\n"
+            f"{repo_context}"
             f"<issue>\n{issue_text}\n</issue>\n\n"
             "The fix may not belong where the error appears. Before "
             "patching, check how the module handles analogous cases "
