@@ -14,16 +14,29 @@ def _is_traversal_path(path: str) -> bool:
 def _seek_sequence(lines, pattern, start=0):
     """Find the first contiguous occurrence of pattern lines within lines.
 
-    Comparison strips trailing whitespace.  Returns the index of the first
-    matching line, or -1 if not found.
+    First tries exact match (strips trailing whitespace only).  If that fails,
+    retries with fully stripped lines (ignoring leading whitespace) so that
+    minor indentation mismatches don't cause patch failures.
+
+    Returns the index of the first matching line, or -1 if not found.
     """
     if not pattern:
         return start
     plen = len(pattern)
+    # Pass 1: exact match (trailing whitespace stripped)
     for i in range(start, len(lines) - plen + 1):
         ok = True
         for j in range(plen):
             if lines[i + j].rstrip('\n\r') != pattern[j].rstrip('\n\r'):
+                ok = False
+                break
+        if ok:
+            return i
+    # Pass 2: fuzzy match (all whitespace stripped)
+    for i in range(start, len(lines) - plen + 1):
+        ok = True
+        for j in range(plen):
+            if lines[i + j].rstrip('\n\r').strip() != pattern[j].rstrip('\n\r').strip():
                 ok = False
                 break
         if ok:

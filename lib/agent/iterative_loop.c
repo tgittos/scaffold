@@ -159,6 +159,26 @@ int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx,
                 continue;
             }
 
+            /* Nudge: if the model tested but tests failed, push it back */
+            if (wf_state->has_patched && wf_state->last_test_failed &&
+                wf_state->nudge_count < ITERATIVE_LOOP_MAX_NUDGES) {
+                const char *nudge_msg =
+                    "Tests are still failing. Your fix is not complete. "
+                    "Read the test failures carefully, identify what your "
+                    "patch got wrong, and apply a corrected patch. Do not "
+                    "stop until the relevant tests pass.";
+                LOG_INFO("Nudging model to fix failing tests (nudge %d/%d)",
+                         wf_state->nudge_count + 1, ITERATIVE_LOOP_MAX_NUDGES);
+                append_conversation_message(
+                    &session->session_data.conversation, "user", nudge_msg);
+                if (session->session_data.config.json_output_mode) {
+                    json_output_system("nudge", nudge_msg);
+                }
+                wf_state->nudge_count++;
+                api_round_trip_cleanup(&rt);
+                continue;
+            }
+
             api_round_trip_cleanup(&rt);
             return 0;
         }
@@ -203,14 +223,52 @@ int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx,
         conversation_append_tool_results(session, results, executed_count,
                                          tool_calls, tool_call_indices);
 
-        /* Track workflow state: did this batch patch or test? */
+        /* Track workflow state: did this batch patch or test?
+         * Only count apply_patch as a real patch if it succeeded —
+         * a failed patch should not reset test-tracking state. */
         for (int i = 0; i < call_count; i++) {
             if (tool_calls[i].name == NULL) continue;
             if (strcmp(tool_calls[i].name, "apply_patch") == 0) {
-                wf_state->has_patched = 1;
-                wf_state->has_tested_since_patch = 0;
+                /* Check if this patch actually succeeded */
+                int patch_ok = 0;
+                for (int j = 0; j < executed_count; j++) {
+                    int idx = tool_call_indices ? tool_call_indices[j] : j;
+                    if (idx == i && results[j].result != NULL) {
+                        /* Failed patches contain "success": false */
+                        if (strstr(results[j].result, "\"success\": false") == NULL &&
+                            strstr(results[j].result, "\"success\":false") == NULL) {
+                            patch_ok = 1;
+                        }
+                        break;
+                    }
+                }
+                if (patch_ok) {
+                    wf_state->has_patched = 1;
+                    wf_state->has_tested_since_patch = 0;
+                    wf_state->last_test_failed = 0;
+                }
             } else if (strcmp(tool_calls[i].name, "shell") == 0) {
                 wf_state->has_tested_since_patch = 1;
+                /* Check if the shell command failed (non-zero exit_code).
+                 * The result JSON looks like: {"exit_code": N, ...}
+                 * Find the matching result for this tool call. */
+                wf_state->last_test_failed = 0;
+                for (int j = 0; j < executed_count; j++) {
+                    int idx = tool_call_indices ? tool_call_indices[j] : j;
+                    if (idx == i && results[j].result != NULL) {
+                        const char *ec = strstr(results[j].result, "\"exit_code\":");
+                        if (ec != NULL) {
+                            /* Skip past "exit_code": and whitespace */
+                            ec += strlen("\"exit_code\":");
+                            while (*ec == ' ') ec++;
+                            int code = atoi(ec);
+                            if (code != 0) {
+                                wf_state->last_test_failed = 1;
+                            }
+                        }
+                        break;
+                    }
+                }
             }
         }
 

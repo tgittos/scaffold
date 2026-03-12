@@ -5,11 +5,12 @@
 #include "tool_orchestration.h"
 
 #define ITERATIVE_LOOP_MAX_ITERATIONS 200
-#define ITERATIVE_LOOP_MAX_NUDGES 2
+#define ITERATIVE_LOOP_MAX_NUDGES 3
 
 typedef struct {
     int has_patched;
     int has_tested_since_patch;
+    int last_test_failed;          /* 1 if the most recent shell had non-zero exit */
     int nudge_count;
 } LoopWorkflowState;
 

@@ -165,7 +165,11 @@ def _run_in_docker(instance, scaffold_binary, model, workdir, timeout,
             "patching, check how the module handles analogous cases "
             "and make sure you are fixing the root cause, not "
             "suppressing a symptom. Read the tests for the affected "
-            "code — they show intended behavior and edge cases."
+            "code — they show intended behavior and edge cases.\n\n"
+            "After making your fix, run the full test suite for the "
+            "affected module — not just a single test file. Your "
+            "patch must pass all existing tests. If any test fails, "
+            "iterate on your fix until all tests pass."
         )
         result = run_scaffold_in_container(
             container=container,
