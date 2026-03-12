@@ -155,6 +155,22 @@ This is possible because it's written in C and compiled with [Cosmopolitan](http
 
 ---
 
+## Benchmarks
+
+Scaffold is evaluated against three coding benchmarks:
+
+| Benchmark | Instances | Task |
+|-----------|-----------|------|
+| [SWE-bench Verified](https://www.swebench.com/) | 500 | Fix real GitHub issues |
+| [FEA-Bench](https://github.com/microsoft/FEA-Bench) | 1,401 | Implement features in real repos |
+| [Context-Bench](https://github.com/letta-ai/context-bench) | Varies | Answer questions by searching files |
+
+Each eval provisions a fresh environment, gives scaffold the task description, and checks whether its output passes the project's test suite (SWE-bench, FEA-Bench) or matches expected answers (Context-Bench).
+
+Current results are tracked in [`BENCHMARKS.md`](BENCHMARKS.md). See [Evaluations](docs/evals.md) for how to run evals yourself.
+
+---
+
 ## Building from source
 
 Scaffold targets the Cosmopolitan toolchain. The easiest path is the devcontainer:
