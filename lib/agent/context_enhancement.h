@@ -26,4 +26,19 @@ int build_enhanced_prompt_parts(const AgentSession* session,
                                 const char* user_message,
                                 EnhancedPromptParts* out);
 
+/**
+ * Build a repo snapshot string with git info, key files, and project type.
+ * Returns malloc'd string or NULL if not in a git repo.
+ */
+char* build_repo_snapshot(void);
+
+/**
+ * Build a directory tree listing (directories only) up to max_depth.
+ * Returns malloc'd string or NULL on failure.
+ *
+ * @param root Directory to start from
+ * @param max_depth Maximum recursion depth (0 = top-level only)
+ */
+char* build_directory_tree(const char* root, int max_depth);
+
 #endif // CONTEXT_ENHANCEMENT_H

@@ -47,7 +47,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`tool_orchestration.c/h`** - Tool call deduplication and per-batch tracking
 - **`repl.c/h`** - Read-Eval-Print-Loop for interactive mode with readline, async processing, and periodic supervisor recovery
 - **`async_executor.c/h`** - Non-blocking message processing using background thread with pipe notification; running flag and condition broadcast occur inside mutex to prevent signal loss
-- **`context_enhancement.c/h`** - Split prompt builder: returns `EnhancedPromptParts` with session-stable base prompt and per-request dynamic context (todo state, mode, memories, context retrieval)
+- **`context_enhancement.c/h`** - Split prompt builder: returns `EnhancedPromptParts` with session-stable base prompt and per-request dynamic context (repo snapshot on first turn, todo state, mode, memories, context retrieval). `build_repo_snapshot()` gathers git metadata and directory tree; `build_directory_tree()` produces a depth-limited directory listing
 - **`recap.c/h`** - Conversation recap generation (one-shot LLM calls without history persistence)
 - **`streaming_handler.c/h`** - Application-layer streaming orchestration and provider registry management
 - **`tool_executor.c/h`** - Thin entry point for tool execution workflow (init, initial batch, clear_history support, hand-off). Creates `LoopWorkflowState`, scans initial tool batch for workflow state (`apply_patch`/`shell` calls), passes it to `iterative_loop_run`
@@ -403,7 +403,7 @@ The codebase follows a library-first design where all core functionality lives i
 ### 2. Agent Abstraction (lib/agent/)
 The agent module provides a clean lifecycle API:
 - **Agent**: High-level wrapper with mode-based execution (interactive, single-shot, background, worker)
-- **AgentSession**: Aggregates all components (tools, MCP, subagents, approval gates, message polling)
+- **AgentSession**: Aggregates all components (tools, MCP, subagents, approval gates, message polling, first-turn repo context flag)
 - **AgentConfig**: Configuration struct with dependency injection support
 
 ### 3. Multi-Provider LLM System (lib/llm/)

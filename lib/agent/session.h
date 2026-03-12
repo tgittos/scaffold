@@ -49,6 +49,7 @@ typedef struct AgentSession {
     const char* model_override;         /**< Model override from --model flag */
     PromptMode current_mode;            /**< Active behavioral prompt mode */
     PluginManager plugin_manager;       /**< Plugin subprocess management */
+    int first_turn_context_injected;    /**< Flag: repo context already injected */
 } AgentSession;
 
 /**

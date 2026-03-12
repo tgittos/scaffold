@@ -51,6 +51,7 @@ int session_init(AgentSession* session) {
 
     session->model_registry = NULL;
     session->current_mode = PROMPT_MODE_DEFAULT;
+    session->first_turn_context_injected = 0;
 
     if (uuid_generate_v4(session->session_id) != 0) {
         fprintf(stderr, "Warning: Failed to generate session ID, using fallback\n");

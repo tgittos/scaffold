@@ -677,7 +677,7 @@ System prompts are split into two parts to maximize cache hits across API reques
 graph TB
     Session[Session Config<br/>system_prompt] --> Enhancement[Context Enhancement<br/>context_enhancement.c]
     Enhancement --> BasePart[Base Prompt<br/>Session-stable, cacheable]
-    Enhancement --> DynPart[Dynamic Context<br/>Todo state, mode, memories]
+    Enhancement --> DynPart[Dynamic Context<br/>Repo snapshot, todo state, mode, memories]
 
     BasePart --> SysParts[SystemPromptParts<br/>api_common.h]
     DynPart --> SysParts
@@ -702,6 +702,7 @@ graph TB
 - **Anthropic**: System field is a JSON array of content blocks. The base prompt block has `cache_control: {"type": "ephemeral"}` for explicit caching. The last tool definition also gets `cache_control` to cache the full tool schema. The `anthropic-beta: prompt-caching-2024-07-31` header is sent automatically by the Anthropic provider.
 - **`SystemPromptParts`** (`api_common.h`): Carries the split through the pipeline. `base_prompt` is the session-stable prefix; `dynamic_context` is nullable per-request additions.
 - **`EnhancedPromptParts`** (`context_enhancement.h`): Owned version with allocated strings, returned by `build_enhanced_prompt_parts()`.
+- **Repo Context Seeding**: On the first turn only (controlled by `AgentSession.first_turn_context_injected`), `build_dynamic_context()` calls `build_repo_snapshot()` to inject git metadata (branch, recent commits, modified files), key project files, project type detection, and a depth-2 directory tree into the dynamic context. This eliminates the model's cold-start exploration overhead (~2-5 tool calls saved). Capped at 2KB to prevent token bloat in monorepos.
 
 ## Streaming Response Architecture
 
