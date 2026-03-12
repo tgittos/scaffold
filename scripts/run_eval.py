@@ -392,6 +392,7 @@ def run_benchmark(
     max_instances: int | None,
     timeout: int | None,
     local_output_dir: str,
+    run_id: str = "",
 ) -> None:
     """Generate predictions on the remote droplet."""
     print(f"\n[benchmark] Running {benchmark} (model={model})...")
@@ -414,7 +415,9 @@ def run_benchmark(
     if timeout is not None:
         cmd_parts.append(f"--timeout {timeout}")
 
-    session_log = os.path.join(local_output_dir, "session.log")
+    sessions_dir = os.path.join(local_output_dir, "sessions")
+    os.makedirs(sessions_dir, exist_ok=True)
+    session_log = os.path.join(sessions_dir, f"session_{run_id}.log") if run_id else os.path.join(local_output_dir, "session.log")
     ssh_run(ip, key_path, " ".join(cmd_parts), log_path=session_log)
     print(f"[benchmark] Predictions complete (session log: {session_log})")
 
@@ -453,32 +456,101 @@ def run_evaluation(
     print("[eval] Scoring complete")
 
 
+def _merge_predictions(existing_path: str, new_path: str) -> None:
+    """Merge new predictions into existing predictions.jsonl, replacing by instance_id."""
+    existing = {}
+    if os.path.isfile(existing_path):
+        with open(existing_path) as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    entry = json.loads(line)
+                    existing[entry["instance_id"]] = entry
+
+    with open(new_path) as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                entry = json.loads(line)
+                existing[entry["instance_id"]] = entry
+
+    with open(existing_path, "w") as f:
+        for entry in existing.values():
+            f.write(json.dumps(entry) + "\n")
+
+
+def _distribute_per_instance(staging_dir: str, instances_dir: str, subdir: str) -> None:
+    """Move files from a flat staging directory into per-instance subdirectories."""
+    import shutil
+
+    staging = Path(staging_dir)
+    if not staging.is_dir():
+        return
+    for item in staging.iterdir():
+        if item.is_dir():
+            instance_id = item.name
+            dest = Path(instances_dir) / instance_id / subdir
+            dest.mkdir(parents=True, exist_ok=True)
+            # Overwrite existing files for this instance
+            for f in item.iterdir():
+                target = dest / f.name
+                if f.is_dir():
+                    if target.exists():
+                        shutil.rmtree(target)
+                    shutil.copytree(f, target)
+                else:
+                    shutil.copy2(f, target)
+
+
 def retrieve_results(
     ip: str,
     key_path: str,
     local_output_dir: str,
+    run_id: str,
 ) -> None:
-    """Download predictions and evaluation results from the droplet."""
-    import shutil
+    """Download predictions and evaluation results from the droplet.
 
-    # Remove stale results from previous runs so old files don't linger
-    for subdir in ("scaffold_logs", "results", "eval_logs"):
-        stale = os.path.join(local_output_dir, subdir)
-        if os.path.isdir(stale):
-            shutil.rmtree(stale)
+    Organizes output per-instance so previous results are preserved.
+    Only re-run instances get overwritten.
+
+    Layout:
+        {local_output_dir}/
+            predictions.jsonl           — merged across all runs
+            sessions/
+                session_{run_id}.log
+            instances/
+                {instance_id}/
+                    scaffold/           — stdout.log, stderr.log
+                    eval/               — report.json, test output
+            _staging/                   — ephemeral, for update_benchmark_results
+                results/
+                eval_logs/
+    """
+    import shutil
 
     os.makedirs(local_output_dir, exist_ok=True)
 
+    staging = os.path.join(local_output_dir, "_staging")
+    if os.path.isdir(staging):
+        shutil.rmtree(staging)
+    os.makedirs(staging, exist_ok=True)
+
+    instances_dir = os.path.join(local_output_dir, "instances")
+    os.makedirs(instances_dir, exist_ok=True)
+
     print(f"\n[results] Retrieving results to {local_output_dir}/...")
 
-    # Predictions JSONL
+    # Predictions JSONL — download to staging, then merge
+    new_predictions = os.path.join(staging, "predictions.jsonl")
     scp_from(
         ip, key_path,
         f"{MOUNT_POINT}/predictions.jsonl",
-        os.path.join(local_output_dir, "predictions.jsonl"),
+        new_predictions,
     )
+    merged_predictions = os.path.join(local_output_dir, "predictions.jsonl")
+    _merge_predictions(merged_predictions, new_predictions)
 
-    # Evaluation results directory (if it exists)
+    # Evaluation results directory (for update_benchmark_results)
     rc = ssh_run(
         ip, key_path,
         f"test -d {MOUNT_POINT}/results && ls {MOUNT_POINT}/results/",
@@ -488,10 +560,11 @@ def retrieve_results(
         scp_from(
             ip, key_path,
             f"{MOUNT_POINT}/results/",
-            os.path.join(local_output_dir, "results"),
+            os.path.join(staging, "results"),
         )
 
-    # Scaffold per-instance logs (stdout/stderr)
+    # Scaffold per-instance logs (stdout/stderr) — distribute per instance
+    scaffold_staging = os.path.join(staging, "scaffold_logs")
     rc = ssh_run(
         ip, key_path,
         f"test -d {MOUNT_POINT}/work/logs && ls {MOUNT_POINT}/work/logs/",
@@ -501,10 +574,12 @@ def retrieve_results(
         scp_from(
             ip, key_path,
             f"{MOUNT_POINT}/work/logs/",
-            os.path.join(local_output_dir, "scaffold_logs"),
+            scaffold_staging,
         )
+        _distribute_per_instance(scaffold_staging, instances_dir, "scaffold")
 
-    # Also grab any swebench evaluation output dirs
+    # SWE-bench evaluation output dirs — distribute per instance
+    eval_staging = os.path.join(staging, "eval_logs")
     rc = ssh_run(
         ip, key_path,
         f"ls /root/evals/logs/ 2>/dev/null",
@@ -514,8 +589,19 @@ def retrieve_results(
         scp_from(
             ip, key_path,
             "/root/evals/logs/",
-            os.path.join(local_output_dir, "eval_logs"),
+            eval_staging,
         )
+        # Distribute per-instance report.json files
+        run_eval_dir = Path(eval_staging) / "run_evaluation"
+        if run_eval_dir.is_dir():
+            _distribute_per_instance(str(run_eval_dir), instances_dir, "eval")
+
+    # Session log — save per run_id
+    sessions_dir = os.path.join(local_output_dir, "sessions")
+    os.makedirs(sessions_dir, exist_ok=True)
+    old_session = os.path.join(local_output_dir, "session.log")
+    if os.path.isfile(old_session):
+        shutil.move(old_session, os.path.join(sessions_dir, f"session_{run_id}.log"))
 
     print(f"[results] Saved to {local_output_dir}/")
 
@@ -659,8 +745,8 @@ def update_benchmark_results(
     resolved = set()
     unresolved = set()
 
-    # Strategy 1: Look for a summary report in eval_results/results/
-    results_dir = Path(output_dir) / "results"
+    # Strategy 1: Look for a summary report in _staging/results/
+    results_dir = Path(output_dir) / "_staging" / "results"
     if results_dir.exists():
         report_file = None
         for pattern in [f"{run_id}.json", f"*.{run_id}.json"]:
@@ -679,9 +765,9 @@ def update_benchmark_results(
             resolved = set(report.get("resolved_ids", report.get("resolved", [])))
             unresolved = set(report.get("unresolved_ids", report.get("unresolved", [])))
 
-    # Strategy 2: Aggregate per-instance report.json files from eval_logs
+    # Strategy 2: Aggregate per-instance report.json files from _staging/eval_logs
     if not resolved and not unresolved:
-        eval_logs = Path(output_dir) / "eval_logs" / "run_evaluation"
+        eval_logs = Path(output_dir) / "_staging" / "eval_logs" / "run_evaluation"
         if eval_logs.exists():
             for report_file in eval_logs.rglob("report.json"):
                 report = json.loads(report_file.read_text())
@@ -1037,6 +1123,7 @@ def main() -> None:
             ip, key_path, args.benchmark, effective_model,
             instance_ids, args.max_instances, args.timeout,
             local_output_dir=args.output,
+            run_id=run_id,
         )
 
         # 9. Score predictions
@@ -1046,7 +1133,7 @@ def main() -> None:
         )
 
         # 10. Retrieve results
-        retrieve_results(ip, key_path, args.output)
+        retrieve_results(ip, key_path, args.output, run_id)
 
         # 11. Update benchmark results
         update_benchmark_results(args.output, args.benchmark, effective_model, run_id)
@@ -1060,7 +1147,7 @@ def main() -> None:
         if _cleanup_state.get("droplet_id") and "ip" in dir():
             print("[error] Attempting to retrieve partial results...", file=sys.stderr)
             try:
-                retrieve_results(ip, key_path, args.output)  # type: ignore[possibly-undefined]
+                retrieve_results(ip, key_path, args.output, run_id)  # type: ignore[possibly-undefined]
             except Exception:
                 print("[error] Could not retrieve partial results", file=sys.stderr)
 
