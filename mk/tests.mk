@@ -181,6 +181,13 @@ $(eval $(call def_test,updater,updater/test_updater,\
 $(TEST_updater_TARGET): $(TEST_updater_OBJECTS) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_updater_OBJECTS) $(CJSON_LIB)
 
+$(eval $(call def_test,plugin_updater,updater/test_plugin_updater,\
+    $(TESTDIR)/updater/mock_http.c $(LIBDIR)/updater/updater.c \
+    $(LIBDIR)/util/executable_path.c $(LIBDIR)/util/app_home.c))
+
+$(TEST_plugin_updater_TARGET): $(TEST_plugin_updater_OBJECTS) $(CJSON_LIB)
+	$(CC) -o $@ $(TEST_plugin_updater_OBJECTS) $(CJSON_LIB)
+
 # =============================================================================
 # CJSON TESTS
 # =============================================================================

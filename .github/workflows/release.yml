@@ -117,7 +117,7 @@ jobs:
             -w /workspaces/ralph \
             -e PATH="/uv-bin:/opt/cosmos/bin:$PATH" \
             scaffold-dev:latest \
-            bash -c "make -j$(nproc) && ./scripts/run_tests.sh"
+            bash -c "make -j$(nproc) && make plugins && ./scripts/run_tests.sh"
 
       - name: Fix permissions
         if: always()
@@ -156,6 +156,7 @@ jobs:
           body: ${{ steps.notes.outputs.body }}
           files: |
             out/scaffold
+            out/plugins/session-transcript
             libagent-${{ steps.version.outputs.tag }}.tar.gz
 
       - name: Create Release (auto-generated notes)
@@ -167,4 +168,5 @@ jobs:
           generate_release_notes: true
           files: |
             out/scaffold
+            out/plugins/session-transcript
             libagent-${{ steps.version.outputs.tag }}.tar.gz

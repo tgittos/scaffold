@@ -607,7 +607,17 @@ JSON-RPC 2.0 over stdin/stdout, newline-terminated messages. Same framing as MCP
 - `tool/execute` → success + result
 - `shutdown` → acknowledgment
 
-Plugins can be written in any language that speaks the protocol (C, Python, Go, Rust, shell scripts).
+Plugins must be standalone executables compiled with Cosmopolitan to match scaffold's zero-dependency, cross-platform philosophy.
+
+### Plugin Distribution
+
+Plugins are distributed via GitHub Releases using namespaced git tags (`plugin-<name>-v*`). Each plugin version gets its own release with cross-platform Cosmopolitan binaries. Scaffold releases also bundle plugin binaries as convenience snapshots. Scaffold supports auto-update for plugins: it checks for newer versions at startup via the GitHub Releases API, and users can trigger updates with `--check-plugin-updates` or `--update-plugins`.
+
+### First-Party Plugins
+
+Source in `plugins/`, built to `out/plugins/`. Not embedded in the scaffold binary — users install by copying to `~/.local/scaffold/plugins/`.
+
+- **session-transcript** (`plugins/session-transcript/`) — Records agent conversations to per-session markdown files. Subscribes to `post_user_input`, `post_llm_response`, `post_tool_execute`. Summarizes large tool arguments (e.g., `apply_patch`). Configurable via `~/.local/scaffold/transcript.conf`.
 
 ## OAuth2 Authentication Architecture
 

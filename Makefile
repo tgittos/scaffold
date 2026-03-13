@@ -52,8 +52,8 @@ COMPILE_DEPS += $(GENERATED_DATA)
 # Set default goal explicitly (included makefiles define targets before this)
 .DEFAULT_GOAL := all
 
-# Default target builds scaffold, libagent, and all tests
-all: $(BUILDDIR)/.scaffold-linked embed-python libagent $(ALL_TEST_TARGETS)
+# Default target builds scaffold, libagent, plugins, and all tests
+all: $(BUILDDIR)/.scaffold-linked embed-python libagent plugins $(ALL_TEST_TARGETS)
 
 # Alias for scaffold binary
 scaffold: $(BUILDDIR)/.scaffold-linked
@@ -97,6 +97,7 @@ $(TESTDIR)/unity/%.o: $(TESTDIR)/unity/%.c
 
 clean:
 	rm -rf $(OUTDIR)
+	@$(MAKE) -C plugins/session-transcript clean 2>/dev/null || true
 	rm -f $(OBJECTS) $(ALL_TEST_TARGETS)
 	rm -f src/*.o src/*/*.o src/*/*/*.o test/*.o test/*/*.o test/unity/*.o
 	rm -f src/*.o.d src/*/*.o.d src/*/*/*.o.d test/*.o.d test/*/*.o.d test/unity/*.o.d lib/*.o.d lib/*/*.o.d lib/*/*/*.o.d
@@ -134,4 +135,15 @@ $(ALL_TEST_TARGETS): mk/tests.mk mk/config.mk
 -include $(wildcard src/*.o.d src/*/*.o.d src/*/*/*.o.d lib/*.o.d lib/*/*.o.d lib/*/*/*.o.d test/*.o.d test/*/*.o.d test/unity/*.o.d \
     src/*/.aarch64/*.o.d lib/*/.aarch64/*.o.d lib/*/*/.aarch64/*.o.d test/*/.aarch64/*.o.d test/unity/.aarch64/*.o.d)
 
-.PHONY: all test check check-valgrind clean clean-python distclean python embed-python update-cacert scaffold
+# =============================================================================
+# PLUGINS
+# =============================================================================
+
+plugins: $(CJSON_LIB)
+	@$(MAKE) -C plugins/session-transcript
+
+# =============================================================================
+# PHONY
+# =============================================================================
+
+.PHONY: all test check check-valgrind clean clean-python distclean python embed-python update-cacert scaffold plugins

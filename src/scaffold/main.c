@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include "../../lib/agent/agent.h"
 #include "../../lib/updater/updater.h"
+#include "../../lib/plugin/plugin_manager.h"
 #include "../../lib/util/executable_path.h"
 #include "../../lib/util/app_home.h"
 #include "../../lib/util/config.h"
@@ -23,6 +24,25 @@
 
 #define MAX_CLI_ALLOW_ENTRIES 64
 #define MAX_CLI_ALLOW_CATEGORIES 16
+
+/**
+ * Collect version info from active plugins into caller-allocated arrays.
+ * Returns the number of active plugins found.
+ * pvi_index maps each active plugin to its PluginManager index (for shutdown_one).
+ */
+static int collect_plugin_versions(PluginManager *mgr,
+                                   plugin_version_info_t *pvi,
+                                   int *pvi_index) {
+    int active_count = 0;
+    for (int i = 0; i < mgr->count; i++) {
+        if (!mgr->plugins[i].initialized) continue;
+        pvi[active_count].name = mgr->plugins[i].manifest.name;
+        pvi[active_count].version = mgr->plugins[i].manifest.version;
+        if (pvi_index) pvi_index[active_count] = i;
+        active_count++;
+    }
+    return active_count;
+}
 
 static void print_version(void) {
     printf("scaffold %s (%s)\n", RALPH_VERSION, RALPH_GIT_HASH);
@@ -46,6 +66,8 @@ static void print_help(const char *program_name) {
     printf("  --logout          Log out of OpenAI OAuth session\n");
     printf("  --check-update    Check for updates and exit\n");
     printf("  --update          Download and apply the latest update, then exit\n");
+    printf("  --check-plugin-updates  Check for plugin updates and exit\n");
+    printf("  --update-plugins  Download and install all available plugin updates, then exit\n");
     printf("\n");
     printf("Arguments:\n");
     printf("  MESSAGE           Process a single message and exit\n");
@@ -135,6 +157,8 @@ static int handle_update(void) {
 int main(int argc, char *argv[]) {
     int check_update_flag = 0;
     int update_flag = 0;
+    int check_plugin_updates_flag = 0;
+    int update_plugins_flag = 0;
     int login_flag = 0;
     int logout_flag = 0;
     int export_codex_token_flag = 0;
@@ -154,6 +178,12 @@ int main(int argc, char *argv[]) {
         }
         if (strcmp(argv[i], "--update") == 0) {
             update_flag = 1;
+        }
+        if (strcmp(argv[i], "--check-plugin-updates") == 0) {
+            check_plugin_updates_flag = 1;
+        }
+        if (strcmp(argv[i], "--update-plugins") == 0) {
+            update_plugins_flag = 1;
         }
         if (strcmp(argv[i], "--login") == 0) {
             login_flag = 1;
@@ -240,6 +270,118 @@ int main(int argc, char *argv[]) {
         int rc = handle_check_update();
         app_home_cleanup();
         return rc;
+    }
+
+    if (check_plugin_updates_flag || update_plugins_flag) {
+        app_home_set_app_name("scaffold");
+        app_home_init(home_dir_override);
+        app_home_ensure_exists();
+
+        PluginManager mgr;
+        plugin_manager_init(&mgr);
+        int discovered = plugin_manager_discover(&mgr);
+        if (discovered <= 0) {
+            printf("No plugins installed.\n");
+            app_home_cleanup();
+            return EXIT_SUCCESS;
+        }
+
+        /* Start all plugins to get manifest versions */
+        plugin_manager_start_all(&mgr, NULL);
+
+        plugin_version_info_t *pvi = calloc(mgr.count, sizeof(plugin_version_info_t));
+        int *pvi_index = calloc(mgr.count, sizeof(int));
+        if (!pvi || !pvi_index) {
+            plugin_manager_shutdown_all(&mgr);
+            app_home_cleanup();
+            free(pvi);
+            free(pvi_index);
+            return EXIT_FAILURE;
+        }
+
+        int active_count = collect_plugin_versions(&mgr, pvi, pvi_index);
+        if (active_count == 0) {
+            printf("No active plugins found.\n");
+            plugin_manager_shutdown_all(&mgr);
+            free(pvi);
+            free(pvi_index);
+            app_home_cleanup();
+            return EXIT_SUCCESS;
+        }
+
+        updater_release_t *uresults = calloc(active_count, sizeof(updater_release_t));
+        updater_status_t *ustatuses = calloc(active_count, sizeof(updater_status_t));
+        if (!uresults || !ustatuses) {
+            plugin_manager_shutdown_all(&mgr);
+            free(pvi);
+            free(pvi_index);
+            free(uresults);
+            free(ustatuses);
+            app_home_cleanup();
+            return EXIT_FAILURE;
+        }
+
+        printf("Checking for plugin updates...\n");
+        updater_check_plugins(pvi, active_count, uresults, ustatuses);
+
+        int updates_found = 0;
+        for (int i = 0; i < active_count; i++) {
+            if (ustatuses[i] == UPDATE_AVAILABLE) {
+                updates_found++;
+                if (check_plugin_updates_flag) {
+                    printf("  %s: %s available (current: %s)\n",
+                           pvi[i].name, uresults[i].tag, pvi[i].version);
+                }
+            } else if (check_plugin_updates_flag && ustatuses[i] == UP_TO_DATE) {
+                printf("  %s: up to date (%s)\n", pvi[i].name, pvi[i].version);
+            }
+        }
+
+        if (update_plugins_flag && updates_found > 0) {
+            char *plugins_dir = plugin_manager_get_plugins_dir();
+            for (int i = 0; i < active_count; i++) {
+                if (ustatuses[i] != UPDATE_AVAILABLE) continue;
+
+                char tmp_path[1024];
+                snprintf(tmp_path, sizeof(tmp_path), "%s/%s.update.tmp",
+                         plugins_dir, pvi[i].name);
+
+                printf("Downloading %s %s...\n", pvi[i].name, uresults[i].tag);
+                if (updater_download(&uresults[i], tmp_path) != 0) {
+                    fprintf(stderr, "Error: Failed to download %s\n", pvi[i].name);
+                    continue;
+                }
+
+                /* Shut down the plugin before replacing its binary */
+                plugin_manager_shutdown_one(&mgr, pvi_index[i]);
+
+                char plugin_path[1024];
+                snprintf(plugin_path, sizeof(plugin_path), "%s/%s",
+                         plugins_dir, pvi[i].name);
+
+                if (updater_apply(tmp_path, plugin_path) != 0) {
+                    fprintf(stderr, "Error: Failed to apply update for %s\n",
+                            pvi[i].name);
+                    unlink(tmp_path);
+                    continue;
+                }
+
+                printf("Updated %s to %s\n", pvi[i].name, uresults[i].tag);
+            }
+            free(plugins_dir);
+        } else if (update_plugins_flag) {
+            printf("All plugins are up to date.\n");
+        } else if (!updates_found) {
+            printf("All plugins are up to date.\n");
+        }
+
+        plugin_manager_shutdown_all(&mgr);
+        free(pvi);
+        free(pvi_index);
+        free(uresults);
+        free(ustatuses);
+        app_home_cleanup();
+        return EXIT_SUCCESS;
     }
 
     AgentConfig config = agent_config_default();
@@ -438,6 +580,35 @@ int main(int argc, char *argv[]) {
         if (updater_check(&release) == UPDATE_AVAILABLE) {
             fprintf(stderr, "Update available: %s (current: %s). Run: scaffold --update\n",
                     release.tag, RALPH_VERSION);
+        }
+
+        /* Check plugin updates (batched — single API call) */
+        PluginManager *mgr = &agent.session.plugin_manager;
+        if (mgr->count > 0) {
+            plugin_version_info_t *pvi = calloc(mgr->count, sizeof(plugin_version_info_t));
+            if (pvi) {
+                int active_count = collect_plugin_versions(mgr, pvi, NULL);
+                if (active_count > 0) {
+                    updater_release_t *presults = calloc(active_count, sizeof(updater_release_t));
+                    updater_status_t *pstatuses = calloc(active_count, sizeof(updater_status_t));
+                    if (presults && pstatuses) {
+                        updater_check_plugins(pvi, active_count, presults, pstatuses);
+                        for (int i = 0; i < active_count; i++) {
+                            if (pstatuses[i] == UPDATE_AVAILABLE) {
+                                fprintf(stderr, "Plugin update: %s %s (current: %s). "
+                                        "Run: scaffold --update-plugins\n",
+                                        pvi[i].name, presults[i].tag, pvi[i].version);
+                            } else if (pstatuses[i] == CHECK_FAILED) {
+                                fprintf(stderr, "Warning: Failed to check updates for plugin %s\n",
+                                        pvi[i].name);
+                            }
+                        }
+                    }
+                    free(presults);
+                    free(pstatuses);
+                }
+                free(pvi);
+            }
         }
     }
 

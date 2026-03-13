@@ -12,7 +12,7 @@ typedef enum {
 
 typedef struct {
     int major, minor, patch;
-    char tag[32];
+    char tag[96];
     char download_url[1024];
     size_t asset_size;
     char body[4096];
@@ -45,6 +45,27 @@ int updater_download(const updater_release_t *release, const char *dest_path);
  * @return 0 on success, -1 on failure (e.g., permission denied)
  */
 int updater_apply(const char *downloaded_path, const char *target_path);
+
+/**
+ * Plugin version info for batched update checks.
+ */
+typedef struct {
+    const char *name;
+    const char *version;
+} plugin_version_info_t;
+
+/**
+ * Check GitHub releases for plugin updates.
+ * Fetches recent releases once, then matches each installed plugin
+ * against its latest plugin-<name>-v* release tag.
+ *
+ * @param plugins     Array of {name, version} pairs for installed plugins
+ * @param count       Number of plugins
+ * @param results     Output array of updater_release_t (caller allocates, count elements)
+ * @param statuses    Output array of updater_status_t (caller allocates, count elements)
+ */
+void updater_check_plugins(const plugin_version_info_t *plugins, int count,
+                           updater_release_t *results, updater_status_t *statuses);
 
 /* Internal helpers exposed for testing */
 int parse_semver(const char *tag, int *major, int *minor, int *patch);

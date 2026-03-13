@@ -597,6 +597,11 @@ static void shutdown_plugin(PluginProcess *plugin) {
     plugin->initialized = 0;
 }
 
+void plugin_manager_shutdown_one(PluginManager *mgr, int index) {
+    if (!mgr || index < 0 || index >= mgr->count) return;
+    shutdown_plugin(&mgr->plugins[index]);
+}
+
 void plugin_manager_shutdown_all(PluginManager *mgr) {
     if (!mgr) return;
 

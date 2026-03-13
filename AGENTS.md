@@ -67,6 +67,8 @@ source .env && out/scaffold --yolo "your message"
 | `--export-codex-token` | Print Codex OAuth token as JSON and exit (hidden; for eval pipeline) |
 | `--check-update` | Check for a newer version |
 | `--update` | Self-update the binary |
+| `--check-plugin-updates` | Check for newer plugin versions via GitHub Releases |
+| `--update-plugins` | Download and install latest plugin versions from GitHub Releases |
 | `--allow <entry>` | Allow a specific tool/command pattern |
 | `--allow-category=<cat>` | Allow all tools in a category |
 | `--system-prompt-file <path>` | Load system prompt from file (scaffold reads and deletes it) |

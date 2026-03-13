@@ -88,6 +88,16 @@ int plugin_manager_execute_tool(PluginManager *mgr, const ToolCall *tool_call, T
 char *plugin_manager_get_plugins_dir(void);
 
 /**
+ * Shut down a single plugin by index.
+ * Sends shutdown message, SIGTERM, waits, SIGKILL if needed.
+ * Frees the plugin's resources and marks it uninitialized.
+ *
+ * @param mgr Plugin manager
+ * @param index Plugin index (0-based)
+ */
+void plugin_manager_shutdown_one(PluginManager *mgr, int index);
+
+/**
  * Validate a plugin name.
  * Must start with a letter, be 1-64 chars, and contain only [a-zA-Z0-9-].
  *

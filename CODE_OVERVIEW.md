@@ -202,9 +202,15 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`pdf_extractor.c/h`** - PDF text extraction using PDFio library
 
 #### `lib/plugin/` - Plugin System
-- **`plugin_manager.c/h`** - Plugin discovery (scan `~/.local/scaffold/plugins/`, rejects symlinks via `lstat`), process spawning via fork/pipe with O_CLOEXEC, name validation (rejects duplicates after handshake), crash detection via lazy `waitpid`, 10 MB response limit, schema-only tool registration as `plugin_<name>_<tool>` (execution dispatched by `tool_batch_executor.c`), IPC, and graceful shutdown
+- **`plugin_manager.c/h`** - Plugin discovery (scan `~/.local/scaffold/plugins/`, rejects symlinks via `lstat`), process spawning via fork/pipe with O_CLOEXEC, name validation (rejects duplicates after handshake), crash detection via lazy `waitpid`, 10 MB response limit, schema-only tool registration as `plugin_<name>_<tool>` (execution dispatched by `tool_batch_executor.c`), IPC, and graceful shutdown. `plugin_manager_shutdown_one()` for single-plugin shutdown (used during plugin updates)
 - **`plugin_protocol.c/h`** - JSON-RPC 2.0 message builders (initialize, hook events, tool execute, shutdown) and response parsers (manifest, hook response, tool result)
 - **`hook_dispatcher.c/h`** - Generic callback-driven hook dispatch: each hook provides a context struct, `build_params()`, and `apply_result()` callback; a single `hook_dispatch_generic()` loop handles subscriber ordering, event send/receive, and STOP/SKIP/CONTINUE chain semantics
+
+#### `plugins/` - First-Party Plugins (Cosmopolitan C)
+
+Built to `out/plugins/`. Not embedded in the scaffold binary — users install by copying to `~/.local/scaffold/plugins/`.
+
+- **`plugins/session-transcript/`** - Session transcript plugin. Records user messages, model responses, and tool calls to per-session markdown files. Summarizes large tool arguments (e.g., `apply_patch`). Configurable via `~/.local/scaffold/transcript.conf`
 
 #### `lib/mcp/` - Model Context Protocol
 - **`mcp_client.c/h`** - MCP client implementation and server management
@@ -216,7 +222,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`services.c/h`** - Dependency injection container for service management (message store, vector DB, embeddings, task store, goal/action stores with shared SQLite DAL).
 
 #### `lib/updater/` - Self-Update System
-- **`updater.c/h`** - Self-update via GitHub releases (check for updates, download, apply)
+- **`updater.c/h`** - Self-update via GitHub releases (check for updates, download, apply). `updater_check_plugins()` performs batched plugin update checking against GitHub Releases for all installed plugins
 
 #### `lib/auth/` - OAuth2 Authentication
 - **`openai_login.c/h`** - Login orchestrator: `openai_login()` (PKCE flow with auto-detected headless), `openai_logout()`, `openai_get_codex_credentials()` (token + account ID retrieval), `openai_refresh_credential()` (credential provider callback for session-level refresh), `openai_auth_cleanup()` (persistent store teardown). Persistent module-level store reused across calls for the same db_path
@@ -364,6 +370,7 @@ The test directory mirrors the source structure:
 
 #### `test/updater/` - Updater Tests
 - **`test_updater.c`** - Self-update system tests
+- **`test_plugin_updater.c`** - Plugin update checking and installation tests
 
 #### `test/orchestrator/` - Orchestrator Tests
 - **`test_orchestrator.c`** - Supervisor process lifecycle tests (12 tests: spawn, alive checks, kill, reap, stale PID cleanup, respawn)

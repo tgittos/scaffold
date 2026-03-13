@@ -303,6 +303,35 @@ static void test_get_plugins_dir(void) {
     rmdir(tmpdir);
 }
 
+/* --- shutdown_one tests --- */
+
+static void test_shutdown_one_null(void) {
+    plugin_manager_shutdown_one(NULL, 0);
+}
+
+static void test_shutdown_one_out_of_bounds(void) {
+    PluginManager mgr;
+    plugin_manager_init(&mgr);
+    mgr.count = 1;
+    /* Should not crash with out-of-bounds index */
+    plugin_manager_shutdown_one(&mgr, -1);
+    plugin_manager_shutdown_one(&mgr, 1);
+    plugin_manager_shutdown_one(&mgr, 100);
+}
+
+static void test_shutdown_one_uninitialized(void) {
+    PluginManager mgr;
+    plugin_manager_init(&mgr);
+    mgr.count = 1;
+    mgr.plugins[0].path = NULL;
+    mgr.plugins[0].pid = 0;
+    mgr.plugins[0].stdin_fd = -1;
+    mgr.plugins[0].stdout_fd = -1;
+    mgr.plugins[0].initialized = 0;
+    /* Should not crash on uninitialized plugin */
+    plugin_manager_shutdown_one(&mgr, 0);
+}
+
 int main(void) {
     UNITY_BEGIN();
 
@@ -315,6 +344,9 @@ int main(void) {
     RUN_TEST(test_discover_skips_symlinks);
     RUN_TEST(test_shutdown_empty);
     RUN_TEST(test_shutdown_null);
+    RUN_TEST(test_shutdown_one_null);
+    RUN_TEST(test_shutdown_one_out_of_bounds);
+    RUN_TEST(test_shutdown_one_uninitialized);
     RUN_TEST(test_send_request_bad_fds);
     RUN_TEST(test_execute_tool_no_manager);
     RUN_TEST(test_execute_tool_not_plugin_name);

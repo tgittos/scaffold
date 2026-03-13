@@ -13,6 +13,7 @@
 #define GITHUB_OWNER "tgittos"
 #define GITHUB_REPO  "scaffold"
 #define GITHUB_API_URL "https://api.github.com/repos/" GITHUB_OWNER "/" GITHUB_REPO "/releases/latest"
+#define GITHUB_RELEASES_URL "https://api.github.com/repos/" GITHUB_OWNER "/" GITHUB_REPO "/releases?per_page=50"
 
 #define COPY_BUF_SIZE 65536
 
@@ -238,4 +239,162 @@ int updater_apply(const char *downloaded_path, const char *target_path) {
     unlink(downloaded_path);
     if (has_backup) unlink(backup_path);
     return 0;
+}
+
+void updater_check_plugins(const plugin_version_info_t *plugins, int count,
+                           updater_release_t *results, updater_status_t *statuses) {
+    if (!plugins || !results || !statuses || count <= 0) return;
+
+    for (int i = 0; i < count; i++) {
+        memset(&results[i], 0, sizeof(updater_release_t));
+        statuses[i] = CHECK_FAILED;
+    }
+
+    char user_agent[64];
+    snprintf(user_agent, sizeof(user_agent), "User-Agent: scaffold/%s", RALPH_VERSION);
+
+    const char *headers[] = {
+        user_agent,
+        "Accept: application/vnd.github+json",
+        NULL
+    };
+
+    struct HTTPConfig config = {
+        .timeout_seconds = 3,
+        .connect_timeout_seconds = 2,
+        .follow_redirects = 1,
+        .max_redirects = 5
+    };
+
+    struct HTTPResponse response = {0};
+    int rc = http_get_with_config(GITHUB_RELEASES_URL, headers, &config, &response);
+    if (rc != 0 || response.data == NULL) {
+        cleanup_response(&response);
+        return;
+    }
+
+    cJSON *releases = cJSON_Parse(response.data);
+    cleanup_response(&response);
+    if (!releases || !cJSON_IsArray(releases)) {
+        cJSON_Delete(releases);
+        return;
+    }
+
+    /* Track which plugins we've already matched (first match = latest release) */
+    int *matched = calloc(count, sizeof(int));
+    if (!matched) {
+        cJSON_Delete(releases);
+        return;
+    }
+
+    int releases_count = cJSON_GetArraySize(releases);
+    for (int r = 0; r < releases_count; r++) {
+        cJSON *rel = cJSON_GetArrayItem(releases, r);
+        cJSON *tag_name = cJSON_GetObjectItem(rel, "tag_name");
+        if (!cJSON_IsString(tag_name)) continue;
+
+        const char *tag = tag_name->valuestring;
+
+        /* Check if this tag matches any unmatched plugin */
+        for (int p = 0; p < count; p++) {
+            if (matched[p]) continue;
+            if (!plugins[p].name || !plugins[p].version) continue;
+
+            /* Build expected prefix: "plugin-<name>-v" */
+            char prefix[128];
+            snprintf(prefix, sizeof(prefix), "plugin-%s-v", plugins[p].name);
+            size_t prefix_len = strlen(prefix);
+
+            if (strncmp(tag, prefix, prefix_len) != 0) continue;
+
+            /* This release matches this plugin — it's the latest since
+             * GitHub returns releases newest-first */
+            matched[p] = 1;
+
+            int remote_major, remote_minor, remote_patch;
+            if (parse_semver(tag + prefix_len - 1, &remote_major,
+                             &remote_minor, &remote_patch) != 0) {
+                statuses[p] = CHECK_FAILED;
+                continue;
+            }
+
+            int local_major, local_minor, local_patch;
+            if (parse_semver(plugins[p].version, &local_major,
+                             &local_minor, &local_patch) != 0) {
+                statuses[p] = CHECK_FAILED;
+                continue;
+            }
+
+            int cmp = semver_compare(remote_major, remote_minor, remote_patch,
+                                     local_major, local_minor, local_patch);
+            if (cmp <= 0) {
+                statuses[p] = UP_TO_DATE;
+                continue;
+            }
+
+            /* Find asset matching plugin name */
+            cJSON *assets = cJSON_GetObjectItem(rel, "assets");
+            if (!cJSON_IsArray(assets)) {
+                statuses[p] = CHECK_FAILED;
+                continue;
+            }
+
+            bool found_asset = false;
+            int asset_count = cJSON_GetArraySize(assets);
+            for (int a = 0; a < asset_count; a++) {
+                cJSON *asset = cJSON_GetArrayItem(assets, a);
+                cJSON *name = cJSON_GetObjectItem(asset, "name");
+                if (cJSON_IsString(name) &&
+                    strcmp(name->valuestring, plugins[p].name) == 0) {
+                    cJSON *url = cJSON_GetObjectItem(asset, "browser_download_url");
+                    if (cJSON_IsString(url)) {
+                        snprintf(results[p].download_url,
+                                 sizeof(results[p].download_url),
+                                 "%s", url->valuestring);
+                    }
+                    cJSON *size = cJSON_GetObjectItem(asset, "size");
+                    if (cJSON_IsNumber(size)) {
+                        results[p].asset_size = (size_t)size->valuedouble;
+                    }
+                    found_asset = true;
+                    break;
+                }
+            }
+
+            if (!found_asset || results[p].download_url[0] == '\0') {
+                statuses[p] = CHECK_FAILED;
+                continue;
+            }
+
+            results[p].major = remote_major;
+            results[p].minor = remote_minor;
+            results[p].patch = remote_patch;
+            snprintf(results[p].tag, sizeof(results[p].tag), "%s", tag);
+
+            cJSON *body = cJSON_GetObjectItem(rel, "body");
+            if (cJSON_IsString(body)) {
+                snprintf(results[p].body, sizeof(results[p].body),
+                         "%s", body->valuestring);
+            }
+
+            statuses[p] = UPDATE_AVAILABLE;
+        }
+
+        /* Early exit if all plugins matched */
+        int all_matched = 1;
+        for (int p = 0; p < count; p++) {
+            if (!matched[p]) { all_matched = 0; break; }
+        }
+        if (all_matched) break;
+    }
+
+    /* Plugins with no matching release are up to date (no release exists yet) */
+    for (int p = 0; p < count; p++) {
+        if (!matched[p]) {
+            statuses[p] = UP_TO_DATE;
+        }
+    }
+
+    free(matched);
+    cJSON_Delete(releases);
 }
