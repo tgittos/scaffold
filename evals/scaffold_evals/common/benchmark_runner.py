@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import traceback
+import urllib.request
 from pathlib import Path
 
 from scaffold_evals.common.config import load_config
@@ -13,9 +15,47 @@ from scaffold_evals.common.instance_loader import load_instances
 from scaffold_evals.common.patch_extractor import extract_patch_from_container
 from scaffold_evals.common.scaffold_runner import run_scaffold_in_container
 
+# Files to extract from scaffold's home dir inside the container
+_SCAFFOLD_HOME_ARTIFACTS = ("scaffold.db", "config.json", "session.log")
+
 
 # SWE-bench Docker namespace for pre-built images on Docker Hub
 _SWEBENCH_NAMESPACE = "swebench"
+
+
+def _fetch_pr_description(repo: str, pull_number: int) -> str:
+    """Fetch PR title and body from GitHub API."""
+    url = f"https://api.github.com/repos/{repo}/pulls/{pull_number}"
+    req = urllib.request.Request(url)
+    token = os.environ.get("GITHUB_TOKEN")
+    if token:
+        req.add_header("Authorization", f"token {token}")
+    req.add_header("Accept", "application/vnd.github.v3+json")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read())
+            title = data.get("title", "")
+            body = data.get("body", "") or ""
+            return f"{title}\n\n{body}".strip()
+    except Exception as e:
+        print(f"[warning] Could not fetch PR #{pull_number} from {repo}: {e}", flush=True)
+        return ""
+
+
+def _prepare_feabench_instance(instance: dict) -> dict:
+    """Add missing fields that make_test_spec expects for FEA-bench instances."""
+    if "test_patch" in instance:
+        return instance
+    instance = dict(instance)
+    instance["test_patch"] = ""
+    if not instance.get("problem_statement"):
+        repo = instance.get("repo", "")
+        pull_number = instance.get("pull_number")
+        if repo and pull_number:
+            instance["problem_statement"] = _fetch_pr_description(repo, pull_number)
+        else:
+            instance["problem_statement"] = ""
+    return instance
 
 
 def run_patch_instance(
@@ -59,11 +99,81 @@ def run_patch_instance(
     if result.raw_stderr:
         (log_dir / "stderr.log").write_text(result.raw_stderr)
 
+    # Save patch as standalone file for easy inspection
+    (log_dir / "patch.diff").write_text(patch)
+
+    # Save the scaffold conversation as structured JSON for analysis
+    if result.messages:
+        (log_dir / "conversation.json").write_text(
+            json.dumps(result.messages, indent=2)
+        )
+
     return {
         "instance_id": instance_id,
         "model_name_or_path": model,
         "model_patch": patch,
     }
+
+
+def _collect_container_diagnostics(container, benchmark_name: str) -> str:
+    """Collect diagnostic info from the container before it's destroyed."""
+    sections = []
+    cmds = [
+        ("git status", ["git", "status"]),
+        ("git log -10 --oneline", ["git", "log", "--oneline", "-10"]),
+        ("git diff --stat", ["git", "diff", "--stat"]),
+        ("conda env list", ["conda", "env", "list"]),
+        ("pip list (testbed)", ["bash", "-c",
+         "/opt/miniconda3/envs/testbed/bin/pip list 2>/dev/null || echo 'N/A'"]),
+        ("scaffold home listing", ["bash", "-c",
+         "find /root/.local/scaffold/ -type f 2>/dev/null || echo 'empty'"]),
+    ]
+    for label, cmd in cmds:
+        try:
+            exit_code, output = container.exec_run(cmd, workdir="/testbed/")
+            text = output.decode("utf-8", errors="replace") if isinstance(output, bytes) else output
+            sections.append(f"=== {label} (exit={exit_code}) ===\n{text}")
+        except Exception as e:
+            sections.append(f"=== {label} (error) ===\n{e}")
+    return "\n\n".join(sections)
+
+
+def _extract_scaffold_home(container, log_dir: Path, benchmark_name: str) -> None:
+    """Extract scaffold home artifacts from the container for post-mortem analysis."""
+    home_dir = log_dir / "scaffold_home"
+    home_dir.mkdir(parents=True, exist_ok=True)
+    for artifact in _SCAFFOLD_HOME_ARTIFACTS:
+        try:
+            exit_code, output = container.exec_run(
+                ["cat", f"/root/.local/scaffold/{artifact}"],
+            )
+            if exit_code == 0 and output:
+                data = output if isinstance(output, bytes) else output.encode()
+                (home_dir / artifact).write_bytes(data)
+        except Exception:
+            pass  # Non-fatal; best-effort extraction
+
+    # Also grab any .log files in scaffold home
+    try:
+        exit_code, output = container.exec_run(
+            ["find", "/root/.local/scaffold/", "-name", "*.log", "-type", "f"],
+        )
+        if exit_code == 0 and output:
+            text = output.decode("utf-8", errors="replace") if isinstance(output, bytes) else output
+            for log_path in text.strip().splitlines():
+                log_path = log_path.strip()
+                if not log_path:
+                    continue
+                name = log_path.rsplit("/", 1)[-1]
+                try:
+                    _, content = container.exec_run(["cat", log_path])
+                    if content:
+                        data = content if isinstance(content, bytes) else content.encode()
+                        (home_dir / name).write_bytes(data)
+                except Exception:
+                    pass
+    except Exception:
+        pass
 
 
 def _run_in_docker(instance, scaffold_binary, model, workdir, timeout,
@@ -79,6 +189,9 @@ def _run_in_docker(instance, scaffold_binary, model, workdir, timeout,
 
     instance_id = instance["instance_id"]
     client = docker.from_env()
+
+    # FEA-bench instances lack test_patch/problem_statement; fill them in
+    instance = _prepare_feabench_instance(instance)
 
     # Build/pull the instance image (base -> env -> instance, cached)
     spec = make_test_spec(instance, namespace=_SWEBENCH_NAMESPACE)
@@ -157,20 +270,52 @@ def _run_in_docker(instance, scaffold_binary, model, workdir, timeout,
 
         # Run scaffold
         issue_text = instance.get("problem_statement", "")
-        message = (
-            "Resolve the following issue in this repository.\n\n"
-            f"{repo_context}"
-            f"<issue>\n{issue_text}\n</issue>\n\n"
-            "The fix may not belong where the error appears. Before "
-            "patching, check how the module handles analogous cases "
-            "and make sure you are fixing the root cause, not "
-            "suppressing a symptom. Read the tests for the affected "
-            "code — they show intended behavior and edge cases.\n\n"
-            "After making your fix, run the full test suite for the "
-            "affected module — not just a single test file. Your "
-            "patch must pass all existing tests. If any test fails, "
-            "iterate on your fix until all tests pass."
-        )
+        fail_to_pass = instance.get("FAIL_TO_PASS", [])
+        if isinstance(fail_to_pass, str):
+            import json as _json
+            fail_to_pass = _json.loads(fail_to_pass)
+
+        is_feature = benchmark_name == "feabench"
+        if is_feature:
+            test_hint = ""
+            if fail_to_pass:
+                test_names = "\n".join(fail_to_pass[:20])
+                test_hint = (
+                    f"\n\nThe following tests must pass after your implementation:\n"
+                    f"<tests>\n{test_names}\n</tests>\n"
+                )
+            message = (
+                "Implement the following feature in this repository.\n\n"
+                f"{repo_context}"
+                f"<feature-request>\n{issue_text}\n</feature-request>"
+                f"{test_hint}\n\n"
+                "Read the failing tests carefully — they define the expected "
+                "behavior. Explore the codebase to understand the existing "
+                "patterns and conventions before writing code.\n\n"
+                "After implementing, run the relevant test suite to verify. "
+                "Your patch must pass all existing tests plus the new ones. "
+                "If any test fails, iterate until all tests pass."
+            )
+        else:
+            message = (
+                "Resolve the following issue in this repository.\n\n"
+                f"{repo_context}"
+                f"<issue>\n{issue_text}\n</issue>\n\n"
+                "The fix may not belong where the error appears. Before "
+                "patching, check how the module handles analogous cases "
+                "and make sure you are fixing the root cause, not "
+                "suppressing a symptom. Read the tests for the affected "
+                "code — they show intended behavior and edge cases.\n\n"
+                "After making your fix, run the full test suite for the "
+                "affected module — not just a single test file. Your "
+                "patch must pass all existing tests. If any test fails, "
+                "iterate on your fix until all tests pass."
+            )
+
+        # FEA-bench always runs in debug mode — the benchmark is newer and
+        # we need full diagnostic output for every run.
+        effective_debug = debug or is_feature
+
         result = run_scaffold_in_container(
             container=container,
             message=message,
@@ -178,11 +323,28 @@ def _run_in_docker(instance, scaffold_binary, model, workdir, timeout,
             env_vars=env_vars,
             scaffold_home=scaffold_home,
             timeout=timeout,
-            debug=debug,
+            debug=effective_debug,
         )
 
         # Extract patch
         patch = extract_patch_from_container(container)
+
+        # Collect artifacts before container cleanup
+        log_dir = workdir / "logs" / instance_id.replace("/", "__")
+        log_dir.mkdir(parents=True, exist_ok=True)
+
+        # Container diagnostics (git state, env info)
+        try:
+            diag = _collect_container_diagnostics(container, benchmark_name)
+            (log_dir / "container_diagnostics.log").write_text(diag)
+        except Exception as e:
+            print(f"[{benchmark_name}] Warning: diagnostics collection failed: {e}", flush=True)
+
+        # Scaffold home artifacts (conversation DB, session logs)
+        try:
+            _extract_scaffold_home(container, log_dir, benchmark_name)
+        except Exception as e:
+            print(f"[{benchmark_name}] Warning: scaffold home extraction failed: {e}", flush=True)
 
         return result, patch
     finally:

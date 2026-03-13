@@ -4,7 +4,7 @@
 # ///
 """Provision a DigitalOcean droplet, run scaffold evals, score them, retrieve results.
 
-Supports swebench and feabench benchmarks. Handles the full lifecycle:
+Supports swebench, feabench, and livecodebench benchmarks. Handles the full lifecycle:
   1. Create ephemeral SSH key + DO droplet + block storage volume
   2. Install Docker, uv, mount volume, copy scaffold binary + evals package
   3. Generate predictions via scaffold-eval-<benchmark>
@@ -35,11 +35,11 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 
 PROFILES = {
-    "dev": {"droplet_size": "s-2vcpu-4gb", "volume_gb": 50, "ncpus": 2},
+    "dev": {"droplet_size": "s-4vcpu-8gb", "volume_gb": 50, "ncpus": 4},
     "prod": {"droplet_size": "c-16-intel", "volume_gb": 500, "ncpus": 16},
 }
 
-SUPPORTED_BENCHMARKS = ("swebench", "feabench")
+SUPPORTED_BENCHMARKS = ("swebench", "feabench", "livecodebench")
 DEFAULT_MODEL = "claude-sonnet-4-20250514"
 DEFAULT_REGION = "sfo3"
 MOUNT_POINT = "/mnt/evaldata"
@@ -115,18 +115,33 @@ def create_ssh_key(tmp_dir: str) -> tuple[str, str, str]:
 # ---------------------------------------------------------------------------
 
 
-def create_volume(name: str, size_gb: int, region: str) -> str:
-    """Create a block storage volume, return its ID."""
+PERSISTENT_VOLUME_NAME = "scaffold-eval-cache"
+
+
+def get_or_create_volume(size_gb: int, region: str) -> tuple[str, bool]:
+    """Get existing persistent volume or create one. Returns (vol_id, is_new)."""
+    vol_name = f"{PERSISTENT_VOLUME_NAME}-{region}"
+
+    # Check for existing volume
+    out = doctl("compute", "volume", "list", "--region", region)
+    volumes = json.loads(out)
+    for vol in volumes:
+        if vol["name"] == vol_name:
+            vol_id = vol["id"]
+            print(f"[volume] Reusing {vol_name} id={vol_id}")
+            return vol_id, False
+
+    # Create new
     out = doctl(
-        "compute", "volume", "create", name,
+        "compute", "volume", "create", vol_name,
         "--region", region,
         "--size", f"{size_gb}GiB",
         "--fs-type", "ext4",
     )
     vol = json.loads(out)
     vol_id = vol[0]["id"]
-    print(f"[volume] Created {name} ({size_gb} GB) id={vol_id}")
-    return vol_id
+    print(f"[volume] Created {vol_name} ({size_gb} GB) id={vol_id}")
+    return vol_id, True
 
 
 def attach_volume(volume_id: str, droplet_id: str) -> None:
@@ -341,6 +356,9 @@ def setup_droplet(
     vol_dev = f"/dev/disk/by-id/scsi-0DO_Volume_{volume_name}"
     ssh_run(ip, key_path, (
         f"mkdir -p {MOUNT_POINT} && "
+        # Wait for the volume device node to appear (may lag after attach)
+        f"for i in $(seq 1 30); do [ -e {vol_dev} ] && break; echo 'Waiting for volume device...'; sleep 2; done && "
+        f"[ -e {vol_dev} ] || {{ echo 'Volume device {vol_dev} not found'; exit 1; }} && "
         # Only format if not already formatted
         f"blkid {vol_dev} || mkfs.ext4 -F {vol_dev} && "
         f"mount -o defaults,noatime {vol_dev} {MOUNT_POINT} && "
@@ -374,6 +392,14 @@ def setup_droplet(
         f"export PATH=\"$HOME/.local/bin:$PATH\" && "
         f"cd /root/evals && uv sync --extra {benchmark}"
     ))
+
+    if benchmark == "feabench":
+        print("[setup] Applying FEA-bench patches to swebench...")
+        ssh_run(ip, key_path, (
+            "export PATH=\"$HOME/.local/bin:$PATH\" && "
+            "cd /root/evals && "
+            "uv run python -m scaffold_evals.feabench.patch_swebench"
+        ))
 
     print("[setup] Droplet ready")
 
@@ -453,6 +479,33 @@ def run_evaluation(
     )
 
     ssh_run(ip, key_path, cmd)
+
+    # Copy swebench summary report to results dir for retrieve_results
+    # swebench writes {model}.{run_id}.json to cwd (/root/evals/)
+    ssh_run(ip, key_path, (
+        f"mkdir -p {MOUNT_POINT}/results && "
+        f"cp /root/evals/*.{run_id}.json {MOUNT_POINT}/results/ 2>/dev/null || true"
+    ))
+    print("[eval] Scoring complete")
+
+
+def run_livecodebench_evaluation(
+    ip: str,
+    key_path: str,
+    run_id: str,
+) -> None:
+    """Score LiveCodeBench predictions by running code against test cases."""
+    print(f"\n[eval] Scoring LiveCodeBench predictions (run_id={run_id})...")
+
+    cmd = (
+        f"export PATH=\"$HOME/.local/bin:$PATH\" && "
+        f"cd /root/evals && "
+        f"uv run python -m scaffold_evals.livecodebench.evaluate "
+        f"--predictions {MOUNT_POINT}/predictions.jsonl "
+        f"--output {MOUNT_POINT}/results/{run_id}.json"
+    )
+
+    ssh_run(ip, key_path, cmd)
     print("[eval] Scoring complete")
 
 
@@ -520,7 +573,10 @@ def retrieve_results(
                 session_{run_id}.log
             instances/
                 {instance_id}/
-                    scaffold/           — stdout.log, stderr.log
+                    scaffold/           — stdout.log, stderr.log, patch.diff,
+                                          conversation.json,
+                                          container_diagnostics.log,
+                                          scaffold_home/
                     eval/               — report.json, test output
             _staging/                   — ephemeral, for update_benchmark_results
                 results/
@@ -616,7 +672,7 @@ def teardown(
     volume_id: str | None,
     ssh_key_id: str | None,
 ) -> None:
-    """Destroy all DO resources."""
+    """Destroy droplet and SSH key. Volume is persistent and kept."""
     if droplet_id:
         print(f"[teardown] Destroying droplet {droplet_id}...")
         try:
@@ -635,14 +691,9 @@ def teardown(
         except subprocess.CalledProcessError as e:
             print(f"[teardown] Warning: droplet delete failed: {e}", file=sys.stderr)
 
+    # Volume is persistent — don't destroy it
     if volume_id:
-        print(f"[teardown] Destroying volume {volume_id}...")
-        # Volume deletion may need a brief wait after droplet destruction
-        time.sleep(5)
-        try:
-            doctl_no_json("compute", "volume", "delete", volume_id, "--force")
-        except subprocess.CalledProcessError as e:
-            print(f"[teardown] Warning: volume delete failed: {e}", file=sys.stderr)
+        print(f"[teardown] Volume {volume_id} kept (persistent cache)")
 
     if ssh_key_id:
         print(f"[teardown] Removing SSH key {ssh_key_id}...")
@@ -764,6 +815,13 @@ def update_benchmark_results(
             report = json.loads(report_file.read_text())
             resolved = set(report.get("resolved_ids", report.get("resolved", [])))
             unresolved = set(report.get("unresolved_ids", report.get("unresolved", [])))
+            # swebench puts empty-patch and error instances in separate lists
+            for key in ("empty_patch_ids", "error_ids"):
+                unresolved.update(report.get(key, []))
+            # completed but not resolved = unresolved
+            unresolved.update(
+                set(report.get("completed_ids", [])) - resolved
+            )
 
     # Strategy 2: Aggregate per-instance report.json files from _staging/eval_logs
     if not resolved and not unresolved:
@@ -803,14 +861,52 @@ def render_scorecard(results: dict | None = None) -> None:
     """Generate BENCHMARKS.md from results.json + instance registries."""
     if results is None:
         results = load_results()
+    benchmark_order = ["swebench", "feabench", "livecodebench"]
+    benchmark_labels = {
+        "swebench": "SWE-bench Verified",
+        "feabench": "FEA-Bench",
+        "livecodebench": "LiveCodeBench",
+    }
+    ordered_benchmarks = [b for b in benchmark_order if b in results]
+    ordered_benchmarks += sorted(b for b in results if b not in benchmark_order)
+
     lines = [
         "# Benchmark Scorecard",
         "",
         "*Generated by `scripts/run_eval.py --render`. Do not edit manually.*",
         "",
+        "## Summary",
+        "",
+        "| Benchmark | Model | Passed | Failed | Pending | Total | Pass Rate |",
+        "|-----------|-------|--------|--------|---------|-------|-----------|",
     ]
 
-    for benchmark in sorted(results.keys()):
+    for benchmark in ordered_benchmarks:
+        bench_results = results[benchmark]
+        registry = load_registry(benchmark) if (INSTANCES_DIR / f"{benchmark}.txt").exists() else []
+        total = len(registry)
+        label = benchmark_labels.get(benchmark, benchmark)
+        models = sorted({
+            model
+            for instance_data in bench_results.values()
+            for model in instance_data
+        })
+        for model in models:
+            passed = sum(
+                1 for idata in bench_results.values()
+                if idata.get(model, {}).get("result") == "pass"
+            )
+            failed = sum(
+                1 for idata in bench_results.values()
+                if idata.get(model, {}).get("result") == "fail"
+            )
+            pending = total - passed - failed
+            rate = f"{100 * passed / (passed + failed):.1f}%" if (passed + failed) > 0 else "N/A"
+            lines.append(f"| {label} | {model} | {passed} | {failed} | {pending} | {total} | {rate} |")
+
+    lines.append("")
+
+    for benchmark in ordered_benchmarks:
         bench_results = results[benchmark]
         registry = load_registry(benchmark) if (INSTANCES_DIR / f"{benchmark}.txt").exists() else []
         total = len(registry)
@@ -825,10 +921,7 @@ def render_scorecard(results: dict | None = None) -> None:
         if not models:
             continue
 
-        benchmark_label = {
-            "swebench": "SWE-bench Verified",
-            "feabench": "FEA-Bench",
-        }.get(benchmark, benchmark)
+        benchmark_label = benchmark_labels.get(benchmark, benchmark)
 
         lines.append(f"## {benchmark_label} ({total} instances)")
         lines.append("")
@@ -913,7 +1006,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "benchmark",
         choices=SUPPORTED_BENCHMARKS,
-        help="Benchmark to run (swebench, feabench)",
+        help="Benchmark to run (swebench, feabench, livecodebench)",
     )
     parser.add_argument(
         "-m", "--model",
@@ -1097,8 +1190,8 @@ def main() -> None:
         key_path, _, ssh_key_id = create_ssh_key(tmp_dir)
         _cleanup_state["ssh_key_id"] = ssh_key_id
 
-        # 2. Create volume
-        volume_id = create_volume(resource_name, profile["volume_gb"], args.region)
+        # 2. Get or create persistent volume
+        volume_id, _vol_new = get_or_create_volume(profile["volume_gb"], args.region)
         _cleanup_state["volume_id"] = volume_id
 
         # 3. Create droplet
@@ -1112,7 +1205,8 @@ def main() -> None:
         wait_for_ssh(ip, key_path)
 
         # 6. Setup droplet
-        setup_droplet(ip, key_path, resource_name, scaffold_binary, evals_dir,
+        vol_name = f"{PERSISTENT_VOLUME_NAME}-{args.region}"
+        setup_droplet(ip, key_path, vol_name, scaffold_binary, evals_dir,
                       args.benchmark)
 
         # 7. Upload env file (keeps secrets out of process args)
@@ -1127,10 +1221,13 @@ def main() -> None:
         )
 
         # 9. Score predictions
-        run_evaluation(
-            ip, key_path, args.benchmark, run_id,
-            profile["ncpus"],
-        )
+        if args.benchmark in EVAL_DATASETS:
+            run_evaluation(
+                ip, key_path, args.benchmark, run_id,
+                profile["ncpus"],
+            )
+        elif args.benchmark == "livecodebench":
+            run_livecodebench_evaluation(ip, key_path, run_id)
 
         # 10. Retrieve results
         retrieve_results(ip, key_path, args.output, run_id)
@@ -1177,8 +1274,8 @@ def main() -> None:
         print(f"\n[keep] Droplet kept alive: ssh -i {persist_key} root@{ip}")
         print(f"       To tear down manually:")
         print(f"         doctl compute droplet delete {droplet_id} --force")
-        print(f"         doctl compute volume delete {volume_id} --force")
         print(f"         doctl compute ssh-key delete {ssh_key_id} --force")
+        print(f"       Volume {volume_id} is persistent (shared across runs)")
 
 
 if __name__ == "__main__":

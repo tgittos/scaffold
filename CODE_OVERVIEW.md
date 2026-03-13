@@ -481,17 +481,21 @@ A Python project (`uv`-managed) that measures scaffold's performance on coding b
 ### Benchmarks
 - **SWE-bench Verified** (500 instances) — Fix real GitHub issues, produce patches, run SWE-bench evaluation harness
 - **FEA-Bench** (1,401 instances) — Implement features in real repos, same patch format as SWE-bench
+- **LiveCodeBench** (1,055 instances) — Solve competitive programming problems from LeetCode/Codeforces/AtCoder, produce Python code
 - **Context-Bench** (Letta) — Answer questions by chaining file reads and searches
 
 ### Structure
-- **`scaffold_evals/common/`** — Shared utilities: config loading, scaffold binary invocation + JSONL parsing, git patch extraction, HuggingFace dataset loading + repo setup. `benchmark_runner.py` pre-seeds repo orientation (directory structure + test file locations) as a `<repo-context>` block in the user message before the `<issue>` block
+- **`scaffold_evals/common/`** — Shared utilities: config loading, scaffold binary invocation + JSONL parsing, git patch extraction, HuggingFace dataset loading + repo setup. `benchmark_runner.py` pre-seeds repo orientation (directory structure + test file locations) as a `<repo-context>` block in the user message before the `<issue>` block. Collects per-instance artifacts before container cleanup: `patch.diff`, `conversation.json`, `container_diagnostics.log`, `scaffold_home/` (conversation DB, session logs)
 - **`scaffold_evals/swebench/`** — SWE-bench runner, prompt builder, evaluation wrapper
-- **`scaffold_evals/feabench/`** — FEA-bench runner and prompt builder
+- **`scaffold_evals/feabench/`** — FEA-bench runner and prompt builder. FEA-bench always runs in debug mode for full diagnostic output regardless of `--debug` flag
+- **`scaffold_evals/livecodebench/`** — LiveCodeBench runner (streaming HF dataset loading, code extraction from scaffold responses)
 - **`scaffold_evals/contextbench/`** — Context-bench runner and prompt builder
 - **`prompts/`** — System prompt templates for each benchmark
 
 ### How It Works
 For SWE-bench and FEA-bench instances, scaffold runs inside SWE-bench Docker containers that have project dependencies pre-installed (conda `testbed` env). The harness builds/pulls the instance image via `swebench.harness.docker_build`, starts a container, copies the scaffold binary in, and executes it with `exec_run_with_timeout`. This lets the agent run tests to verify its work. Patches are extracted via `git diff` inside the container.
+
+For LiveCodeBench, scaffold runs locally via subprocess on self-contained competitive programming problems (no repo checkout needed). The dataset is loaded via HuggingFace streaming to avoid caching to disk.
 
 For other benchmarks (contextbench), scaffold runs on a bare git checkout via subprocess.
 
@@ -500,6 +504,7 @@ All benchmarks parse JSONL output and write predictions in the format expected b
 ### Entry Points
 - `scaffold-eval-swebench` — SWE-bench runner CLI
 - `scaffold-eval-feabench` — FEA-bench runner CLI
+- `scaffold-eval-livecodebench` — LiveCodeBench runner CLI
 - `scaffold-eval-contextbench` — Context-bench runner CLI
 
 ### Benchmark Tracking

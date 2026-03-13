@@ -11,11 +11,13 @@ dependencies = [
 [project.optional-dependencies]
 swebench = ["swebench>=2.1"]
 feabench = ["swebench>=2.1"]
+livecodebench = ["datasets>=2.14,<4"]
 contextbench = []
 
 [project.scripts]
 scaffold-eval-swebench = "scaffold_evals.swebench.runner:main"
 scaffold-eval-feabench = "scaffold_evals.feabench.runner:main"
+scaffold-eval-livecodebench = "scaffold_evals.livecodebench.runner:main"
 scaffold-eval-contextbench = "scaffold_evals.contextbench.runner:main"
 
 [build-system]

@@ -1455,7 +1455,7 @@ evals/                         # Evaluation harness (Python, uv-managed)
 └── scaffold_evals/            # Python package
     ├── common/                # Shared utilities
     │   ├── config.py          # TOML config + env var overrides
-    │   ├── benchmark_runner.py # Orchestrates instance runs (Docker or bare repo), pre-seeds repo context in user message
+    │   ├── benchmark_runner.py # Orchestrates instance runs (Docker or bare repo), pre-seeds repo context in user message, collects per-instance artifacts (patch.diff, conversation.json, container_diagnostics.log, scaffold_home/)
     │   ├── scaffold_runner.py # Invoke scaffold binary (subprocess or Docker exec)
     │   ├── patch_extractor.py # Extract diffs (local git or Docker container)
     │   └── instance_loader.py # HuggingFace dataset loading + repo setup
@@ -1463,9 +1463,11 @@ evals/                         # Evaluation harness (Python, uv-managed)
     │   ├── runner.py          # CLI entry point: load, run, extract patches
     │   ├── prompt.py          # System prompt builder
     │   └── evaluate.py        # Wrapper around swebench.harness.run_evaluation
-    ├── feabench/              # FEA-Bench (1,401 instances)
+    ├── feabench/              # FEA-Bench (1,401 instances, always debug mode)
     │   ├── runner.py          # CLI entry point (900s timeout)
     │   └── prompt.py          # Feature implementation prompt builder
+    ├── livecodebench/         # LiveCodeBench (1,055 competitive programming problems)
+    │   └── runner.py          # CLI entry point (streaming HF dataset, code extraction)
     └── contextbench/          # Context-Bench (Letta)
         ├── runner.py          # CLI entry point (question answering)
         └── prompt.py          # Information retrieval prompt builder

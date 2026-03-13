@@ -8,6 +8,7 @@ Scaffold includes an evaluation harness for measuring performance on coding benc
 |-----------|-----------|------|--------|
 | [SWE-bench Verified](https://www.swebench.com/) | 500 | Fix real GitHub issues | Unified diff patch |
 | [FEA-Bench](https://github.com/microsoft/FEA-Bench) | 1,401 | Implement features in real repos | Unified diff patch |
+| [LiveCodeBench](https://livecodebench.github.io/) | 1,055 | Solve competitive programming problems | Python code |
 | [Context-Bench](https://github.com/letta-ai/context-bench) | Varies | Answer questions by searching files | Text answer (local only) |
 
 ## Prerequisites
@@ -43,13 +44,33 @@ source .env
 # Full FEA-bench run (prod profile — 16 vCPUs, 500 GB storage)
 ./scripts/run_eval.py feabench --profile prod -m gpt-4o
 
+# LiveCodeBench — generate code solutions (no Docker scoring)
+./scripts/run_eval.py livecodebench --profile dev -n 10
+
 # Keep droplet alive after run (for debugging)
 ./scripts/run_eval.py swebench --profile dev -i django__django-10097 --keep
 ```
 
 Results are saved to `eval_results/` (or the directory specified by `-o`):
-- `predictions.jsonl` — prediction output
-- `eval_logs/` — SWE-bench evaluation logs (when scoring is enabled)
+
+```
+eval_results/
+  predictions.jsonl           — merged across all runs
+  sessions/
+    session_{run_id}.log      — full SSH session output
+  instances/
+    {instance_id}/
+      scaffold/               — per-instance scaffold artifacts
+        stdout.log            — scaffold raw stdout (JSONL + debug)
+        stderr.log            — scaffold stderr (if available)
+        patch.diff            — extracted git diff (standalone)
+        conversation.json     — structured scaffold conversation
+        container_diagnostics.log — git status, env info, scaffold home listing
+        scaffold_home/        — scaffold DB + session logs from container
+      eval/                   — SWE-bench evaluation output
+        report.json           — test results
+  _staging/                   — ephemeral merge workspace
+```
 
 ### Droplet Profiles
 
@@ -65,7 +86,7 @@ Block storage is mounted at `/mnt/evaldata` and holds repo clones, dataset cache
 ```
 Usage: scripts/run_eval.py [OPTIONS] <benchmark>
 
-Benchmarks: swebench, feabench
+Benchmarks: swebench, feabench, livecodebench
 
 Options:
   -m, --model MODEL          Model to evaluate (default: claude-sonnet-4-20250514)
@@ -125,6 +146,9 @@ uv sync --extra swebench
 # Or FEA-bench
 uv sync --extra feabench
 
+# Or LiveCodeBench
+uv sync --extra livecodebench
+
 # Or Context-bench
 uv sync --extra contextbench
 ```
@@ -155,12 +179,61 @@ uv run scaffold-eval-swebench \
 
 ### FEA-Bench
 
+FEA-bench repos aren't in swebench's repo maps. Before running locally, patch the installed swebench package:
+
+```bash
+uv run python -m scaffold_evals.feabench.patch_swebench
+```
+
+This is done automatically by `run_eval.py` for remote runs. Then generate predictions:
+
 ```bash
 uv run scaffold-eval-feabench \
     --scaffold-binary ../out/scaffold \
     --model claude-sonnet-4-20250514 \
     --output predictions.jsonl \
     --timeout 900
+```
+
+### LiveCodeBench
+
+LiveCodeBench uses HuggingFace streaming to avoid downloading the full dataset to disk.
+
+```bash
+cd evals && source ../.env
+
+# Run specific problems
+uv run scaffold-eval-livecodebench \
+    --scaffold-binary ../out/scaffold \
+    --model claude-sonnet-4-20250514 \
+    --output predictions.jsonl \
+    --instance-ids <question-id-1> <question-id-2>
+
+# Run first 10 problems
+uv run scaffold-eval-livecodebench \
+    --scaffold-binary ../out/scaffold \
+    --model claude-sonnet-4-20250514 \
+    --output predictions.jsonl \
+    --max-instances 10
+
+# Use a specific dataset version (default: release_v6)
+uv run scaffold-eval-livecodebench \
+    --scaffold-binary ../out/scaffold \
+    --model claude-sonnet-4-20250514 \
+    --output predictions.jsonl \
+    --version release_v5 \
+    --max-instances 10
+
+```
+
+Predictions are saved in LiveCodeBench's expected format (`code_list` field) and can be scored using [LiveCodeBench's evaluation tool](https://github.com/LiveCodeBench/LiveCodeBench):
+
+```bash
+git clone https://github.com/LiveCodeBench/LiveCodeBench.git
+cd LiveCodeBench && uv pip install -e .
+python -m lcb_runner.evaluation.compute_code_generation_metrics \
+    --eval_all_file predictions.jsonl \
+    --start_date 2023-05-01 --end_date 2025-01-31
 ```
 
 ### Context-Bench
@@ -281,6 +354,9 @@ evals/
     feabench/
       runner.py                      # FEA-bench CLI entry point
       prompt.py                      # Prompt builder
+      patch_swebench.py              # Patches swebench 4.1.0 for FEA-bench compatibility
+    livecodebench/
+      runner.py                      # LiveCodeBench CLI entry point (streaming dataset)
     contextbench/
       runner.py                      # Context-bench CLI entry point
       prompt.py                      # Prompt builder
