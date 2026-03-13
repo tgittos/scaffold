@@ -21,15 +21,23 @@ void tearDown(void) {
     todo_list_destroy(&g_session.todo_list);
 }
 
+static int git_available(void) {
+    return system("git rev-parse --show-toplevel >/dev/null 2>&1") == 0;
+}
+
 void test_repo_snapshot_returns_non_null_in_git_repo(void) {
-    /* We are running inside a git repo */
     char* snapshot = build_repo_snapshot();
+    if (!git_available()) {
+        TEST_ASSERT_NULL(snapshot);
+        return;
+    }
     TEST_ASSERT_NOT_NULL(snapshot);
     TEST_ASSERT_TRUE(strlen(snapshot) > 0);
     free(snapshot);
 }
 
 void test_repo_snapshot_contains_header(void) {
+    if (!git_available()) { TEST_IGNORE_MESSAGE("no git repo"); }
     char* snapshot = build_repo_snapshot();
     TEST_ASSERT_NOT_NULL(snapshot);
     TEST_ASSERT_NOT_NULL(strstr(snapshot, "# Repository Context"));
@@ -37,6 +45,7 @@ void test_repo_snapshot_contains_header(void) {
 }
 
 void test_repo_snapshot_contains_branch(void) {
+    if (!git_available()) { TEST_IGNORE_MESSAGE("no git repo"); }
     char* snapshot = build_repo_snapshot();
     TEST_ASSERT_NOT_NULL(snapshot);
     TEST_ASSERT_NOT_NULL(strstr(snapshot, "Branch:"));
@@ -44,6 +53,7 @@ void test_repo_snapshot_contains_branch(void) {
 }
 
 void test_repo_snapshot_contains_commits(void) {
+    if (!git_available()) { TEST_IGNORE_MESSAGE("no git repo"); }
     char* snapshot = build_repo_snapshot();
     TEST_ASSERT_NOT_NULL(snapshot);
     TEST_ASSERT_NOT_NULL(strstr(snapshot, "Recent commits:"));
@@ -51,14 +61,15 @@ void test_repo_snapshot_contains_commits(void) {
 }
 
 void test_repo_snapshot_contains_project_root(void) {
+    if (!git_available()) { TEST_IGNORE_MESSAGE("no git repo"); }
     char* snapshot = build_repo_snapshot();
     TEST_ASSERT_NOT_NULL(snapshot);
-    /* This repo has a Makefile */
     TEST_ASSERT_NOT_NULL(strstr(snapshot, "Makefile"));
     free(snapshot);
 }
 
 void test_repo_snapshot_contains_directory_structure(void) {
+    if (!git_available()) { TEST_IGNORE_MESSAGE("no git repo"); }
     char* snapshot = build_repo_snapshot();
     TEST_ASSERT_NOT_NULL(snapshot);
     TEST_ASSERT_NOT_NULL(strstr(snapshot, "# Directory Structure"));
@@ -66,10 +77,21 @@ void test_repo_snapshot_contains_directory_structure(void) {
 }
 
 void test_repo_snapshot_within_size_limit(void) {
+    if (!git_available()) { TEST_IGNORE_MESSAGE("no git repo"); }
     char* snapshot = build_repo_snapshot();
     TEST_ASSERT_NOT_NULL(snapshot);
     TEST_ASSERT_TRUE(strlen(snapshot) < 2048);
     free(snapshot);
+}
+
+void test_repo_snapshot_returns_null_without_git(void) {
+    /* build_repo_snapshot gracefully returns NULL when not in a git repo */
+    char old_cwd[512];
+    getcwd(old_cwd, sizeof(old_cwd));
+    chdir("/tmp");
+    char* snapshot = build_repo_snapshot();
+    TEST_ASSERT_NULL(snapshot);
+    chdir(old_cwd);
 }
 
 void test_directory_tree_null_root(void) {
@@ -182,11 +204,13 @@ void test_first_turn_flag_injects_repo_context(void) {
     int rc = build_enhanced_prompt_parts(&g_session, NULL, &parts);
     TEST_ASSERT_EQUAL_INT(0, rc);
 
-    /* First turn should have repo context */
-    TEST_ASSERT_NOT_NULL(parts.dynamic_context);
-    TEST_ASSERT_NOT_NULL(strstr(parts.dynamic_context, "Repository Context"));
+    if (git_available()) {
+        /* First turn should have repo context when in a git repo */
+        TEST_ASSERT_NOT_NULL(parts.dynamic_context);
+        TEST_ASSERT_NOT_NULL(strstr(parts.dynamic_context, "Repository Context"));
+    }
 
-    /* Flag should now be set */
+    /* Flag should now be set regardless */
     TEST_ASSERT_EQUAL_INT(1, g_session.first_turn_context_injected);
 
     free_enhanced_prompt_parts(&parts);
@@ -222,6 +246,7 @@ int main(void) {
     RUN_TEST(test_repo_snapshot_contains_project_root);
     RUN_TEST(test_repo_snapshot_contains_directory_structure);
     RUN_TEST(test_repo_snapshot_within_size_limit);
+    RUN_TEST(test_repo_snapshot_returns_null_without_git);
     RUN_TEST(test_directory_tree_null_root);
     RUN_TEST(test_directory_tree_nonexistent_dir);
     RUN_TEST(test_directory_tree_depth_zero);
