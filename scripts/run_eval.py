@@ -405,6 +405,45 @@ def setup_droplet(
 
 
 # ---------------------------------------------------------------------------
+# Artifact cleanup
+# ---------------------------------------------------------------------------
+
+
+def clean_stale_artifacts(
+    ip: str,
+    key_path: str,
+    instance_ids: list[str] | None,
+) -> None:
+    """Remove stale predictions, logs, and eval artifacts from the persistent volume.
+
+    This ensures re-runs of the same instance IDs produce fresh results
+    instead of reusing cached artifacts from prior runs.
+    """
+    print("\n[cleanup] Removing stale artifacts from persistent volume...")
+
+    # Always remove the old predictions file so benchmark_runner starts fresh
+    cmds = [f"rm -f {MOUNT_POINT}/predictions.jsonl"]
+
+    if instance_ids:
+        for iid in instance_ids:
+            safe_id = iid.replace("/", "__")
+            # Scaffold work logs (conversation.json, patch.diff, stdout.log)
+            cmds.append(f"rm -rf {MOUNT_POINT}/work/logs/{safe_id}")
+            # Eval scoring results
+            cmds.append(f"rm -rf {MOUNT_POINT}/results/*{safe_id}* 2>/dev/null || true")
+        # SWE-bench eval logs on root disk
+        cmds.append("rm -rf /root/evals/logs/ 2>/dev/null || true")
+    else:
+        # No specific instances — full clean of all run artifacts
+        cmds.append(f"rm -rf {MOUNT_POINT}/work/logs")
+        cmds.append(f"rm -rf {MOUNT_POINT}/results")
+        cmds.append("rm -rf /root/evals/logs/ 2>/dev/null || true")
+
+    ssh_run(ip, key_path, " && ".join(cmds), check=False)
+    print("[cleanup] Done")
+
+
+# ---------------------------------------------------------------------------
 # Benchmark execution
 # ---------------------------------------------------------------------------
 
@@ -1211,6 +1250,9 @@ def main() -> None:
 
         # 7. Upload env file (keeps secrets out of process args)
         upload_env_file(ip, key_path, remote_env)
+
+        # 7.5. Clean stale artifacts from previous runs on the persistent volume
+        clean_stale_artifacts(ip, key_path, instance_ids)
 
         # 8. Run benchmark (generate predictions) — always in debug mode
         run_benchmark(

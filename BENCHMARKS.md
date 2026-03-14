@@ -582,7 +582,7 @@
 ### Results
 | Instance | gpt-5.3-codex |
 |----------|---------------|
-| Aider-AI__aider-207 | :x: 2026-03-13 |
+| Aider-AI__aider-207 | :x: 2026-03-14 |
 
 ### Instance Registry
 <details><summary>All 1401 valid instance IDs</summary>

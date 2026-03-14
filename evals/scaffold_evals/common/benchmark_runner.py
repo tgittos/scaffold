@@ -289,12 +289,15 @@ def _run_in_docker(instance, scaffold_binary, model, workdir, timeout,
                 f"{repo_context}"
                 f"<feature-request>\n{issue_text}\n</feature-request>"
                 f"{test_hint}\n\n"
-                "Read the failing tests carefully — they define the expected "
-                "behavior. Explore the codebase to understand the existing "
-                "patterns and conventions before writing code.\n\n"
-                "After implementing, run the relevant test suite to verify. "
-                "Your patch must pass all existing tests plus the new ones. "
-                "If any test fails, iterate until all tests pass."
+                "These tests may not exist yet. Run them first — if any are "
+                "missing (test not found), you must write them yourself as "
+                "part of your implementation. Study the existing test files "
+                "for patterns and conventions, then create the missing test "
+                "methods so they validate the requested feature.\n\n"
+                "After implementing, run the full relevant test suite to "
+                "verify. Your patch must pass all listed tests plus all "
+                "pre-existing tests. If any test fails, iterate until all "
+                "tests pass."
             )
         else:
             message = (
