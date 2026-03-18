@@ -1475,10 +1475,12 @@ evals/                         # Evaluation harness (Python, uv-managed)
 benchmarks/                    # Benchmark tracking data
 ├── instances/
 │   └── swebench.txt           # Valid instance IDs (guard rail, one per line)
-└── results.json               # Accumulated pass/fail results per model
+└── results.json               # Multi-run pass/fail results per model (runs array)
 
 scripts/run_eval.py            # Also handles benchmark tracking:
+                               #   --runs N (default 5, multi-run variance tracking)
                                #   --next N / --retry-failed N (instance selection)
+                               #   --compare MODEL_A MODEL_B (z-test comparison)
                                #   --render (regenerate BENCHMARKS.md scorecard)
                                #   Auto-imports results after scoring
 ```

@@ -39,16 +39,25 @@ The `scripts/run_eval.py` script provisions a DigitalOcean droplet, runs the ful
 source .env
 
 # Single SWE-bench instance (dev profile — small droplet)
-./scripts/run_eval.py swebench --profile dev -i django__django-10097
+./scripts/run_eval.py swebench -i django__django-10097
 
-# Full FEA-bench run (prod profile — 16 vCPUs, 500 GB storage)
-./scripts/run_eval.py feabench --profile prod -m gpt-4o
+# Full FEA-bench run
+./scripts/run_eval.py feabench -m gpt-4o
 
 # LiveCodeBench — generate code solutions (no Docker scoring)
-./scripts/run_eval.py livecodebench --profile dev -n 10
+./scripts/run_eval.py livecodebench -n 10
+
+# Quick single-run check (default is 5 runs for statistical significance)
+./scripts/run_eval.py swebench -i django__django-10097 --runs 1
+
+# Run 5 times (default) for variance tracking
+./scripts/run_eval.py swebench -i django__django-10880
+
+# Compare two models statistically
+./scripts/run_eval.py swebench --compare gpt-5.3-codex gpt-4o
 
 # Keep droplet alive after run (for debugging)
-./scripts/run_eval.py swebench --profile dev -i django__django-10097 --keep
+./scripts/run_eval.py swebench -i django__django-10097 --keep
 ```
 
 Results are saved to `eval_results/` (or the directory specified by `-o`):
@@ -72,12 +81,11 @@ eval_results/
   _staging/                   — ephemeral merge workspace
 ```
 
-### Droplet Profiles
+### Droplet Profile
 
-| Profile | Droplet | Block Storage | Cost | Use case |
-|---------|---------|---------------|------|----------|
-| `dev` | `s-2vcpu-4gb` | 50 GB | ~$0.036/hr | Test 1-5 instances, validate setup |
-| `prod` | `c-16-intel` | 500 GB | ~$0.38/hr | Full benchmark suites |
+| Droplet | Block Storage | Cost |
+|---------|---------------|------|
+| `s-4vcpu-8gb` | 50 GB | ~$0.07/hr |
 
 Block storage is mounted at `/mnt/evaldata` and holds repo clones, dataset cache, Docker images, and eval results.
 
@@ -94,7 +102,7 @@ Options:
   -i, --instance-ids IDS     Comma-separated instance IDs
   -n, --max-instances N      Max instances to run
   -t, --timeout SECONDS      Per-instance timeout
-  --profile dev|prod         Droplet profile (default: dev)
+  --profile NAME             Droplet profile (default: dev)
   --region REGION            DO region (default: sfo3)
   --keep                     Don't tear down droplet after run
   --scaffold-home DIR        Scaffold home to sync OAuth from (default: ~/.local/scaffold)
@@ -102,6 +110,8 @@ Options:
   --retry-failed N           Pick N previously failed instances for the model
   --filter PREFIX            Filter instances by ID prefix (with --next/--retry-failed)
   --render                   Regenerate BENCHMARKS.md from results (no eval run)
+  --runs N                   Number of runs per eval (default: 5)
+  --compare MODEL_A MODEL_B  Compare two models statistically (no eval run)
 ```
 
 ### Environment Variables
@@ -373,10 +383,47 @@ benchmarks/
   results.json            # Accumulated pass/fail results per model
 ```
 
+### Results schema
+
+Each (instance, model) pair stores an array of runs rather than a single scalar result:
+
+```json
+{
+  "swebench": {
+    "django__django-10880": {
+      "gpt-5.3-codex": {
+        "runs": [
+          {"date": "2026-03-18", "result": "pass", "run_id": "scaffold_xxx_run1"},
+          {"date": "2026-03-18", "result": "fail", "run_id": "scaffold_xxx_run2"}
+        ]
+      }
+    }
+  }
+}
+```
+
+Old scalar entries (`{"date": "...", "result": "..."}`) are automatically migrated to single-element `runs` arrays on read (lazy migration).
+
+### Multi-run variance tracking
+
+Eval results are non-deterministic. By default, `--runs 5` executes each eval 5 times to produce statistically meaningful pass rates. Each run gets its own predictions file, scoring pass, and artifact directory.
+
 After each eval run, `run_eval.py` automatically:
-1. Parses the SWE-bench report for resolved/unresolved instance IDs
-2. Merges results into `benchmarks/results.json` (additive, never overwrites)
-3. Regenerates `BENCHMARKS.md` as a scorecard
+1. Parses each run's SWE-bench report for resolved/unresolved instance IDs
+2. Appends results to the `runs` array in `benchmarks/results.json`
+3. Regenerates `BENCHMARKS.md` with pass rates, Wilson score confidence intervals, and multi-run counts
+
+The scorecard shows `2/5 (40%)` for multi-run results and `1/1*` with an asterisk for single-run results (marking them as statistically unreliable).
+
+### Statistical comparison
+
+Use `--compare` to compare two models:
+
+```bash
+./scripts/run_eval.py swebench --compare gpt-5.3-codex gpt-4o
+```
+
+This prints aggregate pass rates with Wilson 95% CIs, a two-proportion z-test p-value, and a per-instance delta table — all computed from stdlib `math.erf` with no external dependencies.
 
 ### Instance selection
 
@@ -384,13 +431,13 @@ Instead of manually specifying instance IDs, use `--next` or `--retry-failed`:
 
 ```bash
 # Run next 5 untested instances for the current model
-./scripts/run_eval.py swebench --profile dev --next 5
+./scripts/run_eval.py swebench --next 5
 
 # Run next 5 untested django instances only
-./scripts/run_eval.py swebench --profile dev --next 5 --filter django
+./scripts/run_eval.py swebench --next 5 --filter django
 
 # Retry failed astropy instances
-./scripts/run_eval.py swebench --profile dev --retry-failed 3 --filter astropy
+./scripts/run_eval.py swebench --retry-failed 3 --filter astropy
 
 # Just regenerate the scorecard (no eval run)
 ./scripts/run_eval.py swebench --render

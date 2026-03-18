@@ -54,7 +54,8 @@
       "WebFetch(domain:tbench.ai)",
       "WebFetch(domain:www.swebench.com)",
       "WebFetch(domain:www.letta.com)",
-      "Bash(doctl compute:*)"
+      "Bash(doctl compute:*)",
+      "Bash(uv run:*)"
     ]
   },
   "spinnerTipsEnabled": false

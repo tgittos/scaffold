@@ -508,7 +508,7 @@ All benchmarks parse JSONL output and write predictions in the format expected b
 - `scaffold-eval-contextbench` — Context-bench runner CLI
 
 ### Benchmark Tracking
-Results are tracked in `benchmarks/results.json` (pass/fail per instance per model). Instance registries in `benchmarks/instances/*.txt` serve as guard rails for valid instance IDs. `scripts/run_eval.py` auto-imports results after scoring and regenerates `BENCHMARKS.md`. Supports `--next N` (pick untested instances), `--retry-failed N` (retry failures), and `--render` (regenerate scorecard only).
+Results are tracked in `benchmarks/results.json` as multi-run arrays per (instance, model) pair — each run stores `{date, result, run_id}`. Old scalar entries are lazily migrated on read. Instance registries in `benchmarks/instances/*.txt` serve as guard rails for valid instance IDs. `scripts/run_eval.py` auto-imports results after scoring and regenerates `BENCHMARKS.md` with pass rates and Wilson score 95% confidence intervals. Supports `--runs N` (default 5 for variance tracking), `--next N` (pick untested instances), `--retry-failed N` (retry failures), `--compare MODEL_A MODEL_B` (z-test significance), and `--render` (regenerate scorecard only).
 
 ## Build System
 

@@ -13,7 +13,7 @@ Supports swebench, feabench, and livecodebench benchmarks. Handles the full life
   6. Tear down all DO resources
 
 Usage:
-  source .env && ./scripts/run_eval.py swebench --profile dev -i django__django-16379
+  source .env && ./scripts/run_eval.py swebench -i django__django-16379
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import atexit
 import json
+import math
 import os
 import signal
 import subprocess
@@ -36,7 +37,6 @@ from pathlib import Path
 
 PROFILES = {
     "dev": {"droplet_size": "s-4vcpu-8gb", "volume_gb": 50, "ncpus": 4},
-    "prod": {"droplet_size": "c-16-intel", "volume_gb": 500, "ncpus": 16},
 }
 
 SUPPORTED_BENCHMARKS = ("swebench", "feabench", "livecodebench")
@@ -599,11 +599,16 @@ def retrieve_results(
     key_path: str,
     local_output_dir: str,
     run_id: str,
+    run_index: int | None = None,
 ) -> None:
     """Download predictions and evaluation results from the droplet.
 
     Organizes output per-instance so previous results are preserved.
     Only re-run instances get overwritten.
+
+    When run_index is set (multi-run mode), artifacts are stored under
+    instances/{id}/runs/run_{N}/scaffold/ and .../eval/ instead of
+    directly under scaffold/ and eval/.
 
     Layout:
         {local_output_dir}/
@@ -612,11 +617,11 @@ def retrieve_results(
                 session_{run_id}.log
             instances/
                 {instance_id}/
-                    scaffold/           — stdout.log, stderr.log, patch.diff,
-                                          conversation.json,
-                                          container_diagnostics.log,
-                                          scaffold_home/
-                    eval/               — report.json, test output
+                    scaffold/           — single-run artifacts (run_index=None)
+                    eval/
+                    runs/               — multi-run artifacts (run_index set)
+                        run_1/scaffold/
+                        run_1/eval/
             _staging/                   — ephemeral, for update_benchmark_results
                 results/
                 eval_logs/
@@ -658,6 +663,10 @@ def retrieve_results(
             os.path.join(staging, "results"),
         )
 
+    # Determine per-instance subdir based on run_index (multi-run vs single)
+    scaffold_subdir = f"runs/run_{run_index}/scaffold" if run_index else "scaffold"
+    eval_subdir = f"runs/run_{run_index}/eval" if run_index else "eval"
+
     # Scaffold per-instance logs (stdout/stderr) — distribute per instance
     scaffold_staging = os.path.join(staging, "scaffold_logs")
     rc = ssh_run(
@@ -671,7 +680,7 @@ def retrieve_results(
             f"{MOUNT_POINT}/work/logs/",
             scaffold_staging,
         )
-        _distribute_per_instance(scaffold_staging, instances_dir, "scaffold")
+        _distribute_per_instance(scaffold_staging, instances_dir, scaffold_subdir)
 
     # SWE-bench evaluation output dirs — distribute per instance
     eval_staging = os.path.join(staging, "eval_logs")
@@ -689,7 +698,7 @@ def retrieve_results(
         # Distribute per-instance report.json files
         run_eval_dir = Path(eval_staging) / "run_evaluation"
         if run_eval_dir.is_dir():
-            _distribute_per_instance(str(run_eval_dir), instances_dir, "eval")
+            _distribute_per_instance(str(run_eval_dir), instances_dir, eval_subdir)
 
     # Session log — save per run_id
     sessions_dir = os.path.join(local_output_dir, "sessions")
@@ -777,11 +786,26 @@ RESULTS_PATH = BENCHMARKS_DIR / "results.json"
 SCORECARD_PATH = Path(__file__).resolve().parent.parent / "BENCHMARKS.md"
 
 
+def _migrate_result_entry(entry: dict) -> dict:
+    """Migrate old scalar {date, result} to new {runs: [...]} format."""
+    if "runs" in entry:
+        return entry
+    # Old format: {"date": "...", "result": "..."}
+    if "date" in entry and "result" in entry:
+        return {"runs": [{"date": entry["date"], "result": entry["result"]}]}
+    return entry
+
+
 def load_results() -> dict:
-    """Load benchmarks/results.json, returning empty dict if missing."""
-    if RESULTS_PATH.exists():
-        return json.loads(RESULTS_PATH.read_text())
-    return {}
+    """Load benchmarks/results.json, migrating old scalar entries to runs arrays."""
+    if not RESULTS_PATH.exists():
+        return {}
+    data = json.loads(RESULTS_PATH.read_text())
+    for benchmark in data.values():
+        for instance_id, instance_data in benchmark.items():
+            for model in list(instance_data.keys()):
+                instance_data[model] = _migrate_result_entry(instance_data[model])
+    return data
 
 
 def save_results(results: dict) -> None:
@@ -820,20 +844,21 @@ def select_instances(
         instance_results = results.get(instance_id, {})
         model_result = instance_results.get(model)
 
-        if mode == "next" and model_result is None:
+        if mode == "next" and (model_result is None or not model_result.get("runs")):
             selected.append(instance_id)
-        elif mode == "retry-failed" and model_result and model_result.get("result") == "fail":
-            selected.append(instance_id)
+        elif mode == "retry-failed" and model_result and model_result.get("runs"):
+            if any(r.get("result") == "fail" for r in model_result["runs"]):
+                selected.append(instance_id)
 
     return selected
 
 
-def update_benchmark_results(
-    output_dir: str, benchmark: str, model: str, run_id: str,
-) -> None:
-    """Parse eval report and merge results into benchmarks/results.json."""
-    resolved = set()
-    unresolved = set()
+def _parse_eval_report(
+    output_dir: str, run_id: str,
+) -> tuple[set[str], set[str]]:
+    """Parse eval report for a single run, returning (resolved, unresolved) instance IDs."""
+    resolved: set[str] = set()
+    unresolved: set[str] = set()
 
     # Strategy 1: Look for a summary report in _staging/results/
     results_dir = Path(output_dir) / "_staging" / "results"
@@ -854,10 +879,8 @@ def update_benchmark_results(
             report = json.loads(report_file.read_text())
             resolved = set(report.get("resolved_ids", report.get("resolved", [])))
             unresolved = set(report.get("unresolved_ids", report.get("unresolved", [])))
-            # swebench puts empty-patch and error instances in separate lists
             for key in ("empty_patch_ids", "error_ids"):
                 unresolved.update(report.get(key, []))
-            # completed but not resolved = unresolved
             unresolved.update(
                 set(report.get("completed_ids", [])) - resolved
             )
@@ -874,26 +897,85 @@ def update_benchmark_results(
                     else:
                         unresolved.add(iid)
 
-    if not resolved and not unresolved:
-        print(f"[benchmark] No report file found matching run_id={run_id}")
-        return
+    return resolved, unresolved
 
-    # Merge into results.json
+
+def update_benchmark_results(
+    output_dir: str, benchmark: str, model: str, run_ids: list[str],
+) -> None:
+    """Parse eval reports and merge results into benchmarks/results.json.
+
+    Each run_id corresponds to a separate eval run. Results are appended to the
+    runs array for each (instance, model) pair.
+    """
     all_results = load_results()
     bench_results = all_results.setdefault(benchmark, {})
     today = date.today().isoformat()
+    total_new = 0
 
-    for iid in resolved:
-        bench_results.setdefault(iid, {})[model] = {"result": "pass", "date": today}
-    for iid in unresolved:
-        bench_results.setdefault(iid, {})[model] = {"result": "fail", "date": today}
+    for rid in run_ids:
+        resolved, unresolved = _parse_eval_report(output_dir, rid)
+        if not resolved and not unresolved:
+            print(f"[benchmark] No report file found matching run_id={rid}")
+            continue
 
-    save_results(all_results)
-    new_count = len(resolved) + len(unresolved)
-    print(f"[benchmark] Updated results.json: {len(resolved)} pass, {len(unresolved)} fail ({new_count} new)")
+        for iid in resolved:
+            model_data = bench_results.setdefault(iid, {}).setdefault(model, {"runs": []})
+            model_data["runs"].append({"date": today, "result": "pass", "run_id": rid})
+        for iid in unresolved:
+            model_data = bench_results.setdefault(iid, {}).setdefault(model, {"runs": []})
+            model_data["runs"].append({"date": today, "result": "fail", "run_id": rid})
 
-    # Regenerate scorecard
-    render_scorecard(all_results)
+        new_count = len(resolved) + len(unresolved)
+        total_new += new_count
+        print(f"[benchmark] Run {rid}: {len(resolved)} pass, {len(unresolved)} fail")
+
+    if total_new > 0:
+        save_results(all_results)
+        print(f"[benchmark] Updated results.json ({total_new} new run entries)")
+        render_scorecard(all_results)
+
+
+def _wilson_ci(passes: int, total: int, z: float = 1.96) -> tuple[float, float]:
+    """Wilson score confidence interval for a binomial proportion.
+
+    Returns (lower, upper) as fractions in [0, 1].
+    """
+    if total == 0:
+        return (0.0, 0.0)
+    p = passes / total
+    denom = 1 + z * z / total
+    centre = p + z * z / (2 * total)
+    spread = z * math.sqrt((p * (1 - p) + z * z / (4 * total)) / total)
+    return (max(0.0, (centre - spread) / denom), min(1.0, (centre + spread) / denom))
+
+
+def _normal_cdf(x: float) -> float:
+    """Standard normal CDF using math.erf."""
+    return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
+
+
+def _two_proportion_ztest(
+    p1: float, n1: int, p2: float, n2: int,
+) -> float:
+    """Two-proportion z-test. Returns two-tailed p-value."""
+    if n1 == 0 or n2 == 0:
+        return 1.0
+    p_pool = (p1 * n1 + p2 * n2) / (n1 + n2)
+    if p_pool == 0.0 or p_pool == 1.0:
+        return 1.0
+    se = math.sqrt(p_pool * (1 - p_pool) * (1.0 / n1 + 1.0 / n2))
+    if se == 0:
+        return 1.0
+    z = (p1 - p2) / se
+    return 2.0 * (1.0 - _normal_cdf(abs(z)))
+
+
+def _instance_pass_rate(model_data: dict) -> tuple[int, int]:
+    """Return (passes, total_runs) from a model's data for an instance."""
+    runs = model_data.get("runs", [])
+    passes = sum(1 for r in runs if r.get("result") == "pass")
+    return passes, len(runs)
 
 
 def render_scorecard(results: dict | None = None) -> None:
@@ -909,6 +991,8 @@ def render_scorecard(results: dict | None = None) -> None:
     ordered_benchmarks = [b for b in benchmark_order if b in results]
     ordered_benchmarks += sorted(b for b in results if b not in benchmark_order)
 
+    has_single_run = False
+
     lines = [
         "# Benchmark Scorecard",
         "",
@@ -916,14 +1000,14 @@ def render_scorecard(results: dict | None = None) -> None:
         "",
         "## Summary",
         "",
-        "| Benchmark | Model | Passed | Failed | Pending | Total | Pass Rate |",
-        "|-----------|-------|--------|--------|---------|-------|-----------|",
+        "| Benchmark | Model | Instances | Runs | Pass Rate | 95% CI |",
+        "|-----------|-------|-----------|------|-----------|--------|",
     ]
 
     for benchmark in ordered_benchmarks:
         bench_results = results[benchmark]
         registry = load_registry(benchmark) if (INSTANCES_DIR / f"{benchmark}.txt").exists() else []
-        total = len(registry)
+        total_instances = len(registry)
         label = benchmark_labels.get(benchmark, benchmark)
         models = sorted({
             model
@@ -931,26 +1015,35 @@ def render_scorecard(results: dict | None = None) -> None:
             for model in instance_data
         })
         for model in models:
-            passed = sum(
-                1 for idata in bench_results.values()
-                if idata.get(model, {}).get("result") == "pass"
+            total_passes = 0
+            total_runs = 0
+            tested_count = 0
+            for idata in bench_results.values():
+                md = idata.get(model)
+                if md and md.get("runs"):
+                    p, t = _instance_pass_rate(md)
+                    total_passes += p
+                    total_runs += t
+                    tested_count += 1
+            pending = total_instances - tested_count
+            if total_runs > 0:
+                rate = 100.0 * total_passes / total_runs
+                lo, hi = _wilson_ci(total_passes, total_runs)
+                ci_str = f"{100*lo:.1f}%-{100*hi:.1f}%"
+            else:
+                rate = 0.0
+                ci_str = "N/A"
+            lines.append(
+                f"| {label} | {model} | {tested_count}/{total_instances} | {total_runs} | {rate:.1f}% | {ci_str} |"
             )
-            failed = sum(
-                1 for idata in bench_results.values()
-                if idata.get(model, {}).get("result") == "fail"
-            )
-            pending = total - passed - failed
-            rate = f"{100 * passed / (passed + failed):.1f}%" if (passed + failed) > 0 else "N/A"
-            lines.append(f"| {label} | {model} | {passed} | {failed} | {pending} | {total} | {rate} |")
 
     lines.append("")
 
     for benchmark in ordered_benchmarks:
         bench_results = results[benchmark]
         registry = load_registry(benchmark) if (INSTANCES_DIR / f"{benchmark}.txt").exists() else []
-        total = len(registry)
+        total_instances = len(registry)
 
-        # Discover all models
         models = sorted({
             model
             for instance_data in bench_results.values()
@@ -962,26 +1055,36 @@ def render_scorecard(results: dict | None = None) -> None:
 
         benchmark_label = benchmark_labels.get(benchmark, benchmark)
 
-        lines.append(f"## {benchmark_label} ({total} instances)")
+        lines.append(f"## {benchmark_label} ({total_instances} instances)")
         lines.append("")
 
         # Summary table
         lines.append("### Summary")
-        lines.append("| Model | Passed | Failed | Pending | Pass Rate |")
-        lines.append("|-------|--------|--------|---------|-----------|")
+        lines.append("| Model | Instances | Runs | Pass Rate | 95% CI |")
+        lines.append("|-------|-----------|------|-----------|--------|")
 
         for model in models:
-            passed = sum(
-                1 for idata in bench_results.values()
-                if idata.get(model, {}).get("result") == "pass"
+            total_passes = 0
+            total_runs = 0
+            tested_count = 0
+            for idata in bench_results.values():
+                md = idata.get(model)
+                if md and md.get("runs"):
+                    p, t = _instance_pass_rate(md)
+                    total_passes += p
+                    total_runs += t
+                    tested_count += 1
+            pending = total_instances - tested_count
+            if total_runs > 0:
+                rate = 100.0 * total_passes / total_runs
+                lo, hi = _wilson_ci(total_passes, total_runs)
+                ci_str = f"{100*lo:.1f}%-{100*hi:.1f}%"
+            else:
+                rate = 0.0
+                ci_str = "N/A"
+            lines.append(
+                f"| {model} | {tested_count}/{total_instances} ({pending} pending) | {total_runs} | {rate:.1f}% | {ci_str} |"
             )
-            failed = sum(
-                1 for idata in bench_results.values()
-                if idata.get(model, {}).get("result") == "fail"
-            )
-            pending = total - passed - failed
-            rate = f"{100 * passed / (passed + failed):.1f}%" if (passed + failed) > 0 else "N/A"
-            lines.append(f"| {model} | {passed} | {failed} | {pending} | {rate} |")
 
         lines.append("")
 
@@ -1000,13 +1103,25 @@ def render_scorecard(results: dict | None = None) -> None:
             for iid in tested_ids:
                 cells = []
                 for model in models:
-                    r = bench_results[iid].get(model)
-                    if r is None:
+                    md = bench_results[iid].get(model)
+                    if md is None or not md.get("runs"):
                         cells.append("")
-                    elif r["result"] == "pass":
-                        cells.append(f":white_check_mark: {r['date']}")
                     else:
-                        cells.append(f":x: {r['date']}")
+                        passes, total = _instance_pass_rate(md)
+                        if total == 1:
+                            has_single_run = True
+                            if passes == 1:
+                                cells.append(":white_check_mark: 1/1*")
+                            else:
+                                cells.append(":x: 1/1*")
+                        else:
+                            pct = 100.0 * passes / total
+                            if passes == total:
+                                cells.append(f":white_check_mark: {passes}/{total} ({pct:.0f}%)")
+                            elif passes == 0:
+                                cells.append(f":x: {passes}/{total} ({pct:.0f}%)")
+                            else:
+                                cells.append(f":large_orange_diamond: {passes}/{total} ({pct:.0f}%)")
                 lines.append(f"| {iid} | " + " | ".join(cells) + " |")
 
             lines.append("")
@@ -1014,7 +1129,7 @@ def render_scorecard(results: dict | None = None) -> None:
         # Instance registry (collapsible)
         if registry:
             lines.append("### Instance Registry")
-            lines.append(f"<details><summary>All {total} valid instance IDs</summary>")
+            lines.append(f"<details><summary>All {total_instances} valid instance IDs</summary>")
             lines.append("")
             for iid in registry:
                 lines.append(f"- {iid}")
@@ -1022,8 +1137,77 @@ def render_scorecard(results: dict | None = None) -> None:
             lines.append("</details>")
             lines.append("")
 
+    if has_single_run:
+        lines.insert(3, "")
+        lines.insert(4, r"\* *Single-run result — not statistically reliable. Re-run with `--runs 5` for meaningful data.*")
+
     SCORECARD_PATH.write_text("\n".join(lines))
     print(f"[benchmark] Generated {SCORECARD_PATH} ({len(lines)} lines)")
+
+
+def render_comparison(benchmark: str, model_a: str, model_b: str) -> None:
+    """Print a statistical comparison of two models to stdout."""
+    results = load_results()
+    bench = results.get(benchmark, {})
+    if not bench:
+        print(f"No results for benchmark '{benchmark}'", file=sys.stderr)
+        sys.exit(1)
+
+    # Aggregate pass rates
+    a_passes, a_total = 0, 0
+    b_passes, b_total = 0, 0
+    rows: list[tuple[str, str, str, str]] = []  # (iid, a_cell, b_cell, delta)
+
+    all_ids = sorted(set(
+        iid for iid in bench
+        if bench[iid].get(model_a, {}).get("runs") or bench[iid].get(model_b, {}).get("runs")
+    ))
+
+    for iid in all_ids:
+        a_data = bench[iid].get(model_a, {})
+        b_data = bench[iid].get(model_b, {})
+        ap, at = _instance_pass_rate(a_data) if a_data.get("runs") else (0, 0)
+        bp, bt = _instance_pass_rate(b_data) if b_data.get("runs") else (0, 0)
+        a_passes += ap
+        a_total += at
+        b_passes += bp
+        b_total += bt
+
+        a_cell = f"{ap}/{at}" if at > 0 else "-"
+        b_cell = f"{bp}/{bt}" if bt > 0 else "-"
+        if at > 0 and bt > 0:
+            delta_val = (ap / at - bp / bt) * 100
+            delta = f"{delta_val:+.0f}pp"
+        else:
+            delta = "-"
+        rows.append((iid, a_cell, b_cell, delta))
+
+    # Summary
+    print(f"\n{'='*60}")
+    print(f"Comparison: {model_a} vs {model_b} ({benchmark})")
+    print(f"{'='*60}\n")
+
+    for label, passes, total in [(model_a, a_passes, a_total), (model_b, b_passes, b_total)]:
+        if total > 0:
+            rate = 100.0 * passes / total
+            lo, hi = _wilson_ci(passes, total)
+            print(f"  {label}: {rate:.1f}% ({passes}/{total} runs) — 95% CI: [{100*lo:.1f}%, {100*hi:.1f}%]")
+        else:
+            print(f"  {label}: no data")
+
+    # Z-test
+    if a_total > 0 and b_total > 0:
+        p_val = _two_proportion_ztest(a_passes / a_total, a_total, b_passes / b_total, b_total)
+        sig = "YES" if p_val < 0.05 else "no"
+        print(f"\n  z-test p-value: {p_val:.4f} — significant at 0.05? {sig}")
+    print()
+
+    # Per-instance delta table
+    print(f"{'Instance':<45} {model_a:>10} {model_b:>10} {'Delta':>8}")
+    print("-" * 75)
+    for iid, a_cell, b_cell, delta in rows:
+        print(f"{iid:<45} {a_cell:>10} {b_cell:>10} {delta:>8}")
+    print()
 
 
 # ---------------------------------------------------------------------------
@@ -1037,9 +1221,9 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
-            "  ./scripts/run_eval.py swebench --profile dev -i django__django-16379\n"
-            "  ./scripts/run_eval.py feabench --profile prod -m gpt-4o\n"
-            "  ./scripts/run_eval.py swebench --profile prod -n 50\n"
+            "  ./scripts/run_eval.py swebench -i django__django-16379\n"
+            "  ./scripts/run_eval.py feabench -m gpt-4o\n"
+            "  ./scripts/run_eval.py swebench -n 50 --runs 3\n"
         ),
     )
     parser.add_argument(
@@ -1073,7 +1257,6 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--profile",
-        choices=PROFILES.keys(),
         default="dev",
         help="Droplet profile (default: dev)",
     )
@@ -1114,6 +1297,19 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Regenerate BENCHMARKS.md from current results (no eval run)",
     )
+    parser.add_argument(
+        "--runs",
+        type=int,
+        default=5,
+        metavar="N",
+        help="Number of runs per eval (default: 5). Use --runs 1 for a quick check.",
+    )
+    parser.add_argument(
+        "--compare",
+        nargs=2,
+        metavar=("MODEL_A", "MODEL_B"),
+        help="Compare two models statistically and print results (no eval run)",
+    )
     return parser.parse_args()
 
 
@@ -1128,6 +1324,11 @@ def main() -> None:
     # --render: just regenerate scorecard and exit
     if args.render:
         render_scorecard()
+        return
+
+    # --compare: statistical comparison and exit
+    if args.compare:
+        render_comparison(args.benchmark, args.compare[0], args.compare[1])
         return
 
     # Validate mutual exclusivity of instance selection flags
@@ -1195,6 +1396,7 @@ def main() -> None:
     run_id = f"scaffold_{ts}"
 
     effective_model = "gpt-5.3-codex" if codex_token else args.model
+    num_runs = args.runs
 
     # Resolve instance selection
     if args.instance_ids:
@@ -1218,6 +1420,7 @@ def main() -> None:
     print(f"==> Eval run: {resource_name}")
     print(f"    Benchmark: {args.benchmark}")
     print(f"    Model:     {effective_model}")
+    print(f"    Runs:      {num_runs}")
     print(f"    Profile:   {args.profile} ({profile['droplet_size']}, {profile['volume_gb']} GB)")
     print(f"    Region:    {args.region}")
     print()
@@ -1251,33 +1454,49 @@ def main() -> None:
         # 7. Upload env file (keeps secrets out of process args)
         upload_env_file(ip, key_path, remote_env)
 
-        # 7.5. Clean stale artifacts from previous runs on the persistent volume
-        clean_stale_artifacts(ip, key_path, instance_ids)
+        # Multi-run loop (steps 7.5–10 repeated per run)
+        all_run_ids: list[str] = []
+        for run_idx in range(1, num_runs + 1):
+            if num_runs > 1:
+                iter_run_id = f"{run_id}_run{run_idx}"
+                print(f"\n{'='*60}")
+                print(f"  Run {run_idx}/{num_runs} — {iter_run_id}")
+                print(f"{'='*60}")
+            else:
+                iter_run_id = run_id
 
-        # 8. Run benchmark (generate predictions) — always in debug mode
-        run_benchmark(
-            ip, key_path, args.benchmark, effective_model,
-            instance_ids, args.max_instances, args.timeout,
-            local_output_dir=args.output,
-            run_id=run_id,
-        )
+            # 7.5. Clean stale artifacts from previous runs on the persistent volume
+            clean_stale_artifacts(ip, key_path, instance_ids)
 
-        # 9. Score predictions
-        if args.benchmark in EVAL_DATASETS:
-            run_evaluation(
-                ip, key_path, args.benchmark, run_id,
-                profile["ncpus"],
+            # 8. Run benchmark (generate predictions) — always in debug mode
+            run_benchmark(
+                ip, key_path, args.benchmark, effective_model,
+                instance_ids, args.max_instances, args.timeout,
+                local_output_dir=args.output,
+                run_id=iter_run_id,
             )
-        elif args.benchmark == "livecodebench":
-            run_livecodebench_evaluation(ip, key_path, run_id)
 
-        # 10. Retrieve results
-        retrieve_results(ip, key_path, args.output, run_id)
+            # 9. Score predictions
+            if args.benchmark in EVAL_DATASETS:
+                run_evaluation(
+                    ip, key_path, args.benchmark, iter_run_id,
+                    profile["ncpus"],
+                )
+            elif args.benchmark == "livecodebench":
+                run_livecodebench_evaluation(ip, key_path, iter_run_id)
 
-        # 11. Update benchmark results
-        update_benchmark_results(args.output, args.benchmark, effective_model, run_id)
+            # 10. Retrieve results
+            if num_runs > 1:
+                retrieve_results(ip, key_path, args.output, iter_run_id, run_index=run_idx)
+            else:
+                retrieve_results(ip, key_path, args.output, iter_run_id)
 
-        print(f"\n==> Eval complete. Results in {args.output}/")
+            all_run_ids.append(iter_run_id)
+
+        # 11. Update benchmark results (all runs at once)
+        update_benchmark_results(args.output, args.benchmark, effective_model, all_run_ids)
+
+        print(f"\n==> Eval complete ({num_runs} run{'s' if num_runs > 1 else ''}). Results in {args.output}/")
 
     except Exception as e:
         print(f"\n[error] {e}", file=sys.stderr)

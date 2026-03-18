@@ -2,288 +2,476 @@
   "feabench": {
     "Aider-AI__aider-207": {
       "gpt-5.3-codex": {
-        "date": "2026-03-14",
-        "result": "fail"
+        "runs": [
+          {
+            "date": "2026-03-14",
+            "result": "fail"
+          }
+        ]
       }
     }
   },
   "livecodebench": {
     "1873_A": {
       "gpt-5.3-codex": {
-        "date": "2026-03-13",
-        "result": "pass"
+        "runs": [
+          {
+            "date": "2026-03-13",
+            "result": "pass"
+          }
+        ]
       }
     }
   },
   "swebench": {
     "astropy__astropy-12907": {
       "gpt-5.3-codex": {
-        "date": "2026-03-05",
-        "result": "pass"
+        "runs": [
+          {
+            "date": "2026-03-18",
+            "result": "fail"
+          }
+        ]
       }
     },
     "astropy__astropy-13033": {
       "gpt-5.3-codex": {
-        "date": "2026-03-14",
-        "result": "fail"
+        "runs": [
+          {
+            "date": "2026-03-14",
+            "result": "fail"
+          }
+        ]
       }
     },
     "astropy__astropy-13236": {
       "gpt-5.3-codex": {
-        "date": "2026-03-14",
-        "result": "fail"
+        "runs": [
+          {
+            "date": "2026-03-14",
+            "result": "fail"
+          }
+        ]
       }
     },
     "astropy__astropy-13398": {
       "gpt-5.3-codex": {
-        "date": "2026-03-14",
-        "result": "fail"
+        "runs": [
+          {
+            "date": "2026-03-14",
+            "result": "fail"
+          }
+        ]
       }
     },
     "astropy__astropy-13453": {
       "gpt-5.3-codex": {
-        "date": "2026-03-05",
-        "result": "pass"
+        "runs": [
+          {
+            "date": "2026-03-18",
+            "result": "fail"
+          }
+        ]
       }
     },
     "astropy__astropy-13579": {
       "gpt-5.3-codex": {
-        "date": "2026-03-11",
-        "result": "pass"
+        "runs": [
+          {
+            "date": "2026-03-18",
+            "result": "fail"
+          }
+        ]
       }
     },
     "astropy__astropy-13977": {
       "gpt-5.3-codex": {
-        "date": "2026-03-14",
-        "result": "fail"
+        "runs": [
+          {
+            "date": "2026-03-14",
+            "result": "fail"
+          }
+        ]
       }
     },
     "astropy__astropy-14096": {
       "gpt-5.3-codex": {
-        "date": "2026-03-11",
-        "result": "pass"
+        "runs": [
+          {
+            "date": "2026-03-18",
+            "result": "fail"
+          }
+        ]
       }
     },
     "astropy__astropy-14182": {
       "gpt-5.3-codex": {
-        "date": "2026-03-14",
-        "result": "fail"
+        "runs": [
+          {
+            "date": "2026-03-14",
+            "result": "fail"
+          }
+        ]
       }
     },
     "astropy__astropy-14309": {
       "gpt-5.3-codex": {
-        "date": "2026-03-11",
-        "result": "pass"
+        "runs": [
+          {
+            "date": "2026-03-18",
+            "result": "fail"
+          }
+        ]
       }
     },
     "astropy__astropy-14365": {
       "gpt-5.3-codex": {
-        "date": "2026-03-11",
-        "result": "fail"
+        "runs": [
+          {
+            "date": "2026-03-11",
+            "result": "fail"
+          }
+        ]
       }
     },
     "astropy__astropy-14369": {
       "gpt-5.3-codex": {
-        "date": "2026-03-11",
-        "result": "fail"
+        "runs": [
+          {
+            "date": "2026-03-11",
+            "result": "fail"
+          }
+        ]
       }
     },
     "astropy__astropy-14508": {
       "gpt-5.3-codex": {
-        "date": "2026-03-11",
-        "result": "pass"
+        "runs": [
+          {
+            "date": "2026-03-11",
+            "result": "pass"
+          }
+        ]
       }
     },
     "astropy__astropy-14539": {
       "gpt-5.3-codex": {
-        "date": "2026-03-12",
-        "result": "pass"
+        "runs": [
+          {
+            "date": "2026-03-12",
+            "result": "pass"
+          }
+        ]
       }
     },
     "astropy__astropy-14598": {
       "gpt-5.3-codex": {
-        "date": "2026-03-12",
-        "result": "fail"
+        "runs": [
+          {
+            "date": "2026-03-12",
+            "result": "fail"
+          }
+        ]
       }
     },
     "astropy__astropy-14995": {
       "gpt-5.3-codex": {
-        "date": "2026-03-12",
-        "result": "pass"
+        "runs": [
+          {
+            "date": "2026-03-12",
+            "result": "pass"
+          }
+        ]
       }
     },
     "astropy__astropy-7166": {
       "gpt-5.3-codex": {
-        "date": "2026-03-12",
-        "result": "pass"
+        "runs": [
+          {
+            "date": "2026-03-12",
+            "result": "pass"
+          }
+        ]
       }
     },
     "astropy__astropy-7336": {
       "gpt-5.3-codex": {
-        "date": "2026-03-12",
-        "result": "pass"
+        "runs": [
+          {
+            "date": "2026-03-12",
+            "result": "pass"
+          }
+        ]
       }
     },
     "astropy__astropy-7606": {
       "gpt-5.3-codex": {
-        "date": "2026-03-12",
-        "result": "fail"
+        "runs": [
+          {
+            "date": "2026-03-12",
+            "result": "fail"
+          }
+        ]
       }
     },
     "astropy__astropy-7671": {
       "gpt-5.3-codex": {
-        "date": "2026-03-12",
-        "result": "pass"
+        "runs": [
+          {
+            "date": "2026-03-12",
+            "result": "pass"
+          }
+        ]
       }
     },
     "astropy__astropy-8707": {
       "gpt-5.3-codex": {
-        "date": "2026-03-12",
-        "result": "fail"
+        "runs": [
+          {
+            "date": "2026-03-12",
+            "result": "fail"
+          }
+        ]
       }
     },
     "astropy__astropy-8872": {
       "gpt-5.3-codex": {
-        "date": "2026-03-12",
-        "result": "fail"
+        "runs": [
+          {
+            "date": "2026-03-12",
+            "result": "fail"
+          }
+        ]
       }
     },
     "django__django-10097": {
       "gpt-5.3-codex": {
-        "date": "2026-03-18",
-        "result": "fail"
+        "runs": [
+          {
+            "date": "2026-03-18",
+            "result": "fail"
+          }
+        ]
       }
     },
     "django__django-10554": {
       "gpt-5.3-codex": {
-        "date": "2026-03-18",
-        "result": "fail"
+        "runs": [
+          {
+            "date": "2026-03-18",
+            "result": "fail"
+          }
+        ]
       }
     },
     "django__django-10880": {
       "gpt-5.3-codex": {
-        "date": "2026-03-11",
-        "result": "pass"
+        "runs": [
+          {
+            "date": "2026-03-18",
+            "result": "fail"
+          }
+        ]
       }
     },
     "django__django-10914": {
       "gpt-5.3-codex": {
-        "date": "2026-03-11",
-        "result": "pass"
+        "runs": [
+          {
+            "date": "2026-03-11",
+            "result": "pass"
+          }
+        ]
       }
     },
     "django__django-10973": {
       "gpt-5.3-codex": {
-        "date": "2026-03-14",
-        "result": "fail"
+        "runs": [
+          {
+            "date": "2026-03-14",
+            "result": "fail"
+          }
+        ]
       }
     },
     "django__django-10999": {
       "gpt-5.3-codex": {
-        "date": "2026-03-14",
-        "result": "fail"
+        "runs": [
+          {
+            "date": "2026-03-14",
+            "result": "fail"
+          }
+        ]
       }
     },
     "django__django-11066": {
       "gpt-5.3-codex": {
-        "date": "2026-03-11",
-        "result": "pass"
+        "runs": [
+          {
+            "date": "2026-03-11",
+            "result": "pass"
+          }
+        ]
       }
     },
     "django__django-11087": {
       "gpt-5.3-codex": {
-        "date": "2026-03-14",
-        "result": "fail"
+        "runs": [
+          {
+            "date": "2026-03-14",
+            "result": "fail"
+          }
+        ]
       }
     },
     "django__django-11095": {
       "gpt-5.3-codex": {
-        "date": "2026-03-11",
-        "result": "pass"
+        "runs": [
+          {
+            "date": "2026-03-11",
+            "result": "pass"
+          }
+        ]
       }
     },
     "django__django-11099": {
       "gpt-5.3-codex": {
-        "date": "2026-03-11",
-        "result": "pass"
+        "runs": [
+          {
+            "date": "2026-03-11",
+            "result": "pass"
+          }
+        ]
       }
     },
     "django__django-11119": {
       "gpt-5.3-codex": {
-        "date": "2026-03-11",
-        "result": "pass"
+        "runs": [
+          {
+            "date": "2026-03-11",
+            "result": "pass"
+          }
+        ]
       }
     },
     "django__django-11133": {
       "gpt-5.3-codex": {
-        "date": "2026-03-11",
-        "result": "pass"
+        "runs": [
+          {
+            "date": "2026-03-11",
+            "result": "pass"
+          }
+        ]
       }
     },
     "django__django-11138": {
       "gpt-5.3-codex": {
-        "date": "2026-03-14",
-        "result": "fail"
+        "runs": [
+          {
+            "date": "2026-03-14",
+            "result": "fail"
+          }
+        ]
       }
     },
     "django__django-11141": {
       "gpt-5.3-codex": {
-        "date": "2026-03-11",
-        "result": "fail"
+        "runs": [
+          {
+            "date": "2026-03-11",
+            "result": "fail"
+          }
+        ]
       }
     },
     "django__django-11149": {
       "gpt-5.3-codex": {
-        "date": "2026-03-11",
-        "result": "fail"
+        "runs": [
+          {
+            "date": "2026-03-11",
+            "result": "fail"
+          }
+        ]
       }
     },
     "django__django-11163": {
       "gpt-5.3-codex": {
-        "date": "2026-03-11",
-        "result": "pass"
+        "runs": [
+          {
+            "date": "2026-03-11",
+            "result": "pass"
+          }
+        ]
       }
     },
     "django__django-11179": {
       "gpt-5.3-codex": {
-        "date": "2026-03-11",
-        "result": "pass"
+        "runs": [
+          {
+            "date": "2026-03-11",
+            "result": "pass"
+          }
+        ]
       }
     },
     "django__django-11206": {
       "gpt-5.3-codex": {
-        "date": "2026-03-12",
-        "result": "fail"
+        "runs": [
+          {
+            "date": "2026-03-12",
+            "result": "fail"
+          }
+        ]
       }
     },
     "django__django-11211": {
       "gpt-5.3-codex": {
-        "date": "2026-03-12",
-        "result": "fail"
+        "runs": [
+          {
+            "date": "2026-03-12",
+            "result": "fail"
+          }
+        ]
       }
     },
     "django__django-11239": {
       "gpt-5.3-codex": {
-        "date": "2026-03-12",
-        "result": "pass"
+        "runs": [
+          {
+            "date": "2026-03-12",
+            "result": "pass"
+          }
+        ]
       }
     },
     "django__django-11265": {
       "gpt-5.3-codex": {
-        "date": "2026-03-12",
-        "result": "fail"
+        "runs": [
+          {
+            "date": "2026-03-12",
+            "result": "fail"
+          }
+        ]
       }
     },
     "django__django-11276": {
       "gpt-5.3-codex": {
-        "date": "2026-03-12",
-        "result": "pass"
+        "runs": [
+          {
+            "date": "2026-03-12",
+            "result": "pass"
+          }
+        ]
       }
     },
     "django__django-11292": {
       "gpt-5.3-codex": {
-        "date": "2026-03-12",
-        "result": "pass"
+        "runs": [
+          {
+            "date": "2026-03-12",
+            "result": "pass"
+          }
+        ]
       }
     }
   }

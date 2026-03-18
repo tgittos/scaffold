@@ -152,14 +152,20 @@ The `evals/` directory contains a Python eval package (`uv`-managed) that measur
 # Build scaffold first
 ./scripts/build.sh
 
-# Run a single SWE-bench instance (provisions a DigitalOcean droplet)
-source .env && uv run scripts/run_eval.py swebench --profile dev -i django__django-10097
+# Run a single SWE-bench instance (5 runs by default for variance tracking)
+source .env && uv run scripts/run_eval.py swebench -i django__django-10097
+
+# Quick single-run check (not statistically reliable)
+source .env && uv run scripts/run_eval.py swebench -i django__django-10097 --runs 1
 
 # Run next 5 untested instances
-source .env && uv run scripts/run_eval.py swebench --profile dev --next 5
+source .env && uv run scripts/run_eval.py swebench --next 5
 
 # Retry previously failed instances
-source .env && uv run scripts/run_eval.py swebench --profile dev --retry-failed 3
+source .env && uv run scripts/run_eval.py swebench --retry-failed 3
+
+# Compare two models statistically
+uv run scripts/run_eval.py swebench --compare gpt-5.3-codex gpt-4o
 
 # Regenerate BENCHMARKS.md scorecard without running evals
 uv run scripts/run_eval.py swebench --render
@@ -171,9 +177,11 @@ source ../.env && uv run scaffold-eval-swebench --scaffold-binary ../out/scaffol
 
 ### Benchmark Tracking
 
-- `benchmarks/results.json` — accumulated pass/fail results per instance per model
+- `benchmarks/results.json` — accumulated pass/fail runs per instance per model (array of `{date, result, run_id}`)
 - `benchmarks/instances/swebench.txt` — valid instance IDs (guard rail for `--next`/`--retry-failed`)
-- `BENCHMARKS.md` — auto-generated scorecard, **do not edit manually**
+- `BENCHMARKS.md` — auto-generated scorecard with pass rates and Wilson CIs, **do not edit manually**
+- Default `--runs 5` produces statistically meaningful data; `--runs 1` for quick checks
+- `--compare MODEL_A MODEL_B` prints z-test significance and per-instance delta table
 
 ### Key Architecture Notes
 

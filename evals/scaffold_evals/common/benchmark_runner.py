@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import sys
+import time
 import traceback
 import urllib.request
 from pathlib import Path
@@ -112,6 +113,7 @@ def run_patch_instance(
         "instance_id": instance_id,
         "model_name_or_path": model,
         "model_patch": patch,
+        "exit_code": result.exit_code,
     }
 
 
@@ -329,8 +331,11 @@ def _run_in_docker(instance, scaffold_binary, model, workdir, timeout,
             debug=effective_debug,
         )
 
-        # Extract patch
-        patch = extract_patch_from_container(container)
+        # Extract patch — diff against base_commit so we capture changes
+        # even if scaffold committed them during its run.
+        patch = extract_patch_from_container(
+            container, base_commit=instance.get("base_commit"),
+        )
 
         # Collect artifacts before container cleanup
         log_dir = workdir / "logs" / instance_id.replace("/", "__")
@@ -413,6 +418,14 @@ def run_patch_benchmark(
         print(f"[{benchmark_name}] Warning: {output_path} exists, overwriting.", file=sys.stderr)
         output_path.write_text("")
 
+    # Rate-limit circuit breaker: back off when consecutive instances fail
+    # with empty patches (likely 429s or provider outage).
+    consecutive_failures = 0
+    _BACKOFF_THRESHOLD = 2
+    _BACKOFF_BASE_SECONDS = 30
+    _BACKOFF_MAX_SECONDS = 300
+    _BACKOFF_FACTOR = 2
+
     for instance in instances:
         try:
             prediction = run_patch_instance(
@@ -426,6 +439,23 @@ def run_patch_benchmark(
                 scaffold_home=scaffold_home,
                 debug=args.debug,
             )
+
+            if not prediction["model_patch"].strip() and prediction.get("exit_code", 0) != 0:
+                consecutive_failures += 1
+                if consecutive_failures >= _BACKOFF_THRESHOLD:
+                    delay = min(
+                        _BACKOFF_BASE_SECONDS * _BACKOFF_FACTOR ** (consecutive_failures - _BACKOFF_THRESHOLD),
+                        _BACKOFF_MAX_SECONDS,
+                    )
+                    print(
+                        f"[rate-limit] {consecutive_failures} consecutive empty-patch failures, "
+                        f"backing off {delay:.0f}s...",
+                        flush=True,
+                    )
+                    time.sleep(delay)
+            else:
+                consecutive_failures = 0
+
             with open(output_path, "a") as f:
                 f.write(json.dumps(prediction) + "\n")
         except Exception:
