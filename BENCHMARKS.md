@@ -6,7 +6,7 @@
 
 | Benchmark | Model | Passed | Failed | Pending | Total | Pass Rate |
 |-----------|-------|--------|--------|---------|-------|-----------|
-| SWE-bench Verified | gpt-5.3-codex | 24 | 21 | 455 | 500 | 53.3% |
+| SWE-bench Verified | gpt-5.3-codex | 23 | 22 | 455 | 500 | 51.1% |
 | FEA-Bench | gpt-5.3-codex | 0 | 1 | 1400 | 1401 | 0.0% |
 | LiveCodeBench | gpt-5.3-codex | 1 | 0 | 1054 | 1055 | 100.0% |
 
@@ -15,20 +15,20 @@
 ### Summary
 | Model | Passed | Failed | Pending | Pass Rate |
 |-------|--------|--------|---------|-----------|
-| gpt-5.3-codex | 24 | 21 | 455 | 53.3% |
+| gpt-5.3-codex | 23 | 22 | 455 | 51.1% |
 
 ### Results
 | Instance | gpt-5.3-codex |
 |----------|---------------|
 | astropy__astropy-12907 | :white_check_mark: 2026-03-05 |
-| astropy__astropy-13033 | :x: 2026-03-12 |
-| astropy__astropy-13236 | :x: 2026-03-12 |
-| astropy__astropy-13398 | :x: 2026-03-12 |
+| astropy__astropy-13033 | :x: 2026-03-14 |
+| astropy__astropy-13236 | :x: 2026-03-14 |
+| astropy__astropy-13398 | :x: 2026-03-14 |
 | astropy__astropy-13453 | :white_check_mark: 2026-03-05 |
 | astropy__astropy-13579 | :white_check_mark: 2026-03-11 |
-| astropy__astropy-13977 | :x: 2026-03-12 |
+| astropy__astropy-13977 | :x: 2026-03-14 |
 | astropy__astropy-14096 | :white_check_mark: 2026-03-11 |
-| astropy__astropy-14182 | :x: 2026-03-12 |
+| astropy__astropy-14182 | :x: 2026-03-14 |
 | astropy__astropy-14309 | :white_check_mark: 2026-03-11 |
 | astropy__astropy-14365 | :x: 2026-03-11 |
 | astropy__astropy-14369 | :x: 2026-03-11 |
@@ -42,19 +42,19 @@
 | astropy__astropy-7671 | :white_check_mark: 2026-03-12 |
 | astropy__astropy-8707 | :x: 2026-03-12 |
 | astropy__astropy-8872 | :x: 2026-03-12 |
-| django__django-10097 | :white_check_mark: 2026-03-04 |
-| django__django-10554 | :x: 2026-03-12 |
+| django__django-10097 | :x: 2026-03-18 |
+| django__django-10554 | :x: 2026-03-18 |
 | django__django-10880 | :white_check_mark: 2026-03-11 |
 | django__django-10914 | :white_check_mark: 2026-03-11 |
-| django__django-10973 | :x: 2026-03-12 |
-| django__django-10999 | :x: 2026-03-12 |
+| django__django-10973 | :x: 2026-03-14 |
+| django__django-10999 | :x: 2026-03-14 |
 | django__django-11066 | :white_check_mark: 2026-03-11 |
-| django__django-11087 | :x: 2026-03-12 |
+| django__django-11087 | :x: 2026-03-14 |
 | django__django-11095 | :white_check_mark: 2026-03-11 |
 | django__django-11099 | :white_check_mark: 2026-03-11 |
 | django__django-11119 | :white_check_mark: 2026-03-11 |
 | django__django-11133 | :white_check_mark: 2026-03-11 |
-| django__django-11138 | :x: 2026-03-12 |
+| django__django-11138 | :x: 2026-03-14 |
 | django__django-11141 | :x: 2026-03-11 |
 | django__django-11149 | :x: 2026-03-11 |
 | django__django-11163 | :white_check_mark: 2026-03-11 |
