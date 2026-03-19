@@ -71,9 +71,11 @@ int tool_executor_run_workflow(AgentSession* session, ToolCall* tool_calls, int 
 
     /* Track workflow state from initial tool batch */
     LoopWorkflowState wf_state = {0};
+    wf_state.has_used_tools = 1;  /* We're executing tools right now */
     for (int i = 0; i < call_count; i++) {
         if (tool_calls[i].name == NULL) continue;
-        if (strcmp(tool_calls[i].name, "apply_patch") == 0) {
+        if (strcmp(tool_calls[i].name, "apply_patch") == 0 ||
+            strcmp(tool_calls[i].name, "write_file") == 0) {
             wf_state.has_patched = 1;
             wf_state.has_tested_since_patch = 0;
         } else if (strcmp(tool_calls[i].name, "shell") == 0) {

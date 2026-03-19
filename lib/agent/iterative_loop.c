@@ -140,6 +140,27 @@ int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx,
                                            rt.parsed.completion_tokens);
             }
 
+            /* Nudge: if the model used tools but stopped without writing
+             * any files, it may have described changes without applying them.
+             * Push it back to actually make the changes. */
+            if (wf_state->has_used_tools && !wf_state->has_patched &&
+                wf_state->nudge_count < ITERATIVE_LOOP_MAX_NUDGES) {
+                const char *nudge_msg =
+                    "You described changes but didn't apply them. "
+                    "Use the apply_patch tool to make your changes to "
+                    "the actual files, then run tests to verify.";
+                LOG_INFO("Nudging model to apply changes (nudge %d/%d)",
+                         wf_state->nudge_count + 1, ITERATIVE_LOOP_MAX_NUDGES);
+                append_conversation_message(
+                    &session->session_data.conversation, "user", nudge_msg);
+                if (session->session_data.config.json_output_mode) {
+                    json_output_system("nudge", nudge_msg);
+                }
+                wf_state->nudge_count++;
+                api_round_trip_cleanup(&rt);
+                continue;
+            }
+
             /* Nudge: if the model patched but never tested, push it back */
             if (wf_state->has_patched && !wf_state->has_tested_since_patch &&
                 wf_state->nudge_count < ITERATIVE_LOOP_MAX_NUDGES) {
@@ -224,11 +245,13 @@ int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx,
                                          tool_calls, tool_call_indices);
 
         /* Track workflow state: did this batch patch or test?
-         * Only count apply_patch as a real patch if it succeeded —
+         * Only count apply_patch/write_file as a real patch if it succeeded —
          * a failed patch should not reset test-tracking state. */
+        wf_state->has_used_tools = 1;
         for (int i = 0; i < call_count; i++) {
             if (tool_calls[i].name == NULL) continue;
-            if (strcmp(tool_calls[i].name, "apply_patch") == 0) {
+            if (strcmp(tool_calls[i].name, "apply_patch") == 0 ||
+                strcmp(tool_calls[i].name, "write_file") == 0) {
                 /* Check if this patch actually succeeded */
                 int patch_ok = 0;
                 for (int j = 0; j < executed_count; j++) {

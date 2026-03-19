@@ -8,9 +8,10 @@
 #define ITERATIVE_LOOP_MAX_NUDGES 3
 
 typedef struct {
-    int has_patched;
+    int has_patched;               /* 1 if apply_patch or write_file succeeded */
     int has_tested_since_patch;
     int last_test_failed;          /* 1 if the most recent shell had non-zero exit */
+    int has_used_tools;            /* 1 if any tool was executed during the session */
     int nudge_count;
 } LoopWorkflowState;
 

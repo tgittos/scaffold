@@ -250,6 +250,31 @@
           {
             "date": "2026-03-18",
             "result": "fail"
+          },
+          {
+            "date": "2026-03-19",
+            "result": "fail",
+            "run_id": "scaffold_1773883360_run1"
+          },
+          {
+            "date": "2026-03-19",
+            "result": "fail",
+            "run_id": "scaffold_1773883360_run2"
+          },
+          {
+            "date": "2026-03-19",
+            "result": "fail",
+            "run_id": "scaffold_1773883360_run3"
+          },
+          {
+            "date": "2026-03-19",
+            "result": "fail",
+            "run_id": "scaffold_1773883360_run4"
+          },
+          {
+            "date": "2026-03-19",
+            "result": "fail",
+            "run_id": "scaffold_1773883360_run5"
           }
         ]
       }
@@ -260,6 +285,61 @@
           {
             "date": "2026-03-18",
             "result": "fail"
+          },
+          {
+            "date": "2026-03-19",
+            "result": "fail",
+            "run_id": "scaffold_1773925712_run1"
+          },
+          {
+            "date": "2026-03-19",
+            "result": "fail",
+            "run_id": "scaffold_1773925712_run2"
+          },
+          {
+            "date": "2026-03-19",
+            "result": "fail",
+            "run_id": "scaffold_1773925712_run3"
+          },
+          {
+            "date": "2026-03-19",
+            "result": "fail",
+            "run_id": "scaffold_1773925712_run4"
+          },
+          {
+            "date": "2026-03-19",
+            "result": "fail",
+            "run_id": "scaffold_1773925712_run5"
+          },
+          {
+            "date": "2026-03-19",
+            "result": "fail",
+            "run_id": "scaffold_1773928507"
+          },
+          {
+            "date": "2026-03-19",
+            "result": "fail",
+            "run_id": "scaffold_1773929046_run1"
+          },
+          {
+            "date": "2026-03-19",
+            "result": "fail",
+            "run_id": "scaffold_1773929046_run2"
+          },
+          {
+            "date": "2026-03-19",
+            "result": "fail",
+            "run_id": "scaffold_1773929046_run3"
+          },
+          {
+            "date": "2026-03-19",
+            "result": "fail",
+            "run_id": "scaffold_1773929046_run4"
+          },
+          {
+            "date": "2026-03-19",
+            "result": "fail",
+            "run_id": "scaffold_1773929046_run5"
           }
         ]
       }
@@ -280,6 +360,31 @@
           {
             "date": "2026-03-11",
             "result": "pass"
+          },
+          {
+            "date": "2026-03-19",
+            "result": "pass",
+            "run_id": "scaffold_1773883360_run1"
+          },
+          {
+            "date": "2026-03-19",
+            "result": "pass",
+            "run_id": "scaffold_1773883360_run2"
+          },
+          {
+            "date": "2026-03-19",
+            "result": "pass",
+            "run_id": "scaffold_1773883360_run3"
+          },
+          {
+            "date": "2026-03-19",
+            "result": "pass",
+            "run_id": "scaffold_1773883360_run4"
+          },
+          {
+            "date": "2026-03-19",
+            "result": "pass",
+            "run_id": "scaffold_1773883360_run5"
           }
         ]
       }
@@ -340,6 +445,31 @@
           {
             "date": "2026-03-11",
             "result": "pass"
+          },
+          {
+            "date": "2026-03-19",
+            "result": "pass",
+            "run_id": "scaffold_1773925712_run1"
+          },
+          {
+            "date": "2026-03-19",
+            "result": "pass",
+            "run_id": "scaffold_1773925712_run2"
+          },
+          {
+            "date": "2026-03-19",
+            "result": "pass",
+            "run_id": "scaffold_1773925712_run3"
+          },
+          {
+            "date": "2026-03-19",
+            "result": "pass",
+            "run_id": "scaffold_1773925712_run4"
+          },
+          {
+            "date": "2026-03-19",
+            "result": "pass",
+            "run_id": "scaffold_1773925712_run5"
           }
         ]
       }

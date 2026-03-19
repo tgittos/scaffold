@@ -32,6 +32,10 @@ static int compare_results_by_timestamp(const void* a, const void* b) {
 
     if (res_a->document->timestamp < res_b->document->timestamp) return -1;
     if (res_a->document->timestamp > res_b->document->timestamp) return 1;
+    /* Stable tiebreaker: insertion order (id) preserves message sequence
+     * when multiple messages share the same second-resolution timestamp. */
+    if (res_a->document->id < res_b->document->id) return -1;
+    if (res_a->document->id > res_b->document->id) return 1;
     return 0;
 }
 
