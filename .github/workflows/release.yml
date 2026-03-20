@@ -1,7 +1,8 @@
 # Release workflow for scaffold
 # Manually triggered from the GitHub Actions UI.
-# Calculates the next version from the latest tag, builds, tests,
-# creates a git tag, and publishes a GitHub Release.
+# Runs CI first via the reusable build workflow, then calculates the next
+# version from the latest tag, builds release artifacts, creates a git tag,
+# and publishes a GitHub Release.
 
 name: Release
 
@@ -28,12 +29,16 @@ on:
 permissions:
   contents: write
 
-env:
-  UV_VERSION: "0.5.14"
-
 jobs:
+  ci:
+    name: CI
+    uses: ./.github/workflows/build.yml
+    with:
+      build_command: 'make -j$(nproc) && make plugins && ./scripts/run_tests.sh'
+
   release:
-    name: Build and Release
+    name: Release
+    needs: ci
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/master'
 
@@ -90,26 +95,13 @@ jobs:
           restore-keys: |
             deps-
 
-      - name: Cache uv
-        uses: actions/cache@v4
-        with:
-          path: ~/.local/bin/uv
-          key: uv-${{ env.UV_VERSION }}-linux
-
-      - name: Install uv
-        run: |
-          if [ ! -f "$HOME/.local/bin/uv" ]; then
-            curl -LsSf https://astral.sh/uv/${{ env.UV_VERSION }}/install.sh | sh
-          fi
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-
       - name: Create tag
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git tag -a "${{ steps.version.outputs.tag }}" -m "Release ${{ steps.version.outputs.tag }}"
 
-      - name: Build and test
+      - name: Build release artifacts
         run: |
           docker run --rm --privileged \
             -v ${{ github.workspace }}:/workspaces/ralph \
@@ -117,7 +109,7 @@ jobs:
             -w /workspaces/ralph \
             -e PATH="/uv-bin:/opt/cosmos/bin:$PATH" \
             scaffold-dev:latest \
-            bash -c "make -j$(nproc) && make plugins && ./scripts/run_tests.sh"
+            bash -c "make -j$(nproc) && make plugins"
 
       - name: Fix permissions
         if: always()
