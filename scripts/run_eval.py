@@ -978,6 +978,12 @@ def _instance_pass_rate(model_data: dict) -> tuple[int, int]:
     return passes, len(runs)
 
 
+def _instance_solved(model_data: dict) -> bool:
+    """Return True if the instance has at least one passing run."""
+    passes, total = _instance_pass_rate(model_data)
+    return total > 0 and passes > 0
+
+
 def render_scorecard(results: dict | None = None) -> None:
     """Generate BENCHMARKS.md from results.json + instance registries."""
     if results is None:
@@ -1000,8 +1006,8 @@ def render_scorecard(results: dict | None = None) -> None:
         "",
         "## Summary",
         "",
-        "| Benchmark | Model | Instances | Runs | Pass Rate | 95% CI |",
-        "|-----------|-------|-----------|------|-----------|--------|",
+        "| Benchmark | Model | Solved | Tested | Pass Rate | 95% CI |",
+        "|-----------|-------|--------|--------|-----------|--------|",
     ]
 
     for benchmark in ordered_benchmarks:
@@ -1015,26 +1021,23 @@ def render_scorecard(results: dict | None = None) -> None:
             for model in instance_data
         })
         for model in models:
-            total_passes = 0
-            total_runs = 0
+            solved_count = 0
             tested_count = 0
             for idata in bench_results.values():
                 md = idata.get(model)
                 if md and md.get("runs"):
-                    p, t = _instance_pass_rate(md)
-                    total_passes += p
-                    total_runs += t
                     tested_count += 1
-            pending = total_instances - tested_count
-            if total_runs > 0:
-                rate = 100.0 * total_passes / total_runs
-                lo, hi = _wilson_ci(total_passes, total_runs)
+                    if _instance_solved(md):
+                        solved_count += 1
+            if tested_count > 0:
+                rate = 100.0 * solved_count / tested_count
+                lo, hi = _wilson_ci(solved_count, tested_count)
                 ci_str = f"{100*lo:.1f}%-{100*hi:.1f}%"
             else:
                 rate = 0.0
                 ci_str = "N/A"
             lines.append(
-                f"| {label} | {model} | {tested_count}/{total_instances} | {total_runs} | {rate:.1f}% | {ci_str} |"
+                f"| {label} | {model} | {solved_count} | {tested_count}/{total_instances} | {rate:.1f}% | {ci_str} |"
             )
 
     lines.append("")
@@ -1060,30 +1063,30 @@ def render_scorecard(results: dict | None = None) -> None:
 
         # Summary table
         lines.append("### Summary")
-        lines.append("| Model | Instances | Runs | Pass Rate | 95% CI |")
-        lines.append("|-------|-----------|------|-----------|--------|")
+        lines.append("| Model | Solved | Tested | Pass Rate | 95% CI |")
+        lines.append("|-------|--------|--------|-----------|--------|")
 
         for model in models:
-            total_passes = 0
-            total_runs = 0
+            solved_count = 0
             tested_count = 0
+            total_runs = 0
             for idata in bench_results.values():
                 md = idata.get(model)
                 if md and md.get("runs"):
-                    p, t = _instance_pass_rate(md)
-                    total_passes += p
-                    total_runs += t
                     tested_count += 1
+                    total_runs += len(md["runs"])
+                    if _instance_solved(md):
+                        solved_count += 1
             pending = total_instances - tested_count
-            if total_runs > 0:
-                rate = 100.0 * total_passes / total_runs
-                lo, hi = _wilson_ci(total_passes, total_runs)
+            if tested_count > 0:
+                rate = 100.0 * solved_count / tested_count
+                lo, hi = _wilson_ci(solved_count, tested_count)
                 ci_str = f"{100*lo:.1f}%-{100*hi:.1f}%"
             else:
                 rate = 0.0
                 ci_str = "N/A"
             lines.append(
-                f"| {model} | {tested_count}/{total_instances} ({pending} pending) | {total_runs} | {rate:.1f}% | {ci_str} |"
+                f"| {model} | {solved_count}/{tested_count} | {tested_count}/{total_instances} ({pending} pending, {total_runs} total runs) | {rate:.1f}% | {ci_str} |"
             )
 
         lines.append("")
@@ -1108,20 +1111,15 @@ def render_scorecard(results: dict | None = None) -> None:
                         cells.append("")
                     else:
                         passes, total = _instance_pass_rate(md)
+                        solved = passes > 0
                         if total == 1:
                             has_single_run = True
-                            if passes == 1:
-                                cells.append(":white_check_mark: 1/1*")
-                            else:
-                                cells.append(":x: 1/1*")
+                            icon = ":white_check_mark:" if solved else ":x:"
+                            cells.append(f"{icon} 1/1*")
                         else:
-                            pct = 100.0 * passes / total
-                            if passes == total:
-                                cells.append(f":white_check_mark: {passes}/{total} ({pct:.0f}%)")
-                            elif passes == 0:
-                                cells.append(f":x: {passes}/{total} ({pct:.0f}%)")
-                            else:
-                                cells.append(f":large_orange_diamond: {passes}/{total} ({pct:.0f}%)")
+                            icon = ":white_check_mark:" if passes == total else \
+                                   ":large_orange_diamond:" if solved else ":x:"
+                            cells.append(f"{icon} {passes}/{total}")
                 lines.append(f"| {iid} | " + " | ".join(cells) + " |")
 
             lines.append("")
@@ -1153,9 +1151,9 @@ def render_comparison(benchmark: str, model_a: str, model_b: str) -> None:
         print(f"No results for benchmark '{benchmark}'", file=sys.stderr)
         sys.exit(1)
 
-    # Aggregate pass rates
-    a_passes, a_total = 0, 0
-    b_passes, b_total = 0, 0
+    # Aggregate at instance level (solved = at least one pass)
+    a_solved, a_tested = 0, 0
+    b_solved, b_tested = 0, 0
     rows: list[tuple[str, str, str, str]] = []  # (iid, a_cell, b_cell, delta)
 
     all_ids = sorted(set(
@@ -1168,16 +1166,22 @@ def render_comparison(benchmark: str, model_a: str, model_b: str) -> None:
         b_data = bench[iid].get(model_b, {})
         ap, at = _instance_pass_rate(a_data) if a_data.get("runs") else (0, 0)
         bp, bt = _instance_pass_rate(b_data) if b_data.get("runs") else (0, 0)
-        a_passes += ap
-        a_total += at
-        b_passes += bp
-        b_total += bt
+        if at > 0:
+            a_tested += 1
+            if ap > 0:
+                a_solved += 1
+        if bt > 0:
+            b_tested += 1
+            if bp > 0:
+                b_solved += 1
 
         a_cell = f"{ap}/{at}" if at > 0 else "-"
         b_cell = f"{bp}/{bt}" if bt > 0 else "-"
         if at > 0 and bt > 0:
-            delta_val = (ap / at - bp / bt) * 100
-            delta = f"{delta_val:+.0f}pp"
+            a_s = 1 if ap > 0 else 0
+            b_s = 1 if bp > 0 else 0
+            delta_val = (a_s - b_s) * 100
+            delta = f"{delta_val:+.0f}pp" if delta_val != 0 else "="
         else:
             delta = "-"
         rows.append((iid, a_cell, b_cell, delta))
@@ -1187,17 +1191,17 @@ def render_comparison(benchmark: str, model_a: str, model_b: str) -> None:
     print(f"Comparison: {model_a} vs {model_b} ({benchmark})")
     print(f"{'='*60}\n")
 
-    for label, passes, total in [(model_a, a_passes, a_total), (model_b, b_passes, b_total)]:
-        if total > 0:
-            rate = 100.0 * passes / total
-            lo, hi = _wilson_ci(passes, total)
-            print(f"  {label}: {rate:.1f}% ({passes}/{total} runs) — 95% CI: [{100*lo:.1f}%, {100*hi:.1f}%]")
+    for label, solved, tested in [(model_a, a_solved, a_tested), (model_b, b_solved, b_tested)]:
+        if tested > 0:
+            rate = 100.0 * solved / tested
+            lo, hi = _wilson_ci(solved, tested)
+            print(f"  {label}: {rate:.1f}% ({solved}/{tested} instances solved) — 95% CI: [{100*lo:.1f}%, {100*hi:.1f}%]")
         else:
             print(f"  {label}: no data")
 
-    # Z-test
-    if a_total > 0 and b_total > 0:
-        p_val = _two_proportion_ztest(a_passes / a_total, a_total, b_passes / b_total, b_total)
+    # Z-test on instance-level proportions
+    if a_tested > 0 and b_tested > 0:
+        p_val = _two_proportion_ztest(a_solved / a_tested, a_tested, b_solved / b_tested, b_tested)
         sig = "YES" if p_val < 0.05 else "no"
         print(f"\n  z-test p-value: {p_val:.4f} — significant at 0.05? {sig}")
     print()

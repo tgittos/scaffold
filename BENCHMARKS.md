@@ -6,18 +6,18 @@
 
 ## Summary
 
-| Benchmark | Model | Instances | Runs | Pass Rate | 95% CI |
-|-----------|-------|-----------|------|-----------|--------|
-| SWE-bench Verified | gpt-5.3-codex | 45/500 | 71 | 38.0% | 27.6%-49.7% |
-| FEA-Bench | gpt-5.3-codex | 1/1401 | 1 | 0.0% | 0.0%-79.3% |
-| LiveCodeBench | gpt-5.3-codex | 1/1055 | 1 | 100.0% | 20.7%-100.0% |
+| Benchmark | Model | Solved | Tested | Pass Rate | 95% CI |
+|-----------|-------|--------|--------|-----------|--------|
+| SWE-bench Verified | gpt-5.3-codex | 17 | 45/500 | 37.8% | 25.1%-52.4% |
+| FEA-Bench | gpt-5.3-codex | 0 | 1/1401 | 0.0% | 0.0%-79.3% |
+| LiveCodeBench | gpt-5.3-codex | 1 | 1/1055 | 100.0% | 20.7%-100.0% |
 
 ## SWE-bench Verified (500 instances)
 
 ### Summary
-| Model | Instances | Runs | Pass Rate | 95% CI |
-|-------|-----------|------|-----------|--------|
-| gpt-5.3-codex | 45/500 (455 pending) | 71 | 38.0% | 27.6%-49.7% |
+| Model | Solved | Tested | Pass Rate | 95% CI |
+|-------|--------|--------|-----------|--------|
+| gpt-5.3-codex | 17/45 | 45/500 (455 pending, 71 total runs) | 37.8% | 25.1%-52.4% |
 
 ### Results
 | Instance | gpt-5.3-codex |
@@ -44,16 +44,16 @@
 | astropy__astropy-7671 | :white_check_mark: 1/1* |
 | astropy__astropy-8707 | :x: 1/1* |
 | astropy__astropy-8872 | :x: 1/1* |
-| django__django-10097 | :x: 0/6 (0%) |
-| django__django-10554 | :x: 0/12 (0%) |
+| django__django-10097 | :x: 0/6 |
+| django__django-10554 | :x: 0/12 |
 | django__django-10880 | :x: 1/1* |
-| django__django-10914 | :white_check_mark: 6/6 (100%) |
+| django__django-10914 | :white_check_mark: 6/6 |
 | django__django-10973 | :x: 1/1* |
 | django__django-10999 | :x: 1/1* |
 | django__django-11066 | :white_check_mark: 1/1* |
 | django__django-11087 | :x: 1/1* |
 | django__django-11095 | :white_check_mark: 1/1* |
-| django__django-11099 | :white_check_mark: 6/6 (100%) |
+| django__django-11099 | :white_check_mark: 6/6 |
 | django__django-11119 | :white_check_mark: 1/1* |
 | django__django-11133 | :white_check_mark: 1/1* |
 | django__django-11138 | :x: 1/1* |
@@ -577,9 +577,9 @@
 ## FEA-Bench (1401 instances)
 
 ### Summary
-| Model | Instances | Runs | Pass Rate | 95% CI |
-|-------|-----------|------|-----------|--------|
-| gpt-5.3-codex | 1/1401 (1400 pending) | 1 | 0.0% | 0.0%-79.3% |
+| Model | Solved | Tested | Pass Rate | 95% CI |
+|-------|--------|--------|-----------|--------|
+| gpt-5.3-codex | 0/1 | 1/1401 (1400 pending, 1 total runs) | 0.0% | 0.0%-79.3% |
 
 ### Results
 | Instance | gpt-5.3-codex |
@@ -1996,9 +1996,9 @@
 ## LiveCodeBench (1055 instances)
 
 ### Summary
-| Model | Instances | Runs | Pass Rate | 95% CI |
-|-------|-----------|------|-----------|--------|
-| gpt-5.3-codex | 1/1055 (1054 pending) | 1 | 100.0% | 20.7%-100.0% |
+| Model | Solved | Tested | Pass Rate | 95% CI |
+|-------|--------|--------|-----------|--------|
+| gpt-5.3-codex | 1/1 | 1/1055 (1054 pending, 1 total runs) | 100.0% | 20.7%-100.0% |
 
 ### Results
 | Instance | gpt-5.3-codex |
