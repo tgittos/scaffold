@@ -390,6 +390,8 @@ graph TB
     DefaultTools --> DirOps[Directory Operations<br/>list_dir.py]
     DefaultTools --> SearchOp[Search Files<br/>search_files.py]
     DefaultTools --> PipTools[Package Management<br/>pip.py]
+    DefaultTools --> SearchHistory[Git History<br/>search_history.py]
+    DefaultTools --> ShowStructure[Code Structure<br/>show_structure.py]
 
     SubagentTool --> ChildProcess[Child Scaffold Process<br/>fork/exec]
 
@@ -713,6 +715,7 @@ graph TB
 - **`SystemPromptParts`** (`api_common.h`): Carries the split through the pipeline. `base_prompt` is the session-stable prefix; `dynamic_context` is nullable per-request additions.
 - **`EnhancedPromptParts`** (`context_enhancement.h`): Owned version with allocated strings, returned by `build_enhanced_prompt_parts()`.
 - **Repo Context Seeding**: On the first turn only (controlled by `AgentSession.first_turn_context_injected`), `build_dynamic_context()` calls `build_repo_snapshot()` to inject git metadata (branch, recent commits, modified files), key project files, project type detection, and a depth-2 directory tree into the dynamic context. This eliminates the model's cold-start exploration overhead (~2-5 tool calls saved). Capped at 2KB to prevent token bloat in monorepos.
+- **Provider-Specific Prompts**: Behavioral instructions tailored per provider are embedded at build time from `data/prompts/providers/` (`anthropic.txt`, `openai.txt`, `local.txt`). Compiled into `build/generated/provider_prompts.h` via `scripts/gen_data.sh` and injected into the dynamic context by `context_enhancement.c` based on the active provider.
 
 ## Streaming Response Architecture
 
@@ -1207,7 +1210,7 @@ graph TB
 ### Python Tools (1 tool + file-based tools)
 - **`python`**: Execute arbitrary Python code with embedded interpreter
 
-### Python File Tools (8 tools loaded from `~/.local/scaffold/tools/`)
+### Python File Tools (10 embedded default tools from `src/tools/python_defaults/`)
 - **`read_file`**: Read file contents with line numbers, returns dict with content/total_lines/range
 - **`write_file`**: Write or append content to file (mode: "write" or "append")
 - **`list_dir`**: List directory contents with ISO timestamps
@@ -1216,6 +1219,8 @@ graph TB
 - **`shell`**: Execute shell commands
 - **`web_fetch`**: Fetch web content
 - **`pip`**: Package management (action: "install" or "list") — install pure-Python packages from PyPI or list installed packages
+- **`search_history`**: Search git history with structured output (operations: log, pickaxe, blame, diff). Gate: file_read
+- **`show_structure`**: Analyze code structure without reading full files (operations: outline, imports, hierarchy, exports). Supports Python, JS/TS, Rust, Go, Java, C/C++, Ruby, and more. Gate: file_read
 
 ### Subagent Tools (2 tools)
 - **`subagent`**: Spawn a child scaffold process for parallel task execution
@@ -1270,7 +1275,9 @@ src/
 │       ├── apply_patch.py
 │       ├── shell.py
 │       ├── web_fetch.py
-│       └── pip.py           # Package management (action: install/list)
+│       ├── pip.py           # Package management (action: install/list)
+│       ├── search_history.py # Git history search (log, pickaxe, blame, diff)
+│       └── show_structure.py # Code structure analysis (outline, imports, hierarchy, exports)
 lib/
 ├── libagent.h              # Public API for the agent library
 ├── types.h                 # Shared types (ToolCall, ToolResult, StreamingToolUse)
@@ -1448,10 +1455,6 @@ lib/
 ```
 evals/                         # Evaluation harness (Python, uv-managed)
 ├── pyproject.toml             # Package definition with per-benchmark extras
-├── prompts/                   # System prompt templates
-│   ├── swebench_system.txt    # SWE-bench bug-fix prompt
-│   ├── feabench_system.txt    # FEA-bench feature implementation prompt
-│   └── contextbench_system.txt # Context-bench information retrieval prompt
 └── scaffold_evals/            # Python package
     ├── common/                # Shared utilities
     │   ├── config.py          # TOML config + env var overrides
@@ -1460,17 +1463,16 @@ evals/                         # Evaluation harness (Python, uv-managed)
     │   ├── patch_extractor.py # Extract diffs (local git or Docker container)
     │   └── instance_loader.py # HuggingFace dataset loading + repo setup
     ├── swebench/              # SWE-bench Verified (500 instances)
-    │   ├── runner.py          # CLI entry point: load, run, extract patches
-    │   ├── prompt.py          # System prompt builder
+    │   ├── runner.py          # CLI entry point (thin wrapper around benchmark_runner)
     │   └── evaluate.py        # Wrapper around swebench.harness.run_evaluation
     ├── feabench/              # FEA-Bench (1,401 instances, always debug mode)
-    │   ├── runner.py          # CLI entry point (900s timeout)
-    │   └── prompt.py          # Feature implementation prompt builder
+    │   ├── runner.py          # CLI entry point (thin wrapper around benchmark_runner, 900s timeout)
+    │   └── patch_swebench.py  # Monkey-patch swebench for FEA-bench repo support
     ├── livecodebench/         # LiveCodeBench (1,055 competitive programming problems)
-    │   └── runner.py          # CLI entry point (streaming HF dataset, code extraction)
+    │   ├── runner.py          # CLI entry point (streaming HF dataset, code extraction)
+    │   └── evaluate.py        # Score predictions by running code against test cases
     └── contextbench/          # Context-Bench (Letta)
-        ├── runner.py          # CLI entry point (question answering)
-        └── prompt.py          # Information retrieval prompt builder
+        └── runner.py          # CLI entry point (question answering)
 
 benchmarks/                    # Benchmark tracking data
 ├── instances/

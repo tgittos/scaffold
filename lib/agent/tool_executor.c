@@ -8,7 +8,6 @@
 #include "tool_batch_executor.h"
 #include "conversation_state.h"
 #include "iterative_loop.h"
-#include "session.h"
 #include "../session/conversation_tracker.h"
 #include <stdlib.h>
 #include <string.h>

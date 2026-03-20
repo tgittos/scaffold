@@ -646,10 +646,12 @@ ChannelMessage **channel_receive(message_store_t *store, const char *channel_nam
     }
     sqlite_dal_unlock(store->dal);
 
-    BindInt64Text2 mark_params = { last_rowid, channel_name, agent_id };
-    sqlite_dal_exec_p(store->dal,
-        "UPDATE channel_subscriptions SET last_read_at = ? WHERE channel_id = ? AND agent_id = ?;",
-        bind_int64_text2, &mark_params);
+    if (last_rowid > 0) {
+        BindInt64Text2 mark_params = { last_rowid, channel_name, agent_id };
+        sqlite_dal_exec_p(store->dal,
+            "UPDATE channel_subscriptions SET last_read_at = ? WHERE channel_id = ? AND agent_id = ?;",
+            bind_int64_text2, &mark_params);
+    }
 
     *out_count = count;
     return (ChannelMessage **)items;
@@ -692,10 +694,12 @@ ChannelMessage **channel_receive_all(message_store_t *store, const char *agent_i
     }
     sqlite_dal_unlock(store->dal);
 
-    BindInt64Text mark_params = { last_rowid, agent_id };
-    sqlite_dal_exec_p(store->dal,
-        "UPDATE channel_subscriptions SET last_read_at = ? WHERE agent_id = ?;",
-        bind_int64_text, &mark_params);
+    if (last_rowid > 0) {
+        BindInt64Text mark_params = { last_rowid, agent_id };
+        sqlite_dal_exec_p(store->dal,
+            "UPDATE channel_subscriptions SET last_read_at = ? WHERE agent_id = ?;",
+            bind_int64_text, &mark_params);
+    }
 
     *out_count = count;
     return (ChannelMessage **)items;

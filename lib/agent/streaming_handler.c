@@ -340,6 +340,10 @@ int streaming_round_trip_execute(AgentSession* session, LLMProvider* provider,
 
     if (ctx->tool_uses.count > (size_t)INT_MAX) {
         fprintf(stderr, "Error: Too many tool calls (%zu exceeds INT_MAX)\n", ctx->tool_uses.count);
+        free(result->parsed.response_content);
+        free(result->parsed.thinking_content);
+        result->parsed.response_content = NULL;
+        result->parsed.thinking_content = NULL;
         streaming_context_free(ctx);
         return -1;
     }

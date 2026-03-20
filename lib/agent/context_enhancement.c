@@ -39,8 +39,9 @@ static const char* const SUMMARY_SECTION_HEADER =
     "Summary of earlier conversation that has been compacted:\n";
 
 static const char* const SKIP_DIRS[] = {
-    ".git", "node_modules", "__pycache__", "build", "dist",
-    "vendor", ".venv", "out", ".cache", ".tox", NULL
+    ".git", ".hg", ".svn", "node_modules", "__pycache__", ".tox", ".mypy_cache",
+    ".pytest_cache", "venv", ".venv", "env", ".env", "dist", "build", ".eggs",
+    ".idea", ".vscode", "target", "vendor", "out", ".cache", NULL
 };
 
 static const char* const KEY_FILES[] = {
@@ -404,7 +405,7 @@ static char* build_dynamic_context(const AgentSession* session) {
     return dynamic;
 }
 
-int build_enhanced_prompt_parts(const AgentSession* session,
+int build_enhanced_prompt_parts(AgentSession* session,
                                 const char* user_message,
                                 EnhancedPromptParts* out) {
     if (session == NULL || out == NULL) return -1;
@@ -420,7 +421,7 @@ int build_enhanced_prompt_parts(const AgentSession* session,
 
     /* Mark first turn context as injected */
     if (!session->first_turn_context_injected) {
-        ((AgentSession*)session)->first_turn_context_injected = 1;
+        session->first_turn_context_injected = 1;
     }
 
     if (user_message == NULL || strlen(user_message) == 0) {

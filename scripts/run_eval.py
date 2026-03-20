@@ -1506,7 +1506,7 @@ def main() -> None:
         print(f"\n[error] {e}", file=sys.stderr)
 
         # Try to retrieve partial results
-        if _cleanup_state.get("droplet_id") and "ip" in dir():
+        if _cleanup_state.get("droplet_id") and "ip" in locals():
             print("[error] Attempting to retrieve partial results...", file=sys.stderr)
             try:
                 retrieve_results(ip, key_path, args.output, run_id)  # type: ignore[possibly-undefined]
@@ -1518,7 +1518,7 @@ def main() -> None:
         sys.exit(1)
 
     finally:
-        if args.keep and "key_path" in dir():
+        if args.keep and "key_path" in locals():
             # Persist SSH key so the user can actually connect to the kept droplet
             import shutil
             persist_key = os.path.join(args.output, "eval_key")

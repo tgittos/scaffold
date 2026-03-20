@@ -28,6 +28,8 @@ Application-specific code that uses the library layer. This is a thin wrapper ar
 - **`shell.py`** - Shell command execution with timeout
 - **`web_fetch.py`** - Fetch and process web content
 - **`pip.py`** - Package management: install pure-Python packages or list installed packages (action parameter: "install" or "list")
+- **`search_history.py`** - Search git history with structured output (operations: log, pickaxe, blame, diff). Gate: file_read
+- **`show_structure.py`** - Analyze code structure without reading full files (operations: outline, imports, hierarchy, exports). Supports 10+ languages. Gate: file_read
 
 ---
 
@@ -51,7 +53,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`recap.c/h`** - Conversation recap generation (one-shot LLM calls without history persistence)
 - **`streaming_handler.c/h`** - Application-layer streaming orchestration and provider registry management
 - **`tool_executor.c/h`** - Thin entry point for tool execution workflow (init, initial batch, clear_history support, hand-off). Creates `LoopWorkflowState`, scans initial tool batch for workflow state (`apply_patch`/`shell` calls), passes it to `iterative_loop_run`
-- **`iterative_loop.c/h`** - Iterative tool-calling loop for follow-up LLM rounds. `LoopWorkflowState` tracks `has_patched`, `has_tested_since_patch`, `nudge_count`. Nudge guard: when model returns zero tool calls but has patched without testing (and `nudge_count < ITERATIVE_LOOP_MAX_NUDGES` (2)), injects a user message pushing the model to run tests instead of exiting. After each tool batch, scans tool names to update workflow state
+- **`iterative_loop.c/h`** - Iterative tool-calling loop for follow-up LLM rounds. `LoopWorkflowState` tracks `has_patched`, `has_tested_since_patch`, `last_test_failed`, `has_used_tools`, `nudge_count`. Three nudge guards (capped at `ITERATIVE_LOOP_MAX_NUDGES` (3) total): (1) hallucinated-action — model used tools but never patched, pushes it to call apply_patch; (2) test-after-patch — model patched but never tested; (3) fix-failing-tests — model's tests are still failing. After each tool batch, scans tool names and exit codes to update workflow state
 - **`prompt_mode.c/h`** - Behavioral prompt mode definitions and parsing (plan, explore, debug, review)
 
 #### `lib/session/` - Session Data Management
@@ -395,7 +397,7 @@ The test directory mirrors the source structure:
 - **`mock_embeddings_service.c`** - Mock embeddings service for DI
 - **`test/updater/mock_http.c`** - Mock HTTP for updater tests
 - **`test/fixtures/test.jpg`** - Test image fixture for image attachment tests
-- **`test/stubs/`** - Test stubs for isolated unit testing (ralph_stub, services_stub, output_formatter_stub, python_tool_stub, subagent_stub)
+- **`test/stubs/`** - Test stubs for isolated unit testing (ralph_stub, services_stub, output_formatter_stub, python_tool_stub)
 
 ---
 
@@ -486,11 +488,10 @@ A Python project (`uv`-managed) that measures scaffold's performance on coding b
 
 ### Structure
 - **`scaffold_evals/common/`** — Shared utilities: config loading, scaffold binary invocation + JSONL parsing, git patch extraction, HuggingFace dataset loading + repo setup. `benchmark_runner.py` pre-seeds repo orientation (directory structure + test file locations) as a `<repo-context>` block in the user message before the `<issue>` block. Collects per-instance artifacts before container cleanup: `patch.diff`, `conversation.json`, `container_diagnostics.log`, `scaffold_home/` (conversation DB, session logs)
-- **`scaffold_evals/swebench/`** — SWE-bench runner, prompt builder, evaluation wrapper
-- **`scaffold_evals/feabench/`** — FEA-bench runner and prompt builder. FEA-bench always runs in debug mode for full diagnostic output regardless of `--debug` flag
-- **`scaffold_evals/livecodebench/`** — LiveCodeBench runner (streaming HF dataset loading, code extraction from scaffold responses)
-- **`scaffold_evals/contextbench/`** — Context-bench runner and prompt builder
-- **`prompts/`** — System prompt templates for each benchmark
+- **`scaffold_evals/swebench/`** — SWE-bench runner (thin wrapper around benchmark_runner), evaluation wrapper
+- **`scaffold_evals/feabench/`** — FEA-bench runner (thin wrapper around benchmark_runner, 900s timeout), patch_swebench.py for monkey-patching swebench package. Always runs in debug mode for full diagnostic output
+- **`scaffold_evals/livecodebench/`** — LiveCodeBench runner (streaming HF dataset, code extraction), evaluate.py for scoring against test cases
+- **`scaffold_evals/contextbench/`** — Context-bench runner (question answering)
 
 ### How It Works
 For SWE-bench and FEA-bench instances, scaffold runs inside SWE-bench Docker containers that have project dependencies pre-installed (conda `testbed` env). The harness builds/pulls the instance image via `swebench.harness.docker_build`, starts a container, copies the scaffold binary in, and executes it with `exec_run_with_timeout`. This lets the agent run tests to verify its work. Patches are extracted via `git diff` inside the container.

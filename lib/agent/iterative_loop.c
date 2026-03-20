@@ -77,7 +77,6 @@ int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx,
                 LOG_WARN("API request failed in tool loop iteration %d, retry %d/%d in %dms",
                          loop_count, stream_retries, STREAM_RETRY_MAX, delay_ms);
                 usleep(delay_ms * 1000);
-                loop_count--;
                 continue;
             }
             return -1;
