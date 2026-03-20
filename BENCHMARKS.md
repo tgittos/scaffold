@@ -17,19 +17,19 @@
 ### Summary
 | Model | Solved | Tested | Pass Rate | 95% CI |
 |-------|--------|--------|-----------|--------|
-| gpt-5.3-codex | 17/45 | 45/500 (455 pending, 71 total runs) | 37.8% | 25.1%-52.4% |
+| gpt-5.3-codex | 17/45 | 45/500 (455 pending, 87 total runs) | 37.8% | 25.1%-52.4% |
 
 ### Results
 | Instance | gpt-5.3-codex |
 |----------|---------------|
-| astropy__astropy-12907 | :x: 1/1* |
+| astropy__astropy-12907 | :x: 0/11 |
 | astropy__astropy-13033 | :x: 1/1* |
 | astropy__astropy-13236 | :x: 1/1* |
 | astropy__astropy-13398 | :x: 1/1* |
 | astropy__astropy-13453 | :x: 1/1* |
 | astropy__astropy-13579 | :x: 1/1* |
 | astropy__astropy-13977 | :x: 1/1* |
-| astropy__astropy-14096 | :x: 1/1* |
+| astropy__astropy-14096 | :x: 0/6 |
 | astropy__astropy-14182 | :x: 1/1* |
 | astropy__astropy-14309 | :x: 1/1* |
 | astropy__astropy-14365 | :x: 1/1* |
@@ -47,7 +47,7 @@
 | django__django-10097 | :x: 0/6 |
 | django__django-10554 | :x: 0/12 |
 | django__django-10880 | :x: 1/1* |
-| django__django-10914 | :white_check_mark: 6/6 |
+| django__django-10914 | :white_check_mark: 7/7 |
 | django__django-10973 | :x: 1/1* |
 | django__django-10999 | :x: 1/1* |
 | django__django-11066 | :white_check_mark: 1/1* |

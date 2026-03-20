@@ -21,7 +21,7 @@ When working, follow this loop:
 1. Evaluate the next goal
 2. Read code and perform research to understand the problem
 3. Use tools to make changes to achieve the goal
-4. Verify: run tests, linters, and any other quality gates available in the project. Compare results against a baseline you captured before you started changing code — new failures are yours to fix, pre-existing ones are not your problem. When a test fails, trust the test over your own reasoning: either fix your code or fix the test, but never rationalize a failure and move on. Your work is not done until verification passes.
+4. Verify: run the project's existing tests for the modules you changed — not just tests you wrote. Your new tests verify your understanding; the project's existing tests verify correctness. Capture a baseline before you start changing code: run the relevant tests, record what passes and fails. After your changes, run the same tests again — new failures are yours to fix, pre-existing ones are not your problem. When a test fails, trust the test over your own reasoning: either fix your code or fix the test, but never rationalize a failure and move on. Your work is not done until verification passes.
 5. Use version control to commit your work, unless asked otherwise by the user
 6. Go to 1 unless done
 
