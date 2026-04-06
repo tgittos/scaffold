@@ -62,6 +62,8 @@ static void print_help(const char *program_name) {
     printf("  --json            Enable JSON output mode\n");
     printf("  --home <path>     Override home directory (default: ~/.local/scaffold)\n");
     printf("  --yolo            Disable all approval gates for this session\n");
+    printf("  --context-window <n>  Override context window size (tokens)\n");
+    printf("  -p, --prompt <text>   Use custom system prompt (skips default + AGENTS.md)\n");
     printf("  --login           Log in to OpenAI via OAuth (ChatGPT subscription)\n");
     printf("  --logout          Log out of OpenAI OAuth session\n");
     printf("  --check-update    Check for updates and exit\n");
@@ -405,6 +407,8 @@ int main(int argc, char *argv[]) {
     char *supervisor_goal_id = NULL;
     char *supervisor_phase_str = NULL;
     char *model_override = NULL;
+    int context_window_override = 0;
+    char *system_prompt_override = NULL;
     char *system_prompt_file = NULL;
 
     for (int i = 1; i < argc; i++) {
@@ -454,6 +458,12 @@ int main(int argc, char *argv[]) {
             subagent_context = argv[++i];
         } else if (strcmp(argv[i], "--model") == 0 && i + 1 < argc) {
             model_override = argv[++i];
+        } else if (strcmp(argv[i], "--context-window") == 0 && i + 1 < argc) {
+            context_window_override = atoi(argv[++i]);
+            if (context_window_override <= 0) {
+                fprintf(stderr, "Error: --context-window requires a positive integer\n");
+                return EXIT_FAILURE;
+            }
         } else if (strcmp(argv[i], "--worker") == 0) {
             worker_mode = 1;
         } else if (strcmp(argv[i], "--queue") == 0 && i + 1 < argc) {
@@ -464,6 +474,8 @@ int main(int argc, char *argv[]) {
             supervisor_goal_id = argv[++i];
         } else if (strcmp(argv[i], "--phase") == 0 && i + 1 < argc) {
             supervisor_phase_str = argv[++i];
+        } else if ((strcmp(argv[i], "--prompt") == 0 || strcmp(argv[i], "-p") == 0) && i + 1 < argc) {
+            system_prompt_override = argv[++i];
         } else if (strcmp(argv[i], "--system-prompt-file") == 0 && i + 1 < argc) {
             system_prompt_file = argv[++i];
         } else if (message_arg_index == -1 && argv[i][0] != '-') {
@@ -516,6 +528,8 @@ int main(int argc, char *argv[]) {
     }
 
     config.model_override = model_override;
+    config.context_window_override = context_window_override;
+    config.system_prompt_override = system_prompt_override;
 
     if (log_level_str != NULL) {
         int lvl = log_parse_level(log_level_str);

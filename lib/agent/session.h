@@ -47,6 +47,8 @@ typedef struct AgentSession {
     Services* services;                 /**< Dependency injection container */
     ModelRegistry* model_registry;      /**< Model capability registry */
     const char* model_override;         /**< Model override from --model flag */
+    int context_window_override;        /**< Context window override from --context-window flag */
+    const char* system_prompt_override; /**< System prompt override from -p flag */
     PromptMode current_mode;            /**< Active behavioral prompt mode */
     PluginManager plugin_manager;       /**< Plugin subprocess management */
     int first_turn_context_injected;    /**< Flag: repo context already injected */

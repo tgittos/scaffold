@@ -117,6 +117,8 @@ int agent_init(Agent* agent, const AgentConfig* config) {
     }
 
     agent->session.model_override = agent->config.model_override;
+    agent->session.context_window_override = agent->config.context_window_override;
+    agent->session.system_prompt_override = agent->config.system_prompt_override;
     subagent_manager_set_services(&agent->session.subagent_manager, agent->services);
     document_store_set_services(agent->services);
     memory_tool_set_services(agent->services);

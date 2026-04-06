@@ -61,6 +61,8 @@ source .env && out/scaffold --yolo "your message"
 | `--json` | Enable JSON output mode (structured JSONL on stdout) |
 | `--yolo` | Disable all approval gates for this session |
 | `--model <name>` | Select model (e.g. `gpt-4o`) |
+| `--context-window <n>` | Override context window size (tokens) |
+| `-p`, `--prompt <text>` | Use custom system prompt (skips default + AGENTS.md) |
 | `--home <path>` | Override home directory (default: `~/.local/scaffold`) |
 | `--login` | Log in to OpenAI via OAuth (ChatGPT subscription) |
 | `--logout` | Log out of OpenAI OAuth session |

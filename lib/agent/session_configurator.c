@@ -59,7 +59,13 @@ int session_configurator_load(AgentSession* session) {
         embeddings_service_reinitialize(embeddings);
     }
 
-    load_system_prompt(&session->session_data.config.system_prompt);
+    if (session->system_prompt_override) {
+        session->session_data.config.system_prompt = strdup(session->system_prompt_override);
+        LOG_DEBUG("Using system prompt override from -p flag (%zu chars)",
+                    strlen(session->system_prompt_override));
+    } else {
+        load_system_prompt(&session->session_data.config.system_prompt);
+    }
 
     if (config->api_url) {
         session->session_data.config.api_url = strdup(config->api_url);
@@ -164,8 +170,13 @@ int session_configurator_load(AgentSession* session) {
         break;
     }
 
+    /* CLI --context-window always wins */
+    if (session->context_window_override > 0) {
+        session->session_data.config.context_window = session->context_window_override;
+        LOG_DEBUG("Context window overridden by --context-window flag: %d tokens",
+                    session->context_window_override);
     /* 8192 is the "not configured" sentinel; replace with model-specific window when available */
-    if (session->session_data.config.context_window == 8192) {
+    } else if (session->session_data.config.context_window == 8192) {
         ModelRegistry* registry = session->model_registry;
         if (registry && session->session_data.config.model) {
             ModelCapabilities* model = detect_model_capabilities(registry, session->session_data.config.model);

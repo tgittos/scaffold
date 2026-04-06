@@ -119,6 +119,12 @@ typedef struct AgentConfig {
     /** Model override (tier name or raw model ID) from --model flag */
     const char* model_override;
 
+    /** Context window override from --context-window flag (0 = auto-detect) */
+    int context_window_override;
+
+    /** System prompt override from -p flag (NULL uses default) */
+    const char* system_prompt_override;
+
     /** CLI allowlist entries (tool:pattern format) */
     const char** allow_entries;
     int allow_entry_count;
