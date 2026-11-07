@@ -2,11 +2,22 @@
 
 Scaffold supports a subprocess-based plugin system. Plugins are standalone executables that communicate with scaffold over stdin/stdout using JSON-RPC 2.0. They can hook into the agent pipeline and provide custom tools.
 
-Plugins can be written in any language -- Python, Go, Rust, C, shell scripts -- as long as they speak the protocol.
+Plugins are standalone executables that speak the protocol. Since scaffold is a zero-dependency binary, plugins should be written in C and compiled with [Cosmopolitan](https://github.com/jart/cosmopolitan) to produce cross-platform binaries that work everywhere scaffold does.
 
 ## Installation
 
-Drop an executable into `~/.local/scaffold/plugins/`:
+The primary way to install plugins is by downloading pre-built binaries from GitHub Releases:
+
+```bash
+# Download a plugin from its GitHub Release
+curl -L -o ~/.local/scaffold/plugins/session-transcript \
+  https://github.com/<owner>/ralph/releases/download/plugin-session-transcript-v1.0.0/session-transcript
+chmod +x ~/.local/scaffold/plugins/session-transcript
+```
+
+Plugins are also bundled as convenience snapshots in scaffold releases. To keep plugins up to date automatically, use `scaffold --update-plugins`.
+
+Alternatively, drop any executable into `~/.local/scaffold/plugins/`:
 
 ```bash
 cp my-plugin ~/.local/scaffold/plugins/
@@ -14,6 +25,23 @@ chmod +x ~/.local/scaffold/plugins/my-plugin
 ```
 
 Scaffold discovers plugins on startup. Restart scaffold after adding or removing plugins. Use `/plugins` in interactive mode to see what's loaded.
+
+## Distribution & Updates
+
+### Plugin versioning
+
+Each plugin is versioned independently using namespaced git tags in the format `plugin-<name>-v*` (e.g., `plugin-session-transcript-v1.2.0`). The build system compiles the version from the git tag into the plugin binary, making it available in the plugin's manifest during the initialize handshake.
+
+### GitHub Releases
+
+Each plugin version gets its own GitHub Release, tagged with the namespaced tag. Release assets include cross-platform Cosmopolitan binaries ready for installation. Scaffold releases also include plugin binaries as convenience snapshots so users get working plugins out of the box.
+
+### Update checking
+
+Scaffold checks for plugin updates at startup by querying GitHub Releases for each installed plugin. Users can also check and update manually:
+
+- `scaffold --check-plugin-updates` — Query GitHub Releases for newer versions of all installed plugins and report available updates.
+- `scaffold --update-plugins` — Download and install the latest versions of all plugins from GitHub Releases, replacing the existing binaries in `~/.local/scaffold/plugins/`.
 
 ## How it works
 
@@ -218,182 +246,119 @@ Plugin names must not contain underscores, forward slashes, or backslashes, and 
 - If a plugin fails the initialization handshake, it is killed and excluded
 - An empty or missing `~/.local/scaffold/plugins/` directory is fine -- scaffold runs normally
 
+## Writing plugins
+
+Scaffold is a single binary with no runtime dependencies. Plugins must match this philosophy: **write plugins in C and compile with Cosmopolitan**. This produces cross-platform binaries that work everywhere scaffold does — no interpreters, no runtimes, no dependencies for your users to install.
+
+Use cJSON (vendored in `deps/cJSON-*`) for JSON parsing. See `plugins/session-transcript/` for a complete reference implementation.
+
 ## Examples
 
-### Python: git context plugin
+### Session transcript
 
-Injects the current git branch and changed files into the system prompt.
+Records all agent conversations to markdown files. Source is in `plugins/session-transcript/`.
 
-```python
-#!/usr/bin/env python3
-"""Adds git repo context to agent prompts."""
-import json, sys, subprocess
+Subscribes to `post_user_input`, `post_llm_response`, and `post_tool_execute` hooks to capture user messages, model responses, and tool calls. Large tool arguments (like `apply_patch`) are automatically summarized to keep transcripts readable.
 
-def git(cmd):
-    try:
-        return subprocess.check_output(
-            ["git"] + cmd, stderr=subprocess.DEVNULL, text=True
-        ).strip()
-    except Exception:
-        return None
+Configuration via `~/.local/scaffold/transcript.conf`:
 
-def handle(request):
-    method = request["method"]
-    rid = request.get("id")
-
-    if method == "initialize":
-        return {"jsonrpc":"2.0","id":rid,"result":{
-            "name":"git-context","version":"1.0.0",
-            "description":"Adds git repo context to prompts",
-            "hooks":["context_enhance"],"tools":[],"priority":600
-        }}
-
-    if method == "hook/context_enhance":
-        ctx = request["params"].get("dynamic_context", "") or ""
-        branch = git(["branch","--show-current"])
-        if branch:
-            ctx += f"\n\n# Git Context\nBranch: {branch}\n"
-            status = git(["diff","--stat","HEAD"])
-            if status:
-                ctx += f"Changes:\n{status}\n"
-        return {"jsonrpc":"2.0","id":rid,"result":{"dynamic_context":ctx}}
-
-    if method == "shutdown":
-        return {"jsonrpc":"2.0","id":rid,"result":{"ok":True}}
-
-    return {"jsonrpc":"2.0","id":rid,"error":{
-        "code":-32601,"message":"Unknown method"
-    }}
-
-for line in sys.stdin:
-    request = json.loads(line.strip())
-    response = handle(request)
-    sys.stdout.write(json.dumps(response) + "\n")
-    sys.stdout.flush()
-    if request["method"] == "shutdown":
-        break
+```
+output_dir=~/my-transcripts
+max_arg_length=500
+max_result_length=2000
 ```
 
-Install:
+Build and install (version is compiled in from git tags via `plugin-session-transcript-v*`):
 
 ```bash
-cp git-context ~/.local/scaffold/plugins/
-chmod +x ~/.local/scaffold/plugins/git-context
+make plugins
+cp out/plugins/session-transcript ~/.local/scaffold/plugins/
 ```
 
-### Python: audit logger
-
-Logs all tool calls to a file.
-
-```python
-#!/usr/bin/env python3
-"""Logs tool execution to ~/.local/scaffold/audit.log."""
-import json, sys, os, datetime
-
-LOG = os.path.expanduser("~/.local/scaffold/audit.log")
-
-def handle(request):
-    method = request["method"]
-    rid = request.get("id")
-
-    if method == "initialize":
-        return {"jsonrpc":"2.0","id":rid,"result":{
-            "name":"audit-logger","version":"1.0.0",
-            "description":"Logs tool calls to audit.log",
-            "hooks":["pre_tool_execute"],"tools":[],"priority":100
-        }}
-
-    if method == "hook/pre_tool_execute":
-        params = request["params"]
-        ts = datetime.datetime.now().isoformat()
-        entry = f"{ts} TOOL {params['tool_name']} {params.get('arguments','')}\n"
-        with open(LOG, "a") as f:
-            f.write(entry)
-        return {"jsonrpc":"2.0","id":rid,"result":{"action":"continue"}}
-
-    if method == "shutdown":
-        return {"jsonrpc":"2.0","id":rid,"result":{"ok":True}}
-
-    return {"jsonrpc":"2.0","id":rid,"result":{"action":"continue"}}
-
-for line in sys.stdin:
-    request = json.loads(line.strip())
-    response = handle(request)
-    sys.stdout.write(json.dumps(response) + "\n")
-    sys.stdout.flush()
-    if request["method"] == "shutdown":
-        break
-```
-
-### Shell: simple tool provider
-
-A minimal plugin in bash that provides a `uptime` tool.
-
-```bash
-#!/bin/bash
-# Plugin that provides a system uptime tool.
-
-while IFS= read -r line; do
-    method=$(echo "$line" | jq -r '.method')
-    id=$(echo "$line" | jq -r '.id')
-
-    case "$method" in
-        initialize)
-            echo '{"jsonrpc":"2.0","id":'"$id"',"result":{"name":"system-info","version":"1.0.0","description":"System info tools","hooks":[],"tools":[{"name":"uptime","description":"Get system uptime","parameters":[]}],"priority":500}}'
-            ;;
-        tool/execute)
-            result=$(uptime -p 2>/dev/null || uptime)
-            echo '{"jsonrpc":"2.0","id":'"$id"',"result":{"success":true,"result":"'"${result//\"/\\\"}"'"}}'
-            ;;
-        shutdown)
-            echo '{"jsonrpc":"2.0","id":'"$id"',"result":{"ok":true}}'
-            exit 0
-            ;;
-        *)
-            echo '{"jsonrpc":"2.0","id":'"$id"',"error":{"code":-32601,"message":"Unknown method"}}'
-            ;;
-    esac
-done
-```
+Transcripts are written to `~/.local/scaffold/transcripts/` (one markdown file per session).
 
 ### Plugin template
 
-Minimal boilerplate for a Python plugin:
+Minimal boilerplate for a Cosmopolitan C plugin:
 
-```python
-#!/usr/bin/env python3
-import json, sys
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <cJSON.h>
 
-MANIFEST = {
-    "name": "my-plugin",
-    "version": "0.1.0",
-    "description": "",
-    "hooks": [],
-    "tools": [],
-    "priority": 500,
+static void send_json(cJSON *root) {
+    char *str = cJSON_PrintUnformatted(root);
+    if (str) { fprintf(stdout, "%s\n", str); fflush(stdout); free(str); }
+    cJSON_Delete(root);
 }
 
-def handle(request):
-    method = request["method"]
-    rid = request.get("id")
+static cJSON *make_response(int id) {
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "jsonrpc", "2.0");
+    cJSON_AddNumberToObject(root, "id", id);
+    return root;
+}
 
-    if method == "initialize":
-        return {"jsonrpc":"2.0","id":rid,"result":MANIFEST}
+int main(void) {
+    char line[1024 * 1024];
+    while (fgets(line, sizeof(line), stdin)) {
+        size_t len = strlen(line);
+        while (len > 0 && (line[len-1] == '\n' || line[len-1] == '\r'))
+            line[--len] = '\0';
+        if (len == 0) continue;
 
-    if method == "shutdown":
-        return {"jsonrpc":"2.0","id":rid,"result":{"ok":True}}
+        cJSON *req = cJSON_Parse(line);
+        if (!req) continue;
 
-    # Handle your hooks/tools here
+        const char *method = "";
+        cJSON *m = cJSON_GetObjectItem(req, "method");
+        if (m && cJSON_IsString(m)) method = m->valuestring;
 
-    return {"jsonrpc":"2.0","id":rid,"error":{
-        "code":-32601,"message":"Unknown method"
-    }}
+        int id = 0;
+        cJSON *id_j = cJSON_GetObjectItem(req, "id");
+        if (id_j && cJSON_IsNumber(id_j)) id = id_j->valueint;
 
-for line in sys.stdin:
-    request = json.loads(line.strip())
-    response = handle(request)
-    sys.stdout.write(json.dumps(response) + "\n")
-    sys.stdout.flush()
-    if request["method"] == "shutdown":
-        break
+        if (strcmp(method, "initialize") == 0) {
+            cJSON *root = make_response(id);
+            cJSON *result = cJSON_CreateObject();
+            cJSON_AddStringToObject(result, "name", "my-plugin");
+            cJSON_AddStringToObject(result, "version", "1.0.0");
+            cJSON_AddStringToObject(result, "description", "What this plugin does");
+            cJSON *hooks = cJSON_CreateArray();
+            /* Add hooks: "post_user_input", "post_llm_response", etc. */
+            cJSON_AddItemToObject(result, "hooks", hooks);
+            cJSON *tools = cJSON_CreateArray();
+            cJSON_AddItemToObject(result, "tools", tools);
+            cJSON_AddNumberToObject(result, "priority", 500);
+            cJSON_AddItemToObject(root, "result", result);
+            send_json(root);
+        } else if (strcmp(method, "shutdown") == 0) {
+            cJSON *root = make_response(id);
+            cJSON *result = cJSON_CreateObject();
+            cJSON_AddBoolToObject(result, "ok", 1);
+            cJSON_AddItemToObject(root, "result", result);
+            send_json(root);
+            cJSON_Delete(req);
+            break;
+        } else {
+            /* Handle hooks/tools here */
+            cJSON *root = make_response(id);
+            cJSON *result = cJSON_CreateObject();
+            cJSON_AddStringToObject(result, "action", "continue");
+            cJSON_AddItemToObject(root, "result", result);
+            send_json(root);
+        }
+
+        cJSON_Delete(req);
+    }
+    return 0;
+}
+```
+
+Build with:
+
+```bash
+cosmocc -O2 -std=c11 -I deps/cJSON-1.7.18 -o my-plugin main.c deps/cJSON-1.7.18/cJSON.c
+cp my-plugin ~/.local/scaffold/plugins/
 ```

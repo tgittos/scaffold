@@ -371,6 +371,36 @@ void streaming_emit_tool_delta(StreamingContext* ctx, const char* id, const char
     }
 }
 
+void streaming_replace_tool_arguments(StreamingContext* ctx, const char* id, const char* arguments) {
+    if (ctx == NULL || id == NULL || arguments == NULL) {
+        return;
+    }
+
+    /* Find tool by id */
+    ssize_t idx = -1;
+    for (size_t i = 0; i < ctx->tool_uses.count; i++) {
+        if (ctx->tool_uses.data[i].id != NULL && strcmp(ctx->tool_uses.data[i].id, id) == 0) {
+            idx = (ssize_t)i;
+            break;
+        }
+    }
+    if (idx < 0) return;
+
+    StreamingToolUse* tool = &ctx->tool_uses.data[idx];
+    size_t len = strlen(arguments);
+    size_t needed = len + 1;
+
+    if (needed > tool->arguments_capacity) {
+        char* new_buf = realloc(tool->arguments_json, needed);
+        if (new_buf == NULL) return;
+        tool->arguments_json = new_buf;
+        tool->arguments_capacity = needed;
+    }
+
+    memcpy(tool->arguments_json, arguments, len);
+    tool->arguments_json[len] = '\0';
+}
+
 void streaming_emit_complete(StreamingContext* ctx, const char* stop_reason) {
     if (ctx == NULL) {
         return;

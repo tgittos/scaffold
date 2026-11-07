@@ -5,7 +5,6 @@
 #include "util/debug_output.h"
 
 void setUp(void) {
-    debug_init(true);
 }
 
 void tearDown(void) {

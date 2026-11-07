@@ -18,8 +18,8 @@
  * deduplicates tool calls via the orchestration context, and appends
  * results to the conversation history.
  *
- * @param session  The agent session
- * @param ctx      Orchestration context (tracks executed tool IDs)
+ * @param session   The agent session
+ * @param ctx       Orchestration context (tracks executed tool IDs)
  * @return 0 on success, -1 on error, -2 on interrupt
  */
 int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx);

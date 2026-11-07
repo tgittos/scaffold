@@ -19,43 +19,40 @@ void orchestrator_tool_set_services(Services *services) {
 }
 
 /* ========================================================================
- * Parameter definitions
- * ======================================================================== */
-
-static const ParamDef EXECUTE_PLAN_PARAMS[] = {
-    {"plan_text", "string", "The complete plan text to decompose into goals and actions", NULL, 1},
-};
-
-static const ParamDef GOAL_ID_PARAMS[] = {
-    {"goal_id", "string", "ID of the goal", NULL, 1},
-};
-
-/* ========================================================================
  * Tool definitions table
  * ======================================================================== */
 
+static const char *ORCHESTRATOR_OPERATIONS[] = {
+    "execute_plan", "list_goals", "goal_status",
+    "start_goal", "pause_goal", "cancel_goal", NULL
+};
+
+static const ParamDef ORCHESTRATOR_DISPATCH_PARAMS[] = {
+    {"operation", "string", "Operation to perform: execute_plan, list_goals, goal_status, start_goal, pause_goal, cancel_goal", ORCHESTRATOR_OPERATIONS, 1},
+    {"plan_text", "string", "The complete plan text to decompose (execute_plan)", NULL, 0},
+    {"goal_id", "string", "ID of the goal (goal_status, start_goal, pause_goal, cancel_goal)", NULL, 0},
+};
+
 static const ToolDef ORCHESTRATOR_TOOLS[] = {
-    {"execute_plan",
-     "Decompose a finalized plan into GOAP goals and actions. Returns the plan with decomposition instructions. After calling this, use goap_create_goal and goap_create_actions to create the goal hierarchy, then call start_goal for each goal.",
-     EXECUTE_PLAN_PARAMS, 1, execute_execute_plan},
-    {"list_goals",
-     "List all goals with their status and world state progress",
-     NULL, 0, execute_list_goals},
-    {"goal_status",
-     "Get detailed status for a goal: world state, action tree, supervisor info",
-     GOAL_ID_PARAMS, 1, execute_goal_status},
-    {"start_goal",
-     "Activate a goal and spawn its supervisor process. Call after creating the goal and its initial actions.",
-     GOAL_ID_PARAMS, 1, execute_start_goal},
-    {"pause_goal",
-     "Pause a goal by stopping its supervisor. The goal can be resumed later with start_goal.",
-     GOAL_ID_PARAMS, 1, execute_pause_goal},
-    {"cancel_goal",
-     "Cancel a goal by killing its supervisor and marking it failed",
-     GOAL_ID_PARAMS, 1, execute_cancel_goal},
+    {"orchestrator", "Orchestration operations: execute plans, list/start/pause/cancel goals, get goal status. Use 'operation' to select the action.",
+     ORCHESTRATOR_DISPATCH_PARAMS, sizeof(ORCHESTRATOR_DISPATCH_PARAMS) / sizeof(ORCHESTRATOR_DISPATCH_PARAMS[0]), execute_orchestrator_dispatch},
 };
 
 #define ORCHESTRATOR_TOOL_COUNT (sizeof(ORCHESTRATOR_TOOLS) / sizeof(ORCHESTRATOR_TOOLS[0]))
+
+static const OperationDispatchEntry ORCHESTRATOR_DISPATCH[] = {
+    {"execute_plan", execute_execute_plan},
+    {"list_goals",   execute_list_goals},
+    {"goal_status",  execute_goal_status},
+    {"start_goal",   execute_start_goal},
+    {"pause_goal",   execute_pause_goal},
+    {"cancel_goal",  execute_cancel_goal},
+};
+
+int execute_orchestrator_dispatch(const ToolCall *tc, ToolResult *result) {
+    return dispatch_by_operation(tc, result, ORCHESTRATOR_DISPATCH,
+        sizeof(ORCHESTRATOR_DISPATCH) / sizeof(ORCHESTRATOR_DISPATCH[0]));
+}
 
 int register_orchestrator_tools(ToolRegistry *registry) {
     if (registry == NULL) return -1;
@@ -72,16 +69,16 @@ static const char DECOMPOSITION_INSTRUCTION[] =
     "You are now in DECOMPOSITION MODE. Your task is to break down the plan below "
     "into GOAP goals and actions.\n\n"
     "For each major objective in the plan:\n"
-    "1. Create a goal using goap_create_goal with:\n"
+    "1. Create a goal using goap(operation=\"create_goal\") with:\n"
     "   - A short descriptive name\n"
     "   - A description of what the goal achieves\n"
     "   - goal_state: JSON object with boolean assertion keys that define completion\n"
-    "2. Create initial compound actions for each goal using goap_create_actions:\n"
+    "2. Create initial compound actions for each goal using goap(operation=\"create_actions\"):\n"
     "   - 3-5 high-level phases as compound actions (is_compound: true)\n"
     "   - Each with preconditions (what must be true first) and effects (what becomes true)\n"
     "   - Include verification phases (code_review, testing) alongside implementation\n"
     "   - Preconditions create ordering: an action waits until its preconditions are in world_state\n"
-    "3. After creating each goal and its initial actions, call start_goal to begin execution.\n\n"
+    "3. After creating each goal and its initial actions, call orchestrator(operation=\"start_goal\") to begin execution.\n\n"
     "PLAN TO DECOMPOSE:\n";
 
 int execute_execute_plan(const ToolCall *tc, ToolResult *result) {

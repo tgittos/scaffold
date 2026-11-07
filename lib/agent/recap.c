@@ -1,3 +1,6 @@
+#define LOG_MODULE     LOG_MOD_AGENT
+#define LOG_MODULE_STR "agent"
+#include "../util/log.h"
 #include "recap.h"
 #include "../network/api_common.h"
 #include "../network/streaming.h"
@@ -5,7 +8,6 @@
 #include "../llm/llm_client.h"
 #include "../ui/output_formatter.h"
 #include "../ui/status_line.h"
-#include "../util/debug_output.h"
 #include "../session/token_manager.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -160,7 +162,7 @@ int recap_generate(AgentSession* session, int max_messages) {
     snprintf(recap_prompt, prompt_size, recap_template, recent_messages);
     free(recent_messages);
 
-    debug_printf("Generating recap with prompt: %s\n", recap_prompt);
+    LOG_DEBUG("Generating recap with prompt: %s", recap_prompt);
 
     ProviderRegistry* registry = get_provider_registry();
     if (registry == NULL) {
@@ -202,8 +204,8 @@ int recap_generate(AgentSession* session, int max_messages) {
         return -1;
     }
 
-    debug_printf("Making recap streaming API request to %s\n", session->session_data.config.api_url);
-    debug_printf("POST data: %s\n\n", post_data);
+    LOG_DEBUG("Making recap streaming API request to %s", session->session_data.config.api_url);
+    LOG_DEBUG("POST data: %s", post_data);
 
     StreamingContext* ctx = streaming_context_create();
     if (ctx == NULL) {

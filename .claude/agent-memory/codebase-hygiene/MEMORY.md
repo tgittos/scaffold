@@ -17,10 +17,16 @@ Notes:
 
 ## Known Issues (as of 2026-02-27)
 
-- session_configurator_cleanup() is declared and defined but never called -- memory leak of s_codex_db_path
+- FIXED: session_configurator_cleanup() is now called in session.c:202 (develop branch)
+- FIXED: codex_provider.c "future refactor" comment was cleaned up in comment audit commit
 - test/stubs/subagent_stub.c exists but is not referenced in mk/tests.mk (orphaned)
-- src/ralph/tools/.aarch64/ contains stale build artifacts from pre-refactor era
+- src/ralph/tools/.aarch64/ contains stale build artifacts from pre-refactor era (gitignored, local only)
 - mk/config.mk INCLUDES has ghost paths: src/llm, src/session, src/utils, src/db, src/cli (directories don't exist)
 - mk/tests.mk line 330 says "LIBRALPH-LINKED TESTS" but lib is now "libagent"
 - test/ralph/test_main.c tests hand-constructed JSON via snprintf, no longer reflects how the codebase works
-- codex_provider.c line 97-98 has "future refactor" / "known limitation" comment (tech debt marker)
+- goal_store_get_dal() and action_store_get_dal() are declared+defined but never called
+- goal_store_has_active_goals(), action_store_list_ready(), action_store_skip_pending() only used in tests
+- session_register_cleanup_hook() and session_unregister_all_hooks() are dead code (entire hook mechanism unused)
+- supervisor.c includes <cJSON.h> but never uses it
+- orchestrator.h comment for orchestrator_check_stale claims "1 hour stale guard" but code does not check time
+- agent_get_session(), agent_get_session_id(), agent_get_services() static inlines never called (public API surface)

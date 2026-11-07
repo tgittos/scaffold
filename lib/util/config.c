@@ -1,5 +1,7 @@
+#define LOG_MODULE     LOG_MOD_AGENT
+#define LOG_MODULE_STR "agent"
+#include "log.h"
 #include "config.h"
-#include "debug_output.h"
 #include "app_home.h"
 #include <defaults.h>
 #include <cJSON.h>
@@ -109,7 +111,7 @@ static void config_generate_default_file(void)
     char *config_file = app_home_path("config.json");
     if (config_file) {
         if (config_save_to_file(config_file) == 0) {
-            debug_printf("[Config] Created %s with API keys from environment\n\n", config_file);
+            LOG_INFO("[Config] Created %s with API keys from environment", config_file);
         }
         free(config_file);
     }

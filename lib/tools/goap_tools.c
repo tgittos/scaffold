@@ -35,97 +35,60 @@ void goap_tools_set_subagent_manager(SubagentManager *mgr) {
  * Parameter definitions
  * ======================================================================== */
 
-static const ParamDef GET_GOAL_PARAMS[] = {
-    {"goal_id", "string", "ID of the goal", NULL, 1},
-};
-
-static const ParamDef LIST_ACTIONS_PARAMS[] = {
-    {"goal_id", "string", "ID of the goal", NULL, 1},
-    {"status", "string", "Filter by status: pending, running, completed, failed, skipped", NULL, 0},
-    {"parent_action_id", "string", "Filter by parent action ID (list children of a compound action)", NULL, 0},
-};
-
-static const ParamDef CREATE_GOAL_PARAMS[] = {
-    {"name", "string", "Short name for the goal", NULL, 1},
-    {"description", "string", "Full goal description", NULL, 1},
-    {"goal_state", "object", "Goal state: JSON object of boolean assertion keys that must all be true", NULL, 1},
-    {"queue_name", "string", "Work queue name for this goal's workers (auto-generated if omitted)", NULL, 0},
-    {"persistent", "boolean", "If true, goal stays ACTIVE across wake cycles for incremental advancement", NULL, 0},
-};
-
-static const ParamDef CREATE_ACTIONS_PARAMS[] = {
-    {"goal_id", "string", "ID of the goal these actions belong to", NULL, 1},
-    {"actions", "array", "Array of action objects. Required: description (string). Optional: effects (string array, default []), preconditions (string array, default []), is_compound (bool, default false), role (string), parent_action_id (string)", NULL, 1},
-};
-
-static const ParamDef UPDATE_ACTION_PARAMS[] = {
-    {"action_id", "string", "ID of the action to update", NULL, 1},
-    {"status", "string", "New status: pending, running, completed, failed, skipped", NULL, 1},
-    {"result", "string", "Result text (for completed/failed actions)", NULL, 0},
-};
-
-static const ParamDef DISPATCH_ACTION_PARAMS[] = {
-    {"action_id", "string", "ID of the primitive action to dispatch to a worker", NULL, 1},
-};
-
-static const ParamDef UPDATE_WORLD_STATE_PARAMS[] = {
-    {"goal_id", "string", "ID of the goal", NULL, 1},
-    {"assertions", "object", "JSON object of assertion key/boolean pairs to merge into world state", NULL, 1},
-    {"summary", "string", "Progress notes for context recovery on next wake", NULL, 0},
-};
-
-static const ParamDef CHECK_COMPLETE_PARAMS[] = {
-    {"goal_id", "string", "ID of the goal to check", NULL, 1},
-};
-
-static const ParamDef GET_ACTION_RESULTS_PARAMS[] = {
-    {"goal_id", "string", "ID of the goal", NULL, 1},
-    {"action_ids", "array", "Optional: specific action IDs to get results for (omit for all completed)", NULL, 0},
-};
-
-static const ParamDef SAVE_PLAN_DOCUMENT_PARAMS[] = {
-    {"goal_id", "string", "ID of the goal", NULL, 1},
-    {"plan_document", "string", "The plan document text (research findings, decomposition strategy, execution notes)", NULL, 1},
-};
 
 /* ========================================================================
  * Tool definitions table
  * ======================================================================== */
 
+static const char *GOAP_OPERATIONS[] = {
+    "get_goal", "list_actions", "create_goal", "create_actions",
+    "update_action", "dispatch_action", "update_world_state",
+    "check_complete", "get_action_results", "save_plan_document", NULL
+};
+
+static const ParamDef GOAP_DISPATCH_PARAMS[] = {
+    {"operation", "string", "Operation to perform: get_goal, list_actions, create_goal, create_actions, update_action, dispatch_action, update_world_state, check_complete, get_action_results, save_plan_document", GOAP_OPERATIONS, 1},
+    {"goal_id", "string", "ID of the goal", NULL, 0},
+    {"name", "string", "Short name for the goal (create_goal)", NULL, 0},
+    {"description", "string", "Full goal description (create_goal)", NULL, 0},
+    {"goal_state", "object", "Goal state assertions (create_goal)", NULL, 0},
+    {"queue_name", "string", "Work queue name (create_goal)", NULL, 0},
+    {"persistent", "boolean", "If true, goal stays ACTIVE across wake cycles (create_goal)", NULL, 0},
+    {"actions", "array", "Array of action objects (create_actions)", NULL, 0},
+    {"action_id", "string", "ID of the action (update_action, dispatch_action)", NULL, 0},
+    {"status", "string", "Action status: pending, running, completed, failed, skipped (update_action, list_actions)", NULL, 0},
+    {"result", "string", "Result text (update_action)", NULL, 0},
+    {"assertions", "object", "Boolean assertion key/value pairs (update_world_state)", NULL, 0},
+    {"summary", "string", "Progress notes (update_world_state)", NULL, 0},
+    {"parent_action_id", "string", "Filter by parent action (list_actions)", NULL, 0},
+    {"action_ids", "array", "Specific action IDs to get results for (get_action_results)", NULL, 0},
+    {"plan_document", "string", "Plan document text (save_plan_document)", NULL, 0},
+};
+
 static const ToolDef GOAP_TOOLS[] = {
-    {"goap_get_goal",
-     "Get goal details: description, goal state, world state, status, summary",
-     GET_GOAL_PARAMS, 1, execute_goap_get_goal},
-    {"goap_list_actions",
-     "List actions for a goal, optionally filtered by status or parent compound action",
-     LIST_ACTIONS_PARAMS, 3, execute_goap_list_actions},
-    {"goap_create_goal",
-     "Create a new goal with goal state assertions defining completion criteria",
-     CREATE_GOAL_PARAMS, 5, execute_goap_create_goal},
-    {"goap_create_actions",
-     "Batch-create actions (compound or primitive) with preconditions and effects",
-     CREATE_ACTIONS_PARAMS, 2, execute_goap_create_actions},
-    {"goap_update_action",
-     "Update an action's status and optionally set its result",
-     UPDATE_ACTION_PARAMS, 3, execute_goap_update_action},
-    {"goap_dispatch_action",
-     "Dispatch a primitive action to a worker: enqueue work item and spawn worker process",
-     DISPATCH_ACTION_PARAMS, 1, execute_goap_dispatch_action},
-    {"goap_update_world_state",
-     "Merge boolean assertions into a goal's world state after verifying effects",
-     UPDATE_WORLD_STATE_PARAMS, 3, execute_goap_update_world_state},
-    {"goap_check_complete",
-     "Check if a goal is complete: world_state contains all goal_state assertions as true",
-     CHECK_COMPLETE_PARAMS, 1, execute_goap_check_complete},
-    {"goap_get_action_results",
-     "Get results from completed actions for a goal (results truncated to prevent context blowup)",
-     GET_ACTION_RESULTS_PARAMS, 2, execute_goap_get_action_results},
-    {"goap_save_plan_document",
-     "Save a plan document (research findings, decomposition strategy) for a goal",
-     SAVE_PLAN_DOCUMENT_PARAMS, 2, execute_goap_save_plan_document},
+    {"goap", "Goal-Oriented Action Planning: create/manage goals, create/update/dispatch actions, update world state, check completion, save plan documents. Use 'operation' to select the action.",
+     GOAP_DISPATCH_PARAMS, sizeof(GOAP_DISPATCH_PARAMS) / sizeof(GOAP_DISPATCH_PARAMS[0]), execute_goap_dispatch},
 };
 
 #define GOAP_TOOL_COUNT (sizeof(GOAP_TOOLS) / sizeof(GOAP_TOOLS[0]))
+
+static const OperationDispatchEntry GOAP_DISPATCH[] = {
+    {"get_goal",          execute_goap_get_goal},
+    {"list_actions",      execute_goap_list_actions},
+    {"create_goal",       execute_goap_create_goal},
+    {"create_actions",    execute_goap_create_actions},
+    {"update_action",     execute_goap_update_action},
+    {"dispatch_action",   execute_goap_dispatch_action},
+    {"update_world_state", execute_goap_update_world_state},
+    {"check_complete",    execute_goap_check_complete},
+    {"get_action_results", execute_goap_get_action_results},
+    {"save_plan_document", execute_goap_save_plan_document},
+};
+
+int execute_goap_dispatch(const ToolCall *tc, ToolResult *result) {
+    return dispatch_by_operation(tc, result, GOAP_DISPATCH,
+        sizeof(GOAP_DISPATCH) / sizeof(GOAP_DISPATCH[0]));
+}
 
 int register_goap_tools(ToolRegistry *registry) {
     if (registry == NULL) return -1;

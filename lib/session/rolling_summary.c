@@ -1,7 +1,9 @@
+#define LOG_MODULE     LOG_MOD_CONTEXT
+#define LOG_MODULE_STR "context"
+#include "../util/log.h"
 #include "rolling_summary.h"
 #include "../llm/llm_provider.h"
 #include "../llm/llm_client.h"
-#include "../util/debug_output.h"
 #include "token_manager.h"
 #include "../network/streaming.h"
 #include <stdio.h>
@@ -109,7 +111,7 @@ static char* extract_content_from_response(const char* response_data, int api_ty
 
     cJSON* root = cJSON_Parse(response_data);
     if (root == NULL) {
-        debug_printf("Failed to parse summary response JSON\n");
+        LOG_ERROR("Failed to parse summary response JSON");
         return NULL;
     }
 
@@ -192,34 +194,34 @@ int generate_rolling_summary(
     // Skip summary generation for local AI without authentication
     // (they may not support the chat completions format needed for summarization)
     if (api_key == NULL && api_type == 2) {
-        debug_printf("Skipping rolling summary: local AI without authentication\n");
+        LOG_INFO("Skipping rolling summary: local AI without authentication");
         return -1;
     }
 
     char* formatted_messages = format_messages_for_summary(messages, message_count);
     if (formatted_messages == NULL) {
-        debug_printf("Failed to format messages for summary\n");
+        LOG_ERROR("Failed to format messages for summary");
         return -1;
     }
 
     char* prompt = build_summary_prompt(formatted_messages, existing_summary);
     free(formatted_messages);
     if (prompt == NULL) {
-        debug_printf("Failed to build summary prompt\n");
+        LOG_ERROR("Failed to build summary prompt");
         return -1;
     }
 
-    debug_printf("Generating rolling summary for %d messages\n", message_count);
-    debug_printf("Summary prompt: %.200s...\n", prompt);
+    LOG_INFO("Generating rolling summary for %d messages", message_count);
+    LOG_DEBUG("Summary prompt: %.200s...", prompt);
 
     char* post_data = build_api_request_json(api_type, model, prompt);
     free(prompt);
     if (post_data == NULL) {
-        debug_printf("Failed to build API request JSON\n");
+        LOG_ERROR("Failed to build API request JSON");
         return -1;
     }
 
-    debug_printf("Summary API request: %s\n", post_data);
+    LOG_DEBUG("Summary API request: %s", post_data);
 
     const char* hdrs[8] = {0};
     ProviderRegistry* provider_reg = get_provider_registry();
@@ -241,28 +243,28 @@ int generate_rolling_summary(
     free(post_data);
 
     if (result != 0) {
-        debug_printf("Summary API request failed with code %d\n", result);
+        LOG_ERROR("Summary API request failed with code %d", result);
         cleanup_response(&response);
         return -1;
     }
 
     if (response.data == NULL || response.size == 0) {
-        debug_printf("Empty response from summary API\n");
+        LOG_ERROR("Empty response from summary API");
         cleanup_response(&response);
         return -1;
     }
 
-    debug_printf("Summary API response: %.500s...\n", response.data);
+    LOG_DEBUG("Summary API response: %.500s...", response.data);
 
     char* summary_content = extract_content_from_response(response.data, api_type);
     cleanup_response(&response);
 
     if (summary_content == NULL) {
-        debug_printf("Failed to extract summary content from response\n");
+        LOG_ERROR("Failed to extract summary content from response");
         return -1;
     }
 
-    debug_printf("Generated summary: %.200s...\n", summary_content);
+    LOG_DEBUG("Generated summary: %.200s...", summary_content);
 
     *out_summary = summary_content;
     return 0;

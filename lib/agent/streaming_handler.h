@@ -2,6 +2,7 @@
 #define STREAMING_HANDLER_H
 
 #include "session.h"
+#include "api_round_trip.h"
 #include "../llm/llm_provider.h"
 
 /**
@@ -28,5 +29,16 @@
  */
 int streaming_process_message(AgentSession* session, LLMProvider* provider,
                               const char* user_message, int max_tokens);
+
+/**
+ * Execute a single streaming round trip and return the result.
+ *
+ * Used by the iterative tool loop for providers that require streaming
+ * (e.g., Codex Responses API). Returns the response in the same
+ * LLMRoundTripResult format as api_round_trip_execute.
+ */
+int streaming_round_trip_execute(AgentSession* session, LLMProvider* provider,
+                                  const char* user_message, int max_tokens,
+                                  LLMRoundTripResult* result);
 
 #endif /* STREAMING_HANDLER_H */

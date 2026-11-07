@@ -51,22 +51,37 @@ source .env && out/scaffold --yolo "your message"
 
 | Flag | Description |
 |------|-------------|
-| `--debug` | Show HTTP traffic to LLM providers |
+| `--version`, `-v` | Print version and exit |
+| `--help`, `-h` | Print help and exit |
+| `--debug` | Enable all debug logging (backward compat: LOG_DEBUG + all modules) |
+| `--log <level>` | Set log level: error, warn, info, debug |
+| `--log-module <mods>` | Filter log modules (comma-separated): agent, tool, llm, http, context, policy, goap, mcp, db, ipc, plugin |
+| `--log-http-body` | Enable raw HTTP body logging (CURLOPT_VERBOSE) |
 | `--no-stream` | Disable response streaming |
-| `--json` | Enable JSON output mode |
+| `--json` | Enable JSON output mode (structured JSONL on stdout) |
 | `--yolo` | Disable all approval gates for this session |
 | `--model <name>` | Select model (e.g. `gpt-4o`) |
+| `--context-window <n>` | Override context window size (tokens) |
+| `-p`, `--prompt <text>` | Use custom system prompt (skips default + AGENTS.md) |
 | `--home <path>` | Override home directory (default: `~/.local/scaffold`) |
 | `--login` | Log in to OpenAI via OAuth (ChatGPT subscription) |
 | `--logout` | Log out of OpenAI OAuth session |
-| `--phase plan\|execute` | Set supervisor phase (default: auto-detect from goal status) |
+| `--check-update` | Check for a newer version |
+| `--update` | Self-update the binary |
+| `--check-plugin-updates` | Check for newer plugin versions via GitHub Releases |
+| `--update-plugins` | Download and install latest plugin versions from GitHub Releases |
+| `--allow <entry>` | Allow a specific tool/command pattern |
+| `--allow-category=<cat>` | Allow all tools in a category |
+| `--system-prompt-file <path>` | Load system prompt from file (scaffold reads and deletes it) |
+
+Internal flags used by the orchestrator/subagent system (not for direct user invocation): `--subagent`, `--task`, `--context`, `--worker`, `--queue`, `--supervisor`, `--goal`, `--phase`, `--no-auto-messages`, `--message-poll-interval`.
 
 ## Development Environment
 
 - Docker devcontainer with Cosmopolitan toolchain pre-configured
 - `.env` has API credentials - **never read it**, only source it
 - Use `apt` to install tooling only, not libraries (breaks portability)
-- **Python**: Use `uv` for Python package/project management. Install it if not already present (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
+- **Python**: ALWAYS use `uv` to run Python. Use `uv run python`, `uv run <script>`, or `uv run <entrypoint>`. **Never use `python3` or `python` directly** — the embedded Python (`PYTHONHOME=/zip`) breaks system Python in subprocesses. Install uv if not present: `curl -LsSf https://astral.sh/uv/install.sh | sh`
 
 ## Code Style
 
@@ -80,7 +95,7 @@ source .env && out/scaffold --yolo "your message"
 
 **Delete aggressively**: Prefer editing over adding. Remove dead code during refactors. Code not written can't have bugs.
 
-**Makefile changes**: Maintain structure and organization for AI readability. 
+**Makefile changes**: Maintain structure and organization for AI readability.
 
 **Fast tests**: Use mocks for external APIs in tests where possible.
 
@@ -119,6 +134,20 @@ Use these binaries **only** for debugging. Use the cross platform fat binary at 
 valgrind --leak-check=full ./test/test_foo.aarch64.elf  # ARM64
 valgrind --leak-check=full ./test/test_foo.com.dbg      # x86_64
 ```
+
+## Key Architecture Notes
+
+- Codex provider uses Responses API (not Chat Completions). Input is a flat array, not messages.
+- The iterative loop passes `user_message=""` for follow-up rounds — providers must handle empty strings correctly.
+- `--json` mode is output-only; does not affect API payloads or conversation structure.
+- `shell.py` strips `PYTHONHOME` and `PYTHONDONTWRITEBYTECODE` from subprocesses to prevent the embedded Python from breaking system Python.
+- `apply_patch.py` uses a custom patch format (`*** Begin Patch` / `*** Update File:` / `*** Add File:` / `*** Delete File:` / `*** End Patch`), not standard unified diff.
+- Streaming includes transient error retry with exponential backoff and `response.failed` event detection.
+
+## System Prompts
+
+- `data/prompts/scaffold_system.txt` — main system prompt (embedded in binary at build time)
+- `data/prompts/modes/` — behavioral mode prompts: `debug.txt`, `explore.txt`, `plan.txt`, `review.txt`
 
 ## Versioning & Releases
 

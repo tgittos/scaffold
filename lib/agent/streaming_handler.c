@@ -1,4 +1,8 @@
+#define LOG_MODULE     LOG_MOD_AGENT
+#define LOG_MODULE_STR "agent"
+#include "../util/log.h"
 #include "streaming_handler.h"
+#include "api_round_trip.h"
 #include "context_enhancement.h"
 #include "message_dispatcher.h"
 #include "../network/api_common.h"
@@ -8,7 +12,6 @@
 #include "../network/streaming.h"
 #include "../ui/output_formatter.h"
 #include "../ui/json_output.h"
-#include "../util/debug_output.h"
 #include "../llm/llm_client.h"
 #include "../ui/status_line.h"
 #include "../plugin/hook_dispatcher.h"
@@ -87,15 +90,24 @@ static size_t stream_http_callback(const char* data, size_t size, void* user_dat
     return size;
 }
 
-int streaming_process_message(AgentSession* session, LLMProvider* provider,
-                              const char* user_message, int max_tokens) {
-    if (session == NULL || provider == NULL) {
-        return -1;
-    }
-
+/*
+ * Build, send, and return a streaming request. Handles prompt preparation,
+ * JSON payload construction, callback wiring, credential refresh, and the
+ * HTTP call. Returns a live StreamingContext on success (caller frees) or
+ * NULL on failure.
+ *
+ * sse_user_data_out is caller-owned storage so the SSE user-data struct
+ * lives on the caller's stack frame (it references provider, which also
+ * lives on the caller's stack).
+ */
+static StreamingContext* streaming_send_request(AgentSession* session,
+                                                 LLMProvider* provider,
+                                                 const char* user_message,
+                                                 int max_tokens,
+                                                 StreamingSSEUserData* sse_user_data_out) {
     EnhancedPromptParts parts;
     if (message_dispatcher_prepare_prompt(session, user_message, &parts) != 0) {
-        return -1;
+        return NULL;
     }
 
     SystemPromptParts sys_parts = {
@@ -117,23 +129,21 @@ int streaming_process_message(AgentSession* session, LLMProvider* provider,
 
     if (post_data == NULL) {
         fprintf(stderr, "Error: Failed to build streaming JSON payload\n");
-        return -1;
+        return NULL;
     }
 
-    debug_printf("Streaming POST data: %s\n\n", post_data);
+    LOG_DEBUG("Streaming POST data length: %zu", strlen(post_data));
 
     StreamingContext* ctx = streaming_context_create();
     if (ctx == NULL) {
         free(post_data);
         fprintf(stderr, "Error: Failed to create streaming context\n");
-        return -1;
+        return NULL;
     }
 
-    StreamingSSEUserData sse_user_data = {
-        .ctx = ctx,
-        .provider = provider
-    };
-    ctx->user_data = &sse_user_data;
+    sse_user_data_out->ctx = ctx;
+    sse_user_data_out->provider = provider;
+    ctx->user_data = sse_user_data_out;
 
     ctx->on_text_chunk = streaming_text_callback;
     ctx->on_thinking_chunk = streaming_thinking_callback;
@@ -166,7 +176,7 @@ int streaming_process_message(AgentSession* session, LLMProvider* provider,
         provider->build_headers(provider, session->session_data.config.api_key, hdrs, 8);
     }
 
-    int result = llm_client_send_streaming(
+    int rc = llm_client_send_streaming(
         session->session_data.config.api_url,
         hdrs,
         post_data,
@@ -175,15 +185,33 @@ int streaming_process_message(AgentSession* session, LLMProvider* provider,
 
     free(post_data);
 
-    if (result != 0) {
+    if (rc != 0) {
         status_line_set_idle();
         if (provider->cleanup_stream_state != NULL) {
             provider->cleanup_stream_state(provider);
         }
         streaming_context_free(ctx);
         fprintf(stderr, "Error: Streaming HTTP request failed\n");
+        return NULL;
+    }
+
+    return ctx;
+}
+
+int streaming_process_message(AgentSession* session, LLMProvider* provider,
+                              const char* user_message, int max_tokens) {
+    if (session == NULL || provider == NULL) {
         return -1;
     }
+
+    StreamingSSEUserData sse_user_data;
+    StreamingContext* ctx = streaming_send_request(session, provider, user_message,
+                                                    max_tokens, &sse_user_data);
+    if (ctx == NULL) {
+        return -1;
+    }
+
+    int result = 0;
 
     int input_tokens = ctx->input_tokens;
     int output_tokens = ctx->output_tokens;
@@ -279,4 +307,62 @@ int streaming_process_message(AgentSession* session, LLMProvider* provider,
 
     streaming_context_free(ctx);
     return result;
+}
+
+int streaming_round_trip_execute(AgentSession* session, LLMProvider* provider,
+                                  const char* user_message, int max_tokens,
+                                  LLMRoundTripResult* result) {
+    if (session == NULL || provider == NULL || result == NULL) return -1;
+
+    memset(result, 0, sizeof(*result));
+
+    StreamingSSEUserData sse_user_data;
+    StreamingContext* ctx = streaming_send_request(session, provider, user_message,
+                                                    max_tokens, &sse_user_data);
+    if (ctx == NULL) return -1;
+
+    if (ctx->state == STREAM_STATE_ERROR) {
+        LOG_ERROR("Streaming request failed: %s",
+                  ctx->error_message ? ctx->error_message : "unknown error");
+        status_line_set_idle();
+        streaming_context_free(ctx);
+        return -1;
+    }
+
+    status_line_set_idle();
+
+    /* Fill LLMRoundTripResult from streaming context */
+    result->parsed.prompt_tokens = ctx->input_tokens;
+    result->parsed.completion_tokens = ctx->output_tokens;
+    result->parsed.response_content = ctx->text_content ? strdup(ctx->text_content) : NULL;
+    result->parsed.thinking_content = ctx->thinking_content && ctx->thinking_len > 0
+                                        ? strdup(ctx->thinking_content) : NULL;
+
+    if (ctx->tool_uses.count > (size_t)INT_MAX) {
+        fprintf(stderr, "Error: Too many tool calls (%zu exceeds INT_MAX)\n", ctx->tool_uses.count);
+        free(result->parsed.response_content);
+        free(result->parsed.thinking_content);
+        result->parsed.response_content = NULL;
+        result->parsed.thinking_content = NULL;
+        streaming_context_free(ctx);
+        return -1;
+    }
+    if (ctx->tool_uses.count > 0) {
+        int count = (int)ctx->tool_uses.count;
+        ToolCall* calls = calloc(count, sizeof(ToolCall));
+        if (!calls) {
+            streaming_context_free(ctx);
+            return -1;
+        }
+        for (int i = 0; i < count; i++) {
+            calls[i].id = ctx->tool_uses.data[i].id ? strdup(ctx->tool_uses.data[i].id) : NULL;
+            calls[i].name = ctx->tool_uses.data[i].name ? strdup(ctx->tool_uses.data[i].name) : NULL;
+            calls[i].arguments = ctx->tool_uses.data[i].arguments_json ? strdup(ctx->tool_uses.data[i].arguments_json) : NULL;
+        }
+        result->tool_calls = calls;
+        result->tool_call_count = count;
+    }
+
+    streaming_context_free(ctx);
+    return 0;
 }

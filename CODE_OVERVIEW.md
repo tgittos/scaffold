@@ -13,7 +13,7 @@ Application-specific code that uses the library layer. This is a thin wrapper ar
 
 #### `src/tools/` - Python Tool Integration
 - **`python_tool.c/h`** - Embedded Python interpreter execution
-- **`python_tool_files.c/h`** - Python file-based tool loading system
+- **`python_tool_files.c/h`** - Python file-based tool loading system (supports freeform tool invocation for tools with Match: directive)
 - **`python_extension.c/h`** - Tool extension interface for Python tools integration with lib/
 - **`http_python.c/h`** - Python extension for C HTTP client (`_ralph_http` module: get, post, download)
 - **`verified_file_python.c/h`** - Python extension for TOCTOU-safe file operations (`_ralph_verified_io` module)
@@ -21,16 +21,15 @@ Application-specific code that uses the library layer. This is a thin wrapper ar
 
 ##### Python Default Tools (in `python_defaults/`)
 - **`read_file.py`** - Read file contents with line numbers, returns dict with content/total_lines/range
-- **`write_file.py`** - Write content to file
-- **`append_file.py`** - Append content to file
-- **`file_info.py`** - Get file metadata
+- **`write_file.py`** - Write or append content to file (mode parameter: "write" or "append")
 - **`list_dir.py`** - List directory contents with filtering and ISO timestamps
 - **`search_files.py`** - Search files by content/pattern with optional context lines, matched_files, total_matches_found
-- **`apply_delta.py`** - Apply delta patch operations with optional expected-content verification
+- **`apply_patch.py`** - Apply text patches using Codex-compatible block find-and-replace format; appends "run the relevant tests" hint to success details
 - **`shell.py`** - Shell command execution with timeout
 - **`web_fetch.py`** - Fetch and process web content
-- **`pip_install.py`** - Install pure-Python packages from PyPI (py3-none-any wheels)
-- **`pip_list.py`** - List installed Python packages from site-packages
+- **`pip.py`** - Package management: install pure-Python packages or list installed packages (action parameter: "install" or "list")
+- **`search_history.py`** - Search git history with structured output (operations: log, pickaxe, blame, diff). Gate: file_read
+- **`show_structure.py`** - Analyze code structure without reading full files (operations: outline, imports, hierarchy, exports). Supports 10+ languages. Gate: file_read
 
 ---
 
@@ -50,7 +49,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`tool_orchestration.c/h`** - Tool call deduplication and per-batch tracking
 - **`repl.c/h`** - Read-Eval-Print-Loop for interactive mode with readline, async processing, and periodic supervisor recovery
 - **`async_executor.c/h`** - Non-blocking message processing using background thread with pipe notification; running flag and condition broadcast occur inside mutex to prevent signal loss
-- **`context_enhancement.c/h`** - Split prompt builder: returns `EnhancedPromptParts` with session-stable base prompt and per-request dynamic context (todo state, mode, memories, context retrieval)
+- **`context_enhancement.c/h`** - Split prompt builder: returns `EnhancedPromptParts` with session-stable base prompt and per-request dynamic context (repo snapshot on first turn, todo state, mode, memories, context retrieval). `build_repo_snapshot()` gathers git metadata and directory tree; `build_directory_tree()` produces a depth-limited directory listing
 - **`recap.c/h`** - Conversation recap generation (one-shot LLM calls without history persistence)
 - **`streaming_handler.c/h`** - Application-layer streaming orchestration and provider registry management
 - **`tool_executor.c/h`** - Thin entry point for tool execution workflow (init, initial batch, clear_history support, hand-off)
@@ -147,15 +146,15 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`builtin_tools.c/h`** - Registration of built-in tools
 - **`memory_tool.c/h`** - Persistent semantic memory (remember, recall_memories, forget_memory)
 - **`pdf_tool.c/h`** - PDF processing and vector indexing
-- **`vector_db_tool.c/h`** - Vector database operations (13 tools)
+- **`vector_db_tool.c/h`** - Vector database dispatch tool (single `vector_db` tool with `operation` enum: create_index, delete_index, list_indices, add_vector, update_vector, delete_vector, get_vector, search, add_text, add_chunked_text, add_pdf_document, search_text, search_by_time)
 - **`subagent_tool.c/h`** - Subagent process spawning and management
 - **`subagent_process.c/h`** - Subagent process I/O and lifecycle management
-- **`messaging_tool.c/h`** - Inter-agent messaging (6 tools)
+- **`messaging_tool.c/h`** - Inter-agent messaging dispatch tool (single `messaging` tool with `operation` enum: send_message, check_messages, subscribe_channel, publish_channel, check_channel_messages, get_agent_info)
 - **`todo_manager.c/h`** - Todo data structures and operations
 - **`todo_tool.c/h`** - Todo tool call handler
 - **`todo_display.c/h`** - Todo console visualization
-- **`goap_tools.c/h`** - GOAP goal/action tools for supervisors (10 tools, scaffold mode only): includes `goap_save_plan_document` for persisting plan documents, `goap_get_goal` returns plan_document, `build_work_context()` injects plan_guidance from plan_document
-- **`orchestrator_tool.c/h`** - Orchestrator lifecycle tools: execute_plan, list_goals, goal_status, start/pause/cancel_goal
+- **`goap_tools.c/h`** - GOAP dispatch tool for supervisors (single `goap` tool with `operation` enum: get_goal, list_actions, create_goal, create_actions, update_action, dispatch_action, update_world_state, check_complete, get_action_results, save_plan_document). Includes plan_document persistence and plan_guidance injection via `build_work_context()`
+- **`orchestrator_tool.c/h`** - Orchestrator dispatch tool (single `orchestrator` tool with `operation` enum: execute_plan, list_goals, goal_status, start_goal, pause_goal, cancel_goal)
 - **`mode_tool.c/h`** - LLM-callable switch_mode tool for changing behavioral modes
 - **`tool_cache.c/h`** - Thread-safe tool result caching with file mtime invalidation
 
@@ -190,7 +189,8 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`interrupt.c/h`** - Cooperative Ctrl+C cancellation with signal handling
 - **`common_utils.c/h`** - General utility functions (string ops, JSON extraction)
 - **`json_escape.c/h`** - JSON string escaping utilities
-- **`debug_output.c/h`** - Conditional debug logging with ANSI colors
+- **`log.c/h`** - Leveled, module-tagged structured logging (LOG_ERROR/WARN/INFO/DEBUG with per-module filtering)
+- **`debug_output.c/h`** - JSON summarization helpers (legacy; used by log.c)
 - **`document_chunker.c/h`** - Intelligent text chunking for embeddings
 - **`config.c/h`** - Configuration management with cascading priority (local -> user -> env -> defaults)
 - **`prompt_loader.c/h`** - System prompt loading (core + AGENTS.md)
@@ -204,9 +204,15 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`pdf_extractor.c/h`** - PDF text extraction using PDFio library
 
 #### `lib/plugin/` - Plugin System
-- **`plugin_manager.c/h`** - Plugin discovery (scan `~/.local/scaffold/plugins/`, rejects symlinks via `lstat`), process spawning via fork/pipe with O_CLOEXEC, name validation (rejects duplicates after handshake), crash detection via lazy `waitpid`, 10 MB response limit, schema-only tool registration as `plugin_<name>_<tool>` (execution dispatched by `tool_batch_executor.c`), IPC, and graceful shutdown
+- **`plugin_manager.c/h`** - Plugin discovery (scan `~/.local/scaffold/plugins/`, rejects symlinks via `lstat`), process spawning via fork/pipe with O_CLOEXEC, name validation (rejects duplicates after handshake), crash detection via lazy `waitpid`, 10 MB response limit, schema-only tool registration as `plugin_<name>_<tool>` (execution dispatched by `tool_batch_executor.c`), IPC, and graceful shutdown. `plugin_manager_shutdown_one()` for single-plugin shutdown (used during plugin updates)
 - **`plugin_protocol.c/h`** - JSON-RPC 2.0 message builders (initialize, hook events, tool execute, shutdown) and response parsers (manifest, hook response, tool result)
 - **`hook_dispatcher.c/h`** - Generic callback-driven hook dispatch: each hook provides a context struct, `build_params()`, and `apply_result()` callback; a single `hook_dispatch_generic()` loop handles subscriber ordering, event send/receive, and STOP/SKIP/CONTINUE chain semantics
+
+#### `plugins/` - First-Party Plugins (Cosmopolitan C)
+
+Built to `out/plugins/`. Not embedded in the scaffold binary — users install by copying to `~/.local/scaffold/plugins/`.
+
+- **`plugins/session-transcript/`** - Session transcript plugin. Records user messages, model responses, and tool calls to per-session markdown files. Summarizes large tool arguments (e.g., `apply_patch`). Configurable via `~/.local/scaffold/transcript.conf`
 
 #### `lib/mcp/` - Model Context Protocol
 - **`mcp_client.c/h`** - MCP client implementation and server management
@@ -218,7 +224,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`services.c/h`** - Dependency injection container for service management (message store, vector DB, embeddings, task store, goal/action stores with shared SQLite DAL).
 
 #### `lib/updater/` - Self-Update System
-- **`updater.c/h`** - Self-update via GitHub releases (check for updates, download, apply)
+- **`updater.c/h`** - Self-update via GitHub releases (check for updates, download, apply). `updater_check_plugins()` performs batched plugin update checking against GitHub Releases for all installed plugins
 
 #### `lib/auth/` - OAuth2 Authentication
 - **`openai_login.c/h`** - Login orchestrator: `openai_login()` (PKCE flow with auto-detected headless), `openai_logout()`, `openai_get_codex_credentials()` (token + account ID retrieval), `openai_refresh_credential()` (credential provider callback for session-level refresh), `openai_auth_cleanup()` (persistent store teardown). Persistent module-level store reused across calls for the same db_path
@@ -330,6 +336,7 @@ The test directory mirrors the source structure:
 - **`test_prompt_loader.c`** - Prompt loading tests
 - **`test_config.c`** - Configuration system tests
 - **`test_json_output.c`** - JSON output mode tests
+- **`test_log.c`** - Structured logging system tests (level/module filtering, parsing)
 - **`test_debug_output.c`** - Debug output tests
 - **`test_app_home.c`** - Application home directory management tests
 - **`test_pipe_notifier.c`** - Pipe notifier async notification tests
@@ -365,6 +372,7 @@ The test directory mirrors the source structure:
 
 #### `test/updater/` - Updater Tests
 - **`test_updater.c`** - Self-update system tests
+- **`test_plugin_updater.c`** - Plugin update checking and installation tests
 
 #### `test/orchestrator/` - Orchestrator Tests
 - **`test_orchestrator.c`** - Supervisor process lifecycle tests (12 tests: spawn, alive checks, kill, reap, stale PID cleanup, respawn)
@@ -389,7 +397,7 @@ The test directory mirrors the source structure:
 - **`mock_embeddings_service.c`** - Mock embeddings service for DI
 - **`test/updater/mock_http.c`** - Mock HTTP for updater tests
 - **`test/fixtures/test.jpg`** - Test image fixture for image attachment tests
-- **`test/stubs/`** - Test stubs for isolated unit testing (ralph_stub, services_stub, output_formatter_stub, python_tool_stub, subagent_stub)
+- **`test/stubs/`** - Test stubs for isolated unit testing (ralph_stub, services_stub, output_formatter_stub, python_tool_stub)
 
 ---
 
@@ -404,7 +412,7 @@ The codebase follows a library-first design where all core functionality lives i
 ### 2. Agent Abstraction (lib/agent/)
 The agent module provides a clean lifecycle API:
 - **Agent**: High-level wrapper with mode-based execution (interactive, single-shot, background, worker)
-- **AgentSession**: Aggregates all components (tools, MCP, subagents, approval gates, message polling)
+- **AgentSession**: Aggregates all components (tools, MCP, subagents, approval gates, message polling, first-turn repo context flag)
 - **AgentConfig**: Configuration struct with dependency injection support
 
 ### 3. Multi-Provider LLM System (lib/llm/)

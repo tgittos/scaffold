@@ -1,9 +1,11 @@
+#define LOG_MODULE     LOG_MOD_LLM
+#define LOG_MODULE_STR "llm"
+#include "../util/log.h"
 #include "embeddings.h"
 #include "embedding_provider.h"
 #include "../network/http_client.h"
 #include "util/common_utils.h"
 #include <cJSON.h>
-#include "util/debug_output.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -121,7 +123,7 @@ int embeddings_get_vector(const embeddings_config_t *config, const char *text,
         return -1;
     }
 
-    debug_printf("Embeddings request JSON: %s\n", request_json);
+    LOG_DEBUG("Embeddings request JSON: %s", request_json);
 
     const char *headers[11]; /* +1 for NULL terminator */
     const int max_headers = 10;
@@ -146,12 +148,12 @@ int embeddings_get_vector(const embeddings_config_t *config, const char *text,
     }
 
     if (strstr(response.data, "\"error\"") != NULL) {
-        debug_fprintf(stderr, "API Error: %s\n", response.data);
+        LOG_ERROR("API Error: %s", response.data);
         cleanup_response(&response);
         return -1;
     }
 
-    debug_printf_json("Embeddings response: ", response.data);
+    LOG_JSON(LOG_DEBUG, "Embeddings response: ", response.data);
 
     result = provider->parse_response(provider, response.data, embedding);
     cleanup_response(&response);

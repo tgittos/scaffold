@@ -19,7 +19,7 @@ def _is_traversal_path(path: str) -> bool:
 def search_files(path: str, pattern: str, glob_filter: str = None,
                  recursive: bool = True, case_sensitive: bool = True,
                  max_results: int = 100, context_lines: int = 0) -> dict:
-    """Search for pattern in files.
+    """Search file contents for a regex pattern. Use to find function definitions, usages, strings, or references across a codebase. Supports glob filtering and context lines. For finding files by name, use list_dir with glob_filter instead.
 
     Args:
         path: Path to search (file or directory)

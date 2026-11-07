@@ -9,6 +9,7 @@ int register_vector_db_tool(ToolRegistry *registry);
 /** Returns the singleton vector database, creating it on first call. */
 vector_db_t* get_global_vector_db(void);
 
+int execute_vector_db_dispatch(const ToolCall *tool_call, ToolResult *result);
 int execute_vector_db_create_index_tool_call(const ToolCall *tool_call, ToolResult *result);
 int execute_vector_db_delete_index_tool_call(const ToolCall *tool_call, ToolResult *result);
 int execute_vector_db_list_indices_tool_call(const ToolCall *tool_call, ToolResult *result);

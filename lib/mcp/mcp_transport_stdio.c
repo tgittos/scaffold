@@ -4,8 +4,10 @@
  * Implements MCP communication via a child process's stdin/stdout.
  */
 
+#define LOG_MODULE     LOG_MOD_MCP
+#define LOG_MODULE_STR "mcp"
+#include "../util/log.h"
 #include "mcp_transport.h"
-#include "util/debug_output.h"
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -21,12 +23,12 @@ static int stdio_connect(MCPTransport *transport, const MCPServerConfig *config)
     }
 
     if (config->type != MCP_SERVER_STDIO) {
-        debug_printf("STDIO transport: wrong server type\n");
+        LOG_ERROR("STDIO transport: wrong server type");
         return -1;
     }
 
     if (!config->command) {
-        debug_printf("STDIO transport: no command specified\n");
+        LOG_ERROR("STDIO transport: no command specified");
         return -1;
     }
 
@@ -38,12 +40,12 @@ static int stdio_connect(MCPTransport *transport, const MCPServerConfig *config)
     int stdin_pipe[2], stdout_pipe[2];
 
     if (pipe(stdin_pipe) == -1) {
-        debug_printf("STDIO transport: failed to create stdin pipe: %s\n", strerror(errno));
+        LOG_ERROR("STDIO transport: failed to create stdin pipe: %s", strerror(errno));
         return -1;
     }
 
     if (pipe(stdout_pipe) == -1) {
-        debug_printf("STDIO transport: failed to create stdout pipe: %s\n", strerror(errno));
+        LOG_ERROR("STDIO transport: failed to create stdout pipe: %s", strerror(errno));
         close(stdin_pipe[0]);
         close(stdin_pipe[1]);
         return -1;
@@ -51,7 +53,7 @@ static int stdio_connect(MCPTransport *transport, const MCPServerConfig *config)
 
     pid_t pid = fork();
     if (pid == -1) {
-        debug_printf("STDIO transport: failed to fork: %s\n", strerror(errno));
+        LOG_ERROR("STDIO transport: failed to fork: %s", strerror(errno));
         close(stdin_pipe[0]);
         close(stdin_pipe[1]);
         close(stdout_pipe[0]);
@@ -88,7 +90,7 @@ static int stdio_connect(MCPTransport *transport, const MCPServerConfig *config)
         argv[config->args.count + 1] = NULL;
 
         execv(config->command, argv);
-        debug_printf("STDIO transport: execv failed: %s\n", strerror(errno));
+        LOG_ERROR("STDIO transport: execv failed: %s", strerror(errno));
         _exit(1);
     }
 
@@ -107,7 +109,7 @@ static int stdio_connect(MCPTransport *transport, const MCPServerConfig *config)
     transport->config = config;
     transport->connected = 1;
 
-    debug_printf("STDIO transport: started process %d for %s\n", pid, config->name);
+    LOG_INFO("STDIO transport: started process %d for %s", pid, config->name);
     return 0;
 }
 
@@ -140,7 +142,7 @@ static int stdio_disconnect(MCPTransport *transport) {
 
     transport->connected = 0;
 
-    debug_printf("STDIO transport: disconnected\n");
+    LOG_INFO("STDIO transport: disconnected");
     return 0;
 }
 
@@ -151,7 +153,7 @@ static int stdio_send_request(MCPTransport *transport, const char *request, char
 
     StdioTransportData *data = transport->data;
     if (!data || data->stdin_fd <= 0 || data->stdout_fd <= 0) {
-        debug_printf("STDIO transport: not connected\n");
+        LOG_ERROR("STDIO transport: not connected");
         return -1;
     }
 
@@ -160,12 +162,12 @@ static int stdio_send_request(MCPTransport *transport, const char *request, char
     size_t request_len = strlen(request);
     ssize_t written = write(data->stdin_fd, request, request_len);
     if (written != (ssize_t)request_len) {
-        debug_printf("STDIO transport: failed to write request\n");
+        LOG_ERROR("STDIO transport: failed to write request");
         return -1;
     }
 
     if (write(data->stdin_fd, "\n", 1) != 1) {
-        debug_printf("STDIO transport: failed to write newline\n");
+        LOG_ERROR("STDIO transport: failed to write newline");
         return -1;
     }
 
@@ -179,7 +181,7 @@ static int stdio_send_request(MCPTransport *transport, const char *request, char
     size_t buf_used = 0;
     char *buffer = malloc(buf_size);
     if (!buffer) {
-        debug_printf("STDIO transport: malloc failed\n");
+        LOG_ERROR("STDIO transport: malloc failed");
         return -1;
     }
 
@@ -195,7 +197,7 @@ static int stdio_send_request(MCPTransport *transport, const char *request, char
             if (errno == EINTR) {
                 continue;  /* Interrupted, retry */
             }
-            debug_printf("STDIO transport: select failed: %s\n", strerror(errno));
+            LOG_ERROR("STDIO transport: select failed: %s", strerror(errno));
             free(buffer);
             return -1;
         }
@@ -212,7 +214,7 @@ static int stdio_send_request(MCPTransport *transport, const char *request, char
             size_t new_size = buf_size * 2;
             char *new_buf = realloc(buffer, new_size);
             if (!new_buf) {
-                debug_printf("STDIO transport: realloc failed\n");
+                LOG_ERROR("STDIO transport: realloc failed");
                 free(buffer);
                 return -1;
             }
@@ -241,7 +243,7 @@ static int stdio_send_request(MCPTransport *transport, const char *request, char
             if (errno == EINTR) {
                 continue;  /* Interrupted, retry */
             }
-            debug_printf("STDIO transport: read failed: %s\n", strerror(errno));
+            LOG_ERROR("STDIO transport: read failed: %s", strerror(errno));
             free(buffer);
             return -1;
         }
@@ -250,13 +252,13 @@ static int stdio_send_request(MCPTransport *transport, const char *request, char
         if (got_data) {
             break;  /* Have data before EOF */
         }
-        debug_printf("STDIO transport: EOF from server\n");
+        LOG_ERROR("STDIO transport: EOF from server");
         free(buffer);
         return -1;
     }
 
     if (buf_used == 0) {
-        debug_printf("STDIO transport: timeout waiting for response\n");
+        LOG_ERROR("STDIO transport: timeout waiting for response");
         free(buffer);
         return -1;
     }

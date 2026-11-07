@@ -1,10 +1,12 @@
+#define LOG_MODULE     LOG_MOD_AGENT
+#define LOG_MODULE_STR "agent"
+#include "../util/log.h"
 #include "message_processor.h"
 #include "conversation_state.h"
 #include "tool_executor.h"
 #include "../tools/tools_system.h"
 #include "../ui/output_formatter.h"
 #include "../ui/json_output.h"
-#include "../util/debug_output.h"
 #include "../plugin/hook_dispatcher.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,7 +31,7 @@ int message_processor_handle_response(AgentSession* session,
     /* Fallback: generic parser for models without a registry-level parser */
     if (call_count == 0 && message_content != NULL) {
         if (parse_tool_calls(message_content, &tool_calls, &call_count) == 0 && call_count > 0) {
-            debug_printf("Found %d tool calls via generic parser fallback\n", call_count);
+            LOG_DEBUG("Found %d tool calls via generic parser fallback", call_count);
         }
     }
 
@@ -60,7 +62,7 @@ int message_processor_handle_response(AgentSession* session,
 
     int rc;
     if (call_count > 0) {
-        debug_printf("Found %d tool calls in response\n", call_count);
+        LOG_DEBUG("Found %d tool calls in response", call_count);
 
         if (session->session_data.config.json_output_mode) {
             json_output_assistant_tool_calls_buffered(tool_calls, call_count,

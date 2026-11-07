@@ -174,7 +174,8 @@ int register_pdf_tool(ToolRegistry *registry) {
     }
 
     int result = register_tool(registry, "pdf_extract_text",
-                              "Extract text content from a PDF file",
+                              "Extract text from a PDF file and index it for semantic search. "
+                              "Use start_page/end_page for large PDFs to extract specific sections.",
                               parameters, 3, execute_pdf_extract_text_tool_call);
 
     for (int i = 0; i < 3; i++) {

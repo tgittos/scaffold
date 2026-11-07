@@ -36,6 +36,11 @@ test/unity/.aarch64/
 scaffold.config.json
 scaffold.config.json.backup
 
+# Python
+__pycache__/
+*.pyc
+.venv/
+
 # Random files
 .DS_Store
 

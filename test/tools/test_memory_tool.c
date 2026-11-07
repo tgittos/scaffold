@@ -143,19 +143,24 @@ void test_register_memory_tools(void) {
     for (size_t i = 0; i < registry.functions.count; i++) {
         if (strcmp(registry.functions.data[i].name, "remember") == 0) {
             found_remember = 1;
-            TEST_ASSERT_EQUAL_STRING("Store important information in long-term memory for future reference",
+            TEST_ASSERT_EQUAL_STRING("Store information in long-term memory for semantic retrieval. "
+                                   "Use for key facts, user preferences, project conventions, or corrections. "
+                                   "Do not store transient or easily re-derivable information.",
                                    registry.functions.data[i].description);
             TEST_ASSERT_EQUAL_INT(4, registry.functions.data[i].parameter_count);
         }
         if (strcmp(registry.functions.data[i].name, "recall_memories") == 0) {
             found_recall = 1;
-            TEST_ASSERT_EQUAL_STRING("Search and retrieve relevant memories based on a query",
+            TEST_ASSERT_EQUAL_STRING("Search long-term memory using semantic similarity. "
+                                   "Returns the most relevant stored memories for a natural-language query. "
+                                   "Use at session start to recall user preferences or context from prior conversations.",
                                    registry.functions.data[i].description);
             TEST_ASSERT_EQUAL_INT(2, registry.functions.data[i].parameter_count);
         }
         if (strcmp(registry.functions.data[i].name, "forget_memory") == 0) {
             found_forget = 1;
-            TEST_ASSERT_EQUAL_STRING("Delete a specific memory from long-term storage by its ID",
+            TEST_ASSERT_EQUAL_STRING("Delete a memory from long-term storage by ID. "
+                                   "Use recall_memories first to find and confirm the ID before deleting.",
                                    registry.functions.data[i].description);
             TEST_ASSERT_EQUAL_INT(1, registry.functions.data[i].parameter_count);
         }

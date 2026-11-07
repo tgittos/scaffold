@@ -19,7 +19,7 @@ def _is_traversal_path(path: str) -> bool:
 
 def shell(command: str, working_dir: str = None, timeout: int = 30,
           capture_stderr: bool = True) -> dict:
-    """Execute shell command.
+    """Execute a shell command and return stdout/stderr. Use for builds, tests, git operations, and system tasks. Prefer dedicated tools (read_file, search_files, apply_patch) over shell equivalents. Avoid interactive commands (vim, less) — they will hang.
 
     Args:
         command: Shell command to execute
@@ -95,6 +95,13 @@ def shell(command: str, working_dir: str = None, timeout: int = 30,
     start = time.time()
     timed_out = False
 
+    # Build a clean environment for child processes.
+    # Scaffold's embedded Python sets PYTHONHOME=/zip which breaks any
+    # system Python invoked by the agent (e.g. `python -m pytest`).
+    import os as _os
+    clean_env = {k: v for k, v in _os.environ.items()
+                 if k not in ("PYTHONHOME", "PYTHONDONTWRITEBYTECODE")}
+
     try:
         result = subprocess.run(
             command,
@@ -102,7 +109,8 @@ def shell(command: str, working_dir: str = None, timeout: int = 30,
             cwd=working_dir,
             capture_output=True,
             text=True,
-            timeout=timeout
+            timeout=timeout,
+            env=clean_env,
         )
 
         stdout = result.stdout
@@ -128,6 +136,16 @@ def shell(command: str, working_dir: str = None, timeout: int = 30,
         stdout = stdout[:max_output] + '\n[Output truncated at 1MB]'
     if len(stderr) > max_output:
         stderr = stderr[:max_output] + '\n[Output truncated at 1MB]'
+
+    # Hint when commands fail due to missing dependencies
+    if exit_code != 0:
+        combined = stdout + stderr
+        if 'ModuleNotFoundError' in combined or 'No module named' in combined:
+            stderr += "\n[Hint: A Python module is missing. Install it (e.g. 'pip install <name>' or 'pip install -e .') then retry.]"
+        elif 'Cannot find module' in combined and 'node' in command.lower():
+            stderr += "\n[Hint: A Node.js module is missing. Install it (e.g. 'npm install' or 'npm install <name>') then retry.]"
+        elif 'command not found' in combined:
+            stderr += "\n[Hint: Command not found. Install it (e.g. 'apt-get install -y <name>', 'pip install <name>', or 'npm install -g <name>') then retry.]"
 
     return {
         "stdout": stdout,

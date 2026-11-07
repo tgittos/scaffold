@@ -1,0 +1,91 @@
+# Reusable build-and-test workflow
+# Called by ci.yml and release.yml to ensure identical build/test steps.
+
+name: Build and Test
+
+on:
+  workflow_call:
+    inputs:
+      build_command:
+        description: 'Build command to run inside the container'
+        required: false
+        type: string
+        default: './scripts/build.sh && ./scripts/run_tests.sh -v'
+      upload_artifact:
+        description: 'Whether to upload the scaffold binary as an artifact'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  UV_VERSION: "0.5.14"
+
+jobs:
+  build:
+    name: Build and Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build devcontainer image
+        uses: docker/build-push-action@v5
+        with:
+          context: .devcontainer
+          load: true
+          tags: scaffold-dev:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps/
+            build/
+            python/build/
+          key: deps-${{ hashFiles('mk/config.mk', 'mk/deps.mk', 'python/Makefile') }}
+          restore-keys: |
+            deps-
+
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/bin/uv
+          key: uv-${{ env.UV_VERSION }}-linux
+
+      - name: Install uv
+        run: |
+          if [ ! -f "$HOME/.local/bin/uv" ]; then
+            curl -LsSf https://astral.sh/uv/${{ env.UV_VERSION }}/install.sh | sh
+          fi
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Build and test
+        run: |
+          docker run --rm --privileged \
+            -v ${{ github.workspace }}:/workspaces/ralph \
+            -v $HOME/.local/bin:/uv-bin:ro \
+            -w /workspaces/ralph \
+            -e PATH="/uv-bin:/opt/cosmos/bin:$PATH" \
+            scaffold-dev:latest \
+            bash -c "${{ inputs.build_command }}"
+
+      - name: Fix permissions for cache
+        if: always()
+        run: sudo chown -R $(id -u):$(id -g) deps/ build/ out/ python/build/ 2>/dev/null || true
+
+      - name: Upload binary
+        if: inputs.upload_artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: scaffold
+          path: out/scaffold
+          if-no-files-found: error

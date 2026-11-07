@@ -71,7 +71,7 @@ void test_help_excludes_internal_flags(void) {
     // Internal flags should NOT be documented in user help
     TEST_ASSERT_NULL(strstr(output, "--subagent"));
     TEST_ASSERT_NULL(strstr(output, "--task"));
-    TEST_ASSERT_NULL(strstr(output, "--context"));
+    TEST_ASSERT_NULL(strstr(output, "--context "));
     TEST_ASSERT_NULL(strstr(output, "--allow"));
     TEST_ASSERT_NULL(strstr(output, "--worker"));
     TEST_ASSERT_NULL(strstr(output, "--queue"));

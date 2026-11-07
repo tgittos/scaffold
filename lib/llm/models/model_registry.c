@@ -26,6 +26,7 @@ static const ModelDataEntry MODEL_DATA[] = {
     { "gpt",      "openai",    128000, 0, NULL,      NULL },
     { "o1",       "openai",    200000, 0, NULL,      NULL },
     { "o4",       "openai",    200000, 0, NULL,      NULL },
+    { "gemma",    "openai",    131072, 1, "<think>", "</think>" },
     { "qwen",     "openai",     32768, 1, "<think>", "</think>" },
     { "deepseek", "openai",    128000, 1, "<think>", "</think>" },
     { "claude",   "anthropic", 200000, 0, NULL,      NULL },

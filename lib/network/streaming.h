@@ -90,6 +90,7 @@ void streaming_emit_text(StreamingContext* ctx, const char* text, size_t len);
 void streaming_emit_thinking(StreamingContext* ctx, const char* text, size_t len);
 void streaming_emit_tool_start(StreamingContext* ctx, const char* id, const char* name);
 void streaming_emit_tool_delta(StreamingContext* ctx, const char* id, const char* json_delta, size_t len);
+void streaming_replace_tool_arguments(StreamingContext* ctx, const char* id, const char* arguments);
 void streaming_emit_complete(StreamingContext* ctx, const char* stop_reason);
 void streaming_emit_error(StreamingContext* ctx, const char* error);
 

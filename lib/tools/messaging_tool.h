@@ -14,6 +14,7 @@ int execute_subscribe_channel_tool_call(const ToolCall *tool_call, ToolResult *r
 int execute_publish_channel_tool_call(const ToolCall *tool_call, ToolResult *result);
 int execute_check_channel_messages_tool_call(const ToolCall *tool_call, ToolResult *result);
 int execute_get_agent_info_tool_call(const ToolCall *tool_call, ToolResult *result);
+int execute_messaging_dispatch(const ToolCall *tool_call, ToolResult *result);
 
 void messaging_tool_set_services(Services* services);
 void messaging_tool_set_agent_id(const char* agent_id);

@@ -1,8 +1,11 @@
+#define LOG_MODULE     LOG_MOD_TOOL
+#define LOG_MODULE_STR "tool"
+#include "../util/log.h"
+
 #include "tool_batch_executor.h"
 #include "../util/interrupt.h"
 #include "../ui/output_formatter.h"
 #include "../ui/json_output.h"
-#include "../util/debug_output.h"
 #include "../mcp/mcp_client.h"
 #include "../ui/spinner.h"
 #include "../policy/protected_files.h"
@@ -77,17 +80,17 @@ static void execute_single_tool(ToolBatchContext* ctx, ToolCall* call,
 
     if (entry->is_mcp) {
         if (mcp_client_execute_tool(&ctx->session->mcp_client, call, result) == 0) {
-            debug_printf("Executed tool: %s (ID: %s)\n", call->name, call->id);
+            LOG_INFO("Executed tool: %s (id=%s)", call->name, call->id);
         }
     } else if (entry->is_plugin) {
         if (plugin_manager_execute_tool(&ctx->session->plugin_manager, call, result) == 0) {
-            debug_printf("Executed tool: %s (ID: %s)\n", call->name, call->id);
+            LOG_INFO("Executed tool: %s (id=%s)", call->name, call->id);
         }
     } else if (execute_tool_call(&ctx->session->tools, call, result) != 0) {
-        debug_printf("Warning: Failed to execute tool call %s\n", call->name);
+        LOG_ERROR("Failed to execute tool call %s", call->name);
         fill_error_result(result, call->id, "Tool execution failed");
     } else {
-        debug_printf("Executed tool: %s (ID: %s)\n", call->name, call->id);
+        LOG_INFO("Executed tool: %s (id=%s)", call->name, call->id);
     }
 
     verified_file_context_clear();
@@ -139,13 +142,13 @@ int tool_batch_execute(ToolBatchContext* ctx,
 
         if (compact) {
             if (tool_orchestration_is_duplicate(ctx->orchestration, calls[i].id)) {
-                debug_printf("Skipping already executed tool: %s (ID: %s)\n",
-                           calls[i].name, calls[i].id);
+                LOG_DEBUG("Skipping already executed tool: %s (id=%s)",
+                          calls[i].name, calls[i].id);
                 continue;
             }
             if (tool_orchestration_mark_executed(ctx->orchestration, calls[i].id) != 0) {
-                debug_printf("Warning: Failed to track tool call ID %s, skipping execution\n",
-                           calls[i].id);
+                LOG_WARN("Failed to track tool call ID %s, skipping execution",
+                         calls[i].id);
                 continue;
             }
             call_indices[count] = i;
@@ -154,7 +157,7 @@ int tool_batch_execute(ToolBatchContext* ctx,
         int slot = compact ? count : i;
 
         if (!tool_orchestration_can_spawn_subagent(ctx->orchestration, calls[i].name)) {
-            debug_printf("Skipping duplicate subagent call %d (ID: %s)\n", i, calls[i].id);
+            LOG_DEBUG("Skipping duplicate subagent call %d (id=%s)", i, calls[i].id);
             fill_error_result(&results[slot], calls[i].id,
                               "{\"error\": \"duplicate_subagent\", \"message\": "
                               "\"Only one subagent can be spawned per turn. "
@@ -169,7 +172,7 @@ int tool_batch_execute(ToolBatchContext* ctx,
             count++;
             continue;
         } else if (strcmp(calls[i].name, "subagent") == 0) {
-            debug_printf("First subagent call (ID: %s)\n", calls[i].id);
+            LOG_DEBUG("First subagent call (id=%s)", calls[i].id);
         }
 
         ApprovedPath out_path;
@@ -180,7 +183,7 @@ int tool_batch_execute(ToolBatchContext* ctx,
         if (approval == -2) {
             free_approved_path(&out_path);
             status = -1;
-            debug_printf("User aborted tool execution at tool %d of %d\n", i + 1, call_count);
+            LOG_WARN("User aborted tool execution at tool %d of %d", i + 1, call_count);
             fill_error_result(&results[slot], calls[i].id,
                               "{\"error\": \"aborted\", \"message\": \"Operation aborted by user\"}");
             display_streaming_tool_result(calls[i].id, calls[i].name,
@@ -197,7 +200,7 @@ int tool_batch_execute(ToolBatchContext* ctx,
         }
         if (approval == -1) {
             free_approved_path(&out_path);
-            debug_printf("Tool %s blocked by approval gate\n", calls[i].name);
+            LOG_INFO("Tool %s blocked by approval gate", calls[i].name);
             if (json_mode) {
                 json_output_tool_result(calls[i].id, results[slot].result,
                                         !results[slot].success);
@@ -255,8 +258,8 @@ int tool_batch_execute(ToolBatchContext* ctx,
     }
 
     int use_parallel = (approved_count >= 2 && all_thread_safe);
-    debug_printf("Batch: %d approved tools, all_thread_safe=%d, parallel=%d\n",
-                 approved_count, all_thread_safe, use_parallel);
+    LOG_DEBUG("Batch: %d approved tools, all_thread_safe=%d, parallel=%d",
+              approved_count, all_thread_safe, use_parallel);
 
     if (approved_count == 1) {
         PreScreenEntry* e = &approved[0];
@@ -296,8 +299,8 @@ int tool_batch_execute(ToolBatchContext* ctx,
                     .entry = e
                 };
                 if (pthread_create(&threads[k], NULL, worker_thread, &args[k]) != 0) {
-                    debug_printf("Failed to create thread for tool %s, executing inline\n",
-                               calls[e->call_index].name);
+                    LOG_WARN("Failed to create thread for tool %s, executing inline",
+                             calls[e->call_index].name);
                     execute_single_tool(ctx, &calls[e->call_index], &results[e->slot], e);
                 } else {
                     created[k] = 1;

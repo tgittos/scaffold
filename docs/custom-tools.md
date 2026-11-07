@@ -52,7 +52,7 @@ These are extracted to `~/.local/scaffold/tools/` on first run:
 | `file_info` | Get file metadata (size, permissions, timestamps) |
 | `list_dir` | List directory contents with filtering |
 | `search_files` | Search files by content or pattern |
-| `apply_delta` | Apply unified diff patches |
+| `apply_patch` | Apply text patches to files |
 | `shell` | Execute shell commands with timeout |
 | `web_fetch` | Fetch and process web content |
 | `pip_install` | Install pure-Python packages from PyPI |

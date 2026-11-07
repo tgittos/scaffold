@@ -1,7 +1,9 @@
+#define LOG_MODULE     LOG_MOD_TOOL
+#define LOG_MODULE_STR "tool"
+#include "../../lib/util/log.h"
 #include "python_tool_files.h"
 #include "python_tool.h"
 #include "util/app_home.h"
-#include "util/debug_output.h"
 #include <Python.h>
 #include <cJSON.h>
 #include <stdio.h>
@@ -20,15 +22,14 @@ static int tool_files_initialized = 0;
 static const char *DEFAULT_TOOL_NAMES[] = {
     "read_file",
     "write_file",
-    "append_file",
     "list_dir",
     "search_files",
-    "file_info",
-    "apply_delta",
+    "apply_patch",
     "shell",
     "web_fetch",
-    "pip_install",
-    "pip_list",
+    "pip",
+    "search_history",
+    "show_structure",
     NULL
 };
 
@@ -140,6 +141,69 @@ static int extract_default_tools(const char *tools_dir) {
         }
 
         free(content);
+    }
+
+    // Clean up stale tool files: if a .py file in the tools dir is NOT in
+    // DEFAULT_TOOL_NAMES but matches its embedded /zip/ counterpart exactly,
+    // it's a leftover from a previous version — delete it.
+    DIR *cleanup_dir = opendir(tools_dir);
+    if (cleanup_dir != NULL) {
+        struct dirent *entry;
+        while ((entry = readdir(cleanup_dir)) != NULL) {
+            if (entry->d_name[0] == '.') continue;
+            size_t name_len = strlen(entry->d_name);
+            if (name_len < 4 || strcmp(entry->d_name + name_len - 3, ".py") != 0) continue;
+
+            // Extract base name (without .py)
+            char base_name[256];
+            strncpy(base_name, entry->d_name, sizeof(base_name) - 1);
+            base_name[sizeof(base_name) - 1] = '\0';
+            if (name_len - 3 < sizeof(base_name)) {
+                base_name[name_len - 3] = '\0';
+            }
+
+            // Check if this tool is in DEFAULT_TOOL_NAMES
+            int is_current = 0;
+            for (int j = 0; DEFAULT_TOOL_NAMES[j] != NULL; j++) {
+                if (strcmp(base_name, DEFAULT_TOOL_NAMES[j]) == 0) {
+                    is_current = 1;
+                    break;
+                }
+            }
+            if (is_current) continue;
+
+            // Not a current tool — check if it matches the embedded version
+            char *embedded_content = read_embedded_file(entry->d_name);
+            if (embedded_content == NULL) continue;  // No embedded version, user-created tool
+
+            char dest_path[512];
+            snprintf(dest_path, sizeof(dest_path), "%s/%s", tools_dir, entry->d_name);
+
+            FILE *f = fopen(dest_path, "r");
+            if (f != NULL) {
+                fseek(f, 0, SEEK_END);
+                long size = ftell(f);
+                fseek(f, 0, SEEK_SET);
+
+                if (size > 0 && size <= 1024 * 1024) {
+                    char *disk_content = malloc(size + 1);
+                    if (disk_content != NULL) {
+                        size_t read_bytes = fread(disk_content, 1, size, f);
+                        disk_content[read_bytes] = '\0';
+                        if (strcmp(disk_content, embedded_content) == 0) {
+                            // Exact match — safe to remove stale tool
+                            fclose(f);
+                            f = NULL;
+                            unlink(dest_path);
+                        }
+                        free(disk_content);
+                    }
+                }
+                if (f != NULL) fclose(f);
+            }
+            free(embedded_content);
+        }
+        closedir(cleanup_dir);
     }
 
     return extracted;
@@ -276,6 +340,12 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
         "                p['required'] = False\n"
         "            # Use parsed docstring description or fall back to param name\n"
         "            p['description'] = arg_descriptions.get(name, name)\n"
+        "            # Check for {PARAM}_ITEMS_SCHEMA constant for array item schemas\n"
+        "            if p['type'] == 'array':\n"
+        "                schema_var = name.upper() + '_ITEMS_SCHEMA'\n"
+        "                schema_val = globals().get(schema_var)\n"
+        "                if schema_val and isinstance(schema_val, dict):\n"
+        "                    p['items_schema'] = json.dumps(schema_val)\n"
         "            params.append(p)\n"
         "        return json.dumps({\n"
         "            'name': func_name,\n"
@@ -383,6 +453,7 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
                 cJSON *p_type = cJSON_GetObjectItem(param, "type");
                 cJSON *p_desc = cJSON_GetObjectItem(param, "description");
                 cJSON *p_req = cJSON_GetObjectItem(param, "required");
+                cJSON *p_items = cJSON_GetObjectItem(param, "items_schema");
 
                 if (cJSON_IsString(p_name)) {
                     tool_def->parameters[i].name = strdup(p_name->valuestring);
@@ -396,6 +467,10 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
                 tool_def->parameters[i].required = cJSON_IsTrue(p_req) ? 1 : 0;
                 tool_def->parameters[i].enum_values = NULL;
                 tool_def->parameters[i].enum_count = 0;
+                tool_def->parameters[i].items_schema = NULL;
+                if (cJSON_IsString(p_items) && p_items->valuestring != NULL) {
+                    tool_def->parameters[i].items_schema = strdup(p_items->valuestring);
+                }
             }
         }
     }
@@ -429,6 +504,7 @@ int python_load_tool_files(void) {
                     free(tool->parameters[j].name);
                     free(tool->parameters[j].type);
                     free(tool->parameters[j].description);
+                    free(tool->parameters[j].items_schema);
                 }
                 free(tool->parameters);
             }
@@ -557,6 +633,7 @@ int python_register_tool_schemas(ToolRegistry *registry) {
                 params[j].required = tool->parameters[j].required;
                 params[j].enum_values = NULL;
                 params[j].enum_count = 0;
+                params[j].items_schema = tool->parameters[j].items_schema ? strdup(tool->parameters[j].items_schema) : NULL;
             }
         }
 
@@ -569,6 +646,7 @@ int python_register_tool_schemas(ToolRegistry *registry) {
                 free(params[j].name);
                 free(params[j].type);
                 free(params[j].description);
+                free(params[j].items_schema);
             }
             free(params);
         }
@@ -597,14 +675,35 @@ int execute_python_file_tool_call(const ToolCall *tool_call, ToolResult *result)
         return 0;
     }
 
-    cJSON *args = cJSON_Parse(tool_call->arguments);
+    // Freeform tool support: if the tool has a match_arg and arguments is not
+    // JSON (doesn't start with '{'), treat the raw arguments string as the
+    // value of the match_arg parameter, bypassing JSON parsing.  This is how
+    // Codex models send apply_patch — raw patch text without JSON wrapping.
+    const char *match_arg = python_tool_get_match_arg(tool_call->name);
+    int freeform = (match_arg != NULL && tool_call->arguments != NULL
+                    && tool_call->arguments[0] != '\0'
+                    && tool_call->arguments[0] != '{');
+
+    cJSON *args = NULL;
+    if (freeform) {
+        // Synthesize a JSON object with the match_arg as key
+        args = cJSON_CreateObject();
+        if (args != NULL) {
+            cJSON_AddStringToObject(args, match_arg, tool_call->arguments);
+        }
+    } else {
+        args = cJSON_Parse(tool_call->arguments);
+    }
+
     if (args == NULL) {
-        debug_printf("[DEBUG] Failed to parse arguments for %s\n", tool_call->name);
-        debug_printf("[DEBUG] Arguments string: '%s'\n",
-                     tool_call->arguments ? tool_call->arguments : "(NULL)");
-        const char *error_ptr = cJSON_GetErrorPtr();
-        debug_printf("[DEBUG] cJSON error near: '%s'\n",
-                     error_ptr ? error_ptr : "(unknown)");
+        LOG_DEBUG("Failed to parse arguments for %s", tool_call->name);
+        LOG_DEBUG("Arguments string: '%s'",
+                  tool_call->arguments ? tool_call->arguments : "(NULL)");
+        if (!freeform) {
+            const char *error_ptr = cJSON_GetErrorPtr();
+            LOG_DEBUG("cJSON error near: '%s'",
+                      error_ptr ? error_ptr : "(unknown)");
+        }
 
         result->result = strdup("{\"error\": \"Failed to parse arguments\", \"success\": false}");
         result->success = 0;
@@ -887,6 +986,7 @@ void python_cleanup_tool_files(void) {
                     free(tool->parameters[j].name);
                     free(tool->parameters[j].type);
                     free(tool->parameters[j].description);
+                    free(tool->parameters[j].items_schema);
                 }
                 free(tool->parameters);
             }

@@ -1,3 +1,6 @@
+#define LOG_MODULE     LOG_MOD_TOOL
+#define LOG_MODULE_STR "tool"
+#include "../util/log.h"
 /*
  * subagent_process.c - Subagent Process I/O and Lifecycle
  *
@@ -9,7 +12,6 @@
 #include "messaging_tool.h"
 #include "../ipc/message_store.h"
 #include "../services/services.h"
-#include "../util/debug_output.h"
 #include "../util/executable_path.h"
 
 #include <cJSON.h>
@@ -280,21 +282,21 @@ void subagent_notify_parent(const Subagent* sub, Services *services) {
 
     char* parent_id = messaging_tool_get_agent_id();
     if (parent_id == NULL || parent_id[0] == '\0') {
-        debug_printf("subagent_notify_parent: no parent agent ID set, skipping notification\n");
+        LOG_DEBUG("subagent_notify_parent: no parent agent ID set, skipping notification");
         free(parent_id);
         return;
     }
 
     message_store_t* store = services_get_message_store(services);
     if (store == NULL) {
-        debug_printf("subagent_notify_parent: message store unavailable\n");
+        LOG_WARN("subagent_notify_parent: message store unavailable");
         free(parent_id);
         return;
     }
 
     cJSON* msg = cJSON_CreateObject();
     if (msg == NULL) {
-        debug_printf("subagent_notify_parent: failed to create JSON object\n");
+        LOG_ERROR("subagent_notify_parent: failed to create JSON object");
         free(parent_id);
         return;
     }
@@ -325,7 +327,7 @@ void subagent_notify_parent(const Subagent* sub, Services *services) {
     cJSON_Delete(msg);
 
     if (json_str == NULL) {
-        debug_printf("subagent_notify_parent: failed to serialize JSON\n");
+        LOG_ERROR("subagent_notify_parent: failed to serialize JSON");
         free(parent_id);
         return;
     }
@@ -333,9 +335,9 @@ void subagent_notify_parent(const Subagent* sub, Services *services) {
     char msg_id[40];
     int result = message_send_direct(store, sub->id, parent_id, json_str, 0, msg_id);
     if (result != 0) {
-        debug_printf("subagent_notify_parent: failed to send message to parent\n");
+        LOG_ERROR("subagent_notify_parent: failed to send message to parent");
     } else {
-        debug_printf("subagent_notify_parent: sent completion message %s to parent %s\n",
+        LOG_INFO("subagent_notify_parent: sent completion message %s to parent %s",
                      msg_id, parent_id);
     }
     free(json_str);

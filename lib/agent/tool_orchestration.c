@@ -1,24 +1,24 @@
+#define LOG_MODULE     LOG_MOD_AGENT
+#define LOG_MODULE_STR "agent"
+#include "../util/log.h"
 #include "tool_orchestration.h"
 #include "../policy/protected_files.h"
 #include "../policy/tool_args.h"
 #include "../policy/verified_file_context.h"
 #include "../policy/pattern_generator.h"
-#include "../util/debug_output.h"
 #include <stdlib.h>
 #include <string.h>
 
 static int is_file_write_tool(const char *tool_name) {
     if (tool_name == NULL) return 0;
     return (strcmp(tool_name, "write_file") == 0 ||
-            strcmp(tool_name, "append_file") == 0 ||
-            strcmp(tool_name, "apply_delta") == 0);
+            strcmp(tool_name, "apply_patch") == 0);
 }
 
 static int is_file_tool(const char *tool_name) {
     if (tool_name == NULL) return 0;
     return (strcmp(tool_name, "write_file") == 0 ||
-            strcmp(tool_name, "append_file") == 0 ||
-            strcmp(tool_name, "apply_delta") == 0 ||
+            strcmp(tool_name, "apply_patch") == 0 ||
             strcmp(tool_name, "read_file") == 0);
 }
 
@@ -131,7 +131,7 @@ int tool_orchestration_check_approval(ToolOrchestrationContext* ctx,
             return -2;
     }
 
-    debug_printf("Warning: Unhandled approval result %d, defaulting to allow\n", approval);
+    LOG_WARN("Unhandled approval result %d, defaulting to allow", approval);
     free_approved_path(&approved_path);
     return 0;
 }

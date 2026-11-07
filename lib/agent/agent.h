@@ -20,6 +20,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 /* Session types from lib/ */
 #include "session.h"
@@ -67,8 +68,17 @@ typedef struct AgentConfig {
     /** Execution mode */
     AgentMode mode;
 
-    /** Enable debug output */
+    /** Enable debug output (legacy --debug flag) */
     bool debug;
+
+    /** Log level (0=error, 1=warn, 2=info, 3=debug; -1=not set) */
+    int log_level;
+
+    /** Log module bitmask (LOG_MOD_ALL if not specified) */
+    uint32_t log_modules;
+
+    /** Enable CURLOPT_VERBOSE for HTTP body logging */
+    bool log_http_body;
 
     /** Enable JSON output mode */
     bool json_mode;
@@ -109,6 +119,12 @@ typedef struct AgentConfig {
     /** Model override (tier name or raw model ID) from --model flag */
     const char* model_override;
 
+    /** Context window override from --context-window flag (0 = auto-detect) */
+    int context_window_override;
+
+    /** System prompt override from -p flag (NULL uses default) */
+    const char* system_prompt_override;
+
     /** CLI allowlist entries (tool:pattern format) */
     const char** allow_entries;
     int allow_entry_count;
@@ -142,6 +158,9 @@ static inline AgentConfig agent_config_default(void) {
     AgentConfig config = {0};
     config.mode = AGENT_MODE_INTERACTIVE;
     config.debug = false;
+    config.log_level = -1;
+    config.log_modules = 0;
+    config.log_http_body = false;
     config.json_mode = false;
     config.no_stream = false;
     config.yolo = false;

@@ -1,3 +1,6 @@
+#define LOG_MODULE     LOG_MOD_POLICY
+#define LOG_MODULE_STR "policy"
+#include "../util/log.h"
 #include "approval_gate.h"
 #include "gate_prompter.h"
 #include "pattern_generator.h"
@@ -15,7 +18,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "../util/debug_output.h"
 #include "../util/app_home.h"
 
 static ApprovalGateCallbacks g_gate_callbacks = {0};
@@ -322,8 +324,8 @@ int approval_gate_init(ApprovalGateConfig *config) {
         if (access(config_path, R_OK) == 0) {
             int load_result = approval_gate_load_from_file(config, config_path);
             if (load_result != 0) {
-                debug_printf("Warning: Failed to parse approval_gates from %s, "
-                             "using defaults\n", config_path);
+                LOG_WARN("Warning: Failed to parse approval_gates from %s, "
+                         "using defaults", config_path);
             }
         }
         free(config_path);
@@ -592,16 +594,10 @@ GateCategory get_tool_category(const char *tool_name) {
         return GATE_CATEGORY_MEMORY;
     }
 
-    if (strncmp(tool_name, "vector_db_", 10) == 0) {
-        return GATE_CATEGORY_MEMORY;
-    }
-
-    if (strcmp(tool_name, "send_message") == 0 ||
-        strcmp(tool_name, "check_messages") == 0 ||
-        strcmp(tool_name, "subscribe_channel") == 0 ||
-        strcmp(tool_name, "publish_channel") == 0 ||
-        strcmp(tool_name, "check_channel_messages") == 0 ||
-        strcmp(tool_name, "get_agent_info") == 0) {
+    if (strcmp(tool_name, "vector_db") == 0 ||
+        strcmp(tool_name, "messaging") == 0 ||
+        strcmp(tool_name, "goap") == 0 ||
+        strcmp(tool_name, "orchestrator") == 0) {
         return GATE_CATEGORY_MEMORY;
     }
 
@@ -631,15 +627,13 @@ GateCategory get_tool_category(const char *tool_name) {
     }
 
     if (strcmp(tool_name, "read_file") == 0 ||
-        strcmp(tool_name, "file_info") == 0 ||
         strcmp(tool_name, "list_dir") == 0 ||
         strcmp(tool_name, "search_files") == 0) {
         return GATE_CATEGORY_FILE_READ;
     }
 
     if (strcmp(tool_name, "write_file") == 0 ||
-        strcmp(tool_name, "append_file") == 0 ||
-        strcmp(tool_name, "apply_delta") == 0) {
+        strcmp(tool_name, "apply_patch") == 0) {
         return GATE_CATEGORY_FILE_WRITE;
     }
 

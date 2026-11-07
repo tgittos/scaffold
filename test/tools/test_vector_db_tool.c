@@ -99,32 +99,14 @@ void tearDown(void) {
 void test_register_vector_db_tool(void) {
     ToolRegistry registry = {0};
     init_tool_registry(&registry);
-    
+
     int result = register_vector_db_tool(&registry);
     TEST_ASSERT_EQUAL_INT(0, result);
-    
-    // Should have registered 13 tools (added search_text and search_by_time)
-    TEST_ASSERT_EQUAL_INT(13, registry.functions.count);
-    
-    // Check tool names
-    const char *expected_tools[] = {
-        "vector_db_create_index",
-        "vector_db_delete_index",
-        "vector_db_list_indices",
-        "vector_db_add_vector",
-        "vector_db_update_vector",
-        "vector_db_delete_vector",
-        "vector_db_get_vector",
-        "vector_db_search",
-        "vector_db_add_text",
-        "vector_db_add_chunked_text",
-        "vector_db_add_pdf_document"
-    };
-    
-    for (int i = 0; i < 11; i++) {
-        TEST_ASSERT_EQUAL_STRING(expected_tools[i], registry.functions.data[i].name);
-    }
-    
+
+    // Should have registered 1 consolidated tool
+    TEST_ASSERT_EQUAL_INT(1, registry.functions.count);
+    TEST_ASSERT_EQUAL_STRING("vector_db", registry.functions.data[0].name);
+
     cleanup_tool_registry(&registry);
 }
 

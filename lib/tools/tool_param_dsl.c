@@ -3,6 +3,9 @@
  */
 
 #include "tool_param_dsl.h"
+#include "tool_result_builder.h"
+#include "../util/common_utils.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -135,6 +138,34 @@ int register_tool_from_def(ToolRegistry *registry, const ToolDef *def) {
     free(params);
 
     return result;
+}
+
+int dispatch_by_operation(const ToolCall *tc, ToolResult *result,
+                          const OperationDispatchEntry *table, int count) {
+    if (!tc || !result) return -1;
+
+    char *operation = extract_string_param(tc->arguments, "operation");
+    if (!operation) {
+        result->tool_call_id = safe_strdup(tc->id);
+        tool_result_set_error(result, "Missing required parameter: operation");
+        return 0;
+    }
+
+    for (int i = 0; i < count; i++) {
+        if (strcmp(operation, table[i].name) == 0) {
+            int rc = table[i].handler(tc, result);
+            free(operation);
+            return rc;
+        }
+    }
+
+    /* Build error with the unknown operation value */
+    char errbuf[256];
+    snprintf(errbuf, sizeof(errbuf), "Unknown operation: %s", operation);
+    result->tool_call_id = safe_strdup(tc->id);
+    tool_result_set_error(result, errbuf);
+    free(operation);
+    return 0;
 }
 
 int register_tools_from_defs(ToolRegistry *registry, const ToolDef *defs, int count) {
