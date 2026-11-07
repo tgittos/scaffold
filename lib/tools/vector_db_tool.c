@@ -14,6 +14,12 @@
 
 static Services* g_services = NULL;
 
+/* Index dimension follows the configured embedding model (probed at
+ * startup); falls back to the default when the feature is disabled. */
+static size_t implicit_index_dimension(void) {
+    return embeddings_service_get_dimension(services_get_embeddings(g_services));
+}
+
 vector_db_t *get_global_vector_db(void) {
     vector_db_service_t* vdb_service = services_get_vector_db(g_services);
     return vector_db_service_get_database(vdb_service);
@@ -555,7 +561,7 @@ int execute_vector_db_add_text_tool_call(const ToolCall *tool_call, ToolResult *
     
     document_store_t *doc_store = services_get_document_store(g_services);
 
-    if (document_store_ensure_index(doc_store, index_name, 1536, 10000) != 0) {
+    if (document_store_ensure_index(doc_store, index_name, implicit_index_dimension(), 10000) != 0) {
         result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to ensure index exists\"}");
         result->success = 0;
         free(index_name);
@@ -631,7 +637,7 @@ int execute_vector_db_add_chunked_text_tool_call(const ToolCall *tool_call, Tool
     
     document_store_t *doc_store = services_get_document_store(g_services);
 
-    if (document_store_ensure_index(doc_store, index_name, 1536, 10000) != 0) {
+    if (document_store_ensure_index(doc_store, index_name, implicit_index_dimension(), 10000) != 0) {
         result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to ensure index exists\"}");
         result->success = 0;
         free_chunking_result(chunks);
@@ -741,7 +747,7 @@ int execute_vector_db_add_pdf_document_tool_call(const ToolCall *tool_call, Tool
     
     document_store_t *doc_store = services_get_document_store(g_services);
 
-    if (document_store_ensure_index(doc_store, index_name, 1536, 10000) != 0) {
+    if (document_store_ensure_index(doc_store, index_name, implicit_index_dimension(), 10000) != 0) {
         result->result = safe_strdup("{\"success\": false, \"error\": \"Failed to ensure index exists\"}");
         result->success = 0;
         free_chunking_result(chunks);

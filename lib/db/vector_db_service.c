@@ -6,8 +6,6 @@
 #include <string.h>
 #include <pthread.h>
 
-#define OPENAI_EMBEDDING_DIM_DEFAULT 1536
-
 struct vector_db_service {
     vector_db_t* database;
     pthread_mutex_t mutex;
@@ -91,7 +89,7 @@ int vector_db_service_add_text(Services* services, const char* index_name,
 
     embeddings_service_t* emb = services_get_embeddings(services);
     if (!embeddings_service_is_configured(emb)) {
-        size_t fallback_dim = OPENAI_EMBEDDING_DIM_DEFAULT;
+        size_t fallback_dim = EMBEDDINGS_DIM_DEFAULT;
         float *zero_embedding = calloc(fallback_dim, sizeof(float));
         if (zero_embedding == NULL) return -1;
 

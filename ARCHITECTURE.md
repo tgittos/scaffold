@@ -1088,14 +1088,14 @@ The embedding system uses a parallel registry pattern to the LLM provider system
 
 ```mermaid
 graph TB
-    EmbeddingsService[Embeddings Service<br/>Singleton] --> EmbeddingProvider[Embedding Provider<br/>embedding_provider.c/h]
+    EmbeddingsService[Embeddings Service<br/>Singleton<br/>probes model dimension at startup] --> EmbeddingProvider[Embedding Provider<br/>embedding_provider.c/h]
 
     EmbeddingProvider --> Detection{Provider Detection<br/>URL-based}
     Detection -->|api.openai.com| OpenAIEmbed[OpenAI Provider<br/>openai_embedding_provider.c]
     Detection -->|localhost/other| LocalEmbed[Local Provider<br/>local_embedding_provider.c]
 
-    OpenAIEmbed --> OpenAIAPI[OpenAI API<br/>text-embedding-3-small<br/>1536 dimensions]
-    LocalEmbed --> LocalAPI[Local API<br/>LMStudio/Ollama<br/>Variable dimensions]
+    OpenAIEmbed --> OpenAIAPI[OpenAI API<br/>text-embedding-3-small<br/>dimension from response]
+    LocalEmbed --> LocalAPI[Local API<br/>LMStudio/Ollama<br/>dimension from response]
 
     OpenAIAPI --> HTTPClient[HTTP Client]
     LocalAPI --> HTTPClient
@@ -1112,7 +1112,8 @@ graph TB
 ### Embedding Configuration
 - **Separate API URL**: `embedding_api_url` can differ from `openai_api_url`
 - **Model Selection**: Configurable via `embedding_model` setting
-- **Known Dimensions**: text-embedding-3-small (1536), text-embedding-3-large (3072)
+- **Dimension Probing**: at startup (and on reinitialize) the service embeds a short probe text and caches the vector dimension the model actually returns; all index creation uses that value, so models of the same provider (e.g. 384-dim vs 1536-dim OpenAI models) work correctly
+- **Hard Disable on Probe Failure**: if the probe request fails, the embedding feature is disabled for the session — no static-dimension fallback. Consumers get zero embeddings of the default size (1536) and semantic search is unavailable; no crash
 - **Local Models**: Supports Qwen3-Embedding, all-MiniLM, all-mpnet, and others
 
 ## Data Persistence Layer

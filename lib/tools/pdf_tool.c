@@ -15,9 +15,14 @@
 #include <time.h>
 
 #define PDF_DOCUMENTS_INDEX "documents"
-#define PDF_EMBEDDING_DIM 1536
 
 static Services* g_services = NULL;
+
+/* Index dimension follows the configured embedding model (probed at
+ * startup); falls back to the default when the feature is disabled. */
+static size_t pdf_index_dimension(void) {
+    return embeddings_service_get_dimension(services_get_embeddings(g_services));
+}
 
 static void auto_process_pdf_for_vector_storage(const char *file_path, const char *extracted_text) {
     if (!file_path || !extracted_text || strlen(extracted_text) == 0) {
@@ -29,7 +34,7 @@ static void auto_process_pdf_for_vector_storage(const char *file_path, const cha
         return;
     }
 
-    if (document_store_ensure_index(doc_store, PDF_DOCUMENTS_INDEX, PDF_EMBEDDING_DIM, 10000) != 0) {
+    if (document_store_ensure_index(doc_store, PDF_DOCUMENTS_INDEX, pdf_index_dimension(), 10000) != 0) {
         return;
     }
 

@@ -13,7 +13,6 @@
 #include <errno.h>
 
 #define MEMORY_INDEX_NAME "long_term_memory"
-#define MEMORY_EMBEDDING_DIM 1536
 
 static Services* g_services = NULL;
 
@@ -24,7 +23,8 @@ void memory_tool_set_services(Services* services) {
 static int ensure_memory_index(Services* services) {
     document_store_t* store = services_get_document_store(services);
     if (store == NULL) return -1;
-    return document_store_ensure_index(store, MEMORY_INDEX_NAME, MEMORY_EMBEDDING_DIM, 100000);
+    size_t dim = embeddings_service_get_dimension(services_get_embeddings(services));
+    return document_store_ensure_index(store, MEMORY_INDEX_NAME, dim, 100000);
 }
 
 static char* create_memory_metadata(const char *memory_type, const char *source, const char *importance) {

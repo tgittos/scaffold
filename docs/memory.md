@@ -101,7 +101,7 @@ Scaffold supports two embedding providers:
 
 ### OpenAI (default)
 
-Uses `text-embedding-3-small` (1536 dimensions) by default. Configure with:
+Uses `text-embedding-3-small` (1536 dimensions) by default. The actual dimension is resolved by probing the configured model at startup, so any model dimension works; if the probe fails, embedding-based search is disabled for the session. Configure with:
 
 ```json
 {
@@ -121,4 +121,4 @@ Point at a local embedding server (LM Studio, Ollama):
 }
 ```
 
-Supported local models include Qwen3-Embedding, all-MiniLM, all-mpnet, and others. Dimensions are auto-detected.
+Supported local models include Qwen3-Embedding, all-MiniLM, all-mpnet, and others. The vector dimension is resolved from the model via a startup probe (no per-model configuration needed).

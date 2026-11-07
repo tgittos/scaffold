@@ -16,6 +16,23 @@
 // Internal server state
 static MockAPIServer* g_server = NULL;
 
+/* Write all bytes: a single write() may be short for large payloads. */
+static int write_all(int fd, const char* buf, size_t len) {
+    size_t offset = 0;
+    while (offset < len) {
+        ssize_t n = write(fd, buf + offset, len - offset);
+        if (n < 0) {
+            if (errno == EINTR) continue;
+            return -1;
+        }
+        if (n == 0) {
+            break;
+        }
+        offset += (size_t)n;
+    }
+    return 0;
+}
+
 // Thread function for handling incoming connections
 static void* server_thread_func(void* arg) {
     MockAPIServer* server = (MockAPIServer*)arg;
@@ -30,8 +47,12 @@ static void* server_thread_func(void* arg) {
         return NULL;
     }
     
-    // Set socket options
-    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) {
+    // SO_REUSEADDR only: it lets the port be re-bound after a quick
+    // stop/start. SO_REUSEPORT must NOT be set - it would let a second,
+    // stale listener coexist on the same port, and the kernel would hand
+    // new connections to a listener whose service thread has already
+    // exited (the client then sends a request that nobody answers).
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt))) {
         perror("setsockopt failed");
         close(server_fd);
         return NULL;
@@ -67,6 +88,8 @@ static void* server_thread_func(void* arg) {
         }
         
         // Read the request
+        struct timeval rcv_timeout = {5, 0};
+        setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &rcv_timeout, sizeof(rcv_timeout));
         char request[REQUEST_BUFFER_SIZE] = {0};
         ssize_t bytes_read = read(client_fd, request, REQUEST_BUFFER_SIZE - 1);
         if (bytes_read <= 0) {
@@ -88,12 +111,12 @@ static void* server_thread_func(void* arg) {
                 break;
             }
         }
-        
+
         // Handle the request
         if (response == NULL) {
             // No mock response found - return 404
             const char* not_found = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
-            write(client_fd, not_found, strlen(not_found));
+            write_all(client_fd, not_found, strlen(not_found));
         } else if (response->should_fail) {
             // Simulate network failure by closing connection without response
             // Don't send anything, just close
@@ -136,8 +159,8 @@ static void* server_thread_func(void* arg) {
                 response->response_code,
                 content_length);
 
-            write(client_fd, headers_buf, strlen(headers_buf));
-            write(client_fd, body, content_length);
+            write_all(client_fd, headers_buf, strlen(headers_buf));
+            write_all(client_fd, body, content_length);
 
             // Free dynamic body if allocated
             if (dynamic_body) {

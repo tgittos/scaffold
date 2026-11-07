@@ -18,7 +18,12 @@ void conversation_tracker_set_services(Services* services) {
 }
 
 #define CONVERSATION_INDEX "conversations"
-#define CONVERSATION_EMBEDDING_DIM 1536
+
+/* Index dimension follows the configured embedding model (probed at
+ * startup); falls back to the default when the feature is disabled. */
+static size_t conversation_index_dimension(void) {
+    return embeddings_service_get_dimension(services_get_embeddings(g_services));
+}
 
 DARRAY_DEFINE(ConversationHistory, ConversationMessage)
 
@@ -355,7 +360,7 @@ static int add_message_to_history(ConversationHistory *history, const char *role
         if (!skip_storage) {
             document_store_t* store = services_get_document_store(g_services);
             if (store != NULL) {
-                int index_result = document_store_ensure_index(store, CONVERSATION_INDEX, CONVERSATION_EMBEDDING_DIM, 10000);
+                int index_result = document_store_ensure_index(store, CONVERSATION_INDEX, conversation_index_dimension(), 10000);
                 if (index_result != 0) {
                     LOG_WARN("Failed to ensure conversation index");
                 }
@@ -396,7 +401,7 @@ int load_conversation_history(ConversationHistory *history) {
         return 0;
     }
 
-    document_store_ensure_index(store, CONVERSATION_INDEX, CONVERSATION_EMBEDDING_DIM, 10000);
+    document_store_ensure_index(store, CONVERSATION_INDEX, conversation_index_dimension(), 10000);
 
     time_t now = time(NULL);
     time_t start_time = now - (7 * 24 * 60 * 60);
@@ -449,7 +454,7 @@ int load_extended_conversation_history(ConversationHistory *history, int days_ba
         return -1;
     }
     
-    document_store_ensure_index(store, CONVERSATION_INDEX, CONVERSATION_EMBEDDING_DIM, 10000);
+    document_store_ensure_index(store, CONVERSATION_INDEX, conversation_index_dimension(), 10000);
 
     time_t now = time(NULL);
     time_t start_time = 0;
@@ -476,7 +481,7 @@ ConversationHistory* search_conversation_history(const char *query, size_t max_r
         return NULL;
     }
     
-    document_store_ensure_index(store, CONVERSATION_INDEX, CONVERSATION_EMBEDDING_DIM, 10000);
+    document_store_ensure_index(store, CONVERSATION_INDEX, conversation_index_dimension(), 10000);
 
     document_search_results_t* results = vector_db_service_search_text(
         g_services, CONVERSATION_INDEX, query, max_results);

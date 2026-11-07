@@ -351,6 +351,8 @@ $(eval $(call def_test_lib,memory_mgmt,test_memory_management,))
 $(eval $(call def_test_lib,token_manager,session/test_token_manager,))
 $(eval $(call def_test_lib,conversation_compactor,session/test_conversation_compactor,))
 $(eval $(call def_test_lib,rolling_summary,session/test_rolling_summary,))
+$(eval $(call def_test_lib,embeddings_service,llm/test_embeddings_service,$(TESTDIR)/mock_api_server.c))
+$(eval $(call def_test_lib,embeddings_service_reinit,llm/test_embeddings_service_reinit,$(TESTDIR)/mock_api_server.c))
 $(eval $(call def_test_lib,model_tools,llm/test_model_tools,))
 $(eval $(call def_test_lib,openai_streaming,llm/test_openai_streaming,))
 $(eval $(call def_test_lib,anthropic_streaming,llm/test_anthropic_streaming,))
@@ -396,7 +398,7 @@ $(TEST_plugin_protocol_TARGET): $(TEST_plugin_protocol_OBJECTS) $(CJSON_LIB)
 
 # Batch link rule for libagent-linked tests
 LIBAGENT_TESTS := tool_param_dsl json_output output tools_system vector_db_tool memory_tool \
-    memory_mgmt token_manager conversation_compactor rolling_summary model_tools \
+    memory_mgmt token_manager conversation_compactor rolling_summary model_tools embeddings_service embeddings_service_reinit \
     openai_streaming anthropic_streaming codex_provider messages_array_bug mcp_client subagent_tool \
     incomplete_task_bug conversation conversation_vdb tool_calls_not_stored document_store \
     message_dispatcher message_processor recap parallel_batch model_commands \

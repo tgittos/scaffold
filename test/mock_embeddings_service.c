@@ -79,7 +79,7 @@ vector_t* embeddings_service_text_to_vector(embeddings_service_t* service, const
 }
 
 size_t embeddings_service_get_dimension(embeddings_service_t* service) {
-    (void)service;
+    if (service == NULL || !service->configured) return EMBEDDINGS_DIM_DEFAULT;
     return MOCK_EMBEDDING_DIM;
 }
 

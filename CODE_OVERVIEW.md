@@ -80,7 +80,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`model_capabilities.c/h`** - Model capability detection and management (context windows, features)
 - **`embeddings.c/h`** - Low-level text embedding functionality
 - **`embedding_provider.c/h`** - Embedding provider interface and registry
-- **`embeddings_service.c/h`** - Thread-safe embedding service singleton
+- **`embeddings_service.c/h`** - Thread-safe embedding service singleton; probes the model at startup to resolve the vector dimension (feature is disabled if the probe fails)
 - **`llm_client.c/h`** - LLM HTTP client wrapping http_client for API calls; accepts pre-built `const char** headers` from providers. Supports pluggable credential provider (`llm_credential_provider_fn`) for token refresh
 
 ##### `lib/llm/models/` - Model Capability Implementations
