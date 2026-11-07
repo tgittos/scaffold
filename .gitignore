@@ -38,3 +38,6 @@ scaffold.config.json.backup
 
 # Random files
 .DS_Store
+
+# Local superpowers workflow docs (specs/plans)
+docs/superpowers/
