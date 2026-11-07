@@ -62,8 +62,11 @@ int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx) {
         LOG_DEBUG("Making API request for tool loop iteration %d", loop_count);
 
         DispatchDecision dispatch = message_dispatcher_select_mode(session);
+        /* Streaming callbacks display text/thinking live; only the buffered
+         * path needs it re-displayed after the round trip. */
+        int streamed = dispatch.mode == DISPATCH_STREAMING && dispatch.provider != NULL;
         int rt_rc;
-        if (dispatch.mode == DISPATCH_STREAMING && dispatch.provider != NULL) {
+        if (streamed) {
             rt_rc = streaming_round_trip_execute(session, dispatch.provider,
                                                   "", iteration_max_tokens, &rt);
         } else {
@@ -94,7 +97,7 @@ int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx) {
         if (call_count > 0) {
             if (rt.parsed.response_content != NULL && strlen(rt.parsed.response_content) > 0) {
                 if (!session->session_data.config.json_output_mode) {
-                    display_streaming_text(rt.parsed.response_content,
+                    if (!streamed) display_streaming_text(rt.parsed.response_content,
                                            strlen(rt.parsed.response_content));
                 } else {
                     json_output_assistant_text(rt.parsed.response_content,
@@ -126,11 +129,11 @@ int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx) {
         if (call_count == 0) {
             LOG_INFO("No more tool calls - ending loop after %d iterations", loop_count);
             if (!session->session_data.config.json_output_mode) {
-                if (rt.parsed.thinking_content != NULL) {
+                if (!streamed && rt.parsed.thinking_content != NULL) {
                     display_streaming_thinking(rt.parsed.thinking_content,
                                                strlen(rt.parsed.thinking_content));
                 }
-                if (rt.parsed.response_content != NULL) {
+                if (!streamed && rt.parsed.response_content != NULL) {
                     display_streaming_text(rt.parsed.response_content,
                                            strlen(rt.parsed.response_content));
                 }
