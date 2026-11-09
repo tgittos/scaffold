@@ -2,6 +2,7 @@
 #define STATUS_LINE_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <time.h>
 
 typedef struct {
@@ -36,6 +37,25 @@ void status_line_set_idle(void);
  */
 void status_line_update_tokens(int prompt_tokens, int completion_tokens);
 void status_line_set_last_response_tokens(int tokens);
+
+/**
+ * Set the active model name and its context window (tokens; <= 0 = unknown).
+ * NULL model clears the name; long names are truncated.
+ */
+void status_line_set_model(const char *model, int context_window);
+
+/**
+ * Mark the current context size as unknown until the next response reports
+ * usage (e.g. after compaction trims the conversation).
+ */
+void status_line_invalidate_context(void);
+
+/**
+ * Build the "<pct>%/<window>  <model>" segment into buf (no terminal I/O).
+ * Usage is "?" when unknown; the ctx part is yellow above 70% and red above
+ * 90%; the model name is dim. buf is "" when neither model nor window is known.
+ */
+void status_line_format_context(char *buf, size_t buf_size);
 
 /**
  * Print the status info line to stdout (skipped in JSON mode).

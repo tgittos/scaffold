@@ -1397,7 +1397,7 @@ lib/
 │   ├── goal_commands.c/h   # /goals slash commands
 │   ├── model_commands.c/h  # /model slash commands
 │   ├── mode_commands.c/h   # /mode slash commands
-│   └── status_line.c/h     # Status info line (tokens, agents, mode, busy state)
+│   └── status_line.c/h     # Status info line (activity, context %/window, model)
 ├── tools/                  # Tool system
 │   ├── tools.h             # Public tools API header
 │   ├── tools_system.c/h    # Tool registry and execution

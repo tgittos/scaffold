@@ -7,9 +7,12 @@
 #include <string.h>
 #include <time.h>
 #include <pthread.h>
+#include <sys/ioctl.h>
+#include <unistd.h>
 
 #define STATUS_MAX_AGENTS 8
 #define STATUS_AGENT_TASK_LEN 64
+#define STATUS_MODEL_NAME_LEN 96
 
 typedef struct {
     char id_short[5];
@@ -34,6 +37,9 @@ typedef struct {
     bool busy_rendered;
 
     int current_mode;
+
+    char model_name[STATUS_MODEL_NAME_LEN];
+    int context_window;
 } StatusLineState;
 
 static StatusLineState g_status = {0};
@@ -134,14 +140,103 @@ void status_line_set_last_response_tokens(int tokens) {
     pthread_mutex_unlock(&g_status.mutex);
 }
 
+void status_line_set_model(const char *model, int context_window) {
+    if (!g_status.initialized) return;
+    pthread_mutex_lock(&g_status.mutex);
+    snprintf(g_status.model_name, sizeof(g_status.model_name), "%s", model ? model : "");
+    g_status.context_window = context_window;
+    pthread_mutex_unlock(&g_status.mutex);
+}
+
+void status_line_invalidate_context(void) {
+    if (!g_status.initialized) return;
+    pthread_mutex_lock(&g_status.mutex);
+    g_status.session_prompt_tokens = 0;
+    pthread_mutex_unlock(&g_status.mutex);
+}
+
 static void format_token_count(int tokens, char *buf, size_t buf_size) {
-    if (tokens >= 1000000) {
+    if (tokens >= 10000000) {
+        snprintf(buf, buf_size, "%dM", (tokens + 500000) / 1000000);
+    } else if (tokens >= 1000000) {
         snprintf(buf, buf_size, "%.1fM", tokens / 1000000.0);
+    } else if (tokens >= 10000) {
+        snprintf(buf, buf_size, "%dk", (tokens + 500) / 1000);
     } else if (tokens >= 1000) {
         snprintf(buf, buf_size, "%.1fk", tokens / 1000.0);
     } else {
         snprintf(buf, buf_size, "%d", tokens);
     }
+}
+
+static void format_context(char *buf, size_t buf_size, bool with_model) {
+    if (!buf || buf_size == 0) return;
+    buf[0] = '\0';
+    if (!g_status.initialized) return;
+
+    pthread_mutex_lock(&g_status.mutex);
+    char model[STATUS_MODEL_NAME_LEN];
+    memcpy(model, g_status.model_name, sizeof(model));
+    int window = g_status.context_window;
+    int tokens = g_status.session_prompt_tokens;
+    pthread_mutex_unlock(&g_status.mutex);
+
+    if (window <= 0 && !model[0]) return;
+
+    char ctx[48] = {0};
+    const char *color = "";
+    if (window > 0) {
+        char window_str[16] = {0};
+        format_token_count(window, window_str, sizeof(window_str));
+        if (tokens > 0) {
+            double pct = tokens * 100.0 / window;
+            if (pct > 90.0) color = TERM_BRIGHT_RED;
+            else if (pct > 70.0) color = TERM_BRIGHT_YELLOW;
+            snprintf(ctx, sizeof(ctx), "%.1f%%/%s", pct, window_str);
+        } else {
+            snprintf(ctx, sizeof(ctx), "?/%s", window_str);
+        }
+    } else {
+        snprintf(ctx, sizeof(ctx), "?");
+    }
+
+    const char *reset = color[0] ? TERM_RESET : "";
+    if (with_model && model[0]) {
+        snprintf(buf, buf_size, "%s%s%s  " TERM_DIM "%s" TERM_RESET, color, ctx, reset, model);
+    } else {
+        snprintf(buf, buf_size, "%s%s%s", color, ctx, reset);
+    }
+}
+
+void status_line_format_context(char *buf, size_t buf_size) {
+    format_context(buf, buf_size, true);
+}
+
+/* 0 when unknown (no TTY and no $COLUMNS): rendering is then unclamped. */
+static int terminal_columns(void) {
+    struct winsize ws;
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0) {
+        return ws.ws_col;
+    }
+    const char *env = getenv("COLUMNS");
+    int cols = env ? atoi(env) : 0;
+    return cols > 0 ? cols : 0;
+}
+
+/* Terminal columns used by s: skips CSI escapes, counts UTF-8 code points. */
+static int visible_width(const char *s) {
+    int width = 0;
+    while (*s) {
+        if (s[0] == '\033' && s[1] == '[') {
+            s += 2;
+            while (*s && !(*s >= '@' && *s <= '~')) s++;
+            if (*s) s++;
+            continue;
+        }
+        if (((unsigned char)*s & 0xC0) != 0x80) width++;
+        s++;
+    }
+    return width;
 }
 
 void status_line_set_mode(int mode) {
@@ -175,19 +270,13 @@ void status_line_render_info(void) {
 
     pthread_mutex_unlock(&g_status.mutex);
 
-    bool printed = false;
+    char left[512] = "";
     time_t now = time(NULL);
 
     if (busy) {
         int elapsed = (int)(now - busy_start);
-        if (busy_label[0]) {
-            fprintf(stdout, TERM_DIM "  " TERM_SYM_ACTIVE " %s (%ds)" TERM_RESET "\n",
-                    busy_label, elapsed);
-        } else {
-            fprintf(stdout, TERM_DIM "  " TERM_SYM_ACTIVE " Working... (%ds)" TERM_RESET "\n",
-                    elapsed);
-        }
-        printed = true;
+        snprintf(left, sizeof(left), TERM_DIM "  " TERM_SYM_ACTIVE " %s (%ds)" TERM_RESET,
+                 busy_label[0] ? busy_label : "Working...", elapsed);
     } else if (agent_count > 0) {
         char line[384];
         int pos = 0;
@@ -212,35 +301,53 @@ void status_line_render_info(void) {
                             ", +%d more", agent_count - 3);
         }
 
-        char session_str[16] = "";
         if (session_total > 0) {
+            char session_str[16];
             format_token_count(session_total, session_str, sizeof(session_str));
-        }
-
-        if (session_str[0]) {
-            fprintf(stdout, TERM_DIM "%s       %s tokens" TERM_RESET "\n",
-                    line, session_str);
+            snprintf(left, sizeof(left), TERM_DIM "%s       %s tokens" TERM_RESET,
+                     line, session_str);
         } else {
-            fprintf(stdout, TERM_DIM "%s" TERM_RESET "\n", line);
+            snprintf(left, sizeof(left), TERM_DIM "%s" TERM_RESET, line);
         }
-        printed = true;
     } else if (last_response > 0) {
         char resp_str[16];
         format_token_count(last_response, resp_str, sizeof(resp_str));
-        char session_str[16] = "";
         if (session_total > 0) {
+            char session_str[16];
             format_token_count(session_total, session_str, sizeof(session_str));
-        }
-
-        if (session_str[0]) {
-            fprintf(stdout, TERM_DIM "  \xe2\x94\x94 %s tokens"
-                    "       %s session" TERM_RESET "\n",
-                    resp_str, session_str);
+            snprintf(left, sizeof(left), TERM_DIM "  \xe2\x94\x94 %s tokens"
+                     "       %s session" TERM_RESET, resp_str, session_str);
         } else {
-            fprintf(stdout, TERM_DIM "  \xe2\x94\x94 %s tokens" TERM_RESET "\n",
-                    resp_str);
+            snprintf(left, sizeof(left), TERM_DIM "  \xe2\x94\x94 %s tokens" TERM_RESET,
+                     resp_str);
         }
-        printed = true;
+    }
+
+    /* status_line_clear_rendered() erases one row, so the line must not wrap:
+     * drop the model name, then the whole segment, to fit. */
+    char segment[256] = {0};
+    format_context(segment, sizeof(segment), true);
+    int cols = terminal_columns();
+    if (cols > 0) {
+        int budget = cols - 1;
+        int left_width = visible_width(left) + (left[0] ? 3 : 2);
+        if (left_width + visible_width(segment) > budget) {
+            format_context(segment, sizeof(segment), false);
+        }
+        if (left_width + visible_width(segment) > budget) {
+            segment[0] = '\0';
+        }
+    }
+
+    bool printed = true;
+    if (left[0] && segment[0]) {
+        fprintf(stdout, "%s   %s\n", left, segment);
+    } else if (left[0]) {
+        fprintf(stdout, "%s\n", left);
+    } else if (segment[0]) {
+        fprintf(stdout, "  %s\n", segment);
+    } else {
+        printed = false;
     }
 
     g_info_rendered = printed;

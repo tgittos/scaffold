@@ -193,8 +193,10 @@ The image is base64-encoded and sent to the LLM alongside your message. This req
 
 ## Status line
 
-The bottom of the terminal shows a status line with:
-- Token usage (current/max)
-- Active agent count
-- Current behavioral mode
-- Busy/idle state
+A status line is always shown above the prompt. The left side shows activity: the busy label, active agents, or the last response's token count with the session total. The right side shows context usage as `pct%/window` and the active model name, e.g. `12.3%/200k  claude-sonnet-4-5`.
+
+- Usage is `?` until the first response, and again after compaction until the next response.
+- Usage turns yellow above 70% and red above 90%.
+- The model name and window follow `/model` switches.
+
+A non-default behavioral mode is shown in the prompt as `[mode] >`.

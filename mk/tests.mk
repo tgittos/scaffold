@@ -377,6 +377,7 @@ $(eval $(call def_test_lib,agent_commands,ui/test_agent_commands,))
 $(eval $(call def_test_lib,goal_commands,ui/test_goal_commands,))
 $(eval $(call def_test_lib,mode_tool,tools/test_mode_tool,))
 $(eval $(call def_test_lib,mode_commands,ui/test_mode_commands,))
+$(eval $(call def_test_lib,status_line,ui/test_status_line,))
 $(eval $(call def_test_lib,context_mode_injection,agent/test_context_mode_injection,))
 $(eval $(call def_test_lib,repo_context,agent/test_repo_context,))
 $(eval $(call def_test_lib,python_tool,tools/test_python_tool,$(TOOL_SOURCES)))
@@ -402,7 +403,7 @@ LIBAGENT_TESTS := tool_param_dsl json_output output tools_system vector_db_tool 
     openai_streaming anthropic_streaming codex_provider messages_array_bug mcp_client subagent_tool \
     incomplete_task_bug conversation conversation_vdb tool_calls_not_stored document_store \
     message_dispatcher message_processor recap parallel_batch model_commands \
-    slash_commands task_commands agent_commands goal_commands mode_tool mode_commands \
+    slash_commands task_commands agent_commands goal_commands mode_tool mode_commands status_line \
     context_mode_injection repo_context image_attachment goap_tools orchestrator_tool goap_lifecycle \
     goap_state plugin_manager hook_dispatcher plugin_integration
 

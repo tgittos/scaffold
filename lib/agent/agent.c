@@ -403,6 +403,8 @@ int agent_run(Agent* agent) {
             }
 
             status_line_init();
+            status_line_set_model(agent->session.session_data.config.model,
+                                  agent->session.session_data.config.context_window);
             repl_show_greeting(&agent->session, agent->config.json_mode);
 
             using_history();

@@ -447,10 +447,11 @@ void print_formatted_response_improved(const ParsedResponse *response) {
         printf(TERM_DIM TERM_GRAY "%s" TERM_RESET "\n\n", response->thinking_content);
     }
 
+    status_line_update_tokens(response->prompt_tokens, response->completion_tokens);
+
     if (response->response_content) {
         printf("%s\n", response->response_content);
 
-        status_line_update_tokens(response->prompt_tokens, response->completion_tokens);
         if (response->completion_tokens > 0) {
             status_line_set_last_response_tokens(response->completion_tokens);
         }

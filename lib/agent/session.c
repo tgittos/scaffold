@@ -31,6 +31,7 @@
 #include "../util/config.h"
 #include "../plugin/plugin_manager.h"
 #include "../plugin/hook_dispatcher.h"
+#include "../ui/status_line.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -309,6 +310,7 @@ int manage_conversation_tokens(AgentSession* session, const char* user_message,
     if (background_status == 0 && background_result.tokens_saved > 0) {
         LOG_DEBUG("Background trimming saved %d tokens, recalculating allocation", background_result.tokens_saved);
         cleanup_compaction_result(&background_result);
+        status_line_invalidate_context();
 
         result = calculate_token_allocation(&session->session_data, user_message, config, usage);
         if (result != 0) {
@@ -331,6 +333,7 @@ int manage_conversation_tokens(AgentSession* session, const char* user_message,
         if (compact_status == 0 && compact_result.tokens_saved > 0) {
             LOG_DEBUG("Trimming saved %d tokens, recalculating allocation", compact_result.tokens_saved);
             cleanup_compaction_result(&compact_result);
+            status_line_invalidate_context();
 
             result = calculate_token_allocation(&session->session_data, user_message, config, usage);
             if (result == 0) {

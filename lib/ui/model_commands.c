@@ -4,6 +4,7 @@
 #include "../util/ansi_codes.h"
 #include "../llm/model_capabilities.h"
 #include "../agent/session_configurator.h"
+#include "status_line.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -85,6 +86,8 @@ static void switch_model(const char *name, AgentSession *session) {
             session->session_data.config.context_window = caps->max_context_length;
         }
     }
+    status_line_set_model(session->session_data.config.model,
+                          session->session_data.config.context_window);
 
     const char *tier = find_tier_for_model(resolved);
     if (tier) {

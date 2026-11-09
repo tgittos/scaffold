@@ -180,7 +180,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`goal_commands.c/h`** - `/goals` command for GOAP goal listing and action tree display
 - **`model_commands.c/h`** - `/model` command for switching AI models
 - **`mode_commands.c/h`** - `/mode` command for switching behavioral prompt modes
-- **`status_line.c/h`** - Status info line rendering (tokens, agents, mode, busy state)
+- **`status_line.c/h`** - Status info line rendering (busy, agents, last response, context %/window, model name)
 
 #### `lib/util/` - Generic Utilities
 - **`darray.h`** - Type-safe dynamic array macros (header-only)
