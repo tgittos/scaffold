@@ -29,22 +29,22 @@ Build produces binaries in `out/`:
 
 ```bash
 # Interactive mode
-source .env && out/scaffold
+set -a && source .env && set +a && out/scaffold
 
 # One-shot mode (process single message and exit)
-source .env && out/scaffold "your message here"
+set -a && source .env && set +a && out/scaffold "your message here"
 
 # Pipe input
-source .env && echo "your message" | out/scaffold
+set -a && source .env && set +a && echo "your message" | out/scaffold
 
 # With specific model
-source .env && out/scaffold --model gpt-4o "your message"
+set -a && source .env && set +a && out/scaffold --model gpt-4o "your message"
 
 # With debug HTTP traffic
-source .env && out/scaffold --debug "your message"
+set -a && source .env && set +a && out/scaffold --debug "your message"
 
 # Disable approval gates
-source .env && out/scaffold --yolo "your message"
+set -a && source .env && set +a && out/scaffold --yolo "your message"
 ```
 
 ### CLI flags
@@ -79,7 +79,7 @@ Internal flags used by the orchestrator/subagent system (not for direct user inv
 ## Development Environment
 
 - Docker devcontainer with Cosmopolitan toolchain pre-configured
-- `.env` has API credentials - **never read it**, only source it
+- `.env` has API credentials - **never read it**, only source it. Its lines have no `export`, so source it under `set -a` or child processes won't see the values
 - Use `apt` to install tooling only, not libraries (breaks portability)
 - **Python**: ALWAYS use `uv` to run Python. Use `uv run python`, `uv run <script>`, or `uv run <entrypoint>`. **Never use `python3` or `python` directly** — the embedded Python (`PYTHONHOME=/zip`) breaks system Python in subprocesses. Install uv if not present: `curl -LsSf https://astral.sh/uv/install.sh | sh`
 
