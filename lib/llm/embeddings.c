@@ -82,10 +82,9 @@ int embeddings_init(embeddings_config_t *config, const char *model,
         return -1;
     }
 
-    // Warn but don't fail: some providers work without auth in certain configurations
     if (provider->capabilities.requires_auth && (api_key == NULL || strlen(api_key) == 0)) {
-        fprintf(stderr, "Warning: Provider %s requires authentication but no API key provided\n",
-                provider->capabilities.name);
+        embeddings_cleanup(config);
+        return -1;
     }
 
     return 0;

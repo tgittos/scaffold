@@ -270,15 +270,55 @@ void test_probe_failure_disables_feature(void) {
     embeddings_service_destroy(service);
 }
 
-void test_no_api_key_unconfigured_returns_default_dimension(void) {
+void test_no_api_key_local_url_configured(void) {
+    /* Local servers don't require auth */
     unsetenv("OPENAI_API_KEY");
     set_local_model_env();
 
     embeddings_service_t* service = embeddings_service_create();
     TEST_ASSERT_NOT_NULL(service);
 
+    TEST_ASSERT_EQUAL_INT(1, embeddings_service_is_configured(service));
+    TEST_ASSERT_EQUAL_UINT(384, embeddings_service_get_dimension(service));
+
+    embeddings_service_destroy(service);
+}
+
+void test_no_api_key_no_url_unconfigured(void) {
+    unsetenv("OPENAI_API_KEY");
+    config_set("openai_api_key", "");
+
+    embeddings_service_t* service = embeddings_service_create();
+    TEST_ASSERT_NOT_NULL(service);
+
     TEST_ASSERT_EQUAL_INT(0, embeddings_service_is_configured(service));
     TEST_ASSERT_EQUAL_UINT(EMBEDDINGS_DIM_DEFAULT, embeddings_service_get_dimension(service));
+
+    embeddings_service_destroy(service);
+}
+
+void test_config_file_url_and_model_used(void) {
+    unsetenv("OPENAI_API_KEY");
+    TEST_ASSERT_EQUAL_INT(0, config_set("embedding_api_url", "http://127.0.0.1:18897/v1/embeddings"));
+    TEST_ASSERT_EQUAL_INT(0, config_set("embedding_model", "mock-model-384"));
+
+    embeddings_service_t* service = embeddings_service_create();
+    TEST_ASSERT_NOT_NULL(service);
+
+    TEST_ASSERT_EQUAL_INT(1, embeddings_service_is_configured(service));
+    TEST_ASSERT_EQUAL_UINT(384, embeddings_service_get_dimension(service));
+
+    embeddings_service_destroy(service);
+}
+
+void test_env_url_overrides_config(void) {
+    TEST_ASSERT_EQUAL_INT(0, config_set("embedding_api_url", "http://127.0.0.1:1/v1/embeddings"));
+    set_local_model_env();
+
+    embeddings_service_t* service = embeddings_service_create();
+    TEST_ASSERT_NOT_NULL(service);
+
+    TEST_ASSERT_EQUAL_INT(1, embeddings_service_is_configured(service));
 
     embeddings_service_destroy(service);
 }
@@ -346,7 +386,10 @@ int main(int argc, char* argv[]) {
     RUN_TEST(test_probe_success_resolves_model_dimension);
     RUN_TEST(test_probe_success_openai_provider);
     RUN_TEST(test_probe_failure_disables_feature);
-    RUN_TEST(test_no_api_key_unconfigured_returns_default_dimension);
+    RUN_TEST(test_no_api_key_local_url_configured);
+    RUN_TEST(test_no_api_key_no_url_unconfigured);
+    RUN_TEST(test_config_file_url_and_model_used);
+    RUN_TEST(test_env_url_overrides_config);
     RUN_TEST(test_index_dimensions_follow_model_end_to_end);
 
     return UNITY_END();

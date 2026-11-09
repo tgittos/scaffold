@@ -70,7 +70,7 @@ int execute_remember_tool_call(const ToolCall *tool_call, ToolResult *result) {
 
     embeddings_service_t* embeddings = services_get_embeddings(g_services);
     if (!embeddings_service_is_configured(embeddings)) {
-        tool_result_builder_set_error(builder, "Embeddings service not configured. OPENAI_API_KEY environment variable required");
+        tool_result_builder_set_error(builder, "Embeddings service not configured. Set embedding_api_url and embedding_model in config, or OPENAI_API_KEY for OpenAI");
         ToolResult* temp_result = tool_result_builder_finalize(builder);
         if (temp_result) {
             *result = *temp_result;
@@ -232,7 +232,7 @@ int execute_recall_memories_tool_call(const ToolCall *tool_call, ToolResult *res
 
     embeddings_service_t* embeddings = services_get_embeddings(g_services);
     if (!embeddings_service_is_configured(embeddings)) {
-        tool_result_builder_set_error(builder, "Embeddings service not configured. OPENAI_API_KEY environment variable required");
+        tool_result_builder_set_error(builder, "Embeddings service not configured. Set embedding_api_url and embedding_model in config, or OPENAI_API_KEY for OpenAI");
         ToolResult* temp_result = tool_result_builder_finalize(builder);
         if (temp_result) {
             *result = *temp_result;

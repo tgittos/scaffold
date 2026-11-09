@@ -143,7 +143,7 @@ valgrind --leak-check=full ./test/test_foo.com.dbg      # x86_64
 - `shell.py` strips `PYTHONHOME` and `PYTHONDONTWRITEBYTECODE` from subprocesses to prevent the embedded Python from breaking system Python.
 - `apply_patch.py` uses a custom patch format (`*** Begin Patch` / `*** Update File:` / `*** Add File:` / `*** Delete File:` / `*** End Patch`), not standard unified diff.
 - Streaming includes transient error retry with exponential backoff and `response.failed` event detection.
-- Embedding vector dimension is resolved by probing the configured model at startup (see ARCHITECTURE.md). If the probe fails the embedding feature is hard-disabled — index code must use `embeddings_service_get_dimension()`, never a literal dimension.
+- Embedding vector dimension is resolved by probing the configured model at startup (see ARCHITECTURE.md). If the probe fails the embedding feature is hard-disabled — index code must use `embeddings_service_get_dimension()`, never a literal dimension. The endpoint comes from `EMBEDDING_API_URL`/`EMBEDDING_MODEL`, then the `embedding_api_url`/`embedding_model` config keys; a key is required only for providers that need auth (OpenAI).
 
 ## System Prompts
 

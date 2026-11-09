@@ -5,6 +5,7 @@
 #include "embedding_provider.h"
 #include "db/vector_db.h"
 #include "util/common_utils.h"
+#include "util/config.h"
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
@@ -37,20 +38,29 @@ static int probe_embedding_dimension(embeddings_service_t* service) {
     return 0;
 }
 
+static const char *non_empty(const char *s) {
+    return (s && s[0]) ? s : NULL;
+}
+
 /*
- * Initialize config and probe the model. On probe failure the embedding
- * feature is disabled entirely: consumers fall back to the unconfigured
- * behavior (zero embeddings, no semantic search).
+ * Initialize config and probe the model. Environment variables override the
+ * config file. On probe failure the embedding feature is disabled entirely:
+ * consumers fall back to the unconfigured behavior (zero embeddings, no
+ * semantic search).
  */
 static int configure_and_probe(embeddings_service_t* service) {
-    const char *api_key = getenv("OPENAI_API_KEY");
-    const char *model = getenv("EMBEDDING_MODEL");
-    const char *api_url = getenv("EMBEDDING_API_URL");
-    if (!api_url) api_url = getenv("OPENAI_API_URL");
+    const char *api_key = non_empty(getenv("OPENAI_API_KEY"));
+    if (!api_key) api_key = non_empty(config_get_string("openai_api_key"));
 
+    const char *model = non_empty(getenv("EMBEDDING_MODEL"));
+    if (!model) model = non_empty(config_get_string("embedding_model"));
     if (!model) model = "text-embedding-3-small";
 
-    if (!api_key || embeddings_init(&service->config, model, api_key, api_url) != 0) {
+    const char *api_url = non_empty(getenv("EMBEDDING_API_URL"));
+    if (!api_url) api_url = non_empty(config_get_string("embedding_api_url"));
+    if (!api_url) api_url = non_empty(getenv("OPENAI_API_URL"));
+
+    if (embeddings_init(&service->config, model, api_key, api_url) != 0) {
         return -1;
     }
 

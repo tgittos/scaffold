@@ -32,7 +32,7 @@ Create a `scaffold.config.json` in your project directory or `~/.local/scaffold/
 | `openai_api_key` | string | | OpenAI API key |
 | `anthropic_api_key` | string | | Anthropic API key |
 | `openai_api_url` | string | | Custom OpenAI-compatible endpoint |
-| `embedding_api_url` | string | | Embedding service endpoint (defaults to LLM endpoint) |
+| `embedding_api_url` | string | | Embedding service endpoint (defaults to the OpenAI embeddings API) |
 | `embedding_model` | string | | Model for embeddings |
 | `system_prompt` | string | | Custom system prompt override |
 | `context_window` | number | `8192` | Context window size in tokens |
@@ -82,8 +82,10 @@ Scaffold supports model tiers that map logical names to specific models. Configu
 |----------|-------------|
 | `OPENAI_API_KEY` | OpenAI API key (overrides config file) |
 | `ANTHROPIC_API_KEY` | Anthropic API key (overrides config file) |
+| `EMBEDDING_API_URL` | Embedding service endpoint (overrides config file) |
+| `EMBEDDING_MODEL` | Embedding model (overrides config file) |
 
-Environment variables take precedence over config file values for API keys.
+Environment variables take precedence over config file values.
 
 ## Provider detection
 

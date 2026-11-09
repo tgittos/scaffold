@@ -112,7 +112,7 @@ Uses `text-embedding-3-small` (1536 dimensions) by default. The actual dimension
 
 ### Local embeddings
 
-Point at a local embedding server (LM Studio, Ollama):
+Point at a local embedding server (LM Studio, Ollama, omlx). No API key is needed:
 
 ```json
 {

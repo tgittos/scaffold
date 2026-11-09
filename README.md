@@ -66,7 +66,7 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 
 `--login` opens a browser, authenticates via OpenAI OAuth, and stores your session locally. After that, scaffold routes through the Codex API using your ChatGPT subscription — no API key needed, no per-token billing. `--logout` when you're done.
 
-> **Note:** Semantic memory requires an API key for embeddings even when using Codex login. Set `OPENAI_API_KEY` alongside `--login` if you want long-term memory across sessions.
+> **Note:** Semantic memory needs an embeddings endpoint, even when using Codex login. Either set `OPENAI_API_KEY`, or point `embedding_api_url` and `embedding_model` in your config at a local embedding server (no key needed). See [Memory System](docs/memory.md).
 
 ### 3. Run
 

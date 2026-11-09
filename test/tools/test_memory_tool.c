@@ -195,6 +195,7 @@ void test_remember_tool_missing_content(void) {
 void test_remember_tool_no_api_key(void) {
     // Clear the API key env var to simulate unconfigured state
     unsetenv("OPENAI_API_KEY");
+    config_set("openai_api_key", "");
     embeddings_service_t* embeddings = services_get_embeddings(test_services);
     if (embeddings) embeddings_service_reinitialize(embeddings);
 
@@ -268,6 +269,7 @@ void test_recall_memories_missing_query(void) {
 void test_recall_memories_no_api_key(void) {
     // Clear the API key env var to simulate unconfigured state
     unsetenv("OPENAI_API_KEY");
+    config_set("openai_api_key", "");
     embeddings_service_t* embeddings = services_get_embeddings(test_services);
     if (embeddings) embeddings_service_reinitialize(embeddings);
 
