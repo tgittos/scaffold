@@ -28,13 +28,14 @@ void setUp(void) {
 }
 
 void tearDown(void) {
-    hnswlib_clear_all();
-    rmdir_recursive("/tmp/test_doc_store");
     document_store_set_services(NULL);
     if (g_test_services) {
         services_destroy(g_test_services);
         g_test_services = NULL;
     }
+    /* After services_destroy: the vector DB's flush thread reads hnswlib's indexes. */
+    hnswlib_clear_all();
+    rmdir_recursive("/tmp/test_doc_store");
     rmdir_recursive(g_test_home);
     app_home_cleanup();
 }
