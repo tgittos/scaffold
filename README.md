@@ -1,8 +1,6 @@
 # scaffold
 
-Most AI coding tools are fancy autocomplete. You type, they suggest. You chat, they respond. You're still driving.
-
-Scaffold doesn't assist. It builds.
+Scaffold is an autonomous coding agent. You give it a description of an application, and it plans the work, writes the code, runs the tests and fixes what breaks — approval prompts only if you want them.
 
 ```bash
 wget https://github.com/tgittos/scaffold/releases/latest/download/scaffold
@@ -19,27 +17,21 @@ seed the database with a handful of demo users and posts so the app feels alive 
 first launch."
 ```
 
-Describe what you want. Walk away. Come back to working software.
-
-> **Alpha software.** Scaffold works, but it has rough edges. If you're the kind of person who runs code from a README without flinching, you're in the right place.
+> **Alpha software.** It works, but there are rough edges. If you're comfortable running a binary straight off a README, you'll be fine.
 
 ---
 
 ## How it works
 
-Scaffold operates like a small software team, not a single chatbot.
+Scaffold splits the work across three kinds of agent rather than running one long chat.
 
-When you give it a description, it doesn't start writing code. It plans. It breaks your spec into goals, assigns each goal a supervisor, and the supervisors dispatch specialized workers to do the actual building. The whole thing runs autonomously — no hand-holding, no approval loops (unless you want them).
+**The orchestrator** reads your description and breaks it into a sequence of goals. It decides the architecture and the build order, and it doesn't write code itself.
 
-**The orchestrator** reads your description and decomposes it into a sequence of goals. It figures out the architecture, decides what to build first, and manages the pipeline. It never writes a line of code itself.
+**Goal supervisors** each own one goal. A supervisor uses [GOAP (Goal-Oriented Action Planning)](https://en.wikipedia.org/wiki/Goal-oriented_action_planning) to track what's done and what's next — world state is a set of boolean assertions about what exists so far — and keeps dispatching workers until the goal state holds. When a worker fails, the supervisor re-plans. When a supervisor crashes, it resumes from its last saved state.
 
-**Goal supervisors** are long-lived agents, each responsible for a single goal. A supervisor uses [GOAP (Goal-Oriented Action Planning)](https://en.wikipedia.org/wiki/Goal-oriented_action_planning) to reason about what's done and what's next. It tracks world state — a set of boolean assertions about what exists so far — and dispatches workers until the goal state is satisfied. If a worker fails, the supervisor adapts. If a supervisor crashes, it recovers from its last known state.
+**Workers** handle one task each (write a migration, implement an endpoint, run the tests, fix what the tests found) and then exit. Every worker has a role — implementation, testing, code review, architecture review, design review or PM review — with its own system prompt.
 
-**Workers** are fast, focused, and disposable. Each one handles a single task — write a migration, implement an endpoint, run the tests, fix the bug the tests found — then exits. Workers are assigned roles (implementation, testing, code review, architecture review, design review, PM review), each with a tailored system prompt that keeps them on task.
-
-The orchestrator advances to the next goal when the current one is verified complete. Repeat until the application exists.
-
-It's [ralphs](https://ghuntley.com/ralph/) all the way down.
+Once a goal is verified, the orchestrator moves on to the next one, until there are none left. It's [ralphs](https://ghuntley.com/ralph/) all the way down.
 
 ---
 
@@ -55,7 +47,7 @@ chmod +x scaffold
 ### 2. Configure
 
 ```bash
-# Use your ChatGPT subscription (recommended — flat rate, no per-token fees)
+# Use your ChatGPT subscription (flat rate, no per-token fees)
 ./scaffold --login
 
 # Or use an API key
@@ -64,9 +56,9 @@ export OPENAI_API_KEY="sk-..."
 export ANTHROPIC_API_KEY="sk-ant-..."
 ```
 
-`--login` opens a browser, authenticates via OpenAI OAuth, and stores your session locally. After that, scaffold routes through the Codex API using your ChatGPT subscription — no API key needed, no per-token billing. `--logout` when you're done.
+`--login` opens a browser, authenticates with OpenAI OAuth and stores the session locally. From then on scaffold talks to the Codex API on your ChatGPT subscription, so there's no API key or per-token billing. `--logout` clears it.
 
-> **Note:** Semantic memory needs an embeddings endpoint, even when using Codex login. Either set `OPENAI_API_KEY`, or point `embedding_api_url` and `embedding_model` in your config at a local embedding server (no key needed). See [Memory System](docs/memory.md).
+> **Note:** semantic memory needs an embeddings endpoint, even with Codex login. Either set `OPENAI_API_KEY`, or point `embedding_api_url` and `embedding_model` in your config at a local embedding server (no key needed). See [Memory System](docs/memory.md).
 
 ### 3. Run
 
@@ -83,57 +75,49 @@ cat SPEC.md | ./scaffold
 # Select a specific model
 ./scaffold --model gpt-4o "build a blog with Next.js"
 
-# Full autonomy (no approval prompts)
+# No approval prompts
 ./scaffold --yolo "build a blog with Next.js"
 ```
 
-See the [Getting Started guide](docs/getting-started.md) for more details.
+The [Getting Started guide](docs/getting-started.md) goes into more detail.
 
 ---
 
 ## Why this exists
 
-Every AI coding tool today puts you in the driver's seat. Copilot suggests lines. Cursor chats about files. Claude Code runs commands you approve. They're all built around the same assumption: the human is the architect, the AI is the assistant.
+Most AI coding tools assume you're the architect and the AI is helping. Copilot suggests lines, Cursor chats about files, Claude Code runs commands you approve.
 
-Scaffold inverts this. You're the client. Scaffold is the team.
-
-You provide the spec. Scaffold provides the architect, the developers, the testers, and the project manager. Its plans aren't hidden in an LLM's context window — they're explicit GOAP goal trees, persisted to SQLite, queryable with `/goals`. You can watch it think.
-
-This isn't a better copilot. It's a different thing entirely.
+Scaffold takes the other side of that: you write the spec, and it does the architecture, development, testing and project management. Its plan isn't buried in a context window either. Goals are explicit GOAP trees persisted to SQLite, and `/goals` shows you where it's up to.
 
 ---
 
 ## Where this is going
 
-Right now, scaffold generates applications from descriptions. That's the starting point, not the destination.
-
-The ambition is a software factory. Point it at a product backlog. Feed it a roadmap. Let it build your product while you sleep. Come back in the morning, review the PRs, ship.
-
-One person with scaffold should be able to build and maintain what used to take a team.
+Generating an application from a description is the starting point. The longer-term aim is something closer to a software factory — point it at a backlog or a roadmap, let it work overnight, and review the PRs in the morning.
 
 ---
 
 ## What's under the hood
 
-Scaffold is a single binary. No runtime dependencies. No Docker. No Python install. No npm. Download it and run it.
+Scaffold is a single binary with no runtime dependencies, so there's no Docker, Python or npm to install.
 
-This is possible because it's written in C and compiled with [Cosmopolitan](https://github.com/jart/cosmopolitan), which produces Actually Portable Executables — one binary that runs on Linux, macOS, Windows, FreeBSD, and OpenBSD across x86_64 and ARM64. The Python interpreter, the vector database, the PDF processor, the TLS stack — all compiled in.
+It's written in C and compiled with [Cosmopolitan](https://github.com/jart/cosmopolitan), which produces Actually Portable Executables: one binary that runs on Linux, macOS, Windows, FreeBSD and OpenBSD, on x86_64 and ARM64. The Python interpreter, vector database, PDF processor and TLS stack are all compiled in.
 
 ### Capabilities
 
 - **LLM providers**: Anthropic, OpenAI, Codex (ChatGPT subscription via OAuth), and anything API-compatible (LM Studio, Ollama, etc.)
-- **Codex auth**: Log in with your ChatGPT subscription instead of paying per-token. OAuth2 with PKCE, encrypted token storage, automatic refresh.
-- **Extended thinking**: Native support for reasoning models (Claude, Qwen, DeepSeek)
-- **Prompt caching**: Split system prompts for Anthropic and OpenAI to maximize cache hits, reducing latency and cost
-- **Vision**: Attach images to conversations for multimodal models
-- **Tools**: 54 built-in tools — file I/O, shell, web fetch, PDF processing, package management
-- **Memory**: Semantic long-term memory via HNSWLIB vector store, persisted across sessions
-- **MCP**: Model Context Protocol client with stdio, HTTP, and SSE transports
-- **Plugins**: JSON-RPC 2.0 plugin protocol — drop executables into `~/.local/scaffold/plugins/`, register custom tools in any language
-- **Sub-agents**: Fork/exec process spawning with inter-agent messaging (direct + pub/sub)
-- **Task persistence**: Goals, actions, and work queues backed by SQLite
-- **Self-update**: Checks GitHub releases and updates in place
-- **Project awareness**: Reads AGENTS.md for project-specific context
+- **Codex auth**: OAuth2 with PKCE, encrypted token storage and automatic refresh
+- **Extended thinking**: native support for reasoning models (Claude, Qwen, DeepSeek)
+- **Prompt caching**: system prompts are split for Anthropic and OpenAI to get more cache hits
+- **Vision**: attach images for multimodal models
+- **Tools**: 54 built-in tools covering file I/O, shell, web fetch, PDF processing and package management
+- **Memory**: semantic long-term memory in an HNSWLIB vector store, persisted across sessions
+- **MCP**: Model Context Protocol client with stdio, HTTP and SSE transports
+- **Plugins**: JSON-RPC 2.0 plugin protocol — drop executables into `~/.local/scaffold/plugins/` to register tools in any language
+- **Sub-agents**: fork/exec process spawning with inter-agent messaging (direct and pub/sub)
+- **Task persistence**: goals, actions and work queues stored in SQLite
+- **Self-update**: checks GitHub releases and updates in place
+- **Project awareness**: reads `AGENTS.md` for project-specific context
 
 ---
 
@@ -156,7 +140,7 @@ This is possible because it's written in C and compiled with [Cosmopolitan](http
 
 ## Building from source
 
-Scaffold targets the Cosmopolitan toolchain. The easiest path is the devcontainer:
+Scaffold builds with the Cosmopolitan toolchain, and the devcontainer is the easiest way to get it:
 
 ```bash
 # Build the devcontainer image
@@ -170,7 +154,7 @@ docker run --rm --privileged \
     ./scripts/build.sh
 ```
 
-The `--privileged` flag registers the APE binary loader for Cosmopolitan executables.
+`--privileged` lets the container register the APE binary loader for Cosmopolitan executables.
 
 ### Dependencies (vendored or linked at build time)
 
@@ -182,4 +166,4 @@ libcurl, mbedtls, readline, ncurses, zlib, cJSON, SQLite, HNSWLIB, PDFio, ossp-u
 ./scripts/build.sh && ./scripts/run_tests.sh
 ```
 
-See [Building from Source](docs/building-from-source.md) for the full guide.
+The full guide is in [Building from Source](docs/building-from-source.md).
