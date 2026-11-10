@@ -184,8 +184,21 @@ run_test() {
     local exit_code
 
     cd "$PROJECT_DIR"
+    local marker
+    marker=$(mktemp)
     output=$(./"$test_path" 2>&1)
     exit_code=$?
+
+    # A crashing child process leaves a core file without changing the
+    # test's own exit status.
+    local cores
+    cores=$(find "$PROJECT_DIR" -maxdepth 1 -type f \
+        \( -name core -o -name 'core.[0-9]*' -o -name '*.core' \) \
+        -newer "$marker" 2>/dev/null)
+    rm -f "$marker"
+    if [ -n "$cores" ]; then
+        output="$output"$'\n'"Core dumped: $cores"
+    fi
 
     local end_time=$(date +%s)000
     local duration=$((end_time - start_time))
@@ -207,9 +220,10 @@ run_test() {
         fi
     fi
 
-    # Detect segfault
+    # Detect segfault: crash text, death by signal, or a core file
     local segfault=0
-    if echo "$output" | grep -qi "segmentation fault\|segfault\|SIGSEGV"; then
+    if echo "$output" | grep -qi "segmentation fault\|segfault\|SIGSEGV" \
+        || [ $exit_code -gt 128 ] || [ -n "$cores" ]; then
         segfault=1
     fi
 
