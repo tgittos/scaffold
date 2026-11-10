@@ -22,6 +22,10 @@ bool get_json_output_mode(void) {
 }
 
 static int streaming_first_chunk = 1;
+/* Thinking -> text separation: set while thinking is the last thing shown,
+ * with the count of newlines that thinking output ended on. */
+static int streaming_after_thinking = 0;
+static int streaming_thinking_trailing_nl = 0;
 
 
 static char *extract_json_string(const char *json, const char *key) {
@@ -768,6 +772,8 @@ void cleanup_output_formatter(void) {
 
 void display_streaming_init(void) {
     streaming_first_chunk = 1;
+    streaming_after_thinking = 0;
+    streaming_thinking_trailing_nl = 0;
 }
 
 void display_streaming_text(const char* text, size_t len) {
@@ -781,6 +787,21 @@ void display_streaming_text(const char* text, size_t len) {
 
     if (streaming_first_chunk) {
         streaming_first_chunk = 0;
+    }
+    if (streaming_after_thinking) {
+        /* Exactly one blank line between reasoning and the answer: drop the
+         * answer's leading newlines and top up what thinking ended with. */
+        while (len > 0 && (*text == '\n' || *text == '\r')) {
+            text++;
+            len--;
+        }
+        if (len == 0) {
+            return;
+        }
+        for (int i = streaming_thinking_trailing_nl; i < 2; i++) {
+            fputc('\n', stdout);
+        }
+        streaming_after_thinking = 0;
     }
     fwrite(text, 1, len, stdout);
     fflush(stdout);
@@ -803,6 +824,14 @@ void display_streaming_thinking(const char* text, size_t len) {
     fwrite(text, 1, len, stdout);
     printf(TERM_RESET);
     fflush(stdout);
+
+    streaming_after_thinking = 1;
+    size_t nl = 0;
+    while (nl < len && text[len - 1 - nl] == '\n') {
+        nl++;
+    }
+    /* A chunk with text resets the count; a newline-only chunk extends it */
+    streaming_thinking_trailing_nl = (nl == len) ? streaming_thinking_trailing_nl + (int)nl : (int)nl;
 }
 
 void display_streaming_tool_start(const char* id, const char* tool_name) {

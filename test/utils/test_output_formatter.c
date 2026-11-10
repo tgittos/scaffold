@@ -2,6 +2,8 @@
 #include "ui/output_formatter.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
 
 // Test data - typical OpenAI response
 static const char *openai_response = 
@@ -587,8 +589,84 @@ void test_task_tool_display(void) {
     TEST_ASSERT_TRUE(1);
 }
 
+/* --- streaming thinking -> text separation --- */
+
+static int g_saved_stdout = -1;
+static char g_capture_path[64];
+static char g_capture_buf[4096];
+
+static void capture_begin(void) {
+    fflush(stdout);
+    g_saved_stdout = dup(STDOUT_FILENO);
+    snprintf(g_capture_path, sizeof(g_capture_path), "/tmp/test_output_fmt.XXXXXX");
+    int fd = mkstemp(g_capture_path);
+    TEST_ASSERT_TRUE(fd >= 0);
+    dup2(fd, STDOUT_FILENO);
+    close(fd);
+}
+
+/* Returns captured stdout with ANSI escape sequences removed */
+static const char* capture_end_plain(void) {
+    fflush(stdout);
+    dup2(g_saved_stdout, STDOUT_FILENO);
+    close(g_saved_stdout);
+    g_saved_stdout = -1;
+
+    char raw[4096];
+    FILE* in = fopen(g_capture_path, "r");
+    TEST_ASSERT_NOT_NULL(in);
+    size_t n = fread(raw, 1, sizeof(raw) - 1, in);
+    raw[n] = '\0';
+    fclose(in);
+    remove(g_capture_path);
+
+    size_t o = 0;
+    for (size_t i = 0; i < n && o < sizeof(g_capture_buf) - 1; i++) {
+        if (raw[i] == '\x1b' && i + 1 < n && raw[i + 1] == '[') {
+            i += 2;
+            while (i < n && !((raw[i] >= 'A' && raw[i] <= 'Z') || (raw[i] >= 'a' && raw[i] <= 'z'))) i++;
+            continue;
+        }
+        if (raw[i] == '\r') continue;
+        g_capture_buf[o++] = raw[i];
+    }
+    g_capture_buf[o] = '\0';
+    return g_capture_buf;
+}
+
+static const char* render_stream(const char* thinking, const char* text) {
+    capture_begin();
+    display_streaming_init();
+    display_streaming_thinking(thinking, strlen(thinking));
+    display_streaming_text(text, strlen(text));
+    return capture_end_plain();
+}
+
+void test_streaming_text_after_thinking_gets_blank_line(void) {
+    TEST_ASSERT_EQUAL_STRING("pondering\n\nHey, Tim!",
+                             render_stream("pondering", "Hey, Tim!"));
+}
+
+void test_streaming_separator_absorbs_existing_newlines(void) {
+    /* Thinking ends with a newline and the answer starts with two:
+     * still exactly one blank line between them. */
+    TEST_ASSERT_EQUAL_STRING("pondering\n\nHey, Tim!",
+                             render_stream("pondering\n", "\n\nHey, Tim!"));
+}
+
+void test_streaming_text_without_thinking_unchanged(void) {
+    capture_begin();
+    display_streaming_init();
+    display_streaming_text("Hello", 5);
+    display_streaming_text(" world", 6);
+    TEST_ASSERT_EQUAL_STRING("Hello world", capture_end_plain());
+}
+
 int main(void) {
     UNITY_BEGIN();
+    RUN_TEST(test_streaming_text_after_thinking_gets_blank_line);
+    RUN_TEST(test_streaming_separator_absorbs_existing_newlines);
+    RUN_TEST(test_streaming_text_without_thinking_unchanged);
     
     RUN_TEST(test_parse_api_response_with_null_parameters);
     RUN_TEST(test_parse_api_response_openai_format);
