@@ -45,7 +45,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`message_processor.c/h`** - Buffered (non-streaming) response handling and tool call extraction
 - **`api_round_trip.c/h`** - Single LLM request-response cycle (payload build, HTTP, parse)
 - **`conversation_state.c/h`** - Conversation history append helpers (assistant messages, tool results)
-- **`tool_batch_executor.c/h`** - Batch tool execution with approval gate integration; explicitly dispatches MCP and plugin tools (schema-only registry entries)
+- **`tool_batch_executor.c/h`** - Batch tool execution with approval gate integration; explicitly dispatches MCP and plugin tools (schema-only registry entries); caps each result at `tool_result_max_bytes` (default 32768) keeping head and tail around a `[... N bytes omitted ...]` marker
 - **`tool_orchestration.c/h`** - Tool call deduplication and per-batch tracking
 - **`repl.c/h`** - Read-Eval-Print-Loop for interactive mode with readline, async processing, and periodic supervisor recovery
 - **`async_executor.c/h`** - Non-blocking message processing using background thread with pipe notification; running flag and condition broadcast occur inside mutex to prevent signal loss

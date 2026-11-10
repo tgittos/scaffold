@@ -44,4 +44,11 @@ int tool_batch_execute(ToolBatchContext* ctx,
                        int* call_indices,
                        int* executed_count);
 
+/**
+ * Cap result->result at max_bytes of content, keeping the head and tail
+ * around a "[... N bytes omitted ...]" marker. Cuts never split a UTF-8
+ * sequence. Results at or under max_bytes, and max_bytes == 0, are untouched.
+ */
+void tool_result_apply_cap(ToolResult* result, size_t max_bytes);
+
 #endif /* LIB_AGENT_TOOL_BATCH_EXECUTOR_H */

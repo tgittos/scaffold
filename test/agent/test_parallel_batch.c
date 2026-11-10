@@ -32,6 +32,20 @@ static int slow_tool_execute(const ToolCall *call, ToolResult *result) {
     return 0;
 }
 
+static int big_tool_execute(const ToolCall *call, ToolResult *result) {
+    size_t n = 100000;
+    char *buf = malloc(n + 1);
+    if (buf == NULL) return -1;
+    memset(buf, 'x', n);
+    buf[0] = 'H';
+    buf[n - 1] = 'T';
+    buf[n] = '\0';
+    result->tool_call_id = call->id ? strdup(call->id) : NULL;
+    result->result = buf;
+    result->success = 1;
+    return 0;
+}
+
 static void register_slow_tool(ToolRegistry *reg, const char *name) {
     ToolFunction func = {0};
     func.name = strdup(name);
@@ -50,6 +64,8 @@ void setUp(void) {
     register_slow_tool(&session.tools, "slow_a");
     register_slow_tool(&session.tools, "slow_b");
     register_slow_tool(&session.tools, "slow_c");
+    register_slow_tool(&session.tools, "big");
+    session.tools.functions.data[session.tools.functions.count - 1].execute_func = big_tool_execute;
 
     memset(&orchestration, 0, sizeof(orchestration));
     tool_orchestration_init(&orchestration, NULL);
@@ -272,6 +288,59 @@ void test_non_thread_safe_falls_back_to_serial(void) {
     free_results(results, 2);
 }
 
+void test_oversized_result_is_capped(void) {
+    ToolCall calls[1] = { make_call("c1", "big", NULL) };
+    ToolResult results[1] = {0};
+    int executed = 0;
+
+    int rc = tool_batch_execute(&batch_ctx, calls, 1, results, NULL, &executed);
+
+    TEST_ASSERT_EQUAL_INT(0, rc);
+    const char *r = results[0].result;
+    TEST_ASSERT_NOT_NULL(r);
+    size_t len = strlen(r);
+    TEST_ASSERT_LESS_THAN_size_t(32768 + 64, len);
+    TEST_ASSERT_EQUAL_CHAR('H', r[0]);
+    TEST_ASSERT_EQUAL_CHAR('T', r[len - 1]);
+    TEST_ASSERT_NOT_NULL(strstr(r, "[... 67232 bytes omitted ...]"));
+
+    free_calls(calls, 1);
+    free_results(results, 1);
+}
+
+void test_cap_leaves_small_result_untouched(void) {
+    ToolResult result = { .result = strdup("short") };
+    tool_result_apply_cap(&result, 16);
+    TEST_ASSERT_EQUAL_STRING("short", result.result);
+    free(result.result);
+}
+
+void test_cap_does_not_split_utf8(void) {
+    /* 20 x U+00E9 (2 bytes each) = 40 bytes; odd limit forces a mid-sequence cut. */
+    char buf[41];
+    for (int i = 0; i < 20; i++) {
+        buf[2 * i] = (char)0xC3;
+        buf[2 * i + 1] = (char)0xA9;
+    }
+    buf[40] = '\0';
+    ToolResult result = { .result = strdup(buf) };
+
+    tool_result_apply_cap(&result, 11);
+
+    const char *r = result.result;
+    const char *marker = strstr(r, "\n[... ");
+    TEST_ASSERT_NOT_NULL(marker);
+    TEST_ASSERT_EQUAL_INT(0, (int)((marker - r) % 2));
+    const char *tail = strstr(marker, "...]\n");
+    TEST_ASSERT_NOT_NULL(tail);
+    tail += 5;
+    TEST_ASSERT_EQUAL_INT(0, (int)(strlen(tail) % 2));
+    TEST_ASSERT_EQUAL_HEX8(0xC3, (unsigned char)tail[0]);
+    TEST_ASSERT_EQUAL_INT(40, (int)((marker - r) + strlen(tail)) +
+                          atoi(marker + 6));
+    free(result.result);
+}
+
 void test_null_context_returns_error(void) {
     int executed = 0;
     ToolResult results[1] = {0};
@@ -293,5 +362,8 @@ int main(void) {
     RUN_TEST(test_non_thread_safe_falls_back_to_serial);
     RUN_TEST(test_tool_cache_thread_safety);
     RUN_TEST(test_null_context_returns_error);
+    RUN_TEST(test_oversized_result_is_capped);
+    RUN_TEST(test_cap_leaves_small_result_untouched);
+    RUN_TEST(test_cap_does_not_split_utf8);
     return UNITY_END();
 }
