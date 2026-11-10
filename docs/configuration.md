@@ -36,6 +36,7 @@ Create a `scaffold.config.json` in your project directory or `~/.local/scaffold/
 | `embedding_model` | string | | Model for embeddings |
 | `system_prompt` | string | | Custom system prompt override |
 | `context_window` | number | `8192` | Context window size in tokens |
+| `tool_result_max_bytes` | number | `32768` | Cap on each tool result sent to the model; longer results keep head and tail around an omission marker |
 | `max_tokens` | number | `-1` | Max output tokens (`-1` = unlimited) |
 | `enable_streaming` | boolean | `true` | Enable real-time response streaming |
 | `check_updates` | boolean | `true` | Check for updates on startup |

@@ -53,6 +53,7 @@ void test_config_init_with_defaults(void) {
     TEST_ASSERT_EQUAL_STRING("https://api.openai.com/v1/chat/completions", config->api_url);
     TEST_ASSERT_EQUAL_STRING("gpt-5-mini-2025-08-07", config->model);
     TEST_ASSERT_EQUAL(8192, config->context_window);
+    TEST_ASSERT_EQUAL(32768, config->tool_result_max_bytes);
     TEST_ASSERT_EQUAL(-1, config->max_tokens);
     TEST_ASSERT_TRUE(config->enable_streaming);  // Default should be true
 }
@@ -69,6 +70,7 @@ void test_config_init_with_anthropic_config(void) {
         "  \"model\": \"claude-3-sonnet-20240229\",\n"
         "  \"anthropic_api_key\": \"test-key\",\n"
         "  \"context_window\": 4096,\n"
+        "  \"tool_result_max_bytes\": 1024,\n"
         "  \"max_tokens\": 1000\n"
         "}\n";
 
@@ -84,6 +86,7 @@ void test_config_init_with_anthropic_config(void) {
     TEST_ASSERT_EQUAL_STRING("test-key", config->api_key);
     TEST_ASSERT_EQUAL_STRING("test-key", config->anthropic_api_key);
     TEST_ASSERT_EQUAL(4096, config->context_window);
+    TEST_ASSERT_EQUAL(1024, config->tool_result_max_bytes);
     TEST_ASSERT_EQUAL(1000, config->max_tokens);
 }
 
@@ -190,6 +193,8 @@ void test_config_get_int(void) {
     
     TEST_ASSERT_EQUAL(4096, config_get_int("context_window", -1));
     TEST_ASSERT_EQUAL(1000, config_get_int("max_tokens", -1));
+    TEST_ASSERT_EQUAL(0, config_set("tool_result_max_bytes", "2048"));
+    TEST_ASSERT_EQUAL(2048, config_get_int("tool_result_max_bytes", -1));
     TEST_ASSERT_EQUAL(999, config_get_int("nonexistent_key", 999)); // Should return default
 }
 
