@@ -53,7 +53,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`recap.c/h`** - Conversation recap generation (one-shot LLM calls without history persistence)
 - **`streaming_handler.c/h`** - Application-layer streaming orchestration and provider registry management
 - **`tool_executor.c/h`** - Thin entry point for tool execution workflow (init, initial batch, clear_history support, hand-off)
-- **`iterative_loop.c/h`** - Iterative tool-calling loop for follow-up LLM rounds
+- **`iterative_loop.c/h`** - Iterative tool-calling loop for follow-up LLM rounds; bounded retry of empty rounds (no text, reasoning or tool calls) with a visible warning
 - **`prompt_mode.c/h`** - Behavioral prompt mode definitions and parsing (plan, explore, debug, review)
 
 #### `lib/session/` - Session Data Management
@@ -92,15 +92,15 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 ##### `lib/llm/providers/` - API Provider Implementations
 - **`codex_provider.c/h`** - OpenAI Codex Responses API client (subscription-based via OAuth, `chatgpt-account-id` header, thread-local account ID, flat tool format, structured function_call emission for tool call round-trips, error/incomplete/failed stream event handling)
 - **`anthropic_provider.c`** - Anthropic API client (Messages format)
-- **`openai_provider.c`** - OpenAI API client (Chat completions)
-- **`local_ai_provider.c`** - Local AI server integration (LM Studio, Ollama)
+- **`openai_provider.c`** - OpenAI API client (Chat completions); streams `delta.reasoning_content` as thinking
+- **`local_ai_provider.c`** - Local AI server integration (LM Studio, Ollama); streams `delta.reasoning_content` as thinking
 - **`openai_embedding_provider.c`** - OpenAI embedding API provider
 - **`local_embedding_provider.c`** - Local embedding service provider
 
 #### `lib/network/` - Network Communication
 - **`http_client.c/h`** - HTTP client implementation using libcurl (buffered and streaming)
 - **`http_form_post.c/h`** - Form-urlencoded POST for OAuth token endpoints (URL-encodes via `curl_easy_escape`, sets Content-Type)
-- **`api_common.c/h`** - JSON payload building with prompt caching support (`SystemPromptParts` split, Anthropic `cache_control` markers, model-aware payload construction), `summarize_tool_calls()` for converting tool_calls JSON to plain text, `streaming_add_params()` shared utility for adding stream/store params
+- **`api_common.c/h`** - JSON payload building with prompt caching support (`SystemPromptParts` split, Anthropic `cache_control` markers, model-aware payload construction), canonical OpenAI tool message formatting (`role:tool` + `tool_call_id`, assistant `tool_calls` verbatim), `streaming_add_params()` shared utility for adding stream/store params
 - **`streaming.c/h`** - SSE streaming infrastructure for real-time response handling
 - **`api_error.c/h`** - Enhanced API error handling with retry logic
 - **`embedded_cacert.c/h`** - Embedded Mozilla CA certificate bundle for portable SSL/TLS
@@ -253,6 +253,7 @@ The test directory mirrors the source structure:
 
 #### `test/ralph/` - Core Functionality Tests
 - **`test_ralph.c`** - Core Ralph functionality tests
+- **`test_iterative_loop_empty.c`** - Empty-round retry and give-up behavior of the tool loop (mock SSE server)
 - **`test_cli_flags.c`** - CLI flag parsing tests
 - **`test_recap.c`** - Recap generation tests
 - **`test_async_executor.c`** - Async executor background thread tests
@@ -272,6 +273,7 @@ The test directory mirrors the source structure:
 - **`test_http_client.c`** - HTTP client functionality tests
 - **`test_http_form_post.c`** - Form-urlencoded POST tests
 - **`test_messages_array_bug.c`** - Message handling regression tests
+- **`test_openai_message_format.c`** - Canonical OpenAI tool message shape (`role:tool`, assistant `tool_calls`)
 - **`test_streaming.c`** - SSE streaming infrastructure tests
 - **`test_http_retry.c`** - HTTP retry logic tests
 - **`test_http_python.c`** - Python HTTP extension tests

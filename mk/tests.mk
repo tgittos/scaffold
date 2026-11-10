@@ -358,6 +358,7 @@ $(eval $(call def_test_lib,openai_streaming,llm/test_openai_streaming,))
 $(eval $(call def_test_lib,anthropic_streaming,llm/test_anthropic_streaming,))
 $(eval $(call def_test_lib,codex_provider,llm/test_codex_provider,))
 $(eval $(call def_test_lib,messages_array_bug,network/test_messages_array_bug,))
+$(eval $(call def_test_lib,openai_message_format,network/test_openai_message_format,))
 $(eval $(call def_test_lib,mcp_client,mcp/test_mcp_client,))
 $(eval $(call def_test_lib,subagent_tool,tools/test_subagent_tool,))
 $(eval $(call def_test_lib,incomplete_task_bug,ralph/test_incomplete_task_bug,))
@@ -367,6 +368,7 @@ $(eval $(call def_test_lib,tool_calls_not_stored,session/test_tool_calls_not_sto
 $(eval $(call def_test_lib,document_store,db/test_document_store,))
 $(eval $(call def_test_lib,http,network/test_http_client,))
 $(eval $(call def_test_lib,ralph,ralph/test_ralph,$(TESTDIR)/mock_api_server.c))
+$(eval $(call def_test_lib,iterative_loop_empty,ralph/test_iterative_loop_empty,$(TESTDIR)/mock_api_server.c))
 $(eval $(call def_test_lib,message_dispatcher,ralph/test_message_dispatcher,))
 $(eval $(call def_test_lib,message_processor,ralph/test_message_processor,))
 $(eval $(call def_test_lib,recap,ralph/test_recap,))
@@ -400,9 +402,10 @@ $(TEST_plugin_protocol_TARGET): $(TEST_plugin_protocol_OBJECTS) $(CJSON_LIB)
 # Batch link rule for libagent-linked tests
 LIBAGENT_TESTS := tool_param_dsl json_output output tools_system vector_db_tool memory_tool \
     memory_mgmt token_manager conversation_compactor rolling_summary model_tools embeddings_service embeddings_service_reinit \
-    openai_streaming anthropic_streaming codex_provider messages_array_bug mcp_client subagent_tool \
+    openai_streaming anthropic_streaming codex_provider messages_array_bug openai_message_format mcp_client subagent_tool \
     incomplete_task_bug conversation conversation_vdb tool_calls_not_stored document_store \
     message_dispatcher message_processor recap parallel_batch model_commands \
+    iterative_loop_empty \
     slash_commands task_commands agent_commands goal_commands mode_tool mode_commands status_line \
     context_mode_injection repo_context image_attachment goap_tools orchestrator_tool goap_lifecycle \
     goap_state plugin_manager hook_dispatcher plugin_integration

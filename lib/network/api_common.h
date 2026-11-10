@@ -16,8 +16,6 @@ typedef struct {
     const char* dynamic_context;
 } SystemPromptParts;
 
-char* summarize_tool_calls(const char* raw_json);
-
 /* Flags for streaming_add_params */
 #define STREAM_INCLUDE_USAGE (1 << 0)
 #define STREAM_NO_STORE      (1 << 1)
