@@ -3,6 +3,7 @@
 #include "tools/python_tool_files.h"
 #include "lib/tools/tools_system.h"
 #include "util/app_home.h"
+#include "../test_fs_utils.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -887,6 +888,75 @@ void test_apply_patch_basic(void) {
     python_cleanup_tool_files();
 }
 
+static const char *SHIPPED_APPEND_FILE_PY =
+    "\"\"\"Append content to a file.\"\"\"\n"
+    "\n"
+    "def append_file(path: str, content: str) -> dict:\n"
+    "    \"\"\"Append content to file.\n"
+    "\n"
+    "    Args:\n"
+    "        path: Path to the file to append to\n"
+    "        content: Content to append\n"
+    "\n"
+    "    Returns:\n"
+    "        Dictionary with success status and path\n"
+    "    \"\"\"\n"
+    "    from pathlib import Path\n"
+    "\n"
+    "    p = Path(path).resolve()\n"
+    "\n"
+    "    # Security check - prevent directory traversal\n"
+    "    if '..' in str(path):\n"
+    "        raise ValueError(\"Invalid path: directory traversal not allowed\")\n"
+    "\n"
+    "    # Create parent directories if needed\n"
+    "    p.parent.mkdir(parents=True, exist_ok=True)\n"
+    "\n"
+    "    # Append content\n"
+    "    with open(p, 'a', encoding='utf-8') as f:\n"
+    "        f.write(content)\n"
+    "\n"
+    "    return {\n"
+    "        \"success\": True,\n"
+    "        \"path\": str(p),\n"
+    "        \"bytes_appended\": len(content.encode('utf-8'))\n"
+    "    }\n";
+
+static void write_text_file(const char *path, const char *content) {
+    FILE *f = fopen(path, "w");
+    TEST_ASSERT_NOT_NULL(f);
+    fputs(content, f);
+    fclose(f);
+}
+
+void test_retired_default_tools_removed_only_when_unmodified(void) {
+    char home[] = "/tmp/retired_tools_XXXXXX";
+    TEST_ASSERT_NOT_NULL(mkdtemp(home));
+    app_home_cleanup();
+    TEST_ASSERT_EQUAL_INT(0, app_home_init(home));
+
+    char tools_dir[512], shipped[600], customized[600], user_tool[600];
+    snprintf(tools_dir, sizeof(tools_dir), "%s/tools", home);
+    TEST_ASSERT_EQUAL_INT(0, mkdir(tools_dir, 0755));
+    snprintf(shipped, sizeof(shipped), "%s/append_file.py", tools_dir);
+    snprintf(customized, sizeof(customized), "%s/pip_list.py", tools_dir);
+    snprintf(user_tool, sizeof(user_tool), "%s/my_tool.py", tools_dir);
+    write_text_file(shipped, SHIPPED_APPEND_FILE_PY);
+    write_text_file(customized, "def pip_list() -> dict:\n    return {}\n");
+    write_text_file(user_tool, "def my_tool() -> dict:\n    return {}\n");
+
+    TEST_ASSERT_EQUAL_INT(0, python_init_tool_files());
+
+    struct stat st;
+    TEST_ASSERT_NOT_EQUAL(0, stat(shipped, &st));
+    TEST_ASSERT_EQUAL_INT(0, stat(customized, &st));
+    TEST_ASSERT_EQUAL_INT(0, stat(user_tool, &st));
+
+    python_cleanup_tool_files();
+    app_home_cleanup();
+    rmdir_recursive(home);
+}
+
 int main(void) {
     // Initialize app home before Python interpreter (needed for tool files path)
     app_home_init(NULL);
@@ -921,6 +991,7 @@ int main(void) {
     RUN_TEST(test_search_files_new_features);
     RUN_TEST(test_list_dir_iso_timestamps);
     RUN_TEST(test_apply_patch_basic);
+    RUN_TEST(test_retired_default_tools_removed_only_when_unmodified);
 
     int result = UNITY_END();
 
