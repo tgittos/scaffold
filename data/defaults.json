@@ -9,6 +9,7 @@
   "api_backoff_factor": 2.0,
   "max_subagents": 5,
   "subagent_timeout": 300,
+  "shell_max_timeout": 300,
   "enable_streaming": true,
   "json_output_mode": false,
   "check_updates": true,

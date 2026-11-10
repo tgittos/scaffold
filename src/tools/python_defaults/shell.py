@@ -24,7 +24,7 @@ def shell(command: str, working_dir: str = None, timeout: int = 30,
     Args:
         command: Shell command to execute
         working_dir: Working directory for command execution (optional)
-        timeout: Maximum execution time in seconds (default: 30, max: 300)
+        timeout: Maximum execution time in seconds (default: 30, capped by the shell_max_timeout config, default 300)
         capture_stderr: Whether to capture stderr separately (default: True)
 
     Returns:
@@ -33,12 +33,13 @@ def shell(command: str, working_dir: str = None, timeout: int = 30,
     import subprocess
     import time
     from pathlib import Path
+    import _ralph_sys
 
-    # Validate timeout
+    max_timeout = _ralph_sys.get_config_int("shell_max_timeout", 300)
     if timeout <= 0:
         timeout = 30
-    elif timeout > 300:
-        timeout = 300
+    elif timeout > max_timeout:
+        timeout = max_timeout
 
     # Security checks - reject dangerous patterns
     dangerous_patterns = [

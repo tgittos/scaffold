@@ -80,6 +80,7 @@ api_retry_delay_ms=$(jq -r '.api_retry_delay_ms' "$DEFAULTS")
 api_backoff_factor=$(jq -r '.api_backoff_factor | tostring | if test("\\.") then . else . + ".0" end' "$DEFAULTS")
 max_subagents=$(jq -r '.max_subagents' "$DEFAULTS")
 subagent_timeout=$(jq -r '.subagent_timeout' "$DEFAULTS")
+shell_max_timeout=$(jq -r '.shell_max_timeout' "$DEFAULTS")
 enable_streaming=$(jq -r '.enable_streaming' "$DEFAULTS")
 json_output_mode=$(jq -r '.json_output_mode' "$DEFAULTS")
 check_updates=$(jq -r '.check_updates' "$DEFAULTS")
@@ -103,6 +104,7 @@ cat > "$TMP" << HEOF
 #define DEFAULT_API_BACKOFF_FACTOR ${api_backoff_factor}f
 #define DEFAULT_MAX_SUBAGENTS ${max_subagents}
 #define DEFAULT_SUBAGENT_TIMEOUT ${subagent_timeout}
+#define DEFAULT_SHELL_MAX_TIMEOUT ${shell_max_timeout}
 #define DEFAULT_ENABLE_STREAMING $(bool_to_c "$enable_streaming")
 #define DEFAULT_JSON_OUTPUT_MODE $(bool_to_c "$json_output_mode")
 #define DEFAULT_CHECK_UPDATES $(bool_to_c "$check_updates")
