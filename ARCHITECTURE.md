@@ -995,7 +995,7 @@ graph TB
 | `memory` | ALLOW | Memory tool operations |
 | `subagent` | GATE | Spawning subagents |
 | `mcp` | GATE | MCP tool execution |
-| `python` | ALLOW | Python code execution |
+| `python` | GATE | Python code execution; fallback for tools with no declared category |
 | `plugin` | GATE | Plugin tool execution |
 
 ### Key Components
