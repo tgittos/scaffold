@@ -138,7 +138,7 @@ Each tool belongs to a category with a default action:
 | `memory` | allow | `remember`, `recall_memories`, vector DB, messaging |
 | `subagent` | gate | `subagent` |
 | `mcp` | gate | MCP tool calls |
-| `python` | allow | `python` |
+| `python` | gate | `python`, and tools with no declared category (`--allow-category=python` allows them) |
 | `plugin` | gate | Plugin tool calls |
 
 Actions:
