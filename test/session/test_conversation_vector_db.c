@@ -196,8 +196,29 @@ void test_sliding_window_retrieval(void) {
 
 }
 
+/* History loads at session init, before config is read and the embedding
+ * dimension is known; an index created then would be fixed at the wrong size. */
+void test_loading_history_does_not_create_index(void) {
+    ConversationHistory history;
+    init_conversation_history(&history);
+
+    TEST_ASSERT_EQUAL(0, load_conversation_history(&history));
+    TEST_ASSERT_EQUAL(0, load_extended_conversation_history(&history, 30, 100));
+    ConversationHistory* found = search_conversation_history("quantum", 5);
+    if (found) {
+        cleanup_conversation_history(found);
+        free(found);
+    }
+
+    TEST_ASSERT_FALSE(vector_db_service_has_index(g_test_services->vector_db, "conversations"));
+
+    cleanup_conversation_history(&history);
+}
+
 int main(void) {
     UNITY_BEGIN();
+
+    RUN_TEST(test_loading_history_does_not_create_index);
 
     RUN_TEST(test_conversation_stored_in_vector_db);
     RUN_TEST(test_extended_conversation_history);
