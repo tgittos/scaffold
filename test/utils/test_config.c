@@ -417,6 +417,31 @@ void test_config_resolve_model_null(void) {
     TEST_ASSERT_NULL(config_resolve_model(NULL));
 }
 
+void test_config_shell_max_timeout(void) {
+    TEST_ASSERT_EQUAL(0, config_init());
+    TEST_ASSERT_EQUAL(300, config_get_int("shell_max_timeout", -1));
+
+    FILE *f = fopen("test_config.json", "w");
+    TEST_ASSERT_NOT_NULL(f);
+    fputs("{\"shell_max_timeout\": 1800}", f);
+    fclose(f);
+    TEST_ASSERT_EQUAL(0, config_load_from_file("test_config.json"));
+    TEST_ASSERT_EQUAL(1800, config_get_int("shell_max_timeout", -1));
+
+    f = fopen("test_config.json", "w");
+    TEST_ASSERT_NOT_NULL(f);
+    fputs("{\"shell_max_timeout\": 0}", f);
+    fclose(f);
+    TEST_ASSERT_EQUAL(0, config_load_from_file("test_config.json"));
+    TEST_ASSERT_EQUAL(1800, config_get_int("shell_max_timeout", -1));
+
+    TEST_ASSERT_EQUAL(0, config_save_to_file("test_config.json"));
+    config_cleanup();
+    TEST_ASSERT_EQUAL(0, config_init());
+    TEST_ASSERT_EQUAL(0, config_load_from_file("test_config.json"));
+    TEST_ASSERT_EQUAL(1800, config_get_int("shell_max_timeout", -1));
+}
+
 int main(void) {
     UNITY_BEGIN();
     
@@ -443,6 +468,7 @@ int main(void) {
     RUN_TEST(test_config_resolve_model_tier_names);
     RUN_TEST(test_config_resolve_model_raw_id);
     RUN_TEST(test_config_resolve_model_null);
+    RUN_TEST(test_config_shell_max_timeout);
 
     return UNITY_END();
 }
