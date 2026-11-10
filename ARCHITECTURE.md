@@ -750,7 +750,7 @@ graph TB
 
 ### Streaming Features
 - Real-time text streaming to console
-- Extended thinking content accumulation (Anthropic `thinking_delta`; OpenAI-compatible `delta.reasoning_content`, e.g. Qwen3 on omlx/vLLM)
+- Extended thinking content accumulation (Anthropic `thinking_delta`; OpenAI-compatible `delta.reasoning_content`, e.g. Qwen3 on omlx/vLLM), rendered dimmed and separated from the answer by exactly one blank line
 - Tool call argument accumulation from deltas
 - Provider-specific SSE parsing (Anthropic events vs OpenAI data lines)
 - Configurable via `--no-stream` flag to disable
