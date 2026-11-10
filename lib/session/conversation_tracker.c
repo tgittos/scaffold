@@ -401,8 +401,6 @@ int load_conversation_history(ConversationHistory *history) {
         return 0;
     }
 
-    document_store_ensure_index(store, CONVERSATION_INDEX, conversation_index_dimension(), 10000);
-
     time_t now = time(NULL);
     time_t start_time = now - (7 * 24 * 60 * 60);
 
@@ -454,8 +452,6 @@ int load_extended_conversation_history(ConversationHistory *history, int days_ba
         return -1;
     }
     
-    document_store_ensure_index(store, CONVERSATION_INDEX, conversation_index_dimension(), 10000);
-
     time_t now = time(NULL);
     time_t start_time = 0;
     if (days_back > 0) {
@@ -481,8 +477,6 @@ ConversationHistory* search_conversation_history(const char *query, size_t max_r
         return NULL;
     }
     
-    document_store_ensure_index(store, CONVERSATION_INDEX, conversation_index_dimension(), 10000);
-
     document_search_results_t* results = vector_db_service_search_text(
         g_services, CONVERSATION_INDEX, query, max_results);
     
