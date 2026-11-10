@@ -750,10 +750,16 @@ graph TB
 
 ### Streaming Features
 - Real-time text streaming to console
-- Extended thinking content accumulation
+- Extended thinking content accumulation (Anthropic `thinking_delta`; OpenAI-compatible `delta.reasoning_content`, e.g. Qwen3 on omlx/vLLM)
 - Tool call argument accumulation from deltas
 - Provider-specific SSE parsing (Anthropic events vs OpenAI data lines)
 - Configurable via `--no-stream` flag to disable
+
+### Tool Message Shape (OpenAI-compatible)
+`format_openai_message()` sends the canonical Chat Completions shape: assistant messages carrying `tool_calls` are emitted verbatim from the stored canonical JSON, and tool results are `{"role":"tool","tool_call_id":...,"content":...}`. Tool results are not rewritten as system messages.
+
+### Empty-Round Handling
+`iterative_loop_run()` treats a round with no tool calls, no visible text and no reasoning as a degenerate completion: it retries up to `EMPTY_RETRY_MAX` (3) times with exponential backoff, printing a warning to stderr each time. If the model stays empty, the turn ends with a visible warning and no blank assistant message is stored.
 
 ## Subagent System
 

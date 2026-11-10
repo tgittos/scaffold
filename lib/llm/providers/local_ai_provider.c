@@ -182,6 +182,13 @@ static int local_ai_parse_stream_event(const LLMProvider* provider,
                     streaming_emit_text(ctx, content->valuestring, strlen(content->valuestring));
                 }
 
+                // Reasoning/thinking content (Qwen3, DeepSeek and other thinking models
+                // stream it as reasoning_content; without this it vanishes from the turn)
+                cJSON* reasoning = cJSON_GetObjectItem(delta, "reasoning_content");
+                if (reasoning != NULL && cJSON_IsString(reasoning) && reasoning->valuestring != NULL) {
+                    streaming_emit_thinking(ctx, reasoning->valuestring, strlen(reasoning->valuestring));
+                }
+
                 cJSON* tool_calls = cJSON_GetObjectItem(delta, "tool_calls");
                 if (tool_calls != NULL) {
                     local_ai_parse_tool_call_delta(ctx, tool_calls);
