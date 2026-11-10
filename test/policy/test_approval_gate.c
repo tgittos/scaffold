@@ -93,7 +93,7 @@ void test_approval_gate_init_sets_default_categories(void) {
     TEST_ASSERT_EQUAL(GATE_ACTION_ALLOW, config.categories[GATE_CATEGORY_MEMORY]);
     TEST_ASSERT_EQUAL(GATE_ACTION_GATE, config.categories[GATE_CATEGORY_SUBAGENT]);
     TEST_ASSERT_EQUAL(GATE_ACTION_GATE, config.categories[GATE_CATEGORY_MCP]);
-    TEST_ASSERT_EQUAL(GATE_ACTION_ALLOW, config.categories[GATE_CATEGORY_PYTHON]);
+    TEST_ASSERT_EQUAL(GATE_ACTION_GATE, config.categories[GATE_CATEGORY_PYTHON]);
 }
 
 void test_approval_gate_init_null_returns_error(void) {
@@ -544,6 +544,22 @@ void test_approval_requires_check_denied_category(void) {
 
     int result = approval_gate_requires_check(&config, &call);
     TEST_ASSERT_EQUAL(-1, result);  /* -1 = denied */
+}
+
+void test_approval_requires_check_python_gated_by_default(void) {
+    ToolCall call = { .id = "call_1", .name = "python", .arguments = "{}" };
+    TEST_ASSERT_EQUAL(1, approval_gate_requires_check(&config, &call));
+}
+
+void test_approval_requires_check_unknown_tool_gated_by_default(void) {
+    ToolCall call = { .id = "call_1", .name = "custom_dynamic_tool", .arguments = "{}" };
+    TEST_ASSERT_EQUAL(1, approval_gate_requires_check(&config, &call));
+}
+
+void test_approval_requires_check_python_allowed_by_allow_category(void) {
+    TEST_ASSERT_EQUAL(0, approval_gate_set_category_action(&config, "python", GATE_ACTION_ALLOW));
+    ToolCall call = { .id = "call_1", .name = "python", .arguments = "{}" };
+    TEST_ASSERT_EQUAL(0, approval_gate_requires_check(&config, &call));
 }
 
 void test_approval_requires_check_gates_disabled(void) {
@@ -2169,6 +2185,9 @@ int main(void) {
     RUN_TEST(test_approval_requires_check_allowed_category);
     RUN_TEST(test_approval_requires_check_gated_category);
     RUN_TEST(test_approval_requires_check_denied_category);
+    RUN_TEST(test_approval_requires_check_python_gated_by_default);
+    RUN_TEST(test_approval_requires_check_unknown_tool_gated_by_default);
+    RUN_TEST(test_approval_requires_check_python_allowed_by_allow_category);
     RUN_TEST(test_approval_requires_check_gates_disabled);
     RUN_TEST(test_approval_requires_check_allowlist_bypass);
 

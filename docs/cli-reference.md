@@ -34,7 +34,7 @@ If `MESSAGE` is provided, scaffold processes it and exits (one-shot mode). Witho
 |------|-------------|
 | `--yolo` | Disable all approval gates for this session |
 | `--allow <spec>` | Add an allowlist entry (see below) |
-| `--allow-category=<cat>` | Allow an entire category (`file_read`, `file_write`, `shell`, `network`, `memory`, `subagent`, `mcp`, `python`, `plugin`) |
+| `--allow-category=<cat>` | Allow an entire category (`file_read`, `file_write`, `shell`, `network`, `memory`, `subagent`, `mcp`, `python`, `plugin`). `python` (gated by default) also covers tools with no declared category |
 
 #### `--allow` format
 

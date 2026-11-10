@@ -652,8 +652,8 @@ void test_default_category_actions(void) {
     TEST_ASSERT_EQUAL(GATE_ACTION_GATE,
                       approval_gate_get_category_action(&config, GATE_CATEGORY_MCP));
 
-    /* PYTHON = ALLOW */
-    TEST_ASSERT_EQUAL(GATE_ACTION_ALLOW,
+    /* PYTHON = GATE */
+    TEST_ASSERT_EQUAL(GATE_ACTION_GATE,
                       approval_gate_get_category_action(&config, GATE_CATEGORY_PYTHON));
 
     approval_gate_cleanup(&config);
