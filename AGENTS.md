@@ -1,9 +1,9 @@
 # ralph Project
 
 Portable C codebase compiled with Cosmopolitan. Source in `src/`, tests in `test/` (using vendored `unity`).
-See `@COSMOPOLITAN.md`, `@ARCHITECTURE.md`, `@CODE_OVERVIEW.md` for design docs.
+See `@COSMOPOLITAN.md` for the Cosmopolitan tooling; ARCHITECTURE.md and CODE_OVERVIEW.md document the design (read them on demand — they are deliberately not inlined into the prompt).
 
-Always update docs (AGENTS.md, `@ARCHITECTURE.md` and `@CODE_OVERVIEW.md`) before you commit.
+Always update docs (AGENTS.md, ARCHITECTURE.md and CODE_OVERVIEW.md) before you commit.
 
 ## Build & Run
 

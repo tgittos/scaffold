@@ -18,9 +18,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 #include <unistd.h>
 
 #define STREAM_RETRY_MAX 3
+#define EMPTY_RETRY_MAX 3
+
+/* A response is "empty" when the model produced neither visible text nor
+ * reasoning: nothing was streamed, nothing gets stored, and the loop would
+ * otherwise exit the turn in silence. */
+static bool is_blank(const char* s) {
+    for (const char* p = s; p != NULL && *p != '\0'; p++) {
+        if (*p != ' ' && *p != '\t' && *p != '\n' && *p != '\r') {
+            return false;
+        }
+    }
+    return true;
+}
 
 int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx) {
     if (session == NULL || ctx == NULL) {
@@ -29,6 +43,7 @@ int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx) {
 
     int loop_count = 0;
     int stream_retries = 0;
+    int empty_retries = 0;
 
     LOG_INFO("Starting iterative tool calling loop");
 
@@ -93,6 +108,43 @@ int iterative_loop_run(AgentSession* session, ToolOrchestrationContext* ctx) {
         int call_count = rt.tool_call_count;
         rt.tool_calls = NULL;
         rt.tool_call_count = 0;
+
+        /* A round with no tool calls, no visible text and no reasoning is a
+         * degenerate completion (thinking models occasionally spend the whole
+         * turn in reasoning and emit nothing else): retry it a bounded number
+         * of times before ending the turn with a visible warning. */
+        if (call_count == 0 &&
+            is_blank(rt.parsed.response_content) &&
+            is_blank(rt.parsed.thinking_content)) {
+            empty_retries++;
+            if (empty_retries <= EMPTY_RETRY_MAX) {
+                int delay_ms = 1000 * (1 << (empty_retries - 1));
+                LOG_WARN("Empty model response in tool loop iteration %d, retry %d/%d in %dms",
+                         loop_count, empty_retries, EMPTY_RETRY_MAX, delay_ms);
+                if (!session->session_data.config.json_output_mode) {
+                    fprintf(stderr,
+                            "Warning: model returned an empty response; retrying (%d/%d)\n",
+                            empty_retries, EMPTY_RETRY_MAX);
+                    fflush(stderr);
+                }
+                api_round_trip_cleanup(&rt);
+                usleep(delay_ms * 1000);
+                continue;
+            }
+            LOG_WARN("Empty model response persisted after %d retries; ending turn",
+                     empty_retries);
+            if (!session->session_data.config.json_output_mode) {
+                fprintf(stderr,
+                        "Warning: the model returned no visible response after %d attempts; ending the turn.\n",
+                        empty_retries);
+                fflush(stderr);
+            }
+            /* Do not store a blank assistant message; fall through to the
+             * normal (empty) completion display below. */
+            assistant_content = NULL;
+        } else {
+            empty_retries = 0;
+        }
 
         if (call_count > 0) {
             if (rt.parsed.response_content != NULL && strlen(rt.parsed.response_content) > 0) {

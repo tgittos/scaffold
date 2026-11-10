@@ -11,6 +11,7 @@ static LLMProvider* openai_provider = NULL;
 
 // External provider access
 extern int register_openai_provider(ProviderRegistry* registry);
+extern int register_local_ai_provider(ProviderRegistry* registry);
 
 // Get the OpenAI provider for testing
 static LLMProvider* get_openai_provider(void) {
@@ -22,6 +23,18 @@ static LLMProvider* get_openai_provider(void) {
         initialized = 1;
     }
     return detect_provider_for_url(&registry, "https://api.openai.com/v1/chat/completions");
+}
+
+// Get the local AI provider for testing (OpenAI-compatible local servers)
+static LLMProvider* get_local_ai_provider(void) {
+    static ProviderRegistry registry;
+    static int initialized = 0;
+    if (!initialized) {
+        init_provider_registry(&registry);
+        register_local_ai_provider(&registry);
+        initialized = 1;
+    }
+    return detect_provider_for_url(&registry, "http://localhost:1234/v1/chat/completions");
 }
 
 void setUp(void) {
@@ -302,6 +315,44 @@ void test_build_streaming_request_null_model(void) {
 }
 
 // =============================================================================
+// Reasoning Content (Thinking) Parsing Tests
+// =============================================================================
+
+void test_parse_reasoning_content_delta(void) {
+    const char* json = "{\"choices\":[{\"delta\":{\"reasoning_content\":\"Let me think.\"}}]}";
+
+    int result = openai_provider->parse_stream_event(openai_provider, test_ctx, json, strlen(json));
+    TEST_ASSERT_EQUAL_INT(0, result);
+    TEST_ASSERT_EQUAL_STRING("Let me think.", test_ctx->thinking_content);
+    // Reasoning must not leak into visible text
+    TEST_ASSERT_EQUAL_STRING("", test_ctx->text_content);
+}
+
+void test_parse_reasoning_then_content_deltas(void) {
+    const char* reasoning = "{\"choices\":[{\"delta\":{\"reasoning_content\":\"Hmm,\"}}]}";
+    const char* content = "{\"choices\":[{\"delta\":{\"content\":\" the answer\"}}]}";
+
+    openai_provider->parse_stream_event(openai_provider, test_ctx, reasoning, strlen(reasoning));
+    openai_provider->parse_stream_event(openai_provider, test_ctx, content, strlen(content));
+
+    TEST_ASSERT_EQUAL_STRING("Hmm,", test_ctx->thinking_content);
+    TEST_ASSERT_EQUAL_STRING(" the answer", test_ctx->text_content);
+}
+
+void test_local_ai_parse_reasoning_content_delta(void) {
+    LLMProvider* local_provider = get_local_ai_provider();
+    TEST_ASSERT_NOT_NULL(local_provider);
+    TEST_ASSERT_NOT_NULL(local_provider->parse_stream_event);
+
+    const char* json = "{\"choices\":[{\"delta\":{\"reasoning_content\":\"Step one.\"}}]}";
+
+    int result = local_provider->parse_stream_event(local_provider, test_ctx, json, strlen(json));
+    TEST_ASSERT_EQUAL_INT(0, result);
+    TEST_ASSERT_EQUAL_STRING("Step one.", test_ctx->thinking_content);
+    TEST_ASSERT_EQUAL_STRING("", test_ctx->text_content);
+}
+
+// =============================================================================
 // Main
 // =============================================================================
 
@@ -330,6 +381,11 @@ int main(void) {
 
     // Usage statistics parsing tests
     RUN_TEST(test_parse_usage_statistics);
+
+    // Reasoning content (thinking) parsing tests
+    RUN_TEST(test_parse_reasoning_content_delta);
+    RUN_TEST(test_parse_reasoning_then_content_deltas);
+    RUN_TEST(test_local_ai_parse_reasoning_content_delta);
 
     // Done signal handling tests
     RUN_TEST(test_parse_done_signal);
