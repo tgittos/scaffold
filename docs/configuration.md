@@ -40,6 +40,7 @@ Create a `scaffold.config.json` in your project directory or `~/.local/scaffold/
 | `max_tokens` | number | `-1` | Max output tokens (`-1` = unlimited) |
 | `enable_streaming` | boolean | `true` | Enable real-time response streaming |
 | `check_updates` | boolean | `true` | Check for updates on startup |
+| `shell_max_timeout` | number | `300` | Upper bound in seconds on the `shell` tool's `timeout` |
 
 #### API retry settings
 

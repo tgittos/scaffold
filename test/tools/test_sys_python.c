@@ -1,9 +1,12 @@
 #include "unity/unity.h"
 #include "tools/sys_python.h"
 #include "util/app_home.h"
+#include "util/config.h"
 #include <Python.h>
 #include <string.h>
 #include <stdlib.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 static int python_initialized = 0;
 
@@ -96,6 +99,36 @@ void test_get_app_home_returns_string(void) {
     TEST_ASSERT_EQUAL_STRING("str", get_python_str("_sp2"));
 }
 
+static long get_python_long(const char *varname) {
+    PyObject *main_dict = PyModule_GetDict(PyImport_AddModule("__main__"));
+    PyObject *val = PyDict_GetItemString(main_dict, varname);
+    TEST_ASSERT_NOT_NULL(val);
+    return PyLong_AsLong(val);
+}
+
+void test_get_config_int(void) {
+    const char *home = "/tmp/test_sys_python_home";
+    mkdir(home, 0755);
+    app_home_cleanup();
+    app_home_init(home);
+    TEST_ASSERT_EQUAL_INT(0, config_init());
+    config_get()->shell_max_timeout = 1234;
+
+    PyObject *result = run_python(
+        "import _ralph_sys\n"
+        "_sp3 = _ralph_sys.get_config_int('shell_max_timeout', 7)\n"
+        "_sp4 = _ralph_sys.get_config_int('no_such_key', 7)\n"
+    );
+    TEST_ASSERT_NOT_NULL(result);
+    Py_XDECREF(result);
+    TEST_ASSERT_EQUAL_INT(1234, get_python_long("_sp3"));
+    TEST_ASSERT_EQUAL_INT(7, get_python_long("_sp4"));
+
+    config_cleanup();
+    unlink("/tmp/test_sys_python_home/config.json");
+    rmdir(home);
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_sys_module_imports);
@@ -103,6 +136,7 @@ int main(void) {
     RUN_TEST(test_get_app_home_exists);
     RUN_TEST(test_get_executable_path_returns_string_or_none);
     RUN_TEST(test_get_app_home_returns_string);
+    RUN_TEST(test_get_config_int);
 
     if (python_initialized) {
         Py_Finalize();

@@ -17,7 +17,7 @@ Application-specific code that uses the library layer. This is a thin wrapper ar
 - **`python_extension.c/h`** - Tool extension interface for Python tools integration with lib/
 - **`http_python.c/h`** - Python extension for C HTTP client (`_ralph_http` module: get, post, download)
 - **`verified_file_python.c/h`** - Python extension for TOCTOU-safe file operations (`_ralph_verified_io` module)
-- **`sys_python.c/h`** - Python extension for system info (`_ralph_sys` module: get_executable_path, get_app_home)
+- **`sys_python.c/h`** - Python extension for system info (`_ralph_sys` module: get_executable_path, get_app_home, get_config_int)
 
 ##### Python Default Tools (in `python_defaults/`)
 - **`read_file.py`** - Read file contents with line numbers, returns dict with content/total_lines/range

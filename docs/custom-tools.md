@@ -64,7 +64,7 @@ Custom tools have access to three C extension modules:
 
 - **`_ralph_http`** -- HTTP client (get, post, download)
 - **`_ralph_verified_io`** -- TOCTOU-safe file operations
-- **`_ralph_sys`** -- System utilities (get_executable_path, get_app_home)
+- **`_ralph_sys`** -- System utilities (get_executable_path, get_app_home, get_config_int)
 
 ## Worker role prompts
 

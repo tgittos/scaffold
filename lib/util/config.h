@@ -24,6 +24,7 @@ typedef struct {
     int max_subagents;
     int subagent_timeout;       // seconds
     int max_workers_per_goal;
+    int shell_max_timeout;      // seconds
 
     bool enable_streaming;
     bool json_output_mode;

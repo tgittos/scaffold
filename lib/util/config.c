@@ -51,6 +51,7 @@ static int config_set_defaults(agent_config_t *config)
     config->max_subagents = DEFAULT_MAX_SUBAGENTS;
     config->subagent_timeout = DEFAULT_SUBAGENT_TIMEOUT;
     config->max_workers_per_goal = 3;
+    config->shell_max_timeout = DEFAULT_SHELL_MAX_TIMEOUT;
 
     config->enable_streaming = DEFAULT_ENABLE_STREAMING;
     config->json_output_mode = DEFAULT_JSON_OUTPUT_MODE;
@@ -276,6 +277,11 @@ int config_load_from_file(const char *filepath)
         g_config->max_workers_per_goal = item->valueint;
     }
 
+    item = cJSON_GetObjectItem(json, "shell_max_timeout");
+    if (cJSON_IsNumber(item) && item->valueint > 0) {
+        g_config->shell_max_timeout = item->valueint;
+    }
+
     item = cJSON_GetObjectItem(json, "enable_streaming");
     if (cJSON_IsBool(item)) {
         g_config->enable_streaming = cJSON_IsTrue(item);
@@ -356,6 +362,7 @@ int config_save_to_file(const char *filepath)
     cJSON_AddNumberToObject(json, "max_subagents", g_config->max_subagents);
     cJSON_AddNumberToObject(json, "subagent_timeout", g_config->subagent_timeout);
     cJSON_AddNumberToObject(json, "max_workers_per_goal", g_config->max_workers_per_goal);
+    cJSON_AddNumberToObject(json, "shell_max_timeout", g_config->shell_max_timeout);
 
     cJSON_AddBoolToObject(json, "enable_streaming", g_config->enable_streaming);
     cJSON_AddBoolToObject(json, "check_updates", g_config->check_updates);
@@ -616,6 +623,8 @@ int config_get_int(const char *key, int default_value)
         return g_config->subagent_timeout;
     } else if (strcmp(key, "max_workers_per_goal") == 0) {
         return g_config->max_workers_per_goal;
+    } else if (strcmp(key, "shell_max_timeout") == 0) {
+        return g_config->shell_max_timeout;
     }
 
     return default_value;
