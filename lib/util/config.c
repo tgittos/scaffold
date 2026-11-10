@@ -41,6 +41,7 @@ static int config_set_defaults(agent_config_t *config)
     if (!config->model) return -1;
 
     config->context_window = DEFAULT_CONTEXT_WINDOW;
+    config->tool_result_max_bytes = DEFAULT_TOOL_RESULT_MAX_BYTES;
     config->max_tokens = DEFAULT_MAX_TOKENS;
 
     config->api_max_retries = DEFAULT_API_MAX_RETRIES;
@@ -235,6 +236,11 @@ int config_load_from_file(const char *filepath)
         g_config->context_window = item->valueint;
     }
 
+    item = cJSON_GetObjectItem(json, "tool_result_max_bytes");
+    if (cJSON_IsNumber(item) && item->valueint > 0) {
+        g_config->tool_result_max_bytes = item->valueint;
+    }
+
     item = cJSON_GetObjectItem(json, "max_tokens");
     if (cJSON_IsNumber(item)) {
         g_config->max_tokens = item->valueint;
@@ -340,6 +346,7 @@ int config_save_to_file(const char *filepath)
         cJSON_AddStringToObject(json, "system_prompt", g_config->system_prompt);
 
     cJSON_AddNumberToObject(json, "context_window", g_config->context_window);
+    cJSON_AddNumberToObject(json, "tool_result_max_bytes", g_config->tool_result_max_bytes);
     cJSON_AddNumberToObject(json, "max_tokens", g_config->max_tokens);
 
     cJSON_AddNumberToObject(json, "api_max_retries", g_config->api_max_retries);
@@ -520,6 +527,12 @@ int config_set(const char *key, const char *value)
             int parsed = atoi(value);
             if (parsed > 0) g_config->context_window = parsed;
         }
+    } else if (strcmp(key, "tool_result_max_bytes") == 0) {
+        free(new_val);
+        if (value) {
+            int parsed = atoi(value);
+            if (parsed > 0) g_config->tool_result_max_bytes = parsed;
+        }
     } else if (strcmp(key, "max_tokens") == 0) {
         free(new_val);
         if (value) {
@@ -589,6 +602,8 @@ int config_get_int(const char *key, int default_value)
 
     if (strcmp(key, "context_window") == 0) {
         return g_config->context_window;
+    } else if (strcmp(key, "tool_result_max_bytes") == 0) {
+        return g_config->tool_result_max_bytes;
     } else if (strcmp(key, "max_tokens") == 0) {
         return g_config->max_tokens;
     } else if (strcmp(key, "api_max_retries") == 0) {

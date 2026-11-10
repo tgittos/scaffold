@@ -14,6 +14,7 @@ typedef struct {
     char *embedding_model;
     char *system_prompt;
     int context_window;
+    int tool_result_max_bytes;
     int max_tokens;
 
     int api_max_retries;

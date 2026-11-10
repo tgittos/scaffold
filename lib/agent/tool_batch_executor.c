@@ -13,6 +13,8 @@
 #include "../policy/atomic_file.h"
 #include "../plugin/hook_dispatcher.h"
 #include "../plugin/plugin_manager.h"
+#include "../util/config.h"
+#include <defaults.h>
 #include <cJSON.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -44,6 +46,40 @@ static void fill_error_result(ToolResult* result, const char* call_id,
     result->tool_call_id = call_id ? strdup(call_id) : NULL;
     result->result = strdup(error_json);
     result->success = 0;
+}
+
+static int is_utf8_continuation(char c) {
+    return ((unsigned char)c & 0xC0) == 0x80;
+}
+
+void tool_result_apply_cap(ToolResult* result, size_t max_bytes) {
+    if (result == NULL || result->result == NULL || max_bytes == 0) return;
+
+    const char* s = result->result;
+    size_t len = strlen(s);
+    if (len <= max_bytes) return;
+
+    size_t head = max_bytes / 2;
+    while (head > 0 && is_utf8_continuation(s[head])) head--;
+    size_t tail_start = len - (max_bytes - max_bytes / 2);
+    while (tail_start < len && is_utf8_continuation(s[tail_start])) tail_start++;
+
+    char marker[64];
+    int marker_len = snprintf(marker, sizeof(marker), "\n[... %zu bytes omitted ...]\n",
+                              tail_start - head);
+    size_t tail_len = len - tail_start;
+    char* capped = malloc(head + (size_t)marker_len + tail_len + 1);
+    if (capped == NULL) return;
+
+    memcpy(capped, s, head);
+    memcpy(capped + head, marker, (size_t)marker_len);
+    memcpy(capped + head + marker_len, s + tail_start, tail_len + 1);
+
+    LOG_INFO("Capped tool result for %s: %zu -> %zu bytes",
+             result->tool_call_id ? result->tool_call_id : "?", len,
+             head + (size_t)marker_len + tail_len);
+    free(result->result);
+    result->result = capped;
 }
 
 static void fill_remaining_interrupted(ToolBatchContext* ctx,
@@ -326,10 +362,15 @@ int tool_batch_execute(ToolBatchContext* ctx,
     }
 
     /* Phase 3: Post-process (serial) — log results in original order */
+    int cap = config_get_int("tool_result_max_bytes", DEFAULT_TOOL_RESULT_MAX_BYTES);
     for (int k = 0; k < approved_count; k++) {
         PreScreenEntry* e = &approved[k];
         int i = e->call_index;
         int slot = e->slot;
+
+        if (cap > 0) {
+            tool_result_apply_cap(&results[slot], (size_t)cap);
+        }
 
         if (e->has_approved_path) {
             free_approved_path(&e->approved_path);

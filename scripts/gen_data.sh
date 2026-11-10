@@ -73,6 +73,7 @@ TMP="$OUTDIR/defaults.h.tmp"
 api_url=$(jq -r '.api_url' "$DEFAULTS" | c_escape_value)
 model=$(jq -r '.model' "$DEFAULTS" | c_escape_value)
 context_window=$(jq -r '.context_window' "$DEFAULTS")
+tool_result_max_bytes=$(jq -r '.tool_result_max_bytes' "$DEFAULTS")
 max_tokens=$(jq -r '.max_tokens' "$DEFAULTS")
 api_max_retries=$(jq -r '.api_max_retries' "$DEFAULTS")
 api_retry_delay_ms=$(jq -r '.api_retry_delay_ms' "$DEFAULTS")
@@ -95,6 +96,7 @@ cat > "$TMP" << HEOF
 #define DEFAULT_API_URL "${api_url}"
 #define DEFAULT_MODEL "${model}"
 #define DEFAULT_CONTEXT_WINDOW ${context_window}
+#define DEFAULT_TOOL_RESULT_MAX_BYTES ${tool_result_max_bytes}
 #define DEFAULT_MAX_TOKENS (${max_tokens})
 #define DEFAULT_API_MAX_RETRIES ${api_max_retries}
 #define DEFAULT_API_RETRY_DELAY_MS ${api_retry_delay_ms}
