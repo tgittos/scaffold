@@ -232,7 +232,11 @@ main() {
     echo ""
 
     # Find tests
-    mapfile -t tests < <(find_tests)
+    local tests=()
+    local line
+    while IFS= read -r line; do
+        [ -n "$line" ] && tests+=("$line")
+    done < <(find_tests)
     local total=${#tests[@]}
 
     if [ $total -eq 0 ]; then
