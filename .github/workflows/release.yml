@@ -29,6 +29,9 @@ on:
 permissions:
   contents: write
 
+env:
+  UV_VERSION: "0.5.14"
+
 jobs:
   ci:
     name: CI
@@ -94,6 +97,19 @@ jobs:
           key: deps-${{ hashFiles('mk/config.mk', 'mk/deps.mk', 'python/Makefile') }}
           restore-keys: |
             deps-
+
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/bin/uv
+          key: uv-${{ env.UV_VERSION }}-linux
+
+      - name: Install uv
+        run: |
+          if [ ! -f "$HOME/.local/bin/uv" ]; then
+            curl -LsSf https://astral.sh/uv/${{ env.UV_VERSION }}/install.sh | sh
+          fi
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Create tag
         run: |
