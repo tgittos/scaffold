@@ -6,6 +6,7 @@
 #include "util/app_home.h"
 #include <Python.h>
 #include <cJSON.h>
+#include <mbedtls/sha256.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -113,6 +114,69 @@ static int write_file(const char *path, const char *content) {
     return (written == len) ? 0 : -1;
 }
 
+/* Every version ever shipped of a default tool that has since been renamed or
+ * removed. When retiring a default tool, add the SHA-256 of each of its shipped
+ * versions here; files that match none are left alone as user edits. */
+static const struct { const char *filename; const char *sha256_hex; } RETIRED_TOOLS[] = {
+    {"append_file.py", "10c802edbe754c4f96f1d0ea840d29b441b9932512f2c5e48b1ffe3aa4df5023"},
+    {"append_file.py", "246cbf4d1bd3a152bff2f3963b66676837983c009895a0a3c03554e062d9aed3"},
+    {"append_file.py", "5c9d2e1d619c0cbc90404e64e04b28396192fc9441298abff809858fadac9369"},
+    {"append_file.py", "66b7b83ab20ebe97b28299e733266550ed064b4372b4a512cb1ad2b61dcead32"},
+    {"append_file.py", "83db1cbecdecfb0295d14e351d75011da1b3661fb305af98d1e33471c193e104"},
+    {"append_file.py", "9dea43a276a12021abf24afbb5691ef0b0f0f24df8d87418c0893e9aa1ef58fc"},
+    {"apply_delta.py", "0424e645fcd7164d09caaecee89e208f4b8b1ace23ee21dc61ff755e84261695"},
+    {"apply_delta.py", "1e811089466a29368e594f487ac32747150794936bb3037f0b64750d1bf30265"},
+    {"apply_delta.py", "686a128e7564b1b3411bb03310af3b8e05be5cf6d4b506a148a330cecfa8fd1e"},
+    {"apply_delta.py", "a72a2412215dcb8b840a4d8b2f8cb262c16dbabd66be7f5b272ecd7aabc14dc8"},
+    {"apply_delta.py", "a97ed9b7be6b42d790e3eb3f10f4bf8ab35e44d6aeee5b57b4f649dad766f42d"},
+    {"apply_delta.py", "d83d51c932818f449a36fb0510c47612f44c4bca6c86013ee8312929a2a5b5e1"},
+    {"file_info.py", "925897814a980fdda2e1fbaaeda879658f58e9da62a1c99fdd1c6e8acab0d9bd"},
+    {"file_info.py", "aa7593f6ba99c750add2ea5737653508e2364399a1e3a87aa9cf4d2b854170e8"},
+    {"file_info.py", "d385dce25d57da8f09508bdca27647186a4689e8a550b04751e26092762dd29a"},
+    {"file_info.py", "f1e5e516460df8250b1a97f123cf6b7213e6dae63d09b138d301cae43dabdddd"},
+    {"pip_install.py", "8fc71acd1d8306a0324d3ebd0707bf9c3560157d438d07957c8b0c4a5aa316e7"},
+    {"pip_install.py", "e7f27b3f1fa7d4a17a64c798cdb7c0450ebd402c81732e6906f3d97efda6461e"},
+    {"pip_install.py", "fe8f9100590724a4aeabb3e04c3db545a8b3575c618bd25a1251acc88dbe1424"},
+    {"pip_list.py", "874d1fa2b570d41766f12b3df020899ba975c029176c97659e247c2e56bdea3f"},
+};
+
+static int sha256_hex_of_file(const char *path, char out[65]) {
+    FILE *f = fopen(path, "rb");
+    if (f == NULL) return -1;
+
+    mbedtls_sha256_context ctx;
+    mbedtls_sha256_init(&ctx);
+    int rc = mbedtls_sha256_starts(&ctx, 0);
+    unsigned char buf[4096];
+    size_t n;
+    while (rc == 0 && (n = fread(buf, 1, sizeof(buf), f)) > 0) {
+        rc = mbedtls_sha256_update(&ctx, buf, n);
+    }
+    if (ferror(f)) rc = -1;
+    unsigned char digest[32];
+    if (rc == 0) rc = mbedtls_sha256_finish(&ctx, digest);
+    mbedtls_sha256_free(&ctx);
+    fclose(f);
+    if (rc != 0) return -1;
+
+    for (int i = 0; i < 32; i++) {
+        snprintf(out + i * 2, 3, "%02x", digest[i]);
+    }
+    return 0;
+}
+
+static void remove_retired_tools(const char *tools_dir) {
+    for (size_t i = 0; i < sizeof(RETIRED_TOOLS) / sizeof(RETIRED_TOOLS[0]); i++) {
+        char path[512];
+        char hex[65];
+        snprintf(path, sizeof(path), "%s/%s", tools_dir, RETIRED_TOOLS[i].filename);
+        if (sha256_hex_of_file(path, hex) == 0 &&
+            strcmp(hex, RETIRED_TOOLS[i].sha256_hex) == 0) {
+            unlink(path);
+        }
+    }
+}
+
 static int extract_default_tools(const char *tools_dir) {
     int extracted = 0;
 
@@ -143,68 +207,7 @@ static int extract_default_tools(const char *tools_dir) {
         free(content);
     }
 
-    // Clean up stale tool files: if a .py file in the tools dir is NOT in
-    // DEFAULT_TOOL_NAMES but matches its embedded /zip/ counterpart exactly,
-    // it's a leftover from a previous version — delete it.
-    DIR *cleanup_dir = opendir(tools_dir);
-    if (cleanup_dir != NULL) {
-        struct dirent *entry;
-        while ((entry = readdir(cleanup_dir)) != NULL) {
-            if (entry->d_name[0] == '.') continue;
-            size_t name_len = strlen(entry->d_name);
-            if (name_len < 4 || strcmp(entry->d_name + name_len - 3, ".py") != 0) continue;
-
-            // Extract base name (without .py)
-            char base_name[256];
-            strncpy(base_name, entry->d_name, sizeof(base_name) - 1);
-            base_name[sizeof(base_name) - 1] = '\0';
-            if (name_len - 3 < sizeof(base_name)) {
-                base_name[name_len - 3] = '\0';
-            }
-
-            // Check if this tool is in DEFAULT_TOOL_NAMES
-            int is_current = 0;
-            for (int j = 0; DEFAULT_TOOL_NAMES[j] != NULL; j++) {
-                if (strcmp(base_name, DEFAULT_TOOL_NAMES[j]) == 0) {
-                    is_current = 1;
-                    break;
-                }
-            }
-            if (is_current) continue;
-
-            // Not a current tool — check if it matches the embedded version
-            char *embedded_content = read_embedded_file(entry->d_name);
-            if (embedded_content == NULL) continue;  // No embedded version, user-created tool
-
-            char dest_path[512];
-            snprintf(dest_path, sizeof(dest_path), "%s/%s", tools_dir, entry->d_name);
-
-            FILE *f = fopen(dest_path, "r");
-            if (f != NULL) {
-                fseek(f, 0, SEEK_END);
-                long size = ftell(f);
-                fseek(f, 0, SEEK_SET);
-
-                if (size > 0 && size <= 1024 * 1024) {
-                    char *disk_content = malloc(size + 1);
-                    if (disk_content != NULL) {
-                        size_t read_bytes = fread(disk_content, 1, size, f);
-                        disk_content[read_bytes] = '\0';
-                        if (strcmp(disk_content, embedded_content) == 0) {
-                            // Exact match — safe to remove stale tool
-                            fclose(f);
-                            f = NULL;
-                            unlink(dest_path);
-                        }
-                        free(disk_content);
-                    }
-                }
-                if (f != NULL) fclose(f);
-            }
-            free(embedded_content);
-        }
-        closedir(cleanup_dir);
-    }
+    remove_retired_tools(tools_dir);
 
     return extracted;
 }
