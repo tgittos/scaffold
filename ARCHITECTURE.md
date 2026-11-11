@@ -1219,6 +1219,8 @@ graph TB
 
 `python_interpreter_init()` releases the GIL before returning; every C→Python entry point in `python_tool.c` and `python_tool_files.c` takes it with `PyGILState_Ensure()`/`PyGILState_Release()`, so Python tools can be called from any thread. `python_interpreter_shutdown()` reacquires it before `Py_Finalize()`.
 
+File tools are invoked through `_ralph_invoke(name, args_json)`, defined in `__main__` once by `python_load_tool_files()`. It decodes the JSON arguments (dropping top-level nulls so defaults apply), calls the tool function, and returns the JSON result envelope as its return value. Each call's state stays in its own Python frame, so concurrent file-tool calls on different threads never see each other's results.
+
 ### Python File Tools (10 embedded default tools from `src/tools/python_defaults/`)
 - **`read_file`**: Read file contents with line numbers, returns dict with content/total_lines/range
 - **`write_file`**: Write or append content to file (mode: "write" or "append")
