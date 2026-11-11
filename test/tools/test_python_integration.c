@@ -4,6 +4,7 @@
 #include "lib/tools/tools_system.h"
 #include "util/app_home.h"
 #include "../test_fs_utils.h"
+#include <cJSON.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <string.h>
@@ -1019,6 +1020,189 @@ void test_interpreter_restart_after_gil_release(void) {
     free(result.result);
 }
 
+#define ISOLATION_THREADS 8
+#define ISOLATION_ITERATIONS 50
+
+typedef struct {
+    int index;
+    int parties;
+    char token[32];
+    int expect_error;
+    int mismatches;
+    int failures;
+} IsolationWorker;
+
+static IsolationWorker isolation_workers[ISOLATION_THREADS];
+
+static int contains_other_token(const char *text, int self) {
+    for (int i = 0; i < ISOLATION_THREADS; i++) {
+        if (i != self && isolation_workers[i].token[0] != '\0'
+            && strstr(text, isolation_workers[i].token) != NULL) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void *run_isolation_worker(void *arg) {
+    IsolationWorker *w = (IsolationWorker *)arg;
+    char args[128];
+    snprintf(args, sizeof(args), "{\"token\": \"%s\", \"parties\": %d}", w->token, w->parties);
+    for (int i = 0; i < ISOLATION_ITERATIONS; i++) {
+        ToolCall call = { .id = "isolation", .name = "isolation_echo", .arguments = args };
+        ToolResult result = {0};
+        execute_python_file_tool_call(&call, &result);
+        const char *text = result.result ? result.result : "";
+        if (w->expect_error) {
+            if (result.success != 0 || strstr(text, "\"error\"") == NULL) w->failures++;
+        } else {
+            if (result.success != 1) w->failures++;
+            if (strstr(text, w->token) == NULL) w->mismatches++;
+        }
+        if (contains_other_token(text, w->index)) w->mismatches++;
+        free(result.tool_call_id);
+        free(result.result);
+    }
+    return NULL;
+}
+
+/* The returned object's __class__ property waits on a barrier shared by all
+ * successful callers. isinstance() reads __class__, so every call is held
+ * while its result is being converted until all of them have produced theirs. */
+static void load_isolation_tool(char *path, size_t path_size) {
+    TEST_ASSERT_EQUAL_INT(0, python_init_tool_files());
+    snprintf(path, path_size, "%s/isolation_echo.py", python_get_tools_dir());
+    write_text_file(path,
+        "import threading\n"
+        "\n"
+        "_isolation_barriers = {}\n"
+        "_isolation_lock = threading.Lock()\n"
+        "\n"
+        "class _IsolationEcho:\n"
+        "    def __init__(self, token, barrier):\n"
+        "        self.token = token\n"
+        "        self.barrier = barrier\n"
+        "\n"
+        "    @property\n"
+        "    def __class__(self):\n"
+        "        self.barrier.wait(timeout=10)\n"
+        "        return _IsolationEcho\n"
+        "\n"
+        "    def __str__(self):\n"
+        "        return self.token\n"
+        "\n"
+        "def isolation_echo(token: str, parties: int):\n"
+        "    \"\"\"Echo token, raising when it is empty.\n"
+        "\n"
+        "    Args:\n"
+        "        token: Token to echo\n"
+        "        parties: Number of concurrent successful callers\n"
+        "    \"\"\"\n"
+        "    if not token:\n"
+        "        raise ValueError('empty token')\n"
+        "    with _isolation_lock:\n"
+        "        barrier = _isolation_barriers.setdefault(parties, threading.Barrier(parties))\n"
+        "    return _IsolationEcho(token, barrier)\n");
+    TEST_ASSERT_EQUAL_INT(0, python_load_tool_files());
+}
+
+static void setup_isolation_workers(int count, int error_index) {
+    memset(isolation_workers, 0, sizeof(isolation_workers));
+    for (int i = 0; i < count; i++) {
+        isolation_workers[i].index = i;
+        isolation_workers[i].parties = error_index < 0 ? count : count - 1;
+        if (i == error_index) {
+            isolation_workers[i].expect_error = 1;
+        } else {
+            snprintf(isolation_workers[i].token, sizeof(isolation_workers[i].token),
+                     "TOKEN_%d_%d_X", (int)getpid(), i);
+        }
+    }
+}
+
+static void run_isolation_workers(int count) {
+    pthread_t threads[ISOLATION_THREADS];
+    for (int i = 0; i < count; i++) {
+        TEST_ASSERT_EQUAL_INT(0, pthread_create(&threads[i], NULL, run_isolation_worker, &isolation_workers[i]));
+    }
+    for (int i = 0; i < count; i++) {
+        pthread_join(threads[i], NULL);
+    }
+}
+
+static void assert_isolation_workers(int count) {
+    for (int i = 0; i < count; i++) {
+        TEST_ASSERT_EQUAL_INT_MESSAGE(0, isolation_workers[i].mismatches, "result carried another call's token");
+        TEST_ASSERT_EQUAL_INT_MESSAGE(0, isolation_workers[i].failures, "success flag did not match the call's own outcome");
+    }
+}
+
+static void finish_isolation_test(const char *tool_path, int count) {
+    unlink(tool_path);
+    python_cleanup_tool_files();
+    assert_isolation_workers(count);
+}
+
+void test_concurrent_calls_isolate_results(void) {
+    char tool_path[512];
+    load_isolation_tool(tool_path, sizeof(tool_path));
+    setup_isolation_workers(ISOLATION_THREADS, -1);
+    run_isolation_workers(ISOLATION_THREADS);
+    finish_isolation_test(tool_path, ISOLATION_THREADS);
+}
+
+void test_concurrent_calls_isolate_exceptions(void) {
+    char tool_path[512];
+    load_isolation_tool(tool_path, sizeof(tool_path));
+    setup_isolation_workers(5, 4);
+    run_isolation_workers(5);
+    finish_isolation_test(tool_path, 5);
+}
+
+void test_invoke_nested_json_literals(void) {
+    char home[] = "/tmp/invoke_literals_XXXXXX";
+    TEST_ASSERT_NOT_NULL(mkdtemp(home));
+    app_home_cleanup();
+    TEST_ASSERT_EQUAL_INT(0, app_home_init(home));
+
+    char tools_dir[512], tool_path[600];
+    snprintf(tools_dir, sizeof(tools_dir), "%s/tools", home);
+    TEST_ASSERT_EQUAL_INT(0, mkdir(tools_dir, 0755));
+    snprintf(tool_path, sizeof(tool_path), "%s/echo_args.py", tools_dir);
+    write_text_file(tool_path,
+        "def echo_args(payload: dict) -> dict:\n"
+        "    \"\"\"Echo the payload back.\n"
+        "\n"
+        "    Args:\n"
+        "        payload: Arbitrary object\n"
+        "    \"\"\"\n"
+        "    return {\"payload\": payload}\n");
+
+    TEST_ASSERT_EQUAL_INT(0, python_init_tool_files());
+    TEST_ASSERT_EQUAL_INT(0, python_load_tool_files());
+
+    ToolCall call = { .id = "echo-1", .name = "echo_args",
+                      .arguments = "{\"payload\": {\"a\": true, \"b\": null}}" };
+    ToolResult result = {0};
+    TEST_ASSERT_EQUAL_INT(0, execute_python_file_tool_call(&call, &result));
+    TEST_ASSERT_NOT_NULL(result.result);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, result.success, result.result);
+
+    cJSON *json = cJSON_Parse(result.result);
+    TEST_ASSERT_NOT_NULL(json);
+    cJSON *payload = cJSON_GetObjectItem(json, "payload");
+    TEST_ASSERT_TRUE(cJSON_IsObject(payload));
+    TEST_ASSERT_TRUE(cJSON_IsTrue(cJSON_GetObjectItem(payload, "a")));
+    TEST_ASSERT_TRUE(cJSON_IsNull(cJSON_GetObjectItem(payload, "b")));
+    cJSON_Delete(json);
+
+    free(result.tool_call_id);
+    free(result.result);
+    python_cleanup_tool_files();
+    app_home_cleanup();
+    rmdir_recursive(home);
+}
+
 int main(void) {
     // Initialize app home before Python interpreter (needed for tool files path)
     app_home_init(NULL);
@@ -1055,6 +1239,9 @@ int main(void) {
     RUN_TEST(test_apply_patch_basic);
     RUN_TEST(test_retired_default_tools_removed_only_when_unmodified);
     RUN_TEST(test_file_tool_runs_on_non_main_thread);
+    RUN_TEST(test_concurrent_calls_isolate_results);
+    RUN_TEST(test_concurrent_calls_isolate_exceptions);
+    RUN_TEST(test_invoke_nested_json_literals);
     RUN_TEST(test_interpreter_restart_after_gil_release);
 
     int result = UNITY_END();

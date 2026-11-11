@@ -482,6 +482,26 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
     return 0;
 }
 
+// Per-call state lives in locals, so concurrent calls on different threads
+// never share a result slot. Top-level nulls are dropped so parameter
+// defaults apply.
+static const char *INVOKE_HELPER_CODE =
+    "def _ralph_invoke(name, args_json):\n"
+    "    import json\n"
+    "    try:\n"
+    "        args = {k: v for k, v in json.loads(args_json or '{}').items() if v is not None}\n"
+    "        value = globals()[name](**args)\n"
+    "        if isinstance(value, dict):\n"
+    "            return json.dumps(value)\n"
+    "        if isinstance(value, str):\n"
+    "            return json.dumps({'result': value, 'success': True})\n"
+    "        if isinstance(value, list):\n"
+    "            return json.dumps({'results': value, 'success': True})\n"
+    "        return json.dumps({'result': str(value), 'success': True})\n"
+    "    except Exception as e:\n"
+    "        import traceback\n"
+    "        return json.dumps({'error': str(e), 'traceback': traceback.format_exc(), 'success': False})\n";
+
 int python_load_tool_files(void) {
     if (!tool_files_initialized || python_tool_registry.tools_dir == NULL) {
         fprintf(stderr, "Error: Tool files not initialized\n");
@@ -605,6 +625,16 @@ int python_load_tool_files(void) {
             python_tool_registry.count++;
         }
     }
+    PyObject *main_module = PyImport_AddModule("__main__");
+    PyObject *helper = main_module != NULL
+        ? PyRun_String(INVOKE_HELPER_CODE, Py_file_input,
+                       PyModule_GetDict(main_module), PyModule_GetDict(main_module))
+        : NULL;
+    if (helper == NULL) {
+        PyErr_Print();
+        PyErr_Clear();
+    }
+    Py_XDECREF(helper);
     PyGILState_Release(gil);
 
     closedir(dir);
@@ -715,155 +745,30 @@ int execute_python_file_tool_call(const ToolCall *tool_call, ToolResult *result)
         return 0;
     }
 
-    // Two-pass approach: first calculate buffer size, then build kwargs string
-    size_t kwargs_size_needed = 1;
-    cJSON *item = NULL;
-    cJSON_ArrayForEach(item, args) {
-        if (cJSON_IsNull(item)) {
-            continue;
-        }
-        kwargs_size_needed += 4;
-        // Add space for "name="
-        kwargs_size_needed += strlen(item->string) + 1;
-
-        if (cJSON_IsString(item)) {
-            // Worst case: every char escapes to 2 chars, plus quotes
-            kwargs_size_needed += strlen(item->valuestring) * 2 + 3;
-        } else if (cJSON_IsNumber(item)) {
-            kwargs_size_needed += 32; // Enough for any number
-        } else if (cJSON_IsBool(item)) {
-            kwargs_size_needed += 6; // "False" is 5 chars
-        } else if (cJSON_IsArray(item) || cJSON_IsObject(item)) {
-            char *json_str = cJSON_PrintUnformatted(item);
-            if (json_str) {
-                kwargs_size_needed += strlen(json_str);
-                free(json_str);
-            }
-        }
-    }
-
-    char *kwargs = malloc(kwargs_size_needed);
-    if (kwargs == NULL) {
-        cJSON_Delete(args);
-        result->result = strdup("{\"error\": \"Memory allocation failed\", \"success\": false}");
-        result->success = 0;
-        return 0;
-    }
-    kwargs[0] = '\0';
-    size_t kwargs_pos = 0;
-
-    cJSON_ArrayForEach(item, args) {
-        // Null values would cause Python syntax errors
-        if (cJSON_IsNull(item)) {
-            continue;
-        }
-
-        if (kwargs_pos > 0) {
-            kwargs_pos += snprintf(kwargs + kwargs_pos, kwargs_size_needed - kwargs_pos, ", ");
-        }
-
-        if (cJSON_IsString(item)) {
-            const char *str_val = item->valuestring;
-            size_t str_len = strlen(str_val);
-            size_t escaped_size = str_len * 2 + 1;
-            char *escaped = malloc(escaped_size);
-            if (escaped == NULL) {
-                free(kwargs);
-                cJSON_Delete(args);
-                result->result = strdup("{\"error\": \"Memory allocation failed\", \"success\": false}");
-                result->success = 0;
-                return 0;
-            }
-            size_t e = 0;
-            for (size_t j = 0; str_val[j]; j++) {
-                if (str_val[j] == '\\') {
-                    escaped[e++] = '\\';
-                    escaped[e++] = '\\';
-                } else if (str_val[j] == '\'') {
-                    escaped[e++] = '\\';
-                    escaped[e++] = '\'';
-                } else if (str_val[j] == '\n') {
-                    escaped[e++] = '\\';
-                    escaped[e++] = 'n';
-                } else if (str_val[j] == '\r') {
-                    escaped[e++] = '\\';
-                    escaped[e++] = 'r';
-                } else if (str_val[j] == '\t') {
-                    escaped[e++] = '\\';
-                    escaped[e++] = 't';
-                } else {
-                    escaped[e++] = str_val[j];
-                }
-            }
-            escaped[e] = '\0';
-            kwargs_pos += snprintf(kwargs + kwargs_pos, kwargs_size_needed - kwargs_pos,
-                                   "%s='%s'", item->string, escaped);
-            free(escaped);
-        } else if (cJSON_IsNumber(item)) {
-            if (item->valuedouble == (double)item->valueint) {
-                kwargs_pos += snprintf(kwargs + kwargs_pos, kwargs_size_needed - kwargs_pos,
-                                       "%s=%d", item->string, item->valueint);
-            } else {
-                kwargs_pos += snprintf(kwargs + kwargs_pos, kwargs_size_needed - kwargs_pos,
-                                       "%s=%f", item->string, item->valuedouble);
-            }
-        } else if (cJSON_IsBool(item)) {
-            kwargs_pos += snprintf(kwargs + kwargs_pos, kwargs_size_needed - kwargs_pos,
-                                   "%s=%s", item->string, cJSON_IsTrue(item) ? "True" : "False");
-        } else if (cJSON_IsArray(item) || cJSON_IsObject(item)) {
-            char *json_str = cJSON_PrintUnformatted(item);
-            if (json_str) {
-                kwargs_pos += snprintf(kwargs + kwargs_pos, kwargs_size_needed - kwargs_pos,
-                                       "%s=%s", item->string, json_str);
-                free(json_str);
-            }
-        }
-    }
+    char *args_json = cJSON_PrintUnformatted(args);
     cJSON_Delete(args);
-
-    size_t code_len = strlen(tool_call->name) + kwargs_pos + 1024;
-    char *call_code = malloc(code_len);
-    if (call_code == NULL) {
-        free(kwargs);
+    if (args_json == NULL) {
         result->result = strdup("{\"error\": \"Memory allocation failed\", \"success\": false}");
         result->success = 0;
         return 0;
     }
-
-    snprintf(call_code, code_len,
-             "import json\n"
-             "try:\n"
-             "    _ralph_result = %s(%s)\n"
-             "    if isinstance(_ralph_result, dict):\n"
-             "        _ralph_result_json = json.dumps(_ralph_result)\n"
-             "    elif isinstance(_ralph_result, str):\n"
-             "        _ralph_result_json = json.dumps({'result': _ralph_result, 'success': True})\n"
-             "    elif isinstance(_ralph_result, list):\n"
-             "        _ralph_result_json = json.dumps({'results': _ralph_result, 'success': True})\n"
-             "    else:\n"
-             "        _ralph_result_json = json.dumps({'result': str(_ralph_result), 'success': True})\n"
-             "except Exception as e:\n"
-             "    import traceback\n"
-             "    _ralph_result_json = json.dumps({'error': str(e), 'traceback': traceback.format_exc(), 'success': False})\n",
-             tool_call->name, kwargs);
-
-    free(kwargs);
 
     PyGILState_STATE gil = PyGILState_Ensure();
     PyObject *main_module = PyImport_AddModule("__main__");
-    if (main_module == NULL) {
+    PyObject *invoke = main_module != NULL
+        ? PyDict_GetItemString(PyModule_GetDict(main_module), "_ralph_invoke")
+        : NULL;
+    if (invoke == NULL) {
         PyGILState_Release(gil);
-        free(call_code);
-        result->result = strdup("{\"error\": \"Failed to get Python main module\", \"success\": false}");
+        free(args_json);
+        result->result = strdup("{\"error\": \"Python tool helper not loaded\", \"success\": false}");
         result->success = 0;
         return 0;
     }
 
-    PyObject *globals = PyModule_GetDict(main_module);
-    PyObject *exec_result = PyRun_String(call_code, Py_file_input, globals, globals);
-    free(call_code);
-
-    if (exec_result == NULL) {
+    PyObject *result_obj = PyObject_CallFunction(invoke, "ss", tool_call->name, args_json);
+    free(args_json);
+    if (result_obj == NULL) {
         PyErr_Print();
         PyErr_Clear();
         PyGILState_Release(gil);
@@ -871,19 +776,11 @@ int execute_python_file_tool_call(const ToolCall *tool_call, ToolResult *result)
         result->success = 0;
         return 0;
     }
-    Py_DECREF(exec_result);
-
-    PyObject *result_obj = PyDict_GetItemString(globals, "_ralph_result_json");
-    if (result_obj == NULL) {
-        PyGILState_Release(gil);
-        result->result = strdup("{\"error\": \"No result from Python\", \"success\": false}");
-        result->success = 0;
-        return 0;
-    }
 
     const char *result_str = PyUnicode_AsUTF8(result_obj);
     if (result_str == NULL) {
         PyErr_Clear();
+        Py_DECREF(result_obj);
         PyGILState_Release(gil);
         result->result = strdup("{\"error\": \"Failed to get result string\", \"success\": false}");
         result->success = 0;
@@ -891,6 +788,7 @@ int execute_python_file_tool_call(const ToolCall *tool_call, ToolResult *result)
     }
 
     result->result = strdup(result_str);
+    Py_DECREF(result_obj);
     PyGILState_Release(gil);
 
     cJSON *result_json = cJSON_Parse(result->result);
