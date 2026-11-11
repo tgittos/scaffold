@@ -7,6 +7,8 @@ Always update docs (AGENTS.md, ARCHITECTURE.md and CODE_OVERVIEW.md) before you 
 
 ## Build & Run
 
+These commands need the devcontainer's Cosmopolitan toolchain. Check with `command -v cosmocc`: if it resolves (devcontainer or Codespace), run them directly; if not (e.g. a macOS host), run them through `docker run` as shown in `docs/building-from-source.md`.
+
 | Command | Description |
 |---------|-------------|
 | `./scripts/build.sh` | Build (compact output) |
@@ -150,6 +152,10 @@ valgrind --leak-check=full ./test/test_foo.com.dbg      # x86_64
 
 - `data/prompts/scaffold_system.txt` — main system prompt (embedded in binary at build time)
 - `data/prompts/modes/` — behavioral mode prompts: `debug.txt`, `explore.txt`, `plan.txt`, `review.txt`
+
+## Branching
+
+Branch all work from `develop`, never `master`, and target PRs at `develop`. `master` only receives releases and hotfixes.
 
 ## Versioning & Releases
 
