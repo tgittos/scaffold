@@ -2,6 +2,7 @@
 #include "agent/session.h"
 #include "session/session_manager.h"
 #include "session/conversation_tracker.h"
+#include "agent/recap.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -86,6 +87,26 @@ void test_recap_skips_tool_messages(void) {
     cleanup_bare_session(&g_session);
 }
 
+void test_greet_null_args(void) {
+    init_bare_session(&g_session);
+
+    TEST_ASSERT_EQUAL_INT(-1, recap_greet(NULL, "scaffold"));
+    TEST_ASSERT_EQUAL_INT(-1, recap_greet(&g_session, NULL));
+
+    cleanup_bare_session(&g_session);
+}
+
+void test_greet_does_not_persist_conversation(void) {
+    init_bare_session(&g_session);
+
+    int result = recap_greet(&g_session, "scaffold");
+    (void)result;
+
+    TEST_ASSERT_EQUAL_INT(0, g_session.session_data.conversation.count);
+
+    cleanup_bare_session(&g_session);
+}
+
 int main(void) {
     UNITY_BEGIN();
 
@@ -94,6 +115,8 @@ int main(void) {
     RUN_TEST(test_recap_does_not_persist_conversation);
     RUN_TEST(test_recap_max_messages_zero_uses_default);
     RUN_TEST(test_recap_skips_tool_messages);
+    RUN_TEST(test_greet_null_args);
+    RUN_TEST(test_greet_does_not_persist_conversation);
 
     return UNITY_END();
 }

@@ -50,7 +50,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`repl.c/h`** - Read-Eval-Print-Loop for interactive mode with readline, async processing, and periodic supervisor recovery
 - **`async_executor.c/h`** - Non-blocking message processing using background thread with pipe notification; running flag and condition broadcast occur inside mutex to prevent signal loss
 - **`context_enhancement.c/h`** - Split prompt builder: returns `EnhancedPromptParts` with session-stable base prompt and per-request dynamic context (repo snapshot on first turn, todo state, mode, memories, context retrieval). `build_repo_snapshot()` gathers git metadata and directory tree; `build_directory_tree()` produces a depth-limited directory listing
-- **`recap.c/h`** - Conversation recap generation (one-shot LLM calls without history persistence)
+- **`recap.c/h`** - Startup recap and first-run greeting (one-shot LLM calls without history persistence)
 - **`streaming_handler.c/h`** - Application-layer streaming orchestration and provider registry management
 - **`tool_executor.c/h`** - Thin entry point for tool execution workflow (init, initial batch, clear_history support, hand-off)
 - **`iterative_loop.c/h`** - Iterative tool-calling loop for follow-up LLM rounds; bounded retry of empty rounds (no text, reasoning or tool calls) with a visible warning
@@ -256,7 +256,7 @@ The test directory mirrors the source structure:
 - **`test_ralph.c`** - Core Ralph functionality tests
 - **`test_iterative_loop_empty.c`** - Empty-round retry and give-up behavior of the tool loop (mock SSE server)
 - **`test_cli_flags.c`** - CLI flag parsing tests
-- **`test_recap.c`** - Recap generation tests
+- **`test_recap.c`** - Recap and greeting tests
 - **`test_async_executor.c`** - Async executor background thread tests
 - **`test_interrupt.c`** - Cooperative Ctrl+C cancellation tests
 - **`test_agent_identity.c`** - Agent identity thread-safety tests
