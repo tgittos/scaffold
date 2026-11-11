@@ -39,6 +39,7 @@ static int sys_module_registered = 0;
 static PyObject *main_module = NULL;
 static PyObject *globals_dict = NULL;
 static int interpreter_initialized = 0;
+static PyThreadState *main_tstate = NULL;
 
 /*
  * Timeout handling state.
@@ -125,6 +126,7 @@ int python_interpreter_init(void) {
         fprintf(stderr, "Warning: Failed to load Python tool files\n");
     }
 
+    main_tstate = PyEval_SaveThread();
     return 0;
 }
 
@@ -132,6 +134,9 @@ void python_interpreter_shutdown(void) {
     if (!interpreter_initialized) {
         return;
     }
+
+    PyEval_RestoreThread(main_tstate);
+    main_tstate = NULL;
 
     /* Restore SIGALRM handler if it was modified for python timeouts.
      * This handles the case where shutdown is called while a signal handler
@@ -415,27 +420,8 @@ static char* get_python_exception_string(void) {
     return result ? result : strdup("Unknown exception");
 }
 
-int execute_python_code(const PythonExecutionParams *params, PythonExecutionResult *result) {
-    if (params == NULL || result == NULL) {
-        return -1;
-    }
-
-    memset(result, 0, sizeof(PythonExecutionResult));
-
-    if (params->code == NULL) {
-        result->success = 0;
-        result->exception = strdup("No code provided");
-        return 0;  // Return 0 with error in result, not -1
-    }
-
-    if (!interpreter_initialized) {
-        if (python_interpreter_init() != 0) {
-            result->success = 0;
-            result->exception = strdup("Failed to initialize Python interpreter");
-            return 0;  // Return 0 with error in result, not -1
-        }
-    }
-
+/* Caller must hold the GIL. */
+static void run_python_code(const PythonExecutionParams *params, PythonExecutionResult *result) {
     struct timeval start_time, end_time;
     gettimeofday(&start_time, NULL);
 
@@ -444,7 +430,7 @@ int execute_python_code(const PythonExecutionParams *params, PythonExecutionResu
         result->exception = strdup("Failed to import io module");
         result->success = 0;
         PyErr_Clear();
-        return 0;
+        return;
     }
 
     PyObject *sys_module = PyImport_ImportModule("sys");
@@ -453,7 +439,7 @@ int execute_python_code(const PythonExecutionParams *params, PythonExecutionResu
         result->exception = strdup("Failed to import sys module");
         result->success = 0;
         PyErr_Clear();
-        return 0;
+        return;
     }
 
     PyObject *string_io_class = PyObject_GetAttrString(io_module, "StringIO");
@@ -463,7 +449,7 @@ int execute_python_code(const PythonExecutionParams *params, PythonExecutionResu
         result->exception = strdup("Failed to get StringIO class");
         result->success = 0;
         PyErr_Clear();
-        return 0;
+        return;
     }
 
     PyObject *stdout_capture = PyObject_CallObject(string_io_class, NULL);
@@ -478,7 +464,7 @@ int execute_python_code(const PythonExecutionParams *params, PythonExecutionResu
         result->exception = strdup("Failed to create StringIO objects");
         result->success = 0;
         PyErr_Clear();
-        return 0;
+        return;
     }
 
     PyObject *original_stdout = PySys_GetObject("stdout");
@@ -556,7 +542,32 @@ int execute_python_code(const PythonExecutionParams *params, PythonExecutionResu
     Py_DECREF(string_io_class);
     Py_DECREF(io_module);
     Py_DECREF(sys_module);
+}
 
+int execute_python_code(const PythonExecutionParams *params, PythonExecutionResult *result) {
+    if (params == NULL || result == NULL) {
+        return -1;
+    }
+
+    memset(result, 0, sizeof(PythonExecutionResult));
+
+    if (params->code == NULL) {
+        result->success = 0;
+        result->exception = strdup("No code provided");
+        return 0;  // Return 0 with error in result, not -1
+    }
+
+    if (!interpreter_initialized) {
+        if (python_interpreter_init() != 0) {
+            result->success = 0;
+            result->exception = strdup("Failed to initialize Python interpreter");
+            return 0;  // Return 0 with error in result, not -1
+        }
+    }
+
+    PyGILState_STATE gil = PyGILState_Ensure();
+    run_python_code(params, result);
+    PyGILState_Release(gil);
     return 0;
 }
 

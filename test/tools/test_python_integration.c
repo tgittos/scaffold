@@ -4,8 +4,11 @@
 #include "lib/tools/tools_system.h"
 #include "util/app_home.h"
 #include "../test_fs_utils.h"
+#include <pthread.h>
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 static ToolRegistry registry;
 
@@ -957,6 +960,65 @@ void test_retired_default_tools_removed_only_when_unmodified(void) {
     rmdir_recursive(home);
 }
 
+static volatile int file_tool_thread_done = 0;
+static ToolResult file_tool_thread_result;
+
+static void *run_file_tool_call(void *arg) {
+    execute_python_file_tool_call((const ToolCall *)arg, &file_tool_thread_result);
+    file_tool_thread_done = 1;
+    return NULL;
+}
+
+void test_file_tool_runs_on_non_main_thread(void) {
+    TEST_ASSERT_EQUAL_INT(0, python_init_tool_files());
+    TEST_ASSERT_EQUAL_INT(0, python_load_tool_files());
+
+    char dir[] = "/tmp/test_gil_thread_XXXXXX";
+    TEST_ASSERT_NOT_NULL(mkdtemp(dir));
+    char args[128];
+    snprintf(args, sizeof(args), "{\"path\": \"%s\"}", dir);
+    ToolCall call = { .id = "thread-list-dir", .name = "list_dir", .arguments = args };
+
+    memset(&file_tool_thread_result, 0, sizeof(file_tool_thread_result));
+    file_tool_thread_done = 0;
+    pthread_t thread;
+    TEST_ASSERT_EQUAL_INT(0, pthread_create(&thread, NULL, run_file_tool_call, &call));
+
+    for (int i = 0; i < 500 && !file_tool_thread_done; i++) {
+        usleep(10000);
+    }
+    if (!file_tool_thread_done) {
+        /* The blocked thread cannot be joined, so the process cannot continue. */
+        printf("%s:%d:%s:FAIL: deadlock: GIL held by init thread\n", __FILE__, __LINE__, __func__);
+        fflush(stdout);
+        _exit(1);
+    }
+    TEST_ASSERT_TRUE_MESSAGE(file_tool_thread_done, "deadlock: GIL held by init thread");
+    pthread_join(thread, NULL);
+
+    TEST_ASSERT_EQUAL_INT(1, file_tool_thread_result.success);
+
+    free(file_tool_thread_result.tool_call_id);
+    free(file_tool_thread_result.result);
+    rmdir(dir);
+    python_cleanup_tool_files();
+}
+
+void test_interpreter_restart_after_gil_release(void) {
+    python_interpreter_shutdown();
+    TEST_ASSERT_EQUAL_INT(0, python_interpreter_init());
+
+    ToolCall call = { .id = "restart-1", .name = "python", .arguments = "{\"code\": \"print('ok')\"}" };
+    ToolResult result = {0};
+    TEST_ASSERT_EQUAL_INT(0, execute_python_tool_call(&call, &result));
+    TEST_ASSERT_EQUAL_INT(1, result.success);
+    TEST_ASSERT_NOT_NULL(result.result);
+    TEST_ASSERT_NOT_NULL(strstr(result.result, "ok"));
+
+    free(result.tool_call_id);
+    free(result.result);
+}
+
 int main(void) {
     // Initialize app home before Python interpreter (needed for tool files path)
     app_home_init(NULL);
@@ -992,6 +1054,8 @@ int main(void) {
     RUN_TEST(test_list_dir_iso_timestamps);
     RUN_TEST(test_apply_patch_basic);
     RUN_TEST(test_retired_default_tools_removed_only_when_unmodified);
+    RUN_TEST(test_file_tool_runs_on_non_main_thread);
+    RUN_TEST(test_interpreter_restart_after_gil_release);
 
     int result = UNITY_END();
 
