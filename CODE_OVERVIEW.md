@@ -13,7 +13,7 @@ Application-specific code that uses the library layer. This is a thin wrapper ar
 
 #### `src/tools/` - Python Tool Integration
 - **`python_tool.c/h`** - Embedded Python interpreter execution; the GIL is released after init and taken per call
-- **`python_tool_files.c/h`** - Python file-based tool loading system (supports freeform tool invocation for tools with Match: directive; "Thread-safe: true" docstring directive marks tools that run concurrently within a batch)
+- **`python_tool_files.c/h`** - Python file-based tool loading system (supports freeform tool invocation for tools with Match: directive; "Thread-safe: true" docstring directive marks tools that run concurrently within a batch; unmodified older shipped default tool files are refreshed from the embedded versions via `SHIPPED_DEFAULT_TOOLS` hashes)
 - **`python_extension.c/h`** - Tool extension interface for Python tools integration with lib/
 - **`http_python.c/h`** - Python extension for C HTTP client (`_ralph_http` module: get, post, download)
 - **`verified_file_python.c/h`** - Python extension for TOCTOU-safe file operations (`_ralph_verified_io` module)
