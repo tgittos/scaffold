@@ -230,7 +230,7 @@ int recap_generate(AgentSession* session, int max_messages) {
     display_streaming_init();
 
     struct StreamingHTTPConfig streaming_config = {
-        .base = DEFAULT_HTTP_CONFIG,
+        .base = DEFAULT_STREAMING_HTTP_CONFIG.base,
         .stream_callback = recap_stream_http_callback,
         .callback_data = ctx,
         .low_speed_limit = 1,

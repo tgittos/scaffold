@@ -157,7 +157,7 @@ static StreamingContext* streaming_send_request(AgentSession* session,
     display_streaming_init();
 
     struct StreamingHTTPConfig streaming_config = {
-        .base = DEFAULT_HTTP_CONFIG,
+        .base = DEFAULT_STREAMING_HTTP_CONFIG.base,
         .stream_callback = stream_http_callback,
         .callback_data = ctx,
         .low_speed_limit = 1,
