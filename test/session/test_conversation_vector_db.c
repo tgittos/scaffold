@@ -6,7 +6,7 @@
 #include "services/services.h"
 
 extern void hnswlib_clear_all(void);
-extern void document_store_clear_conversations(document_store_t* store);
+extern void document_store_clear_index(document_store_t* store, const char* index_name);
 #include "llm/embeddings_service.h"
 #include "util/app_home.h"
 #include "../mock_embeddings.h"
@@ -210,7 +210,7 @@ void test_loading_history_does_not_create_index(void) {
         free(found);
     }
 
-    TEST_ASSERT_FALSE(vector_db_service_has_index(g_test_services->vector_db, "conversations"));
+    TEST_ASSERT_FALSE(vector_db_service_has_index(g_test_services->vector_db, conversation_tracker_index_name()));
 
     cleanup_conversation_history(&history);
 }

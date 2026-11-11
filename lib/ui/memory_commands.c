@@ -3,6 +3,7 @@
 #include "db/vector_db_service.h"
 #include "llm/embeddings_service.h"
 #include "services/services.h"
+#include "tools/memory_tool.h"
 #include "terminal.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -102,7 +103,7 @@ static void print_chunk_details(const ChunkMetadata* chunk) {
 }
 
 static int cmd_list(const char* args, Services* svc) {
-    const char* index_name = "long_term_memory";
+    const char* index_name = memory_tool_project_index();
 
     if (args && strlen(args) > 0) {
         index_name = args;
@@ -146,7 +147,7 @@ static int cmd_search(const char* args, Services* svc) {
         return -1;
     }
 
-    const char* index_name = "long_term_memory";
+    const char* index_name = memory_tool_project_index();
     size_t count = 0;
     ChunkMetadata** chunks = metadata_store_search(store, index_name, args, &count);
 
@@ -189,8 +190,13 @@ static int cmd_show(const char* args, Services* svc) {
     }
 
     //Fall through known indices since chunk IDs aren't globally unique
-    const char* index_name = "long_term_memory";
+    const char* index_name = memory_tool_project_index();
     ChunkMetadata* chunk = metadata_store_get(store, index_name, chunk_id);
+
+    if (chunk == NULL) {
+        index_name = memory_tool_user_index();
+        chunk = metadata_store_get(store, index_name, chunk_id);
+    }
 
     if (chunk == NULL) {
         index_name = "conversation_history";
@@ -250,8 +256,13 @@ static int cmd_edit(const char* args, Services* svc) {
     }
 
     // Fall through known indices since chunk IDs aren't globally unique
-    const char* index_name = "long_term_memory";
+    const char* index_name = memory_tool_project_index();
     ChunkMetadata* chunk = metadata_store_get(store, index_name, chunk_id);
+
+    if (chunk == NULL) {
+        index_name = memory_tool_user_index();
+        chunk = metadata_store_get(store, index_name, chunk_id);
+    }
 
     if (chunk == NULL) {
         index_name = "conversation_history";
@@ -382,7 +393,7 @@ static int cmd_indices(const char* args, Services* svc) {
 }
 
 static int cmd_stats(const char* args, Services* svc) {
-    const char* index_name = "long_term_memory";
+    const char* index_name = memory_tool_project_index();
 
     if (args && strlen(args) > 0) {
         index_name = args;
