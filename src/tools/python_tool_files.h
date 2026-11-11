@@ -24,6 +24,7 @@ typedef struct {
     ToolParameter *parameters; // Parameter definitions
     char *gate_category;     // Gate category override from "Gate:" directive (or NULL)
     char *match_arg;         // Argument name for pattern matching from "Match:" directive (or NULL)
+    int thread_safe;         // 1 if "Thread-safe: true" directive present; calls may run concurrently
 } PythonToolDef;
 
 /**

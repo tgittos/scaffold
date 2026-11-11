@@ -1,6 +1,7 @@
 """Analyze code structure without reading full files.
 
 Gate: file_read
+Thread-safe: true
 Match: path
 """
 
@@ -517,7 +518,7 @@ def _op_exports(path, depth, language_filter):
 
 def show_structure(path: str, operation: str = "outline", depth: int = 2,
                    language: str = None, symbol: str = None) -> dict:
-    """Get an overview of code structure without reading full file contents. Use this before read_file when you need to understand a module's shape — what classes exist, what methods they have, how files relate. Use 'outline' to see all classes, functions, and methods with line numbers. Use 'imports' to map dependencies between modules. Use 'hierarchy' for class inheritance. Use 'exports' for public API surface. Returns structured data, not source code — much cheaper than reading entire files.
+    """Get an overview of code structure without reading full file contents. Use this before read_file when you need to understand a module's shape — what classes exist, what methods they have, how files relate. Use 'outline' to see all classes, functions, and methods with line numbers. Use 'imports' to map dependencies between modules. Use 'hierarchy' for class inheritance. Use 'exports' for public API surface. Returns structured data, not source code — much cheaper than reading entire files. Calls in the same batch run concurrently; put steps that depend on each other in separate turns.
 
     Args:
         path: File or directory to analyze
