@@ -40,6 +40,7 @@ $(eval $(call def_test,pipe_notifier,utils/test_pipe_notifier,$(LIBDIR)/ipc/pipe
 $(eval $(call def_test,agent_identity,ralph/test_agent_identity,$(LIBDIR)/ipc/agent_identity.c))
 $(eval $(call def_test,prompt,utils/test_prompt_loader,$(LIBDIR)/util/prompt_loader.c $(LIBDIR)/util/app_home.c $(LIBDIR)/util/config.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/util/log.c))
 $(eval $(call def_test,app_home,utils/test_app_home,$(LIBDIR)/util/app_home.c))
+$(eval $(call def_test,project_scope,utils/test_project_scope,$(LIBDIR)/util/project_scope.c))
 $(eval $(call def_test,executable_path,utils/test_executable_path,$(LIBDIR)/util/executable_path.c))
 $(eval $(call def_test,todo_manager,tools/test_todo_manager,$(LIBDIR)/tools/todo_manager.c))
 $(eval $(call def_test,document_chunker,test_document_chunker,$(LIBDIR)/util/document_chunker.c $(LIBDIR)/util/common_utils.c))
@@ -104,6 +105,9 @@ $(TEST_prompt_TARGET): $(TEST_prompt_OBJECTS) $(CJSON_LIB)
 
 $(TEST_app_home_TARGET): $(TEST_app_home_OBJECTS)
 	$(CC) -o $@ $(TEST_app_home_OBJECTS)
+
+$(TEST_project_scope_TARGET): $(TEST_project_scope_OBJECTS)
+	$(CC) -o $@ $(TEST_project_scope_OBJECTS)
 
 $(TEST_executable_path_TARGET): $(TEST_executable_path_OBJECTS)
 	$(CC) -o $@ $(TEST_executable_path_OBJECTS)

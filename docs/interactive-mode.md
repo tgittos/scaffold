@@ -97,7 +97,7 @@ Manage scaffold's persistent semantic memory.
 
 ```
 > /memory list
-Chunks in 'long_term_memory':
+Chunks in 'memory_scaffold_3f9a6c1e8b2d7a40':
   1: [user_preference] "Use TypeScript for all new files"
   2: [fact] "Project uses PostgreSQL 15"
   3: [instruction] "Always run tests before committing"

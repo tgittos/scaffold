@@ -1075,7 +1075,7 @@ graph TB
 |---------|-----------|-------------|
 | `/help` | - | Show available slash commands |
 | `/memory help` | - | Display help message |
-| `/memory list` | `[index_name]` | List chunks from index (default: long_term_memory) |
+| `/memory list` | `[index_name]` | List chunks from index (default: current project memory index) |
 | `/memory search` | `<query>` | Search chunks by content/metadata |
 | `/memory show` | `<chunk_id>` | Display full details of a chunk |
 | `/memory edit` | `<chunk_id> <field> <value>` | Edit chunk metadata |
@@ -1183,6 +1183,9 @@ graph TB
 |------------|--------------|---|-----------------|----------|
 | Memory | 100,000 | 16 | 200 | Long-term semantic memory |
 | Documents | 10,000 | 16 | 200 | PDF and document storage |
+
+### Memory Scopes
+Memory and conversation-history indices are per project. `project_scope_index_name()` (`lib/util/project_scope.c`) resolves the nearest ancestor of the working directory containing a `.git` entry, falling back to the working directory, and names the index `<prefix>_<basename>_<fnv1a64(root)>`. The memory tool and conversation tracker resolve their names once, when their services are set. Project memories go to `memory_<…>`; `remember` with `scope=user` writes `memory_user`, which every project shares. `recall_memories` searches both and merges by distance. History is stored in `conversations_<…>`, so the startup recap only covers the current project.
 
 ## Key Features
 

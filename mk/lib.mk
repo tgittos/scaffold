@@ -133,6 +133,7 @@ LIB_UTIL_SOURCES := \
     $(LIBDIR)/util/config.c \
     $(LIBDIR)/util/prompt_loader.c \
     $(LIBDIR)/util/app_home.c \
+    $(LIBDIR)/util/project_scope.c \
     $(LIBDIR)/util/context_retriever.c \
     $(LIBDIR)/util/executable_path.c \
     $(LIBDIR)/util/process_spawn.c

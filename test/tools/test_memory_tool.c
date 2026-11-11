@@ -13,6 +13,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include "../test_fs_utils.h"
 
 extern void hnswlib_clear_all(void);
@@ -26,11 +29,13 @@ static char *saved_openai_api_url = NULL;
 static MockAPIServer mock_server;
 static MockAPIResponse mock_responses[1];
 static Services* test_services = NULL;
+static char g_saved_cwd[PATH_MAX];
 
 void setUp(void) {
     snprintf(g_test_home, sizeof(g_test_home), "/tmp/test_memory_tool_XXXXXX");
     TEST_ASSERT_NOT_NULL(mkdtemp(g_test_home));
     app_home_init(g_test_home);
+    TEST_ASSERT_NOT_NULL(getcwd(g_saved_cwd, sizeof(g_saved_cwd)));
 
     // Initialize mock embeddings with semantic groups
     mock_embeddings_init_test_groups();
@@ -92,6 +97,7 @@ void setUp(void) {
 }
 
 void tearDown(void) {
+    TEST_ASSERT_EQUAL_INT(0, chdir(g_saved_cwd));
     config_cleanup();
 
     // Restore original env vars
@@ -147,12 +153,12 @@ void test_register_memory_tools(void) {
                                    "Use for key facts, user preferences, project conventions, or corrections. "
                                    "Do not store transient or easily re-derivable information.",
                                    registry.functions.data[i].description);
-            TEST_ASSERT_EQUAL_INT(4, registry.functions.data[i].parameter_count);
+            TEST_ASSERT_EQUAL_INT(5, registry.functions.data[i].parameter_count);
         }
         if (strcmp(registry.functions.data[i].name, "recall_memories") == 0) {
             found_recall = 1;
             TEST_ASSERT_EQUAL_STRING("Search long-term memory using semantic similarity. "
-                                   "Returns the most relevant stored memories for a natural-language query. "
+                                   "Searches both the current project's memories and user-wide memories; each result reports its scope. "
                                    "Use at session start to recall user preferences or context from prior conversations.",
                                    registry.functions.data[i].description);
             TEST_ASSERT_EQUAL_INT(2, registry.functions.data[i].parameter_count);
@@ -162,7 +168,7 @@ void test_register_memory_tools(void) {
             TEST_ASSERT_EQUAL_STRING("Delete a memory from long-term storage by ID. "
                                    "Use recall_memories first to find and confirm the ID before deleting.",
                                    registry.functions.data[i].description);
-            TEST_ASSERT_EQUAL_INT(1, registry.functions.data[i].parameter_count);
+            TEST_ASSERT_EQUAL_INT(2, registry.functions.data[i].parameter_count);
         }
     }
 
@@ -327,7 +333,7 @@ void test_recall_memories_with_valid_query(void) {
     TEST_ASSERT_EQUAL_INT(0, exec_result);
     TEST_ASSERT_NOT_NULL(result.result);
     TEST_ASSERT_EQUAL_INT(1, result.success);
-    TEST_ASSERT_TRUE(strstr(result.result, "\"success\": true") != NULL);
+    TEST_ASSERT_TRUE(strstr(result.result, "\"success\":true") != NULL);
 
     free(result.tool_call_id);
     free(result.result);
@@ -437,6 +443,87 @@ void test_memory_persistence_across_calls(void) {
     free(recall_result.result);
 }
 
+static void register_in(const char* dir) {
+    TEST_ASSERT_EQUAL_INT(0, chdir(dir));
+    ToolRegistry registry = {0};
+    init_tool_registry(&registry);
+    registry.services = test_services;
+    register_memory_tools(&registry);
+    cleanup_tool_registry(&registry);
+}
+
+static void make_repo(const char* name, char* out, size_t out_size) {
+    char git[512];
+    snprintf(out, out_size, "%s/%s", g_test_home, name);
+    TEST_ASSERT_EQUAL_INT(0, mkdir(out, 0755));
+    snprintf(git, sizeof(git), "%s/.git", out);
+    TEST_ASSERT_EQUAL_INT(0, mkdir(git, 0755));
+}
+
+static int run_tool(int (*exec)(const ToolCall*, ToolResult*), const char* args, char** out) {
+    ToolCall call = { .id = "scope_test", .name = "t", .arguments = (char*)args };
+    ToolResult result = {0};
+    exec(&call, &result);
+    int success = result.success;
+    if (out) *out = result.result; else free(result.result);
+    free(result.tool_call_id);
+    return success;
+}
+
+static int recall_contains(const char* needle) {
+    char* out = NULL;
+    run_tool(execute_recall_memories_tool_call, "{\"query\": \"capital of France\", \"k\": 5}", &out);
+    int found = out != NULL && strstr(out, needle) != NULL;
+    free(out);
+    return found;
+}
+
+void test_project_memories_isolated_between_repos(void) {
+    char a[512], b[512];
+    make_repo("repo_a", a, sizeof(a));
+    make_repo("repo_b", b, sizeof(b));
+
+    register_in(a);
+    TEST_ASSERT_EQUAL_INT(1, run_tool(execute_remember_tool_call,
+        "{\"content\": \"Paris is the capital of France\"}", NULL));
+    TEST_ASSERT_TRUE(recall_contains("Paris"));
+
+    register_in(b);
+    TEST_ASSERT_FALSE(recall_contains("Paris"));
+
+    register_in(a);
+    TEST_ASSERT_TRUE(recall_contains("Paris"));
+}
+
+void test_user_memories_shared_across_repos(void) {
+    char a[512], b[512];
+    make_repo("repo_a", a, sizeof(a));
+    make_repo("repo_b", b, sizeof(b));
+
+    register_in(a);
+    TEST_ASSERT_EQUAL_INT(1, run_tool(execute_remember_tool_call,
+        "{\"content\": \"Paris is the capital of France\", \"scope\": \"user\"}", NULL));
+
+    register_in(b);
+    TEST_ASSERT_TRUE(recall_contains("\"scope\":\"user\""));
+}
+
+void test_invalid_scope_rejected(void) {
+    TEST_ASSERT_EQUAL_INT(0, run_tool(execute_remember_tool_call,
+        "{\"content\": \"Paris\", \"scope\": \"galaxy\"}", NULL));
+    TEST_ASSERT_EQUAL_INT(0, run_tool(execute_forget_memory_tool_call,
+        "{\"memory_id\": 0, \"scope\": \"galaxy\"}", NULL));
+}
+
+void test_forget_targets_requested_scope(void) {
+    TEST_ASSERT_EQUAL_INT(1, run_tool(execute_remember_tool_call,
+        "{\"content\": \"Paris is the capital of France\", \"scope\": \"user\"}", NULL));
+
+    TEST_ASSERT_EQUAL_INT(0, run_tool(execute_forget_memory_tool_call, "{\"memory_id\": 0}", NULL));
+    TEST_ASSERT_EQUAL_INT(1, run_tool(execute_forget_memory_tool_call,
+        "{\"memory_id\": 0, \"scope\": \"user\"}", NULL));
+}
+
 int main(void) {
     UNITY_BEGIN();
 
@@ -451,6 +538,10 @@ int main(void) {
     RUN_TEST(test_forget_memory_tool_nonexistent_id);
     RUN_TEST(test_memory_tool_json_escaping);
     RUN_TEST(test_memory_persistence_across_calls);
+    RUN_TEST(test_project_memories_isolated_between_repos);
+    RUN_TEST(test_user_memories_shared_across_repos);
+    RUN_TEST(test_invalid_scope_rejected);
+    RUN_TEST(test_forget_targets_requested_scope);
 
     return UNITY_END();
 }

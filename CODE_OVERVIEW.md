@@ -58,7 +58,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 
 #### `lib/session/` - Session Data Management
 - **`session_manager.c/h`** - Session data structures (SessionData with config, conversation, model info)
-- **`conversation_tracker.c/h`** - Conversation history tracking with vector DB persistence
+- **`conversation_tracker.c/h`** - Conversation history tracking with vector DB persistence, in a per-project index
 - **`conversation_compactor.c/h`** - Intelligent conversation history compression
 - **`rolling_summary.c/h`** - Rolling conversation summary generation with compaction thresholds, `CONTEXT_FULL_THRESHOLD` (0.92) for context pressure detection
 - **`token_manager.c/h`** - Token counting, allocation, and context window management
@@ -144,7 +144,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`tool_format_openai.c`** - OpenAI Chat Completions tool format
 - **`tool_extension.c/h`** - Extension interface for external tool systems (e.g., Python)
 - **`builtin_tools.c/h`** - Registration of built-in tools
-- **`memory_tool.c/h`** - Persistent semantic memory (remember, recall_memories, forget_memory)
+- **`memory_tool.c/h`** - Persistent semantic memory (remember, recall_memories, forget_memory) in a per-project index plus a shared user index
 - **`pdf_tool.c/h`** - PDF processing and vector indexing
 - **`vector_db_tool.c/h`** - Vector database dispatch tool (single `vector_db` tool with `operation` enum: create_index, delete_index, list_indices, add_vector, update_vector, delete_vector, get_vector, search, add_text, add_chunked_text, add_pdf_document, search_text, search_by_time)
 - **`subagent_tool.c/h`** - Subagent process spawning and management
@@ -197,6 +197,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`context_retriever.c/h`** - Vector database context retrieval for prompts
 - **`ansi_codes.h`** - Terminal color codes, box-drawing characters, and status symbols
 - **`app_home.c/h`** - Centralized application home directory management (~/.local/<app_name>/)
+- **`project_scope.c/h`** - Per-project index names derived from the nearest `.git` root of the working directory
 - **`process_spawn.c/h`** - Common fork/exec helper with stdout/stderr redirected to /dev/null
 - **`executable_path.c/h`** - Executable path resolution for APE binaries
 
@@ -341,6 +342,7 @@ The test directory mirrors the source structure:
 - **`test_log.c`** - Structured logging system tests (level/module filtering, parsing)
 - **`test_debug_output.c`** - Debug output tests
 - **`test_app_home.c`** - Application home directory management tests
+- **`test_project_scope.c`** - Project root resolution and index naming tests
 - **`test_pipe_notifier.c`** - Pipe notifier async notification tests
 - **`test_spinner.c`** - Tool execution spinner tests
 - **`test_terminal.c`** - Terminal abstraction tests

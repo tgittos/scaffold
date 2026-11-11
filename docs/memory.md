@@ -13,6 +13,18 @@ When scaffold remembers something, it:
 
 When scaffold needs to recall information, it embeds the query and finds the most semantically similar memories.
 
+## Scopes
+
+Memories and conversation history are scoped to the project scaffold was started in. The project is the nearest directory at or above the working directory that contains a `.git` entry (a repository or a git worktree), or the working directory itself when there is none. Subdirectories of a repository share its scope; each worktree has its own.
+
+| Scope | Index | Holds |
+|-------|-------|-------|
+| `project` | `memory_<dir>_<hash>` | Facts about the current project |
+| `user` | `memory_user` | Preferences that apply in every project |
+| history | `conversations_<dir>_<hash>` | Recent conversation turns, recapped at startup |
+
+`<dir>` is the project directory's name and `<hash>` is a hash of its absolute path.
+
 ## Memory tools
 
 The LLM has three memory tools available:
@@ -30,6 +42,7 @@ Parameters:
 - `type` (optional) -- Category: `user_preference`, `fact`, `instruction`, `correction`
 - `source` (optional) -- Origin: `conversation`, `web`, `file`
 - `importance` (optional) -- Level: `low`, `normal`, `high`, `critical`
+- `scope` (optional, default `project`) -- `project` or `user`
 
 ### `recall_memories`
 
@@ -43,18 +56,18 @@ Parameters:
 - `query` (required) -- What to search for
 - `k` (optional, default 5) -- Number of results to return
 
-Returns memories ranked by similarity score (0-1) with their metadata.
+Searches the project and user scopes together and returns memories ranked by similarity score (0-1), each with its `scope` and metadata.
 
 ### `forget_memory`
 
-Deletes a specific memory by ID.
+Deletes a specific memory by ID. IDs are per scope, so pass the `scope` that `recall_memories` reported (default `project`).
 
 ## Interactive memory management
 
 Use the `/memory` slash command for direct memory management:
 
 ```bash
-# List all memories
+# List memories in the current project's index
 /memory list
 
 # Search for memories about databases
@@ -73,7 +86,7 @@ Use the `/memory` slash command for direct memory management:
 /memory indices
 
 # View statistics for an index
-/memory stats long_term_memory
+/memory stats memory_user
 ```
 
 ## Context enhancement
@@ -81,7 +94,7 @@ Use the `/memory` slash command for direct memory management:
 Scaffold automatically enhances each prompt with relevant memories. Before sending your message to the LLM, it:
 
 1. Embeds your message
-2. Searches long-term memory for relevant entries
+2. Searches the project and user memory scopes for relevant entries
 3. Includes the most relevant memories as context
 
 This means scaffold remembers things across sessions without you needing to repeat yourself.

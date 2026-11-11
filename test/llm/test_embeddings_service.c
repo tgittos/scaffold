@@ -367,10 +367,10 @@ void test_index_dimensions_follow_model_end_to_end(void) {
     document_store_t* store = services_get_document_store(test_services);
     TEST_ASSERT_NOT_NULL(store);
     vector_db_t* db = vector_db_service_get_database(services_get_vector_db(test_services));
-    TEST_ASSERT_EQUAL_UINT(1, vector_db_get_index_size(db, "long_term_memory"));
+    TEST_ASSERT_EQUAL_UINT(1, vector_db_get_index_size(db, memory_tool_project_index()));
 
     vector_t* vec = vector_create(384);
-    TEST_ASSERT_EQUAL_INT(VECTOR_DB_OK, vector_db_get_vector(db, "long_term_memory", 0, vec));
+    TEST_ASSERT_EQUAL_INT(VECTOR_DB_OK, vector_db_get_vector(db, memory_tool_project_index(), 0, vec));
     TEST_ASSERT_EQUAL_UINT(384, vec->dimension);
     vector_destroy(vec);
 
