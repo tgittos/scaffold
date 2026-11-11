@@ -256,12 +256,16 @@ int execute_tool_call(ToolRegistry *registry, const ToolCall *tool_call, ToolRes
                 result->success = 0;
                 return -1;
             }
+            struct timespec observed_mtime = {0, 0};
+            if (func->cacheable && registry->cache != NULL) {
+                observed_mtime = tool_cache_snapshot_mtime(tool_call->arguments);
+            }
             int rc = func->execute_func(tool_call, result);
 
             if (rc == 0 && registry->cache != NULL) {
                 if (func->cacheable && result->success && result->result != NULL) {
                     tool_cache_store(registry->cache, tool_call->name, tool_call->arguments,
-                                     result->result, result->success);
+                                     result->result, result->success, observed_mtime);
                 }
 
                 if (!func->cacheable && result->success && tool_call->arguments != NULL) {
