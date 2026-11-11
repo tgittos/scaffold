@@ -7,11 +7,12 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <errno.h>
+#include <strings.h>
 #include <time.h>
 
 // Simple HTTP response buffer size
 #define RESPONSE_BUFFER_SIZE 8192
-#define REQUEST_BUFFER_SIZE 4096
+#define REQUEST_INITIAL_SIZE 4096
 
 // Internal server state
 static MockAPIServer* g_server = NULL;
@@ -31,6 +32,70 @@ static int write_all(int fd, const char* buf, size_t len) {
         offset += (size_t)n;
     }
     return 0;
+}
+
+/* Returns the value following "name" on a header line, or NULL. */
+static const char* find_header(const char* headers, const char* headers_end, const char* name) {
+    size_t name_len = strlen(name);
+    for (const char* line = headers; line != NULL && line < headers_end; ) {
+        if (strncasecmp(line, name, name_len) == 0) {
+            const char* value = line + name_len;
+            while (*value == ' ') value++;
+            return value;
+        }
+        const char* next = strstr(line, "\r\n");
+        line = next ? next + 2 : NULL;
+    }
+    return NULL;
+}
+
+/* Reads the headers and the full Content-Length body. Closing a socket with
+ * unread request bytes makes the kernel send RST, which can discard the
+ * response before the client reads it. Returns a NUL-terminated heap buffer,
+ * or NULL if the connection closed before any data arrived. */
+static char* read_request(int fd) {
+    size_t cap = REQUEST_INITIAL_SIZE;
+    size_t len = 0;
+    size_t expected = 0;
+    int continue_sent = 0;
+    char* buf = malloc(cap);
+    if (buf == NULL) return NULL;
+
+    for (;;) {
+        if (len + 1 >= cap) {
+            char* grown = realloc(buf, cap * 2);
+            if (grown == NULL) break;
+            buf = grown;
+            cap *= 2;
+        }
+        ssize_t n = read(fd, buf + len, cap - len - 1);
+        if (n < 0 && errno == EINTR) continue;
+        if (n <= 0) break;
+        len += (size_t)n;
+        buf[len] = '\0';
+
+        char* headers_end = strstr(buf, "\r\n\r\n");
+        if (headers_end == NULL) continue;
+        if (expected == 0) {
+            const char* length = find_header(buf, headers_end, "Content-Length:");
+            expected = (size_t)(headers_end + 4 - buf) +
+                       (length ? (size_t)strtoul(length, NULL, 10) : 0);
+        }
+        const char* expect = find_header(buf, headers_end, "Expect:");
+        if (!continue_sent && expect != NULL && strncasecmp(expect, "100-continue", 12) == 0) {
+            const char* cont = "HTTP/1.1 100 Continue\r\n\r\n";
+            write_all(fd, cont, strlen(cont));
+            continue_sent = 1;
+        }
+        if (len >= expected) break;
+    }
+
+    if (len == 0) {
+        free(buf);
+        return NULL;
+    }
+    buf[len] = '\0';
+    return buf;
 }
 
 // Thread function for handling incoming connections
@@ -90,9 +155,8 @@ static void* server_thread_func(void* arg) {
         // Read the request
         struct timeval rcv_timeout = {5, 0};
         setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &rcv_timeout, sizeof(rcv_timeout));
-        char request[REQUEST_BUFFER_SIZE] = {0};
-        ssize_t bytes_read = read(client_fd, request, REQUEST_BUFFER_SIZE - 1);
-        if (bytes_read <= 0) {
+        char* request = read_request(client_fd);
+        if (request == NULL) {
             close(client_fd);
             continue;
         }
@@ -168,6 +232,7 @@ static void* server_thread_func(void* arg) {
             }
         }
         
+        free(request);
         close(client_fd);
     }
     
