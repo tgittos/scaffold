@@ -3,6 +3,7 @@
 #include "../util/log.h"
 #include "agent.h"
 #include "repl.h"
+#include "tool_review.h"
 #include "../workflow/workflow.h"
 #include "../session/conversation_tracker.h"
 #include "../util/ansi_codes.h"
@@ -135,6 +136,8 @@ int agent_init(Agent* agent, const AgentConfig* config) {
         .get_match_arg     = tool_extension_get_match_arg,
         .get_approval_channel = subagent_get_approval_channel,
         .log_approval      = log_subagent_approval,
+        .review_tool_call  = tool_review_run,
+        .review_ctx        = &agent->session,
     };
     approval_gate_set_callbacks(&gate_cbs);
 
@@ -175,6 +178,10 @@ int agent_load_config(Agent* agent) {
     if (agent->config.yolo) {
         approval_gate_enable_yolo(&agent->session.gate_config);
         LOG_INFO("Approval gates disabled (yolo mode)");
+    }
+
+    if (agent->config.auto_mode) {
+        agent->session.gate_config.auto_mode = 1;
     }
 
     for (int i = 0; i < agent->config.allow_category_count; i++) {

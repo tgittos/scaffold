@@ -18,18 +18,19 @@ static int has_git_entry(const char* dir) {
     return stat(path, &st) == 0;
 }
 
-/* Truncates root in place to the project root. */
-static void find_project_root(char* root) {
+/* Truncates root in place to the nearest ancestor holding .git.
+ * Returns 0 when one was found, -1 when root is left unchanged. */
+static int find_project_root(char* root) {
     char probe[PATH_MAX];
     snprintf(probe, sizeof(probe), "%s", root);
 
     for (;;) {
         if (has_git_entry(probe)) {
             snprintf(root, PATH_MAX, "%s", probe);
-            return;
+            return 0;
         }
         char* slash = strrchr(probe, '/');
-        if (slash == NULL || slash == probe) return;
+        if (slash == NULL || slash == probe) return -1;
         *slash = '\0';
     }
 }
@@ -76,4 +77,14 @@ int project_scope_index_name(const char* prefix, char* out, size_t out_size) {
     char cwd[PATH_MAX];
     if (getcwd(cwd, sizeof(cwd)) == NULL) return -1;
     return project_scope_index_name_for(cwd, prefix, out, out_size);
+}
+
+int project_scope_git_root(const char* dir, char* out, size_t out_size) {
+    if (dir == NULL || out == NULL) return -1;
+
+    char root[PATH_MAX];
+    if (realpath(dir, root) == NULL || find_project_root(root) != 0) return -1;
+
+    int n = snprintf(out, out_size, "%s", root);
+    return (n < 0 || (size_t)n >= out_size) ? -1 : 0;
 }

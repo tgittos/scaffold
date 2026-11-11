@@ -71,6 +71,7 @@ LIB_AGENT_SOURCES := \
     $(LIBDIR)/agent/context_enhancement.c \
     $(LIBDIR)/agent/prompt_mode.c \
     $(LIBDIR)/agent/recap.c \
+    $(LIBDIR)/agent/tool_review.c \
     $(LIBDIR)/agent/repl.c
 
 # LLM module
@@ -117,6 +118,7 @@ LIB_POLICY_SOURCES := \
     $(LIBDIR)/policy/tool_args.c \
     $(LIBDIR)/policy/pattern_generator.c \
     $(LIBDIR)/policy/gate_prompter.c \
+    $(LIBDIR)/policy/auto_approve.c \
     $(LIBDIR)/policy/approval_gate.c \
     $(LIBDIR)/policy/approval_errors.c \
     $(LIBDIR)/policy/subagent_approval.c

@@ -95,6 +95,22 @@ void test_small_buffer_fails(void) {
     TEST_ASSERT_EQUAL_INT(-1, project_scope_index_name_for(path, "memory", out, sizeof(out)));
 }
 
+void test_git_root_found_from_subdirectory(void) {
+    char path[512], expected[512], root[512];
+    snprintf(path, sizeof(path), "%s/repo_a/src/deep", g_tmp);
+    snprintf(expected, sizeof(expected), "%s/repo_a", g_tmp);
+    char resolved[512];
+    TEST_ASSERT_NOT_NULL(realpath(expected, resolved));
+    TEST_ASSERT_EQUAL_INT(0, project_scope_git_root(path, root, sizeof(root)));
+    TEST_ASSERT_EQUAL_STRING(resolved, root);
+}
+
+void test_git_root_missing_fails(void) {
+    char path[512], root[512];
+    snprintf(path, sizeof(path), "%s/plain/sub", g_tmp);
+    TEST_ASSERT_EQUAL_INT(-1, project_scope_git_root(path, root, sizeof(root)));
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_subdirectory_shares_repo_scope);
@@ -104,5 +120,7 @@ int main(void) {
     RUN_TEST(test_basename_is_sanitized);
     RUN_TEST(test_missing_dir_fails);
     RUN_TEST(test_small_buffer_fails);
+    RUN_TEST(test_git_root_found_from_subdirectory);
+    RUN_TEST(test_git_root_missing_fails);
     return UNITY_END();
 }

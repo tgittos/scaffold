@@ -60,6 +60,7 @@ static void print_help(const char *program_name) {
     printf("  --json            Enable JSON output mode\n");
     printf("  --home <path>     Override home directory (default: ~/.local/scaffold)\n");
     printf("  --yolo            Disable all approval gates for this session\n");
+    printf("  --auto            Run gated calls that pass auto review without prompting\n");
     printf("  --context-window <n>  Override context window size (tokens)\n");
     printf("  -p, --prompt <text>   Use custom system prompt (skips default + AGENTS.md)\n");
     printf("  --login           Log in to OpenAI via OAuth (ChatGPT subscription)\n");
@@ -388,6 +389,8 @@ int main(int argc, char *argv[]) {
             config.json_mode = true;
         } else if (strcmp(argv[i], "--yolo") == 0) {
             config.yolo = true;
+        } else if (strcmp(argv[i], "--auto") == 0) {
+            config.auto_mode = true;
         } else if (strcmp(argv[i], "--no-auto-messages") == 0) {
             config.no_auto_messages = true;
         } else if (strcmp(argv[i], "--message-poll-interval") == 0 && i + 1 < argc) {

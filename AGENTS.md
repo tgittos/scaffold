@@ -62,6 +62,7 @@ set -a && source .env && set +a && out/scaffold --yolo "your message"
 | `--no-stream` | Disable response streaming |
 | `--json` | Enable JSON output mode (structured JSONL on stdout) |
 | `--yolo` | Disable all approval gates for this session |
+| `--auto` | Run gated calls that pass auto review without prompting |
 | `--model <name>` | Select model (e.g. `gpt-4o`) |
 | `--context-window <n>` | Override context window size (tokens) |
 | `-p`, `--prompt <text>` | Use custom system prompt (skips default + AGENTS.md) |

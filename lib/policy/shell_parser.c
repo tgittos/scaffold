@@ -594,6 +594,154 @@ int shell_command_is_safe_for_matching(const ParsedShellCommand *parsed) {
     return 1;
 }
 
+static int is_word_boundary(char c) {
+    return c == '\0' || isspace((unsigned char)c) ||
+           c == ';' || c == '|' || c == '&';
+}
+
+/* Length of the redirect starting at the '>' at p when it cannot write a
+ * file (">&2", ">/dev/null", ">> /dev/null"); 0 otherwise. */
+static size_t non_writing_redirect_len(const char *p) {
+    static const char DEV_NULL[] = "/dev/null";
+    const char *q = p + 1;
+
+    if (*q == '&') {
+        q++;
+        if (!isdigit((unsigned char)*q)) {
+            return 0;
+        }
+        while (isdigit((unsigned char)*q)) {
+            q++;
+        }
+        return is_word_boundary(*q) ? (size_t)(q - p) : 0;
+    }
+
+    if (*q == '>') {
+        q++;
+    }
+    while (*q == ' ' || *q == '\t') {
+        q++;
+    }
+    if (strncmp(q, DEV_NULL, sizeof(DEV_NULL) - 1) != 0) {
+        return 0;
+    }
+    q += sizeof(DEV_NULL) - 1;
+    return is_word_boundary(*q) ? (size_t)(q - p) : 0;
+}
+
+static int add_trimmed_segment(TokenList *segments, const char *buf, size_t len) {
+    while (len > 0 && isspace((unsigned char)*buf)) {
+        buf++;
+        len--;
+    }
+    while (len > 0 && isspace((unsigned char)buf[len - 1])) {
+        len--;
+    }
+    return len > 0 ? token_list_add(segments, buf, len) : 0;
+}
+
+/* Quote tracking here ignores backslashes. Any segment it mis-splits
+ * contains the backslash, and the parser marks backslashes unsafe. */
+static int split_posix_segments(const char *command, TokenList *segments) {
+    char *buf = malloc(strlen(command) + 1);
+    if (!buf) {
+        return -1;
+    }
+
+    size_t len = 0;
+    int in_single = 0;
+    int in_double = 0;
+    int rc = 0;
+    const char *p = command;
+
+    for (;;) {
+        char c = *p;
+        int quoted = in_single || in_double;
+
+        if (c == '\0' || (!quoted && (c == ';' || c == '|' || c == '&' || c == '\n'))) {
+            if (c == '&' && p[1] != '&') {
+                rc = -1;
+                break;
+            }
+            if (add_trimmed_segment(segments, buf, len) != 0) {
+                rc = -1;
+                break;
+            }
+            if (c == '\0') {
+                break;
+            }
+            p += ((c == '&' || c == '|') && p[1] == c) ? 2 : 1;
+            len = 0;
+            continue;
+        }
+
+        if (c == '\'' && !in_double) {
+            in_single = !in_single;
+        } else if (c == '"' && !in_single) {
+            in_double = !in_double;
+        } else if (c == '>' && !quoted) {
+            size_t skip = non_writing_redirect_len(p);
+            if (skip > 0) {
+                if (len > 0 && isdigit((unsigned char)buf[len - 1]) &&
+                    (len == 1 || isspace((unsigned char)buf[len - 2]))) {
+                    len--;
+                }
+                p += skip;
+                continue;
+            }
+        }
+
+        buf[len++] = c;
+        p++;
+    }
+
+    free(buf);
+    return rc;
+}
+
+int shell_split_segments(const char *command, ShellType type, char ***out_segments) {
+    if (!command || !out_segments) {
+        return -1;
+    }
+    *out_segments = NULL;
+
+    if (strlen(command) > MAX_COMMAND_LENGTH) {
+        return -1;
+    }
+
+    TokenList segments;
+    if (token_list_init(&segments) != 0) {
+        return -1;
+    }
+
+    int rc;
+    if (type == SHELL_TYPE_CMD || type == SHELL_TYPE_POWERSHELL) {
+        rc = token_list_add(&segments, command, strlen(command));
+    } else if (shell_command_is_dangerous(command)) {
+        rc = -1;
+    } else {
+        rc = split_posix_segments(command, &segments);
+    }
+
+    if (rc != 0 || segments.count == 0) {
+        token_list_free(&segments);
+        return -1;
+    }
+
+    *out_segments = segments.tokens;
+    return segments.count;
+}
+
+void free_shell_segments(char **segments, int count) {
+    if (!segments) {
+        return;
+    }
+    for (int i = 0; i < count; i++) {
+        free(segments[i]);
+    }
+    free(segments);
+}
+
 const char *shell_command_get_base(const ParsedShellCommand *parsed) {
     if (!parsed || parsed->token_count == 0) {
         return NULL;

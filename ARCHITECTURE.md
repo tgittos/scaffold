@@ -952,16 +952,20 @@ graph TB
 
     CategoryCheck -->|ALLOW| Allow
     CategoryCheck -->|DENY| Deny
-    CategoryCheck -->|GATE| InteractiveCheck{Interactive?}
-
-    InteractiveCheck -->|No| NonInteractiveDeny[Non-Interactive Deny]
-    InteractiveCheck -->|Yes| SubagentCheck{Is Subagent?}
+    CategoryCheck -->|GATE| SubagentCheck{Is Subagent?}
 
     SubagentCheck -->|Yes| ProxyRequest[Proxy to Parent]
-    SubagentCheck -->|No| UserPrompt[User Prompt]
+    SubagentCheck -->|No| AutoCheck{Auto Mode?}
 
-    ProxyRequest --> ParentPrompt[Parent Prompts User]
-    ParentPrompt --> ProxyResponse[Response to Subagent]
+    ProxyRequest --> ParentCheck[Parent runs check_approval_gate]
+    ParentCheck --> ProxyResponse[Response to Subagent]
+
+    AutoCheck -->|Read-only or in-project write| Allow
+    AutoCheck -->|Model review allows| Allow
+    AutoCheck -->|Off or escalated| InteractiveCheck{Interactive?}
+
+    InteractiveCheck -->|No| NonInteractiveDeny[Non-Interactive Deny]
+    InteractiveCheck -->|Yes| UserPrompt[User Prompt]
 
     UserPrompt --> UserDecision{User Decision}
     ProxyResponse --> UserDecision
@@ -978,10 +982,10 @@ graph TB
     classDef deny fill:#ffcdd2
     classDef prompt fill:#fff3e0
 
-    class CheckGate,ProtectedCheck,RateCheck,AllowlistCheck,CategoryCheck,InteractiveCheck,SubagentCheck check
+    class CheckGate,ProtectedCheck,RateCheck,AllowlistCheck,CategoryCheck,InteractiveCheck,SubagentCheck,AutoCheck check
     class Allow,AddPattern action
     class Deny,RateLimitErr,NonInteractiveDeny,TrackDenial deny
-    class UserPrompt,ParentPrompt,ProxyRequest,ProxyResponse,UserDecision prompt
+    class UserPrompt,ParentCheck,ProxyRequest,ProxyResponse,UserDecision prompt
 ```
 
 ### Tool Categories
@@ -1005,14 +1009,17 @@ graph TB
 - **Allowlist** (`allowlist.c/h`): Regex and shell command pattern matching
 - **Gate Prompter** (`gate_prompter.c/h`): Terminal UI for user approval
 - **Pattern Generator** (`pattern_generator.c/h`): Auto-generate allowlist patterns
+- **Auto Approve** (`auto_approve.c/h`): Auto mode's no-model tier: read-only shell segments and file writes inside the git project
+- **Tool Review** (`lib/agent/tool_review.c/h`): Auto mode's model review, injected as `ApprovalGateCallbacks.review_tool_call`; a one-off request to the session's model carrying user messages and the call, never tool output
 - **Protected Files** (`protected_files.c/h`): Hard-block access to sensitive files
-- **Shell Parser** (`shell_parser.c/h`): Cross-platform shell command parsing (POSIX/CMD/PowerShell)
+- **Shell Parser** (`shell_parser.c/h`): Cross-platform shell command parsing (POSIX/CMD/PowerShell); `shell_split_segments()` splits POSIX chains so allowlist matching and "allow always" work per segment
 - **Atomic File** (`atomic_file.c/h`): TOCTOU-safe file operations
 - **Subagent Approval** (`subagent_approval.c/h`): IPC-based approval proxying for child processes
 
 ### CLI Flags
 
 - `--yolo`: Disable all approval gates for the session
+- `--auto`: Enable auto mode (also `approval_gates.auto_mode` in config)
 - `--allow "tool:pattern"`: Add entry to session allowlist
 - `--allow-category=<category>`: Set category action to ALLOW
 
@@ -1023,6 +1030,7 @@ Gates are configured in `scaffold.config.json`:
 {
   "approval_gates": {
     "enabled": true,
+    "auto_mode": false,
     "categories": {
       "file_write": "gate",
       "shell": "gate",
@@ -1311,6 +1319,7 @@ lib/
 │   ├── async_executor.c/h  # Non-blocking message processing thread
 │   ├── context_enhancement.c/h  # Split prompt builder (base + dynamic context)
 │   ├── recap.c/h           # Startup recap and first-run greeting
+│   ├── tool_review.c/h     # Auto mode model review of gated tool calls
 │   ├── streaming_handler.c/h   # Streaming orchestration layer
 │   ├── tool_executor.c/h   # Tool execution entry point
 │   ├── iterative_loop.c/h  # Iterative tool-calling loop
@@ -1366,6 +1375,7 @@ lib/
 │   └── image_attachment.c/h # Image attachment parsing (@path to base64)
 ├── policy/                 # Approval gate system
 │   ├── approval_gate.c/h   # Core approval orchestration
+│   ├── auto_approve.c/h    # Auto mode read-only and in-project tier
 │   ├── allowlist.c/h       # Pattern matching allowlist
 │   ├── rate_limiter.c/h    # Denial rate limiting
 │   ├── gate_prompter.c/h   # Terminal UI prompts
