@@ -1,6 +1,7 @@
 """List directory contents.
 
 Gate: file_read
+Thread-safe: true
 Match: path
 """
 
@@ -12,7 +13,7 @@ def _is_traversal_path(path: str) -> bool:
 
 
 def list_dir(path: str, glob_filter: str = None, recursive: bool = False, include_hidden: bool = False) -> list:
-    """List directory contents with optional glob filtering. Use to explore project structure or find files by name/extension. For finding files by content, use search_files instead.
+    """List directory contents with optional glob filtering. Use to explore project structure or find files by name/extension. For finding files by content, use search_files instead. Calls in the same batch run concurrently; put steps that depend on each other in separate turns.
 
     Args:
         path: Path to the directory to list

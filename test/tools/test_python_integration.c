@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <time.h>
 #include <unistd.h>
 
 static ToolRegistry registry;
@@ -1203,6 +1204,132 @@ void test_invoke_nested_json_literals(void) {
     rmdir_recursive(home);
 }
 
+static int registry_thread_safe(ToolRegistry *reg, const char *name) {
+    for (size_t i = 0; i < reg->functions.count; i++) {
+        if (strcmp(reg->functions.data[i].name, name) == 0) {
+            return reg->functions.data[i].thread_safe;
+        }
+    }
+    return -1;
+}
+
+void test_default_tools_thread_safety(void) {
+    TEST_ASSERT_EQUAL_INT(0, python_init_tool_files());
+    TEST_ASSERT_EQUAL_INT(0, python_load_tool_files());
+    TEST_ASSERT_EQUAL_INT(0, python_register_tool_schemas(&registry));
+    TEST_ASSERT_EQUAL_INT(0, register_python_tool(&registry));
+
+    const char *safe[] = {"read_file", "search_files", "list_dir", "show_structure",
+                          "search_history", "web_fetch", "shell", "write_file", "apply_patch"};
+    for (size_t i = 0; i < sizeof(safe) / sizeof(safe[0]); i++) {
+        TEST_ASSERT_EQUAL_INT_MESSAGE(1, registry_thread_safe(&registry, safe[i]), safe[i]);
+    }
+    TEST_ASSERT_EQUAL_INT(0, registry_thread_safe(&registry, "python"));
+    TEST_ASSERT_EQUAL_INT(0, registry_thread_safe(&registry, "pip"));
+
+    python_cleanup_tool_files();
+}
+
+void test_custom_tool_defaults_serial(void) {
+    char home[] = "/tmp/custom_serial_XXXXXX";
+    TEST_ASSERT_NOT_NULL(mkdtemp(home));
+    app_home_cleanup();
+    TEST_ASSERT_EQUAL_INT(0, app_home_init(home));
+
+    char tools_dir[512], tool_path[600];
+    snprintf(tools_dir, sizeof(tools_dir), "%s/tools", home);
+    TEST_ASSERT_EQUAL_INT(0, mkdir(tools_dir, 0755));
+    snprintf(tool_path, sizeof(tool_path), "%s/plain_tool.py", tools_dir);
+    write_text_file(tool_path,
+        "\"\"\"Plain tool.\n"
+        "\n"
+        "Gate: file_read\n"
+        "\"\"\"\n"
+        "\n"
+        "def plain_tool(x: str) -> dict:\n"
+        "    \"\"\"Echo x.\n"
+        "\n"
+        "    Args:\n"
+        "        x: Input\n"
+        "    \"\"\"\n"
+        "    return {\"x\": x}\n");
+
+    TEST_ASSERT_EQUAL_INT(0, python_init_tool_files());
+    TEST_ASSERT_EQUAL_INT(0, python_load_tool_files());
+    TEST_ASSERT_EQUAL_INT(0, python_register_tool_schemas(&registry));
+    TEST_ASSERT_EQUAL_INT(0, registry_thread_safe(&registry, "plain_tool"));
+
+    python_cleanup_tool_files();
+    app_home_cleanup();
+    rmdir_recursive(home);
+}
+
+void test_custom_tool_without_module_docstring_is_serial(void) {
+    char home[] = "/tmp/custom_nodoc_XXXXXX";
+    TEST_ASSERT_NOT_NULL(mkdtemp(home));
+    app_home_cleanup();
+    TEST_ASSERT_EQUAL_INT(0, app_home_init(home));
+
+    TEST_ASSERT_EQUAL_INT(0, python_init_tool_files());
+    TEST_ASSERT_EQUAL_INT(0, python_load_tool_files());
+
+    char tool_path[600];
+    snprintf(tool_path, sizeof(tool_path), "%s/tools/nodoc_tool.py", home);
+    write_text_file(tool_path,
+        "def nodoc_tool(x: str) -> dict:\n"
+        "    \"\"\"Echo x.\n"
+        "\n"
+        "    Args:\n"
+        "        x: Input\n"
+        "    \"\"\"\n"
+        "    return {\"x\": x}\n");
+
+    TEST_ASSERT_EQUAL_INT(0, python_load_tool_files());
+    TEST_ASSERT_EQUAL_INT(0, python_register_tool_schemas(&registry));
+    TEST_ASSERT_EQUAL_INT(0, registry_thread_safe(&registry, "nodoc_tool"));
+    TEST_ASSERT_NULL(python_tool_get_gate_category("nodoc_tool"));
+
+    python_cleanup_tool_files();
+    app_home_cleanup();
+    rmdir_recursive(home);
+}
+
+static void *run_shell_sleep(void *arg) {
+    ToolCall call = { .id = "par-shell", .name = "shell",
+                      .arguments = "{\"command\": \"sleep 1\"}" };
+    ToolResult *result = (ToolResult *)arg;
+    execute_python_file_tool_call(&call, result);
+    return NULL;
+}
+
+void test_parallel_shell_batch_overlaps(void) {
+    TEST_ASSERT_EQUAL_INT(0, python_init_tool_files());
+    TEST_ASSERT_EQUAL_INT(0, python_load_tool_files());
+
+    enum { N = 3 };
+    pthread_t threads[N];
+    ToolResult results[N];
+    memset(results, 0, sizeof(results));
+
+    struct timespec t0, t1;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    for (int i = 0; i < N; i++) {
+        TEST_ASSERT_EQUAL_INT(0, pthread_create(&threads[i], NULL, run_shell_sleep, &results[i]));
+    }
+    for (int i = 0; i < N; i++) pthread_join(threads[i], NULL);
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+
+    double elapsed = (double)(t1.tv_sec - t0.tv_sec) + (double)(t1.tv_nsec - t0.tv_nsec) / 1e9;
+    for (int i = 0; i < N; i++) {
+        TEST_ASSERT_EQUAL_INT(1, results[i].success);
+        free(results[i].tool_call_id);
+        free(results[i].result);
+    }
+    TEST_ASSERT_TRUE_MESSAGE(elapsed < 2.2, "three 1s shell calls did not overlap");
+
+    python_cleanup_tool_files();
+}
+
 int main(void) {
     // Initialize app home before Python interpreter (needed for tool files path)
     app_home_init(NULL);
@@ -1243,6 +1370,10 @@ int main(void) {
     RUN_TEST(test_concurrent_calls_isolate_exceptions);
     RUN_TEST(test_invoke_nested_json_literals);
     RUN_TEST(test_interpreter_restart_after_gil_release);
+    RUN_TEST(test_default_tools_thread_safety);
+    RUN_TEST(test_custom_tool_defaults_serial);
+    RUN_TEST(test_custom_tool_without_module_docstring_is_serial);
+    RUN_TEST(test_parallel_shell_batch_overlaps);
 
     int result = UNITY_END();
 

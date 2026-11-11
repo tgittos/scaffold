@@ -291,8 +291,8 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
         "    return args_desc\n"
         "\n"
         "def _ralph_parse_gate_directives(doc):\n"
-        "    \"\"\"Parse Gate: and Match: directives from docstring.\"\"\"\n"
-        "    result = {'gate_category': None, 'match_arg': None}\n"
+        "    \"\"\"Parse Gate:, Match: and Thread-safe: directives from docstring.\"\"\"\n"
+        "    result = {'gate_category': None, 'match_arg': None, 'thread_safe': False}\n"
         "    if not doc:\n"
         "        return result\n"
         "    for line in doc.split('\\n'):\n"
@@ -301,6 +301,8 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
         "            result['gate_category'] = stripped[5:].strip()\n"
         "        elif stripped.startswith('Match:'):\n"
         "            result['match_arg'] = stripped[6:].strip()\n"
+        "        elif stripped.startswith('Thread-safe:'):\n"
+        "            result['thread_safe'] = stripped[12:].strip().lower() == 'true'\n"
         "    return result\n"
         "\n"
         "def _ralph_extract_schema(func_name):\n"
@@ -313,7 +315,7 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
         "    try:\n"
         "        sig = inspect.signature(func)\n"
         "        doc = func.__doc__ or ''\n"
-        "        # Get module docstring for Gate:/Match: directives\n"
+        "        # Get module docstring for Gate:/Match:/Thread-safe: directives\n"
         "        main_module = sys.modules.get('__main__')\n"
         "        module_doc = getattr(main_module, '__doc__', '') or ''\n"
         "        gate_info = _ralph_parse_gate_directives(module_doc)\n"
@@ -324,6 +326,7 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
         "                gate_info['gate_category'] = func_gate_info['gate_category']\n"
         "            if gate_info['match_arg'] is None:\n"
         "                gate_info['match_arg'] = func_gate_info['match_arg']\n"
+        "            gate_info['thread_safe'] = gate_info['thread_safe'] or func_gate_info['thread_safe']\n"
         "        # Get first line of docstring as description\n"
         "        desc = doc.split('\\n')[0].strip() if doc else func_name\n"
         "        # Parse Args section for parameter descriptions\n"
@@ -355,7 +358,8 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
         "            'description': desc,\n"
         "            'parameters': params,\n"
         "            'gate_category': gate_info['gate_category'],\n"
-        "            'match_arg': gate_info['match_arg']\n"
+        "            'match_arg': gate_info['match_arg'],\n"
+        "            'thread_safe': gate_info['thread_safe']\n"
         "        })\n"
         "    except Exception as e:\n"
         "        return None\n";
@@ -406,6 +410,7 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
     cJSON *params_item = cJSON_GetObjectItem(schema, "parameters");
     cJSON *gate_item = cJSON_GetObjectItem(schema, "gate_category");
     cJSON *match_item = cJSON_GetObjectItem(schema, "match_arg");
+    cJSON *thread_safe_item = cJSON_GetObjectItem(schema, "thread_safe");
 
     if (!cJSON_IsString(name_item) || !cJSON_IsString(desc_item)) {
         cJSON_Delete(schema);
@@ -430,6 +435,7 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
     // strdup failure for optional fields is handled gracefully by leaving NULL.
     tool_def->gate_category = NULL;
     tool_def->match_arg = NULL;
+    tool_def->thread_safe = cJSON_IsTrue(thread_safe_item) ? 1 : 0;
     if (cJSON_IsString(gate_item) && gate_item->valuestring != NULL) {
         tool_def->gate_category = strdup(gate_item->valuestring);
     }
@@ -603,6 +609,9 @@ int python_load_tool_files(void) {
         }
 
         PyObject *globals = PyModule_GetDict(main_module);
+        /* Files share __main__; a file without a module docstring must not
+         * inherit the previous file's directives. */
+        PyDict_SetItemString(globals, "__doc__", Py_None);
         PyObject *result = PyRun_String(content, Py_file_input, globals, globals);
         free(content);
 
@@ -688,6 +697,8 @@ int python_register_tool_schemas(ToolRegistry *registry) {
 
         if (result != 0) {
             fprintf(stderr, "Warning: Failed to register Python tool: %s\n", tool->name);
+        } else if (tool->thread_safe) {
+            tool_set_thread_safe(registry, tool->name, 1);
         }
     }
 
