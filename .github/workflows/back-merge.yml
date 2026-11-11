@@ -1,0 +1,46 @@
+# Back-merge workflow for scaffold
+# Keeps master's history (release merges, hotfixes, tags) reachable from
+# develop by opening an auto-merging master -> develop merge-commit PR.
+# Rulesets block direct pushes to develop, so the merge must go through a PR.
+
+name: Back-merge
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: back-merge
+  cancel-in-progress: false
+
+jobs:
+  back-merge:
+    name: Merge master into develop
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Open and auto-merge PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git merge-base --is-ancestor origin/master origin/develop; then
+            echo "develop already contains master"
+            exit 0
+          fi
+          PR=$(gh pr list --base develop --head master --state open --json number --jq '.[0].number')
+          if [ -z "$PR" ]; then
+            PR=$(gh pr create --base develop --head master \
+              --title "Merge master into develop" \
+              --body "Brings master's release and hotfix commits into develop." \
+              | sed 's#.*/##')
+          fi
+          gh pr merge "$PR" --merge --auto

@@ -154,6 +154,14 @@ valgrind --leak-check=full ./test/test_foo.com.dbg      # x86_64
 
 **Single source of truth**: Git tags (`v*`). The build generates `build/version.h` from `git describe --tags`, providing version string, git hash, and dirty flag. No version numbers in config files.
 
+**Branches**: `develop` is the integration branch; `master` holds released code. Both are protected by rulesets: no deletion, no force-push, changes only through PRs that pass `CI / Build and Test`.
+
+- Feature work: branch from `develop`, PR into `develop` (rebase or merge commit).
+- Release: PR `develop` into `master` (merge commit only, which keeps `develop`'s commits intact), then run the Release workflow.
+- Hotfix: branch `hotfix/<name>` from `master`, PR into `master` (merge commit), then release.
+- Back-merge: every push to `master` triggers `back-merge.yml`, which opens an auto-merging `master` → `develop` merge-commit PR, so release tags stay reachable from `develop` and `git describe` reports the correct version there. Resolve conflicts on that PR by hand.
+- Never rebase or cherry-pick commits between `master` and `develop`; copied commits leave tags unreachable from `develop`.
+
 **Release**: Trigger the Release workflow from the GitHub Actions UI on `master`. Pick a bump type (major/minor/patch) and optionally provide release notes. The workflow calculates the next version from the latest tag, builds, tests, creates the tag, and publishes to GitHub Releases.
 
 **Dev builds**: On non-tagged commits, `git describe` produces versions like `0.1.0-14-gabcdef`, giving a natural dev version with distance from the last release.
