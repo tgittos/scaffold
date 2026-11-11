@@ -3,11 +3,13 @@
 
 name: CI
 
+# PRs into master come from develop or hotfix/** branches, whose push runs
+# already report the required check on the PR's head commit.
 on:
   push:
-    branches: [master, develop]
+    branches: [master, develop, 'hotfix/**']
   pull_request:
-    branches: [master, develop]
+    branches: [develop]
 
 jobs:
   ci:
