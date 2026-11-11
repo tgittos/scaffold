@@ -162,7 +162,7 @@ Branch all work from `develop`, never `master`, and target PRs at `develop`. `ma
 
 **Single source of truth**: Git tags (`v*`). The build generates `build/version.h` from `git describe --tags`, providing version string, git hash, and dirty flag. No version numbers in config files.
 
-**Branches**: `develop` is the integration branch; `master` holds released code. Both are protected by rulesets: no deletion, no force-push, changes only through PRs that pass `CI / Build and Test`.
+**Branches**: `develop` is the integration branch; `master` holds released code. Both are protected by rulesets: no deletion, no force-push, changes only through PRs that pass `CI / Build and Test`. CI runs on pushes to `master`, `develop` and `hotfix/**`, and on PRs into `develop`; a PR into `master` gets its check from the push run on its head commit.
 
 - Feature work: branch from `develop`, PR into `develop` (rebase or merge commit).
 - Release: PR `develop` into `master` (merge commit only, which keeps `develop`'s commits intact), then run the Release workflow.
