@@ -7,12 +7,17 @@
 
 #define TOOL_CACHE_INITIAL_CAPACITY 16
 
-static time_t get_file_mtime(const char *path) {
+static struct timespec get_file_mtime(const char *path) {
     struct stat st;
+    struct timespec none = {0, 0};
     if (stat(path, &st) != 0) {
-        return 0;
+        return none;
     }
-    return st.st_mtime;
+    return st.st_mtim;
+}
+
+static int mtime_equal(struct timespec a, struct timespec b) {
+    return a.tv_sec == b.tv_sec && a.tv_nsec == b.tv_nsec;
 }
 
 static char *extract_file_path(const char *arguments) {
@@ -106,8 +111,8 @@ ToolCacheEntry *tool_cache_lookup(ToolCache *cache, const char *tool_name, const
         }
 
         if (entry->file_path != NULL) {
-            time_t current_mtime = get_file_mtime(entry->file_path);
-            if (current_mtime != entry->file_mtime) {
+            struct timespec current_mtime = get_file_mtime(entry->file_path);
+            if (!mtime_equal(current_mtime, entry->file_mtime)) {
                 free_cache_entry(entry);
                 if (i < cache->count - 1) {
                     cache->entries[i] = cache->entries[cache->count - 1];
@@ -146,8 +151,8 @@ int tool_cache_fetch(ToolCache *cache, const char *tool_name, const char *argume
         }
 
         if (entry->file_path != NULL) {
-            time_t current_mtime = get_file_mtime(entry->file_path);
-            if (current_mtime != entry->file_mtime) {
+            struct timespec current_mtime = get_file_mtime(entry->file_path);
+            if (!mtime_equal(current_mtime, entry->file_mtime)) {
                 free_cache_entry(entry);
                 if (i < cache->count - 1) {
                     cache->entries[i] = cache->entries[cache->count - 1];
@@ -168,8 +173,19 @@ int tool_cache_fetch(ToolCache *cache, const char *tool_name, const char *argume
     return 0;
 }
 
+struct timespec tool_cache_snapshot_mtime(const char *arguments) {
+    struct timespec none = {0, 0};
+    char *path = extract_file_path(arguments);
+    if (path == NULL) {
+        return none;
+    }
+    struct timespec mtime = get_file_mtime(path);
+    free(path);
+    return mtime;
+}
+
 int tool_cache_store(ToolCache *cache, const char *tool_name, const char *arguments,
-                     const char *result, int success) {
+                     const char *result, int success, struct timespec observed_mtime) {
     if (cache == NULL || tool_name == NULL || result == NULL) {
         return -1;
     }
@@ -191,10 +207,7 @@ int tool_cache_store(ToolCache *cache, const char *tool_name, const char *argume
             existing->success = success;
             free(existing->file_path);
             existing->file_path = extract_file_path(arguments);
-            existing->file_mtime = 0;
-            if (existing->file_path != NULL) {
-                existing->file_mtime = get_file_mtime(existing->file_path);
-            }
+            existing->file_mtime = observed_mtime;
             pthread_mutex_unlock(&cache->mutex);
             return 0;
         }
@@ -226,10 +239,7 @@ int tool_cache_store(ToolCache *cache, const char *tool_name, const char *argume
     }
 
     entry->file_path = extract_file_path(arguments);
-    entry->file_mtime = 0;
-    if (entry->file_path != NULL) {
-        entry->file_mtime = get_file_mtime(entry->file_path);
-    }
+    entry->file_mtime = observed_mtime;
 
     cache->count++;
     pthread_mutex_unlock(&cache->mutex);

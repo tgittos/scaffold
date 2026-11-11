@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <sys/stat.h>
 
 static ToolCache *cache;
@@ -38,7 +39,7 @@ void test_create_destroy(void) {
 }
 
 void test_store_then_lookup(void) {
-    int rc = tool_cache_store(cache, "read_file", "{\"path\":\"/tmp/nonexistent\"}", "file contents", 1);
+    int rc = tool_cache_store(cache, "read_file", "{\"path\":\"/tmp/nonexistent\"}", "file contents", 1, tool_cache_snapshot_mtime("{\"path\":\"/tmp/nonexistent\"}"));
     TEST_ASSERT_EQUAL_INT(0, rc);
 
     ToolCacheEntry *hit = tool_cache_lookup(cache, "read_file", "{\"path\":\"/tmp/nonexistent\"}");
@@ -48,14 +49,14 @@ void test_store_then_lookup(void) {
 }
 
 void test_lookup_miss(void) {
-    tool_cache_store(cache, "read_file", "{\"path\":\"/a\"}", "contents", 1);
+    tool_cache_store(cache, "read_file", "{\"path\":\"/a\"}", "contents", 1, tool_cache_snapshot_mtime("{\"path\":\"/a\"}"));
 
     ToolCacheEntry *hit = tool_cache_lookup(cache, "read_file", "{\"path\":\"/b\"}");
     TEST_ASSERT_NULL(hit);
 }
 
 void test_lookup_miss_different_tool(void) {
-    tool_cache_store(cache, "read_file", "{\"path\":\"/a\"}", "contents", 1);
+    tool_cache_store(cache, "read_file", "{\"path\":\"/a\"}", "contents", 1, tool_cache_snapshot_mtime("{\"path\":\"/a\"}"));
 
     ToolCacheEntry *hit = tool_cache_lookup(cache, "list_dir", "{\"path\":\"/a\"}");
     TEST_ASSERT_NULL(hit);
@@ -67,7 +68,7 @@ void test_mtime_invalidation(void) {
     char args[512] = {0};
     snprintf(args, sizeof(args), "{\"path\":\"%s\"}", temp_file);
 
-    tool_cache_store(cache, "read_file", args, "original", 1);
+    tool_cache_store(cache, "read_file", args, "original", 1, tool_cache_snapshot_mtime(args));
 
     ToolCacheEntry *hit = tool_cache_lookup(cache, "read_file", args);
     TEST_ASSERT_NOT_NULL(hit);
@@ -85,8 +86,8 @@ void test_mtime_invalidation(void) {
 }
 
 void test_explicit_path_invalidation(void) {
-    tool_cache_store(cache, "read_file", "{\"path\":\"/foo/bar.txt\"}", "contents", 1);
-    tool_cache_store(cache, "list_dir", "{\"path\":\"/foo\"}", "listing", 1);
+    tool_cache_store(cache, "read_file", "{\"path\":\"/foo/bar.txt\"}", "contents", 1, tool_cache_snapshot_mtime("{\"path\":\"/foo/bar.txt\"}"));
+    tool_cache_store(cache, "list_dir", "{\"path\":\"/foo\"}", "listing", 1, tool_cache_snapshot_mtime("{\"path\":\"/foo\"}"));
 
     tool_cache_invalidate_path(cache, "/foo/bar.txt");
 
@@ -99,8 +100,8 @@ void test_explicit_path_invalidation(void) {
 }
 
 void test_clear(void) {
-    tool_cache_store(cache, "a", "{}", "r1", 1);
-    tool_cache_store(cache, "b", "{}", "r2", 1);
+    tool_cache_store(cache, "a", "{}", "r1", 1, tool_cache_snapshot_mtime("{}"));
+    tool_cache_store(cache, "b", "{}", "r2", 1, tool_cache_snapshot_mtime("{}"));
 
     tool_cache_clear(cache);
 
@@ -109,7 +110,7 @@ void test_clear(void) {
 }
 
 void test_null_arguments(void) {
-    int rc = tool_cache_store(cache, "recall_memories", NULL, "memories", 1);
+    int rc = tool_cache_store(cache, "recall_memories", NULL, "memories", 1, tool_cache_snapshot_mtime(NULL));
     TEST_ASSERT_EQUAL_INT(0, rc);
 
     ToolCacheEntry *hit = tool_cache_lookup(cache, "recall_memories", NULL);
@@ -118,7 +119,7 @@ void test_null_arguments(void) {
 }
 
 void test_empty_arguments(void) {
-    int rc = tool_cache_store(cache, "recall_memories", "", "memories", 1);
+    int rc = tool_cache_store(cache, "recall_memories", "", "memories", 1, tool_cache_snapshot_mtime(""));
     TEST_ASSERT_EQUAL_INT(0, rc);
 
     ToolCacheEntry *hit = tool_cache_lookup(cache, "recall_memories", "");
@@ -127,9 +128,9 @@ void test_empty_arguments(void) {
 }
 
 void test_multiple_entries(void) {
-    tool_cache_store(cache, "read_file", "{\"path\":\"/a\"}", "contents_a", 1);
-    tool_cache_store(cache, "read_file", "{\"path\":\"/b\"}", "contents_b", 1);
-    tool_cache_store(cache, "list_dir", "{\"path\":\"/c\"}", "listing_c", 1);
+    tool_cache_store(cache, "read_file", "{\"path\":\"/a\"}", "contents_a", 1, tool_cache_snapshot_mtime("{\"path\":\"/a\"}"));
+    tool_cache_store(cache, "read_file", "{\"path\":\"/b\"}", "contents_b", 1, tool_cache_snapshot_mtime("{\"path\":\"/b\"}"));
+    tool_cache_store(cache, "list_dir", "{\"path\":\"/c\"}", "listing_c", 1, tool_cache_snapshot_mtime("{\"path\":\"/c\"}"));
 
     ToolCacheEntry *a = tool_cache_lookup(cache, "read_file", "{\"path\":\"/a\"}");
     ToolCacheEntry *b = tool_cache_lookup(cache, "read_file", "{\"path\":\"/b\"}");
@@ -147,7 +148,7 @@ void test_capacity_growth(void) {
     for (int i = 0; i < 50; i++) {
         char name[32];
         snprintf(name, sizeof(name), "tool_%d", i);
-        int rc = tool_cache_store(cache, name, "{}", "result", 1);
+        int rc = tool_cache_store(cache, name, "{}", "result", 1, tool_cache_snapshot_mtime("{}"));
         TEST_ASSERT_EQUAL_INT(0, rc);
     }
 
@@ -161,14 +162,14 @@ void test_capacity_growth(void) {
 
 void test_null_cache_operations(void) {
     TEST_ASSERT_NULL(tool_cache_lookup(NULL, "x", "{}"));
-    TEST_ASSERT_EQUAL_INT(-1, tool_cache_store(NULL, "x", "{}", "r", 1));
+    TEST_ASSERT_EQUAL_INT(-1, tool_cache_store(NULL, "x", "{}", "r", 1, tool_cache_snapshot_mtime("{}")));
     tool_cache_invalidate_path(NULL, "/x");
     tool_cache_clear(NULL);
     tool_cache_destroy(NULL);
 }
 
 void test_store_failure_result(void) {
-    int rc = tool_cache_store(cache, "read_file", "{\"path\":\"/missing\"}", "error: not found", 0);
+    int rc = tool_cache_store(cache, "read_file", "{\"path\":\"/missing\"}", "error: not found", 0, tool_cache_snapshot_mtime("{\"path\":\"/missing\"}"));
     TEST_ASSERT_EQUAL_INT(0, rc);
 
     ToolCacheEntry *hit = tool_cache_lookup(cache, "read_file", "{\"path\":\"/missing\"}");
@@ -178,8 +179,8 @@ void test_store_failure_result(void) {
 }
 
 void test_overwrite_existing_entry(void) {
-    tool_cache_store(cache, "read_file", "{\"path\":\"/a\"}", "old_result", 1);
-    tool_cache_store(cache, "read_file", "{\"path\":\"/a\"}", "new_result", 1);
+    tool_cache_store(cache, "read_file", "{\"path\":\"/a\"}", "old_result", 1, tool_cache_snapshot_mtime("{\"path\":\"/a\"}"));
+    tool_cache_store(cache, "read_file", "{\"path\":\"/a\"}", "new_result", 1, tool_cache_snapshot_mtime("{\"path\":\"/a\"}"));
 
     ToolCacheEntry *hit = tool_cache_lookup(cache, "read_file", "{\"path\":\"/a\"}");
     TEST_ASSERT_NOT_NULL(hit);
@@ -192,11 +193,38 @@ void test_file_path_extraction(void) {
     char args[512] = {0};
     snprintf(args, sizeof(args), "{\"file_path\":\"%s\"}", temp_file);
 
-    tool_cache_store(cache, "some_tool", args, "result", 1);
+    tool_cache_store(cache, "some_tool", args, "result", 1, tool_cache_snapshot_mtime(args));
 
     ToolCacheEntry *hit = tool_cache_lookup(cache, "some_tool", args);
     TEST_ASSERT_NOT_NULL(hit);
     TEST_ASSERT_EQUAL_STRING(temp_file, hit->file_path);
+}
+
+void test_store_uses_pre_execution_mtime(void) {
+    create_temp_file();
+
+    char args[512] = {0};
+    snprintf(args, sizeof(args), "{\"path\":\"%s\"}", temp_file);
+
+    struct timespec snap = tool_cache_snapshot_mtime(args);
+
+    /* Rewrite within the same second; force a distinct nanosecond mtime. */
+    FILE *f = fopen(temp_file, "w");
+    TEST_ASSERT_NOT_NULL(f);
+    fprintf(f, "B");
+    fclose(f);
+    struct timespec times[2] = {{0, UTIME_OMIT}, {snap.tv_sec, (snap.tv_nsec + 1) % 1000000000L}};
+    if (times[1].tv_nsec == 0) {
+        times[1].tv_sec++;
+    }
+    TEST_ASSERT_EQUAL_INT(0, utimensat(AT_FDCWD, temp_file, times, 0));
+
+    tool_cache_store(cache, "read_file", args, "A-content", 1, snap);
+
+    char *out = NULL;
+    int success = 0;
+    TEST_ASSERT_EQUAL_INT(0, tool_cache_fetch(cache, "read_file", args, &out, &success));
+    free(out);
 }
 
 int main(void) {
@@ -216,5 +244,6 @@ int main(void) {
     RUN_TEST(test_store_failure_result);
     RUN_TEST(test_overwrite_existing_entry);
     RUN_TEST(test_file_path_extraction);
+    RUN_TEST(test_store_uses_pre_execution_mtime);
     return UNITY_END();
 }

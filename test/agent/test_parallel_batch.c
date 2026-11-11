@@ -230,7 +230,7 @@ static void *cache_hammer(void *arg) {
         snprintf(name, sizeof(name), "tool_%d_%d", td->thread_id, i);
         snprintf(args, sizeof(args), "{\"i\": %d}", i);
         snprintf(result, sizeof(result), "result_%d_%d", td->thread_id, i);
-        tool_cache_store(td->cache, name, args, result, 1);
+        tool_cache_store(td->cache, name, args, result, 1, tool_cache_snapshot_mtime(args));
         tool_cache_lookup(td->cache, name, args);
     }
     return NULL;

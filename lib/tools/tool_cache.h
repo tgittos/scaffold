@@ -10,7 +10,7 @@ typedef struct {
     char *result;
     int success;
     char *file_path;
-    time_t file_mtime;
+    struct timespec file_mtime;
 } ToolCacheEntry;
 
 typedef struct ToolCache {
@@ -34,8 +34,15 @@ ToolCacheEntry *tool_cache_lookup(ToolCache *cache, const char *tool_name, const
 int tool_cache_fetch(ToolCache *cache, const char *tool_name, const char *arguments,
                      char **out_result, int *out_success);
 
+/**
+ * Returns the mtime of the file named in the tool arguments ({0,0} when there
+ * is no path or stat fails). Take it before executing the tool and pass it to
+ * tool_cache_store() so a concurrent write cannot be cached as fresh.
+ */
+struct timespec tool_cache_snapshot_mtime(const char *arguments);
+
 int tool_cache_store(ToolCache *cache, const char *tool_name, const char *arguments,
-                     const char *result, int success);
+                     const char *result, int success, struct timespec observed_mtime);
 void tool_cache_invalidate_path(ToolCache *cache, const char *path);
 void tool_cache_clear(ToolCache *cache);
 
