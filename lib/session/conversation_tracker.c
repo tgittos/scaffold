@@ -10,14 +10,27 @@
 #include "../db/document_store.h"
 #include "../db/vector_db_service.h"
 #include "../services/services.h"
+#include "../util/project_scope.h"
+
+#define CONVERSATION_INDEX_UNSCOPED "conversations_unscoped"
 
 static Services* g_services = NULL;
+static char g_conversation_index[PROJECT_SCOPE_NAME_MAX] = CONVERSATION_INDEX_UNSCOPED;
 
 void conversation_tracker_set_services(Services* services) {
     g_services = services;
+    if (project_scope_index_name("conversations", g_conversation_index,
+                                 sizeof(g_conversation_index)) != 0) {
+        snprintf(g_conversation_index, sizeof(g_conversation_index), "%s",
+                 CONVERSATION_INDEX_UNSCOPED);
+    }
 }
 
-#define CONVERSATION_INDEX "conversations"
+const char* conversation_tracker_index_name(void) {
+    return g_conversation_index;
+}
+
+#define CONVERSATION_INDEX g_conversation_index
 
 /* Index dimension follows the configured embedding model (probed at
  * startup); falls back to the default when the feature is disabled. */

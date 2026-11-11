@@ -2,6 +2,7 @@
 #define LOG_MODULE_STR "policy"
 #include "../util/log.h"
 #include "approval_gate.h"
+#include "auto_approve.h"
 #include "gate_prompter.h"
 #include "pattern_generator.h"
 #include "shell_parser.h"
@@ -128,6 +129,11 @@ static int approval_gate_load_from_json(ApprovalGateConfig *config, cJSON *json)
     cJSON *enabled = cJSON_GetObjectItem(approval_gates, "enabled");
     if (cJSON_IsBool(enabled)) {
         config->enabled = cJSON_IsTrue(enabled) ? 1 : 0;
+    }
+
+    cJSON *auto_mode = cJSON_GetObjectItem(approval_gates, "auto_mode");
+    if (cJSON_IsBool(auto_mode)) {
+        config->auto_mode = cJSON_IsTrue(auto_mode) ? 1 : 0;
     }
 
     cJSON *categories = cJSON_GetObjectItem(approval_gates, "categories");
@@ -785,6 +791,62 @@ int approval_gate_add_shell_allowlist(ApprovalGateConfig *config,
     return 0;
 }
 
+/* Every segment's pattern is generated before any is stored, so one
+ * unmatchable segment leaves the allowlist untouched. */
+static int allow_always_shell(ApprovalGateConfig *config, const ToolCall *tool_call) {
+    char *command = tool_args_get_command(tool_call);
+    if (command == NULL) {
+        return -1;
+    }
+
+    char **segments = NULL;
+    int count = shell_split_segments(command, detect_shell_type(), &segments);
+    free(command);
+    if (count <= 0) {
+        return -1;
+    }
+
+    GeneratedPattern *patterns = calloc((size_t)count, sizeof(*patterns));
+    int rc = patterns != NULL ? 0 : -1;
+
+    for (int i = 0; i < count && rc == 0; i++) {
+        if (generate_shell_command_pattern(segments[i], &patterns[i]) != 0 ||
+            patterns[i].command_prefix == NULL) {
+            rc = -1;
+        }
+    }
+    for (int i = 0; i < count && rc == 0; i++) {
+        rc = apply_generated_pattern(config, tool_call->name, &patterns[i]);
+    }
+
+    if (patterns != NULL) {
+        for (int i = 0; i < count; i++) {
+            free_generated_pattern(&patterns[i]);
+        }
+        free(patterns);
+    }
+    free_shell_segments(segments, count);
+    return rc;
+}
+
+int approval_gate_allow_always(ApprovalGateConfig *config, const ToolCall *tool_call) {
+    if (config == NULL || tool_call == NULL || tool_call->name == NULL) {
+        return -1;
+    }
+
+    if (get_tool_category(tool_call->name) == GATE_CATEGORY_SHELL) {
+        return allow_always_shell(config, tool_call);
+    }
+
+    GeneratedPattern pattern = {0};
+    if (generate_allowlist_pattern(tool_call, &pattern) != 0) {
+        return -1;
+    }
+    int rc = apply_generated_pattern(config, tool_call->name, &pattern);
+    free_generated_pattern(&pattern);
+    return rc;
+}
+
 static char *extract_match_target(const char *tool_name, const char *arguments_json) {
     if (tool_name == NULL || arguments_json == NULL) {
         return NULL;
@@ -809,7 +871,16 @@ static char *extract_match_target(const char *tool_name, const char *arguments_j
         }
     }
 
-    return strdup(arguments_json);
+    ToolCall call = { .name = (char *)tool_name, .arguments = (char *)arguments_json };
+    switch (get_tool_category(tool_name)) {
+        case GATE_CATEGORY_NETWORK:
+            return tool_args_get_url(&call);
+        case GATE_CATEGORY_FILE_READ:
+        case GATE_CATEGORY_FILE_WRITE:
+            return tool_args_get_path(&call);
+        default:
+            return strdup(arguments_json);
+    }
 }
 
 static int match_regex_allowlist(const ApprovalGateConfig *config,
@@ -836,50 +907,17 @@ static int match_regex_allowlist(const ApprovalGateConfig *config,
     return 0;
 }
 
-/* Shell commands with chains, pipes, or subshells are rejected as a security measure */
-static int match_shell_command_allowlist(const ApprovalGateConfig *config,
-                                         const ToolCall *tool_call) {
-    if (config == NULL || tool_call == NULL) {
-        return 0;
-    }
-
-    if (config->shell_allowlist_count == 0 || config->shell_allowlist == NULL) {
-        return 0;
-    }
-
-    if (tool_call->arguments == NULL) {
-        return 0;
-    }
-
-    cJSON *args = cJSON_Parse(tool_call->arguments);
-    if (args == NULL) {
-        return 0;
-    }
-
-    cJSON *command_item = cJSON_GetObjectItem(args, "command");
-    if (!cJSON_IsString(command_item) || command_item->valuestring == NULL) {
-        cJSON_Delete(args);
-        return 0;
-    }
-
-    const char *command_str = command_item->valuestring;
-
-    ParsedShellCommand *parsed = parse_shell_command(command_str);
+static int segment_matches_shell_allowlist(const ApprovalGateConfig *config,
+                                           const char *segment,
+                                           ShellType type) {
+    ParsedShellCommand *parsed = parse_shell_command_for_type(segment, type);
     if (parsed == NULL) {
-        cJSON_Delete(args);
-        return 0;
-    }
-
-    if (!shell_command_is_safe_for_matching(parsed)) {
-        free_parsed_shell_command(parsed);
-        cJSON_Delete(args);
         return 0;
     }
 
     const char *base_cmd = shell_command_get_base(parsed);
-    if (base_cmd == NULL) {
+    if (!shell_command_is_safe_for_matching(parsed) || base_cmd == NULL) {
         free_parsed_shell_command(parsed);
-        cJSON_Delete(args);
         return 0;
     }
 
@@ -924,7 +962,36 @@ static int match_shell_command_allowlist(const ApprovalGateConfig *config,
     }
 
     free_parsed_shell_command(parsed);
-    cJSON_Delete(args);
+    return matched;
+}
+
+/* A compound command matches only when every segment it runs matches. */
+static int match_shell_command_allowlist(const ApprovalGateConfig *config,
+                                         const ToolCall *tool_call) {
+    if (config == NULL || tool_call == NULL) {
+        return 0;
+    }
+
+    if (config->shell_allowlist_count == 0 || config->shell_allowlist == NULL) {
+        return 0;
+    }
+
+    char *command = tool_args_get_command(tool_call);
+    if (command == NULL) {
+        return 0;
+    }
+
+    ShellType type = detect_shell_type();
+    char **segments = NULL;
+    int count = shell_split_segments(command, type, &segments);
+    free(command);
+
+    int matched = count > 0;
+    for (int i = 0; i < count && matched; i++) {
+        matched = segment_matches_shell_allowlist(config, segments[i], type);
+    }
+
+    free_shell_segments(segments, count);
     return matched;
 }
 
@@ -1027,6 +1094,7 @@ ApprovalResult approval_gate_prompt(ApprovalGateConfig *config,
     }
 
     ApprovalResult result = APPROVAL_DENIED;
+    int not_remembered = 0;
 
     for (;;) {
         gate_prompter_show_single(gp, tool_call, command_arg, path_arg);
@@ -1051,6 +1119,7 @@ ApprovalResult approval_gate_prompt(ApprovalGateConfig *config,
 
             case 'a':
                 reset_denial_tracker(config, tool_call->name);
+                not_remembered = approval_gate_allow_always(config, tool_call) != 0;
                 result = APPROVAL_ALLOWED_ALWAYS;
                 goto done;
 
@@ -1077,10 +1146,29 @@ done:
     if (result == APPROVAL_ALLOWED || result == APPROVAL_ALLOWED_ALWAYS) {
         gate_prompter_clear_prompt(gp);
     }
+    if (not_remembered) {
+        fprintf(stderr, "Allowed once: this call can't be added to the allowlist.\n");
+    }
     free(shell_command);
     free(file_path);
     gate_prompter_destroy(gp);
     return result;
+}
+
+static int auto_review_allows(const ToolCall *tool_call, char **out_reason) {
+    if (auto_approve_without_review(tool_call)) {
+        return 1;
+    }
+    if (g_gate_callbacks.review_tool_call == NULL) {
+        return 0;
+    }
+    if (g_gate_callbacks.review_tool_call(g_gate_callbacks.review_ctx,
+                                          tool_call, out_reason) == 1) {
+        free(*out_reason);
+        *out_reason = NULL;
+        return 1;
+    }
+    return 0;
 }
 
 ApprovalResult check_approval_gate(ApprovalGateConfig *config,
@@ -1117,10 +1205,20 @@ ApprovalResult check_approval_gate(ApprovalGateConfig *config,
                     return subagent_request_approval(channel, tool_call, out_path);
                 }
 
+                char *reason = NULL;
+                if (config->auto_mode && auto_review_allows(tool_call, &reason)) {
+                    return APPROVAL_ALLOWED;
+                }
+
                 if (!config->is_interactive) {
+                    free(reason);
                     return APPROVAL_NON_INTERACTIVE_DENIED;
                 }
 
+                if (reason != NULL) {
+                    fprintf(stderr, "Auto review: %s\n", reason);
+                    free(reason);
+                }
                 return approval_gate_prompt(config, tool_call, out_path);
             }
 

@@ -17,6 +17,10 @@ DARRAY_DECLARE(ConversationHistory, ConversationMessage)
 
 void conversation_tracker_set_services(Services* services);
 
+/* History index for the project containing the working directory when
+ * conversation_tracker_set_services() was called. */
+const char* conversation_tracker_index_name(void);
+
 int load_conversation_history(ConversationHistory *history);
 int append_conversation_message(ConversationHistory *history, const char *role, const char *content);
 int append_tool_message(ConversationHistory *history, const char *content, const char *tool_call_id, const char *tool_name);

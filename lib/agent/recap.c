@@ -128,6 +128,8 @@ static size_t recap_stream_http_callback(const char* data, size_t size, void* us
     return size;
 }
 
+static int stream_unsaved_reply(AgentSession* session, const char* prompt);
+
 int recap_generate(AgentSession* session, int max_messages) {
     if (session == NULL) {
         return -1;
@@ -164,21 +166,41 @@ int recap_generate(AgentSession* session, int max_messages) {
 
     LOG_DEBUG("Generating recap with prompt: %s", recap_prompt);
 
+    int result = stream_unsaved_reply(session, recap_prompt);
+    free(recap_prompt);
+    return result;
+}
+
+int recap_greet(AgentSession* session, const char* name) {
+    if (session == NULL || name == NULL) {
+        return -1;
+    }
+
+    char prompt[512];
+    snprintf(prompt, sizeof(prompt),
+             "This is your first interaction with this user in interactive mode. "
+             "Please introduce yourself as %s, briefly explain your capabilities "
+             "(answering questions, running shell commands, file operations, problem-solving), "
+             "and ask what you can help with today. Keep it warm, concise, and engaging. "
+             "Make it feel personal and conversational, not like a static template.", name);
+
+    return stream_unsaved_reply(session, prompt);
+}
+
+/* The prompt and reply are a one-shot exchange: neither is added to conversation history. */
+static int stream_unsaved_reply(AgentSession* session, const char* prompt) {
     ProviderRegistry* registry = get_provider_registry();
     if (registry == NULL) {
-        fprintf(stderr, "Error: Failed to get provider registry for recap\n");
-        free(recap_prompt);
+        fprintf(stderr, "Error: Failed to get provider registry\n");
         return -1;
     }
 
     LLMProvider* provider = detect_provider_for_url(registry, session->session_data.config.api_url);
     if (provider == NULL) {
         fprintf(stderr, "Error: No provider found for URL: %s\n", session->session_data.config.api_url);
-        free(recap_prompt);
         return -1;
     }
 
-    // Empty history: recap is a one-shot call, not part of the conversation
     ConversationHistory empty_history = {0};
     int max_tokens = 300;
 
@@ -192,25 +214,23 @@ int recap_generate(AgentSession* session, int max_messages) {
         session->session_data.config.model,
         &sys_parts,
         &empty_history,
-        recap_prompt,
+        prompt,
         max_tokens,
         NULL
     );
 
-    free(recap_prompt);
-
     if (post_data == NULL) {
-        fprintf(stderr, "Error: Failed to build recap streaming JSON payload\n");
+        fprintf(stderr, "Error: Failed to build streaming JSON payload\n");
         return -1;
     }
 
-    LOG_DEBUG("Making recap streaming API request to %s", session->session_data.config.api_url);
+    LOG_DEBUG("Making one-shot streaming API request to %s", session->session_data.config.api_url);
     LOG_DEBUG("POST data: %s", post_data);
 
     StreamingContext* ctx = streaming_context_create();
     if (ctx == NULL) {
         free(post_data);
-        fprintf(stderr, "Error: Failed to create streaming context for recap\n");
+        fprintf(stderr, "Error: Failed to create streaming context\n");
         return -1;
     }
 
@@ -230,7 +250,7 @@ int recap_generate(AgentSession* session, int max_messages) {
     display_streaming_init();
 
     struct StreamingHTTPConfig streaming_config = {
-        .base = DEFAULT_HTTP_CONFIG,
+        .base = DEFAULT_STREAMING_HTTP_CONFIG.base,
         .stream_callback = recap_stream_http_callback,
         .callback_data = ctx,
         .low_speed_limit = 1,
@@ -257,14 +277,12 @@ int recap_generate(AgentSession* session, int max_messages) {
             provider->cleanup_stream_state(provider);
         }
         streaming_context_free(ctx);
-        fprintf(stderr, "Error: Recap streaming HTTP request failed\n");
+        fprintf(stderr, "Error: Streaming HTTP request failed\n");
         return -1;
     }
 
     display_streaming_complete(ctx->input_tokens, ctx->output_tokens);
     streaming_context_free(ctx);
-
-    // Recap is intentionally not saved to conversation history to avoid bloat
 
     return 0;
 }

@@ -7,6 +7,8 @@ Always update docs (AGENTS.md, ARCHITECTURE.md and CODE_OVERVIEW.md) before you 
 
 ## Build & Run
 
+These commands need the devcontainer's Cosmopolitan toolchain. Check with `command -v cosmocc`: if it resolves (devcontainer or Codespace), run them directly; if not (e.g. a macOS host), run them through `docker run` as shown in `docs/building-from-source.md`.
+
 | Command | Description |
 |---------|-------------|
 | `./scripts/build.sh` | Build (compact output) |
@@ -60,6 +62,7 @@ set -a && source .env && set +a && out/scaffold --yolo "your message"
 | `--no-stream` | Disable response streaming |
 | `--json` | Enable JSON output mode (structured JSONL on stdout) |
 | `--yolo` | Disable all approval gates for this session |
+| `--auto` | Run gated calls that pass auto review without prompting |
 | `--model <name>` | Select model (e.g. `gpt-4o`) |
 | `--context-window <n>` | Override context window size (tokens) |
 | `-p`, `--prompt <text>` | Use custom system prompt (skips default + AGENTS.md) |
@@ -143,6 +146,7 @@ valgrind --leak-check=full ./test/test_foo.com.dbg      # x86_64
 - `shell.py` strips `PYTHONHOME` and `PYTHONDONTWRITEBYTECODE` from subprocesses to prevent the embedded Python from breaking system Python.
 - `apply_patch.py` uses a custom patch format (`*** Begin Patch` / `*** Update File:` / `*** Add File:` / `*** Delete File:` / `*** End Patch`), not standard unified diff.
 - Streaming includes transient error retry with exponential backoff and `response.failed` event detection.
+- Memories and conversation history are per project: `lib/util/project_scope.c` derives index names from the nearest `.git` root of the working directory. `remember` with `scope=user` writes the shared `memory_user` index; recall searches both.
 - Embedding vector dimension is resolved by probing the configured model at startup (see ARCHITECTURE.md). If the probe fails the embedding feature is hard-disabled — index code must use `embeddings_service_get_dimension()`, never a literal dimension. The endpoint comes from `EMBEDDING_API_URL`/`EMBEDDING_MODEL`, then the `embedding_api_url`/`embedding_model` config keys; a key is required only for providers that need auth (OpenAI).
 
 ## System Prompts
@@ -150,9 +154,21 @@ valgrind --leak-check=full ./test/test_foo.com.dbg      # x86_64
 - `data/prompts/scaffold_system.txt` — main system prompt (embedded in binary at build time)
 - `data/prompts/modes/` — behavioral mode prompts: `debug.txt`, `explore.txt`, `plan.txt`, `review.txt`
 
+## Branching
+
+Branch all work from `develop`, never `master`, and target PRs at `develop`. `master` only receives releases and hotfixes.
+
 ## Versioning & Releases
 
 **Single source of truth**: Git tags (`v*`). The build generates `build/version.h` from `git describe --tags`, providing version string, git hash, and dirty flag. No version numbers in config files.
+
+**Branches**: `develop` is the integration branch; `master` holds released code. Both are protected by rulesets: no deletion, no force-push, changes only through PRs that pass `CI / Build and Test`.
+
+- Feature work: branch from `develop`, PR into `develop` (rebase or merge commit).
+- Release: PR `develop` into `master` (merge commit only, which keeps `develop`'s commits intact), then run the Release workflow.
+- Hotfix: branch `hotfix/<name>` from `master`, PR into `master` (merge commit), then release.
+- Back-merge: every push to `master` triggers `back-merge.yml`, which opens an auto-merging `master` → `develop` merge-commit PR, so release tags stay reachable from `develop` and `git describe` reports the correct version there. Resolve conflicts on that PR by hand.
+- Never rebase or cherry-pick commits between `master` and `develop`; copied commits leave tags unreachable from `develop`.
 
 **Release**: Trigger the Release workflow from the GitHub Actions UI on `master`. Pick a bump type (major/minor/patch) and optionally provide release notes. The workflow calculates the next version from the latest tag, builds, tests, creates the tag, and publishes to GitHub Releases.
 

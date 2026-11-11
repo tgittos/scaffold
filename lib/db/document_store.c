@@ -114,17 +114,17 @@ void document_store_destroy(document_store_t* store) {
     free(store);
 }
 
-void document_store_clear_conversations(document_store_t* store) {
-    if (store == NULL) return;
+void document_store_clear_index(document_store_t* store, const char* index_name) {
+    if (store == NULL || index_name == NULL) return;
 
-    char conv_path[512] = {0};
+    char index_path[512] = {0};
     if (store->base_path != NULL) {
-        snprintf(conv_path, sizeof(conv_path), "%s/documents/conversations", store->base_path);
-        rmdir_recursive(conv_path);
+        snprintf(index_path, sizeof(index_path), "%s/documents/%s", store->base_path, index_name);
+        rmdir_recursive(index_path);
     }
 
     if (store->vector_db != NULL) {
-        vector_db_delete_index(store->vector_db, "conversations");
+        vector_db_delete_index(store->vector_db, index_name);
     }
 }
 

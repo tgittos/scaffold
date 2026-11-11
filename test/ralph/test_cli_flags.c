@@ -55,6 +55,7 @@ void test_help_long_flag(void) {
     TEST_ASSERT_NOT_NULL(strstr(output, "--json"));
     TEST_ASSERT_NOT_NULL(strstr(output, "--home"));
     TEST_ASSERT_NOT_NULL(strstr(output, "--yolo"));
+    TEST_ASSERT_NOT_NULL(strstr(output, "--auto"));
 }
 
 void test_help_short_flag(void) {

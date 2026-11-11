@@ -5,7 +5,7 @@
 #include "services/services.h"
 
 extern void hnswlib_clear_all(void);
-extern void document_store_clear_conversations(document_store_t* store);
+extern void document_store_clear_index(document_store_t* store, const char* index_name);
 #include "llm/embeddings_service.h"
 #include <stdio.h>
 #include <string.h>
@@ -56,11 +56,11 @@ void setUp(void) {
     }
     conversation_tracker_set_services(g_test_services);
 
-    document_store_clear_conversations(services_get_document_store(g_test_services));
+    document_store_clear_index(services_get_document_store(g_test_services), conversation_tracker_index_name());
 }
 
 void tearDown(void) {
-    document_store_clear_conversations(services_get_document_store(g_test_services));
+    document_store_clear_index(services_get_document_store(g_test_services), conversation_tracker_index_name());
 
     conversation_tracker_set_services(NULL);
     document_store_set_services(NULL);

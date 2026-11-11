@@ -156,6 +156,7 @@ Configure gates in your config file:
 {
   "approval_gates": {
     "enabled": true,
+    "auto_mode": false,
     "categories": {
       "file_write": "gate",
       "shell": "gate",
@@ -177,7 +178,7 @@ Configure gates in your config file:
 
 ### Allowlist entries
 
-**Regex patterns** (for file and network tools):
+**Regex patterns** (for file and network tools), matched against the call's path or URL:
 ```json
 {"tool": "write_file", "pattern": "^src/.*\\.js$"}
 ```
@@ -192,6 +193,8 @@ Shell patterns can optionally specify a shell type (`bash`, `sh`, `cmd`, `powers
 {"tool": "shell", "command": ["git", "push"], "shell": "bash"}
 ```
 
+A POSIX command chained with `;`, `&&`, `||`, `|` or newlines matches only when every segment matches an entry, so `cd src && make 2>&1 | tail` needs entries for `cd`, `make` and `tail`. `2>&1` and redirects to `/dev/null` are ignored. Segments with other redirects, subshells (`$(...)`, backticks), backslash escapes or a background `&` never match, and neither do commands that match a dangerous pattern such as `rm -rf`.
+
 ### CLI overrides
 
 ```bash
@@ -203,7 +206,20 @@ Shell patterns can optionally specify a shell type (`bash`, `sh`, `cmd`, `powers
 
 # Allow an entire category
 ./scaffold --allow-category=network
+
+# Run gated calls that pass auto review without prompting
+./scaffold --auto
 ```
+
+### Auto mode
+
+With `--auto` or `"auto_mode": true`, a gated call that matches no allowlist entry is reviewed before scaffold prompts:
+
+1. Shell commands whose every segment is read-only (`ls`, `cat`, `grep`, `find` without `-exec`/`-delete`, `git status`/`log`/`diff`/`show`, ...) run. So do `write_file` and `apply_patch` calls whose every path stays inside the git project containing the working directory, outside `.git` and protected files.
+2. Anything else goes to the session's own model in a separate request that is not added to the conversation. The reviewer sees your recent messages and the pending call, never tool output. If it allows the call, the call runs.
+3. Otherwise you get the normal prompt, preceded by the reviewer's reason. Without a terminal, the call is denied.
+
+A failed review request or a reply that isn't a JSON verdict falls through to the prompt. Each reviewed call costs one extra model request, which is slow on local models.
 
 ### Approval prompt
 
@@ -216,7 +232,7 @@ Allow? [y]es / [n]o / [a]lways allow this pattern / [?] details
 
 - **y** -- Allow this one action
 - **n** -- Deny this action
-- **a** -- Allow this and all matching future actions (session only)
+- **a** -- Allow this and all matching future actions (session only). A shell command gets one entry per segment; a command with a segment that can't match (see above) is allowed once, with a notice.
 - **?** -- Show details about the action
 
 For batch operations (multiple tool calls at once), you can approve/deny all or select individual items by number.
@@ -227,7 +243,7 @@ Certain files are always blocked regardless of gate settings. These include sens
 
 ### Subagent behavior
 
-Subagents inherit category settings and static allowlist entries from the parent config. Session-added allowlist entries (from `--allow` or "always allow" prompts) are not inherited.
+Subagents inherit category settings and static allowlist entries from the parent config. Session-added allowlist entries (from `--allow` or "always allow" prompts) are not inherited; instead, a subagent's gated call goes to the parent, which checks it against its own allowlist and auto mode before prompting.
 
 ## Project-specific prompts (AGENTS.md)
 

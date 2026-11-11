@@ -30,6 +30,10 @@ typedef struct {
     struct ApprovalChannel* (*get_approval_channel)(void);
     void (*log_approval)(const char *subagent_id, const char *tool_name,
                          const char *summary, int result);
+    /* Auto mode's model review. Returns 1 to run the call, 0 to ask the user;
+     * may set *out_reason to an allocated explanation the caller frees. */
+    int (*review_tool_call)(void *ctx, const ToolCall *tool_call, char **out_reason);
+    void *review_ctx;
 } ApprovalGateCallbacks;
 
 void approval_gate_set_callbacks(const ApprovalGateCallbacks *callbacks);
@@ -140,7 +144,6 @@ typedef struct {
 typedef struct {
     uint32_t request_id;    /* Matches the request */
     ApprovalResult result;  /* The user's decision */
-    char *pattern;          /* If ALLOWED_ALWAYS, the generated pattern */
 } ApprovalResponse;
 
 /**
@@ -150,6 +153,7 @@ typedef struct {
 typedef struct ApprovalGateConfig {
     int enabled;            /* Master switch for approval gates */
     int is_interactive;     /* Whether stdin is a TTY (can prompt user) */
+    int auto_mode;          /* Approve gated calls that pass auto review */
 
     /* Category configuration */
     GateAction categories[GATE_CATEGORY_COUNT];
@@ -342,6 +346,17 @@ int approval_gate_add_shell_allowlist(ApprovalGateConfig *config,
                                       const char **command_prefix,
                                       int prefix_len,
                                       ShellType shell_type);
+
+/**
+ * Add session allowlist entries so calls like this one run without a prompt.
+ * A shell command gets one prefix entry per segment, and nothing is stored
+ * unless every segment can be matched.
+ *
+ * @param config Gate configuration
+ * @param tool_call The approved tool call
+ * @return 0 when entries were stored, -1 when the call can only be approved once
+ */
+int approval_gate_allow_always(ApprovalGateConfig *config, const ToolCall *tool_call);
 
 /**
  * Check if a tool call matches any allowlist entry.
