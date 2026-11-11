@@ -2,7 +2,6 @@
 #define LOG_MODULE_STR "policy"
 #include "../util/log.h"
 #include "approval_gate.h"
-#include "pattern_generator.h"
 
 #include <cJSON.h>
 #include <errno.h>
@@ -164,7 +163,6 @@ static char *serialize_approval_response(const ApprovalResponse *resp) {
 
     cJSON_AddNumberToObject(json, "request_id", resp->request_id);
     cJSON_AddNumberToObject(json, "result", (int)resp->result);
-    cJSON_AddStringToObject(json, "pattern", resp->pattern ? resp->pattern : "");
 
     char *result = cJSON_PrintUnformatted(json);
     cJSON_Delete(json);
@@ -185,7 +183,6 @@ static int deserialize_approval_response(const char *json_str, ApprovalResponse 
 
     cJSON *request_id = cJSON_GetObjectItem(json, "request_id");
     cJSON *result = cJSON_GetObjectItem(json, "result");
-    cJSON *pattern = cJSON_GetObjectItem(json, "pattern");
 
     if (!cJSON_IsNumber(request_id) || !cJSON_IsNumber(result)) {
         cJSON_Delete(json);
@@ -194,19 +191,9 @@ static int deserialize_approval_response(const char *json_str, ApprovalResponse 
 
     resp->request_id = (uint32_t)request_id->valuedouble;
     resp->result = (ApprovalResult)(int)result->valuedouble;
-    resp->pattern = (cJSON_IsString(pattern) && strlen(pattern->valuestring) > 0)
-                        ? strdup(pattern->valuestring)
-                        : NULL;
 
     cJSON_Delete(json);
     return 0;
-}
-
-static void free_approval_response(ApprovalResponse *resp) {
-    if (resp != NULL) {
-        free(resp->pattern);
-        memset(resp, 0, sizeof(*resp));
-    }
 }
 
 static char *read_message_with_timeout(int fd, int timeout_ms) {
@@ -333,21 +320,10 @@ ApprovalResult subagent_request_approval(const ApprovalChannel *channel,
 
     if (resp.request_id != req.request_id) {
         DEBUG_ERROR("subagent_request_approval: Response request_id mismatch");
-        free_approval_response(&resp);
         return APPROVAL_DENIED;
     }
 
-    ApprovalResult result = resp.result;
-
-    /* If parent approved with "allow always" and generated a pattern,
-     * the pattern has already been added to parent's session allowlist.
-     * Subagent doesn't inherit session allowlist, so we just proceed. */
-    if (result == APPROVAL_ALLOWED_ALWAYS && resp.pattern != NULL) {
-        DEBUG_PRINT("Parent added pattern to allowlist: %s", resp.pattern);
-    }
-
-    free_approval_response(&resp);
-    return result;
+    return resp.result;
 }
 
 int handle_subagent_approval_request(ApprovalGateConfig *config,
@@ -393,7 +369,7 @@ int handle_subagent_approval_request(ApprovalGateConfig *config,
         DEBUG_PRINT("Nested subagent: forwarding request to grandparent");
         result = subagent_request_approval(our_channel, &synthetic_call, &approved_path);
     } else {
-        result = approval_gate_prompt(config, &synthetic_call, &approved_path);
+        result = check_approval_gate(config, &synthetic_call, &approved_path);
     }
 
     if (subagent_id != NULL && cbs && cbs->log_approval) {
@@ -403,24 +379,10 @@ int handle_subagent_approval_request(ApprovalGateConfig *config,
 
     ApprovalResponse resp = {
         .request_id = req.request_id,
-        .result = result,
-        .pattern = NULL
+        .result = result
     };
 
-    if (result == APPROVAL_ALLOWED_ALWAYS) {
-        GeneratedPattern gen_pattern = {0};
-        if (generate_allowlist_pattern(&synthetic_call, &gen_pattern) == 0) {
-            /* Add pattern to parent's allowlist so future requests auto-approve */
-            apply_generated_pattern(config, synthetic_call.name, &gen_pattern);
-            if (gen_pattern.pattern != NULL) {
-                resp.pattern = strdup(gen_pattern.pattern);
-            }
-            free_generated_pattern(&gen_pattern);
-        }
-    }
-
     char *response_str = serialize_approval_response(&resp);
-    free(resp.pattern);
     free_approval_request(&req);
     free_approved_path(&approved_path);
 

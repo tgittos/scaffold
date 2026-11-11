@@ -51,6 +51,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`async_executor.c/h`** - Non-blocking message processing using background thread with pipe notification; running flag and condition broadcast occur inside mutex to prevent signal loss
 - **`context_enhancement.c/h`** - Split prompt builder: returns `EnhancedPromptParts` with session-stable base prompt and per-request dynamic context (repo snapshot on first turn, todo state, mode, memories, context retrieval). `build_repo_snapshot()` gathers git metadata and directory tree; `build_directory_tree()` produces a depth-limited directory listing
 - **`recap.c/h`** - Startup recap and first-run greeting (one-shot LLM calls without history persistence)
+- **`tool_review.c/h`** - Auto mode model review of a gated tool call: one-off request to the session's model with the user's recent messages and the call, parsed as a JSON allow/block verdict
 - **`streaming_handler.c/h`** - Application-layer streaming orchestration and provider registry management
 - **`tool_executor.c/h`** - Thin entry point for tool execution workflow (init, initial batch, clear_history support, hand-off)
 - **`iterative_loop.c/h`** - Iterative tool-calling loop for follow-up LLM rounds; bounded retry of empty rounds (no text, reasoning or tool calls) with a visible warning
@@ -114,6 +115,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`allowlist.c/h`** - Opaque allowlist type for regex and shell pattern matching
 - **`gate_prompter.c/h`** - Terminal UI for single and batch approval prompts
 - **`pattern_generator.c/h`** - Pure functions for generating allowlist patterns
+- **`auto_approve.c/h`** - Auto mode's no-model tier: read-only shell segments, writes inside the git project
 - **`tool_args.c/h`** - Centralized cJSON argument extraction from ToolCall structs
 
 ##### Protected Files
@@ -121,7 +123,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`path_normalize.c/h`** - Cross-platform path normalization (Windows drive letters, UNC paths)
 
 ##### Shell Parsing
-- **`shell_parser.c/h`** - POSIX shell tokenization and dangerous pattern detection
+- **`shell_parser.c/h`** - POSIX shell tokenization, dangerous pattern detection, and segment splitting for compound commands
 - **`shell_parser_cmd.c`** - cmd.exe parsing with metacharacter detection
 - **`shell_parser_ps.c`** - PowerShell parsing with cmdlet detection
 
@@ -197,7 +199,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`context_retriever.c/h`** - Vector database context retrieval for prompts
 - **`ansi_codes.h`** - Terminal color codes, box-drawing characters, and status symbols
 - **`app_home.c/h`** - Centralized application home directory management (~/.local/<app_name>/)
-- **`project_scope.c/h`** - Per-project index names derived from the nearest `.git` root of the working directory
+- **`project_scope.c/h`** - Per-project index names and git root lookup from the nearest `.git` root of the working directory
 - **`process_spawn.c/h`** - Common fork/exec helper with stdout/stderr redirected to /dev/null
 - **`executable_path.c/h`** - Executable path resolution for APE binaries
 
@@ -360,9 +362,11 @@ The test directory mirrors the source structure:
 - **`test_protected_files.c`** - Protected file detection
 - **`test_atomic_file.c`** - TOCTOU-safe file operations
 - **`test_subagent_approval.c`** - Approval proxy pipe management
+- **`test_auto_approve.c`** - Auto mode read-only shell and in-project write rules
 
 #### `test/agent/` - Agent Module Tests
 - **`test_prompt_mode.c`** - Prompt mode enum and parsing tests
+- **`test_tool_review.c`** - Auto mode review verdicts and request contents against the mock API server
 - **`test_context_mode_injection.c`** - Context mode injection tests
 - **`test_parallel_batch.c`** - Parallel batch execution tests
 
@@ -447,7 +451,8 @@ Conversation lifecycle handling:
 ### 7. Approval Gate System (lib/policy/)
 Security-aware tool execution control:
 - **Category-Based Gates**: Tools categorized as file_read, file_write, shell, network, memory, subagent, mcp, python, plugin
-- **Allowlist Matching**: Regex patterns for paths/URLs, shell command prefix matching
+- **Allowlist Matching**: Regex patterns for paths/URLs, shell command prefix matching per segment of a compound command
+- **Auto Mode**: Read-only and in-project calls run; others go to a model review before the prompt
 - **Protected Files**: Hard-block access to config files via basename, glob, and inode detection
 - **Rate Limiting**: Exponential backoff after repeated denials
 - **Subagent Proxy**: IPC-based approval forwarding for child processes

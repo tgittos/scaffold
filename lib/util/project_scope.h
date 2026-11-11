@@ -23,4 +23,12 @@ int project_scope_index_name_for(const char* dir, const char* prefix,
 /** project_scope_index_name_for() applied to the current working directory. */
 int project_scope_index_name(const char* prefix, char* out, size_t out_size);
 
+/**
+ * Resolve the nearest ancestor of dir (inclusive) containing a .git entry.
+ *
+ * @return 0 on success, -1 if dir cannot be resolved, no ancestor holds
+ *         .git, or out is too small
+ */
+int project_scope_git_root(const char* dir, char* out, size_t out_size);
+
 #endif

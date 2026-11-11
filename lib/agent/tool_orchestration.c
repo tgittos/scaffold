@@ -5,7 +5,6 @@
 #include "../policy/protected_files.h"
 #include "../policy/tool_args.h"
 #include "../policy/verified_file_context.h"
-#include "../policy/pattern_generator.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -74,14 +73,7 @@ int tool_orchestration_check_approval(ToolOrchestrationContext* ctx,
                                                    &approved_path);
 
     switch (approval) {
-        case APPROVAL_ALLOWED_ALWAYS: {
-            GeneratedPattern gen_pattern = {0};
-            if (generate_allowlist_pattern(tool_call, &gen_pattern) == 0) {
-                apply_generated_pattern(ctx->gate_config, tool_call->name, &gen_pattern);
-                free_generated_pattern(&gen_pattern);
-            }
-        }
-        /* fallthrough */
+        case APPROVAL_ALLOWED_ALWAYS:
         case APPROVAL_ALLOWED:
             if (approved_path.resolved_path != NULL && is_file_tool(tool_call->name)) {
                 if (out_path != NULL) {

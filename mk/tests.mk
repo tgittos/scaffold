@@ -60,9 +60,12 @@ GATE_DEPS := \
     $(LIBDIR)/policy/allowlist.c \
     $(LIBDIR)/policy/approval_gate.c \
     $(LIBDIR)/policy/approval_errors.c \
+    $(LIBDIR)/policy/auto_approve.c \
     $(LIBDIR)/policy/atomic_file.c \
     $(LIBDIR)/policy/gate_prompter.c \
+    $(LIBDIR)/policy/path_normalize.c \
     $(LIBDIR)/policy/pattern_generator.c \
+    $(LIBDIR)/policy/protected_files.c \
     $(LIBDIR)/policy/rate_limiter.c \
     $(LIBDIR)/policy/shell_parser.c \
     $(LIBDIR)/policy/shell_parser_cmd.c \
@@ -72,9 +75,11 @@ GATE_DEPS := \
     $(LIBDIR)/util/debug_output.c \
     $(LIBDIR)/util/log.c \
     $(LIBDIR)/util/app_home.c \
-    $(LIBDIR)/util/json_escape.c
+    $(LIBDIR)/util/json_escape.c \
+    $(LIBDIR)/util/project_scope.c
 
 $(eval $(call def_test,approval_gate,policy/test_approval_gate,$(GATE_DEPS)))
+$(eval $(call def_test,auto_approve,policy/test_auto_approve,$(LIBDIR)/policy/auto_approve.c $(LIBDIR)/policy/protected_files.c $(LIBDIR)/policy/path_normalize.c $(LIBDIR)/policy/shell_parser.c $(LIBDIR)/policy/shell_parser_cmd.c $(LIBDIR)/policy/shell_parser_ps.c $(LIBDIR)/policy/tool_args.c $(LIBDIR)/util/project_scope.c $(LIBDIR)/util/app_home.c))
 $(eval $(call def_test,atomic_file,policy/test_atomic_file,$(LIBDIR)/policy/atomic_file.c))
 $(eval $(call def_test,path_normalize,policy/test_path_normalize,$(LIBDIR)/policy/path_normalize.c))
 $(eval $(call def_test,verified_file_context,test_verified_file_context,$(LIBDIR)/policy/verified_file_context.c $(LIBDIR)/policy/atomic_file.c $(LIBDIR)/policy/path_normalize.c))
@@ -150,6 +155,9 @@ $(TEST_oauth_callback_server_TARGET): $(TEST_oauth_callback_server_OBJECTS)
 
 $(TEST_approval_gate_TARGET): $(TEST_approval_gate_OBJECTS) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_approval_gate_OBJECTS) $(CJSON_LIB) -lpthread
+
+$(TEST_auto_approve_TARGET): $(TEST_auto_approve_OBJECTS) $(CJSON_LIB)
+	$(CC) -o $@ $(TEST_auto_approve_OBJECTS) $(CJSON_LIB)
 
 $(TEST_atomic_file_TARGET): $(TEST_atomic_file_OBJECTS)
 	$(CC) -o $@ $(TEST_atomic_file_OBJECTS)
@@ -380,6 +388,7 @@ $(eval $(call def_test_lib,iterative_loop_empty,ralph/test_iterative_loop_empty,
 $(eval $(call def_test_lib,message_dispatcher,ralph/test_message_dispatcher,))
 $(eval $(call def_test_lib,message_processor,ralph/test_message_processor,))
 $(eval $(call def_test_lib,recap,ralph/test_recap,))
+$(eval $(call def_test_lib,tool_review,agent/test_tool_review,$(TESTDIR)/mock_api_server.c))
 $(eval $(call def_test_lib,parallel_batch,agent/test_parallel_batch,))
 $(eval $(call def_test_lib,model_commands,ui/test_model_commands,))
 $(eval $(call def_test_lib,task_commands,ui/test_task_commands,))
@@ -412,7 +421,7 @@ LIBAGENT_TESTS := tool_param_dsl json_output output tools_system vector_db_tool 
     memory_mgmt token_manager conversation_compactor rolling_summary model_tools embeddings_service embeddings_service_reinit \
     openai_streaming anthropic_streaming codex_provider messages_array_bug openai_message_format mcp_client subagent_tool \
     incomplete_task_bug conversation conversation_vdb tool_calls_not_stored document_store \
-    message_dispatcher message_processor recap parallel_batch model_commands \
+    message_dispatcher message_processor recap tool_review parallel_batch model_commands \
     iterative_loop_empty \
     slash_commands task_commands agent_commands goal_commands mode_tool mode_commands status_line \
     context_mode_injection repo_context image_attachment goap_tools orchestrator_tool goap_lifecycle \

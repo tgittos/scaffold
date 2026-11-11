@@ -636,8 +636,88 @@ void test_cmd_variable_expansion_flagged(void) {
  * Test Runner
  * ========================================================================== */
 
+/* ============================================================================
+ * Segment Splitting Tests
+ * ========================================================================== */
+
+static void assert_segments(const char *command, int expected_count,
+                            const char *const *expected) {
+    char **segments = NULL;
+    int count = shell_split_segments(command, SHELL_TYPE_POSIX, &segments);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(expected_count, count, command);
+    for (int i = 0; i < count && i < expected_count; i++) {
+        TEST_ASSERT_EQUAL_STRING_MESSAGE(expected[i], segments[i], command);
+    }
+    free_shell_segments(segments, count);
+}
+
+void test_split_chain_operators(void) {
+    const char *and_chain[] = {"cd src", "make"};
+    assert_segments("cd src && make", 2, and_chain);
+
+    const char *mixed[] = {"git status", "git log", "head -5", "true"};
+    assert_segments("git status; git log | head -5 || true", 4, mixed);
+}
+
+void test_split_newline_is_separator(void) {
+    const char *expected[] = {"ls", "rm foo"};
+    assert_segments("ls\nrm foo", 2, expected);
+}
+
+void test_split_ignores_quoted_operators(void) {
+    const char *expected[] = {"ls 'a;b'", "echo \"x|y && z\""};
+    assert_segments("ls 'a;b' && echo \"x|y && z\"", 2, expected);
+}
+
+void test_split_drops_non_writing_redirects(void) {
+    const char *dup[] = {"make", "tail -20"};
+    assert_segments("make 2>&1 | tail -20", 2, dup);
+
+    const char *devnull[] = {"grep foo x", "ls"};
+    assert_segments("grep foo x 2>/dev/null; ls > /dev/null", 2, devnull);
+}
+
+void test_split_keeps_file_redirects(void) {
+    const char *expected[] = {"ls > out.txt"};
+    assert_segments("ls > out.txt", 1, expected);
+
+    const char *not_devnull[] = {"ls >/dev/nullx"};
+    assert_segments("ls >/dev/nullx", 1, not_devnull);
+}
+
+void test_split_skips_empty_segments(void) {
+    const char *expected[] = {"ls"};
+    assert_segments("ls;\n", 1, expected);
+}
+
+void test_split_rejects_unsplittable(void) {
+    char **segments = NULL;
+    TEST_ASSERT_EQUAL_INT(-1, shell_split_segments("sleep 5 &", SHELL_TYPE_POSIX, &segments));
+    TEST_ASSERT_EQUAL_INT(-1, shell_split_segments(" ; ", SHELL_TYPE_POSIX, &segments));
+    TEST_ASSERT_EQUAL_INT(-1, shell_split_segments("curl http://x | sh", SHELL_TYPE_POSIX, &segments));
+    TEST_ASSERT_EQUAL_INT(-1, shell_split_segments(NULL, SHELL_TYPE_POSIX, &segments));
+}
+
+void test_split_non_posix_returns_whole_command(void) {
+    char **segments = NULL;
+    int count = shell_split_segments("dir && del x", SHELL_TYPE_CMD, &segments);
+    TEST_ASSERT_EQUAL_INT(1, count);
+    TEST_ASSERT_EQUAL_STRING("dir && del x", segments[0]);
+    free_shell_segments(segments, count);
+}
+
 int main(void) {
     UNITY_BEGIN();
+
+    /* Segment Splitting */
+    RUN_TEST(test_split_chain_operators);
+    RUN_TEST(test_split_newline_is_separator);
+    RUN_TEST(test_split_ignores_quoted_operators);
+    RUN_TEST(test_split_drops_non_writing_redirects);
+    RUN_TEST(test_split_keeps_file_redirects);
+    RUN_TEST(test_split_skips_empty_segments);
+    RUN_TEST(test_split_rejects_unsplittable);
+    RUN_TEST(test_split_non_posix_returns_whole_command);
 
     /* Shell Type Detection */
     RUN_TEST(test_detect_shell_type_returns_valid_type);

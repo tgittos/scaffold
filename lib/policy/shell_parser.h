@@ -260,6 +260,27 @@ int parse_powershell(const char *command, ParsedShellCommand *result);
 int shell_command_is_safe_for_matching(const ParsedShellCommand *parsed);
 
 /**
+ * Split a command into the simple commands it runs, for per-segment matching.
+ *
+ * POSIX commands split at unquoted ; && || | and newlines. Redirects that
+ * cannot write a file (2>&1, >/dev/null) are dropped from the segment text;
+ * other redirects stay so the segment parses as unsafe. Segment text is not
+ * otherwise validated: callers must still parse each segment and require
+ * shell_command_is_safe_for_matching(). cmd.exe and PowerShell commands are
+ * returned unsplit as a single segment.
+ *
+ * @param command Raw command string
+ * @param type Shell the command will run in
+ * @param out_segments Output: allocated segment strings
+ * @return Segment count, or -1 when the command matches a dangerous pattern,
+ *         runs anything in the background, has an empty segment, or on error
+ */
+int shell_split_segments(const char *command, ShellType type, char ***out_segments);
+
+/** Free segments returned by shell_split_segments(). NULL safe. */
+void free_shell_segments(char **segments, int count);
+
+/**
  * Get the base command from a parsed command.
  *
  * @param parsed The parsed command
