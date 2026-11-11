@@ -1,6 +1,7 @@
 #include "../../test/unity/unity.h"
 #include "agent/session.h"
 #include "agent/context_enhancement.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -25,6 +26,14 @@ static int git_available(void) {
     return system("git rev-parse --show-toplevel >/dev/null 2>&1") == 0;
 }
 
+static int on_named_branch(void) {
+    FILE* fp = popen("git branch --show-current 2>/dev/null", "r");
+    if (fp == NULL) return 0;
+    int c = fgetc(fp);
+    pclose(fp);
+    return c != EOF && c != '\n';
+}
+
 void test_repo_snapshot_returns_non_null_in_git_repo(void) {
     char* snapshot = build_repo_snapshot();
     if (!git_available()) {
@@ -46,6 +55,7 @@ void test_repo_snapshot_contains_header(void) {
 
 void test_repo_snapshot_contains_branch(void) {
     if (!git_available()) { TEST_IGNORE_MESSAGE("no git repo"); }
+    if (!on_named_branch()) { TEST_IGNORE_MESSAGE("detached HEAD"); }
     char* snapshot = build_repo_snapshot();
     TEST_ASSERT_NOT_NULL(snapshot);
     TEST_ASSERT_NOT_NULL(strstr(snapshot, "Branch:"));

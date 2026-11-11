@@ -20,6 +20,10 @@ RUN apt-get update && apt-get install -y \
     binutils \
     && rm -rf /var/lib/apt/lists/*
 
+# CI mounts a checkout owned by the runner's uid; without this, git refuses it
+# and the build version falls back to 0.0.0.
+RUN git config --system --add safe.directory '*'
+
 RUN touch ~/.bashrc && chmod +x ~/.bashrc
 RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
 RUN . ~/.nvm/nvm.sh && . ~/.bashrc && nvm install node && npm i -g @anthropic-ai/claude-code
