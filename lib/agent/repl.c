@@ -314,15 +314,7 @@ void repl_show_greeting(AgentSession* session, bool json_mode) {
         LOG_DEBUG("Generating welcome message...");
 
         const char *name = "scaffold";
-        char greeting_prompt[512];
-        snprintf(greeting_prompt, sizeof(greeting_prompt),
-                 "This is your first interaction with this user in interactive mode. "
-                 "Please introduce yourself as %s, briefly explain your capabilities "
-                 "(answering questions, running shell commands, file operations, problem-solving), "
-                 "and ask what you can help with today. Keep it warm, concise, and engaging. "
-                 "Make it feel personal and conversational, not like a static template.", name);
-
-        int result = session_process_message(session, greeting_prompt);
+        int result = recap_greet(session, name);
         if (result != 0) {
             printf("Hello! I'm %s, your AI assistant. What can I help you with today?\n", name);
         }
