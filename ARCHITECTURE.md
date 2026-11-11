@@ -1217,6 +1217,8 @@ graph TB
 ### Python Tools (1 tool + file-based tools)
 - **`python`**: Execute arbitrary Python code with embedded interpreter
 
+`python_interpreter_init()` releases the GIL before returning; every C→Python entry point in `python_tool.c` and `python_tool_files.c` takes it with `PyGILState_Ensure()`/`PyGILState_Release()`, so Python tools can be called from any thread. `python_interpreter_shutdown()` reacquires it before `Py_Finalize()`.
+
 ### Python File Tools (10 embedded default tools from `src/tools/python_defaults/`)
 - **`read_file`**: Read file contents with line numbers, returns dict with content/total_lines/range
 - **`write_file`**: Write or append content to file (mode: "write" or "append")

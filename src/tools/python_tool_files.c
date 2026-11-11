@@ -532,6 +532,7 @@ int python_load_tool_files(void) {
         }
     }
 
+    PyGILState_STATE gil = PyGILState_Ensure();
     struct dirent *entry;
     while ((entry = readdir(dir)) != NULL) {
         if (entry->d_name[0] == '.') continue;
@@ -604,6 +605,7 @@ int python_load_tool_files(void) {
             python_tool_registry.count++;
         }
     }
+    PyGILState_Release(gil);
 
     closedir(dir);
     return 0;
@@ -847,8 +849,10 @@ int execute_python_file_tool_call(const ToolCall *tool_call, ToolResult *result)
 
     free(kwargs);
 
+    PyGILState_STATE gil = PyGILState_Ensure();
     PyObject *main_module = PyImport_AddModule("__main__");
     if (main_module == NULL) {
+        PyGILState_Release(gil);
         free(call_code);
         result->result = strdup("{\"error\": \"Failed to get Python main module\", \"success\": false}");
         result->success = 0;
@@ -862,6 +866,7 @@ int execute_python_file_tool_call(const ToolCall *tool_call, ToolResult *result)
     if (exec_result == NULL) {
         PyErr_Print();
         PyErr_Clear();
+        PyGILState_Release(gil);
         result->result = strdup("{\"error\": \"Python execution failed\", \"success\": false}");
         result->success = 0;
         return 0;
@@ -870,6 +875,7 @@ int execute_python_file_tool_call(const ToolCall *tool_call, ToolResult *result)
 
     PyObject *result_obj = PyDict_GetItemString(globals, "_ralph_result_json");
     if (result_obj == NULL) {
+        PyGILState_Release(gil);
         result->result = strdup("{\"error\": \"No result from Python\", \"success\": false}");
         result->success = 0;
         return 0;
@@ -878,14 +884,16 @@ int execute_python_file_tool_call(const ToolCall *tool_call, ToolResult *result)
     const char *result_str = PyUnicode_AsUTF8(result_obj);
     if (result_str == NULL) {
         PyErr_Clear();
+        PyGILState_Release(gil);
         result->result = strdup("{\"error\": \"Failed to get result string\", \"success\": false}");
         result->success = 0;
         return 0;
     }
 
     result->result = strdup(result_str);
+    PyGILState_Release(gil);
 
-    cJSON *result_json = cJSON_Parse(result_str);
+    cJSON *result_json = cJSON_Parse(result->result);
     if (result_json != NULL) {
         cJSON *error_item = cJSON_GetObjectItem(result_json, "error");
         if (error_item != NULL && cJSON_IsString(error_item)) {
