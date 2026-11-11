@@ -12,7 +12,7 @@ Application-specific code that uses the library layer. This is a thin wrapper ar
 - **`main.c`** - Application entry point with CLI argument parsing, GOAP orchestration, Python tools, update management, OAuth login (`--login`/`--logout`, auto-sets Codex API URL on login), memory, sub-agents, and orchestrator-specific modes (--supervisor --goal, --worker --queue, --phase plan|execute). Uses system prompt from `data/prompts/scaffold_system.txt`.
 
 #### `src/tools/` - Python Tool Integration
-- **`python_tool.c/h`** - Embedded Python interpreter execution
+- **`python_tool.c/h`** - Embedded Python interpreter execution; the GIL is released after init and taken per call
 - **`python_tool_files.c/h`** - Python file-based tool loading system (supports freeform tool invocation for tools with Match: directive)
 - **`python_extension.c/h`** - Tool extension interface for Python tools integration with lib/
 - **`http_python.c/h`** - Python extension for C HTTP client (`_ralph_http` module: get, post, download)
