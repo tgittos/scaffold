@@ -962,6 +962,149 @@ void test_retired_default_tools_removed_only_when_unmodified(void) {
     rmdir_recursive(home);
 }
 
+static const char *SHIPPED_READ_FILE_PY =
+    "\"\"\"Read file contents with optional line range.\n"
+    "\n"
+    "Gate: file_read\n"
+    "Match: path\n"
+    "\"\"\"\n"
+    "\n"
+    "\n"
+    "def _is_traversal_path(path: str) -> bool:\n"
+    "    \"\"\"Check if path contains directory traversal attempts.\"\"\"\n"
+    "    parts = path.replace('\\\\', '/').split('/')\n"
+    "    return '..' in parts\n"
+    "\n"
+    "\n"
+    "def read_file(path: str, start_line: int = 1, end_line: int = None) -> dict:\n"
+    "    \"\"\"Read file contents with optional line range. Use this to examine source code, configs, logs, or any text file. Prefer start_line/end_line for large files. Always read a file before editing it.\n"
+    "\n"
+    "    Args:\n"
+    "        path: Path to the file to read\n"
+    "        start_line: Starting line number (1-based, default: 1 for first line)\n"
+    "        end_line: Ending line number (1-based inclusive, default: None for end of file)\n"
+    "\n"
+    "    Returns:\n"
+    "        Dictionary with content (line-numbered text), total_lines, and range\n"
+    "    \"\"\"\n"
+    "    from pathlib import Path\n"
+    "    import os\n"
+    "\n"
+    "    # Security check - prevent directory traversal\n"
+    "    if _is_traversal_path(path):\n"
+    "        raise ValueError(\"Invalid path: directory traversal not allowed\")\n"
+    "\n"
+    "    # Try to use verified file I/O for TOCTOU-safe reads\n"
+    "    # This is available when approval gates have verified the path\n"
+    "    content = None\n"
+    "    try:\n"
+    "        import _ralph_verified_io\n"
+    "        if _ralph_verified_io.has_verified_context():\n"
+    "            # Use the resolved path from the verified context (not re-resolving)\n"
+    "            verified_path = _ralph_verified_io.get_resolved_path()\n"
+    "            if verified_path and _ralph_verified_io.path_matches(path):\n"
+    "                p = Path(verified_path)\n"
+    "                if not p.exists():\n"
+    "                    raise FileNotFoundError(f\"File not found: {path}\")\n"
+    "                if not p.is_file():\n"
+    "                    raise ValueError(f\"Not a file: {path}\")\n"
+    "                # Check file size (1MB limit)\n"
+    "                max_size = 1024 * 1024\n"
+    "                if p.stat().st_size > max_size:\n"
+    "                    raise ValueError(f\"File too large (>{max_size} bytes): {path}\")\n"
+    "                # Use the verified file context for atomic open\n"
+    "                fd = _ralph_verified_io.open_verified(str(p), 'r')\n"
+    "                with os.fdopen(fd, 'r', encoding='utf-8', errors='replace') as f:\n"
+    "                    content = f.read()\n"
+    "    except ImportError:\n"
+    "        # Module not available - fall through to standard I/O\n"
+    "        pass\n"
+    "    except OSError as e:\n"
+    "        # Verification failed - report the error\n"
+    "        raise OSError(f\"File verification failed: {e}\")\n"
+    "\n"
+    "    # Standard path resolution when verified context not available\n"
+    "    if content is None:\n"
+    "        p = Path(path).resolve()\n"
+    "\n"
+    "        if not p.exists():\n"
+    "            raise FileNotFoundError(f\"File not found: {path}\")\n"
+    "\n"
+    "        if not p.is_file():\n"
+    "            raise ValueError(f\"Not a file: {path}\")\n"
+    "\n"
+    "        # Check file size (1MB limit)\n"
+    "        max_size = 1024 * 1024\n"
+    "        if p.stat().st_size > max_size:\n"
+    "            raise ValueError(f\"File too large (>{max_size} bytes): {path}\")\n"
+    "\n"
+    "    # Fall back to standard file I/O (when gates disabled or no context)\n"
+    "    if content is None:\n"
+    "        content = p.read_text(encoding='utf-8', errors='replace')\n"
+    "\n"
+    "    all_lines = content.splitlines(keepends=True)\n"
+    "    total_lines = len(all_lines)\n"
+    "\n"
+    "    # Apply line range if specified\n"
+    "    start = max(0, start_line - 1)  # Convert to 0-based\n"
+    "    end = end_line if end_line is not None else total_lines\n"
+    "    end = min(end, total_lines)\n"
+    "    selected = all_lines[start:end]\n"
+    "\n"
+    "    # Build line-numbered content\n"
+    "    numbered = []\n"
+    "    for i, line in enumerate(selected, start=start + 1):\n"
+    "        # Strip trailing newline for consistent formatting, then re-add\n"
+    "        numbered.append(f\"{i}: {line.rstrip(chr(10)).rstrip(chr(13))}\")\n"
+    "    numbered_content = '\\n'.join(numbered)\n"
+    "    if numbered:\n"
+    "        numbered_content += '\\n'\n"
+    "\n"
+    "    range_str = f\"{start + 1}-{end}\" if total_lines > 0 else \"0-0\"\n"
+    "\n"
+    "    return {\n"
+    "        \"success\": True,\n"
+    "        \"content\": numbered_content,\n"
+    "        \"total_lines\": total_lines,\n"
+    "        \"range\": range_str\n"
+    "    }\n"
+    ;
+
+static char *slurp(const char *path) {
+    FILE *f = fopen(path, "r");
+    TEST_ASSERT_NOT_NULL(f);
+    static char buf[16384];
+    size_t n = fread(buf, 1, sizeof(buf) - 1, f);
+    buf[n] = '\0';
+    fclose(f);
+    return buf;
+}
+
+void test_unmodified_old_default_is_refreshed(void) {
+    char home[] = "/tmp/refresh_tools_XXXXXX";
+    TEST_ASSERT_NOT_NULL(mkdtemp(home));
+    app_home_cleanup();
+    TEST_ASSERT_EQUAL_INT(0, app_home_init(home));
+
+    char tools_dir[512], old_path[600], edited_path[600];
+    snprintf(tools_dir, sizeof(tools_dir), "%s/tools", home);
+    TEST_ASSERT_EQUAL_INT(0, mkdir(tools_dir, 0755));
+    snprintf(old_path, sizeof(old_path), "%s/read_file.py", tools_dir);
+    snprintf(edited_path, sizeof(edited_path), "%s/list_dir.py", tools_dir);
+    const char *edited = "def list_dir(path: str) -> dict:\n    return {}\n";
+    write_text_file(old_path, SHIPPED_READ_FILE_PY);
+    write_text_file(edited_path, edited);
+
+    TEST_ASSERT_EQUAL_INT(0, python_init_tool_files());
+
+    TEST_ASSERT_NOT_NULL(strstr(slurp(old_path), "Thread-safe: true"));
+    TEST_ASSERT_EQUAL_STRING(edited, slurp(edited_path));
+
+    python_cleanup_tool_files();
+    app_home_cleanup();
+    rmdir_recursive(home);
+}
+
 static volatile int file_tool_thread_done = 0;
 static ToolResult file_tool_thread_result;
 
@@ -1365,6 +1508,7 @@ int main(void) {
     RUN_TEST(test_list_dir_iso_timestamps);
     RUN_TEST(test_apply_patch_basic);
     RUN_TEST(test_retired_default_tools_removed_only_when_unmodified);
+    RUN_TEST(test_unmodified_old_default_is_refreshed);
     RUN_TEST(test_file_tool_runs_on_non_main_thread);
     RUN_TEST(test_concurrent_calls_isolate_results);
     RUN_TEST(test_concurrent_calls_isolate_exceptions);

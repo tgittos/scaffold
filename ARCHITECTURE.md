@@ -1222,6 +1222,8 @@ graph TB
 File tools are invoked through `_ralph_invoke(name, args_json)`, defined in `__main__` once by `python_load_tool_files()`. It decodes the JSON arguments (dropping top-level nulls so defaults apply), calls the tool function, and returns the JSON result envelope as its return value. Each call's state stays in its own Python frame, so concurrent file-tool calls on different threads never see each other's results.
 
 ### Python File Tools (10 embedded default tools from `src/tools/python_defaults/`)
+On init, an installed default tool file is replaced with the embedded version when its SHA-256 matches a previously shipped version (`SHIPPED_DEFAULT_TOOLS`); edited files are left alone. Hashes of replaced versions must be appended to the table when a default tool changes.
+
 - **`read_file`**: Read file contents with line numbers, returns dict with content/total_lines/range
 - **`write_file`**: Write or append content to file (mode: "write" or "append")
 - **`list_dir`**: List directory contents with ISO timestamps

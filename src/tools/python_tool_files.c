@@ -165,6 +165,82 @@ static int sha256_hex_of_file(const char *path, char out[65]) {
     return 0;
 }
 
+/* SHA-256 of every previously shipped version of each current default tool.
+ * An installed file matching one of these is unmodified and is replaced with
+ * the embedded version. When a default tool changes, append the hash of the
+ * version being replaced here; files that match none are left alone as user edits. */
+static const struct { const char *filename; const char *sha256_hex; } SHIPPED_DEFAULT_TOOLS[] = {
+    {"apply_patch.py", "125b93426bf1cd68a4918387fb897260105c1f3718764fe113b39ce8fc296e38"},
+    {"apply_patch.py", "5f5bc8f7a315aaf9d588c3fc1f17591c70c5fb5d8ed89e3cd5a00e82232bd2ce"},
+    {"apply_patch.py", "5f94926962bae262bcf50cdfa6bb8659638bfa5b987896e8d5f1f9bea43030b0"},
+    {"apply_patch.py", "6b7d52a9500bdc1f5981f9efaa29e2a092a95459720489f30f14c80d031f6383"},
+    {"apply_patch.py", "7b9674c2f5dc61eabd1837cca0828254dcbc6a85794cfe0e3981f272e51cadc3"},
+    {"apply_patch.py", "80d31248a6c07df5c68117a78d678ce21a8dc2efae28bb9e609554ddb5896184"},
+    {"apply_patch.py", "a92065ad2b1fe94b72f560c06a32ae501ca24fe3b92789aebaf58ac34df27831"},
+    {"apply_patch.py", "ad4ee7de4c0c1a32942c029ff312bbf88d357f2755a3db58a30e528692a5aadd"},
+    {"list_dir.py", "100b497307e8ba2830c6a3775565c274387b47c157c3963d316cdece5817222c"},
+    {"list_dir.py", "3f41ba961b0e9e66a5eba35a10e79836d3169f73efd5453945209e63573fc399"},
+    {"list_dir.py", "91a5223bea11e93ee27ab39979f4c826fb44ca02c9585f15fdae3ac2cb440374"},
+    {"list_dir.py", "d4010ccd2be0ea4eb5cc20fb5a0df55578afbe7b9ec34790c493c60946690cd7"},
+    {"list_dir.py", "e1181ec2d79b1ce78b1efd79957e432b5fd80203cbf76385d8848a57f319f2d9"},
+    {"list_dir.py", "e35fa145e7f4c5e71a6140c76bdd3a46e2688d270dac8e5f4d9666583f16f58f"},
+    {"read_file.py", "105051de670deea01b310285d33955f23df2e16bd2264af2376038df217d25c7"},
+    {"read_file.py", "1fd7667195dcc6c5f6a73c953c82eb82abc2912243171148e544267d77406c53"},
+    {"read_file.py", "3821834cd87b0c798358b4c9ef02c8d78189b1705f974a9636c3f8a86a914c3b"},
+    {"read_file.py", "4a2abff9c0c130d6c5800f80c2487748d15e4a9597d3427bad4a62a3ff943dad"},
+    {"read_file.py", "a6a14d8d49a2ce0ddc8f5ddeb9123c6977086d33eb457d0bcf0da99645c76ac5"},
+    {"read_file.py", "c5117b13e9fb523b157b3963c3ec05054c9b4850bf0505484d7c259fe367a63a"},
+    {"read_file.py", "e45e3ef707ae55f72a661e40ca1400f1345f492871019678e5c08863a077148a"},
+    {"read_file.py", "e4ba6a170bf69900951a575e9d417283e0af5198bcce5a781a93e0a6b653e77f"},
+    {"search_files.py", "16d6472b1b28478432976ef79b444264ee7442ef993402b1eff37baa0a4698e5"},
+    {"search_files.py", "2319dbd276e6e47f9779a1b89ddc0040ada6e68dcb365d111cb3cb89bf34c5b6"},
+    {"search_files.py", "243f9e8423911a68fe29812049387224801253820969afbef010ed04a242c3ad"},
+    {"search_files.py", "29fcb300b2b6e68c44b0999b9394e18f3542e1861da55e7dec7d5081166ec142"},
+    {"search_files.py", "44b7b906b29732055296cbf02a9ae082be92890aa03d4c90d38026a67d417268"},
+    {"search_files.py", "6ba76084bd5bd5d8dd518c0ad04eda52ab960041bf4aa47d100ceb4d2557ae1f"},
+    {"search_files.py", "9d97397b29a03f8141d25fd7bbda5688531067fa917ee66f9a90fa7a0d1b4e90"},
+    {"search_files.py", "be736b972bb3d87c160775faf6a381c24e977a3a9d028b6450e81ab112255165"},
+    {"search_history.py", "92b337b06fe7d223a508c0b0319324d8167ac352f53e0df32a344b7174c545f5"},
+    {"search_history.py", "f7b947e55d8368a5da31511aea7db38050ed59d8efaa825c98d6894bd6494a84"},
+    {"shell.py", "75153caf7426957db7427fcbcb46725aae5802d85b5ccff9ec7f87614b09e483"},
+    {"shell.py", "8d371c8b6f817de1ad2afd4e4be1d4bd667d14ccf287adf0a2a1470add1cd2ce"},
+    {"shell.py", "e1fce3ed3222ce0ada23352e704c85b925c7d71d51be95764e448034655fe9ef"},
+    {"shell.py", "e704b398964533453892af1a46b334ca02bf9a52e7d1c77b3b4d80b2f1a23b71"},
+    {"shell.py", "ea3388e38a4abf7f82ae29af7d8c550a7ed5d0806b2b3d427461e77cc68016f1"},
+    {"shell.py", "eac5eba031dd9d916b6c651fab9940d4b2f4ddf6f5dfb4ba6b3568bb219f7f46"},
+    {"shell.py", "ec0d4ec5a1e55113ca8b78c28e66967198593485c8bae868f38f9612f87c8f3c"},
+    {"shell.py", "fc8934df00c2f11f0e0ee1f7b41b0318fe2bc7cd2f2575423751b98d9829140a"},
+    {"shell.py", "fda6e00ede5f13cca59804379b03e21b61c8e655fc439e41afc1b1ca91735651"},
+    {"show_structure.py", "80e297d35bc2199241f2f7e6d29b3da2a4ebfcf31af4c58f953dd1f65a9e3e0a"},
+    {"show_structure.py", "888d1f1deb44c2d0f1119b5a49666f45f0cfd591df7df194410147451d8f1ade"},
+    {"show_structure.py", "fcad6505e6cc630934dde5c247149fd9752bd666bb64b4858df2cbd5dc54de47"},
+    {"web_fetch.py", "107bb647786fb0c2088b84f226084741204287cc94708730ccd03ee6b77ed106"},
+    {"web_fetch.py", "2484f126e8115b6588fe11012291b0d39a00749bf1a99c864699b3a5e7668b31"},
+    {"web_fetch.py", "2963b0366e85fd5a6e83285952f180d3983bec264c8b5dc457d1718bbb1e2ae2"},
+    {"web_fetch.py", "33ae9d881ce489831a0aa1735281c36483921cc6dfda50a225a4f4051b99884b"},
+    {"web_fetch.py", "5e923b1352d393b8c708e9b87612307a71a30d418675a6877fb192c85fdf55ab"},
+    {"web_fetch.py", "96d2347fc3fc0f141fd22b0b979a4210caee0a7b06b57a3db546449edb7d7361"},
+    {"write_file.py", "272cc0b199193a7d392b3dcd8a712c8947cab655244ac939a95cc82a4e4ddec7"},
+    {"write_file.py", "2df21b4b539b9dcbfdc4bef648b18735a5f46a78e72065c0bfa9e790083c11dc"},
+    {"write_file.py", "322e078f2983ccbee8e6b181fbf449437db6680e1a99f677df3c68a86d9a20ce"},
+    {"write_file.py", "6063411136a12c24bc427e1f28c80be10fdec199a654eff2f9502d76136c927c"},
+    {"write_file.py", "91514ae6a26e11f5a91a6823eb07654dada5a37ec0d1d73922d2ae5267a1b44a"},
+    {"write_file.py", "99a6cf90345f5001525a85b2f70486f0f65875b7b7b4a3bbfa8f5ead6fbc142e"},
+    {"write_file.py", "af74827a4f4e00c5217f5a81decca81f809e675b07cad98b02a63261cafdce35"},
+    {"write_file.py", "eda9e8de6f1f57d446cb9afe170d13a4dcb1069c13084c8e6033618de54ba43d"},
+    {"write_file.py", "f5867e039a77b329c138bcbdf252d799a012c5c24197aeb2f81c48f5998c1924"},
+};
+
+static bool is_shipped_default(const char *filename, const char *hex) {
+    for (size_t i = 0; i < sizeof(SHIPPED_DEFAULT_TOOLS) / sizeof(SHIPPED_DEFAULT_TOOLS[0]); i++) {
+        if (strcmp(SHIPPED_DEFAULT_TOOLS[i].filename, filename) == 0 &&
+            strcmp(SHIPPED_DEFAULT_TOOLS[i].sha256_hex, hex) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static void remove_retired_tools(const char *tools_dir) {
     for (size_t i = 0; i < sizeof(RETIRED_TOOLS) / sizeof(RETIRED_TOOLS[0]); i++) {
         char path[512];
@@ -187,15 +263,19 @@ static int extract_default_tools(const char *tools_dir) {
         snprintf(embedded_name, sizeof(embedded_name), "%s.py", DEFAULT_TOOL_NAMES[i]);
         snprintf(dest_path, sizeof(dest_path), "%s/%s", tools_dir, embedded_name);
 
-        // Skip if file already exists -- user may have customized it
-        if (file_exists(dest_path)) {
-            continue;
-        }
-
         char *content = read_embedded_file(embedded_name);
         if (content == NULL) {
             fprintf(stderr, "Warning: Could not read embedded file: %s\n", embedded_name);
             continue;
+        }
+
+        // An existing file is kept unless it is an unmodified older shipped version
+        if (file_exists(dest_path)) {
+            char hex[65];
+            if (sha256_hex_of_file(dest_path, hex) != 0 || !is_shipped_default(embedded_name, hex)) {
+                free(content);
+                continue;
+            }
         }
 
         if (write_file(dest_path, content) == 0) {
