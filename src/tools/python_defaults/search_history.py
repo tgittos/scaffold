@@ -1,6 +1,7 @@
 """Search git history to understand code evolution.
 
 Gate: file_read
+Thread-safe: true
 Match: path
 """
 
@@ -179,7 +180,7 @@ def search_history(path: str, operation: str = "log", pattern: str = None,
                    line_end: int = None, max_results: int = 20,
                    author: str = None, since: str = None,
                    regex: bool = False) -> dict:
-    """Search git history to understand why code is the way it is. Before changing code you don't fully understand, use 'blame' to see who last changed specific lines and why, or 'pickaxe' to find the commit that introduced a pattern. Use 'log' for recent file history and 'diff' to inspect a specific commit. Prefer this over shell git commands — it returns structured data and handles edge cases.
+    """Search git history to understand why code is the way it is. Before changing code you don't fully understand, use 'blame' to see who last changed specific lines and why, or 'pickaxe' to find the commit that introduced a pattern. Use 'log' for recent file history and 'diff' to inspect a specific commit. Prefer this over shell git commands — it returns structured data and handles edge cases. Calls in the same batch run concurrently; put steps that depend on each other in separate turns.
 
     Args:
         path: Repository path or file path to search in

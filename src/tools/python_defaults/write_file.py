@@ -1,6 +1,7 @@
 """Write content to a file.
 
 Gate: file_write
+Thread-safe: true
 Match: path
 """
 
@@ -14,7 +15,7 @@ def _is_traversal_path(path: str) -> bool:
 
 
 def write_file(path: str, content: str, mode: str = "write", backup: bool = False) -> dict:
-    """Create a new file or overwrite/append to an existing file. For surgical edits to existing files, prefer apply_patch — it is safer and preserves surrounding code.
+    """Create a new file or overwrite/append to an existing file. For surgical edits to existing files, prefer apply_patch — it is safer and preserves surrounding code. Calls in the same batch run concurrently; put steps that depend on each other in separate turns.
 
     Args:
         path: Path to the file to write

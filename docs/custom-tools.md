@@ -39,6 +39,7 @@ Scaffold automatically:
 - **Type annotations** -- used to generate the parameter schema (`str`, `int`, `float`, `bool`)
 - **Google-style docstrings** -- `Args:` section defines parameter descriptions, main docstring becomes the tool description
 - **Return a string** -- tool results are returned as strings to the LLM
+- **`Gate:` / `Thread-safe:` directives** -- a line `Gate: <category>` in the module docstring sets the approval category. `Thread-safe: true` lets calls to the tool run concurrently with other thread-safe calls in the same batch; the default is serial. Only set it if the tool keeps no shared mutable state.
 
 ### Built-in Python tools
 

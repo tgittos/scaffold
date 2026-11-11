@@ -1,6 +1,7 @@
 """Fetch web page content.
 
 Gate: network
+Thread-safe: true
 Match: url
 
 Security Note: This tool intentionally allows fetching from localhost and
@@ -17,7 +18,7 @@ import re
 MAX_CONTENT_SIZE = 1024 * 1024  # 1MB
 
 def web_fetch(url: str, timeout: int = 30) -> dict:
-    """Fetch a web page and extract its text content (HTML tags stripped). Use for documentation lookups, API references, or checking web content. Content truncated at 1MB.
+    """Fetch a web page and extract its text content (HTML tags stripped). Use for documentation lookups, API references, or checking web content. Content truncated at 1MB. Calls in the same batch run concurrently; put steps that depend on each other in separate turns.
 
     Args:
         url: URL to fetch

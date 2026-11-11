@@ -1,6 +1,7 @@
 """Read file contents with optional line range.
 
 Gate: file_read
+Thread-safe: true
 Match: path
 """
 
@@ -12,7 +13,7 @@ def _is_traversal_path(path: str) -> bool:
 
 
 def read_file(path: str, start_line: int = 1, end_line: int = None) -> dict:
-    """Read file contents with optional line range. Use this to examine source code, configs, logs, or any text file. Prefer start_line/end_line for large files. Always read a file before editing it.
+    """Read file contents with optional line range. Use this to examine source code, configs, logs, or any text file. Prefer start_line/end_line for large files. Always read a file before editing it. Calls in the same batch run concurrently; put steps that depend on each other in separate turns.
 
     Args:
         path: Path to the file to read

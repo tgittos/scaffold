@@ -1,6 +1,7 @@
 """Apply text patches to files using a unified-diff-like format.
 
 Gate: file_write
+Thread-safe: true
 Match: patch
 """
 
@@ -179,7 +180,7 @@ def _apply_hunk(lines, hunk_lines, file_path):
 
 
 def apply_patch(patch: str) -> dict:
-    """Apply a patch to create, edit, or delete files. Preferred tool for editing existing code — finds and replaces specific blocks precisely. Always read the target file first to ensure context lines match. Include enough context lines for unambiguous matching.
+    """Apply a patch to create, edit, or delete files. Preferred tool for editing existing code — finds and replaces specific blocks precisely. Always read the target file first to ensure context lines match. Include enough context lines for unambiguous matching. Calls in the same batch run concurrently; put steps that depend on each other in separate turns.
 
     Format:
         *** Begin Patch
