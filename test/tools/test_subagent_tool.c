@@ -1261,7 +1261,12 @@ void test_subagent_no_notification_without_parent_id(void) {
     subagent_manager_cleanup(&manager);
 }
 
-int main(void) {
+int main(int argc, char **argv) {
+    (void)argv;
+    /* Spawned agents exec this test binary with agent flags; exit as a failed launch. */
+    if (argc > 1) {
+        return 127;
+    }
     UNITY_BEGIN();
 
     // Manager initialization tests

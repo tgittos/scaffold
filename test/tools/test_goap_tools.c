@@ -972,7 +972,12 @@ void test_get_goal_includes_plan_document(void) {
  * Runner
  * ======================================================================== */
 
-int main(void) {
+int main(int argc, char **argv) {
+    (void)argv;
+    /* Spawned agents exec this test binary with agent flags; exit as a failed launch. */
+    if (argc > 1) {
+        return 127;
+    }
     UNITY_BEGIN();
 
     /* goap_create_goal */
