@@ -2381,6 +2381,20 @@ void test_read_only_skips_subagent_channel(void) {
     approval_gate_set_callbacks(NULL);
 }
 
+void test_writing_shell_uses_subagent_channel(void) {
+    ApprovalGateCallbacks cbs = { .get_approval_channel = stub_channel };
+    approval_gate_set_callbacks(&cbs);
+    g_channel_requests = 0;
+    config.is_interactive = 0;
+
+    ToolCall call = shell_call("{\"command\": \"touch x\"}");
+    ApprovedPath path;
+
+    check_approval_gate(&config, &call, &path);
+    TEST_ASSERT_EQUAL(1, g_channel_requests);
+    approval_gate_set_callbacks(NULL);
+}
+
 void test_in_project_write_gated_without_auto_mode(void) {
     config.is_interactive = 0;
     config.auto_mode = 0;
@@ -2665,6 +2679,7 @@ int main(void) {
     RUN_TEST(test_non_read_only_shell_still_gated_without_auto_mode);
     RUN_TEST(test_dq_substitution_not_auto_allowed);
     RUN_TEST(test_read_only_skips_subagent_channel);
+    RUN_TEST(test_writing_shell_uses_subagent_channel);
     RUN_TEST(test_in_project_write_gated_without_auto_mode);
     RUN_TEST(test_in_project_write_allowed_in_auto_mode);
     RUN_TEST(test_auto_mode_loaded_from_config);
