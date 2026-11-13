@@ -193,6 +193,92 @@ void test_always_ask_flag_read_only_scope(void) {
     free_parsed_shell_command(p);
 }
 
+void test_git_grep_pager_flags_always_ask(void) {
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("git grep -Ocat foo"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("git grep -O cat foo"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG,
+                          status_of("git grep --open-files-in-pager=cat foo"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG,
+                          status_of("git grep --open-files-in-pager foo"));
+
+    /* The pager flags also stop read-only auto-approve. */
+    TEST_ASSERT_EQUAL_INT(1, always_ask("git grep -Otouch foo", 1));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("git grep -O touch foo", 1));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("git grep --open-files-in-pager=touch foo", 1));
+
+    /* An ordinary grep still saves a rule. */
+    assert_rule("git grep -n foo", 0, 2, "git", "grep");
+}
+
+void test_environment_assignment_prefix_is_unsaveable(void) {
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("CI=1 npm test"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("PATH=/tmp/bin ls"));
+    TEST_ASSERT_EQUAL_INT(0, matches("npm test", "CI=1 npm test"));
+
+    /* A command with an assignment prefix matches no rule at all. */
+    char *tokens[1] = { (char *)"CI=1" };
+    ShellRule rule = { .tokens = tokens, .count = 1, .exact = 0 };
+    ParsedShellCommand *p = parse("CI=1 python3 -c 'import os'");
+    TEST_ASSERT_EQUAL_INT(0, shell_rule_matches(&rule, p));
+    free_parsed_shell_command(p);
+}
+
+void test_interpreter_detection_uses_base_name(void) {
+    TEST_ASSERT_EQUAL_INT(0, matches("python3.12 a.py", "python3.12 b.py"));
+    TEST_ASSERT_EQUAL_INT(0, matches("/usr/bin/python3 a.py", "/usr/bin/python3 b.py"));
+    TEST_ASSERT_EQUAL_INT(0, matches(".venv/bin/python a.py", ".venv/bin/python b.py"));
+    TEST_ASSERT_EQUAL_INT(1, matches("python3.12 a.py", "python3.12 a.py -v"));
+    assert_rule("/usr/bin/python3 a.py", 1, 2, "/usr/bin/python3", "a.py");
+
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of(".venv/bin/python -c 'x'"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("/usr/bin/env python3 a.py"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("/bin/sh -c 'ls'"));
+}
+
+void test_code_running_commands_never_broaden(void) {
+    assert_rule("sed s/a/b/ f", 1, 2, "sed", "s/a/b/");
+    TEST_ASSERT_EQUAL_INT(0, matches("sed s/a/b/ f", "sed '1e touch /tmp/x' f"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("sed -n 1p f"));
+    TEST_ASSERT_EQUAL_INT(0, matches("awk '{print}' f", "awk 'BEGIN{system(1)}' f"));
+    TEST_ASSERT_EQUAL_INT(0, matches("gawk '{print}' f", "gawk 'BEGIN{system(1)}' f"));
+
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("npx prettier x"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("eval true"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("source script.sh"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of(". script.sh"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("exec ls"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("go run ./cmd"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("npm exec prettier"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("pnpm dlx prettier"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("yarn dlx prettier"));
+
+    /* Script runners that name a package script keep their subcommand rule. */
+    assert_rule("npm run build", 0, 2, "npm", "run");
+    assert_rule("npm test", 0, 2, "npm", "test");
+    assert_rule("go build ./...", 0, 2, "go", "build");
+}
+
+void test_always_ask_spelling_variants(void) {
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("git clean --force -dx"));
+    TEST_ASSERT_EQUAL_INT(0, matches("git clean -n", "git clean --force -dx"));
+
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("git push origin +main"));
+    TEST_ASSERT_EQUAL_INT(0, matches("git push origin main", "git push origin +main"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("git push origin :topic"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("git push --delete origin topic"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("git push -d origin topic"));
+
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("git branch --delete --force x"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("git branch -d -f x"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("git branch --delete -f x"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("git branch -df x"));
+
+    /* Ordinary pushes and branch reads still save a rule. */
+    assert_rule("git push origin main", 0, 2, "git", "push");
+    assert_rule("git branch -d merged", 0, 2, "git", "branch");
+    assert_rule("git push https://host/x.git main", 0, 2, "git", "push");
+}
+
 void test_status_reasons_and_labels(void) {
     TEST_ASSERT_EQUAL_STRING("writes to a file", shell_rule_status_reason(SHELL_RULE_REDIRECT));
     TEST_ASSERT_TRUE(strlen(shell_rule_status_reason(SHELL_RULE_WRAPPER)) > 0);
@@ -223,6 +309,11 @@ int main(void) {
     RUN_TEST(test_matching_ignores_flag_order_and_global_options);
     RUN_TEST(test_matching_exact_rules_uses_prefix_semantics);
     RUN_TEST(test_always_ask_flag_read_only_scope);
+    RUN_TEST(test_git_grep_pager_flags_always_ask);
+    RUN_TEST(test_environment_assignment_prefix_is_unsaveable);
+    RUN_TEST(test_interpreter_detection_uses_base_name);
+    RUN_TEST(test_code_running_commands_never_broaden);
+    RUN_TEST(test_always_ask_spelling_variants);
     RUN_TEST(test_status_reasons_and_labels);
     return UNITY_END();
 }

@@ -87,6 +87,15 @@ static const AlwaysAskFlag ALWAYS_ASK_FLAGS[] = {
     {"git", "push", "-f", 0, 0},
     {"git", "reset", "--hard", 0, 0},
     {"git", "clean", "-f", 0, 0},
+    {"git", "clean", "--force", 0, 0},
+    {"git", "push", "--delete", 0, 0},
+    {"git", "push", "-d", 0, 0},
+    /* git grep's pager flag runs its value through the shell, so it is never
+     * read-only. The other read-only git subcommands can only run a program
+     * through repo config (--ext-diff, --textconv), which needs an earlier,
+     * separately approved config write. */
+    {"git", "grep", "-O", 1, 1},
+    {"git", "grep", "--open-files-in-pager", 1, 1},
     {"git", "checkout", "--force", 0, 0},
     {"git", "checkout", "-f", 0, 0},
     {"git", "checkout", "--", 0, 0},
@@ -110,13 +119,21 @@ static const AlwaysAskFlag ALWAYS_ASK_FLAGS[] = {
  * matches by prefix, so "a" on "python foo.py" never covers "python bar.py". */
 static const char *NEVER_BROADEN[] = {
     "python", "python3", "node", "ruby", "perl", "bash", "sh", "zsh",
-    "curl", "wget", "ssh", "scp", "rm", NULL
+    "curl", "wget", "ssh", "scp", "rm",
+    /* These run a script given as their argument. */
+    "sed", "awk", "gawk", NULL
 };
 
 /* Commands that run another command: whatever they wrap is what matters, so
  * no rule can describe them. */
 static const char *WRAPPERS[] = {
-    "sudo", "env", "xargs", "nohup", "timeout", "nice", NULL
+    "sudo", "env", "xargs", "nohup", "timeout", "nice",
+    "npx", "eval", "source", ".", "exec", NULL
+};
+
+/* Subcommands that fetch or compile and then run an arbitrary program. */
+static const char *WRAPPER_SUBCOMMANDS[][2] = {
+    {"go", "run"}, {"npm", "exec"}, {"pnpm", "dlx"}, {"yarn", "dlx"}, {NULL, NULL}
 };
 
 /* Shells that run a command when given -c. */
@@ -135,6 +152,60 @@ static int in_list(const char *s, const char *const *list) {
         }
     }
     return 0;
+}
+
+/* The part after the last '/': "/usr/bin/python3" -> "python3". */
+static const char *command_base_name(const char *command) {
+    const char *slash = strrchr(command, '/');
+    return slash != NULL ? slash + 1 : command;
+}
+
+/* Classify a command by its base name, also trying the name with a trailing
+ * version suffix removed, so "/usr/bin/python3.12" counts as "python". */
+static int command_in_list(const char *command, const char *const *list) {
+    const char *name = command_base_name(command);
+    if (in_list(name, list)) {
+        return 1;
+    }
+
+    size_t len = strlen(name);
+    while (len > 1 && (isdigit((unsigned char)name[len - 1]) || name[len - 1] == '.')) {
+        len--;
+    }
+    char stripped[64];
+    if (len == strlen(name) || len >= sizeof(stripped)) {
+        return 0;
+    }
+    memcpy(stripped, name, len);
+    stripped[len] = '\0';
+    return in_list(stripped, list);
+}
+
+static int is_wrapper_subcommand(const char *command, const char *subcommand) {
+    if (subcommand == NULL) {
+        return 0;
+    }
+    const char *name = command_base_name(command);
+    for (int i = 0; WRAPPER_SUBCOMMANDS[i][0] != NULL; i++) {
+        if (strcmp(name, WRAPPER_SUBCOMMANDS[i][0]) == 0 &&
+            strcmp(subcommand, WRAPPER_SUBCOMMANDS[i][1]) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* A "NAME=value" prefix changes what the command sees (PATH, LD_PRELOAD,
+ * GIT_*) and what it therefore runs. */
+static int is_assignment(const char *t) {
+    if (!isalpha((unsigned char)t[0]) && t[0] != '_') {
+        return 0;
+    }
+    const char *p = t + 1;
+    while (isalnum((unsigned char)*p) || *p == '_') {
+        p++;
+    }
+    return *p == '=';
 }
 
 static int is_all_digits(const char *s) {
@@ -247,6 +318,62 @@ static const AlwaysAskFlag *match_always_ask(const char *command, const char *su
     return NULL;
 }
 
+/*
+ * Dangerous git operations that take more than one token to recognise: a push
+ * refspec starting with '+' force-updates and one starting with ':' deletes,
+ * and "git branch --delete --force" is "git branch -D" spelled out.
+ */
+static int git_spelling_always_ask(const ParsedShellCommand *p, const char *subcommand,
+                                   const char **out_flag) {
+    if (subcommand == NULL) {
+        return 0;
+    }
+
+    if (strcmp(subcommand, "push") == 0) {
+        for (int i = 1; i < p->token_count; i++) {
+            const char *t = p->tokens[i];
+            if (!is_option(t) && (t[0] == '+' || t[0] == ':')) {
+                if (out_flag != NULL) {
+                    *out_flag = t;
+                }
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+    if (strcmp(subcommand, "branch") == 0) {
+        const char *del = NULL;
+        const char *force = NULL;
+        for (int i = 1; i < p->token_count; i++) {
+            const char *t = p->tokens[i];
+            if (!is_option(t)) {
+                continue;
+            }
+            if (strcmp(t, "--delete") == 0) {
+                del = t;
+            } else if (strcmp(t, "--force") == 0) {
+                force = t;
+            } else if (t[1] != '-') {
+                for (const char *c = t + 1; *c != '\0'; c++) {
+                    if (*c == 'd') {
+                        del = t;
+                    } else if (*c == 'f') {
+                        force = t;
+                    }
+                }
+            }
+        }
+        if (del != NULL && force != NULL) {
+            if (out_flag != NULL) {
+                *out_flag = force;
+            }
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static int build_rule(ShellRule *out, char *const *tokens, int count, int exact) {
     out->tokens = calloc((size_t)count, sizeof(char *));
     if (out->tokens == NULL) {
@@ -321,6 +448,11 @@ int shell_has_always_ask_flag(const ParsedShellCommand *p, int for_read_only,
         }
     }
 
+    if (!for_read_only && strcmp(command, "git") == 0 &&
+        git_spelling_always_ask(p, subcommand, out_flag)) {
+        return 1;
+    }
+
     /* A global option we can't classify hides what the command really runs. */
     return !subcommand_known;
 }
@@ -345,6 +477,10 @@ ShellRuleStatus shell_rule_from_parsed(const ParsedShellCommand *p, ShellRule *o
         return SHELL_RULE_REDIRECT;
     }
 
+    if (is_assignment(p->tokens[0])) {
+        return SHELL_RULE_WRAPPER;
+    }
+
     const char *command = p->tokens[0];
     const SubcommandTool *tool = find_subcommand_tool(command);
     const char *subcommand = NULL;
@@ -366,10 +502,10 @@ ShellRuleStatus shell_rule_from_parsed(const ParsedShellCommand *p, ShellRule *o
         return SHELL_RULE_ALWAYS_ASK_FLAG;
     }
 
-    if (in_list(command, WRAPPERS)) {
+    if (command_in_list(command, WRAPPERS) || is_wrapper_subcommand(command, subcommand)) {
         return SHELL_RULE_WRAPPER;
     }
-    if (in_list(command, SHELLS)) {
+    if (command_in_list(command, SHELLS)) {
         for (int i = 1; i < p->token_count; i++) {
             const char *t = p->tokens[i];
             if (is_option(t) && t[1] != '-' && strchr(t + 1, 'c') != NULL) {
@@ -378,7 +514,7 @@ ShellRuleStatus shell_rule_from_parsed(const ParsedShellCommand *p, ShellRule *o
         }
     }
 
-    if (in_list(command, NEVER_BROADEN)) {
+    if (command_in_list(command, NEVER_BROADEN)) {
         /* The second token is what the rule pins down. An option there (python -c,
          * node -e, curl -o) carries the real payload, so no rule can cover it. */
         if (p->token_count > 1 && is_option(p->tokens[1])) {
