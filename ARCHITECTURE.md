@@ -1013,6 +1013,7 @@ graph TB
 - **Tool Review** (`lib/agent/tool_review.c/h`): Auto mode's model review, injected as `ApprovalGateCallbacks.review_tool_call`; a one-off request to the session's model carrying user messages and the call, never tool output
 - **Protected Files** (`protected_files.c/h`): Hard-block access to sensitive files
 - **Shell Parser** (`shell_parser.c/h`): Cross-platform shell command parsing (POSIX/CMD/PowerShell); `shell_split_segments()` splits POSIX chains so allowlist matching and "allow always" work per segment
+- **Shell Rules** (`shell_rules.c/h`): Rules created by "allow always" for shell calls: a rule is the command plus the subcommand for tools that have one, matched independently of flag order and global options. Holds the shared always-ask flag table (`--force`, `-delete`, `--output`, ...) that also blocks read-only auto-approve, and names the commands that can't be saved (wrappers like `sudo`/`xargs`/`bash -c`) or must not broaden (interpreters, `curl`, `rm`)
 - **Atomic File** (`atomic_file.c/h`): TOCTOU-safe file operations
 - **Subagent Approval** (`subagent_approval.c/h`): IPC-based approval proxying for child processes
 
@@ -1386,6 +1387,7 @@ lib/
 │   ├── shell_parser.c/h    # POSIX shell parsing
 │   ├── shell_parser_cmd.c  # cmd.exe parsing
 │   ├── shell_parser_ps.c   # PowerShell parsing
+│   ├── shell_rules.c/h     # "Allow always" shell rules and always-ask flags
 │   ├── atomic_file.c/h     # TOCTOU-safe file operations
 │   ├── subagent_approval.c/h # Subagent approval proxy
 │   ├── approval_errors.c   # Approval gate error formatting

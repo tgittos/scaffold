@@ -111,6 +111,7 @@ LIB_POLICY_SOURCES := \
     $(LIBDIR)/policy/shell_parser.c \
     $(LIBDIR)/policy/shell_parser_cmd.c \
     $(LIBDIR)/policy/shell_parser_ps.c \
+    $(LIBDIR)/policy/shell_rules.c \
     $(LIBDIR)/policy/path_normalize.c \
     $(LIBDIR)/policy/protected_files.c \
     $(LIBDIR)/policy/atomic_file.c \

@@ -1,0 +1,453 @@
+#include "shell_rules.h"
+
+#include <ctype.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+/* ==========================================================================
+ * Tables
+ * ========================================================================== */
+
+/* How a global option consumes the token after it. */
+typedef enum {
+    OPT_FLAG,    /* takes no value: --no-pager */
+    OPT_VALUE,   /* takes a value: -C <dir>, --git-dir=<dir> */
+    OPT_NUMBER   /* takes an optional numeric value: make -j [N] */
+} GlobalOptKind;
+
+typedef struct {
+    const char   *name;
+    GlobalOptKind kind;
+} GlobalOpt;
+
+typedef struct {
+    const char      *command;
+    const GlobalOpt *options;      /* name == NULL terminated */
+    int              assignments;  /* 1 = VAR=value before the subcommand (make) */
+} SubcommandTool;
+
+static const GlobalOpt GIT_OPTS[] = {
+    {"-C", OPT_VALUE}, {"--git-dir", OPT_VALUE}, {"--work-tree", OPT_VALUE},
+    {"--no-pager", OPT_FLAG}, {NULL, OPT_FLAG}
+};
+
+static const GlobalOpt DOCKER_OPTS[] = {
+    {"--context", OPT_VALUE}, {"-H", OPT_VALUE}, {NULL, OPT_FLAG}
+};
+
+static const GlobalOpt KUBECTL_OPTS[] = {
+    {"-n", OPT_VALUE}, {"--namespace", OPT_VALUE}, {"--context", OPT_VALUE},
+    {NULL, OPT_FLAG}
+};
+
+static const GlobalOpt MAKE_OPTS[] = {
+    {"-C", OPT_VALUE}, {"-f", OPT_VALUE}, {"-j", OPT_NUMBER}, {NULL, OPT_FLAG}
+};
+
+static const GlobalOpt NO_OPTS[] = {
+    {NULL, OPT_FLAG}
+};
+
+static const SubcommandTool SUBCOMMAND_TOOLS[] = {
+    {"git", GIT_OPTS, 0},
+    {"docker", DOCKER_OPTS, 0},
+    {"kubectl", KUBECTL_OPTS, 0},
+    {"make", MAKE_OPTS, 1},
+    {"npm", NO_OPTS, 0},
+    {"pnpm", NO_OPTS, 0},
+    {"yarn", NO_OPTS, 0},
+    {"cargo", NO_OPTS, 0},
+    {"go", NO_OPTS, 0},
+    {"brew", NO_OPTS, 0},
+    {"gh", NO_OPTS, 0},
+    {NULL, NULL, 0}
+};
+
+/*
+ * Flags that change what a command does. A segment carrying one never creates
+ * a rule and never matches one. for_read_only marks the flags that also make
+ * an otherwise read-only command able to write files or run programs.
+ */
+typedef struct {
+    const char *command;     /* NULL = any command */
+    const char *subcommand;  /* NULL = any subcommand */
+    const char *flag;
+    int         prefix;      /* 1 = match any flag starting with this */
+    int         for_read_only;
+} AlwaysAskFlag;
+
+static const AlwaysAskFlag ALWAYS_ASK_FLAGS[] = {
+    {"git", "push", "--force", 0, 0},
+    {"git", "push", "--force-with-lease", 1, 0},
+    {"git", "push", "-f", 0, 0},
+    {"git", "reset", "--hard", 0, 0},
+    {"git", "clean", "-f", 0, 0},
+    {"git", "checkout", "--force", 0, 0},
+    {"git", "checkout", "-f", 0, 0},
+    {"git", "checkout", "--", 0, 0},
+    {"git", "branch", "-D", 0, 0},
+    /* git -c and --exec-path can run arbitrary code through config and aliases. */
+    {"git", NULL, "-c", 0, 1},
+    {"git", NULL, "--exec-path", 1, 1},
+    {"sed", NULL, "-i", 1, 1},
+    /* find's actions run programs or write files; they are checked on every
+     * command so a read-only command can never smuggle one in. */
+    {NULL, NULL, "-exec", 1, 1},
+    {NULL, NULL, "-ok", 1, 1},
+    {NULL, NULL, "-delete", 0, 1},
+    {NULL, NULL, "-fprint", 1, 1},
+    {NULL, NULL, "-fls", 0, 1},
+    {NULL, NULL, "--output", 1, 1},
+    {NULL, NULL, NULL, 0, 0}
+};
+
+/* Commands whose rule must stay narrow: the rule is the first two tokens and
+ * matches by prefix, so "a" on "python foo.py" never covers "python bar.py". */
+static const char *NEVER_BROADEN[] = {
+    "python", "python3", "node", "ruby", "perl", "bash", "sh", "zsh",
+    "curl", "wget", "ssh", "scp", "rm", NULL
+};
+
+/* Commands that run another command: whatever they wrap is what matters, so
+ * no rule can describe them. */
+static const char *WRAPPERS[] = {
+    "sudo", "env", "xargs", "nohup", "timeout", "nice", NULL
+};
+
+/* Shells that run a command when given -c. */
+static const char *SHELLS[] = {
+    "bash", "sh", "zsh", NULL
+};
+
+/* ==========================================================================
+ * Helpers
+ * ========================================================================== */
+
+static int in_list(const char *s, const char *const *list) {
+    for (int i = 0; list[i] != NULL; i++) {
+        if (strcmp(s, list[i]) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int is_all_digits(const char *s) {
+    if (*s == '\0') {
+        return 0;
+    }
+    for (; *s != '\0'; s++) {
+        if (!isdigit((unsigned char)*s)) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+/* An option token: starts with '-' and is not a bare "-". */
+static int is_option(const char *t) {
+    return t[0] == '-' && t[1] != '\0';
+}
+
+/* Combined short flags like -fu, which stand for -f -u. */
+static int is_short_cluster(const char *t) {
+    return t[0] == '-' && t[1] != '-' && t[1] != '\0' && t[2] != '\0';
+}
+
+static const SubcommandTool *find_subcommand_tool(const char *command) {
+    for (int i = 0; SUBCOMMAND_TOOLS[i].command != NULL; i++) {
+        if (strcmp(command, SUBCOMMAND_TOOLS[i].command) == 0) {
+            return &SUBCOMMAND_TOOLS[i];
+        }
+    }
+    return NULL;
+}
+
+/* Matches "--name" and "--name=value". */
+static const GlobalOpt *find_global_opt(const GlobalOpt *options, const char *token) {
+    for (int i = 0; options[i].name != NULL; i++) {
+        size_t len = strlen(options[i].name);
+        if (strcmp(token, options[i].name) == 0 ||
+            (strncmp(token, options[i].name, len) == 0 && token[len] == '=')) {
+            return &options[i];
+        }
+    }
+    return NULL;
+}
+
+/*
+ * Find the subcommand, skipping the tool's known global options.
+ * Returns 0 with *out_sub set to the subcommand or NULL when there is none,
+ * or -1 with *out_detail set to an option we can't classify.
+ */
+static int resolve_subcommand(const ParsedShellCommand *p, const SubcommandTool *tool,
+                              const char **out_sub, const char **out_detail) {
+    *out_sub = NULL;
+    for (int i = 1; i < p->token_count; i++) {
+        const char *t = p->tokens[i];
+        if (strcmp(t, "--") == 0) {
+            return 0;
+        }
+        if (!is_option(t)) {
+            if (tool->assignments && strchr(t, '=') != NULL) {
+                continue;
+            }
+            *out_sub = t;
+            return 0;
+        }
+
+        const GlobalOpt *opt = find_global_opt(tool->options, t);
+        if (opt == NULL) {
+            *out_detail = t;
+            return -1;
+        }
+        int has_inline_value = strchr(t, '=') != NULL;
+        int next_is_number = i + 1 < p->token_count && is_all_digits(p->tokens[i + 1]);
+        if ((opt->kind == OPT_VALUE && !has_inline_value) ||
+            (opt->kind == OPT_NUMBER && next_is_number)) {
+            i++;
+        }
+    }
+    return 0;
+}
+
+static const AlwaysAskFlag *match_always_ask(const char *command, const char *subcommand,
+                                             const char *token, int for_read_only) {
+    for (int i = 0; ALWAYS_ASK_FLAGS[i].flag != NULL; i++) {
+        const AlwaysAskFlag *e = &ALWAYS_ASK_FLAGS[i];
+        if (for_read_only && !e->for_read_only) {
+            continue;
+        }
+        if (e->command != NULL && strcmp(e->command, command) != 0) {
+            continue;
+        }
+        if (e->subcommand != NULL &&
+            (subcommand == NULL || strcmp(e->subcommand, subcommand) != 0)) {
+            continue;
+        }
+        if (e->prefix ? strncmp(token, e->flag, strlen(e->flag)) == 0
+                      : strcmp(token, e->flag) == 0) {
+            return e;
+        }
+    }
+    return NULL;
+}
+
+static int build_rule(ShellRule *out, char *const *tokens, int count, int exact) {
+    out->tokens = calloc((size_t)count, sizeof(char *));
+    if (out->tokens == NULL) {
+        return -1;
+    }
+    for (int i = 0; i < count; i++) {
+        out->tokens[i] = strdup(tokens[i]);
+        if (out->tokens[i] == NULL) {
+            out->count = i;
+            shell_rule_free(out);
+            return -1;
+        }
+    }
+    out->count = count;
+    out->exact = exact;
+    return 0;
+}
+
+/* ==========================================================================
+ * Public API
+ * ========================================================================== */
+
+int shell_has_always_ask_flag(const ParsedShellCommand *p, int for_read_only,
+                              const char **out_flag) {
+    if (out_flag != NULL) {
+        *out_flag = NULL;
+    }
+    if (p == NULL || p->token_count < 1) {
+        return 0;
+    }
+
+    const char *command = p->tokens[0];
+    const char *subcommand = NULL;
+    const char *detail = NULL;
+    const SubcommandTool *tool = find_subcommand_tool(command);
+    if (tool != NULL) {
+        /* An unclassifiable global option leaves the subcommand unknown; the
+         * segment is unsaveable anyway, so scoped entries simply don't fire. */
+        resolve_subcommand(p, tool, &subcommand, &detail);
+    }
+
+    for (int i = 1; i < p->token_count; i++) {
+        const char *t = p->tokens[i];
+        if (!is_option(t)) {
+            continue;
+        }
+        int found = match_always_ask(command, subcommand, t, for_read_only) != NULL;
+        if (!found && is_short_cluster(t)) {
+            for (const char *c = t + 1; *c != '\0' && !found; c++) {
+                char single[3] = { '-', *c, '\0' };
+                found = match_always_ask(command, subcommand, single, for_read_only) != NULL;
+            }
+        }
+        if (found) {
+            if (out_flag != NULL) {
+                *out_flag = t;
+            }
+            return 1;
+        }
+        if (strcmp(t, "--") == 0) {
+            break; /* everything after "--" is an operand */
+        }
+    }
+    return 0;
+}
+
+ShellRuleStatus shell_rule_from_parsed(const ParsedShellCommand *p, ShellRule *out,
+                                       const char **out_detail) {
+    if (out_detail != NULL) {
+        *out_detail = NULL;
+    }
+    if (out != NULL) {
+        out->tokens = NULL;
+        out->count = 0;
+        out->exact = 0;
+    }
+    if (p == NULL || out == NULL || p->token_count < 1) {
+        return SHELL_RULE_UNSAFE_SYNTAX;
+    }
+    if (p->has_chain || p->has_pipe || p->has_subshell || p->is_dangerous) {
+        return SHELL_RULE_UNSAFE_SYNTAX;
+    }
+    if (p->has_redirect) {
+        return SHELL_RULE_REDIRECT;
+    }
+
+    const char *command = p->tokens[0];
+    const char *flag = NULL;
+    if (shell_has_always_ask_flag(p, 0, &flag)) {
+        if (out_detail != NULL) {
+            *out_detail = flag;
+        }
+        return SHELL_RULE_ALWAYS_ASK_FLAG;
+    }
+
+    if (in_list(command, WRAPPERS)) {
+        return SHELL_RULE_WRAPPER;
+    }
+    if (in_list(command, SHELLS)) {
+        for (int i = 1; i < p->token_count; i++) {
+            const char *t = p->tokens[i];
+            if (is_option(t) && t[1] != '-' && strchr(t + 1, 'c') != NULL) {
+                return SHELL_RULE_WRAPPER;
+            }
+        }
+    }
+
+    if (in_list(command, NEVER_BROADEN)) {
+        int count = p->token_count < 2 ? p->token_count : 2;
+        return build_rule(out, p->tokens, count, 1) == 0 ? SHELL_RULE_OK
+                                                         : SHELL_RULE_UNSAFE_SYNTAX;
+    }
+
+    const SubcommandTool *tool = find_subcommand_tool(command);
+    if (tool != NULL) {
+        const char *subcommand = NULL;
+        const char *detail = NULL;
+        if (resolve_subcommand(p, tool, &subcommand, &detail) != 0) {
+            if (out_detail != NULL) {
+                *out_detail = detail;
+            }
+            return SHELL_RULE_UNKNOWN_GLOBAL_OPT;
+        }
+        if (subcommand != NULL) {
+            char *tokens[2] = { (char *)command, (char *)subcommand };
+            return build_rule(out, tokens, 2, 0) == 0 ? SHELL_RULE_OK
+                                                      : SHELL_RULE_UNSAFE_SYNTAX;
+        }
+    }
+
+    return build_rule(out, p->tokens, 1, 0) == 0 ? SHELL_RULE_OK : SHELL_RULE_UNSAFE_SYNTAX;
+}
+
+int shell_rule_matches(const ShellRule *rule, const ParsedShellCommand *p) {
+    if (rule == NULL || rule->count < 1 || p == NULL) {
+        return 0;
+    }
+
+    ShellRule derived;
+    if (shell_rule_from_parsed(p, &derived, NULL) != SHELL_RULE_OK) {
+        return 0;
+    }
+
+    int ok;
+    if (rule->exact) {
+        /* Legacy prefix semantics: the rule's tokens must open the command. */
+        ok = rule->count <= p->token_count;
+        for (int i = 0; ok && i < rule->count; i++) {
+            ok = strcmp(rule->tokens[i], p->tokens[i]) == 0;
+        }
+    } else {
+        ok = rule->count == derived.count;
+        for (int i = 0; ok && i < rule->count; i++) {
+            ok = strcmp(rule->tokens[i], derived.tokens[i]) == 0;
+        }
+    }
+
+    shell_rule_free(&derived);
+    return ok;
+}
+
+const char *shell_rule_status_reason(ShellRuleStatus s) {
+    switch (s) {
+        case SHELL_RULE_UNSAFE_SYNTAX:
+            return "runs a command inside quotes or a chain";
+        case SHELL_RULE_REDIRECT:
+            return "writes to a file";
+        case SHELL_RULE_ALWAYS_ASK_FLAG:
+            return "uses an always-ask flag";
+        case SHELL_RULE_WRAPPER:
+            return "runs another command";
+        case SHELL_RULE_UNKNOWN_GLOBAL_OPT:
+            return "unrecognised option before the subcommand";
+        case SHELL_RULE_OK:
+            break;
+    }
+    return "";
+}
+
+char *shell_rule_label(const ShellRule *rule) {
+    if (rule == NULL || rule->count < 1) {
+        return NULL;
+    }
+
+    static const char *SUFFIX = " …";
+    size_t len = strlen(SUFFIX) + 1;
+    for (int i = 0; i < rule->count; i++) {
+        len += strlen(rule->tokens[i]) + (i > 0 ? 1 : 0);
+    }
+
+    char *label = malloc(len);
+    if (label == NULL) {
+        return NULL;
+    }
+    label[0] = '\0';
+    for (int i = 0; i < rule->count; i++) {
+        if (i > 0) {
+            strcat(label, " ");
+        }
+        strcat(label, rule->tokens[i]);
+    }
+    strcat(label, SUFFIX);
+    return label;
+}
+
+void shell_rule_free(ShellRule *rule) {
+    if (rule == NULL) {
+        return;
+    }
+    for (int i = 0; i < rule->count; i++) {
+        free(rule->tokens[i]);
+    }
+    free(rule->tokens);
+    rule->tokens = NULL;
+    rule->count = 0;
+    rule->exact = 0;
+}

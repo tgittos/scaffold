@@ -70,6 +70,7 @@ GATE_DEPS := \
     $(LIBDIR)/policy/shell_parser.c \
     $(LIBDIR)/policy/shell_parser_cmd.c \
     $(LIBDIR)/policy/shell_parser_ps.c \
+    $(LIBDIR)/policy/shell_rules.c \
     $(LIBDIR)/policy/subagent_approval.c \
     $(LIBDIR)/policy/tool_args.c \
     $(LIBDIR)/util/debug_output.c \
@@ -79,12 +80,13 @@ GATE_DEPS := \
     $(LIBDIR)/util/project_scope.c
 
 $(eval $(call def_test,approval_gate,policy/test_approval_gate,$(GATE_DEPS)))
-$(eval $(call def_test,auto_approve,policy/test_auto_approve,$(LIBDIR)/policy/auto_approve.c $(LIBDIR)/policy/protected_files.c $(LIBDIR)/policy/path_normalize.c $(LIBDIR)/policy/shell_parser.c $(LIBDIR)/policy/shell_parser_cmd.c $(LIBDIR)/policy/shell_parser_ps.c $(LIBDIR)/policy/tool_args.c $(LIBDIR)/util/project_scope.c $(LIBDIR)/util/app_home.c))
+$(eval $(call def_test,auto_approve,policy/test_auto_approve,$(LIBDIR)/policy/auto_approve.c $(LIBDIR)/policy/protected_files.c $(LIBDIR)/policy/path_normalize.c $(LIBDIR)/policy/shell_parser.c $(LIBDIR)/policy/shell_parser_cmd.c $(LIBDIR)/policy/shell_parser_ps.c $(LIBDIR)/policy/shell_rules.c $(LIBDIR)/policy/tool_args.c $(LIBDIR)/util/project_scope.c $(LIBDIR)/util/app_home.c))
 $(eval $(call def_test,atomic_file,policy/test_atomic_file,$(LIBDIR)/policy/atomic_file.c))
 $(eval $(call def_test,path_normalize,policy/test_path_normalize,$(LIBDIR)/policy/path_normalize.c))
 $(eval $(call def_test,verified_file_context,test_verified_file_context,$(LIBDIR)/policy/verified_file_context.c $(LIBDIR)/policy/atomic_file.c $(LIBDIR)/policy/path_normalize.c))
 $(eval $(call def_test,protected_files,policy/test_protected_files,$(LIBDIR)/policy/protected_files.c $(LIBDIR)/policy/path_normalize.c $(LIBDIR)/util/app_home.c))
 $(eval $(call def_test,shell_parser,policy/test_shell_parser,$(LIBDIR)/policy/shell_parser.c $(LIBDIR)/policy/shell_parser_cmd.c $(LIBDIR)/policy/shell_parser_ps.c))
+$(eval $(call def_test,shell_rules,policy/test_shell_rules,$(LIBDIR)/policy/shell_rules.c $(LIBDIR)/policy/shell_parser.c $(LIBDIR)/policy/shell_parser_cmd.c $(LIBDIR)/policy/shell_parser_ps.c))
 $(eval $(call def_test,shell_parser_cmd,policy/test_shell_parser_cmd,$(LIBDIR)/policy/shell_parser_cmd.c $(LIBDIR)/policy/shell_parser.c $(LIBDIR)/policy/shell_parser_ps.c))
 $(eval $(call def_test,shell_parser_ps,policy/test_shell_parser_ps,$(LIBDIR)/policy/shell_parser_ps.c $(LIBDIR)/policy/shell_parser.c $(LIBDIR)/policy/shell_parser_cmd.c))
 $(eval $(call def_test,subagent_approval,policy/test_subagent_approval,$(GATE_DEPS)))
@@ -173,6 +175,9 @@ $(TEST_verified_file_context_TARGET): $(TEST_verified_file_context_OBJECTS)
 
 $(TEST_shell_parser_TARGET): $(TEST_shell_parser_OBJECTS)
 	$(CC) -o $@ $(TEST_shell_parser_OBJECTS)
+
+$(TEST_shell_rules_TARGET): $(TEST_shell_rules_OBJECTS)
+	$(CC) -o $@ $(TEST_shell_rules_OBJECTS)
 
 $(TEST_shell_parser_cmd_TARGET): $(TEST_shell_parser_cmd_OBJECTS)
 	$(CC) -o $@ $(TEST_shell_parser_cmd_OBJECTS)

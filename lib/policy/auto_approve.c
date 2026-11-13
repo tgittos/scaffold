@@ -1,6 +1,7 @@
 #include "auto_approve.h"
 #include "protected_files.h"
 #include "shell_parser.h"
+#include "shell_rules.h"
 #include "tool_args.h"
 #include "../util/project_scope.h"
 
@@ -21,11 +22,6 @@ static const char *READ_ONLY_GIT_SUBCOMMANDS[] = {
     "blame", "diff", "grep", "log", "ls-files", "rev-parse", "show", "status", NULL
 };
 
-/* Flags that make an otherwise read-only command run programs or write files. */
-static const char *WRITING_FLAG_PREFIXES[] = {
-    "-exec", "-ok", "-delete", "-fprint", "-fls", "--output", NULL
-};
-
 static const char *PATCH_PATH_PREFIXES[] = {
     "*** Update File: ", "*** Add File: ", "*** Delete File: ", "*** Move to: ", NULL
 };
@@ -33,15 +29,6 @@ static const char *PATCH_PATH_PREFIXES[] = {
 static int in_list(const char *s, const char *const *list) {
     for (int i = 0; list[i] != NULL; i++) {
         if (strcmp(s, list[i]) == 0) {
-            return 1;
-        }
-    }
-    return 0;
-}
-
-static int has_listed_prefix(const char *s, const char *const *prefixes) {
-    for (int i = 0; prefixes[i] != NULL; i++) {
-        if (strncmp(s, prefixes[i], strlen(prefixes[i])) == 0) {
             return 1;
         }
     }
@@ -111,8 +98,8 @@ static int segment_is_read_only(const char *segment) {
         ok = parsed->token_count >= 2 &&
              in_list(parsed->tokens[1], READ_ONLY_GIT_SUBCOMMANDS);
     }
-    for (int i = 1; ok && i < parsed->token_count; i++) {
-        ok = !has_listed_prefix(parsed->tokens[i], WRITING_FLAG_PREFIXES);
+    if (ok) {
+        ok = !shell_has_always_ask_flag(parsed, 1, NULL);
     }
 
     free_parsed_shell_command(parsed);
