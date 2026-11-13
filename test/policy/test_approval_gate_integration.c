@@ -56,7 +56,7 @@ void test_non_interactive_denies_gated_operations(void) {
     ToolCall tool_call = {0};
     tool_call.id = "call_001";
     tool_call.name = "shell";
-    tool_call.arguments = "{\"command\": \"ls -la\"}";
+    tool_call.arguments = "{\"command\": \"touch x\"}";
 
     ApprovedPath path = {0};
 

@@ -1156,9 +1156,6 @@ done:
 }
 
 static int auto_review_allows(const ToolCall *tool_call, char **out_reason) {
-    if (auto_approve_without_review(tool_call)) {
-        return 1;
-    }
     if (g_gate_callbacks.review_tool_call == NULL) {
         return 0;
     }
@@ -1197,6 +1194,10 @@ ApprovalResult check_approval_gate(ApprovalGateConfig *config,
 
         case 1:
             {
+                if (auto_approve_without_review(tool_call)) {
+                    return APPROVAL_ALLOWED;
+                }
+
                 /* Subagents request approval from parent via IPC instead of prompting */
                 ApprovalChannel *channel = g_gate_callbacks.get_approval_channel
                                          ? g_gate_callbacks.get_approval_channel()

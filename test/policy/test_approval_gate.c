@@ -2129,7 +2129,7 @@ void test_check_approval_gate_non_interactive_gated_category(void) {
     ToolCall call = {
         .id = "call_1",
         .name = "shell",
-        .arguments = "{\"command\": \"ls\"}"
+        .arguments = "{\"command\": \"touch x\"}"
     };
 
     ApprovedPath path;
@@ -2203,6 +2203,58 @@ void test_review_skipped_outside_auto_mode(void) {
 
     TEST_ASSERT_EQUAL(APPROVAL_NON_INTERACTIVE_DENIED, check_approval_gate(&config, &call, &path));
     TEST_ASSERT_EQUAL(0, g_review_calls);
+    approval_gate_set_callbacks(NULL);
+}
+
+static ApprovalChannel g_dummy_channel = { .request_fd = -1, .response_fd = -1, .subagent_pid = 0 };
+static int g_channel_requests;
+
+static ApprovalChannel *stub_channel(void) {
+    g_channel_requests++;
+    return &g_dummy_channel;
+}
+
+void test_read_only_shell_allowed_without_auto_mode(void) {
+    config.is_interactive = 0;
+    config.auto_mode = 0;
+
+    ToolCall call = shell_call("{\"command\": \"grep foo x\"}");
+    ApprovedPath path;
+
+    TEST_ASSERT_EQUAL(APPROVAL_ALLOWED, check_approval_gate(&config, &call, &path));
+}
+
+void test_non_read_only_shell_still_gated_without_auto_mode(void) {
+    config.is_interactive = 0;
+    config.auto_mode = 0;
+
+    ToolCall call = shell_call("{\"command\": \"touch x\"}");
+    ApprovedPath path;
+
+    TEST_ASSERT_EQUAL(APPROVAL_NON_INTERACTIVE_DENIED, check_approval_gate(&config, &call, &path));
+}
+
+void test_dq_substitution_not_auto_allowed(void) {
+    config.is_interactive = 0;
+    config.auto_mode = 0;
+
+    ToolCall call = shell_call("{\"command\": \"echo \\\"$(touch x)\\\"\"}");
+    ApprovedPath path;
+
+    TEST_ASSERT_EQUAL(APPROVAL_NON_INTERACTIVE_DENIED, check_approval_gate(&config, &call, &path));
+}
+
+void test_read_only_skips_subagent_channel(void) {
+    ApprovalGateCallbacks cbs = { .get_approval_channel = stub_channel };
+    approval_gate_set_callbacks(&cbs);
+    g_channel_requests = 0;
+    config.is_interactive = 0;
+
+    ToolCall call = shell_call("{\"command\": \"grep foo x\"}");
+    ApprovedPath path;
+
+    TEST_ASSERT_EQUAL(APPROVAL_ALLOWED, check_approval_gate(&config, &call, &path));
+    TEST_ASSERT_EQUAL(0, g_channel_requests);
     approval_gate_set_callbacks(NULL);
 }
 
@@ -2451,6 +2503,10 @@ int main(void) {
     RUN_TEST(test_auto_mode_runs_call_the_review_allows);
     RUN_TEST(test_auto_mode_escalates_call_the_review_rejects);
     RUN_TEST(test_review_skipped_outside_auto_mode);
+    RUN_TEST(test_read_only_shell_allowed_without_auto_mode);
+    RUN_TEST(test_non_read_only_shell_still_gated_without_auto_mode);
+    RUN_TEST(test_dq_substitution_not_auto_allowed);
+    RUN_TEST(test_read_only_skips_subagent_channel);
     RUN_TEST(test_auto_mode_loaded_from_config);
     RUN_TEST(test_check_approval_gate_non_interactive_allowed_category);
     RUN_TEST(test_check_approval_gate_non_interactive_allow_category_override);
