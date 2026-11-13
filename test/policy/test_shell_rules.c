@@ -109,7 +109,17 @@ void test_always_ask_flags_block_rules(void) {
 
 void test_tokens_after_double_dash_are_operands(void) {
     assert_rule("git push origin main -- -f", 0, 2, "git", "push");
-    assert_rule("grep -rn foo -- --output", 0, 1, "grep");
+    /* Flags that write or run programs are the exception: see
+     * test_always_ask_flag_read_only_scope. */
+    assert_rule("grep -rn foo -- -f", 0, 1, "grep");
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("grep -rn foo -- --output"));
+}
+
+void test_never_broaden_commands_with_option_payloads_are_unsaveable(void) {
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("python -c 'x'"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("node -e 'x'"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("curl -o f url"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("rm -f x"));
 }
 
 void test_never_broaden_commands_keep_two_token_rules(void) {
@@ -161,10 +171,25 @@ void test_always_ask_flag_read_only_scope(void) {
     TEST_ASSERT_EQUAL_INT(1, always_ask("git push -f", 0));
     TEST_ASSERT_EQUAL_INT(0, always_ask("find . -name '*.c'", 1));
 
+    /* Actions that write or run still act after "--"; git's flags don't. */
+    TEST_ASSERT_EQUAL_INT(1, always_ask("find . -- -delete", 1));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("find . -- -fls out", 1));
+    TEST_ASSERT_EQUAL_INT(0, always_ask("git push origin main -- -f", 0));
+
+    /* An unclassifiable global option hides the subcommand: fail closed. */
+    TEST_ASSERT_EQUAL_INT(1, always_ask("git --weird x push -f", 0));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("git --weird x status", 0));
+
     const char *flag = NULL;
     ParsedShellCommand *p = parse("find . -fprintf out");
     TEST_ASSERT_EQUAL_INT(1, shell_has_always_ask_flag(p, 1, &flag));
     TEST_ASSERT_EQUAL_STRING("-fprintf", flag);
+    free_parsed_shell_command(p);
+
+    /* A cluster reports the single offending flag, not the whole cluster. */
+    p = parse("git push -fu origin main");
+    TEST_ASSERT_EQUAL_INT(1, shell_has_always_ask_flag(p, 0, &flag));
+    TEST_ASSERT_EQUAL_STRING("-f", flag);
     free_parsed_shell_command(p);
 }
 
@@ -192,6 +217,7 @@ int main(void) {
     RUN_TEST(test_always_ask_flags_block_rules);
     RUN_TEST(test_tokens_after_double_dash_are_operands);
     RUN_TEST(test_never_broaden_commands_keep_two_token_rules);
+    RUN_TEST(test_never_broaden_commands_with_option_payloads_are_unsaveable);
     RUN_TEST(test_wrappers_are_unsaveable);
     RUN_TEST(test_unsafe_syntax_and_redirects);
     RUN_TEST(test_matching_ignores_flag_order_and_global_options);

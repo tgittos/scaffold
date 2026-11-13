@@ -29,7 +29,11 @@ typedef struct {
 
 static const GlobalOpt GIT_OPTS[] = {
     {"-C", OPT_VALUE}, {"--git-dir", OPT_VALUE}, {"--work-tree", OPT_VALUE},
-    {"--no-pager", OPT_FLAG}, {NULL, OPT_FLAG}
+    {"--no-pager", OPT_FLAG},
+    /* Known, but always-ask: they can run arbitrary code. Listed so the
+     * subcommand still resolves and the flag check names the real offender. */
+    {"-c", OPT_VALUE}, {"--exec-path", OPT_FLAG},
+    {NULL, OPT_FLAG}
 };
 
 static const GlobalOpt DOCKER_OPTS[] = {
@@ -95,9 +99,9 @@ static const AlwaysAskFlag ALWAYS_ASK_FLAGS[] = {
      * command so a read-only command can never smuggle one in. */
     {NULL, NULL, "-exec", 1, 1},
     {NULL, NULL, "-ok", 1, 1},
-    {NULL, NULL, "-delete", 0, 1},
+    {NULL, NULL, "-delete", 1, 1},
     {NULL, NULL, "-fprint", 1, 1},
-    {NULL, NULL, "-fls", 0, 1},
+    {NULL, NULL, "-fls", 1, 1},
     {NULL, NULL, "--output", 1, 1},
     {NULL, NULL, NULL, 0, 0}
 };
@@ -212,8 +216,17 @@ static int resolve_subcommand(const ParsedShellCommand *p, const SubcommandTool 
     return 0;
 }
 
+/*
+ * Find the always-ask entry a token matches.
+ *
+ * for_read_only limits the search to entries that also make a read-only command
+ * unsafe. subcommand_known == 0 means a global option left the subcommand
+ * unresolved: scoped entries then match any subcommand, so the check fails
+ * closed instead of waving a flag through.
+ */
 static const AlwaysAskFlag *match_always_ask(const char *command, const char *subcommand,
-                                             const char *token, int for_read_only) {
+                                             int subcommand_known, const char *token,
+                                             int for_read_only) {
     for (int i = 0; ALWAYS_ASK_FLAGS[i].flag != NULL; i++) {
         const AlwaysAskFlag *e = &ALWAYS_ASK_FLAGS[i];
         if (for_read_only && !e->for_read_only) {
@@ -222,7 +235,7 @@ static const AlwaysAskFlag *match_always_ask(const char *command, const char *su
         if (e->command != NULL && strcmp(e->command, command) != 0) {
             continue;
         }
-        if (e->subcommand != NULL &&
+        if (e->subcommand != NULL && subcommand_known &&
             (subcommand == NULL || strcmp(e->subcommand, subcommand) != 0)) {
             continue;
         }
@@ -268,36 +281,48 @@ int shell_has_always_ask_flag(const ParsedShellCommand *p, int for_read_only,
     const char *command = p->tokens[0];
     const char *subcommand = NULL;
     const char *detail = NULL;
+    int subcommand_known = 1;
     const SubcommandTool *tool = find_subcommand_tool(command);
     if (tool != NULL) {
-        /* An unclassifiable global option leaves the subcommand unknown; the
-         * segment is unsaveable anyway, so scoped entries simply don't fire. */
-        resolve_subcommand(p, tool, &subcommand, &detail);
+        subcommand_known = resolve_subcommand(p, tool, &subcommand, &detail) == 0;
     }
+
+    /* Flags that write files or run programs (find's actions, sed -i, --output)
+     * are honoured wherever they appear: a command can place them after "--"
+     * and they still act. Only the git-style flags stop at "--", where they
+     * really are operands. */
+    int operands_only = 0;
 
     for (int i = 1; i < p->token_count; i++) {
         const char *t = p->tokens[i];
         if (!is_option(t)) {
             continue;
         }
-        int found = match_always_ask(command, subcommand, t, for_read_only) != NULL;
-        if (!found && is_short_cluster(t)) {
-            for (const char *c = t + 1; *c != '\0' && !found; c++) {
+        int read_only_scope = for_read_only || operands_only;
+        const AlwaysAskFlag *hit =
+            match_always_ask(command, subcommand, subcommand_known, t, read_only_scope);
+        const char *offender = t;
+        if (hit == NULL && is_short_cluster(t)) {
+            for (const char *c = t + 1; *c != '\0' && hit == NULL; c++) {
                 char single[3] = { '-', *c, '\0' };
-                found = match_always_ask(command, subcommand, single, for_read_only) != NULL;
+                hit = match_always_ask(command, subcommand, subcommand_known, single,
+                                       read_only_scope);
+                offender = hit != NULL ? hit->flag : t;
             }
         }
-        if (found) {
+        if (hit != NULL) {
             if (out_flag != NULL) {
-                *out_flag = t;
+                *out_flag = offender;
             }
             return 1;
         }
         if (strcmp(t, "--") == 0) {
-            break; /* everything after "--" is an operand */
+            operands_only = 1;
         }
     }
-    return 0;
+
+    /* A global option we can't classify hides what the command really runs. */
+    return !subcommand_known;
 }
 
 ShellRuleStatus shell_rule_from_parsed(const ParsedShellCommand *p, ShellRule *out,
@@ -321,6 +346,18 @@ ShellRuleStatus shell_rule_from_parsed(const ParsedShellCommand *p, ShellRule *o
     }
 
     const char *command = p->tokens[0];
+    const SubcommandTool *tool = find_subcommand_tool(command);
+    const char *subcommand = NULL;
+    if (tool != NULL) {
+        const char *detail = NULL;
+        if (resolve_subcommand(p, tool, &subcommand, &detail) != 0) {
+            if (out_detail != NULL) {
+                *out_detail = detail;
+            }
+            return SHELL_RULE_UNKNOWN_GLOBAL_OPT;
+        }
+    }
+
     const char *flag = NULL;
     if (shell_has_always_ask_flag(p, 0, &flag)) {
         if (out_detail != NULL) {
@@ -342,26 +379,20 @@ ShellRuleStatus shell_rule_from_parsed(const ParsedShellCommand *p, ShellRule *o
     }
 
     if (in_list(command, NEVER_BROADEN)) {
+        /* The second token is what the rule pins down. An option there (python -c,
+         * node -e, curl -o) carries the real payload, so no rule can cover it. */
+        if (p->token_count > 1 && is_option(p->tokens[1])) {
+            return SHELL_RULE_WRAPPER;
+        }
         int count = p->token_count < 2 ? p->token_count : 2;
         return build_rule(out, p->tokens, count, 1) == 0 ? SHELL_RULE_OK
                                                          : SHELL_RULE_UNSAFE_SYNTAX;
     }
 
-    const SubcommandTool *tool = find_subcommand_tool(command);
-    if (tool != NULL) {
-        const char *subcommand = NULL;
-        const char *detail = NULL;
-        if (resolve_subcommand(p, tool, &subcommand, &detail) != 0) {
-            if (out_detail != NULL) {
-                *out_detail = detail;
-            }
-            return SHELL_RULE_UNKNOWN_GLOBAL_OPT;
-        }
-        if (subcommand != NULL) {
-            char *tokens[2] = { (char *)command, (char *)subcommand };
-            return build_rule(out, tokens, 2, 0) == 0 ? SHELL_RULE_OK
-                                                      : SHELL_RULE_UNSAFE_SYNTAX;
-        }
+    if (subcommand != NULL) {
+        char *tokens[2] = { (char *)command, (char *)subcommand };
+        return build_rule(out, tokens, 2, 0) == 0 ? SHELL_RULE_OK
+                                                  : SHELL_RULE_UNSAFE_SYNTAX;
     }
 
     return build_rule(out, p->tokens, 1, 0) == 0 ? SHELL_RULE_OK : SHELL_RULE_UNSAFE_SYNTAX;
