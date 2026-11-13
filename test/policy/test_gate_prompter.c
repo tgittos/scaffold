@@ -100,6 +100,20 @@ void test_gate_prompter_hint_without_label_hides_always(void) {
     TEST_ASSERT_NULL(strstr(buf, "a ="));
 }
 
+void test_gate_prompter_hint_truncates_long_label_to_80_columns(void) {
+    char buf[256];
+    gate_prompter_format_hint(buf, sizeof(buf),
+        "git show …, grep …, head …, sort …, uniq …, wc …, cat …, ls …, find …");
+    size_t chars = 0;
+    for (const unsigned char *c = (const unsigned char *)buf; *c; c++) {
+        if ((*c & 0xC0) != 0x80) chars++;
+    }
+    TEST_ASSERT_TRUE(chars <= 80);
+    size_t len = strlen(buf);
+    TEST_ASSERT_TRUE(len > 5);
+    TEST_ASSERT_EQUAL_STRING("…\")", buf + len - strlen("…\")"));
+}
+
 /* =============================================================================
  * show_details Tests
  * ========================================================================== */
@@ -234,6 +248,7 @@ int main(void) {
     RUN_TEST(test_gate_prompter_show_single_null_tool_call_is_safe);
     RUN_TEST(test_gate_prompter_hint_with_label_offers_always);
     RUN_TEST(test_gate_prompter_hint_without_label_hides_always);
+    RUN_TEST(test_gate_prompter_hint_truncates_long_label_to_80_columns);
 
     /* show_details tests */
     RUN_TEST(test_gate_prompter_show_details_null_prompter_is_safe);

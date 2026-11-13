@@ -403,6 +403,27 @@ int approval_gate_allow_always_ex(ApprovalGateConfig *config,
  */
 int approval_gate_preview_always(const ToolCall *tool_call, char **out_label);
 
+/** What a keypress at the single-call approval prompt means. */
+typedef enum {
+    APPROVAL_KEY_YES,
+    APPROVAL_KEY_NO,
+    APPROVAL_KEY_ALWAYS,
+    APPROVAL_KEY_DETAILS,
+    APPROVAL_KEY_ABORT,
+    APPROVAL_KEY_INVALID
+} ApprovalKey;
+
+/**
+ * Classify a keypress. "a" is only valid when the prompt offers it.
+ *
+ * @param key The key read (case-insensitive for letters)
+ * @param can_always 1 if "a" is offered, 0 if hidden
+ */
+ApprovalKey approval_gate_classify_key(int key, int can_always);
+
+/** Message shown for an invalid key; mentions "a" only when it is offered. */
+const char *approval_gate_invalid_input_message(int can_always);
+
 /**
  * Build the line telling the user what "a" did.
  *

@@ -1095,6 +1095,24 @@ int approval_gate_preview_always(const ToolCall *tool_call, char **out_label) {
     return saveable;
 }
 
+ApprovalKey approval_gate_classify_key(int key, int can_always) {
+    switch (tolower(key)) {
+        case 'y': return APPROVAL_KEY_YES;
+        case 'n': return APPROVAL_KEY_NO;
+        case 'a': return can_always ? APPROVAL_KEY_ALWAYS : APPROVAL_KEY_INVALID;
+        case '?': return APPROVAL_KEY_DETAILS;
+        case 3:   /* Ctrl+C */
+        case 4:   /* Ctrl+D */
+            return APPROVAL_KEY_ABORT;
+        default:  return APPROVAL_KEY_INVALID;
+    }
+}
+
+const char *approval_gate_invalid_input_message(int can_always) {
+    return can_always ? "Invalid input. Press y, n, a, or ? for details."
+                      : "Invalid input. Press y, n, or ? for details.";
+}
+
 char *approval_gate_format_saved_line(const char *saved, const char *unsaved) {
     if (saved == NULL && unsaved == NULL) {
         return NULL;
@@ -1397,21 +1415,17 @@ ApprovalResult approval_gate_prompt(ApprovalGateConfig *config,
             break;
         }
 
-        switch (tolower(response)) {
-            case 'y':
+        switch (approval_gate_classify_key(response, can_always)) {
+            case APPROVAL_KEY_YES:
                 reset_denial_tracker(config, tool_call->name);
                 result = APPROVAL_ALLOWED;
                 goto done;
 
-            case 'n':
+            case APPROVAL_KEY_NO:
                 result = APPROVAL_DENIED;
                 goto done;
 
-            case 'a': {
-                if (!can_always) {
-                    fprintf(stderr, "Invalid input. Press y, n, or ? for details.\n");
-                    continue;
-                }
+            case APPROVAL_KEY_ALWAYS: {
                 reset_denial_tracker(config, tool_call->name);
                 AllowAlwaysSummary summary = {0};
                 approval_gate_allow_always_ex(config, tool_call, &summary);
@@ -1426,7 +1440,7 @@ ApprovalResult approval_gate_prompt(ApprovalGateConfig *config,
                 goto done;
             }
 
-            case '?': {
+            case APPROVAL_KEY_DETAILS: {
                 char *resolved = out_path ? out_path->resolved_path : NULL;
                 int path_exists = out_path ? out_path->existed : 0;
                 gate_prompter_show_details(gp, tool_call, resolved, path_exists);
@@ -1434,13 +1448,13 @@ ApprovalResult approval_gate_prompt(ApprovalGateConfig *config,
                 continue;
             }
 
-            case 3: /* Ctrl+C */
-            case 4: /* Ctrl+D */
+            case APPROVAL_KEY_ABORT:
                 result = APPROVAL_ABORTED;
                 goto done;
 
+            case APPROVAL_KEY_INVALID:
             default:
-                fprintf(stderr, "Invalid input. Press y, n, a, or ? for details.\n");
+                fprintf(stderr, "%s\n", approval_gate_invalid_input_message(can_always));
                 continue;
         }
     }

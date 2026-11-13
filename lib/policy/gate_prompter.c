@@ -251,7 +251,27 @@ void gate_prompter_format_hint(char *buf, size_t size, const char *always_label)
     if (always_label == NULL) {
         snprintf(buf, size, "Allow? [y/n/?]");
     } else {
-        snprintf(buf, size, "Allow? [y/n/?] (a = always allow \"%.120s\")", always_label);
+        /* The prompt line must fit in 80 columns: 5 for "  └─ ", 1 trailing
+         * space, 35 of fixed hint text and 2 of closing quote and paren. */
+        enum { MAX_LABEL_CHARS = 80 - 6 - 35 - 2 };
+        size_t chars = 0;
+        const char *p = always_label;
+        const char *cut = always_label;
+        for (; *p; p++) {
+            if (((unsigned char)*p & 0xC0) == 0x80) {
+                continue;
+            }
+            if (chars == MAX_LABEL_CHARS - 1) {
+                cut = p;
+            }
+            chars++;
+        }
+        if (chars <= MAX_LABEL_CHARS) {
+            snprintf(buf, size, "Allow? [y/n/?] (a = always allow \"%s\")", always_label);
+        } else {
+            snprintf(buf, size, "Allow? [y/n/?] (a = always allow \"%.*s…\")",
+                     (int)(cut - always_label), always_label);
+        }
     }
 }
 

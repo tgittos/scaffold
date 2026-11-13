@@ -1397,6 +1397,30 @@ void test_allow_always_refuses_command_that_runs_another_command(void) {
     TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &wrapped));
 }
 
+void test_classify_key_always_requires_saveable(void) {
+    TEST_ASSERT_EQUAL(APPROVAL_KEY_ALWAYS, approval_gate_classify_key('a', 1));
+    TEST_ASSERT_EQUAL(APPROVAL_KEY_ALWAYS, approval_gate_classify_key('A', 1));
+    TEST_ASSERT_EQUAL(APPROVAL_KEY_INVALID, approval_gate_classify_key('a', 0));
+}
+
+void test_classify_key_other_keys_unaffected(void) {
+    for (int can = 0; can <= 1; can++) {
+        TEST_ASSERT_EQUAL(APPROVAL_KEY_YES, approval_gate_classify_key('y', can));
+        TEST_ASSERT_EQUAL(APPROVAL_KEY_NO, approval_gate_classify_key('n', can));
+        TEST_ASSERT_EQUAL(APPROVAL_KEY_DETAILS, approval_gate_classify_key('?', can));
+        TEST_ASSERT_EQUAL(APPROVAL_KEY_ABORT, approval_gate_classify_key(3, can));
+        TEST_ASSERT_EQUAL(APPROVAL_KEY_ABORT, approval_gate_classify_key(4, can));
+        TEST_ASSERT_EQUAL(APPROVAL_KEY_INVALID, approval_gate_classify_key('x', can));
+    }
+}
+
+void test_invalid_input_message_mentions_a_only_when_offered(void) {
+    TEST_ASSERT_EQUAL_STRING("Invalid input. Press y, n, a, or ? for details.",
+                             approval_gate_invalid_input_message(1));
+    TEST_ASSERT_EQUAL_STRING("Invalid input. Press y, n, or ? for details.",
+                             approval_gate_invalid_input_message(0));
+}
+
 void test_saved_line_full_save(void) {
     char *line = approval_gate_format_saved_line("grep, head", NULL);
     TEST_ASSERT_EQUAL_STRING("Saved: grep, head.", line);
@@ -2565,6 +2589,9 @@ int main(void) {
     RUN_TEST(test_preview_always_labels_the_rule_it_would_save);
     RUN_TEST(test_shell_allowlist_config_rules_keep_prefix_semantics);
     RUN_TEST(test_allow_always_stores_non_shell_pattern);
+    RUN_TEST(test_classify_key_always_requires_saveable);
+    RUN_TEST(test_classify_key_other_keys_unaffected);
+    RUN_TEST(test_invalid_input_message_mentions_a_only_when_offered);
     RUN_TEST(test_saved_line_full_save);
     RUN_TEST(test_saved_line_partial_save);
     RUN_TEST(test_saved_line_nothing_to_say_is_null);
