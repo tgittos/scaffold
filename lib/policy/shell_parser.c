@@ -671,6 +671,16 @@ static int split_posix_segments(const char *command, TokenList *segments) {
         char c = *p;
         int quoted = in_single || in_double;
 
+        /* "&>/dev/null" merges both streams into the void: harmless, and not
+         * a background "&". Other "&>" targets fall through and stay unsafe. */
+        if (c == '&' && p[1] == '>' && !quoted) {
+            size_t skip = non_writing_redirect_len(p + 1);
+            if (skip > 0) {
+                p += 1 + skip;
+                continue;
+            }
+        }
+
         if (c == '\0' || (!quoted && (c == ';' || c == '|' || c == '&' || c == '\n'))) {
             if (c == '&' && p[1] != '&') {
                 rc = -1;

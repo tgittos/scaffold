@@ -102,6 +102,15 @@ static int segment_is_read_only(const char *segment) {
         ok = !shell_has_always_ask_flag(parsed, 1, NULL);
     }
 
+    /* Reading a protected file is not harmless: its contents would reach the
+     * model with no approval. The segment prompts, it isn't blocked. */
+    for (int i = 1; ok && i < parsed->token_count; i++) {
+        const char *t = parsed->tokens[i];
+        if (t[0] != '-' && is_protected_file(t)) {
+            ok = 0;
+        }
+    }
+
     free_parsed_shell_command(parsed);
     return ok;
 }

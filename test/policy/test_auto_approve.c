@@ -43,6 +43,13 @@ static int approve_shell(const char *command) {
     return auto_approve_without_review(&call);
 }
 
+static int read_only_shell(const char *command) {
+    char args[1024];
+    snprintf(args, sizeof(args), "{\"command\": \"%s\"}", command);
+    ToolCall call = { .id = "c", .name = "shell", .arguments = args };
+    return auto_approve_read_only_shell(&call);
+}
+
 static int approve_write(const char *path) {
     char args[1024];
     snprintf(args, sizeof(args), "{\"path\": \"%s\", \"content\": \"x\"}", path);
@@ -143,6 +150,31 @@ void test_patch_touching_outside_file_needs_review(void) {
     TEST_ASSERT_EQUAL_INT(0, approve_patch("*** Begin Patch\\n*** End Patch"));
 }
 
+void test_git_grep_pager_needs_review(void) {
+    TEST_ASSERT_EQUAL_INT(0, approve_shell("git grep -Ocat foo"));
+    TEST_ASSERT_EQUAL_INT(0, approve_shell("git grep -O cat foo"));
+    TEST_ASSERT_EQUAL_INT(0, approve_shell("git grep --open-files-in-pager=cat foo"));
+    TEST_ASSERT_EQUAL_INT(0, read_only_shell("git grep -Ocat foo"));
+    TEST_ASSERT_EQUAL_INT(0, read_only_shell("git grep -O cat foo"));
+    TEST_ASSERT_EQUAL_INT(0, read_only_shell("git grep --open-files-in-pager=cat foo"));
+    TEST_ASSERT_EQUAL_INT(1, approve_shell("git grep -n foo"));
+}
+
+void test_protected_file_operand_needs_review(void) {
+    TEST_ASSERT_EQUAL_INT(0, approve_shell("cat .env"));
+    TEST_ASSERT_EQUAL_INT(0, read_only_shell("cat .env"));
+    TEST_ASSERT_EQUAL_INT(0, approve_shell("grep -rn KEY .env.local"));
+    TEST_ASSERT_EQUAL_INT(0, approve_shell("cat src/../.env"));
+    TEST_ASSERT_EQUAL_INT(1, approve_shell("cat README.md"));
+}
+
+void test_merged_null_redirect_approved(void) {
+    TEST_ASSERT_EQUAL_INT(1, approve_shell("ls &>/dev/null"));
+    TEST_ASSERT_EQUAL_INT(1, approve_shell("ls &> /dev/null"));
+    TEST_ASSERT_EQUAL_INT(0, approve_shell("ls & rm x"));
+    TEST_ASSERT_EQUAL_INT(0, approve_shell("ls &> out"));
+}
+
 void test_other_tools_need_review(void) {
     ToolCall fetch = { .id = "c", .name = "web_fetch", .arguments = "{\"url\": \"https://x\"}" };
     TEST_ASSERT_EQUAL_INT(0, auto_approve_without_review(&fetch));
@@ -161,6 +193,9 @@ int main(void) {
     RUN_TEST(test_write_without_git_project_needs_review);
     RUN_TEST(test_patch_inside_project_approved);
     RUN_TEST(test_patch_touching_outside_file_needs_review);
+    RUN_TEST(test_git_grep_pager_needs_review);
+    RUN_TEST(test_protected_file_operand_needs_review);
+    RUN_TEST(test_merged_null_redirect_approved);
     RUN_TEST(test_other_tools_need_review);
     return UNITY_END();
 }
