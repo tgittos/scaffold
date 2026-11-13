@@ -353,12 +353,13 @@ int approval_gate_add_shell_allowlist(ApprovalGateConfig *config,
 
 /**
  * Add session allowlist entries so calls like this one run without a prompt.
- * A shell command gets one prefix entry per segment, and nothing is stored
- * unless every segment can be matched.
+ * A shell command gets one rule per segment that can have one; segments that
+ * can't keep prompting. Use approval_gate_allow_always_ex() to find out which
+ * parts were stored and why the rest still ask.
  *
  * @param config Gate configuration
  * @param tool_call The approved tool call
- * @return 0 when entries were stored, -1 when the call can only be approved once
+ * @return 0 when at least one rule was stored, -1 when nothing was stored
  */
 int approval_gate_allow_always(ApprovalGateConfig *config, const ToolCall *tool_call);
 
@@ -372,6 +373,9 @@ typedef struct {
     int   saved_count;  /* Number of rules listed in saved */
     int   unsaved_count;/* Number of parts listed in unsaved */
 } AllowAlwaysSummary;
+/* saved and unsaved are NULL when their count is 0, and the call reports
+ * failure if a count is non-zero but the string couldn't be built, so callers
+ * must NULL-check both before printing. */
 
 /**
  * Add session allowlist entries and report what was stored.
@@ -382,7 +386,8 @@ typedef struct {
  * @param tool_call The approved tool call
  * @param out Optional output: the summary. Caller must free with
  *            allow_always_summary_free().
- * @return 0 when at least one rule was stored, -1 when nothing could be stored
+ * @return 0 when at least one rule was stored and the summary is complete,
+ *         -1 when nothing was stored or the summary couldn't be built
  */
 int approval_gate_allow_always_ex(ApprovalGateConfig *config,
                                   const ToolCall *tool_call,

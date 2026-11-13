@@ -964,6 +964,7 @@ static int allow_always_shell(ApprovalGateConfig *config, const ToolCall *tool_c
 
     StringList saved = {0};
     StringList unsaved = {0};
+    int stored_any = 0;
     int failed = 0;
 
     for (int i = 0; i < count; i++) {
@@ -971,7 +972,13 @@ static int allow_always_shell(ApprovalGateConfig *config, const ToolCall *tool_c
         char *name = NULL;
         if (segment_rule(segments[i], type, &rule, &name) == SHELL_RULE_OK) {
             if (add_session_rule(config, &rule) == 0) {
+                stored_any = 1;
+                /* The rule is live either way; a label we couldn't build falls
+                 * back to the command name so it is never listed as unsaved. */
                 char *label = join_tokens(rule.tokens, rule.count);
+                if (label == NULL) {
+                    label = strdup(rule.tokens[0]);
+                }
                 failed |= string_list_add(&saved, label) != 0;
             } else {
                 failed = 1;
@@ -982,13 +989,18 @@ static int allow_always_shell(ApprovalGateConfig *config, const ToolCall *tool_c
         shell_rule_free(&rule);
     }
 
-    int rc = (!failed && saved.count > 0) ? 0 : -1;
     if (out != NULL) {
         out->saved = string_list_join(&saved);
         out->unsaved = string_list_join(&unsaved);
         out->saved_count = saved.count;
         out->unsaved_count = unsaved.count;
+        /* A summary the caller can't print is a failure, even though the rules
+         * it describes are stored. */
+        failed |= (saved.count > 0 && out->saved == NULL) ||
+                  (unsaved.count > 0 && out->unsaved == NULL);
     }
+
+    int rc = (stored_any && !failed) ? 0 : -1;
 
     string_list_free(&saved);
     string_list_free(&unsaved);
