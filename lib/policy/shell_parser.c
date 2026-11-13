@@ -328,7 +328,7 @@ int parse_posix_shell(const char *command, ParsedShellCommand *result) {
          * metacharacters. A backslash at end of line is line continuation.
          * Mark as unsafe for matching rather than trying to parse all cases.
          */
-        if (c == '\\' && !in_single_quote) {
+        if (c == '\\' && !in_single_quote && !in_double_quote) {
             result->has_chain = 1;  /* Backslash escapes are complex; mark unsafe */
             if (*(p + 1)) {
                 p += 2;  /* Skip backslash and escaped character */
@@ -350,6 +350,19 @@ int parse_posix_shell(const char *command, ParsedShellCommand *result) {
             had_quotes = 1;  /* Mark that this token had quotes */
             p++;
             continue;
+        }
+
+        if (in_double_quote) {
+            /* Substitution still runs inside double quotes. */
+            if ((c == '$' && *(p + 1) == '(') || c == '`') {
+                result->has_subshell = 1;
+            }
+            /* Backslash only escapes $ ` " \ and newline here. */
+            if (c == '\\' && strchr("$`\"\\\n", *(p + 1)) && *(p + 1)) {
+                token_buf[token_len++] = *(p + 1);
+                p += 2;
+                continue;
+            }
         }
 
         if (in_single_quote || in_double_quote) {

@@ -706,6 +706,61 @@ void test_split_non_posix_returns_whole_command(void) {
     free_shell_segments(segments, count);
 }
 
+/* ============================================================================
+ * Double-quote handling
+ * ========================================================================== */
+
+static ParsedShellCommand *dq_parse(const char *cmd) {
+    return parse_shell_command_for_type(cmd, SHELL_TYPE_POSIX);
+}
+
+void test_dq_command_substitution_is_unsafe(void) {
+    ParsedShellCommand *p = dq_parse("echo \"$(touch /tmp/x)\"");
+    TEST_ASSERT_EQUAL_INT(1, p->has_subshell);
+    TEST_ASSERT_EQUAL_INT(0, shell_command_is_safe_for_matching(p));
+    free_parsed_shell_command(p);
+}
+
+void test_dq_backtick_is_unsafe(void) {
+    ParsedShellCommand *p = dq_parse("echo \"`id`\"");
+    TEST_ASSERT_EQUAL_INT(1, p->has_subshell);
+    TEST_ASSERT_EQUAL_INT(0, shell_command_is_safe_for_matching(p));
+    free_parsed_shell_command(p);
+}
+
+void test_dq_backslash_dot_is_safe(void) {
+    ParsedShellCommand *p = dq_parse("grep -v \"\\.h\" x");
+    TEST_ASSERT_EQUAL_INT(1, shell_command_is_safe_for_matching(p));
+    TEST_ASSERT_EQUAL_STRING("\\.h", p->tokens[2]);
+    free_parsed_shell_command(p);
+}
+
+void test_dq_escaped_dollar_is_safe(void) {
+    ParsedShellCommand *p = dq_parse("echo \"\\$(x)\"");
+    TEST_ASSERT_EQUAL_INT(1, shell_command_is_safe_for_matching(p));
+    TEST_ASSERT_EQUAL_STRING("$(x)", p->tokens[1]);
+    free_parsed_shell_command(p);
+}
+
+void test_dq_escaped_quote_stays_in_token(void) {
+    ParsedShellCommand *p = dq_parse("echo \"a\\\"b\"");
+    TEST_ASSERT_EQUAL_INT(1, shell_command_is_safe_for_matching(p));
+    TEST_ASSERT_EQUAL_STRING("a\"b", p->tokens[1]);
+    free_parsed_shell_command(p);
+}
+
+void test_sq_substitution_stays_safe(void) {
+    ParsedShellCommand *p = dq_parse("echo '$(x)'");
+    TEST_ASSERT_EQUAL_INT(1, shell_command_is_safe_for_matching(p));
+    free_parsed_shell_command(p);
+}
+
+void test_unquoted_backslash_still_unsafe(void) {
+    ParsedShellCommand *p = dq_parse("echo a\\;b");
+    TEST_ASSERT_EQUAL_INT(0, shell_command_is_safe_for_matching(p));
+    free_parsed_shell_command(p);
+}
+
 int main(void) {
     UNITY_BEGIN();
 
@@ -821,6 +876,13 @@ int main(void) {
     /* cmd.exe Specific Tests */
     RUN_TEST(test_cmd_caret_escape_flagged);
     RUN_TEST(test_cmd_variable_expansion_flagged);
+    RUN_TEST(test_dq_command_substitution_is_unsafe);
+    RUN_TEST(test_dq_backtick_is_unsafe);
+    RUN_TEST(test_dq_backslash_dot_is_safe);
+    RUN_TEST(test_dq_escaped_dollar_is_safe);
+    RUN_TEST(test_dq_escaped_quote_stays_in_token);
+    RUN_TEST(test_sq_substitution_stays_safe);
+    RUN_TEST(test_unquoted_backslash_still_unsafe);
 
     return UNITY_END();
 }
