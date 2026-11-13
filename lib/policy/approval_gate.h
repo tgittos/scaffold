@@ -217,6 +217,12 @@ void approval_gate_cleanup(ApprovalGateConfig *config);
 GateCategory get_tool_category(const char *tool_name);
 
 /**
+ * Whether get_tool_category resolves the name from its built-in list or an
+ * extension callback (1), rather than falling through to the default (0).
+ */
+int approval_gate_has_explicit_category(const char *tool_name);
+
+/**
  * Get the configured action for a category.
  *
  * @param config Gate configuration

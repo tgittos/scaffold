@@ -269,7 +269,8 @@ void test_get_tool_category_memory_tools(void) {
     TEST_ASSERT_EQUAL(GATE_CATEGORY_MEMORY, get_tool_category("remember"));
     TEST_ASSERT_EQUAL(GATE_CATEGORY_MEMORY, get_tool_category("recall_memories"));
     TEST_ASSERT_EQUAL(GATE_CATEGORY_MEMORY, get_tool_category("forget_memory"));
-    TEST_ASSERT_EQUAL(GATE_CATEGORY_MEMORY, get_tool_category("todo"));
+    TEST_ASSERT_EQUAL(GATE_CATEGORY_MEMORY, get_tool_category("TodoWrite"));
+    TEST_ASSERT_EQUAL(GATE_CATEGORY_MEMORY, get_tool_category("TodoRead"));
 }
 
 void test_get_tool_category_vector_db_prefix(void) {
@@ -288,7 +289,7 @@ void test_get_tool_category_file_tools(void) {
     TEST_ASSERT_EQUAL(GATE_CATEGORY_FILE_READ, get_tool_category("read_file"));
     TEST_ASSERT_EQUAL(GATE_CATEGORY_FILE_READ, get_tool_category("list_dir"));
     TEST_ASSERT_EQUAL(GATE_CATEGORY_FILE_READ, get_tool_category("search_files"));
-    TEST_ASSERT_EQUAL(GATE_CATEGORY_FILE_READ, get_tool_category("process_pdf_document"));
+    TEST_ASSERT_EQUAL(GATE_CATEGORY_FILE_READ, get_tool_category("pdf_extract_text"));
 
     TEST_ASSERT_EQUAL(GATE_CATEGORY_FILE_WRITE, get_tool_category("write_file"));
     TEST_ASSERT_EQUAL(GATE_CATEGORY_FILE_WRITE, get_tool_category("apply_patch"));

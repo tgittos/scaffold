@@ -590,64 +590,78 @@ void approval_gate_cleanup(ApprovalGateConfig *config) {
     config->shell_allowlist_capacity = 0;
 }
 
-GateCategory get_tool_category(const char *tool_name) {
+/* Resolve a tool name to its category. Returns 1 and sets *out when the name
+ * is in the built-in list or an extension callback claims it; 0 otherwise. */
+static int lookup_tool_category(const char *tool_name, GateCategory *out) {
     if (tool_name == NULL) {
-        return GATE_CATEGORY_PYTHON;
+        return 0;
     }
 
     if (strcmp(tool_name, "remember") == 0 ||
         strcmp(tool_name, "recall_memories") == 0 ||
         strcmp(tool_name, "forget_memory") == 0 ||
         strcmp(tool_name, "switch_mode") == 0 ||
-        strcmp(tool_name, "todo") == 0) {
-        return GATE_CATEGORY_MEMORY;
+        strcmp(tool_name, "TodoRead") == 0 ||
+        strcmp(tool_name, "TodoWrite") == 0) {
+        *out = GATE_CATEGORY_MEMORY;
+        return 1;
     }
 
     if (strcmp(tool_name, "vector_db") == 0 ||
         strcmp(tool_name, "messaging") == 0 ||
         strcmp(tool_name, "goap") == 0 ||
         strcmp(tool_name, "orchestrator") == 0) {
-        return GATE_CATEGORY_MEMORY;
+        *out = GATE_CATEGORY_MEMORY;
+        return 1;
     }
 
     if (strncmp(tool_name, "mcp_", 4) == 0) {
-        return GATE_CATEGORY_MCP;
+        *out = GATE_CATEGORY_MCP;
+        return 1;
     }
 
     if (strncmp(tool_name, "plugin_", 7) == 0) {
-        return GATE_CATEGORY_PLUGIN;
+        *out = GATE_CATEGORY_PLUGIN;
+        return 1;
     }
 
-    if (strcmp(tool_name, "process_pdf_document") == 0) {
-        return GATE_CATEGORY_FILE_READ;
+    if (strcmp(tool_name, "pdf_extract_text") == 0) {
+        *out = GATE_CATEGORY_FILE_READ;
+        return 1;
     }
 
     if (strcmp(tool_name, "python") == 0) {
-        return GATE_CATEGORY_PYTHON;
+        *out = GATE_CATEGORY_PYTHON;
+        return 1;
     }
 
     if (strcmp(tool_name, "subagent") == 0 ||
         strcmp(tool_name, "subagent_status") == 0) {
-        return GATE_CATEGORY_SUBAGENT;
+        *out = GATE_CATEGORY_SUBAGENT;
+        return 1;
     }
 
     if (strcmp(tool_name, "shell") == 0) {
-        return GATE_CATEGORY_SHELL;
+        *out = GATE_CATEGORY_SHELL;
+        return 1;
     }
 
     if (strcmp(tool_name, "read_file") == 0 ||
         strcmp(tool_name, "list_dir") == 0 ||
         strcmp(tool_name, "search_files") == 0) {
-        return GATE_CATEGORY_FILE_READ;
+        *out = GATE_CATEGORY_FILE_READ;
+        return 1;
     }
 
     if (strcmp(tool_name, "write_file") == 0 ||
         strcmp(tool_name, "apply_patch") == 0) {
-        return GATE_CATEGORY_FILE_WRITE;
+        *out = GATE_CATEGORY_FILE_WRITE;
+        return 1;
     }
 
     if (strcmp(tool_name, "web_fetch") == 0) {
-        return GATE_CATEGORY_NETWORK;
+        *out = GATE_CATEGORY_NETWORK;
+        return 1;
     }
 
     if (g_gate_callbacks.is_extension_tool &&
@@ -658,12 +672,23 @@ GateCategory get_tool_category(const char *tool_name) {
         if (gate_cat != NULL) {
             GateCategory category;
             if (parse_gate_category(gate_cat, &category) == 0) {
-                return category;
+                *out = category;
+                return 1;
             }
         }
     }
 
-    return GATE_CATEGORY_PYTHON;
+    return 0;
+}
+
+GateCategory get_tool_category(const char *tool_name) {
+    GateCategory category;
+    return lookup_tool_category(tool_name, &category) ? category : GATE_CATEGORY_PYTHON;
+}
+
+int approval_gate_has_explicit_category(const char *tool_name) {
+    GateCategory category;
+    return lookup_tool_category(tool_name, &category);
 }
 
 GateAction approval_gate_get_category_action(const ApprovalGateConfig *config,

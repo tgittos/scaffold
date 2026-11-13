@@ -1,6 +1,8 @@
 #include "unity.h"
 #include "lib/tools/tools_system.h"
 #include "tools/builtin_tools.h"
+#include "tools/todo_tool.h"
+#include "tools/subagent_tool.h"
 #include "policy/approval_gate.h"
 #include "policy/protected_files.h"
 #include <cJSON.h>
@@ -467,9 +469,39 @@ void test_get_tool_category_memory(void) {
     TEST_ASSERT_EQUAL(GATE_CATEGORY_MEMORY, get_tool_category("remember"));
     TEST_ASSERT_EQUAL(GATE_CATEGORY_MEMORY, get_tool_category("recall_memories"));
     TEST_ASSERT_EQUAL(GATE_CATEGORY_MEMORY, get_tool_category("forget_memory"));
-    TEST_ASSERT_EQUAL(GATE_CATEGORY_MEMORY, get_tool_category("todo"));
+    TEST_ASSERT_EQUAL(GATE_CATEGORY_MEMORY, get_tool_category("TodoWrite"));
+    TEST_ASSERT_EQUAL(GATE_CATEGORY_MEMORY, get_tool_category("TodoRead"));
     TEST_ASSERT_EQUAL(GATE_CATEGORY_MEMORY, get_tool_category("vector_db"));
     TEST_ASSERT_EQUAL(GATE_CATEGORY_MEMORY, get_tool_category("goap"));
+}
+
+void test_get_tool_category_pdf(void) {
+    TEST_ASSERT_EQUAL(GATE_CATEGORY_FILE_READ, get_tool_category("pdf_extract_text"));
+}
+
+void test_every_builtin_tool_has_category(void) {
+    ToolRegistry registry;
+    TodoList todo_list;
+    SubagentManager manager;
+    init_tool_registry(&registry);
+    TEST_ASSERT_EQUAL(0, todo_list_init(&todo_list));
+    TEST_ASSERT_EQUAL(0, subagent_manager_init_with_config(&manager, 1, 10));
+    TEST_ASSERT_EQUAL(0, register_builtin_tools(&registry));
+    TEST_ASSERT_EQUAL(0, register_todo_tool(&registry, &todo_list, NULL));
+    TEST_ASSERT_EQUAL(0, register_subagent_tool(&registry, &manager));
+    TEST_ASSERT_EQUAL(0, register_subagent_status_tool(&registry, &manager));
+
+    for (size_t i = 0; i < registry.functions.count; i++) {
+        const char *name = registry.functions.data[i].name;
+        char msg[128];
+        snprintf(msg, sizeof(msg), "tool '%s' has no explicit gate category", name);
+        TEST_ASSERT_TRUE_MESSAGE(approval_gate_has_explicit_category(name), msg);
+    }
+
+    cleanup_tool_registry(&registry);
+    clear_todo_tool_reference();
+    subagent_manager_cleanup(&manager);
+    todo_list_destroy(&todo_list);
 }
 
 void test_get_tool_category_subagent(void) {
@@ -697,6 +729,8 @@ int main(void) {
     RUN_TEST(test_get_tool_category_shell);
     RUN_TEST(test_get_tool_category_network);
     RUN_TEST(test_get_tool_category_memory);
+    RUN_TEST(test_get_tool_category_pdf);
+    RUN_TEST(test_every_builtin_tool_has_category);
     RUN_TEST(test_get_tool_category_subagent);
     RUN_TEST(test_get_tool_category_mcp);
     RUN_TEST(test_get_tool_category_python);
