@@ -1095,6 +1095,27 @@ int approval_gate_preview_always(const ToolCall *tool_call, char **out_label) {
     return saveable;
 }
 
+char *approval_gate_format_saved_line(const char *saved, const char *unsaved) {
+    if (saved == NULL && unsaved == NULL) {
+        return NULL;
+    }
+    const char *sep = (saved != NULL && unsaved != NULL) ? " " : "";
+    size_t len = strlen("Saved: .") + strlen(" Still asks: .") +
+                 (saved ? strlen(saved) : 0) + (unsaved ? strlen(unsaved) : 0) + 2;
+    char *line = malloc(len);
+    if (line == NULL) {
+        return NULL;
+    }
+    int n = 0;
+    if (saved != NULL) {
+        n += snprintf(line + n, len - n, "Saved: %s.", saved);
+    }
+    if (unsaved != NULL) {
+        n += snprintf(line + n, len - n, "%sStill asks: %s.", sep, unsaved);
+    }
+    return line;
+}
+
 void allow_always_summary_free(AllowAlwaysSummary *summary) {
     if (summary == NULL) {
         return;
@@ -1359,10 +1380,14 @@ ApprovalResult approval_gate_prompt(ApprovalGateConfig *config,
     }
 
     ApprovalResult result = APPROVAL_DENIED;
-    int not_remembered = 0;
+    char *saved_line = NULL;
+
+    char *always_label = NULL;
+    int can_always = approval_gate_preview_always(tool_call, &always_label);
 
     for (;;) {
-        gate_prompter_show_single(gp, tool_call, command_arg, path_arg);
+        gate_prompter_show_single(gp, tool_call, command_arg, path_arg,
+                                  can_always ? always_label : NULL);
 
         int response = gate_prompter_read_key(gp);
         gate_prompter_newline(gp);
@@ -1382,11 +1407,24 @@ ApprovalResult approval_gate_prompt(ApprovalGateConfig *config,
                 result = APPROVAL_DENIED;
                 goto done;
 
-            case 'a':
+            case 'a': {
+                if (!can_always) {
+                    fprintf(stderr, "Invalid input. Press y, n, or ? for details.\n");
+                    continue;
+                }
                 reset_denial_tracker(config, tool_call->name);
-                not_remembered = approval_gate_allow_always(config, tool_call) != 0;
+                AllowAlwaysSummary summary = {0};
+                approval_gate_allow_always_ex(config, tool_call, &summary);
+                /* Non-shell summaries hold a raw regex; show the label instead. */
+                const char *saved = category == GATE_CATEGORY_SHELL ? summary.saved : always_label;
+                if (summary.saved_count > 0 || summary.unsaved_count > 0) {
+                    saved_line = approval_gate_format_saved_line(
+                        summary.saved_count > 0 ? saved : NULL, summary.unsaved);
+                }
+                allow_always_summary_free(&summary);
                 result = APPROVAL_ALLOWED_ALWAYS;
                 goto done;
+            }
 
             case '?': {
                 char *resolved = out_path ? out_path->resolved_path : NULL;
@@ -1411,9 +1449,11 @@ done:
     if (result == APPROVAL_ALLOWED || result == APPROVAL_ALLOWED_ALWAYS) {
         gate_prompter_clear_prompt(gp);
     }
-    if (not_remembered) {
-        fprintf(stderr, "Allowed once: this call can't be added to the allowlist.\n");
+    if (saved_line != NULL) {
+        fprintf(stderr, "%s\n", saved_line);
     }
+    free(saved_line);
+    free(always_label);
     free(shell_command);
     free(file_path);
     gate_prompter_destroy(gp);

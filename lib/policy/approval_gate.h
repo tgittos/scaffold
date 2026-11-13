@@ -404,6 +404,16 @@ int approval_gate_allow_always_ex(ApprovalGateConfig *config,
 int approval_gate_preview_always(const ToolCall *tool_call, char **out_label);
 
 /**
+ * Build the line telling the user what "a" did.
+ *
+ * @param saved What was saved (e.g. "grep, head"), or NULL if nothing
+ * @param unsaved What still asks (e.g. "git fetch (writes to a file)"), or NULL
+ * @return "Saved: <saved>." / "Saved: <saved>. Still asks: <unsaved>." /
+ *         "Still asks: <unsaved>."; NULL if both are NULL. Caller must free.
+ */
+char *approval_gate_format_saved_line(const char *saved, const char *unsaved);
+
+/**
  * Free the strings held by a summary and reset it. NULL safe.
  *
  * @param summary The summary to clean up

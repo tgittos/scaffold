@@ -1397,6 +1397,22 @@ void test_allow_always_refuses_command_that_runs_another_command(void) {
     TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &wrapped));
 }
 
+void test_saved_line_full_save(void) {
+    char *line = approval_gate_format_saved_line("grep, head", NULL);
+    TEST_ASSERT_EQUAL_STRING("Saved: grep, head.", line);
+    free(line);
+}
+
+void test_saved_line_partial_save(void) {
+    char *line = approval_gate_format_saved_line("grep, head", "git fetch (writes to a file)");
+    TEST_ASSERT_EQUAL_STRING("Saved: grep, head. Still asks: git fetch (writes to a file).", line);
+    free(line);
+}
+
+void test_saved_line_nothing_to_say_is_null(void) {
+    TEST_ASSERT_NULL(approval_gate_format_saved_line(NULL, NULL));
+}
+
 void test_preview_always_reports_no_rule_for_substitution(void) {
     char *label = NULL;
     ToolCall substitution = shell_call("{\"command\": \"echo \\\"$(id)\\\"\"}");
@@ -2549,6 +2565,9 @@ int main(void) {
     RUN_TEST(test_preview_always_labels_the_rule_it_would_save);
     RUN_TEST(test_shell_allowlist_config_rules_keep_prefix_semantics);
     RUN_TEST(test_allow_always_stores_non_shell_pattern);
+    RUN_TEST(test_saved_line_full_save);
+    RUN_TEST(test_saved_line_partial_save);
+    RUN_TEST(test_saved_line_nothing_to_say_is_null);
     RUN_TEST(test_shell_allowlist_rejects_subshell_commands);
     RUN_TEST(test_shell_allowlist_rejects_dangerous_commands);
     RUN_TEST(test_shell_allowlist_shell_type_specific);

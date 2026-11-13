@@ -6,6 +6,7 @@
  * null safety, and behaviors that don't require terminal interaction.
  */
 
+#include <string.h>
 #include "unity/unity.h"
 #include "policy/gate_prompter.h"
 
@@ -76,14 +77,27 @@ void test_gate_prompter_show_single_null_prompter_is_safe(void) {
     tc.arguments = "{}";
 
     /* Should not crash when passed NULL prompter */
-    gate_prompter_show_single(NULL, &tc, NULL, NULL);
+    gate_prompter_show_single(NULL, &tc, NULL, NULL, NULL);
     TEST_PASS();
 }
 
 void test_gate_prompter_show_single_null_tool_call_is_safe(void) {
     /* Should not crash when passed NULL tool_call */
-    gate_prompter_show_single(NULL, NULL, NULL, NULL);
+    gate_prompter_show_single(NULL, NULL, NULL, NULL, NULL);
     TEST_PASS();
+}
+
+void test_gate_prompter_hint_with_label_offers_always(void) {
+    char buf[256];
+    gate_prompter_format_hint(buf, sizeof(buf), "git show …");
+    TEST_ASSERT_NOT_NULL(strstr(buf, "always allow \"git show …\""));
+}
+
+void test_gate_prompter_hint_without_label_hides_always(void) {
+    char buf[256];
+    gate_prompter_format_hint(buf, sizeof(buf), NULL);
+    TEST_ASSERT_EQUAL_STRING("Allow? [y/n/?]", buf);
+    TEST_ASSERT_NULL(strstr(buf, "a ="));
 }
 
 /* =============================================================================
@@ -218,6 +232,8 @@ int main(void) {
     /* show_single tests */
     RUN_TEST(test_gate_prompter_show_single_null_prompter_is_safe);
     RUN_TEST(test_gate_prompter_show_single_null_tool_call_is_safe);
+    RUN_TEST(test_gate_prompter_hint_with_label_offers_always);
+    RUN_TEST(test_gate_prompter_hint_without_label_hides_always);
 
     /* show_details tests */
     RUN_TEST(test_gate_prompter_show_details_null_prompter_is_safe);

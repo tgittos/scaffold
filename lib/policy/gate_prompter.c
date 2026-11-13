@@ -174,7 +174,7 @@ void gate_prompter_clear_prompt(GatePrompter *gp) {
     /* Move cursor up 2 lines and clear to end of screen.
      * The prompt consists of:
      *   1. "● tool detail" line
-     *   2. "  └─ Allow? [y/n/a/?] <response>" line
+     *   2. "  └─ Allow? [y/n/?] <response>" line
      */
     fprintf(stderr, TERM_CURSOR_UP_FMT TERM_CLEAR_SCREEN, 2);
     fflush(stderr);
@@ -198,7 +198,8 @@ void gate_prompter_clear_batch_prompt(GatePrompter *gp, int count) {
 void gate_prompter_show_single(GatePrompter *gp,
                                const ToolCall *tool_call,
                                const char *command,
-                               const char *path) {
+                               const char *path,
+                               const char *always_label) {
     if (gp == NULL || tool_call == NULL) {
         return;
     }
@@ -237,8 +238,21 @@ void gate_prompter_show_single(GatePrompter *gp,
         fprintf(stderr, TERM_DIM " %s" TERM_RESET, detail);
     }
     fprintf(stderr, "\n");
-    fprintf(stderr, "  └─ Allow? [y/n/a/?] ");
+    char hint[256];
+    gate_prompter_format_hint(hint, sizeof(hint), always_label);
+    fprintf(stderr, "  └─ %s ", hint);
     fflush(stderr);
+}
+
+void gate_prompter_format_hint(char *buf, size_t size, const char *always_label) {
+    if (buf == NULL || size == 0) {
+        return;
+    }
+    if (always_label == NULL) {
+        snprintf(buf, size, "Allow? [y/n/?]");
+    } else {
+        snprintf(buf, size, "Allow? [y/n/?] (a = always allow \"%.120s\")", always_label);
+    }
 }
 
 void gate_prompter_show_details(GatePrompter *gp,
