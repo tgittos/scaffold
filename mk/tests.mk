@@ -390,6 +390,7 @@ $(eval $(call def_test_lib,message_processor,ralph/test_message_processor,))
 $(eval $(call def_test_lib,recap,ralph/test_recap,))
 $(eval $(call def_test_lib,tool_review,agent/test_tool_review,$(TESTDIR)/mock_api_server.c))
 $(eval $(call def_test_lib,parallel_batch,agent/test_parallel_batch,))
+$(eval $(call def_test_lib,tool_wire_format,agent/test_tool_wire_format,$(TESTDIR)/mock_api_server.c))
 $(eval $(call def_test_lib,model_commands,ui/test_model_commands,))
 $(eval $(call def_test_lib,task_commands,ui/test_task_commands,))
 $(eval $(call def_test_lib,agent_commands,ui/test_agent_commands,))
@@ -421,7 +422,7 @@ LIBAGENT_TESTS := tool_param_dsl json_output output tools_system vector_db_tool 
     memory_mgmt token_manager conversation_compactor rolling_summary model_tools embeddings_service embeddings_service_reinit \
     openai_streaming anthropic_streaming codex_provider messages_array_bug openai_message_format mcp_client subagent_tool \
     incomplete_task_bug conversation conversation_vdb tool_calls_not_stored document_store \
-    message_dispatcher message_processor recap tool_review parallel_batch model_commands \
+    message_dispatcher message_processor recap tool_review parallel_batch tool_wire_format model_commands \
     iterative_loop_empty \
     slash_commands task_commands agent_commands goal_commands mode_tool mode_commands status_line \
     context_mode_injection repo_context image_attachment goap_tools orchestrator_tool goap_lifecycle \

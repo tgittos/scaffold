@@ -3,6 +3,7 @@
 #include "../llm/model_capabilities.h"
 #include "../session/conversation_tracker.h"
 #include "../tools/tools_system.h"
+#include "../tools/tool_format.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -476,31 +477,30 @@ char* build_json_payload_common(const char* model, const SystemPromptParts* syst
         cJSON_AddNumberToObject(root, max_tokens_param, max_tokens);
     }
 
-    if (tools != NULL && tools->functions.count > 0 && model) {
-        ModelRegistry* registry = get_model_registry();
-        if (registry) {
-            char* tools_json_str = generate_model_tools_json(registry, model, tools);
-            if (tools_json_str != NULL) {
-                cJSON* tools_arr = cJSON_Parse(tools_json_str);
-                free(tools_json_str);
+    if (tools != NULL && tools->functions.count > 0) {
+        const ToolFormatStrategy* fmt = system_at_top_level ? &tool_format_anthropic
+                                                            : &tool_format_openai;
+        char* tools_json_str = fmt->generate_tools_json(tools);
+        if (tools_json_str != NULL) {
+            cJSON* tools_arr = cJSON_Parse(tools_json_str);
+            free(tools_json_str);
 
-                if (tools_arr != NULL) {
-                    /* For Anthropic, add cache_control on the last tool definition */
-                    if (system_at_top_level && cJSON_IsArray(tools_arr)) {
-                        int tool_count = cJSON_GetArraySize(tools_arr);
-                        if (tool_count > 0) {
-                            cJSON* last_tool = cJSON_GetArrayItem(tools_arr, tool_count - 1);
-                            if (last_tool != NULL) {
-                                cJSON* cache_ctl = cJSON_CreateObject();
-                                if (cache_ctl != NULL) {
-                                    cJSON_AddStringToObject(cache_ctl, "type", "ephemeral");
-                                    cJSON_AddItemToObject(last_tool, "cache_control", cache_ctl);
-                                }
+            if (tools_arr != NULL) {
+                /* For Anthropic, add cache_control on the last tool definition */
+                if (system_at_top_level && cJSON_IsArray(tools_arr)) {
+                    int tool_count = cJSON_GetArraySize(tools_arr);
+                    if (tool_count > 0) {
+                        cJSON* last_tool = cJSON_GetArrayItem(tools_arr, tool_count - 1);
+                        if (last_tool != NULL) {
+                            cJSON* cache_ctl = cJSON_CreateObject();
+                            if (cache_ctl != NULL) {
+                                cJSON_AddStringToObject(cache_ctl, "type", "ephemeral");
+                                cJSON_AddItemToObject(last_tool, "cache_control", cache_ctl);
                             }
                         }
                     }
-                    cJSON_AddItemToObject(root, "tools", tools_arr);
                 }
+                cJSON_AddItemToObject(root, "tools", tools_arr);
             }
         }
     }

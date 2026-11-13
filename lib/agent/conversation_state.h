@@ -7,9 +7,9 @@
 /**
  * Append an assistant message to the conversation history.
  *
- * When tool calls are present (count > 0), the message is formatted using
- * the model registry's format_model_assistant_tool_message with a fallback
- * to a simple tool-name summary. When count == 0, the content is appended
+ * When tool calls are present (count > 0), the message is formatted for the
+ * session's API wire format (Anthropic or OpenAI) with a fallback to a simple
+ * tool-name summary. When count == 0, the content is appended
  * as a plain assistant message.
  *
  * @param session  The agent session

@@ -158,14 +158,6 @@ int execute_tool_call(ToolRegistry *registry, const ToolCall *tool_call, ToolRes
 char* generate_tool_results_json(const ToolResult *results, int result_count);
 
 /**
- * Generate a single tool result message for conversation history
- *
- * @param result Tool result to format as message
- * @return Dynamically allocated message string, caller must free
- */
-char* generate_single_tool_message(const ToolResult *result);
-
-/**
  * Clean up memory allocated for tool registry
  *
  * @param registry Pointer to ToolRegistry structure to cleanup

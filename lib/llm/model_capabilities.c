@@ -1,5 +1,4 @@
 #include "model_capabilities.h"
-#include "../tools/tools_system.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -97,58 +96,4 @@ void cleanup_model_registry_singleton(void) {
         free(g_model_registry);
         g_model_registry = NULL;
     }
-}
-
-char* generate_model_tools_json(ModelRegistry* registry, const char* model_name, const ToolRegistry* tools) {
-    if (!registry || !tools) {
-        return NULL;
-    }
-
-    ModelCapabilities* model = detect_model_capabilities(registry, model_name);
-    if (!model || !model->generate_tools_json) {
-        return NULL;
-    }
-
-    return model->generate_tools_json(tools);
-}
-
-int parse_model_tool_calls(ModelRegistry* registry, const char* model_name,
-                          const char* json_response, ToolCall** tool_calls, int* call_count) {
-    if (!registry || !json_response || !tool_calls || !call_count) {
-        return -1;
-    }
-
-    ModelCapabilities* model = detect_model_capabilities(registry, model_name);
-    if (!model || !model->parse_tool_calls) {
-        return -1;
-    }
-
-    return model->parse_tool_calls(json_response, tool_calls, call_count);
-}
-
-char* format_model_tool_result_message(ModelRegistry* registry, const char* model_name, const ToolResult* result) {
-    if (!registry || !result) {
-        return NULL;
-    }
-
-    ModelCapabilities* model = detect_model_capabilities(registry, model_name);
-    if (!model || !model->format_tool_result_message) {
-        return NULL;
-    }
-
-    return model->format_tool_result_message(result);
-}
-
-char* format_model_assistant_tool_message(ModelRegistry* registry, const char* model_name,
-                                         const char* response_content, const ToolCall* tool_calls, int tool_call_count) {
-    if (!registry) {
-        return NULL;
-    }
-
-    ModelCapabilities* model = detect_model_capabilities(registry, model_name);
-    if (!model || !model->format_assistant_tool_message) {
-        return NULL;
-    }
-
-    return model->format_assistant_tool_message(response_content, tool_calls, tool_call_count);
 }
