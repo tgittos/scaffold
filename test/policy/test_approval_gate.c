@@ -2258,6 +2258,28 @@ void test_read_only_skips_subagent_channel(void) {
     approval_gate_set_callbacks(NULL);
 }
 
+void test_in_project_write_gated_without_auto_mode(void) {
+    config.is_interactive = 0;
+    config.auto_mode = 0;
+
+    ToolCall call = { .id = "c", .name = "write_file",
+                      .arguments = "{\"path\": \"src/new_file.c\", \"content\": \"x\"}" };
+    ApprovedPath path;
+
+    TEST_ASSERT_EQUAL(APPROVAL_NON_INTERACTIVE_DENIED, check_approval_gate(&config, &call, &path));
+}
+
+void test_in_project_write_allowed_in_auto_mode(void) {
+    config.is_interactive = 0;
+    config.auto_mode = 1;
+
+    ToolCall call = { .id = "c", .name = "write_file",
+                      .arguments = "{\"path\": \"src/new_file.c\", \"content\": \"x\"}" };
+    ApprovedPath path;
+
+    TEST_ASSERT_EQUAL(APPROVAL_ALLOWED, check_approval_gate(&config, &call, &path));
+}
+
 void test_auto_mode_loaded_from_config(void) {
     approval_gate_cleanup(&config);
     FILE *f = create_test_config();
@@ -2507,6 +2529,8 @@ int main(void) {
     RUN_TEST(test_non_read_only_shell_still_gated_without_auto_mode);
     RUN_TEST(test_dq_substitution_not_auto_allowed);
     RUN_TEST(test_read_only_skips_subagent_channel);
+    RUN_TEST(test_in_project_write_gated_without_auto_mode);
+    RUN_TEST(test_in_project_write_allowed_in_auto_mode);
     RUN_TEST(test_auto_mode_loaded_from_config);
     RUN_TEST(test_check_approval_gate_non_interactive_allowed_category);
     RUN_TEST(test_check_approval_gate_non_interactive_allow_category_override);

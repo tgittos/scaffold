@@ -296,3 +296,11 @@ int auto_approve_without_review(const ToolCall *tool_call) {
     }
     return 0;
 }
+
+int auto_approve_read_only_shell(const ToolCall *tool_call) {
+    if (tool_call == NULL || tool_call->name == NULL ||
+        strcmp(tool_call->name, "shell") != 0) {
+        return 0;
+    }
+    return shell_is_read_only(tool_call);
+}
