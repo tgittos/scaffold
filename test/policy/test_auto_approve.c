@@ -64,6 +64,27 @@ void test_read_only_shell_commands_approved(void) {
     TEST_ASSERT_EQUAL_INT(1, approve_shell("find . -name '*.c'"));
 }
 
+void test_sed_print_and_null_redirects_approved(void) {
+    TEST_ASSERT_EQUAL_INT(1, approve_shell("sed -n 80,175p lib/a.c"));
+    TEST_ASSERT_EQUAL_INT(1, approve_shell("sed -n '1,$p' f"));
+    TEST_ASSERT_EQUAL_INT(1, approve_shell("sed -n -e 5p -e 9p f"));
+    TEST_ASSERT_EQUAL_INT(1, approve_shell("git status 2>/dev/null"));
+    TEST_ASSERT_EQUAL_INT(1, approve_shell("ls 2>&1 | head"));
+    TEST_ASSERT_EQUAL_INT(1, approve_shell("grep -v \\\"\\\\.h\\\" x"));
+    TEST_ASSERT_EQUAL_INT(1, approve_shell("grep -rn foo lib --include=*.c"));
+}
+
+void test_sed_writes_and_other_redirects_need_review(void) {
+    TEST_ASSERT_EQUAL_INT(0, approve_shell("sed 's/a/b/' f"));
+    TEST_ASSERT_EQUAL_INT(0, approve_shell("sed -n 1p -i f"));
+    TEST_ASSERT_EQUAL_INT(0, approve_shell("sed -n '1p;w out' f"));
+    TEST_ASSERT_EQUAL_INT(0, approve_shell("sed -n '1e id' f"));
+    TEST_ASSERT_EQUAL_INT(0, approve_shell("sed -n 1p `id`"));
+    TEST_ASSERT_EQUAL_INT(0, approve_shell("ls > out"));
+    TEST_ASSERT_EQUAL_INT(0, approve_shell("ls 2>out"));
+    TEST_ASSERT_EQUAL_INT(0, approve_shell("echo \\\"$(touch x)\\\""));
+}
+
 void test_writing_shell_commands_need_review(void) {
     TEST_ASSERT_EQUAL_INT(0, approve_shell("git push"));
     TEST_ASSERT_EQUAL_INT(0, approve_shell("ls > out.txt"));
@@ -132,6 +153,8 @@ int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_read_only_shell_commands_approved);
     RUN_TEST(test_writing_shell_commands_need_review);
+    RUN_TEST(test_sed_print_and_null_redirects_approved);
+    RUN_TEST(test_sed_writes_and_other_redirects_need_review);
     RUN_TEST(test_write_inside_project_approved);
     RUN_TEST(test_write_outside_project_needs_review);
     RUN_TEST(test_write_through_symlink_out_of_project_needs_review);

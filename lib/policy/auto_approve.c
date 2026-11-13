@@ -4,6 +4,7 @@
 #include "tool_args.h"
 #include "../util/project_scope.h"
 
+#include <ctype.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -47,11 +48,64 @@ static int has_listed_prefix(const char *s, const char *const *prefixes) {
     return 0;
 }
 
+/* Matches a sed line-print script: "N", "$", or "N,M" followed by 'p'. */
+static int is_sed_print_script(const char *s) {
+    for (int part = 0; part < 2; part++) {
+        if (*s == '$') {
+            s++;
+        } else if (isdigit((unsigned char)*s)) {
+            while (isdigit((unsigned char)*s)) {
+                s++;
+            }
+        } else {
+            return 0;
+        }
+        if (part == 0 && *s == ',') {
+            s++;
+        } else {
+            break;
+        }
+    }
+    return s[0] == 'p' && s[1] == '\0';
+}
+
+/* sed only prints when -n is given and every script is a plain line print;
+ * anything else (s///, w, e, -i, -f, ...) can write files or run programs. */
+static int sed_is_read_only(const ParsedShellCommand *parsed) {
+    int quiet = 0;
+    int have_script = 0;
+    int ok = 1;
+
+    for (int i = 1; ok && i < parsed->token_count; i++) {
+        const char *t = parsed->tokens[i];
+        if (strcmp(t, "-n") == 0) {
+            quiet = 1;
+        } else if (strcmp(t, "-E") == 0 || strcmp(t, "-r") == 0) {
+            continue;
+        } else if (strcmp(t, "-e") == 0) {
+            ok = i + 1 < parsed->token_count &&
+                 is_sed_print_script(parsed->tokens[++i]);
+            have_script = 1;
+        } else if (t[0] == '-' && t[1] != '\0') {
+            ok = 0;
+        } else if (!have_script) {
+            ok = is_sed_print_script(t);
+            have_script = 1;
+        }
+    }
+    return ok && quiet && have_script;
+}
+
 static int segment_is_read_only(const char *segment) {
     ParsedShellCommand *parsed = parse_shell_command_for_type(segment, SHELL_TYPE_POSIX);
     int ok = parsed != NULL && shell_command_is_safe_for_matching(parsed) &&
              parsed->token_count > 0 &&
-             in_list(parsed->tokens[0], READ_ONLY_COMMANDS);
+             (in_list(parsed->tokens[0], READ_ONLY_COMMANDS) ||
+              strcmp(parsed->tokens[0], "sed") == 0);
+
+    if (ok && strcmp(parsed->tokens[0], "sed") == 0) {
+        ok = sed_is_read_only(parsed);
+    }
 
     if (ok && strcmp(parsed->tokens[0], "git") == 0) {
         ok = parsed->token_count >= 2 &&
