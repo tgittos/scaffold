@@ -8,6 +8,7 @@
 #include "../llm/llm_provider.h"
 #include "../llm/model_capabilities.h"
 #include "../network/http_client.h"
+#include "../tools/tool_format.h"
 #include "../ui/status_line.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -121,16 +122,16 @@ int api_round_trip_execute(AgentSession* session, const char* user_message,
                           result->parsed.response_content :
                           result->parsed.thinking_content;
 
-    int tool_parse_result = parse_model_tool_calls(
-        session->model_registry, session->session_data.config.model,
+    int is_anthropic = (session->session_data.config.api_type == API_TYPE_ANTHROPIC);
+    const ToolFormatStrategy* fmt = is_anthropic ? &tool_format_anthropic : &tool_format_openai;
+
+    int tool_parse_result = fmt->parse_tool_calls(
         response.data, &result->tool_calls, &result->tool_call_count);
 
     if (tool_parse_result != 0 || result->tool_call_count == 0) {
         if (content != NULL &&
-            parse_model_tool_calls(session->model_registry,
-                                   session->session_data.config.model,
-                                   content, &result->tool_calls,
-                                   &result->tool_call_count) == 0 &&
+            fmt->parse_tool_calls(content, &result->tool_calls,
+                                  &result->tool_call_count) == 0 &&
             result->tool_call_count > 0) {
             LOG_DEBUG("Found %d tool calls in message content (custom format)",
                         result->tool_call_count);

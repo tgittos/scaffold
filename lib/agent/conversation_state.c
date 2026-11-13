@@ -14,9 +14,10 @@ int conversation_append_assistant(AgentSession* session,
     }
 
     if (count > 0 && calls != NULL) {
-        char* formatted = format_model_assistant_tool_message(
-            session->model_registry, session->session_data.config.model,
-            content, calls, count);
+        char* formatted =
+            session->session_data.config.api_type == API_TYPE_ANTHROPIC
+                ? claude_format_assistant_tool_message(content, calls, count)
+                : gpt_format_assistant_tool_message(content, calls, count);
 
         if (formatted) {
             int rc = append_conversation_message(
