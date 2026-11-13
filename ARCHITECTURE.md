@@ -952,7 +952,10 @@ graph TB
 
     CategoryCheck -->|ALLOW| Allow
     CategoryCheck -->|DENY| Deny
-    CategoryCheck -->|GATE| SubagentCheck{Is Subagent?}
+    CategoryCheck -->|GATE| ReadOnlyCheck{Read-only shell?}
+
+    ReadOnlyCheck -->|Yes| Allow
+    ReadOnlyCheck -->|No| SubagentCheck{Is Subagent?}
 
     SubagentCheck -->|Yes| ProxyRequest[Proxy to Parent]
     SubagentCheck -->|No| AutoCheck{Auto Mode?}
@@ -960,7 +963,7 @@ graph TB
     ProxyRequest --> ParentCheck[Parent runs check_approval_gate]
     ParentCheck --> ProxyResponse[Response to Subagent]
 
-    AutoCheck -->|Read-only or in-project write| Allow
+    AutoCheck -->|In-project write| Allow
     AutoCheck -->|Model review allows| Allow
     AutoCheck -->|Off or escalated| InteractiveCheck{Interactive?}
 
@@ -982,7 +985,7 @@ graph TB
     classDef deny fill:#ffcdd2
     classDef prompt fill:#fff3e0
 
-    class CheckGate,ProtectedCheck,RateCheck,AllowlistCheck,CategoryCheck,InteractiveCheck,SubagentCheck,AutoCheck check
+    class CheckGate,ProtectedCheck,RateCheck,AllowlistCheck,CategoryCheck,InteractiveCheck,ReadOnlyCheck,SubagentCheck,AutoCheck check
     class Allow,AddPattern action
     class Deny,RateLimitErr,NonInteractiveDeny,TrackDenial deny
     class UserPrompt,ParentCheck,ProxyRequest,ProxyResponse,UserDecision prompt
@@ -1009,7 +1012,7 @@ graph TB
 - **Allowlist** (`allowlist.c/h`): Regex and shell command pattern matching
 - **Gate Prompter** (`gate_prompter.c/h`): Terminal UI for user approval
 - **Pattern Generator** (`pattern_generator.c/h`): Auto-generate allowlist patterns
-- **Auto Approve** (`auto_approve.c/h`): Auto mode's no-model tier: read-only shell segments and file writes inside the git project
+- **Auto Approve** (`auto_approve.c/h`): Checks decided without a model call: read-only shell segments (allowed in every mode) and file writes inside the git project (auto mode only). A segment naming a protected file is not read-only
 - **Tool Review** (`lib/agent/tool_review.c/h`): Auto mode's model review, injected as `ApprovalGateCallbacks.review_tool_call`; a one-off request to the session's model carrying user messages and the call, never tool output
 - **Protected Files** (`protected_files.c/h`): Hard-block access to sensitive files
 - **Shell Parser** (`shell_parser.c/h`): Cross-platform shell command parsing (POSIX/CMD/PowerShell); `shell_split_segments()` splits POSIX chains so allowlist matching and "allow always" work per segment

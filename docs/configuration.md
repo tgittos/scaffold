@@ -213,9 +213,11 @@ A POSIX command chained with `;`, `&&`, `||`, `|` or newlines matches only when 
 
 ### Auto mode
 
+In every mode, a gated shell call whose every segment is read-only runs without a prompt: `ls`, `cat`, `grep`, `sed -n '1,20p'`, `find` without `-exec`/`-delete`, `git status`/`log`/`diff`/`show`/`grep`, and the like. A segment that names a protected file (`cat .env`), carries a flag that can write a file or run a program (`--output`, `-delete`, `git grep -O`), redirects anywhere but `/dev/null`, or contains a command substitution is not read-only and still prompts.
+
 With `--auto` or `"auto_mode": true`, a gated call that matches no allowlist entry is reviewed before scaffold prompts:
 
-1. Shell commands whose every segment is read-only (`ls`, `cat`, `grep`, `find` without `-exec`/`-delete`, `git status`/`log`/`diff`/`show`, ...) run. So do `write_file` and `apply_patch` calls whose every path stays inside the git project containing the working directory, outside `.git` and protected files.
+1. `write_file` and `apply_patch` calls whose every path stays inside the git project containing the working directory, outside `.git` and protected files, run.
 2. Anything else goes to the session's own model in a separate request that is not added to the conversation. The reviewer sees your recent messages and the pending call, never tool output. If it allows the call, the call runs.
 3. Otherwise you get the normal prompt, preceded by the reviewer's reason. Without a terminal, the call is denied.
 
@@ -226,14 +228,16 @@ A failed review request or a reply that isn't a JSON verdict falls through to th
 When a gate triggers, you'll see:
 
 ```
-[GATE] write_file: src/index.js
-Allow? [y]es / [n]o / [a]lways allow this pattern / [?] details
+[GATE] shell: git show HEAD
+Allow? [y/n/?] (a = always allow "git show …")
 ```
 
 - **y** -- Allow this one action
 - **n** -- Deny this action
-- **a** -- Allow this and all matching future actions (session only). A shell command gets one entry per segment; a command with a segment that can't match (see above) is allowed once, with a notice.
+- **a** -- Allow this and all matching future actions (session only), and run the current one. For a shell command, each segment that can have a rule gets one; the prompt names the rule it would save, and a partial save reports what happened, e.g. `Saved: grep. Still asks: git fetch (writes to a file).` When no part of the command can be saved, `a` isn't offered and does nothing.
 - **?** -- Show details about the action
+
+A shell rule saved by `a` is the command name plus, for tools with subcommands (`git`, `docker`, `npm`, `make`, ...), the subcommand. It ignores flag order and global options, so a rule saved from `git -C lib show HEAD` also covers `git show --stat`. It never covers a command carrying a flag that changes what the command does (`git push --force`, `git push origin +main`, `git clean --force`, `git branch -D`, `sed -i`, `find -delete`, `--output`), and it never broadens for commands that run code from their arguments: interpreters (`python`, `node`, `sed`, `awk`), `curl`, `wget`, `ssh`, `scp` and `rm` keep a two-token rule such as `python foo.py`. Commands that run another command (`sudo`, `env`, `xargs`, `timeout`, `npx`, `eval`, `sh -c`, `go run`, `npm exec`), and commands with a `VAR=value` prefix, can't be saved at all.
 
 For batch operations (multiple tool calls at once), you can approve/deny all or select individual items by number.
 
