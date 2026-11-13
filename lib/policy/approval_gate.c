@@ -6,6 +6,7 @@
 #include "gate_prompter.h"
 #include "pattern_generator.h"
 #include "shell_parser.h"
+#include "shell_rules.h"
 #include "subagent_approval.h"
 #include "tool_args.h"
 
@@ -469,6 +470,8 @@ int approval_gate_init_from_parent(ApprovalGateConfig *child,
 
             dst->shell_type = src->shell_type;
             dst->prefix_len = src->prefix_len;
+            dst->is_session_rule = src->is_session_rule;
+            dst->exact = src->exact;
             dst->command_prefix = NULL;
 
             if (src->prefix_len > 0 && src->command_prefix != NULL) {
@@ -791,51 +794,219 @@ int approval_gate_add_shell_allowlist(ApprovalGateConfig *config,
     return 0;
 }
 
-/* Every segment's pattern is generated before any is stored, so one
- * unmatchable segment leaves the allowlist untouched. */
-static int allow_always_shell(ApprovalGateConfig *config, const ToolCall *tool_call) {
+/* A short, deduplicated list of things to show the user. */
+typedef struct {
+    char **items;
+    int    count;
+} StringList;
+
+/* Takes ownership of item. A duplicate is dropped, not an error. */
+static int string_list_add(StringList *list, char *item) {
+    if (item == NULL) {
+        return -1;
+    }
+    for (int i = 0; i < list->count; i++) {
+        if (strcmp(list->items[i], item) == 0) {
+            free(item);
+            return 0;
+        }
+    }
+    char **grown = realloc(list->items, (size_t)(list->count + 1) * sizeof(char *));
+    if (grown == NULL) {
+        free(item);
+        return -1;
+    }
+    list->items = grown;
+    list->items[list->count++] = item;
+    return 0;
+}
+
+static char *string_list_join(const StringList *list) {
+    if (list->count == 0) {
+        return NULL;
+    }
+    size_t len = 1;
+    for (int i = 0; i < list->count; i++) {
+        len += strlen(list->items[i]) + (i > 0 ? 2 : 0);
+    }
+    char *joined = malloc(len);
+    if (joined == NULL) {
+        return NULL;
+    }
+    joined[0] = '\0';
+    for (int i = 0; i < list->count; i++) {
+        if (i > 0) {
+            strcat(joined, ", ");
+        }
+        strcat(joined, list->items[i]);
+    }
+    return joined;
+}
+
+static void string_list_free(StringList *list) {
+    for (int i = 0; i < list->count; i++) {
+        free(list->items[i]);
+    }
+    free(list->items);
+    list->items = NULL;
+    list->count = 0;
+}
+
+static char *join_tokens(char *const *tokens, int count) {
+    size_t len = 1;
+    for (int i = 0; i < count; i++) {
+        len += strlen(tokens[i]) + (i > 0 ? 1 : 0);
+    }
+    char *joined = malloc(len);
+    if (joined == NULL) {
+        return NULL;
+    }
+    joined[0] = '\0';
+    for (int i = 0; i < count; i++) {
+        if (i > 0) {
+            strcat(joined, " ");
+        }
+        strcat(joined, tokens[i]);
+    }
+    return joined;
+}
+
+/* How a segment with no rule is shown, e.g. "git fetch (writes to a file)". */
+static char *unsaved_name(const ParsedShellCommand *parsed, const char *segment,
+                          ShellRuleStatus status) {
+    char *name;
+    if (parsed != NULL && parsed->token_count > 0) {
+        name = join_tokens(parsed->tokens,
+                           parsed->token_count < 2 ? parsed->token_count : 2);
+    } else {
+        name = strdup(segment);
+    }
+    if (name == NULL) {
+        return NULL;
+    }
+
+    const char *reason = shell_rule_status_reason(status);
+    size_t len = strlen(name) + strlen(reason) + 4; /* " (" + ")" + NUL */
+    char *described = malloc(len);
+    if (described != NULL) {
+        snprintf(described, len, "%s (%s)", name, reason);
+    }
+    free(name);
+    return described;
+}
+
+/*
+ * Derive the rule for one segment.
+ *
+ * out_name, when given, receives the name to show for a segment that has no
+ * rule; it stays untouched when a rule was derived.
+ */
+static ShellRuleStatus segment_rule(const char *segment, ShellType type,
+                                    ShellRule *out_rule, char **out_name) {
+    ParsedShellCommand *parsed = parse_shell_command_for_type(segment, type);
+    ShellRuleStatus status = shell_rule_from_parsed(parsed, out_rule, NULL);
+    if (status != SHELL_RULE_OK && out_name != NULL) {
+        *out_name = unsaved_name(parsed, segment, status);
+    }
+    free_parsed_shell_command(parsed);
+    return status;
+}
+
+static int entry_has_rule_tokens(const ShellAllowEntry *entry, const ShellRule *rule) {
+    if (entry->prefix_len != rule->count || entry->command_prefix == NULL) {
+        return 0;
+    }
+    for (int i = 0; i < rule->count; i++) {
+        if (entry->command_prefix[i] == NULL ||
+            strcmp(entry->command_prefix[i], rule->tokens[i]) != 0) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static int add_session_rule(ApprovalGateConfig *config, const ShellRule *rule) {
+    for (int i = 0; i < config->shell_allowlist_count; i++) {
+        const ShellAllowEntry *entry = &config->shell_allowlist[i];
+        if (entry->is_session_rule && entry->exact == rule->exact &&
+            entry_has_rule_tokens(entry, rule)) {
+            return 0; /* Already remembered */
+        }
+    }
+
+    if (approval_gate_add_shell_allowlist(config, (const char **)rule->tokens,
+                                         rule->count, SHELL_TYPE_UNKNOWN) != 0) {
+        return -1;
+    }
+
+    ShellAllowEntry *stored =
+        &config->shell_allowlist[config->shell_allowlist_count - 1];
+    stored->is_session_rule = 1;
+    stored->exact = rule->exact;
+    return 0;
+}
+
+/* Each segment that can have a rule gets one; the rest are named for the user. */
+static int allow_always_shell(ApprovalGateConfig *config, const ToolCall *tool_call,
+                              AllowAlwaysSummary *out) {
     char *command = tool_args_get_command(tool_call);
     if (command == NULL) {
         return -1;
     }
 
+    ShellType type = detect_shell_type();
     char **segments = NULL;
-    int count = shell_split_segments(command, detect_shell_type(), &segments);
+    int count = shell_split_segments(command, type, &segments);
     free(command);
     if (count <= 0) {
         return -1;
     }
 
-    GeneratedPattern *patterns = calloc((size_t)count, sizeof(*patterns));
-    int rc = patterns != NULL ? 0 : -1;
+    StringList saved = {0};
+    StringList unsaved = {0};
+    int failed = 0;
 
-    for (int i = 0; i < count && rc == 0; i++) {
-        if (generate_shell_command_pattern(segments[i], &patterns[i]) != 0 ||
-            patterns[i].command_prefix == NULL) {
-            rc = -1;
+    for (int i = 0; i < count; i++) {
+        ShellRule rule = {0};
+        char *name = NULL;
+        if (segment_rule(segments[i], type, &rule, &name) == SHELL_RULE_OK) {
+            if (add_session_rule(config, &rule) == 0) {
+                char *label = join_tokens(rule.tokens, rule.count);
+                failed |= string_list_add(&saved, label) != 0;
+            } else {
+                failed = 1;
+            }
+        } else {
+            failed |= string_list_add(&unsaved, name) != 0;
         }
-    }
-    for (int i = 0; i < count && rc == 0; i++) {
-        rc = apply_generated_pattern(config, tool_call->name, &patterns[i]);
+        shell_rule_free(&rule);
     }
 
-    if (patterns != NULL) {
-        for (int i = 0; i < count; i++) {
-            free_generated_pattern(&patterns[i]);
-        }
-        free(patterns);
+    int rc = (!failed && saved.count > 0) ? 0 : -1;
+    if (out != NULL) {
+        out->saved = string_list_join(&saved);
+        out->unsaved = string_list_join(&unsaved);
+        out->saved_count = saved.count;
+        out->unsaved_count = unsaved.count;
     }
+
+    string_list_free(&saved);
+    string_list_free(&unsaved);
     free_shell_segments(segments, count);
     return rc;
 }
 
-int approval_gate_allow_always(ApprovalGateConfig *config, const ToolCall *tool_call) {
+int approval_gate_allow_always_ex(ApprovalGateConfig *config, const ToolCall *tool_call,
+                                  AllowAlwaysSummary *out) {
+    if (out != NULL) {
+        memset(out, 0, sizeof(*out));
+    }
     if (config == NULL || tool_call == NULL || tool_call->name == NULL) {
         return -1;
     }
 
     if (get_tool_category(tool_call->name) == GATE_CATEGORY_SHELL) {
-        return allow_always_shell(config, tool_call);
+        return allow_always_shell(config, tool_call, out);
     }
 
     GeneratedPattern pattern = {0};
@@ -843,8 +1014,82 @@ int approval_gate_allow_always(ApprovalGateConfig *config, const ToolCall *tool_
         return -1;
     }
     int rc = apply_generated_pattern(config, tool_call->name, &pattern);
+    if (rc == 0 && out != NULL && pattern.pattern != NULL) {
+        out->saved = strdup(pattern.pattern);
+        out->saved_count = out->saved != NULL ? 1 : 0;
+    }
     free_generated_pattern(&pattern);
     return rc;
+}
+
+int approval_gate_allow_always(ApprovalGateConfig *config, const ToolCall *tool_call) {
+    return approval_gate_allow_always_ex(config, tool_call, NULL);
+}
+
+static int preview_always_shell(const ToolCall *tool_call, char **out_label) {
+    char *command = tool_args_get_command(tool_call);
+    if (command == NULL) {
+        return 0;
+    }
+
+    ShellType type = detect_shell_type();
+    char **segments = NULL;
+    int count = shell_split_segments(command, type, &segments);
+    free(command);
+    if (count <= 0) {
+        return 0;
+    }
+
+    StringList labels = {0};
+    for (int i = 0; i < count; i++) {
+        ShellRule rule = {0};
+        if (segment_rule(segments[i], type, &rule, NULL) == SHELL_RULE_OK) {
+            string_list_add(&labels, shell_rule_label(&rule));
+        }
+        shell_rule_free(&rule);
+    }
+
+    int saveable = labels.count > 0;
+    if (saveable && out_label != NULL) {
+        *out_label = string_list_join(&labels);
+    }
+
+    string_list_free(&labels);
+    free_shell_segments(segments, count);
+    return saveable;
+}
+
+int approval_gate_preview_always(const ToolCall *tool_call, char **out_label) {
+    if (out_label != NULL) {
+        *out_label = NULL;
+    }
+    if (tool_call == NULL || tool_call->name == NULL) {
+        return 0;
+    }
+
+    if (get_tool_category(tool_call->name) == GATE_CATEGORY_SHELL) {
+        return preview_always_shell(tool_call, out_label);
+    }
+
+    GeneratedPattern pattern = {0};
+    if (generate_allowlist_pattern(tool_call, &pattern) != 0) {
+        return 0;
+    }
+    int saveable = pattern.pattern != NULL;
+    if (saveable && out_label != NULL) {
+        *out_label = strdup(pattern.pattern);
+    }
+    free_generated_pattern(&pattern);
+    return saveable;
+}
+
+void allow_always_summary_free(AllowAlwaysSummary *summary) {
+    if (summary == NULL) {
+        return;
+    }
+    free(summary->saved);
+    free(summary->unsaved);
+    memset(summary, 0, sizeof(*summary));
 }
 
 static char *extract_match_target(const char *tool_name, const char *arguments_json) {
@@ -926,6 +1171,14 @@ static int segment_matches_shell_allowlist(const ApprovalGateConfig *config,
         const ShellAllowEntry *entry = &config->shell_allowlist[i];
 
         if (entry->prefix_len <= 0 || entry->command_prefix == NULL) {
+            continue;
+        }
+
+        /* Rules from "a" match the rule the command derives, so flag order and
+         * global options don't matter. */
+        if (entry->is_session_rule) {
+            ShellRule rule = { entry->command_prefix, entry->prefix_len, entry->exact };
+            matched = shell_rule_matches(&rule, parsed);
             continue;
         }
 

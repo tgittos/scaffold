@@ -1337,12 +1337,94 @@ void test_allow_always_stores_every_segment(void) {
     TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &later));
 }
 
-void test_allow_always_refuses_unmatchable_command(void) {
+void test_allow_always_saves_the_segments_it_can(void) {
     ToolCall redirect = shell_call("{\"command\": \"cd src && ls > out.txt\"}");
     ToolCall cd_only = shell_call("{\"command\": \"cd src\"}");
 
-    TEST_ASSERT_EQUAL(-1, approval_gate_allow_always(&config, &redirect));
-    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &cd_only));
+    TEST_ASSERT_EQUAL(0, approval_gate_allow_always(&config, &redirect));
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &cd_only));
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &redirect));
+}
+
+void test_allow_always_summary_names_saved_and_unsaved_parts(void) {
+    AllowAlwaysSummary summary;
+    ToolCall mixed =
+        shell_call("{\"command\": \"grep -rn x lib | head -5; git fetch 2>out\"}");
+
+    TEST_ASSERT_EQUAL(0, approval_gate_allow_always_ex(&config, &mixed, &summary));
+    TEST_ASSERT_EQUAL_STRING("grep, head", summary.saved);
+    TEST_ASSERT_EQUAL(2, summary.saved_count);
+    TEST_ASSERT_EQUAL(1, summary.unsaved_count);
+    TEST_ASSERT_NOT_NULL(summary.unsaved);
+    TEST_ASSERT_NOT_NULL(strstr(summary.unsaved, "git fetch"));
+    TEST_ASSERT_NOT_NULL(strstr(summary.unsaved, "writes to a file"));
+    allow_always_summary_free(&summary);
+
+    ToolCall later = shell_call("{\"command\": \"grep -nr y src\"}");
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &later));
+}
+
+void test_allow_always_rule_ignores_global_options(void) {
+    ToolCall approved = shell_call("{\"command\": \"git -C lib show HEAD\"}");
+    ToolCall later = shell_call("{\"command\": \"git show --stat\"}");
+
+    TEST_ASSERT_EQUAL(0, approval_gate_allow_always(&config, &approved));
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &later));
+}
+
+void test_allow_always_rule_never_covers_always_ask_flag(void) {
+    ToolCall approved = shell_call("{\"command\": \"git push origin\"}");
+    ToolCall plain = shell_call("{\"command\": \"git push\"}");
+    ToolCall forced = shell_call("{\"command\": \"git push -f\"}");
+
+    TEST_ASSERT_EQUAL(0, approval_gate_allow_always(&config, &approved));
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &plain));
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &forced));
+}
+
+void test_allow_always_refuses_command_that_runs_another_command(void) {
+    AllowAlwaysSummary summary;
+    ToolCall wrapped = shell_call("{\"command\": \"sudo ls\"}");
+
+    TEST_ASSERT_NOT_EQUAL(0, approval_gate_allow_always_ex(&config, &wrapped, &summary));
+    TEST_ASSERT_EQUAL(0, summary.saved_count);
+    TEST_ASSERT_NULL(summary.saved);
+    TEST_ASSERT_EQUAL(1, summary.unsaved_count);
+    TEST_ASSERT_NOT_NULL(strstr(summary.unsaved, "sudo ls"));
+    TEST_ASSERT_NOT_NULL(strstr(summary.unsaved, "runs another command"));
+    allow_always_summary_free(&summary);
+
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &wrapped));
+}
+
+void test_preview_always_reports_no_rule_for_substitution(void) {
+    char *label = NULL;
+    ToolCall substitution = shell_call("{\"command\": \"echo \\\"$(id)\\\"\"}");
+
+    TEST_ASSERT_EQUAL(0, approval_gate_preview_always(&substitution, &label));
+    TEST_ASSERT_NULL(label);
+}
+
+void test_preview_always_labels_the_rule_it_would_save(void) {
+    char *label = NULL;
+    ToolCall status = shell_call("{\"command\": \"git status -sb\"}");
+
+    TEST_ASSERT_EQUAL(1, approval_gate_preview_always(&status, &label));
+    TEST_ASSERT_EQUAL_STRING("git status …", label);
+    free(label);
+}
+
+void test_shell_allowlist_config_rules_keep_prefix_semantics(void) {
+    const char *status[] = {"git", "status"};
+    const char *force[] = {"git", "push", "--force"};
+    approval_gate_add_shell_allowlist(&config, status, 2, SHELL_TYPE_UNKNOWN);
+    approval_gate_add_shell_allowlist(&config, force, 3, SHELL_TYPE_UNKNOWN);
+
+    ToolCall with_global_opt = shell_call("{\"command\": \"git -C x status\"}");
+    ToolCall forced = shell_call("{\"command\": \"git push --force\"}");
+
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &with_global_opt));
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &forced));
 }
 
 void test_allow_always_stores_non_shell_pattern(void) {
@@ -2458,7 +2540,14 @@ int main(void) {
     RUN_TEST(test_shell_allowlist_matches_when_every_segment_matches);
     RUN_TEST(test_shell_allowlist_treats_newline_as_separator);
     RUN_TEST(test_allow_always_stores_every_segment);
-    RUN_TEST(test_allow_always_refuses_unmatchable_command);
+    RUN_TEST(test_allow_always_saves_the_segments_it_can);
+    RUN_TEST(test_allow_always_summary_names_saved_and_unsaved_parts);
+    RUN_TEST(test_allow_always_rule_ignores_global_options);
+    RUN_TEST(test_allow_always_rule_never_covers_always_ask_flag);
+    RUN_TEST(test_allow_always_refuses_command_that_runs_another_command);
+    RUN_TEST(test_preview_always_reports_no_rule_for_substitution);
+    RUN_TEST(test_preview_always_labels_the_rule_it_would_save);
+    RUN_TEST(test_shell_allowlist_config_rules_keep_prefix_semantics);
     RUN_TEST(test_allow_always_stores_non_shell_pattern);
     RUN_TEST(test_shell_allowlist_rejects_subshell_commands);
     RUN_TEST(test_shell_allowlist_rejects_dangerous_commands);

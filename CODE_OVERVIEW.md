@@ -110,7 +110,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 #### `lib/policy/` - Approval Gate System
 
 ##### Core Components
-- **`approval_gate.c/h`** - Core orchestration: category lookup, gate checking, config management
+- **`approval_gate.c/h`** - Core orchestration: category lookup, gate checking, config management, and "allow always" storage (one session rule per saveable shell segment, with a summary of what still asks)
 - **`rate_limiter.c/h`** - Opaque rate limiter type with exponential backoff tracking
 - **`allowlist.c/h`** - Opaque allowlist type for regex and shell pattern matching
 - **`gate_prompter.c/h`** - Terminal UI for single and batch approval prompts

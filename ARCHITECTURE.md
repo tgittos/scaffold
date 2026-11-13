@@ -1004,7 +1004,7 @@ graph TB
 
 ### Key Components
 
-- **Approval Gate** (`approval_gate.c/h`): Core orchestration logic for gate checking
+- **Approval Gate** (`approval_gate.c/h`): Core orchestration logic for gate checking. "Allow always" saves a session rule per shell segment that can have one (`approval_gate_allow_always_ex`) and reports what it saved and what still asks; `approval_gate_preview_always` names the rules before prompting. Session rules match through `shell_rule_matches`; entries from the config file and `--allow` keep token-prefix matching
 - **Rate Limiter** (`rate_limiter.c/h`): Exponential backoff after repeated denials
 - **Allowlist** (`allowlist.c/h`): Regex and shell command pattern matching
 - **Gate Prompter** (`gate_prompter.c/h`): Terminal UI for user approval

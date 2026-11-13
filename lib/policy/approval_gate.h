@@ -105,6 +105,10 @@ typedef struct {
     char **command_prefix;  /* Command tokens, e.g., ["git", "status"] */
     int prefix_len;         /* Number of tokens in prefix */
     ShellType shell_type;   /* Optional: only match this shell type, or UNKNOWN for any */
+    int is_session_rule;    /* 1 = created by "a": matched with shell_rule_matches;
+                             * 0 = config file or --allow: token prefix matching */
+    int exact;              /* Session rules only: 1 = never-broaden rule, matched
+                             * by token prefix (see shell_rules.h) */
 } ShellAllowEntry;
 
 /**
@@ -357,6 +361,49 @@ int approval_gate_add_shell_allowlist(ApprovalGateConfig *config,
  * @return 0 when entries were stored, -1 when the call can only be approved once
  */
 int approval_gate_allow_always(ApprovalGateConfig *config, const ToolCall *tool_call);
+
+/**
+ * What pressing "a" remembered, and what it couldn't.
+ */
+typedef struct {
+    char *saved;        /* Rules stored, e.g. "grep, head", or NULL */
+    char *unsaved;      /* Parts that still ask, e.g. "git fetch (writes to a file)",
+                         * or NULL */
+    int   saved_count;  /* Number of rules listed in saved */
+    int   unsaved_count;/* Number of parts listed in unsaved */
+} AllowAlwaysSummary;
+
+/**
+ * Add session allowlist entries and report what was stored.
+ * A shell command gets one rule per segment that can have one; segments that
+ * can't are named in the summary with the reason they still ask.
+ *
+ * @param config Gate configuration
+ * @param tool_call The approved tool call
+ * @param out Optional output: the summary. Caller must free with
+ *            allow_always_summary_free().
+ * @return 0 when at least one rule was stored, -1 when nothing could be stored
+ */
+int approval_gate_allow_always_ex(ApprovalGateConfig *config,
+                                  const ToolCall *tool_call,
+                                  AllowAlwaysSummary *out);
+
+/**
+ * Describe the rules pressing "a" would create, without storing anything.
+ *
+ * @param tool_call The tool call about to be prompted for
+ * @param out_label Optional output: the rules, e.g. "git show …, grep …".
+ *                  Caller must free.
+ * @return 1 if anything about the call is saveable, 0 otherwise
+ */
+int approval_gate_preview_always(const ToolCall *tool_call, char **out_label);
+
+/**
+ * Free the strings held by a summary and reset it. NULL safe.
+ *
+ * @param summary The summary to clean up
+ */
+void allow_always_summary_free(AllowAlwaysSummary *summary);
 
 /**
  * Check if a tool call matches any allowlist entry.
