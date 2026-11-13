@@ -354,23 +354,6 @@ char* generate_tool_results_json(const ToolResult *results, int result_count) {
     return json;
 }
 
-char* generate_single_tool_message(const ToolResult *result) {
-    if (result == NULL || result->tool_call_id == NULL || result->result == NULL) {
-        return NULL;
-    }
-
-    size_t estimated_size = strlen(result->result) * 2 + 200; // *2 for escaping
-    char *message = malloc(estimated_size);
-    if (message == NULL) {
-        return NULL;
-    }
-
-    snprintf(message, estimated_size, "Tool call %s result: %s",
-             result->tool_call_id, result->result);
-
-    return message;
-}
-
 void cleanup_tool_registry(ToolRegistry *registry) {
     if (registry == NULL) {
         return;

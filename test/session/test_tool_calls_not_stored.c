@@ -110,7 +110,7 @@ void test_assistant_tool_calls_not_stored_in_vector_db(void) {
     append_conversation_message(&history, "user", "What's the weather like in London?");
 
     // Add an assistant message in GPT format with tool_calls
-    // This is what format_model_assistant_tool_message creates for GPT models
+    // This is what gpt_format_assistant_tool_message creates
     const char* assistant_with_tool_calls =
         "{\"role\": \"assistant\", \"content\": null, \"tool_calls\": [{\"id\": \"call_abc123\", \"type\": \"function\", \"function\": {\"name\": \"get_weather\", \"arguments\": \"{\\\"location\\\": \\\"London\\\"}\"}}]}";
 

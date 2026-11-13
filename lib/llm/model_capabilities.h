@@ -8,7 +8,6 @@
 
 /* Forward declarations to break cross-layer header dependencies */
 typedef struct ParsedResponse ParsedResponse;
-typedef struct ToolRegistry ToolRegistry;
 
 typedef struct {
     const char* model_pattern;  /* substring match, e.g. "qwen", "deepseek", "claude" */
@@ -18,12 +17,6 @@ typedef struct {
     const char* thinking_end_tag;
 
     int (*process_response)(const char* content, ParsedResponse* result);
-
-    int supports_function_calling;
-    char* (*generate_tools_json)(const ToolRegistry* registry);
-    int (*parse_tool_calls)(const char* json_response, ToolCall** tool_calls, int* call_count);
-    char* (*format_tool_result_message)(const ToolResult* result);
-    char* (*format_assistant_tool_message)(const char* response_content, const ToolCall* tool_calls, int tool_call_count);
 
     int max_context_length;
 } ModelCapabilities;
@@ -43,13 +36,6 @@ char* gpt_format_assistant_tool_message(const char* response_content,
 char* claude_format_assistant_tool_message(const char* response_content,
                                            const ToolCall* tool_calls,
                                            int tool_call_count);
-
-char* generate_model_tools_json(ModelRegistry* registry, const char* model_name, const ToolRegistry* tools);
-int parse_model_tool_calls(ModelRegistry* registry, const char* model_name,
-                          const char* json_response, ToolCall** tool_calls, int* call_count);
-char* format_model_tool_result_message(ModelRegistry* registry, const char* model_name, const ToolResult* result);
-char* format_model_assistant_tool_message(ModelRegistry* registry, const char* model_name,
-                                         const char* response_content, const ToolCall* tool_calls, int tool_call_count);
 
 ModelRegistry* get_model_registry(void);
 void cleanup_model_registry_singleton(void);
