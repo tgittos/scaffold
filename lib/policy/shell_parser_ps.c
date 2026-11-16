@@ -74,6 +74,7 @@ int parse_powershell(const char *command, ParsedShellCommand *result) {
     result->has_pipe = 0;
     result->has_subshell = 0;
     result->has_redirect = 0;
+    result->has_variable = 0;
     result->is_dangerous = shell_command_is_dangerous(command) ||
                            powershell_command_is_dangerous(command);
     result->shell_type = SHELL_TYPE_POWERSHELL;

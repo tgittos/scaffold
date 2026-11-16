@@ -57,6 +57,7 @@ typedef struct {
     int has_pipe;           /* Contains | */
     int has_subshell;       /* Contains $() or `` (POSIX/PS) */
     int has_redirect;       /* Contains > >> < << */
+    int has_variable;       /* Contains a $ the shell would expand (POSIX) */
 
     /* Security flags */
     int is_dangerous;       /* Matches dangerous pattern (rm -rf, etc.) */

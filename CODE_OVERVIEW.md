@@ -126,7 +126,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`shell_parser.c/h`** - POSIX shell tokenization, dangerous pattern detection, and segment splitting for compound commands
 - **`shell_parser_cmd.c`** - cmd.exe parsing with metacharacter detection
 - **`shell_parser_ps.c`** - PowerShell parsing with cmdlet detection
-- **`shell_rules.c/h`** - Rules saved by "always allow": command + subcommand (plus the script for runners like `npm run build`), base-name lookups, flag-order-insensitive matching, always-ask flag table, and the commands and subcommands no rule can cover
+- **`shell_rules.c/h`** - Rules saved by "always allow": the segment's exact token list, matched token for token, plus the always-ask flag table and the expansions (variable, glob, brace) that stop a segment being saved
 
 ##### TOCTOU Protection
 - **`atomic_file.c/h`** - Atomic file operations with O_NOFOLLOW, O_EXCL, inode verification
@@ -359,7 +359,7 @@ The test directory mirrors the source structure:
 - **`test_shell_parser.c`** - POSIX shell tokenization and dangerous pattern detection
 - **`test_shell_parser_cmd.c`** - cmd.exe parsing tests
 - **`test_shell_parser_ps.c`** - PowerShell parsing and dangerous cmdlet detection
-- **`test_shell_rules.c`** - Rule derivation, flag-order-insensitive matching, always-ask flags
+- **`test_shell_rules.c`** - Rule derivation, exact-token matching, always-ask flags, unsaveable expansions
 - **`test_path_normalize.c`** - Cross-platform path normalization
 - **`test_protected_files.c`** - Protected file detection
 - **`test_atomic_file.c`** - TOCTOU-safe file operations

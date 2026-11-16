@@ -6,30 +6,26 @@
 /**
  * Shell allow rules created by pressing "a" at the approval prompt.
  *
- * A rule is the command name plus, for tools that have subcommands (git,
- * docker, kubectl, ...), the subcommand. Matching ignores flag order and global
- * options, so a rule saved from "git -C lib show HEAD" still matches
- * "git show --stat". Flags that change what a command does (--force, -delete,
- * ...) never create a rule and never match one.
+ * A rule is the exact token list of the command segment it was saved from, and
+ * it matches only a segment with the same tokens in the same order. Whitespace
+ * and quoting don't matter, because the rule holds parsed tokens; anything else
+ * does, so "a" on "git status" never covers "git status -sb".
  *
- * Commands that run other programs (sudo, xargs, bash -c, npm exec) can't be
- * saved at all, nor can subcommands that run arbitrary code or can't be undone
- * (git config, git reset, docker build); commands whose rule must not broaden
- * (interpreters, curl, rm) and script runners (npm run, make) keep a narrow
- * rule that names the script or target, matched by prefix.
+ * A segment can't be saved at all when the shell would turn it into something
+ * else before it runs (substitution, chain, redirect, a glob, a brace
+ * expansion) or when it carries a flag that must always be approved (--force,
+ * -delete, curl -o, ...).
  *
- * Commands are looked up by their base name with any version suffix removed,
- * so "/usr/bin/python3.12" is classified as "python"; a saved rule keeps the
- * tokens as the user typed them.
+ * Entries from the config file and --allow are not rules: they keep token
+ * prefix matching, and shell_rule_is_broad() marks the ones --auto ignores.
  *
  * Related headers:
  * - shell_parser.h: parses the command this module classifies
  */
 
 typedef struct {
-    char **tokens;     /* ["grep"] or ["git","show"] or, for never-broaden, ["python","foo.py"] */
+    char **tokens;     /* Every token of the segment, e.g. ["make","test"] */
     int    count;
-    int    exact;      /* 1 = legacy prefix semantics (never-broaden rules) */
 } ShellRule;
 
 typedef enum {
@@ -37,10 +33,7 @@ typedef enum {
     SHELL_RULE_UNSAFE_SYNTAX,     /* substitution, chain, unsplittable pipe, dangerous pattern */
     SHELL_RULE_REDIRECT,          /* writes to a file */
     SHELL_RULE_ALWAYS_ASK_FLAG,   /* e.g. --force */
-    SHELL_RULE_WRAPPER,           /* sudo, env, xargs, nohup, timeout, nice, sh -c */
-    SHELL_RULE_UNKNOWN_GLOBAL_OPT,/* option before subcommand we can't classify */
-    SHELL_RULE_RUNS_CODE,         /* git config, docker build, gh */
-    SHELL_RULE_IRREVERSIBLE       /* git reset, git stash, kubectl delete */
+    SHELL_RULE_EXPANSION          /* a variable, glob or brace the shell expands */
 } ShellRuleStatus;
 
 /**
@@ -50,8 +43,8 @@ typedef enum {
  * @param out Output: the rule, filled only when SHELL_RULE_OK is returned.
  *            Caller must free with shell_rule_free().
  * @param out_detail Optional output: the offending token (e.g. "--force") for
- *                   SHELL_RULE_ALWAYS_ASK_FLAG and SHELL_RULE_UNKNOWN_GLOBAL_OPT,
- *                   NULL otherwise. Points into the parsed command's tokens.
+ *                   SHELL_RULE_ALWAYS_ASK_FLAG and SHELL_RULE_EXPANSION, NULL
+ *                   otherwise. Points into the parsed command's tokens.
  * @return SHELL_RULE_OK, or the reason no rule can be saved
  */
 ShellRuleStatus shell_rule_from_parsed(const ParsedShellCommand *p, ShellRule *out,
@@ -60,8 +53,8 @@ ShellRuleStatus shell_rule_from_parsed(const ParsedShellCommand *p, ShellRule *o
 /**
  * Check whether a command is covered by a saved rule.
  *
- * Exact rules match by token prefix; other rules match when the command derives
- * the same rule. A command that can't produce a rule never matches one.
+ * Only a command that could itself be saved, with the rule's exact tokens,
+ * matches.
  *
  * @param rule The saved rule
  * @param p The parsed command
@@ -79,6 +72,16 @@ int shell_rule_matches(const ShellRule *rule, const ParsedShellCommand *p);
 int shell_has_always_ask_flag(const ParsedShellCommand *p, const char **out_flag);
 
 /**
+ * Check whether a token carries a brace expansion the shell would turn into
+ * several words: a "{" with a "," or ".." before its "}". A quoted program such
+ * as awk's "{print}" or sed's "1{p}" is just text.
+ *
+ * @param token The token to inspect
+ * @return 1 if the token would expand, 0 otherwise
+ */
+int shell_token_has_brace_expansion(const char *token);
+
+/**
  * Short user-facing reason a command couldn't be saved as a rule.
  *
  * @param s The status from shell_rule_from_parsed()
@@ -87,7 +90,10 @@ int shell_has_always_ask_flag(const ParsedShellCommand *p, const char **out_flag
 const char *shell_rule_status_reason(ShellRuleStatus s);
 
 /**
- * Render a rule for display, e.g. "git show …".
+ * Render a rule for display, e.g. "\"git show HEAD\"".
+ *
+ * The quotes are part of the label so that several rules read as a list:
+ * "make test", "git status".
  *
  * @param rule The rule
  * @return Allocated string, or NULL on error. Caller must free.
@@ -95,15 +101,16 @@ const char *shell_rule_status_reason(ShellRuleStatus s);
 char *shell_rule_label(const ShellRule *rule);
 
 /**
- * Check whether a rule's tokens cover too much to stand in for a model review.
+ * Check whether a config or --allow entry covers too much to stand in for a
+ * model review.
  *
- * Broad rules name a command that runs whatever it is given: an interpreter or
- * wrapper, or a package manager's run/exec/test with no script named. In
+ * Broad entries name a command that runs whatever it is given: an interpreter
+ * or wrapper, or a package manager's run/exec/test with no script named. In
  * --auto such an entry is skipped so the call reaches the review.
  *
- * @param tokens The rule's tokens
+ * @param tokens The entry's tokens
  * @param count Number of tokens
- * @return 1 if the rule is too broad, 0 otherwise
+ * @return 1 if the entry is too broad, 0 otherwise
  */
 int shell_rule_is_broad(const char *const *tokens, int count);
 

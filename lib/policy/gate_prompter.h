@@ -83,8 +83,8 @@ int gate_prompter_read_key_timeout(GatePrompter *gp, int timeout_ms, char *press
  * @param tool_call The tool call to prompt for
  * @param command Extracted shell command (or NULL if not a shell tool)
  * @param path Extracted file path (or NULL if not applicable)
- * @param always_label What "a" would save, e.g. "git show …"; NULL when "a"
- *        is not offered
+ * @param always_label What "a" would save, quoted, e.g. "\"git show HEAD\"";
+ *        NULL when "a" is not offered
  */
 void gate_prompter_show_single(GatePrompter *gp,
                                const ToolCall *tool_call,
@@ -97,7 +97,8 @@ void gate_prompter_show_single(GatePrompter *gp,
  *
  * @param buf Output buffer
  * @param size Size of buf
- * @param always_label What "a" would save, or NULL if "a" is not offered
+ * @param always_label What "a" would save, quoted by the caller, or NULL if
+ *        "a" is not offered
  */
 void gate_prompter_format_hint(char *buf, size_t size, const char *always_label);
 

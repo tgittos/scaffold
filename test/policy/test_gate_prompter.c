@@ -89,8 +89,8 @@ void test_gate_prompter_show_single_null_tool_call_is_safe(void) {
 
 void test_gate_prompter_hint_with_label_offers_always(void) {
     char buf[256];
-    gate_prompter_format_hint(buf, sizeof(buf), "git show …");
-    TEST_ASSERT_NOT_NULL(strstr(buf, "always allow \"git show …\""));
+    gate_prompter_format_hint(buf, sizeof(buf), "\"git show HEAD\"");
+    TEST_ASSERT_NOT_NULL(strstr(buf, "always allow \"git show HEAD\""));
 }
 
 void test_gate_prompter_hint_without_label_hides_always(void) {
@@ -103,7 +103,7 @@ void test_gate_prompter_hint_without_label_hides_always(void) {
 void test_gate_prompter_hint_truncates_long_label_to_80_columns(void) {
     char buf[256];
     gate_prompter_format_hint(buf, sizeof(buf),
-        "git show …, grep …, head …, sort …, uniq …, wc …, cat …, ls …, find …");
+        "\"git show HEAD\", \"grep -rn foo lib\", \"head -5 log\", \"sort -u x\"");
     size_t chars = 0;
     for (const unsigned char *c = (const unsigned char *)buf; *c; c++) {
         if ((*c & 0xC0) != 0x80) chars++;

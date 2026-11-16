@@ -24,8 +24,8 @@ typedef struct {
 typedef struct {
     const char      *command;
     const GlobalOpt *options;      /* name == NULL terminated */
-    int              assignments;  /* 1 = takes VAR=value arguments (make); they
-                                    * make the command unsaveable */
+    int              assignments;  /* 1 = takes VAR=value arguments (make), which
+                                    * are not the subcommand */
 } SubcommandTool;
 
 static const GlobalOpt GIT_OPTS[] = {
@@ -58,6 +58,8 @@ static const GlobalOpt NO_OPTS[] = {
     {NULL, OPT_FLAG}
 };
 
+/* Tools whose always-ask flags are scoped to a subcommand: the subcommand has
+ * to be resolved before those flags can be checked. */
 static const SubcommandTool SUBCOMMAND_TOOLS[] = {
     {"git", GIT_OPTS, 0},
     {"docker", DOCKER_OPTS, 0},
@@ -174,18 +176,12 @@ static const AlwaysAskFlag ALWAYS_ASK_FLAGS[] = {
     {NULL, NULL, NULL, 0, 0}
 };
 
-/* Commands whose rule must stay narrow: the rule is the first two tokens and
- * matches by prefix, so "a" on "python foo.py" never covers "python bar.py". */
-static const char *NEVER_BROADEN[] = {
+/* Commands that run whatever they are handed: a config entry naming one covers
+ * every program it could run. */
+static const char *BROAD_COMMANDS[] = {
     "python", "python3", "node", "ruby", "perl", "bash", "sh", "zsh",
     "curl", "wget", "ssh", "scp", "rm",
-    /* These run a script given as their argument. */
-    "sed", "awk", "gawk", NULL
-};
-
-/* Commands that run another command: whatever they wrap is what matters, so
- * no rule can describe them. */
-static const char *WRAPPERS[] = {
+    "sed", "awk", "gawk",
     "sudo", "env", "xargs", "nohup", "timeout", "nice",
     "npx", "eval", "source", ".", "exec",
     "time", "command", "builtin", "stdbuf", "chroot", "watch", "strace",
@@ -196,7 +192,7 @@ static const char *WRAPPERS[] = {
 
 /* Subcommands that fetch, compile or containerise and then run an arbitrary
  * program. */
-static const char *WRAPPER_SUBCOMMANDS[][2] = {
+static const char *BROAD_SUBCOMMANDS[][2] = {
     {"go", "run"},
     {"npm", "x"}, {"npm", "exec"},
     {"pnpm", "dlx"}, {"pnpm", "exec"},
@@ -208,67 +204,9 @@ static const char *WRAPPER_SUBCOMMANDS[][2] = {
     {NULL, NULL}
 };
 
-/*
- * Subcommands no rule can describe: they run code the rule can't see, or they
- * change state that can't be restored. Both are decided per command, so the
- * prompt can name the real reason.
- */
-typedef struct {
-    const char     *command;
-    const char     *subcommand;  /* NULL = every subcommand, and the bare command */
-    ShellRuleStatus status;
-} UnsaveableSubcommand;
-
-static const UnsaveableSubcommand UNSAVEABLE_SUBCOMMANDS[] = {
-    {"git", "config", SHELL_RULE_RUNS_CODE},
-    {"git", "rebase", SHELL_RULE_RUNS_CODE},
-    {"git", "filter-branch", SHELL_RULE_RUNS_CODE},
-    {"git", "submodule", SHELL_RULE_RUNS_CODE},
-    {"git", "worktree", SHELL_RULE_RUNS_CODE},
-    {"git", "checkout", SHELL_RULE_IRREVERSIBLE},
-    {"git", "restore", SHELL_RULE_IRREVERSIBLE},
-    {"git", "reset", SHELL_RULE_IRREVERSIBLE},
-    {"git", "clean", SHELL_RULE_IRREVERSIBLE},
-    {"git", "stash", SHELL_RULE_IRREVERSIBLE},
-    {"docker", "build", SHELL_RULE_RUNS_CODE},
-    {"docker", "compose", SHELL_RULE_RUNS_CODE},
-    {"kubectl", "apply", SHELL_RULE_IRREVERSIBLE},
-    {"kubectl", "delete", SHELL_RULE_IRREVERSIBLE},
-    /* gh runs user-defined aliases and extensions, and gh api writes. */
-    {"gh", NULL, SHELL_RULE_RUNS_CODE},
-    {NULL, NULL, SHELL_RULE_OK}
-};
-
-/*
- * Commands that run a named script or target. The name belongs in the rule, so
- * "npm run build" never covers "npm run deploy".
- */
-typedef struct {
-    const char *command;
-    const char *subcommand;    /* NULL = the subcommand is itself the target */
-    int         names_script;  /* 1 = the operand after the subcommand is the script */
-} ScriptRunner;
-
-static const ScriptRunner SCRIPT_RUNNERS[] = {
-    {"npm", "run", 1},
-    {"npm", "run-script", 1},
-    {"npm", "test", 0},
-    {"pnpm", "run", 1},
-    {"pnpm", "run-script", 1},
-    {"yarn", "run", 1},
-    {"yarn", NULL, 0},
-    {"make", NULL, 0},
-    {NULL, NULL, 0}
-};
-
 /* Package managers whose run/exec/test covers whatever the project defines. */
 static const char *PACKAGE_MANAGERS[] = {
     "npm", "pnpm", "yarn", "bun", "uv", "poetry", "pipx", "bundle", NULL
-};
-
-/* Shells that run a command when given -c. */
-static const char *SHELLS[] = {
-    "bash", "sh", "zsh", NULL
 };
 
 /* ==========================================================================
@@ -323,13 +261,13 @@ static int command_name_in_list(const CommandName *name, const char *const *list
     return name->stripped[0] != '\0' && in_list(name->stripped, list);
 }
 
-static int is_wrapper_subcommand(const CommandName *name, const char *subcommand) {
+static int is_broad_subcommand(const CommandName *name, const char *subcommand) {
     if (subcommand == NULL) {
         return 0;
     }
-    for (int i = 0; WRAPPER_SUBCOMMANDS[i][0] != NULL; i++) {
-        if (command_name_is(name, WRAPPER_SUBCOMMANDS[i][0]) &&
-            strcmp(subcommand, WRAPPER_SUBCOMMANDS[i][1]) == 0) {
+    for (int i = 0; BROAD_SUBCOMMANDS[i][0] != NULL; i++) {
+        if (command_name_is(name, BROAD_SUBCOMMANDS[i][0]) &&
+            strcmp(subcommand, BROAD_SUBCOMMANDS[i][1]) == 0) {
             return 1;
         }
     }
@@ -337,57 +275,13 @@ static int is_wrapper_subcommand(const CommandName *name, const char *subcommand
 }
 
 /* Whether any subcommand of the command runs whatever it is given. */
-static int has_wrapper_subcommands(const CommandName *name) {
-    for (int i = 0; WRAPPER_SUBCOMMANDS[i][0] != NULL; i++) {
-        if (command_name_is(name, WRAPPER_SUBCOMMANDS[i][0])) {
+static int has_broad_subcommands(const CommandName *name) {
+    for (int i = 0; BROAD_SUBCOMMANDS[i][0] != NULL; i++) {
+        if (command_name_is(name, BROAD_SUBCOMMANDS[i][0])) {
             return 1;
         }
     }
     return 0;
-}
-
-/* SHELL_RULE_OK when the command and subcommand can have a rule at all. */
-static ShellRuleStatus unsaveable_subcommand_status(const CommandName *name,
-                                                    const char *subcommand) {
-    for (int i = 0; UNSAVEABLE_SUBCOMMANDS[i].command != NULL; i++) {
-        const UnsaveableSubcommand *e = &UNSAVEABLE_SUBCOMMANDS[i];
-        if (!command_name_is(name, e->command)) {
-            continue;
-        }
-        if (e->subcommand == NULL ||
-            (subcommand != NULL && strcmp(e->subcommand, subcommand) == 0)) {
-            return e->status;
-        }
-    }
-    return SHELL_RULE_OK;
-}
-
-static const ScriptRunner *find_script_runner(const CommandName *name,
-                                              const char *subcommand) {
-    for (int i = 0; SCRIPT_RUNNERS[i].command != NULL; i++) {
-        const ScriptRunner *e = &SCRIPT_RUNNERS[i];
-        if (!command_name_is(name, e->command)) {
-            continue;
-        }
-        if (e->subcommand == NULL ||
-            (subcommand != NULL && strcmp(e->subcommand, subcommand) == 0)) {
-            return e;
-        }
-    }
-    return NULL;
-}
-
-/* A "NAME=value" prefix changes what the command sees (PATH, LD_PRELOAD,
- * GIT_*) and what it therefore runs. */
-static int is_assignment(const char *t) {
-    if (!isalpha((unsigned char)t[0]) && t[0] != '_') {
-        return 0;
-    }
-    const char *p = t + 1;
-    while (isalnum((unsigned char)*p) || *p == '_') {
-        p++;
-    }
-    return *p == '=';
 }
 
 static int is_all_digits(const char *s) {
@@ -436,10 +330,10 @@ static const GlobalOpt *find_global_opt(const GlobalOpt *options, const char *to
 /*
  * Find the subcommand, skipping the tool's known global options.
  * Returns 0 with *out_sub set to the subcommand or NULL when there is none,
- * or -1 with *out_detail set to an option we can't classify.
+ * or -1 when an option we can't classify hides it.
  */
 static int resolve_subcommand(const ParsedShellCommand *p, const SubcommandTool *tool,
-                              const char **out_sub, const char **out_detail) {
+                              const char **out_sub) {
     *out_sub = NULL;
     for (int i = 1; i < p->token_count; i++) {
         const char *t = p->tokens[i];
@@ -456,7 +350,6 @@ static int resolve_subcommand(const ParsedShellCommand *p, const SubcommandTool 
 
         const GlobalOpt *opt = find_global_opt(tool->options, t);
         if (opt == NULL) {
-            *out_detail = t;
             return -1;
         }
         int has_inline_value = strchr(t, '=') != NULL;
@@ -569,23 +462,18 @@ static int git_spelling_always_ask(const ParsedShellCommand *p, const char *subc
     return 0;
 }
 
-/*
- * The script a runner was told to run: the token right after the subcommand.
- * Anything else there (an option, "--") means the script isn't named where a
- * rule could pin it, so there is none.
- */
-static const char *script_token_after(const ParsedShellCommand *p,
-                                      const char *subcommand) {
-    for (int i = 1; i + 1 < p->token_count; i++) {
-        if (p->tokens[i] == subcommand) {
-            const char *next = p->tokens[i + 1];
-            return is_option(next) ? NULL : next;
+/* The token the shell would rewrite before the command sees it. */
+static const char *expanding_token(const ParsedShellCommand *p) {
+    for (int i = 0; i < p->token_count; i++) {
+        const char *t = p->tokens[i];
+        if (strpbrk(t, "$`*?[") != NULL || shell_token_has_brace_expansion(t)) {
+            return t;
         }
     }
     return NULL;
 }
 
-static int build_rule(ShellRule *out, char *const *tokens, int count, int exact) {
+static int build_rule(ShellRule *out, char *const *tokens, int count) {
     out->tokens = calloc((size_t)count, sizeof(char *));
     if (out->tokens == NULL) {
         return -1;
@@ -599,13 +487,27 @@ static int build_rule(ShellRule *out, char *const *tokens, int count, int exact)
         }
     }
     out->count = count;
-    out->exact = exact;
     return 0;
 }
 
 /* ==========================================================================
  * Public API
  * ========================================================================== */
+
+int shell_token_has_brace_expansion(const char *token) {
+    if (token == NULL) {
+        return 0;
+    }
+    for (const char *open = strchr(token, '{'); open != NULL;
+         open = strchr(open + 1, '{')) {
+        for (const char *p = open + 1; *p != '\0' && *p != '{' && *p != '}'; p++) {
+            if (*p == ',' || (p[0] == '.' && p[1] == '.')) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
 
 int shell_has_always_ask_flag(const ParsedShellCommand *p, const char **out_flag) {
     if (out_flag != NULL) {
@@ -617,11 +519,10 @@ int shell_has_always_ask_flag(const ParsedShellCommand *p, const char **out_flag
 
     CommandName name = command_name_of(p->tokens[0]);
     const char *subcommand = NULL;
-    const char *detail = NULL;
     int subcommand_known = 1;
     const SubcommandTool *tool = find_subcommand_tool(&name);
     if (tool != NULL) {
-        subcommand_known = resolve_subcommand(p, tool, &subcommand, &detail) == 0;
+        subcommand_known = resolve_subcommand(p, tool, &subcommand) == 0;
     }
     /* git spells some dangerous operations out across several tokens. */
     int is_git = command_name_is(&name, "git");
@@ -675,7 +576,6 @@ ShellRuleStatus shell_rule_from_parsed(const ParsedShellCommand *p, ShellRule *o
     if (out != NULL) {
         out->tokens = NULL;
         out->count = 0;
-        out->exact = 0;
     }
     if (p == NULL || out == NULL || p->token_count < 1) {
         return SHELL_RULE_UNSAFE_SYNTAX;
@@ -687,24 +587,6 @@ ShellRuleStatus shell_rule_from_parsed(const ParsedShellCommand *p, ShellRule *o
         return SHELL_RULE_REDIRECT;
     }
 
-    if (is_assignment(p->tokens[0])) {
-        return SHELL_RULE_WRAPPER;
-    }
-
-    const char *command = p->tokens[0];
-    CommandName name = command_name_of(command);
-    const SubcommandTool *tool = find_subcommand_tool(&name);
-    const char *subcommand = NULL;
-    if (tool != NULL) {
-        const char *detail = NULL;
-        if (resolve_subcommand(p, tool, &subcommand, &detail) != 0) {
-            if (out_detail != NULL) {
-                *out_detail = detail;
-            }
-            return SHELL_RULE_UNKNOWN_GLOBAL_OPT;
-        }
-    }
-
     const char *flag = NULL;
     if (shell_has_always_ask_flag(p, &flag)) {
         if (out_detail != NULL) {
@@ -713,99 +595,39 @@ ShellRuleStatus shell_rule_from_parsed(const ParsedShellCommand *p, ShellRule *o
         return SHELL_RULE_ALWAYS_ASK_FLAG;
     }
 
-    if (command_name_in_list(&name, WRAPPERS) ||
-        is_wrapper_subcommand(&name, subcommand)) {
-        return SHELL_RULE_WRAPPER;
-    }
-    if (command_name_in_list(&name, SHELLS)) {
-        for (int i = 1; i < p->token_count; i++) {
-            const char *t = p->tokens[i];
-            if (is_option(t) && t[1] != '-' && strchr(t + 1, 'c') != NULL) {
-                return SHELL_RULE_WRAPPER;
-            }
+    /* The rule holds the tokens the shell produced, so a token the shell would
+     * still rewrite stands for a command nobody reviewed. */
+    const char *expanding = expanding_token(p);
+    if (p->has_variable || expanding != NULL) {
+        if (out_detail != NULL) {
+            *out_detail = expanding;
         }
+        return SHELL_RULE_EXPANSION;
     }
 
-    ShellRuleStatus unsaveable = unsaveable_subcommand_status(&name, subcommand);
-    if (unsaveable != SHELL_RULE_OK) {
-        return unsaveable;
-    }
-
-    /* A VAR=value argument changes the recipes make runs. */
-    if (tool != NULL && tool->assignments) {
-        for (int i = 1; i < p->token_count; i++) {
-            if (is_assignment(p->tokens[i])) {
-                return SHELL_RULE_RUNS_CODE;
-            }
-        }
-    }
-
-    if (command_name_in_list(&name, NEVER_BROADEN)) {
-        /* The second token is what the rule pins down. An option there (python -c,
-         * node -e, curl -o) carries the real payload, so no rule can cover it. */
-        if (p->token_count > 1 && is_option(p->tokens[1])) {
-            return SHELL_RULE_WRAPPER;
-        }
-        int count = p->token_count < 2 ? p->token_count : 2;
-        return build_rule(out, p->tokens, count, 1) == 0 ? SHELL_RULE_OK
-                                                         : SHELL_RULE_UNSAFE_SYNTAX;
-    }
-
-    const ScriptRunner *runner = find_script_runner(&name, subcommand);
-    if (runner != NULL && subcommand != NULL) {
-        char *tokens[3] = { (char *)command, (char *)subcommand, NULL };
-        int count = 2;
-        if (runner->names_script) {
-            const char *script = script_token_after(p, subcommand);
-            if (script == NULL) {
-                /* Without a script the rule would cover every script there is. */
-                return SHELL_RULE_WRAPPER;
-            }
-            tokens[2] = (char *)script;
-            count = 3;
-        }
-        /* Matched against the rule the command derives, so the global options a
-         * runner takes (make -j4, make -C build) don't stop the rule covering
-         * the very command it was saved from. */
-        return build_rule(out, tokens, count, 0) == 0 ? SHELL_RULE_OK
-                                                      : SHELL_RULE_UNSAFE_SYNTAX;
-    }
-
-    if (subcommand != NULL) {
-        char *tokens[2] = { (char *)command, (char *)subcommand };
-        return build_rule(out, tokens, 2, 0) == 0 ? SHELL_RULE_OK
-                                                  : SHELL_RULE_UNSAFE_SYNTAX;
-    }
-
-    return build_rule(out, p->tokens, 1, 0) == 0 ? SHELL_RULE_OK : SHELL_RULE_UNSAFE_SYNTAX;
+    return build_rule(out, p->tokens, p->token_count) == 0 ? SHELL_RULE_OK
+                                                           : SHELL_RULE_UNSAFE_SYNTAX;
 }
 
 int shell_rule_matches(const ShellRule *rule, const ParsedShellCommand *p) {
-    if (rule == NULL || rule->count < 1 || p == NULL) {
+    if (rule == NULL || rule->count < 1 || p == NULL ||
+        rule->count != p->token_count) {
         return 0;
     }
 
+    for (int i = 0; i < rule->count; i++) {
+        if (strcmp(rule->tokens[i], p->tokens[i]) != 0) {
+            return 0;
+        }
+    }
+
+    /* The same tokens still have to be a command "a" could have saved. */
     ShellRule derived;
     if (shell_rule_from_parsed(p, &derived, NULL) != SHELL_RULE_OK) {
         return 0;
     }
-
-    int ok;
-    if (rule->exact) {
-        /* Legacy prefix semantics: the rule's tokens must open the command. */
-        ok = rule->count <= p->token_count;
-        for (int i = 0; ok && i < rule->count; i++) {
-            ok = strcmp(rule->tokens[i], p->tokens[i]) == 0;
-        }
-    } else {
-        ok = rule->count == derived.count;
-        for (int i = 0; ok && i < rule->count; i++) {
-            ok = strcmp(rule->tokens[i], derived.tokens[i]) == 0;
-        }
-    }
-
     shell_rule_free(&derived);
-    return ok;
+    return 1;
 }
 
 int shell_rule_is_broad(const char *const *tokens, int count) {
@@ -814,21 +636,20 @@ int shell_rule_is_broad(const char *const *tokens, int count) {
     }
 
     CommandName name = command_name_of(tokens[0]);
-    if (command_name_in_list(&name, NEVER_BROADEN) ||
-        command_name_in_list(&name, WRAPPERS)) {
+    if (command_name_in_list(&name, BROAD_COMMANDS)) {
         return 1;
     }
 
     /* A bare tool entry covers its own command-running subcommands. */
     if (count == 1) {
         return command_name_in_list(&name, PACKAGE_MANAGERS) ||
-               has_wrapper_subcommands(&name);
+               has_broad_subcommands(&name);
     }
 
     if (tokens[1] != NULL) {
         /* Naming what the wrapper runs doesn't narrow the entry: it still
          * matches every flag and operand that follows. */
-        if (is_wrapper_subcommand(&name, tokens[1])) {
+        if (is_broad_subcommand(&name, tokens[1])) {
             return 1;
         }
         if (count == 2 && command_name_in_list(&name, PACKAGE_MANAGERS)) {
@@ -847,14 +668,8 @@ const char *shell_rule_status_reason(ShellRuleStatus s) {
             return "writes to a file";
         case SHELL_RULE_ALWAYS_ASK_FLAG:
             return "uses an always-ask flag";
-        case SHELL_RULE_WRAPPER:
-            return "runs another command";
-        case SHELL_RULE_UNKNOWN_GLOBAL_OPT:
-            return "unrecognised option before the subcommand";
-        case SHELL_RULE_RUNS_CODE:
-            return "can run arbitrary code";
-        case SHELL_RULE_IRREVERSIBLE:
-            return "can't be undone";
+        case SHELL_RULE_EXPANSION:
+            return "the shell expands part of it";
         case SHELL_RULE_OK:
             break;
     }
@@ -866,8 +681,7 @@ char *shell_rule_label(const ShellRule *rule) {
         return NULL;
     }
 
-    static const char *SUFFIX = " …";
-    size_t len = strlen(SUFFIX) + 1;
+    size_t len = 3; /* two quotes and NUL */
     for (int i = 0; i < rule->count; i++) {
         len += strlen(rule->tokens[i]) + (i > 0 ? 1 : 0);
     }
@@ -876,14 +690,15 @@ char *shell_rule_label(const ShellRule *rule) {
     if (label == NULL) {
         return NULL;
     }
-    label[0] = '\0';
+    label[0] = '"';
+    label[1] = '\0';
     for (int i = 0; i < rule->count; i++) {
         if (i > 0) {
             strcat(label, " ");
         }
         strcat(label, rule->tokens[i]);
     }
-    strcat(label, SUFFIX);
+    strcat(label, "\"");
     return label;
 }
 
@@ -897,5 +712,4 @@ void shell_rule_free(ShellRule *rule) {
     free(rule->tokens);
     rule->tokens = NULL;
     rule->count = 0;
-    rule->exact = 0;
 }

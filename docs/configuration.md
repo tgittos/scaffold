@@ -229,26 +229,26 @@ When a gate triggers, you'll see:
 
 ```
 [GATE] shell: git show HEAD
-Allow? [y/n/?] (a = always allow "git show …")
+Allow? [y/n/?] (a = always allow "git show HEAD")
 ```
 
 - **y** -- Allow this one action
 - **n** -- Deny this action
-- **a** -- Allow this and all matching future actions (session only), and run the current one. For a shell command, each segment that can have a rule gets one; the prompt names the rule it would save, and a partial save reports what happened, e.g. `Saved: grep. Still asks: git fetch (writes to a file).` When no part of the command can be saved, `a` isn't offered and does nothing.
+- **a** -- Allow this and all matching future actions (session only), and run the current one. For a shell command, each segment that can have a rule gets one; the prompt names the rules it would save, and a partial save reports what happened, e.g. `Saved: "grep -rn x lib". Still asks: git fetch (writes to a file).` When no part of the command can be saved, `a` isn't offered and does nothing.
 - **?** -- Show details about the action
 
-A shell rule saved by `a` is the command name plus, for tools with subcommands (`git`, `docker`, `kubectl`, ...), the subcommand. It ignores flag order and global options, so a rule saved from `git -C lib show HEAD` also covers `git show --stat`. Commands are recognised by their base name with any version suffix removed, so `/usr/bin/git` and `python3.12` are treated as `git` and `python`; the rule itself keeps the tokens as you typed them.
+A shell rule saved by `a` is the exact command of that segment. It covers only the same command again: whitespace and quoting don't matter, anything else does. `a` on `git status` does not cover `git status -sb`, `grep -rn foo lib` does not cover `grep -nr foo lib`, and `python3 x.py` covers only `python3 x.py`.
 
-What a rule never covers:
+What can't be saved at all:
 
+- A command the shell would rewrite before running it: a substitution (`$(...)`, backticks), a variable (`$HOME`, `${VAR:-x}`), a glob (`cat *.txt`, `ls dir?`) or a brace expansion (`cat .{a,b}`).
+- A chain, a pipe that can't be split, or a redirect that writes a file.
 - A flag that changes what the command does, including an abbreviated long option, which is accepted for every command (`git push --forc`, `rm --rec`, `tar --to-com`): `git push --force`, `git push origin +main`, `git push --mirror`, `git branch -d`, `git tag -f`, `git clean --force`, `sed -i`, `find -delete`, `rm -r`, `curl -o`, `wget -O`, `tar --to-command`, `make -f`, `--output`.
-- A subcommand that runs arbitrary code or can't be undone: `git config`, `git rebase`, `git checkout`, `git restore`, `git reset`, `git clean`, `git stash`, `git filter-branch`, `git submodule`, `git worktree`, `docker build`, `docker compose`, `kubectl apply`, `kubectl delete`, and every `gh` subcommand.
-- A command that runs another command: `sudo`, `env`, `xargs`, `timeout`, `time`, `watch`, `parallel`, `npx`, `bunx`, `uvx`, `eval`, `sh -c`, `dash`, `go run`, `npm exec`, `uv run`, `poetry run`, `bundle exec`, `docker run`, `kubectl exec`, or any command with a `VAR=value` prefix, or a `VAR=value` argument to `make`.
-- An operand that names a protected file, directly (`cat .env`), through a pattern (`cat .en?`) or after a revision (`git show HEAD:.env`).
+- An operand that names a protected file, directly (`cat .env`), through a pattern (`cat .en?`) or after a revision (`git show HEAD:.env`). A saved rule is checked against this too.
 
-Commands that run code from their arguments keep a narrow rule matched by prefix: interpreters (`python`, `node`, `sed`, `awk`), `curl`, `wget`, `ssh`, `scp` and `rm` save two tokens, such as `python foo.py`, and script runners save the script or target — `npm run build`, `npm run-script build`, `npm test`, `pnpm run build`, `yarn build`, `make test`. A bare `make` covers only a bare `make`.
+Everything else is saved as typed, including interpreters, wrappers, `VAR=value` prefixes and absolute paths — the rule still only ever covers that one command.
 
-In `--auto`, allowlist entries that cover whatever they are given are skipped so the model review sees the call: entries starting with an interpreter or wrapper (`python`, `curl`, `sudo`, ...), and a package manager's `run`, `exec` or `test` with no script named (`npm run`).
+Entries from the config file and `--allow` are not rules: they keep token prefix matching, so `["git", "status"]` covers `git status -sb`. In `--auto`, entries that cover whatever they are given are skipped so the model review sees the call: entries starting with an interpreter or wrapper (`python`, `curl`, `sudo`, ...), and a package manager's `run`, `exec` or `test` with no script named (`npm run`).
 
 For batch operations (multiple tool calls at once), you can approve/deny all or select individual items by number.
 

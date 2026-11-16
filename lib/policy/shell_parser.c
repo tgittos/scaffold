@@ -278,6 +278,7 @@ int parse_posix_shell(const char *command, ParsedShellCommand *result) {
     result->has_pipe = 0;
     result->has_subshell = 0;
     result->has_redirect = 0;
+    result->has_variable = 0;
     result->is_dangerous = shell_command_is_dangerous(command);
     result->shell_type = SHELL_TYPE_POSIX;
 
@@ -353,9 +354,11 @@ int parse_posix_shell(const char *command, ParsedShellCommand *result) {
         }
 
         if (in_double_quote) {
-            /* Substitution still runs inside double quotes. */
+            /* Substitution and variables still expand inside double quotes. */
             if ((c == '$' && *(p + 1) == '(') || c == '`') {
                 result->has_subshell = 1;
+            } else if (c == '$') {
+                result->has_variable = 1;
             }
             /* Backslash only escapes $ ` " \ and newline here. */
             if (c == '\\' && strchr("$`\"\\\n", *(p + 1)) && *(p + 1)) {
@@ -405,6 +408,9 @@ int parse_posix_shell(const char *command, ParsedShellCommand *result) {
             } else if (c == '$') {
                 if (*(p + 1) == '(') {
                     result->has_subshell = 1;
+                } else {
+                    /* ${VAR} and $VAR expand to text the rule never saw. */
+                    result->has_variable = 1;
                 }
             } else if (c == '`') {
                 result->has_subshell = 1;

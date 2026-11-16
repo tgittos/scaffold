@@ -473,7 +473,6 @@ int approval_gate_init_from_parent(ApprovalGateConfig *child,
             dst->shell_type = src->shell_type;
             dst->prefix_len = src->prefix_len;
             dst->is_session_rule = src->is_session_rule;
-            dst->exact = src->exact;
             dst->command_prefix = NULL;
 
             if (src->prefix_len > 0 && src->command_prefix != NULL) {
@@ -955,8 +954,7 @@ static int entry_has_rule_tokens(const ShellAllowEntry *entry, const ShellRule *
 static int add_session_rule(ApprovalGateConfig *config, const ShellRule *rule) {
     for (int i = 0; i < config->shell_allowlist_count; i++) {
         const ShellAllowEntry *entry = &config->shell_allowlist[i];
-        if (entry->is_session_rule && entry->exact == rule->exact &&
-            entry_has_rule_tokens(entry, rule)) {
+        if (entry->is_session_rule && entry_has_rule_tokens(entry, rule)) {
             return 0; /* Already remembered */
         }
     }
@@ -969,7 +967,6 @@ static int add_session_rule(ApprovalGateConfig *config, const ShellRule *rule) {
     ShellAllowEntry *stored =
         &config->shell_allowlist[config->shell_allowlist_count - 1];
     stored->is_session_rule = 1;
-    stored->exact = rule->exact;
     return 0;
 }
 
@@ -1002,7 +999,7 @@ static int allow_always_shell(ApprovalGateConfig *config, const ToolCall *tool_c
                 stored_any = 1;
                 /* The rule is live either way; a label we couldn't build falls
                  * back to the command name so it is never listed as unsaved. */
-                char *label = join_tokens(rule.tokens, rule.count);
+                char *label = shell_rule_label(&rule);
                 if (label == NULL) {
                     label = strdup(rule.tokens[0]);
                 }
@@ -1098,6 +1095,16 @@ static int preview_always_shell(const ToolCall *tool_call, char **out_label) {
     return saveable;
 }
 
+/* Labels carry their own quotes so that several of them read as a list. */
+static char *quoted(const char *text) {
+    size_t len = strlen(text) + 3;
+    char *out = malloc(len);
+    if (out != NULL) {
+        snprintf(out, len, "\"%s\"", text);
+    }
+    return out;
+}
+
 int approval_gate_preview_always(const ToolCall *tool_call, char **out_label) {
     if (out_label != NULL) {
         *out_label = NULL;
@@ -1116,7 +1123,7 @@ int approval_gate_preview_always(const ToolCall *tool_call, char **out_label) {
     }
     int saveable = pattern.pattern != NULL;
     if (saveable && out_label != NULL) {
-        *out_label = strdup(pattern.pattern);
+        *out_label = quoted(pattern.pattern);
     }
     free_generated_pattern(&pattern);
     return saveable;
@@ -1231,23 +1238,6 @@ static int match_regex_allowlist(const ApprovalGateConfig *config,
 }
 
 /*
- * Whether a token carries a brace expansion the shell would turn into several
- * words: a "{" with a "," or ".." before its "}". A quoted program such as
- * awk's "{print}" or sed's "1{p}" is just text.
- */
-static int has_brace_expansion(const char *token) {
-    for (const char *open = strchr(token, '{'); open != NULL;
-         open = strchr(open + 1, '{')) {
-        for (const char *p = open + 1; *p != '\0' && *p != '{' && *p != '}'; p++) {
-            if (*p == ',' || (p[0] == '.' && p[1] == '.')) {
-                return 1;
-            }
-        }
-    }
-    return 0;
-}
-
-/*
  * Whether a token names a protected file: directly, after any ":" or "=" that
  * precedes a path ("HEAD:.env", "--file=HEAD:.env"), or through a pattern that
  * expands to one in the working directory. Brace expansion isn't expanded here,
@@ -1265,7 +1255,7 @@ static int token_names_protected_file(const char *token) {
         }
     }
 
-    if (has_brace_expansion(token)) {
+    if (shell_token_has_brace_expansion(token)) {
         return 1;
     }
 
@@ -1331,10 +1321,9 @@ static int segment_matches_shell_allowlist(const ApprovalGateConfig *config,
             continue;
         }
 
-        /* Rules from "a" match the rule the command derives, so flag order and
-         * global options don't matter. */
+        /* Rules from "a" cover the exact command they were saved from. */
         if (entry->is_session_rule) {
-            ShellRule rule = { entry->command_prefix, entry->prefix_len, entry->exact };
+            ShellRule rule = { entry->command_prefix, entry->prefix_len };
             matched = shell_rule_matches(&rule, parsed);
             continue;
         }

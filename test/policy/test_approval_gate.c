@@ -1331,11 +1331,27 @@ void test_shell_allowlist_treats_newline_as_separator(void) {
 }
 
 void test_allow_always_stores_every_segment(void) {
-    ToolCall approved = shell_call("{\"command\": \"cd src && make 2>&1 | tail -20\"}");
-    ToolCall later = shell_call("{\"command\": \"cd src && make && tail -20 log\"}");
+    ToolCall approved = shell_call("{\"command\": \"make test && git status\"}");
+    ToolCall make_test = shell_call("{\"command\": \"make test\"}");
+    ToolCall status = shell_call("{\"command\": \"git status\"}");
+    ToolCall spaced = shell_call("{\"command\": \"make  test\"}");
+    ToolCall both = shell_call("{\"command\": \"make test && git status\"}");
 
     TEST_ASSERT_EQUAL(0, approval_gate_allow_always(&config, &approved));
-    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &later));
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &make_test));
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &status));
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &spaced));
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &both));
+}
+
+void test_allow_always_covers_only_the_exact_commands(void) {
+    ToolCall approved = shell_call("{\"command\": \"make test && git status\"}");
+    ToolCall with_flag = shell_call("{\"command\": \"git status -sb\"}");
+    ToolCall extra_target = shell_call("{\"command\": \"make test install\"}");
+
+    TEST_ASSERT_EQUAL(0, approval_gate_allow_always(&config, &approved));
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &with_flag));
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &extra_target));
 }
 
 void test_allow_always_saves_the_segments_it_can(void) {
@@ -1353,7 +1369,7 @@ void test_allow_always_summary_names_saved_and_unsaved_parts(void) {
         shell_call("{\"command\": \"grep -rn x lib | head -5; git fetch 2>out\"}");
 
     TEST_ASSERT_EQUAL(0, approval_gate_allow_always_ex(&config, &mixed, &summary));
-    TEST_ASSERT_EQUAL_STRING("grep, head", summary.saved);
+    TEST_ASSERT_EQUAL_STRING("\"grep -rn x lib\", \"head -5\"", summary.saved);
     TEST_ASSERT_EQUAL(2, summary.saved_count);
     TEST_ASSERT_EQUAL(1, summary.unsaved_count);
     TEST_ASSERT_NOT_NULL(summary.unsaved);
@@ -1361,41 +1377,33 @@ void test_allow_always_summary_names_saved_and_unsaved_parts(void) {
     TEST_ASSERT_NOT_NULL(strstr(summary.unsaved, "writes to a file"));
     allow_always_summary_free(&summary);
 
-    ToolCall later = shell_call("{\"command\": \"grep -nr y src\"}");
-    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &later));
-}
-
-void test_allow_always_rule_ignores_global_options(void) {
-    ToolCall approved = shell_call("{\"command\": \"git -C lib show HEAD\"}");
-    ToolCall later = shell_call("{\"command\": \"git show --stat\"}");
-
-    TEST_ASSERT_EQUAL(0, approval_gate_allow_always(&config, &approved));
+    ToolCall later = shell_call("{\"command\": \"grep -rn x lib\"}");
     TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &later));
 }
 
 void test_allow_always_rule_never_covers_always_ask_flag(void) {
-    ToolCall approved = shell_call("{\"command\": \"git push origin\"}");
-    ToolCall plain = shell_call("{\"command\": \"git push\"}");
-    ToolCall forced = shell_call("{\"command\": \"git push -f\"}");
+    ToolCall approved = shell_call("{\"command\": \"git push origin main\"}");
+    ToolCall same = shell_call("{\"command\": \"git push origin main\"}");
+    ToolCall forced = shell_call("{\"command\": \"git push origin main -f\"}");
 
     TEST_ASSERT_EQUAL(0, approval_gate_allow_always(&config, &approved));
-    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &plain));
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &same));
     TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &forced));
 }
 
-void test_allow_always_refuses_command_that_runs_another_command(void) {
+void test_allow_always_refuses_command_the_shell_expands(void) {
     AllowAlwaysSummary summary;
-    ToolCall wrapped = shell_call("{\"command\": \"sudo ls\"}");
+    ToolCall globbed = shell_call("{\"command\": \"cat *.txt\"}");
 
-    TEST_ASSERT_NOT_EQUAL(0, approval_gate_allow_always_ex(&config, &wrapped, &summary));
+    TEST_ASSERT_NOT_EQUAL(0, approval_gate_allow_always_ex(&config, &globbed, &summary));
     TEST_ASSERT_EQUAL(0, summary.saved_count);
     TEST_ASSERT_NULL(summary.saved);
     TEST_ASSERT_EQUAL(1, summary.unsaved_count);
-    TEST_ASSERT_NOT_NULL(strstr(summary.unsaved, "sudo ls"));
-    TEST_ASSERT_NOT_NULL(strstr(summary.unsaved, "runs another command"));
+    TEST_ASSERT_NOT_NULL(strstr(summary.unsaved, "cat"));
+    TEST_ASSERT_NOT_NULL(strstr(summary.unsaved, "the shell expands part of it"));
     allow_always_summary_free(&summary);
 
-    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &wrapped));
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &globbed));
 }
 
 void test_classify_key_always_requires_saveable(void) {
@@ -1451,7 +1459,16 @@ void test_preview_always_labels_the_rule_it_would_save(void) {
     ToolCall status = shell_call("{\"command\": \"git status -sb\"}");
 
     TEST_ASSERT_EQUAL(1, approval_gate_preview_always(&status, &label));
-    TEST_ASSERT_EQUAL_STRING("git status …", label);
+    TEST_ASSERT_EQUAL_STRING("\"git status -sb\"", label);
+    free(label);
+}
+
+void test_preview_always_lists_every_segment(void) {
+    char *label = NULL;
+    ToolCall both = shell_call("{\"command\": \"make test && git status\"}");
+
+    TEST_ASSERT_EQUAL(1, approval_gate_preview_always(&both, &label));
+    TEST_ASSERT_EQUAL_STRING("\"make test\", \"git status\"", label);
     free(label);
 }
 
@@ -2732,13 +2749,14 @@ int main(void) {
     RUN_TEST(test_shell_allowlist_matches_when_every_segment_matches);
     RUN_TEST(test_shell_allowlist_treats_newline_as_separator);
     RUN_TEST(test_allow_always_stores_every_segment);
+    RUN_TEST(test_allow_always_covers_only_the_exact_commands);
     RUN_TEST(test_allow_always_saves_the_segments_it_can);
     RUN_TEST(test_allow_always_summary_names_saved_and_unsaved_parts);
-    RUN_TEST(test_allow_always_rule_ignores_global_options);
     RUN_TEST(test_allow_always_rule_never_covers_always_ask_flag);
-    RUN_TEST(test_allow_always_refuses_command_that_runs_another_command);
+    RUN_TEST(test_allow_always_refuses_command_the_shell_expands);
     RUN_TEST(test_preview_always_reports_no_rule_for_substitution);
     RUN_TEST(test_preview_always_labels_the_rule_it_would_save);
+    RUN_TEST(test_preview_always_lists_every_segment);
     RUN_TEST(test_shell_allowlist_config_rules_keep_prefix_semantics);
     RUN_TEST(test_shell_allowlist_refuses_protected_file_operands);
     RUN_TEST(test_shell_allowlist_refuses_only_brace_expansion);

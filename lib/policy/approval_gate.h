@@ -107,8 +107,6 @@ typedef struct {
     ShellType shell_type;   /* Optional: only match this shell type, or UNKNOWN for any */
     int is_session_rule;    /* 1 = created by "a": matched with shell_rule_matches;
                              * 0 = config file or --allow: token prefix matching */
-    int exact;              /* Session rules only: 1 = never-broaden rule, matched
-                             * by token prefix (see shell_rules.h) */
 } ShellAllowEntry;
 
 /**
@@ -373,7 +371,8 @@ int approval_gate_allow_always(ApprovalGateConfig *config, const ToolCall *tool_
  * What pressing "a" remembered, and what it couldn't.
  */
 typedef struct {
-    char *saved;        /* Rules stored, e.g. "grep, head", or NULL */
+    char *saved;        /* Rules stored, e.g. "\"grep -rn x lib\", \"head -5\"",
+                         * or NULL */
     char *unsaved;      /* Parts that still ask, e.g. "git fetch (writes to a file)",
                          * or NULL */
     int   saved_count;  /* Number of rules listed in saved */
@@ -403,8 +402,8 @@ int approval_gate_allow_always_ex(ApprovalGateConfig *config,
  * Describe the rules pressing "a" would create, without storing anything.
  *
  * @param tool_call The tool call about to be prompted for
- * @param out_label Optional output: the rules, e.g. "git show …, grep …".
- *                  Caller must free.
+ * @param out_label Optional output: the rules, quoted and comma-separated, e.g.
+ *                  "\"make test\", \"git status\"". Caller must free.
  * @return 1 if anything about the call is saveable, 0 otherwise
  */
 int approval_gate_preview_always(const ToolCall *tool_call, char **out_label);
