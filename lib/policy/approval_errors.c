@@ -120,7 +120,8 @@ char *format_non_interactive_error(const ToolCall *tool_call) {
                        "\"tool\": \"%s\", "
                        "\"category\": \"%s\", "
                        "\"suggestion\": \"Use --yolo to bypass gates, or "
-                       "--allow-category=%s to allow this category in non-interactive mode\"}",
+                       "--allow-category=%s to allow this category in non-interactive mode. "
+                       "Background goals need --auto (or --yolo) for shell and file writes\"}",
                        escaped_category, escaped_tool, escaped_category, escaped_category);
 
     free(escaped_tool);

@@ -81,6 +81,7 @@ GATE_DEPS := \
     $(LIBDIR)/util/project_scope.c
 
 $(eval $(call def_test,approval_gate,policy/test_approval_gate,$(GATE_DEPS)))
+$(eval $(call def_test,child_mode,policy/test_child_mode,$(LIBDIR)/policy/child_mode.c))
 $(eval $(call def_test,auto_approve,policy/test_auto_approve,$(LIBDIR)/policy/auto_approve.c $(LIBDIR)/policy/protected_files.c $(LIBDIR)/policy/path_normalize.c $(LIBDIR)/policy/shell_parser.c $(LIBDIR)/policy/shell_parser_cmd.c $(LIBDIR)/policy/shell_parser_ps.c $(LIBDIR)/policy/shell_rules.c $(LIBDIR)/policy/tool_args.c $(LIBDIR)/util/project_scope.c $(LIBDIR)/util/app_home.c))
 $(eval $(call def_test,atomic_file,policy/test_atomic_file,$(LIBDIR)/policy/atomic_file.c))
 $(eval $(call def_test,path_normalize,policy/test_path_normalize,$(LIBDIR)/policy/path_normalize.c))
@@ -170,6 +171,9 @@ $(TEST_atomic_file_TARGET): $(TEST_atomic_file_OBJECTS)
 
 $(TEST_path_normalize_TARGET): $(TEST_path_normalize_OBJECTS)
 	$(CC) -o $@ $(TEST_path_normalize_OBJECTS)
+
+$(TEST_child_mode_TARGET): $(TEST_child_mode_OBJECTS) $(CJSON_LIB)
+	$(CC) -o $@ $(TEST_child_mode_OBJECTS) $(CJSON_LIB)
 
 $(TEST_protected_files_TARGET): $(TEST_protected_files_OBJECTS)
 	$(CC) -o $@ $(TEST_protected_files_OBJECTS)
@@ -315,7 +319,7 @@ $(eval $(call def_test,jwt_decode,auth/test_jwt_decode,$(LIBDIR)/auth/jwt_decode
 $(TEST_jwt_decode_TARGET): $(TEST_jwt_decode_OBJECTS) $(CJSON_LIB) $(LIBS_MBEDTLS)
 	$(CC) -o $@ $(TEST_jwt_decode_OBJECTS) $(CJSON_LIB) $(LIBS_MBEDTLS) -lm
 
-$(eval $(call def_test,orchestrator,orchestrator/test_orchestrator,$(LIBDIR)/orchestrator/orchestrator.c $(LIBDIR)/db/goal_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/uuid_utils.c $(LIBDIR)/util/app_home.c $(LIBDIR)/util/executable_path.c $(LIBDIR)/util/process_spawn.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/util/log.c))
+$(eval $(call def_test,orchestrator,orchestrator/test_orchestrator,$(LIBDIR)/policy/child_mode.c $(LIBDIR)/orchestrator/orchestrator.c $(LIBDIR)/db/goal_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/uuid_utils.c $(LIBDIR)/util/app_home.c $(LIBDIR)/util/executable_path.c $(LIBDIR)/util/process_spawn.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/util/log.c))
 
 $(TEST_orchestrator_TARGET): $(TEST_orchestrator_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_orchestrator_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) $(CJSON_LIB) -lpthread -lm

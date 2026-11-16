@@ -6,6 +6,7 @@
 #include "../util/uuid_utils.h"
 #include "../util/app_home.h"
 #include "../util/executable_path.h"
+#include "../policy/child_mode.h"
 #include "../util/config.h"
 #include "db/goal_store.h"
 #include "db/action_store.h"
@@ -608,6 +609,30 @@ static char *build_work_context(const Goal *goal, action_store_t *as,
     return context_str;
 }
 
+int goap_build_worker_args(char *args[], int capacity, char *exe_path, const char *queue_name,
+                           const char *prompt_file, const ApprovalGateConfig *gate,
+                           const char *home) {
+    if (args == NULL || exe_path == NULL || queue_name == NULL || capacity < GOAP_WORKER_ARGS_MAX) {
+        return -1;
+    }
+    int n = 0;
+    args[n++] = exe_path;
+    args[n++] = "--worker";
+    args[n++] = "--queue";
+    args[n++] = (char *)queue_name;
+    if (prompt_file != NULL && prompt_file[0]) {
+        args[n++] = "--system-prompt-file";
+        args[n++] = (char *)prompt_file;
+    }
+    const char *mode[CHILD_MODE_FLAGS_MAX];
+    int mode_count = child_mode_flags(gate, home, mode);
+    for (int i = 0; i < mode_count; i++) {
+        args[n++] = (char *)mode[i];
+    }
+    args[n] = NULL;
+    return n;
+}
+
 int execute_goap_dispatch_action(const ToolCall *tc, ToolResult *result) {
     if (!tc || !result) return -1;
     result->tool_call_id = safe_strdup(tc->id);
@@ -725,23 +750,23 @@ int execute_goap_dispatch_action(const ToolCall *tc, ToolResult *result) {
         return 0;
     }
 
-    char *spawn_args[12];
-    int ai = 0;
-    spawn_args[ai++] = exe_path;
-    spawn_args[ai++] = "--worker";
-    spawn_args[ai++] = "--queue";
-    spawn_args[ai++] = goal->queue_name;
-    spawn_args[ai++] = "--yolo";
-    if (prompt_file[0]) {
-        spawn_args[ai++] = "--system-prompt-file";
-        spawn_args[ai++] = prompt_file;
-    }
+    char *spawn_args[GOAP_WORKER_ARGS_MAX];
     /* The worker reads the parent's config and databases, not a default home. */
-    if (app_home_is_initialized()) {
-        spawn_args[ai++] = "--home";
-        spawn_args[ai++] = (char *)app_home_get();
+    const char *home = app_home_is_initialized() ? app_home_get() : NULL;
+    const ApprovalGateConfig *gate = child_mode_get_process_gate();
+    if (goap_build_worker_args(spawn_args, GOAP_WORKER_ARGS_MAX, exe_path,
+                               goal->queue_name, prompt_file, gate, home) < 0) {
+        free(exe_path);
+        if (prompt_file[0]) unlink(prompt_file);
+        work_queue_remove(wq, work_item_id);
+        tool_result_set_error(result, "Failed to build worker arguments");
+        work_queue_destroy(wq);
+        goal_free(goal);
+        action_free(action);
+        free(action_id);
+        free(context);
+        return 0;
     }
-    spawn_args[ai] = NULL;
 
     char subagent_id[SUBAGENT_ID_LENGTH + 1] = {0};
     int spawn_rc = -1;

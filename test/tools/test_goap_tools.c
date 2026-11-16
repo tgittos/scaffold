@@ -1,5 +1,6 @@
 #include "unity.h"
 #include "tools/goap_tools.h"
+#include "policy/child_mode.h"
 #include "db/goal_store.h"
 #include "db/action_store.h"
 #include "services/services.h"
@@ -972,6 +973,33 @@ void test_get_goal_includes_plan_document(void) {
  * Runner
  * ======================================================================== */
 
+static int has_arg(char *args[], const char *s) {
+    for (int i = 0; args[i] != NULL; i++) if (strcmp(args[i], s) == 0) return 1;
+    return 0;
+}
+
+void test_worker_args_normal_mode_has_no_yolo(void) {
+    ApprovalGateConfig cfg = {.enabled = 1};
+    char *args[GOAP_WORKER_ARGS_MAX];
+    TEST_ASSERT_TRUE(goap_build_worker_args(args, GOAP_WORKER_ARGS_MAX, "/bin/scaffold", "q1", "/tmp/p", &cfg, NULL) > 0);
+    TEST_ASSERT_TRUE(has_arg(args, "--worker"));
+    TEST_ASSERT_TRUE(has_arg(args, "--system-prompt-file"));
+    TEST_ASSERT_FALSE(has_arg(args, "--yolo"));
+    TEST_ASSERT_FALSE(has_arg(args, "--auto"));
+}
+
+void test_worker_args_carry_parent_mode(void) {
+    ApprovalGateConfig yolo = {.enabled = 0};
+    ApprovalGateConfig autom = {.enabled = 1, .auto_mode = 1};
+    char *args[GOAP_WORKER_ARGS_MAX];
+    goap_build_worker_args(args, GOAP_WORKER_ARGS_MAX, "/bin/scaffold", "q1", "", &yolo, "/tmp/h");
+    TEST_ASSERT_TRUE(has_arg(args, "--yolo"));
+    TEST_ASSERT_TRUE(has_arg(args, "--home"));
+    goap_build_worker_args(args, GOAP_WORKER_ARGS_MAX, "/bin/scaffold", "q1", "", &autom, NULL);
+    TEST_ASSERT_TRUE(has_arg(args, "--auto"));
+    TEST_ASSERT_FALSE(has_arg(args, "--yolo"));
+}
+
 int main(int argc, char **argv) {
     (void)argv;
     /* Spawned agents exec this test binary with agent flags; exit as a failed launch. */
@@ -979,6 +1007,8 @@ int main(int argc, char **argv) {
         return 127;
     }
     UNITY_BEGIN();
+    RUN_TEST(test_worker_args_normal_mode_has_no_yolo);
+    RUN_TEST(test_worker_args_carry_parent_mode);
 
     /* goap_create_goal */
     RUN_TEST(test_create_goal);

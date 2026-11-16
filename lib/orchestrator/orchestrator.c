@@ -4,6 +4,8 @@
 #include "orchestrator.h"
 #include "../util/executable_path.h"
 #include "../util/process_spawn.h"
+#include "../util/app_home.h"
+#include "../policy/child_mode.h"
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
@@ -17,6 +19,29 @@ static int64_t now_millis(void) {
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
     return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+int orchestrator_build_supervisor_args(char* args[], int capacity, char* exe_path,
+                                       const char* goal_id, const char* phase,
+                                       const struct ApprovalGateConfig* gate, const char* home) {
+    if (args == NULL || exe_path == NULL || goal_id == NULL || phase == NULL ||
+        capacity < ORCHESTRATOR_SUPERVISOR_ARGS_MAX) {
+        return -1;
+    }
+    int n = 0;
+    args[n++] = exe_path;
+    args[n++] = "--supervisor";
+    args[n++] = "--goal";
+    args[n++] = (char*)goal_id;
+    args[n++] = "--phase";
+    args[n++] = (char*)phase;
+    const char* mode[CHILD_MODE_FLAGS_MAX];
+    int mode_count = child_mode_flags(gate, home, mode);
+    for (int i = 0; i < mode_count; i++) {
+        args[n++] = (char*)mode[i];
+    }
+    args[n] = NULL;
+    return n;
 }
 
 int orchestrator_spawn_supervisor(goal_store_t* store, const char* goal_id) {
@@ -34,14 +59,14 @@ int orchestrator_spawn_supervisor(goal_store_t* store, const char* goal_id) {
         return -1;
     }
 
-    char* args[] = {
-        exe_path,
-        "--supervisor",
-        "--goal", (char*)goal_id,
-        "--phase", (char*)phase_str,
-        "--yolo",
-        NULL
-    };
+    char* args[ORCHESTRATOR_SUPERVISOR_ARGS_MAX];
+    const char* home = app_home_is_initialized() ? app_home_get() : NULL;
+    if (orchestrator_build_supervisor_args(args, ORCHESTRATOR_SUPERVISOR_ARGS_MAX, exe_path,
+                                           goal_id, phase_str, child_mode_get_process_gate(),
+                                           home) < 0) {
+        free(exe_path);
+        return -1;
+    }
 
     pid_t pid;
     if (process_spawn_devnull(args, &pid) != 0) {

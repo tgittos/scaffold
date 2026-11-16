@@ -2,6 +2,7 @@
 #include "orchestrator/orchestrator.h"
 #include "db/goal_store.h"
 #include "util/app_home.h"
+#include "policy/child_mode.h"
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
@@ -292,8 +293,37 @@ void test_null_params(void) {
     TEST_ASSERT_EQUAL(-1, orchestrator_respawn_dead(NULL));
 }
 
+static int has_arg(char *args[], const char *s) {
+    for (int i = 0; args[i] != NULL; i++) if (strcmp(args[i], s) == 0) return 1;
+    return 0;
+}
+
+void test_supervisor_args_normal_mode_has_no_mode_flag(void) {
+    ApprovalGateConfig cfg = {.enabled = 1};
+    char *args[ORCHESTRATOR_SUPERVISOR_ARGS_MAX];
+    TEST_ASSERT_TRUE(orchestrator_build_supervisor_args(args, ORCHESTRATOR_SUPERVISOR_ARGS_MAX, "/bin/scaffold", "g1", "plan", &cfg, NULL) > 0);
+    TEST_ASSERT_TRUE(has_arg(args, "--supervisor"));
+    TEST_ASSERT_FALSE(has_arg(args, "--yolo"));
+    TEST_ASSERT_FALSE(has_arg(args, "--auto"));
+}
+
+void test_supervisor_args_carry_parent_mode(void) {
+    ApprovalGateConfig yolo = {.enabled = 0};
+    ApprovalGateConfig autom = {.enabled = 1, .auto_mode = 1};
+    char *args[ORCHESTRATOR_SUPERVISOR_ARGS_MAX];
+    orchestrator_build_supervisor_args(args, ORCHESTRATOR_SUPERVISOR_ARGS_MAX, "/bin/scaffold", "g1", "execute", &yolo, "/tmp/h");
+    TEST_ASSERT_TRUE(has_arg(args, "--yolo"));
+    TEST_ASSERT_TRUE(has_arg(args, "--home"));
+    orchestrator_build_supervisor_args(args, ORCHESTRATOR_SUPERVISOR_ARGS_MAX, "/bin/scaffold", "g1", "execute", &autom, NULL);
+    TEST_ASSERT_TRUE(has_arg(args, "--auto"));
+    TEST_ASSERT_FALSE(has_arg(args, "--yolo"));
+}
+
 int main(void) {
     UNITY_BEGIN();
+
+    RUN_TEST(test_supervisor_args_normal_mode_has_no_mode_flag);
+    RUN_TEST(test_supervisor_args_carry_parent_mode);
 
     RUN_TEST(test_supervisor_alive_no_supervisor);
     RUN_TEST(test_supervisor_alive_with_running_process);

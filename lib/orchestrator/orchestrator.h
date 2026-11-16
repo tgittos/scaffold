@@ -14,6 +14,21 @@
  * @param goal_id  UUID of the goal to supervise
  * @return 0 on success, -1 on error
  */
+struct ApprovalGateConfig;
+
+/** Most argv entries (with the NULL) orchestrator_build_supervisor_args writes. */
+#define ORCHESTRATOR_SUPERVISOR_ARGS_MAX 12
+
+/**
+ * Build the supervisor's argv. The supervisor gets the spawning process's
+ * approval mode (--yolo / --auto / none) and --home; it is never forced to --yolo.
+ *
+ * @return Entries before the NULL, or -1 on bad arguments
+ */
+int orchestrator_build_supervisor_args(char* args[], int capacity, char* exe_path,
+                                       const char* goal_id, const char* phase,
+                                       const struct ApprovalGateConfig* gate, const char* home);
+
 int orchestrator_spawn_supervisor(goal_store_t* store, const char* goal_id);
 
 /**

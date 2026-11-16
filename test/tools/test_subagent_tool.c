@@ -370,7 +370,7 @@ static int args_index_of(char *args[], int count, const char *flag) {
 void test_subagent_args_carry_auto_mode(void) {
     char *args[SUBAGENT_CHILD_ARGS_MAX];
     int count = subagent_build_child_args(args, SUBAGENT_CHILD_ARGS_MAX, "/bin/scaffold",
-                                          "task", NULL, NULL, 1, NULL);
+                                          "task", NULL, NULL, "--auto", NULL);
 
     TEST_ASSERT_TRUE(count > 0);
     TEST_ASSERT_NULL(args[count]);
@@ -381,7 +381,7 @@ void test_subagent_args_carry_auto_mode(void) {
 void test_subagent_args_omit_auto_mode_when_parent_prompts(void) {
     char *args[SUBAGENT_CHILD_ARGS_MAX];
     int count = subagent_build_child_args(args, SUBAGENT_CHILD_ARGS_MAX, "/bin/scaffold",
-                                          "task", "ctx", "gpt-4o", 0, NULL);
+                                          "task", "ctx", "gpt-4o", NULL, NULL);
 
     TEST_ASSERT_TRUE(count > 0);
     TEST_ASSERT_EQUAL_INT(-1, args_index_of(args, count, "--auto"));
@@ -392,7 +392,7 @@ void test_subagent_args_omit_auto_mode_when_parent_prompts(void) {
 void test_subagent_args_carry_parent_home(void) {
     char *args[SUBAGENT_CHILD_ARGS_MAX];
     int count = subagent_build_child_args(args, SUBAGENT_CHILD_ARGS_MAX, "/bin/scaffold",
-                                          "task", "ctx", "gpt-4o", 1, "/tmp/parent_home");
+                                          "task", "ctx", "gpt-4o", "--auto", "/tmp/parent_home");
 
     int home = args_index_of(args, count, "--home");
     TEST_ASSERT_TRUE(home > 0);
@@ -404,10 +404,10 @@ void test_subagent_args_carry_parent_home(void) {
 void test_subagent_args_reject_small_buffer(void) {
     char *args[4];
     TEST_ASSERT_EQUAL_INT(-1, subagent_build_child_args(args, 4, "/bin/scaffold", "task",
-                                                        "ctx", "gpt-4o", 1,
+                                                        "ctx", "gpt-4o", "--auto",
                                                         "/tmp/parent_home"));
     TEST_ASSERT_EQUAL_INT(-1, subagent_build_child_args(NULL, 16, "/bin/scaffold", "task",
-                                                        NULL, NULL, 0, NULL));
+                                                        NULL, NULL, NULL, NULL));
 }
 
 void test_subagent_spawn_null_params(void) {

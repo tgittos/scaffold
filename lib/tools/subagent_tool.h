@@ -94,7 +94,7 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
  */
 int subagent_build_child_args(char *args[], int capacity, char *executable,
                               const char *task, const char *context,
-                              const char *model, int auto_mode, const char *home);
+                              const char *model, const char *mode_flag, const char *home);
 
 /** Spawn a subagent with a custom argv. The child execv's args[0] with args. task_desc populates the Subagent.task field for completion notifications. */
 int subagent_spawn_with_args(SubagentManager *manager, char *args[],

@@ -632,6 +632,7 @@ void test_format_non_interactive_error_json(void) {
     TEST_ASSERT_NOT_NULL(strstr(error, "\"error\""));
     TEST_ASSERT_NOT_NULL(strstr(error, "non_interactive"));
     TEST_ASSERT_NOT_NULL(strstr(error, "write_file"));
+    TEST_ASSERT_NOT_NULL(strstr(error, "--auto"));
 
     free(error);
 }

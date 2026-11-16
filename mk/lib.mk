@@ -108,6 +108,7 @@ LIB_SESSION_SOURCES := \
 LIB_POLICY_SOURCES := \
     $(LIBDIR)/policy/rate_limiter.c \
     $(LIBDIR)/policy/allowlist.c \
+    $(LIBDIR)/policy/child_mode.c \
     $(LIBDIR)/policy/shell_parser.c \
     $(LIBDIR)/policy/shell_parser_cmd.c \
     $(LIBDIR)/policy/shell_parser_ps.c \

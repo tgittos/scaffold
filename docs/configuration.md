@@ -272,6 +272,8 @@ Subagents inherit category settings and static allowlist entries from the parent
 
 A subagent is started with the parent's `--auto`, so a shell call in a subagent skips the child's own allowlist too and reaches the parent's review. Every subagent is also started with the parent's home directory, so it reads the same `config.json` the parent did.
 
+Goal supervisors and GOAP workers follow the same rule. A child is started with `--yolo` if the parent runs with `--yolo`, with `--auto` if the parent runs with `--auto`, and with neither otherwise; each also gets the parent's `--home`. A supervisor passes its own mode on to its workers. A supervisor has no terminal, so without `--auto` or `--yolo` a shell or file-write call that it or a worker makes is refused, and the refusal says background goals need `--auto` (or `--yolo`).
+
 ## Project-specific prompts (AGENTS.md)
 
 Scaffold reads an `AGENTS.md` file from the current directory and appends it to the system prompt. Use this to give scaffold project-specific context:

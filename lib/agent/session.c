@@ -17,6 +17,7 @@
 #include "../tools/mode_tool.h"
 #include "../tools/tool_extension.h"
 #include "../tools/messaging_tool.h"
+#include "../policy/child_mode.h"
 #include "../util/uuid_utils.h"
 #include "../session/conversation_tracker.h"
 #include "../session/session_manager.h"
@@ -142,6 +143,8 @@ int session_init(AgentSession* session) {
         approval_gate_detect_interactive(&session->gate_config);
         /* Set gate_config on subagent manager for approval proxying during blocking waits */
         subagent_manager_set_gate_config(&session->subagent_manager, &session->gate_config);
+        /* Goal supervisors and workers spawned from here inherit this approval mode. */
+        child_mode_set_process_gate(&session->gate_config);
     }
 
     /* Plugins are optional; failures are non-fatal */
@@ -182,6 +185,7 @@ void session_cleanup(AgentSession* session) {
 
     tool_extension_shutdown_all();
 
+    child_mode_set_process_gate(NULL);
     approval_gate_cleanup(&session->gate_config);
     subagent_manager_cleanup(&session->subagent_manager);
     mcp_client_cleanup(&session->mcp_client);

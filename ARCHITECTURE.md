@@ -910,7 +910,7 @@ graph TB
 
 ### Phase Lifecycle
 
-1. **Orchestrator spawns supervisor** with auto-detected `--phase` flag based on goal status (PLANNING = plan, ACTIVE = execute)
+1. **Orchestrator spawns supervisor** with auto-detected `--phase` flag based on goal status (PLANNING = plan, ACTIVE = execute); the supervisor and its workers receive the spawning process's approval mode (`--yolo`, `--auto` or neither, plus `--home`) from `child_mode_flags()` in `lib/policy/child_mode.c`, the same helper subagents use. The session registers its gate config with `child_mode_set_process_gate()` so the orchestrator can read it. A supervisor in normal mode has no TTY, so gated calls are refused with a hint to use `--auto` or `--yolo`
 2. **Plan phase**: Supervisor builds a planner message with goal description and decomposition instructions. The LLM creates actions and optionally saves a plan document via `goap_save_plan_document`. When `plan_is_complete()` detects actions exist, the goal transitions to ACTIVE and the supervisor exits
 3. **Execute phase**: Supervisor builds an executor message with work context and `plan_guidance` (from the goal's `plan_document`). The LLM dispatches actions to workers and updates world state. Goal completion triggers COMPLETED status
 4. **Respawn**: Orchestrator respawns dead supervisors for both PLANNING and ACTIVE goals, re-detecting the appropriate phase

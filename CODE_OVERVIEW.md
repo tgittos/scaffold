@@ -238,6 +238,7 @@ Built to `out/plugins/`. Not embedded in the scaffold binary — users install b
 
 #### `lib/orchestrator/` - Scaffold Orchestration
 - **`supervisor.c/h`** - Supervisor event loop with `SupervisorPhase` enum (`SUPERVISOR_PHASE_PLAN`, `SUPERVISOR_PHASE_EXECUTE`): phase-aware execution via `supervisor_run(phase)`, split message builders (`build_planner_message`, `build_executor_message`), `plan_is_complete()` check, context pressure exit (`SUPERVISOR_EXIT_CONTEXT`), message-poller-based wake-on-worker-completion, orphaned action recovery on startup
+- **`policy/child_mode.c/h`** - Builds the `--yolo`/`--auto`/`--home` argv a child process gets from its parent's approval mode (subagents, supervisors, GOAP workers)
 - **`orchestrator.c/h`** - Supervisor spawning (via process_spawn) with auto-detected `--phase` flag from goal status, liveness checks, zombie reaping, stale PID cleanup (dead processes only), respawn for both PLANNING and ACTIVE goals
 - **`goap_state.c/h`** - Shared GOAP state evaluation: precondition checking (`goap_preconditions_met`) and progress tracking (`goap_check_progress`) used by 5 call sites
 - **`role_prompts.c/h`** - Role-based system prompts for workers: loads from `<app_home>/prompts/<role>.md` with built-in defaults for 6 standard roles (implementation, code_review, architecture_review, design_review, pm_review, testing)

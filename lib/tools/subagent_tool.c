@@ -5,6 +5,7 @@
 #include "../util/app_home.h"
 #include "../util/config.h"
 #include "../policy/subagent_approval.h"
+#include "../policy/child_mode.h"
 #include "../ipc/message_store.h"
 #include "messaging_tool.h"
 #include <cJSON.h>
@@ -369,7 +370,7 @@ static int prefork_setup(SubagentManager *manager, char id_out[SUBAGENT_ID_LENGT
 
 int subagent_build_child_args(char *args[], int capacity, char *executable,
                               const char *task, const char *context,
-                              const char *model, int auto_mode, const char *home) {
+                              const char *model, const char *mode_flag, const char *home) {
     if (args == NULL || executable == NULL || task == NULL || capacity < 1) {
         return -1;
     }
@@ -390,8 +391,8 @@ int subagent_build_child_args(char *args[], int capacity, char *executable,
     }
     /* Without --auto the child would match its config file's shell entries on
      * its own instead of sending the call up for the parent's model review. */
-    if (auto_mode) {
-        parts[n++] = "--auto";
+    if (mode_flag != NULL) {
+        parts[n++] = mode_flag;
     }
     if (home != NULL && home[0] != '\0') {
         parts[n++] = "--home";
@@ -430,10 +431,10 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
 
     /* Built before the fork: the child must not allocate between fork and exec. */
     char *args[SUBAGENT_CHILD_ARGS_MAX];
-    int auto_mode = manager->gate_config != NULL && manager->gate_config->auto_mode;
+    const char *mode_flag = child_mode_mode_flag(manager->gate_config);
     const char *home = app_home_is_initialized() ? app_home_get() : NULL;
     int arg_count = subagent_build_child_args(args, SUBAGENT_CHILD_ARGS_MAX, ralph_path,
-                                              task, context, model, auto_mode, home);
+                                              task, context, model, mode_flag, home);
 
     pid_t pid = arg_count > 0 ? fork() : -1;
     if (pid == -1) {
