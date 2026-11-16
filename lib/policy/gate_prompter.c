@@ -195,73 +195,168 @@ void gate_prompter_clear_batch_prompt(GatePrompter *gp, int count) {
     fflush(stderr);
 }
 
+/* How one character is shown: itself, or an escape. Returns its length. */
+static size_t escape_char(char out[5], unsigned char c) {
+    if (c == '\n' || c == '\t' || c == '\r') {
+        out[0] = '\\';
+        out[1] = c == '\n' ? 'n' : (c == '\t' ? 't' : 'r');
+        out[2] = '\0';
+        return 2;
+    }
+    if (c < 0x20 || c == 0x7f) {
+        snprintf(out, 5, "\\x%02x", c);
+        return 4;
+    }
+    out[0] = (char)c;
+    out[1] = '\0';
+    return 1;
+}
+
+/*
+ * Escape text into buf, stopping before an escape that doesn't fit in either
+ * buf or limit. *out_complete tells whether all of the text was written.
+ */
+static size_t escape_into(char *buf, size_t size, const char *text, size_t limit,
+                          int *out_complete) {
+    size_t out = 0;
+    int complete = 1;
+    for (const unsigned char *c = (const unsigned char *)text;
+         text != NULL && *c != '\0'; c++) {
+        char escape[5];
+        size_t len = escape_char(escape, *c);
+        if (out + len + 1 > size || out + len > limit) {
+            complete = 0;
+            break;
+        }
+        memcpy(buf + out, escape, len);
+        out += len;
+    }
+    buf[out] = '\0';
+    if (out_complete != NULL) {
+        *out_complete = complete;
+    }
+    return out;
+}
+
 void gate_prompter_escape_control(char *buf, size_t size, const char *text) {
     if (buf == NULL || size == 0) {
         return;
     }
-    size_t out = 0;
-    for (const unsigned char *c = (const unsigned char *)text;
-         text != NULL && *c != '\0'; c++) {
+    escape_into(buf, size, text, (size_t)-1, NULL);
+}
+
+void gate_prompter_escape_truncate(char *buf, size_t size, const char *text,
+                                   size_t max_chars) {
+    if (buf == NULL || size == 0) {
+        return;
+    }
+    int complete = 0;
+    size_t out = escape_into(buf, size, text, max_chars, &complete);
+    if (complete) {
+        return;
+    }
+    /* Make room for the ellipsis without cutting into an escape sequence. */
+    size_t room = max_chars > 3 ? max_chars - 3 : 0;
+    if (room > size - 4) {
+        room = size > 4 ? size - 4 : 0;
+    }
+    if (out > room) {
+        out = escape_into(buf, size, text, room, NULL);
+    }
+    snprintf(buf + out, size - out, "...");
+}
+
+char *gate_prompter_escape_alloc(const char *text) {
+    if (text == NULL) {
+        return NULL;
+    }
+    size_t size = strlen(text) * 4 + 1;
+    char *buf = malloc(size);
+    if (buf == NULL) {
+        return NULL;
+    }
+    escape_into(buf, size, text, (size_t)-1, NULL);
+    return buf;
+}
+
+/* The tail of a long value, escaped, with a leading "...". */
+static void escape_tail(char *buf, size_t size, const char *text, size_t max_chars) {
+    size_t len = strlen(text);
+    size_t budget = max_chars > 3 ? max_chars - 3 : 0;
+    size_t shown = 0;
+    size_t start = len;
+    while (start > 0) {
         char escape[5];
-        const char *piece = escape;
-        size_t len;
-        if (*c == '\n' || *c == '\t' || *c == '\r') {
-            escape[0] = '\\';
-            escape[1] = *c == '\n' ? 'n' : (*c == '\t' ? 't' : 'r');
-            escape[2] = '\0';
-            len = 2;
-        } else if (*c < 0x20 || *c == 0x7f) {
-            snprintf(escape, sizeof(escape), "\\x%02x", *c);
-            len = 4;
-        } else {
-            escape[0] = (char)*c;
-            escape[1] = '\0';
-            len = 1;
-        }
-        if (out + len + 1 > size) {
+        size_t piece = escape_char(escape, (unsigned char)text[start - 1]);
+        if (shown + piece > budget) {
             break;
         }
-        memcpy(buf + out, piece, len);
-        out += len;
+        shown += piece;
+        start--;
     }
-    buf[out] = '\0';
+    snprintf(buf, size, "...");
+    escape_into(buf + 3, size > 3 ? size - 3 : 0, text + start, budget, NULL);
+}
+
+void gate_prompter_format_detail(char *buf, size_t size, const char *command,
+                                 const char *path, const char *arguments,
+                                 const char *working_dir) {
+    enum { MAX_DETAIL = 60, MAX_DIR = 30 };
+    if (buf == NULL || size == 0) {
+        return;
+    }
+    buf[0] = '\0';
+
+    char value[MAX_DETAIL + 4];
+    value[0] = '\0';
+    if (command != NULL && command[0] != '\0') {
+        gate_prompter_escape_truncate(value, sizeof(value), command, MAX_DETAIL);
+    } else if (path != NULL && path[0] != '\0') {
+        char escaped[MAX_DETAIL + 4];
+        int complete = 0;
+        escape_into(escaped, sizeof(escaped), path, MAX_DETAIL, &complete);
+        if (complete) {
+            snprintf(value, sizeof(value), "%s", escaped);
+        } else {
+            escape_tail(value, sizeof(value), path, MAX_DETAIL);
+        }
+    } else if (arguments != NULL && arguments[0] != '\0') {
+        gate_prompter_escape_truncate(value, sizeof(value), arguments, MAX_DETAIL);
+    }
+
+    if (working_dir == NULL || working_dir[0] == '\0') {
+        snprintf(buf, size, "%s", value);
+        return;
+    }
+
+    char dir[MAX_DIR + 4];
+    int complete = 0;
+    escape_into(dir, sizeof(dir), working_dir, MAX_DIR, &complete);
+    if (!complete) {
+        escape_tail(dir, sizeof(dir), working_dir, MAX_DIR);
+    }
+    if (value[0] == '\0') {
+        snprintf(buf, size, "(in %s)", dir);
+    } else {
+        snprintf(buf, size, "%s (in %s)", value, dir);
+    }
 }
 
 void gate_prompter_show_single(GatePrompter *gp,
                                const ToolCall *tool_call,
                                const char *command,
                                const char *path,
-                               const char *always_label) {
+                               const char *always_label,
+                               const char *working_dir) {
     if (gp == NULL || tool_call == NULL) {
         return;
     }
 
     const char *tool_name = tool_call->name ? tool_call->name : "unknown";
 
-    char detail[80] = "";
-    if (command != NULL && strlen(command) > 0) {
-        char safe[244]; /* 60 printable characters can escape to 4 bytes each */
-        gate_prompter_escape_control(safe, sizeof(safe), command);
-        if (strlen(safe) <= 60) {
-            snprintf(detail, sizeof(detail), "%s", safe);
-        } else {
-            snprintf(detail, sizeof(detail), "%.57s...", safe);
-        }
-    } else if (path != NULL && strlen(path) > 0) {
-        size_t path_len = strlen(path);
-        if (path_len <= 60) {
-            snprintf(detail, sizeof(detail), "%s", path);
-        } else {
-            snprintf(detail, sizeof(detail), "...%s", path + path_len - 57);
-        }
-    } else if (tool_call->arguments != NULL && strlen(tool_call->arguments) > 0) {
-        size_t arg_len = strlen(tool_call->arguments);
-        if (arg_len <= 60) {
-            snprintf(detail, sizeof(detail), "%s", tool_call->arguments);
-        } else {
-            snprintf(detail, sizeof(detail), "%.57s...", tool_call->arguments);
-        }
-    }
+    char detail[128] = "";
+    gate_prompter_format_detail(detail, sizeof(detail), command, path,
+                                tool_call->arguments, working_dir);
 
     /* Clear any existing prompt (e.g., readline "> ") before showing gate */
     fprintf(stderr, TERM_CLEAR_LINE);
@@ -326,11 +421,17 @@ void gate_prompter_show_details(GatePrompter *gp,
     fprintf(stderr, "  ├─ tool: %s\n", tool_name);
 
     if (tool_call->arguments != NULL && strlen(tool_call->arguments) > 0) {
-        fprintf(stderr, "  ├─ args:" TERM_DIM " %s" TERM_RESET "\n", tool_call->arguments);
+        char *args = gate_prompter_escape_alloc(tool_call->arguments);
+        fprintf(stderr, "  ├─ args:" TERM_DIM " %s" TERM_RESET "\n",
+                args != NULL ? args : "(unprintable)");
+        free(args);
     }
 
     if (resolved_path != NULL && strlen(resolved_path) > 0) {
-        fprintf(stderr, "  ├─ path:" TERM_DIM " %s", resolved_path);
+        char *safe_path = gate_prompter_escape_alloc(resolved_path);
+        fprintf(stderr, "  ├─ path:" TERM_DIM " %s",
+                safe_path != NULL ? safe_path : "(unprintable)");
+        free(safe_path);
         if (path_exists) {
             fprintf(stderr, " (exists)");
         } else {
@@ -363,12 +464,9 @@ void gate_prompter_show_batch(GatePrompter *gp,
 
         char arg_preview[50] = "";
         if (tool_calls[i].arguments != NULL && strlen(tool_calls[i].arguments) > 0) {
-            size_t arg_len = strlen(tool_calls[i].arguments);
-            if (arg_len <= 45) {
-                snprintf(arg_preview, sizeof(arg_preview), " %s", tool_calls[i].arguments);
-            } else {
-                snprintf(arg_preview, sizeof(arg_preview), " %.42s...", tool_calls[i].arguments);
-            }
+            arg_preview[0] = ' ';
+            gate_prompter_escape_truncate(arg_preview + 1, sizeof(arg_preview) - 1,
+                                          tool_calls[i].arguments, 45);
         }
 
         if (status_char != ' ') {

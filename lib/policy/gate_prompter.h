@@ -85,12 +85,31 @@ int gate_prompter_read_key_timeout(GatePrompter *gp, int timeout_ms, char *press
  * @param path Extracted file path (or NULL if not applicable)
  * @param always_label What "a" would save, quoted, e.g. "\"git show HEAD\"";
  *        NULL when "a" is not offered
+ * @param working_dir Directory the call runs in, shown when it is not the
+ *        current one; NULL otherwise
  */
 void gate_prompter_show_single(GatePrompter *gp,
                                const ToolCall *tool_call,
                                const char *command,
                                const char *path,
-                               const char *always_label);
+                               const char *always_label,
+                               const char *working_dir);
+
+/**
+ * Format the detail shown after the tool name: the command, else the path,
+ * else the raw arguments, with control characters escaped, truncated to 60
+ * characters, and the working directory named when there is one.
+ *
+ * @param buf Output buffer (at least 128 bytes)
+ * @param size Size of buf
+ * @param command Extracted shell command, or NULL
+ * @param path Extracted file path, or NULL
+ * @param arguments Raw arguments JSON, or NULL
+ * @param working_dir Directory to name, or NULL
+ */
+void gate_prompter_format_detail(char *buf, size_t size, const char *command,
+                                 const char *path, const char *arguments,
+                                 const char *working_dir);
 
 /**
  * Format the single-call key hint, e.g. `Allow? [y/n/?] (a = always allow "x")`.
@@ -113,6 +132,27 @@ void gate_prompter_format_hint(char *buf, size_t size, const char *always_label)
  * @param text Text to escape (NULL yields an empty buffer)
  */
 void gate_prompter_escape_control(char *buf, size_t size, const char *text);
+
+/**
+ * Copy text with control characters escaped, cut to max_chars characters with
+ * a trailing "..." when it is longer. A cut never splits an escape sequence.
+ *
+ * @param buf Output buffer
+ * @param size Size of buf
+ * @param text Text to escape (NULL yields an empty buffer)
+ * @param max_chars Maximum length of the result, including any "..."
+ */
+void gate_prompter_escape_truncate(char *buf, size_t size, const char *text,
+                                   size_t max_chars);
+
+/**
+ * Escape text of any length into a fresh buffer.
+ *
+ * @param text Text to escape
+ * @return Allocated escaped string, or NULL for NULL input or on error.
+ *         Caller must free.
+ */
+char *gate_prompter_escape_alloc(const char *text);
 
 /**
  * Display tool details (expanded view).

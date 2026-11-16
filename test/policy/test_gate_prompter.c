@@ -6,6 +6,7 @@
  * null safety, and behaviors that don't require terminal interaction.
  */
 
+#include <stdlib.h>
 #include <string.h>
 #include "unity/unity.h"
 #include "policy/gate_prompter.h"
@@ -77,13 +78,13 @@ void test_gate_prompter_show_single_null_prompter_is_safe(void) {
     tc.arguments = "{}";
 
     /* Should not crash when passed NULL prompter */
-    gate_prompter_show_single(NULL, &tc, NULL, NULL, NULL);
+    gate_prompter_show_single(NULL, &tc, NULL, NULL, NULL, NULL);
     TEST_PASS();
 }
 
 void test_gate_prompter_show_single_null_tool_call_is_safe(void) {
     /* Should not crash when passed NULL tool_call */
-    gate_prompter_show_single(NULL, NULL, NULL, NULL, NULL);
+    gate_prompter_show_single(NULL, NULL, NULL, NULL, NULL, NULL);
     TEST_PASS();
 }
 
@@ -138,6 +139,62 @@ void test_gate_prompter_escape_control_truncates_safely(void) {
     gate_prompter_escape_control(buf, sizeof(buf), "ab\x1b" "cd");
     TEST_ASSERT_EQUAL_STRING("ab", buf);
     TEST_ASSERT_TRUE(strlen(buf) < sizeof(buf));
+}
+
+void test_gate_prompter_escape_alloc_escapes_control_characters(void) {
+    char *escaped = gate_prompter_escape_alloc("a\x1b[2Kb");
+    TEST_ASSERT_NOT_NULL(escaped);
+    TEST_ASSERT_EQUAL_STRING("a\\x1b[2Kb", escaped);
+    free(escaped);
+
+    TEST_ASSERT_NULL(gate_prompter_escape_alloc(NULL));
+}
+
+void test_gate_prompter_escape_truncate_keeps_escapes_whole(void) {
+    char buf[64];
+
+    /* "ab" plus a four-byte escape doesn't fit in five characters. */
+    gate_prompter_escape_truncate(buf, sizeof(buf), "ab\x1b" "cdef", 5);
+    TEST_ASSERT_EQUAL_STRING("ab...", buf);
+
+    gate_prompter_escape_truncate(buf, sizeof(buf), "short", 20);
+    TEST_ASSERT_EQUAL_STRING("short", buf);
+}
+
+void test_gate_prompter_format_detail_escapes_and_names_directory(void) {
+    char buf[256];
+
+    gate_prompter_format_detail(buf, sizeof(buf), "make test", NULL, NULL, "/tmp/x");
+    TEST_ASSERT_EQUAL_STRING("make test (in /tmp/x)", buf);
+
+    /* A form feed in a path is invisible unless it is escaped. */
+    gate_prompter_format_detail(buf, sizeof(buf), NULL, "run.sh\f", NULL, NULL);
+    TEST_ASSERT_EQUAL_STRING("run.sh\\x0c", buf);
+
+    gate_prompter_format_detail(buf, sizeof(buf), NULL, NULL,
+                                "{\"a\": \"b\x1b[2K\"}", NULL);
+    TEST_ASSERT_NOT_NULL(strstr(buf, "\\x1b"));
+
+    gate_prompter_format_detail(buf, sizeof(buf), NULL, NULL, NULL, NULL);
+    TEST_ASSERT_EQUAL_STRING("", buf);
+}
+
+void test_gate_prompter_format_detail_truncates_long_values(void) {
+    char buf[256];
+    char long_command[200];
+    memset(long_command, 'x', sizeof(long_command) - 1);
+    long_command[sizeof(long_command) - 1] = '\0';
+
+    gate_prompter_format_detail(buf, sizeof(buf), long_command, NULL, NULL, NULL);
+    TEST_ASSERT_EQUAL_INT(60, (int)strlen(buf));
+    TEST_ASSERT_NOT_NULL(strstr(buf, "..."));
+
+    char long_path[200];
+    memset(long_path, 'y', sizeof(long_path) - 1);
+    long_path[sizeof(long_path) - 1] = '\0';
+    gate_prompter_format_detail(buf, sizeof(buf), NULL, long_path, NULL, NULL);
+    TEST_ASSERT_EQUAL_INT(60, (int)strlen(buf));
+    TEST_ASSERT_EQUAL_INT(0, strncmp(buf, "...", 3));
 }
 
 /* =============================================================================
@@ -278,6 +335,10 @@ int main(void) {
     RUN_TEST(test_gate_prompter_hint_escapes_control_characters);
     RUN_TEST(test_gate_prompter_escape_control_renders_escapes);
     RUN_TEST(test_gate_prompter_escape_control_truncates_safely);
+    RUN_TEST(test_gate_prompter_escape_alloc_escapes_control_characters);
+    RUN_TEST(test_gate_prompter_escape_truncate_keeps_escapes_whole);
+    RUN_TEST(test_gate_prompter_format_detail_escapes_and_names_directory);
+    RUN_TEST(test_gate_prompter_format_detail_truncates_long_values);
 
     /* show_details tests */
     RUN_TEST(test_gate_prompter_show_details_null_prompter_is_safe);

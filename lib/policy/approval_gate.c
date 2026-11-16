@@ -1635,9 +1635,22 @@ ApprovalResult approval_gate_prompt(ApprovalGateConfig *config,
     char *always_label = NULL;
     int can_always = approval_gate_preview_always(tool_call, &always_label);
 
+    /* The prompt names the directory when the call doesn't run in the current
+     * one, so "y" never approves a command in a directory the user can't see. */
+    char *working_dir = NULL;
+    if (command_arg != NULL) {
+        char cwd[PATH_MAX];
+        working_dir = resolve_call_working_dir(tool_call);
+        if (working_dir != NULL && getcwd(cwd, sizeof(cwd)) != NULL &&
+            strcmp(cwd, working_dir) == 0) {
+            free(working_dir);
+            working_dir = NULL;
+        }
+    }
+
     for (;;) {
         gate_prompter_show_single(gp, tool_call, command_arg, path_arg,
-                                  can_always ? always_label : NULL);
+                                  can_always ? always_label : NULL, working_dir);
 
         int response = gate_prompter_read_key(gp);
         gate_prompter_newline(gp);
@@ -1700,6 +1713,7 @@ done:
     }
     free(saved_line);
     free(always_label);
+    free(working_dir);
     free(shell_command);
     free(file_path);
     gate_prompter_destroy(gp);
