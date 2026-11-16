@@ -110,11 +110,11 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 #### `lib/policy/` - Approval Gate System
 
 ##### Core Components
-- **`approval_gate.c/h`** - Core orchestration: category lookup, gate checking, config management, and "allow always" storage (one session rule per saveable shell segment, with a summary of what still asks)
+- **`approval_gate.c/h`** - Core orchestration: category lookup, gate checking, config management, and "allow always" storage (one session rule per saveable shell segment, scoped to the call's working directory, with a summary of what still asks)
 - **`rate_limiter.c/h`** - Opaque rate limiter type with exponential backoff tracking
 - **`allowlist.c/h`** - Opaque allowlist type for regex and shell pattern matching
 - **`gate_prompter.c/h`** - Terminal UI for single and batch approval prompts
-- **`pattern_generator.c/h`** - Pure functions for generating allowlist patterns
+- **`pattern_generator.c/h`** - Pure functions for generating allowlist patterns for non-shell tools
 - **`auto_approve.c/h`** - Auto mode's no-model tier: writes inside the git project (shell calls never qualify)
 - **`tool_args.c/h`** - Centralized cJSON argument extraction from ToolCall structs
 
@@ -123,10 +123,10 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`path_normalize.c/h`** - Cross-platform path normalization (Windows drive letters, UNC paths)
 
 ##### Shell Parsing
-- **`shell_parser.c/h`** - POSIX shell tokenization, dangerous pattern detection, and segment splitting for compound commands
+- **`shell_parser.c/h`** - POSIX shell tokenization, dangerous pattern detection, and segment splitting for compound commands; text it can't read as sh would (backslashes outside single quotes, comments, control characters, heredocs) is marked unsafe
 - **`shell_parser_cmd.c`** - cmd.exe parsing with metacharacter detection
 - **`shell_parser_ps.c`** - PowerShell parsing with cmdlet detection
-- **`shell_rules.c/h`** - Rules saved by "always allow": the segment's exact token list, matched token for token, plus the always-ask flag table and the expansions (variable, glob, brace) that stop a segment being saved
+- **`shell_rules.c/h`** - Rules saved by "always allow": the segment's exact token list, matched token for token, plus the always-ask flag table (looked up on the command behind assignments and wrappers) and the expansions (variable, glob, brace, `~`) that stop a segment being saved
 
 ##### TOCTOU Protection
 - **`atomic_file.c/h`** - Atomic file operations with O_NOFOLLOW, O_EXCL, inode verification

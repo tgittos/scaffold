@@ -215,7 +215,7 @@ A POSIX command chained with `;`, `&&`, `||`, `|` or newlines matches only when 
 
 Gated shell calls always prompt in normal mode, however harmless they look; the agent has approval-free read tools for reading files. With `--auto` they go to the model review below.
 
-With `--auto` or `"auto_mode": true`, a gated call that matches no allowlist entry is reviewed before scaffold prompts:
+With `--auto` or `"auto_mode": true`, a gated call that matches no allowlist entry is reviewed before scaffold prompts. Shell calls skip allowlist matching altogether in this mode -- config entries, `--allow` entries and rules saved with `a` are all ignored -- because what a command does depends on files the agent may just have written, which the review sees and an entry doesn't:
 
 1. `write_file` and `apply_patch` calls whose every path stays inside the git project containing the working directory, outside `.git` and protected files, run.
 2. Anything else goes to the session's own model in a separate request that is not added to the conversation. The reviewer sees your recent messages and the pending call, never tool output. If it allows the call, the call runs.
@@ -239,16 +239,20 @@ Allow? [y/n/?] (a = always allow "git show HEAD")
 
 A shell rule saved by `a` is the exact command of that segment. It covers only the same command again: whitespace and quoting don't matter, anything else does. `a` on `git status` does not cover `git status -sb`, `grep -rn foo lib` does not cover `grep -nr foo lib`, and `python3 x.py` covers only `python3 x.py`.
 
+A rule also records the directory the call ran in -- the shell tool's `working_dir` argument resolved against the current directory, or the current directory when the call has none -- and matches only calls that resolve to the same directory, so a rule for `make test` in the project doesn't cover `make test` in a downloaded repository. When that directory isn't the current one, the prompt names it: `a = always allow "make test" in /tmp/x`.
+
 What can't be saved at all:
 
 - A command the shell would rewrite before running it: a substitution (`$(...)`, backticks), a variable (`$HOME`, `${VAR:-x}`), a glob (`cat *.txt`, `ls dir?`) or a brace expansion (`cat .{a,b}`).
 - A chain, a pipe that can't be split, or a redirect that writes a file.
-- A flag that changes what the command does, including an abbreviated long option, which is accepted for every command (`git push --forc`, `rm --rec`, `tar --to-com`): `git push --force`, `git push origin +main`, `git push --mirror`, `git branch -d`, `git tag -f`, `git clean --force`, `sed -i`, `find -delete`, `rm -r`, `curl -o`, `wget -O`, `tar --to-command`, `make -f`, `--output`.
+- A command whose text this parser can't read the way the shell would: a backslash outside single quotes, a comment (`#` starting a word), a heredoc (`<<`), or a newline, `\r`, `\v` or `\f` outside single quotes. Such a command matches no entry either, config or session.
+- A token starting with `~`, which the shell replaces with a home directory.
+- A flag that changes what the command does, including an abbreviated long option, which is accepted for every command (`git push --forc`, `rm --rec`, `tar --to-com`): `git push --force`, `git push origin +main`, `git push --mirror`, `git branch -d`, `git tag -f`, `git clean --force`, `sed -i`, `find -delete`, `rm -r`, `curl -o`, `wget -O`, `tar --to-command`, `make -f`, `--output`. The flags are looked up on the command behind any `VAR=value` prefix and any wrapper that runs it (`sudo`, `env`, `command`, `nice`, `nohup`, `timeout`, `time`, `stdbuf`, `setsid`, `ionice`), so `sudo git push --force` and `A=1 git push -f` can't be saved; a wrapper option scaffold can't classify (`sudo -i`) makes the segment unsaveable too.
 - An operand that names a protected file, directly (`cat .env`), through a pattern (`cat .en?`) or after a revision (`git show HEAD:.env`). A saved rule is checked against this too.
 
 Everything else is saved as typed, including interpreters, wrappers, `VAR=value` prefixes and absolute paths — the rule still only ever covers that one command.
 
-Entries from the config file and `--allow` are not rules: they keep token prefix matching, so `["git", "status"]` covers `git status -sb`. In `--auto`, entries that cover whatever they are given are skipped so the model review sees the call: entries starting with an interpreter or wrapper (`python`, `curl`, `sudo`, ...), and a package manager's `run`, `exec` or `test` with no script named (`npm run`).
+Entries from the config file and `--allow` are not rules: they keep token prefix matching, so `["git", "status"]` covers `git status -sb`. They apply to any directory, and `--auto` ignores them as described above.
 
 For batch operations (multiple tool calls at once), you can approve/deny all or select individual items by number.
 
