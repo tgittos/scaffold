@@ -58,6 +58,69 @@ static const GlobalOpt NO_OPTS[] = {
     {NULL, OPT_FLAG}
 };
 
+/*
+ * Words that run the command following them. The always-ask tables are keyed on
+ * the command, so these words and any NAME=value prefix are skipped before the
+ * lookup; an option this table doesn't know hides what really runs, so the
+ * segment then fails closed.
+ */
+typedef struct {
+    const char      *name;
+    const GlobalOpt *options;
+    int              operand_prefix; /* words before the command (timeout's duration) */
+} Wrapper;
+
+static const GlobalOpt SUDO_OPTS[] = {
+    {"-u", OPT_VALUE}, {"--user", OPT_VALUE},
+    {"-g", OPT_VALUE}, {"--group", OPT_VALUE},
+    {"-E", OPT_FLAG}, {"--preserve-env", OPT_FLAG},
+    {"-H", OPT_FLAG}, {"--set-home", OPT_FLAG},
+    {"-n", OPT_FLAG}, {"--non-interactive", OPT_FLAG},
+    {"-k", OPT_FLAG}, {"--reset-timestamp", OPT_FLAG},
+    {NULL, OPT_FLAG}
+};
+
+static const GlobalOpt ENV_OPTS[] = {
+    {"-i", OPT_FLAG}, {"--ignore-environment", OPT_FLAG},
+    {"-u", OPT_VALUE}, {"--unset", OPT_VALUE},
+    {"-C", OPT_VALUE}, {"--chdir", OPT_VALUE},
+    {"-0", OPT_FLAG}, {"--null", OPT_FLAG},
+    {NULL, OPT_FLAG}
+};
+
+static const GlobalOpt NICE_OPTS[] = {
+    {"-n", OPT_VALUE}, {"--adjustment", OPT_VALUE}, {NULL, OPT_FLAG}
+};
+
+static const GlobalOpt TIMEOUT_OPTS[] = {
+    {"-s", OPT_VALUE}, {"--signal", OPT_VALUE},
+    {"-k", OPT_VALUE}, {"--kill-after", OPT_VALUE},
+    {"--preserve-status", OPT_FLAG}, {"--foreground", OPT_FLAG},
+    {"-v", OPT_FLAG}, {"--verbose", OPT_FLAG},
+    {NULL, OPT_FLAG}
+};
+
+static const GlobalOpt STDBUF_OPTS[] = {
+    {"-i", OPT_VALUE}, {"--input", OPT_VALUE},
+    {"-o", OPT_VALUE}, {"--output", OPT_VALUE},
+    {"-e", OPT_VALUE}, {"--error", OPT_VALUE},
+    {NULL, OPT_FLAG}
+};
+
+static const Wrapper WRAPPERS[] = {
+    {"sudo", SUDO_OPTS, 0},
+    {"env", ENV_OPTS, 0},
+    {"nice", NICE_OPTS, 0},
+    {"timeout", TIMEOUT_OPTS, 1},
+    {"stdbuf", STDBUF_OPTS, 0},
+    {"command", NO_OPTS, 0},
+    {"nohup", NO_OPTS, 0},
+    {"time", NO_OPTS, 0},
+    {"setsid", NO_OPTS, 0},
+    {"ionice", NO_OPTS, 0},
+    {NULL, NULL, 0}
+};
+
 /* Tools whose always-ask flags are scoped to a subcommand: the subcommand has
  * to be resolved before those flags can be checked. */
 static const SubcommandTool SUBCOMMAND_TOOLS[] = {
@@ -466,7 +529,9 @@ static int git_spelling_always_ask(const ParsedShellCommand *p, const char *subc
 static const char *expanding_token(const ParsedShellCommand *p) {
     for (int i = 0; i < p->token_count; i++) {
         const char *t = p->tokens[i];
-        if (strpbrk(t, "$`*?[") != NULL || shell_token_has_brace_expansion(t)) {
+        /* A leading "~" is a home directory the rule never saw. */
+        if (t[0] == '~' || strpbrk(t, "$`*?[") != NULL ||
+            shell_token_has_brace_expansion(t)) {
             return t;
         }
     }
@@ -509,14 +574,88 @@ int shell_token_has_brace_expansion(const char *token) {
     return 0;
 }
 
-int shell_has_always_ask_flag(const ParsedShellCommand *p, const char **out_flag) {
-    if (out_flag != NULL) {
-        *out_flag = NULL;
-    }
-    if (p == NULL || p->token_count < 1) {
+/* A NAME=value word placed before the command. */
+static int is_assignment(const char *t) {
+    const char *eq = strchr(t, '=');
+    if (eq == NULL || eq == t) {
         return 0;
     }
+    if (!isalpha((unsigned char)t[0]) && t[0] != '_') {
+        return 0;
+    }
+    for (const char *c = t + 1; c < eq; c++) {
+        if (!isalnum((unsigned char)*c) && *c != '_') {
+            return 0;
+        }
+    }
+    return 1;
+}
 
+static const Wrapper *find_wrapper(const CommandName *name) {
+    for (int i = 0; WRAPPERS[i].name != NULL; i++) {
+        if (command_name_is(name, WRAPPERS[i].name)) {
+            return &WRAPPERS[i];
+        }
+    }
+    return NULL;
+}
+
+/*
+ * Index of the word that names the command, skipping assignment prefixes and
+ * wrappers. Returns -1 when a wrapper's options can't be parsed or no command
+ * word is left, which the caller treats as always-ask.
+ */
+static int command_word_index(char *const *tokens, int count) {
+    int i = 0;
+    while (i < count) {
+        if (is_assignment(tokens[i])) {
+            i++;
+            continue;
+        }
+
+        CommandName name = command_name_of(tokens[i]);
+        const Wrapper *wrapper = find_wrapper(&name);
+        if (wrapper == NULL) {
+            return i;
+        }
+
+        i++;
+        int operands = wrapper->operand_prefix;
+        while (i < count) {
+            const char *t = tokens[i];
+            if (strcmp(t, "--") == 0) {
+                i++;
+                break;
+            }
+            if (is_assignment(t)) {
+                i++;
+                continue;
+            }
+            if (!is_option(t)) {
+                if (operands == 0) {
+                    break;
+                }
+                operands--;
+                i++;
+                continue;
+            }
+            const GlobalOpt *opt = find_global_opt(wrapper->options, t);
+            if (opt == NULL) {
+                return -1;
+            }
+            if (opt->kind == OPT_VALUE && strchr(t, '=') == NULL) {
+                i++;
+            }
+            i++;
+        }
+        if (operands > 0) {
+            return -1;
+        }
+    }
+    return i < count ? i : -1;
+}
+
+static int always_ask_in_command(const ParsedShellCommand *p, const char **out_flag) {
     CommandName name = command_name_of(p->tokens[0]);
     const char *subcommand = NULL;
     int subcommand_known = 1;
@@ -566,6 +705,31 @@ int shell_has_always_ask_flag(const ParsedShellCommand *p, const char **out_flag
 
     /* A global option we can't classify hides what the command really runs. */
     return !subcommand_known;
+}
+
+int shell_has_always_ask_flag(const ParsedShellCommand *p, const char **out_flag) {
+    if (out_flag != NULL) {
+        *out_flag = NULL;
+    }
+    if (p == NULL || p->token_count < 1) {
+        return 0;
+    }
+
+    int command_word = command_word_index(p->tokens, p->token_count);
+    if (command_word < 0) {
+        /* A wrapper we can't read through: fail closed. */
+        if (out_flag != NULL) {
+            *out_flag = p->tokens[0];
+        }
+        return 1;
+    }
+
+    /* A borrowed view starting at the command word, so the tables are looked up
+     * on the program that actually runs. */
+    ParsedShellCommand command = *p;
+    command.tokens = p->tokens + command_word;
+    command.token_count = p->token_count - command_word;
+    return always_ask_in_command(&command, out_flag);
 }
 
 ShellRuleStatus shell_rule_from_parsed(const ParsedShellCommand *p, ShellRule *out,

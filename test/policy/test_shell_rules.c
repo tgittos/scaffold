@@ -296,6 +296,35 @@ void test_unsafe_syntax_and_redirects(void) {
     TEST_ASSERT_EQUAL_INT(0, matches("grep foo bar", "grep foo bar > out"));
 }
 
+void test_wrappers_do_not_hide_always_ask_flags(void) {
+    /* The flag tables are keyed on the command, so the wrapper and any
+     * NAME=value prefix have to be skipped before the lookup. */
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("sudo git push --force"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("env git push -f"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("A=1 git push -f"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG,
+                          status_of("command git push --force"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("nice git reset --hard"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("timeout 5 git push -f"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG,
+                          status_of("env GIT_TRACE=1 git push -f origin main"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("sudo -u root git push -f"));
+
+    /* A wrapper option we can't classify hides the command: fail closed. */
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("sudo --banana git log"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("timeout --banana git log"));
+
+    /* A wrapped command with no always-ask flag still saves. */
+    assert_rule("sudo make test", 3, "sudo", "make", "test");
+    assert_rule("env git log -1", 4, "env", "git", "log", "-1");
+}
+
+void test_tilde_tokens_are_unsaveable(void) {
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_EXPANSION, status_of("cat ~/notes.txt"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_EXPANSION, status_of("ls ~"));
+    assert_rule("cat ./notes.txt", 2, "cat", "./notes.txt");
+}
+
 void test_broad_entries_are_recognised(void) {
     const char *python[] = { "python" };
     const char *usr_python[] = { "/usr/bin/python3" };
@@ -376,6 +405,8 @@ int main(void) {
     RUN_TEST(test_git_grep_pager_flags_always_ask);
     RUN_TEST(test_always_ask_spelling_variants);
     RUN_TEST(test_unsafe_syntax_and_redirects);
+    RUN_TEST(test_wrappers_do_not_hide_always_ask_flags);
+    RUN_TEST(test_tilde_tokens_are_unsaveable);
     RUN_TEST(test_broad_entries_are_recognised);
     RUN_TEST(test_brace_expansion_predicate);
     RUN_TEST(test_status_reasons_and_labels);
