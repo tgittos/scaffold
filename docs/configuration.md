@@ -195,6 +195,8 @@ Shell patterns can optionally specify a shell type (`bash`, `sh`, `cmd`, `powers
 
 A POSIX command chained with `;`, `&&`, `||`, `|` or newlines matches only when every segment matches an entry, so `cd src && make 2>&1 | tail` needs entries for `cd`, `make` and `tail`. `2>&1` and redirects to `/dev/null` are ignored. Segments with other redirects, subshells (`$(...)`, backticks), backslash escapes or a background `&` never match, and neither do commands that match a dangerous pattern such as `rm -rf`.
 
+A call whose arguments JSON repeats a key at any nesting level is denied before any of this: scaffold reads the first value of a duplicated key and the tool executor reads the last, so `{"command": "git status", "command": "touch x"}` would be checked as one command and run as another. Names are compared case-insensitively.
+
 ### CLI overrides
 
 ```bash
@@ -232,6 +234,8 @@ When a gate triggers, you'll see:
 Allow? [y/n/?] (a = always allow "git show HEAD")
 ```
 
+When the call runs somewhere else, the detail line names that directory: `shell: make test (in /tmp/x)`. Control characters in a command, a path or the arguments are shown as escapes (`\n`, `\x1b`) in the prompt, the details view and the batch preview.
+
 - **y** -- Allow this one action
 - **n** -- Deny this action
 - **a** -- Allow this and all matching future actions (session only), and run the current one. For a shell command, each segment that can have a rule gets one; the prompt names the rules it would save, and a partial save reports what happened, e.g. `Saved: "grep -rn x lib". Still asks: git fetch (writes to a file).` When no part of the command can be saved, `a` isn't offered and does nothing.
@@ -246,8 +250,10 @@ What can't be saved at all:
 - A command the shell would rewrite before running it: a substitution (`$(...)`, backticks), a variable (`$HOME`, `${VAR:-x}`), a glob (`cat *.txt`, `ls dir?`) or a brace expansion (`cat .{a,b}`).
 - A chain, a pipe that can't be split, or a redirect that writes a file.
 - A command whose text this parser can't read the way the shell would: a backslash outside single quotes, a comment (`#` starting a word), a heredoc (`<<`), or a newline, `\r`, `\v` or `\f` outside single quotes. Such a command matches no entry either, config or session.
-- A token starting with `~`, which the shell replaces with a home directory.
-- A flag that changes what the command does, including an abbreviated long option, which is accepted for every command (`git push --forc`, `rm --rec`, `tar --to-com`): `git push --force`, `git push origin +main`, `git push --mirror`, `git branch -d`, `git tag -f`, `git clean --force`, `sed -i`, `find -delete`, `rm -r`, `curl -o`, `wget -O`, `tar --to-command`, `make -f`, `--output`. The flags are looked up on the command behind any `VAR=value` prefix and any wrapper that runs it (`sudo`, `env`, `command`, `nice`, `nohup`, `timeout`, `time`, `stdbuf`, `setsid`, `ionice`), so `sudo git push --force` and `A=1 git push -f` can't be saved; a wrapper option scaffold can't classify (`sudo -i`) makes the segment unsaveable too.
+- A token with a `~` the shell replaces with a home directory: at the start of the token, or after an `=` or `:` in it (`make PREFIX=~/x`).
+- `cd`, `pushd` and `popd`, which move the directory the segments after them run in. A command containing such a segment also matches no rule saved by `a`, so a saved `make` can't be reached with `cd .. && make`.
+- Any command with a segment this parser can't read: when one segment is refused for that reason, no segment of the command is saved.
+- A flag that changes what the command does, including an abbreviated long option, which is accepted for every command (`git push --forc`, `rm --rec`, `tar --to-com`): `git push --force`, `git push origin +main`, `git push --mirror`, `git branch -d`, `git tag -f`, `git clean --force`, `sed -i`, `sed --in-place`, `perl -i`, `rsync --delete`, `find -delete`, `rm -r`, `curl -o`, `wget -O`, `tar --to-command`, `make -f`, `--output`. The flags are looked up on the command behind any `VAR=value` prefix and any wrapper that runs it (`sudo`, `doas`, `env`, `command`, `nice`, `nohup`, `timeout`, `time`, `stdbuf`, `setsid`, `ionice`, `xargs`, `exec`, `chroot`, `flock`, `watch`, `strace`, `script`), so `sudo git push --force` and `A=1 git push -f` can't be saved; a wrapper option scaffold can't classify (`sudo -i`) makes the segment unsaveable too.
 - An operand that names a protected file, directly (`cat .env`), through a pattern (`cat .en?`) or after a revision (`git show HEAD:.env`). A saved rule is checked against this too.
 
 Everything else is saved as typed, including interpreters, wrappers, `VAR=value` prefixes and absolute paths — the rule still only ever covers that one command.
@@ -263,6 +269,8 @@ Certain files are always blocked regardless of gate settings. These include sens
 ### Subagent behavior
 
 Subagents inherit category settings and static allowlist entries from the parent config. Session-added allowlist entries (from `--allow` or "always allow" prompts) are not inherited; instead, a subagent's gated call goes to the parent, which checks it against its own allowlist and auto mode before prompting.
+
+A subagent is started with the parent's `--auto`, so a shell call in a subagent skips the child's own allowlist too and reaches the parent's review. Every subagent is also started with the parent's home directory, so it reads the same `config.json` the parent did.
 
 ## Project-specific prompts (AGENTS.md)
 

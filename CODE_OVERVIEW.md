@@ -116,7 +116,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`gate_prompter.c/h`** - Terminal UI for single and batch approval prompts
 - **`pattern_generator.c/h`** - Pure functions for generating allowlist patterns for non-shell tools
 - **`auto_approve.c/h`** - Auto mode's no-model tier: writes inside the git project (shell calls never qualify)
-- **`tool_args.c/h`** - Centralized cJSON argument extraction from ToolCall structs
+- **`tool_args.c/h`** - Centralized cJSON argument extraction from ToolCall structs (case-sensitive lookups, plus `tool_args_has_duplicate_keys` for the gate's duplicate-key denial)
 
 ##### Protected Files
 - **`protected_files.c/h`** - Protected file detection via basename, prefix, glob, and inode matching
@@ -126,7 +126,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`shell_parser.c/h`** - POSIX shell tokenization, dangerous pattern detection, and segment splitting for compound commands; text it can't read as sh would (backslashes outside single quotes, comments, control characters, heredocs) is marked unsafe
 - **`shell_parser_cmd.c`** - cmd.exe parsing with metacharacter detection
 - **`shell_parser_ps.c`** - PowerShell parsing with cmdlet detection
-- **`shell_rules.c/h`** - Rules saved by "always allow": the segment's exact token list, matched token for token, plus the always-ask flag table (looked up on the command behind assignments and wrappers) and the expansions (variable, glob, brace, `~`) that stop a segment being saved
+- **`shell_rules.c/h`** - Rules saved by "always allow": the segment's exact token list, matched token for token, plus the always-ask flag table (looked up on the command behind assignments and wrappers), the expansions (variable, glob, brace, `~`) and the directory changes (`cd`, `pushd`, `popd`) that stop a segment being saved
 
 ##### TOCTOU Protection
 - **`atomic_file.c/h`** - Atomic file operations with O_NOFOLLOW, O_EXCL, inode verification
