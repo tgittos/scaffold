@@ -728,25 +728,103 @@ void test_dq_backtick_is_unsafe(void) {
     free_parsed_shell_command(p);
 }
 
-void test_dq_backslash_dot_is_safe(void) {
+void test_dq_backslash_is_unsafe(void) {
     ParsedShellCommand *p = dq_parse("grep -v \"\\.h\" x");
-    TEST_ASSERT_EQUAL_INT(1, shell_command_is_safe_for_matching(p));
-    TEST_ASSERT_EQUAL_STRING("\\.h", p->tokens[2]);
+    TEST_ASSERT_EQUAL_INT(1, p->has_chain);
+    TEST_ASSERT_EQUAL_INT(0, shell_command_is_safe_for_matching(p));
     free_parsed_shell_command(p);
 }
 
-void test_dq_escaped_dollar_is_safe(void) {
+void test_dq_escaped_dollar_is_unsafe(void) {
     ParsedShellCommand *p = dq_parse("echo \"\\$(x)\"");
-    TEST_ASSERT_EQUAL_INT(1, shell_command_is_safe_for_matching(p));
-    TEST_ASSERT_EQUAL_STRING("$(x)", p->tokens[1]);
+    TEST_ASSERT_EQUAL_INT(0, shell_command_is_safe_for_matching(p));
     free_parsed_shell_command(p);
 }
 
-void test_dq_escaped_quote_stays_in_token(void) {
+void test_dq_escaped_quote_is_unsafe(void) {
     ParsedShellCommand *p = dq_parse("echo \"a\\\"b\"");
-    TEST_ASSERT_EQUAL_INT(1, shell_command_is_safe_for_matching(p));
-    TEST_ASSERT_EQUAL_STRING("a\"b", p->tokens[1]);
+    TEST_ASSERT_EQUAL_INT(0, shell_command_is_safe_for_matching(p));
     free_parsed_shell_command(p);
+}
+
+/* ============================================================================
+ * Separators the shell does not treat as whitespace, and comments
+ * ========================================================================== */
+
+void test_newline_outside_single_quotes_is_unsafe(void) {
+    /* The splitter reads "\"" as open-close-open and keeps the newline in one
+     * segment; the parser must refuse it so no prefix rule covers line two. */
+    ParsedShellCommand *p = dq_parse("git log -1 \"\\\"\"\ntouch /tmp/p \"\\\"\"");
+    const char *prefix[] = {"git", "log"};
+    TEST_ASSERT_EQUAL_INT(1, p->has_chain);
+    TEST_ASSERT_EQUAL_INT(0, shell_command_is_safe_for_matching(p));
+    TEST_ASSERT_EQUAL_INT(0, shell_command_matches_prefix(p, prefix, 2));
+    free_parsed_shell_command(p);
+}
+
+void test_comment_word_is_unsafe(void) {
+    ParsedShellCommand *p = dq_parse("git log -1 --oneline #'\ntouch /tmp/p #'");
+    const char *prefix[] = {"git", "log"};
+    TEST_ASSERT_EQUAL_INT(1, p->has_chain);
+    TEST_ASSERT_EQUAL_INT(0, shell_command_matches_prefix(p, prefix, 2));
+    free_parsed_shell_command(p);
+}
+
+void test_hash_inside_a_word_is_still_safe(void) {
+    ParsedShellCommand *p = dq_parse("git log HEAD#1");
+    TEST_ASSERT_EQUAL_INT(1, shell_command_is_safe_for_matching(p));
+    TEST_ASSERT_EQUAL_STRING("HEAD#1", p->tokens[2]);
+    free_parsed_shell_command(p);
+}
+
+void test_control_characters_are_not_separators(void) {
+    /* sh runs the command word "log\v/x"; splitting on \v would hide that. */
+    ParsedShellCommand *p = dq_parse("git log\v/x");
+    const char *prefix[] = {"git", "log"};
+    TEST_ASSERT_EQUAL_INT(1, p->has_chain);
+    TEST_ASSERT_EQUAL_INT(0, shell_command_matches_prefix(p, prefix, 2));
+    free_parsed_shell_command(p);
+
+    ParsedShellCommand *cr = dq_parse("git log\r-1");
+    TEST_ASSERT_EQUAL_INT(1, cr->has_chain);
+    free_parsed_shell_command(cr);
+
+    ParsedShellCommand *ff = dq_parse("git log\f-1");
+    TEST_ASSERT_EQUAL_INT(1, ff->has_chain);
+    free_parsed_shell_command(ff);
+}
+
+void test_single_quoted_control_characters_stay_safe(void) {
+    ParsedShellCommand *p = dq_parse("grep 'a\nb' file");
+    TEST_ASSERT_EQUAL_INT(1, shell_command_is_safe_for_matching(p));
+    TEST_ASSERT_EQUAL_STRING("a\nb", p->tokens[1]);
+    free_parsed_shell_command(p);
+}
+
+void test_prefix_match_refuses_variables(void) {
+    ParsedShellCommand *p = dq_parse("git $log");
+    const char *prefix[] = {"git", "log"};
+    TEST_ASSERT_EQUAL_INT(1, p->has_variable);
+    TEST_ASSERT_EQUAL_INT(0, shell_command_matches_prefix(p, prefix, 2));
+    free_parsed_shell_command(p);
+}
+
+void test_copy_parsed_command_copies_has_variable(void) {
+    ParsedShellCommand *orig = dq_parse("echo $X");
+    ParsedShellCommand *copy = copy_parsed_shell_command(orig);
+    TEST_ASSERT_NOT_NULL(copy);
+    TEST_ASSERT_EQUAL_INT(1, orig->has_variable);
+    TEST_ASSERT_EQUAL_INT(orig->has_variable, copy->has_variable);
+    free_parsed_shell_command(orig);
+    free_parsed_shell_command(copy);
+}
+
+void test_split_rejects_heredoc(void) {
+    char **segments = NULL;
+    TEST_ASSERT_EQUAL_INT(-1, shell_split_segments("cat <<EOF\ngit stash drop\nEOF",
+                                                   SHELL_TYPE_POSIX, &segments));
+    TEST_ASSERT_EQUAL_INT(-1, shell_split_segments("cat > notes.md <<-EOF\nls\nEOF",
+                                                   SHELL_TYPE_POSIX, &segments));
 }
 
 void test_sq_substitution_stays_safe(void) {
@@ -878,9 +956,17 @@ int main(void) {
     RUN_TEST(test_cmd_variable_expansion_flagged);
     RUN_TEST(test_dq_command_substitution_is_unsafe);
     RUN_TEST(test_dq_backtick_is_unsafe);
-    RUN_TEST(test_dq_backslash_dot_is_safe);
-    RUN_TEST(test_dq_escaped_dollar_is_safe);
-    RUN_TEST(test_dq_escaped_quote_stays_in_token);
+    RUN_TEST(test_dq_backslash_is_unsafe);
+    RUN_TEST(test_newline_outside_single_quotes_is_unsafe);
+    RUN_TEST(test_comment_word_is_unsafe);
+    RUN_TEST(test_hash_inside_a_word_is_still_safe);
+    RUN_TEST(test_control_characters_are_not_separators);
+    RUN_TEST(test_single_quoted_control_characters_stay_safe);
+    RUN_TEST(test_prefix_match_refuses_variables);
+    RUN_TEST(test_copy_parsed_command_copies_has_variable);
+    RUN_TEST(test_split_rejects_heredoc);
+    RUN_TEST(test_dq_escaped_dollar_is_unsafe);
+    RUN_TEST(test_dq_escaped_quote_is_unsafe);
     RUN_TEST(test_sq_substitution_stays_safe);
     RUN_TEST(test_unquoted_backslash_still_unsafe);
 

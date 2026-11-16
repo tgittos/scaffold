@@ -324,13 +324,19 @@ int parse_posix_shell(const char *command, ParsedShellCommand *result) {
         }
 
         /*
-         * Security: Handle backslash escapes outside quotes.
-         * In POSIX shells, backslash can escape any character including
-         * metacharacters. A backslash at end of line is line continuation.
-         * Mark as unsafe for matching rather than trying to parse all cases.
+         * Security: characters this parser cannot read the way sh does.
+         * A backslash escapes the next character (including a quote, which
+         * desynchronises the segment splitter), a newline separates commands,
+         * and \r \v \f stay inside the word for sh while isspace() would split
+         * on them. Inside single quotes they are all literal text.
          */
+        if (!in_single_quote &&
+            (c == '\\' || c == '\n' || c == '\r' || c == '\v' || c == '\f')) {
+            result->has_chain = 1;
+        }
+
+        /* A backslash outside quotes escapes the next character. */
         if (c == '\\' && !in_single_quote && !in_double_quote) {
-            result->has_chain = 1;  /* Backslash escapes are complex; mark unsafe */
             if (*(p + 1)) {
                 p += 2;  /* Skip backslash and escaped character */
             } else {
@@ -360,12 +366,6 @@ int parse_posix_shell(const char *command, ParsedShellCommand *result) {
             } else if (c == '$') {
                 result->has_variable = 1;
             }
-            /* Backslash only escapes $ ` " \ and newline here. */
-            if (c == '\\' && strchr("$`\"\\\n", *(p + 1)) && *(p + 1)) {
-                token_buf[token_len++] = *(p + 1);
-                p += 2;
-                continue;
-            }
         }
 
         if (in_single_quote || in_double_quote) {
@@ -374,7 +374,15 @@ int parse_posix_shell(const char *command, ParsedShellCommand *result) {
             continue;
         }
 
-        if (isspace((unsigned char)c)) {
+        /* An unquoted '#' at the start of a word begins a comment the shell
+         * ends at the next newline; everything after it is text this parser
+         * would otherwise read as tokens. */
+        if (c == '#' && token_len == 0 && !had_quotes) {
+            result->has_chain = 1;
+        }
+
+        /* sh splits words on space, tab and newline only. */
+        if (c == ' ' || c == '\t' || c == '\n') {
             if (token_len > 0 || had_quotes) {
                 if (token_list_add(&tokens, token_buf, token_len) != 0) {
                     free(token_buf);
@@ -528,7 +536,8 @@ int shell_command_matches_prefix(const ParsedShellCommand *parsed,
     }
 
     if (parsed->has_chain || parsed->has_pipe ||
-        parsed->has_subshell || parsed->has_redirect) {
+        parsed->has_subshell || parsed->has_redirect ||
+        parsed->has_variable) {
         return 0;
     }
 
@@ -659,8 +668,8 @@ static int add_trimmed_segment(TokenList *segments, const char *buf, size_t len)
     return len > 0 ? token_list_add(segments, buf, len) : 0;
 }
 
-/* Quote tracking here ignores backslashes. Any segment it mis-splits
- * contains the backslash, and the parser marks backslashes unsafe. */
+/* Quote tracking here ignores backslashes. Any segment it mis-splits contains
+ * a backslash outside single quotes, which the parser marks unsafe. */
 static int split_posix_segments(const char *command, TokenList *segments) {
     char *buf = malloc(strlen(command) + 1);
     if (!buf) {
@@ -708,6 +717,11 @@ static int split_posix_segments(const char *command, TokenList *segments) {
             in_single = !in_single;
         } else if (c == '"' && !in_single) {
             in_double = !in_double;
+        } else if (c == '<' && p[1] == '<' && !quoted) {
+            /* A heredoc's body lines are data, not commands: this splitter
+             * would hand them over as segments of their own. */
+            rc = -1;
+            break;
         } else if (c == '>' && !quoted) {
             size_t skip = non_writing_redirect_len(p);
             if (skip > 0) {
@@ -793,6 +807,7 @@ ParsedShellCommand *copy_parsed_shell_command(const ParsedShellCommand *cmd) {
     copy->has_pipe = cmd->has_pipe;
     copy->has_subshell = cmd->has_subshell;
     copy->has_redirect = cmd->has_redirect;
+    copy->has_variable = cmd->has_variable;
     copy->is_dangerous = cmd->is_dangerous;
     copy->shell_type = cmd->shell_type;
 
