@@ -698,6 +698,37 @@ void test_split_rejects_unsplittable(void) {
     TEST_ASSERT_EQUAL_INT(-1, shell_split_segments(NULL, SHELL_TYPE_POSIX, &segments));
 }
 
+void test_split_rejects_control_characters(void) {
+    /* sh keeps \r \v \f inside the word; trimming them off an edge would make
+     * the segment read as a different command than the one that runs. */
+    char **segments = NULL;
+    TEST_ASSERT_EQUAL_INT(-1, shell_split_segments("rm notes.txt\r", SHELL_TYPE_POSIX,
+                                                  &segments));
+    TEST_ASSERT_EQUAL_INT(-1, shell_split_segments("git status\v", SHELL_TYPE_POSIX,
+                                                  &segments));
+    TEST_ASSERT_EQUAL_INT(-1, shell_split_segments("./run.sh\f", SHELL_TYPE_POSIX,
+                                                  &segments));
+    TEST_ASSERT_EQUAL_INT(-1, shell_split_segments("git status\r && ls",
+                                                  SHELL_TYPE_POSIX, &segments));
+
+    /* Inside single quotes they are literal text the parser can read. */
+    const char *quoted[] = {"echo 'a\rb'"};
+    assert_segments("echo 'a\rb'", 1, quoted);
+}
+
+void test_split_strips_multi_digit_redirect_fd(void) {
+    /* bash reads "12>" as a redirect, so "12" is not an argument. */
+    const char *expected[] = {"git log"};
+    assert_segments("git log 12>/dev/null", 1, expected);
+
+    const char *dup[] = {"make", "tail -20"};
+    assert_segments("make 22>&1 | tail -20", 2, dup);
+
+    /* Digits glued to a word are part of it, not an fd. */
+    const char *glued[] = {"ls a12"};
+    assert_segments("ls a12 2>/dev/null", 1, glued);
+}
+
 void test_split_non_posix_returns_whole_command(void) {
     char **segments = NULL;
     int count = shell_split_segments("dir && del x", SHELL_TYPE_CMD, &segments);
@@ -960,6 +991,8 @@ int main(void) {
     RUN_TEST(test_newline_outside_single_quotes_is_unsafe);
     RUN_TEST(test_comment_word_is_unsafe);
     RUN_TEST(test_hash_inside_a_word_is_still_safe);
+    RUN_TEST(test_split_rejects_control_characters);
+    RUN_TEST(test_split_strips_multi_digit_redirect_fd);
     RUN_TEST(test_control_characters_are_not_separators);
     RUN_TEST(test_single_quoted_control_characters_stay_safe);
     RUN_TEST(test_prefix_match_refuses_variables);

@@ -1356,12 +1356,17 @@ void test_allow_always_covers_only_the_exact_commands(void) {
 }
 
 void test_allow_always_saves_the_segments_it_can(void) {
-    ToolCall redirect = shell_call("{\"command\": \"cd src && ls > out.txt\"}");
+    ToolCall redirect = shell_call("{\"command\": \"make test && ls > out.txt\"}");
+    ToolCall make_only = shell_call("{\"command\": \"make test\"}");
     ToolCall cd_only = shell_call("{\"command\": \"cd src\"}");
 
     TEST_ASSERT_EQUAL(0, approval_gate_allow_always(&config, &redirect));
-    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &cd_only));
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &make_only));
     TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &redirect));
+
+    /* A "cd" segment is never saved. */
+    TEST_ASSERT_EQUAL(-1, approval_gate_allow_always(&config, &cd_only));
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &cd_only));
 }
 
 void test_allow_always_summary_names_saved_and_unsaved_parts(void) {
@@ -1626,6 +1631,63 @@ void test_shell_allowlist_refuses_heredoc(void) {
 
     /* The body line never becomes a rule of its own. */
     ToolCall body = shell_call("{\"command\": \"git stash drop\"}");
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &body));
+}
+
+void test_shell_allowlist_refuses_trailing_control_character(void) {
+    /* sh runs "notes.txt\r", a different file than the rule's "notes.txt". */
+    ToolCall saved = shell_call("{\"command\": \"rm notes.txt\"}");
+    ToolCall with_cr = shell_call("{\"command\": \"rm notes.txt\\r\"}");
+    ToolCall with_vt = shell_call("{\"command\": \"git status\\u000b\"}");
+
+    TEST_ASSERT_EQUAL(0, approval_gate_allow_always(&config, &saved));
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &saved));
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &with_cr));
+    TEST_ASSERT_EQUAL(0, approval_gate_preview_always(&with_cr, NULL));
+    TEST_ASSERT_EQUAL(-1, approval_gate_allow_always(&config, &with_cr));
+
+    const char *status[] = {"git", "status"};
+    approval_gate_add_shell_allowlist(&config, status, 2, SHELL_TYPE_UNKNOWN);
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &with_vt));
+}
+
+void test_directory_changing_segment_blocks_session_rules(void) {
+    ToolCall chain = shell_call("{\"command\": \"cd build && cmake .. && make\"}");
+    ToolCall climb = shell_call("{\"command\": \"cd .. && cd .. && make\"}");
+    ToolCall plain_make = shell_call("{\"command\": \"make\"}");
+    AllowAlwaysSummary summary;
+
+    /* "cmake .." and "make" are saved; the "cd" segment never is. */
+    TEST_ASSERT_EQUAL(0, approval_gate_allow_always_ex(&config, &chain, &summary));
+    TEST_ASSERT_NOT_NULL(summary.unsaved);
+    TEST_ASSERT_NOT_NULL(strstr(summary.unsaved, "cd"));
+    allow_always_summary_free(&summary);
+
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &plain_make));
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &chain));
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &climb));
+}
+
+void test_config_cd_entry_does_not_revive_session_rules(void) {
+    const char *cd[] = {"cd"};
+    approval_gate_add_shell_allowlist(&config, cd, 1, SHELL_TYPE_UNKNOWN);
+
+    ToolCall saved = shell_call("{\"command\": \"make\"}");
+    ToolCall climb = shell_call("{\"command\": \"cd .. && make\"}");
+
+    TEST_ASSERT_EQUAL(0, approval_gate_allow_always(&config, &saved));
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &climb));
+}
+
+void test_unsafe_segment_saves_nothing_from_the_command(void) {
+    /* The splitter can't see what a comment swallows, so no segment of such a
+     * command becomes a rule. */
+    ToolCall commented = shell_call(
+        "{\"command\": \"git log # ; git stash drop\"}");
+    ToolCall body = shell_call("{\"command\": \"git stash drop\"}");
+
+    TEST_ASSERT_EQUAL(0, approval_gate_preview_always(&commented, NULL));
+    TEST_ASSERT_EQUAL(-1, approval_gate_allow_always(&config, &commented));
     TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &body));
 }
 
@@ -2836,6 +2898,10 @@ int main(void) {
     RUN_TEST(test_shell_allowlist_refuses_comment_hidden_newline);
     RUN_TEST(test_shell_allowlist_refuses_heredoc);
     RUN_TEST(test_allow_always_refuses_protected_file);
+    RUN_TEST(test_shell_allowlist_refuses_trailing_control_character);
+    RUN_TEST(test_directory_changing_segment_blocks_session_rules);
+    RUN_TEST(test_config_cd_entry_does_not_revive_session_rules);
+    RUN_TEST(test_unsafe_segment_saves_nothing_from_the_command);
     RUN_TEST(test_session_rule_matches_only_its_working_dir);
     RUN_TEST(test_session_rule_saved_without_working_dir_uses_cwd);
     RUN_TEST(test_preview_always_names_other_working_dir);

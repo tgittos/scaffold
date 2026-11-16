@@ -109,6 +109,14 @@ static const GlobalOpt STDBUF_OPTS[] = {
 
 static const Wrapper WRAPPERS[] = {
     {"sudo", SUDO_OPTS, 0},
+    {"doas", NO_OPTS, 0},
+    {"xargs", NO_OPTS, 0},
+    {"exec", NO_OPTS, 0},
+    {"chroot", NO_OPTS, 1},
+    {"flock", NO_OPTS, 1},
+    {"watch", NO_OPTS, 0},
+    {"strace", NO_OPTS, 0},
+    {"script", NO_OPTS, 0},
     {"env", ENV_OPTS, 0},
     {"nice", NICE_OPTS, 0},
     {"timeout", TIMEOUT_OPTS, 1},
@@ -189,6 +197,11 @@ static const AlwaysAskFlag ALWAYS_ASK_FLAGS[] = {
     {"git", NULL, "-c", 0, 1},
     {"git", NULL, "--exec-path", 1, 1},
     {"sed", NULL, "-i", 1, 1},
+    {"sed", NULL, "--in-place", 1, 1},
+    /* perl -i rewrites files in place, usually spelled as a short cluster. */
+    {"perl", NULL, "-i", 1, 1},
+    /* rsync --delete removes files at the destination. */
+    {"rsync", NULL, "--delete", 1, 1},
     /* make picks up rules from a chosen makefile or straight off the command line. */
     {"make", NULL, "-f", 0, 0},
     {"make", NULL, "--file", 1, 0},
@@ -453,12 +466,24 @@ static int git_spelling_always_ask(const ParsedShellCommand *p, const char *subc
     return 0;
 }
 
+/* A "~" bash expands: at the start of a word, or after an "=" or ":" in it. */
+static int has_tilde_expansion(const char *t) {
+    if (t[0] == '~') {
+        return 1;
+    }
+    for (const char *c = t + 1; *c != '\0'; c++) {
+        if (*c == '~' && (c[-1] == '=' || c[-1] == ':')) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 /* The token the shell would rewrite before the command sees it. */
 static const char *expanding_token(const ParsedShellCommand *p) {
     for (int i = 0; i < p->token_count; i++) {
         const char *t = p->tokens[i];
-        /* A leading "~" is a home directory the rule never saw. */
-        if (t[0] == '~' || strpbrk(t, "$`*?[") != NULL ||
+        if (has_tilde_expansion(t) || strpbrk(t, "$`*?[") != NULL ||
             shell_token_has_brace_expansion(t)) {
             return t;
         }
@@ -583,6 +608,20 @@ static int command_word_index(char *const *tokens, int count) {
     return i < count ? i : -1;
 }
 
+int shell_command_changes_directory(const ParsedShellCommand *p) {
+    if (p == NULL || p->token_count < 1) {
+        return 0;
+    }
+    int command_word = command_word_index(p->tokens, p->token_count);
+    if (command_word < 0) {
+        /* A wrapper we can't read through is always-ask anyway. */
+        return 0;
+    }
+    CommandName name = command_name_of(p->tokens[command_word]);
+    return command_name_is(&name, "cd") || command_name_is(&name, "chdir") ||
+           command_name_is(&name, "pushd") || command_name_is(&name, "popd");
+}
+
 static int always_ask_in_command(const ParsedShellCommand *p, const char **out_flag) {
     CommandName name = command_name_of(p->tokens[0]);
     const char *subcommand = NULL;
@@ -678,6 +717,9 @@ ShellRuleStatus shell_rule_from_parsed(const ParsedShellCommand *p, ShellRule *o
     if (p->has_redirect) {
         return SHELL_RULE_REDIRECT;
     }
+    if (shell_command_changes_directory(p)) {
+        return SHELL_RULE_DIRECTORY_CHANGE;
+    }
 
     const char *flag = NULL;
     if (shell_has_always_ask_flag(p, &flag)) {
@@ -734,6 +776,8 @@ const char *shell_rule_status_reason(ShellRuleStatus s) {
             return "the shell expands part of it";
         case SHELL_RULE_PROTECTED_FILE:
             return "names a protected file";
+        case SHELL_RULE_DIRECTORY_CHANGE:
+            return "changes the directory later commands run in";
         case SHELL_RULE_OK:
             break;
     }

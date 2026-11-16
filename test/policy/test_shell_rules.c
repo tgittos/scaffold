@@ -322,7 +322,44 @@ void test_wrappers_do_not_hide_always_ask_flags(void) {
 void test_tilde_tokens_are_unsaveable(void) {
     TEST_ASSERT_EQUAL_INT(SHELL_RULE_EXPANSION, status_of("cat ~/notes.txt"));
     TEST_ASSERT_EQUAL_INT(SHELL_RULE_EXPANSION, status_of("ls ~"));
+    /* bash expands a "~" after "=" or ":" too. */
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_EXPANSION, status_of("make PREFIX=~/x"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_EXPANSION, status_of("ls --dir=~"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_EXPANSION, status_of("ls a:~/x"));
     assert_rule("cat ./notes.txt", 2, "cat", "./notes.txt");
+}
+
+void test_directory_changing_segments_are_unsaveable(void) {
+    /* A saved "cd" would compose with any other rule and move the directory
+     * the later segments run in. */
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_DIRECTORY_CHANGE, status_of("cd build"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_DIRECTORY_CHANGE, status_of("cd .."));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_DIRECTORY_CHANGE, status_of("pushd /tmp"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_DIRECTORY_CHANGE, status_of("popd"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_DIRECTORY_CHANGE, status_of("sudo cd /"));
+    TEST_ASSERT_TRUE(strlen(shell_rule_status_reason(SHELL_RULE_DIRECTORY_CHANGE)) > 0);
+
+    ParsedShellCommand *cd = parse("cd ..");
+    ParsedShellCommand *make = parse("make test");
+    TEST_ASSERT_EQUAL_INT(1, shell_command_changes_directory(cd));
+    TEST_ASSERT_EQUAL_INT(0, shell_command_changes_directory(make));
+    free_parsed_shell_command(cd);
+    free_parsed_shell_command(make);
+}
+
+void test_more_wrappers_and_in_place_flags_always_ask(void) {
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("xargs git push --force"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("exec git push -f"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("doas git push -f"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("flock /tmp/l git push -f"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("sed --in-place p f"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("sed --in-place=.bak p f"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("sed --in-pl=x p f"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("perl -pi -e s/a/b/ f"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("rsync --delete a b"));
+
+    /* A wrapped command with no always-ask flag still saves. */
+    assert_rule("xargs grep foo", 3, "xargs", "grep", "foo");
 }
 
 void test_brace_expansion_predicate(void) {
@@ -366,6 +403,8 @@ int main(void) {
     RUN_TEST(test_unsafe_syntax_and_redirects);
     RUN_TEST(test_wrappers_do_not_hide_always_ask_flags);
     RUN_TEST(test_tilde_tokens_are_unsaveable);
+    RUN_TEST(test_directory_changing_segments_are_unsaveable);
+    RUN_TEST(test_more_wrappers_and_in_place_flags_always_ask);
     RUN_TEST(test_brace_expansion_predicate);
     RUN_TEST(test_status_reasons_and_labels);
     return UNITY_END();

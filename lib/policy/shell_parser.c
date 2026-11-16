@@ -657,15 +657,35 @@ static size_t non_writing_redirect_len(const char *p) {
     return is_word_boundary(*q) ? (size_t)(q - p) : 0;
 }
 
+/* sh separates words on space, tab and newline only; \r \v \f stay inside the
+ * word, so they must not be trimmed off a segment's edges. */
+static int is_segment_padding(char c) {
+    return c == ' ' || c == '\t' || c == '\n';
+}
+
 static int add_trimmed_segment(TokenList *segments, const char *buf, size_t len) {
-    while (len > 0 && isspace((unsigned char)*buf)) {
+    while (len > 0 && is_segment_padding(*buf)) {
         buf++;
         len--;
     }
-    while (len > 0 && isspace((unsigned char)buf[len - 1])) {
+    while (len > 0 && is_segment_padding(buf[len - 1])) {
         len--;
     }
     return len > 0 ? token_list_add(segments, buf, len) : 0;
+}
+
+/* Length of the all-digit word ending at buf[len - 1], which a following '>'
+ * turns into a file descriptor the command never sees; 0 when there is none. */
+static size_t trailing_fd_len(const char *buf, size_t len) {
+    size_t digits = 0;
+    while (digits < len && isdigit((unsigned char)buf[len - 1 - digits])) {
+        digits++;
+    }
+    if (digits == 0) {
+        return 0;
+    }
+    size_t before = len - digits;
+    return before == 0 || is_segment_padding(buf[before - 1]) ? digits : 0;
 }
 
 /* Quote tracking here ignores backslashes. Any segment it mis-splits contains
@@ -694,6 +714,13 @@ static int split_posix_segments(const char *command, TokenList *segments) {
                 p += 1 + skip;
                 continue;
             }
+        }
+
+        /* A control character sh keeps inside the word: this splitter would
+         * trim it off an edge and hand over a command that runs differently. */
+        if (!in_single && (c == '\r' || c == '\v' || c == '\f')) {
+            rc = -1;
+            break;
         }
 
         if (c == '\0' || (!quoted && (c == ';' || c == '|' || c == '&' || c == '\n'))) {
@@ -725,10 +752,7 @@ static int split_posix_segments(const char *command, TokenList *segments) {
         } else if (c == '>' && !quoted) {
             size_t skip = non_writing_redirect_len(p);
             if (skip > 0) {
-                if (len > 0 && isdigit((unsigned char)buf[len - 1]) &&
-                    (len == 1 || isspace((unsigned char)buf[len - 2]))) {
-                    len--;
-                }
+                len -= trailing_fd_len(buf, len);
                 p += skip;
                 continue;
             }

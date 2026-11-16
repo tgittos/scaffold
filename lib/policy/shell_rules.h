@@ -35,7 +35,8 @@ typedef enum {
     SHELL_RULE_REDIRECT,          /* writes to a file */
     SHELL_RULE_ALWAYS_ASK_FLAG,   /* e.g. --force */
     SHELL_RULE_EXPANSION,         /* a variable, glob or brace the shell expands */
-    SHELL_RULE_PROTECTED_FILE     /* names a file the gate always asks about */
+    SHELL_RULE_PROTECTED_FILE,    /* names a file the gate always asks about */
+    SHELL_RULE_DIRECTORY_CHANGE   /* cd/pushd/popd: moves later segments */
 } ShellRuleStatus;
 
 /**
@@ -63,6 +64,19 @@ ShellRuleStatus shell_rule_from_parsed(const ParsedShellCommand *p, ShellRule *o
  * @return 1 if the rule covers the command, 0 otherwise
  */
 int shell_rule_matches(const ShellRule *rule, const ParsedShellCommand *p);
+
+/**
+ * Check whether a command moves the directory the segments after it run in
+ * (cd, pushd, popd), looking through wrappers and assignment prefixes.
+ *
+ * Such a segment is never saveable, and a command containing one matches no
+ * saved rule: a saved "cd .." would otherwise compose with any other rule and
+ * run it somewhere nobody approved.
+ *
+ * @param p The parsed command
+ * @return 1 if the command changes the directory, 0 otherwise
+ */
+int shell_command_changes_directory(const ParsedShellCommand *p);
 
 /**
  * Check whether a command carries a flag that must always be approved.

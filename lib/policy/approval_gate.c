@@ -949,6 +949,23 @@ static ShellRuleStatus segment_rule(const char *segment, ShellType type,
 }
 
 /*
+ * Whether any segment is syntax the splitter can't read the way sh does. The
+ * other segments of such a command are then text the user never approved (a
+ * comment or a heredoc body), so none of them may become a rule.
+ */
+static int any_segment_unsafe_syntax(char **segments, int count, ShellType type) {
+    for (int i = 0; i < count; i++) {
+        ShellRule rule = {0};
+        ShellRuleStatus status = segment_rule(segments[i], type, &rule, NULL);
+        shell_rule_free(&rule);
+        if (status == SHELL_RULE_UNSAFE_SYNTAX) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/*
  * The directory a call runs in: its working_dir argument resolved against the
  * current directory, or the current directory when it has none. Caller frees.
  */
@@ -1061,6 +1078,12 @@ static int allow_always_shell(ApprovalGateConfig *config, const ToolCall *tool_c
         return -1;
     }
 
+    if (any_segment_unsafe_syntax(segments, count, type)) {
+        free(working_dir);
+        free_shell_segments(segments, count);
+        return -1;
+    }
+
     StringList saved = {0};
     StringList unsaved = {0};
     int stored_any = 0;
@@ -1149,6 +1172,11 @@ static int preview_always_shell(const ToolCall *tool_call, char **out_label) {
     int count = shell_split_segments(command, type, &segments);
     free(command);
     if (count <= 0) {
+        return 0;
+    }
+
+    if (any_segment_unsafe_syntax(segments, count, type)) {
+        free_shell_segments(segments, count);
         return 0;
     }
 
@@ -1374,7 +1402,8 @@ static int command_names_protected_file(const ParsedShellCommand *parsed) {
 static int segment_matches_shell_allowlist(const ApprovalGateConfig *config,
                                            const char *segment,
                                            ShellType type,
-                                           const char *working_dir) {
+                                           const char *working_dir,
+                                           int session_rules_apply) {
     ParsedShellCommand *parsed = parse_shell_command_for_type(segment, type);
     if (parsed == NULL) {
         return 0;
@@ -1399,7 +1428,7 @@ static int segment_matches_shell_allowlist(const ApprovalGateConfig *config,
          * directory it ran in. */
         if (entry->is_session_rule) {
             ShellRule rule = { entry->command_prefix, entry->prefix_len };
-            matched = entry->working_dir != NULL &&
+            matched = session_rules_apply && entry->working_dir != NULL &&
                       strcmp(entry->working_dir, working_dir) == 0 &&
                       shell_rule_matches(&rule, parsed);
             continue;
@@ -1441,6 +1470,26 @@ static int segment_matches_shell_allowlist(const ApprovalGateConfig *config,
     return matched;
 }
 
+/*
+ * Whether any segment moves the directory the segments after it run in. A rule
+ * saved from "a" is scoped to one directory, so a "cd" in the chain would let
+ * the rules that follow it run anywhere.
+ */
+static int any_segment_changes_directory(char **segments, int count, ShellType type) {
+    for (int i = 0; i < count; i++) {
+        ParsedShellCommand *parsed = parse_shell_command_for_type(segments[i], type);
+        if (parsed == NULL) {
+            return 1; /* Can't tell what it does: fail closed. */
+        }
+        int changes = shell_command_changes_directory(parsed);
+        free_parsed_shell_command(parsed);
+        if (changes) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 /* A compound command matches only when every segment it runs matches. */
 static int match_shell_command_allowlist(const ApprovalGateConfig *config,
                                          const ToolCall *tool_call) {
@@ -1470,9 +1519,11 @@ static int match_shell_command_allowlist(const ApprovalGateConfig *config,
     free(command);
 
     int matched = count > 0 && working_dir != NULL;
+    int session_rules_apply =
+        matched && !any_segment_changes_directory(segments, count, type);
     for (int i = 0; i < count && matched; i++) {
         matched = segment_matches_shell_allowlist(config, segments[i], type,
-                                                  working_dir);
+                                                  working_dir, session_rules_apply);
     }
 
     free(working_dir);
