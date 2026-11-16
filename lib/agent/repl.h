@@ -16,7 +16,6 @@ extern "C" {
  * - Readline input with history
  * - Async message processing
  * - Message polling notifications
- * - Subagent approval proxying
  *
  * @param session The session to run interactively
  * @param json_mode Whether JSON output mode is enabled

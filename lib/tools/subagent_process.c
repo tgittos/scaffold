@@ -90,7 +90,6 @@ void cleanup_subagent(Subagent *sub, Services *services) {
         sub->stdout_pipe[1] = -1;
     }
 
-
     if (sub->task) {
         free(sub->task);
         sub->task = NULL;

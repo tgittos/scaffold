@@ -59,20 +59,9 @@ int subagent_manager_init_with_config(SubagentManager *manager, int max_subagent
     manager->max_subagents = max_subagents;
     manager->timeout_seconds = timeout_seconds;
     manager->is_subagent_process = 0;
-    manager->spawn_callback = NULL;
-    manager->spawn_callback_data = NULL;
     manager->services = NULL;
 
     return 0;
-}
-
-void subagent_manager_set_spawn_callback(SubagentManager *manager,
-                                         SubagentSpawnCallback callback,
-                                         void *user_data) {
-    if (manager != NULL) {
-        manager->spawn_callback = callback;
-        manager->spawn_callback_data = user_data;
-    }
 }
 
 void subagent_manager_set_services(SubagentManager *manager, Services *services) {
@@ -239,10 +228,6 @@ static int register_subagent(SubagentManager *manager, const char id[SUBAGENT_ID
     }
 
     strcpy(subagent_id_out, id);
-
-    if (manager->spawn_callback != NULL) {
-        manager->spawn_callback(manager->spawn_callback_data);
-    }
 
     return 0;
 }

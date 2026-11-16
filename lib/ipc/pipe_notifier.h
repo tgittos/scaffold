@@ -5,8 +5,7 @@
  * PipeNotifier - Thread-safe pipe-based notification abstraction.
  *
  * Provides a unified interface for inter-thread/inter-process notification
- * using non-blocking pipes. Used by async_executor, message_poller, and
- * subagent approval channels.
+ * using non-blocking pipes. Used by async_executor and message_poller.
  *
  * Thread safety: All operations are thread-safe. Multiple threads can
  * send notifications concurrently, and one thread can receive.

@@ -8,7 +8,7 @@
  * Extensions can provide:
  * - Tool initialization/shutdown lifecycle
  * - Tool registration with the registry
- * - Metadata queries for approval gates and prompt generation
+ * - Metadata queries for prompt generation
  */
 
 #ifndef LIB_TOOLS_TOOL_EXTENSION_H
@@ -21,7 +21,7 @@ extern "C" {
 #endif
 
 /**
- * Metadata callbacks for approval gate and prompt integration.
+ * Metadata callbacks for prompt integration.
  * These allow lib/ to query tool metadata without knowing the tool implementation.
  */
 typedef struct {
@@ -71,7 +71,7 @@ typedef struct {
      */
     void (*shutdown)(void);
 
-    /** Metadata callbacks for approval gate and prompt integration */
+    /** Metadata callbacks for prompt integration */
     ToolExtensionMetadata metadata;
 } ToolExtension;
 
