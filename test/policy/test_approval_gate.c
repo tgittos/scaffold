@@ -9,6 +9,7 @@
 #include <string.h>
 #include <time.h>
 #include <sys/stat.h>
+#include <limits.h>
 #include <unistd.h>
 #include "util/app_home.h"
 
@@ -1553,46 +1554,22 @@ void test_shell_allowlist_refuses_glob_that_expands_to_protected_file(void) {
     TEST_ASSERT_EQUAL(1, harmless_matched);
 }
 
-void test_auto_mode_skips_broad_shell_rules(void) {
-    const char *python[] = {"python"};
-    const char *npm_run[] = {"npm", "run"};
-    const char *docker_run[] = {"docker", "run"};
-    const char *npm[] = {"npm"};
-    approval_gate_add_shell_allowlist(&config, python, 1, SHELL_TYPE_UNKNOWN);
-    approval_gate_add_shell_allowlist(&config, npm_run, 2, SHELL_TYPE_UNKNOWN);
-    approval_gate_add_shell_allowlist(&config, docker_run, 2, SHELL_TYPE_UNKNOWN);
-    approval_gate_add_shell_allowlist(&config, npm, 1, SHELL_TYPE_UNKNOWN);
-
-    ToolCall script = shell_call("{\"command\": \"python tool.py\"}");
-    ToolCall npm_build = shell_call("{\"command\": \"npm run build\"}");
-    ToolCall docker_shell = shell_call("{\"command\": \"docker run alpine sh\"}");
-    ToolCall npm_exec = shell_call("{\"command\": \"npm exec prettier\"}");
-
-    config.auto_mode = 0;
-    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &script));
-    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &npm_build));
-    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &docker_shell));
-    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &npm_exec));
-
-    config.auto_mode = 1;
-    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &script));
-    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &npm_build));
-    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &docker_shell));
-    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &npm_exec));
-}
-
-void test_auto_mode_keeps_narrow_shell_rules(void) {
+void test_auto_mode_skips_every_shell_entry(void) {
     const char *npm_run_build[] = {"npm", "run", "build"};
     const char *git_status[] = {"git", "status"};
     approval_gate_add_shell_allowlist(&config, npm_run_build, 3, SHELL_TYPE_UNKNOWN);
     approval_gate_add_shell_allowlist(&config, git_status, 2, SHELL_TYPE_UNKNOWN);
-    config.auto_mode = 1;
 
     ToolCall npm_build = shell_call("{\"command\": \"npm run build\"}");
     ToolCall status = shell_call("{\"command\": \"git status -s\"}");
 
+    config.auto_mode = 0;
     TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &npm_build));
     TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &status));
+
+    config.auto_mode = 1;
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &npm_build));
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &status));
 }
 
 void test_shell_allowlist_config_rules_keep_prefix_semantics(void) {
@@ -1606,6 +1583,108 @@ void test_shell_allowlist_config_rules_keep_prefix_semantics(void) {
 
     TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &with_global_opt));
     TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &forced));
+}
+
+void test_shell_allowlist_refuses_escaped_quote_newline(void) {
+    /* The splitter reads "\"" as open-close-open, so the newline lands inside
+     * one segment; nothing may match or be saved from it. */
+    const char *log[] = {"git", "log"};
+    approval_gate_add_shell_allowlist(&config, log, 2, SHELL_TYPE_UNKNOWN);
+
+    ToolCall hidden = shell_call(
+        "{\"command\": \"git log -1 \\\"\\\\\\\"\\\"\\ntouch /tmp/pwned2 \\\"\\\\\\\"\\\"\"}");
+
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &hidden));
+    TEST_ASSERT_EQUAL(0, approval_gate_preview_always(&hidden, NULL));
+    TEST_ASSERT_EQUAL(-1, approval_gate_allow_always(&config, &hidden));
+}
+
+void test_shell_allowlist_refuses_comment_hidden_newline(void) {
+    const char *log[] = {"git", "log"};
+    approval_gate_add_shell_allowlist(&config, log, 2, SHELL_TYPE_UNKNOWN);
+
+    ToolCall hidden = shell_call(
+        "{\"command\": \"git log -1 --oneline #'\\ntouch /tmp/pwned3 #'\"}");
+
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &hidden));
+    TEST_ASSERT_EQUAL(0, approval_gate_preview_always(&hidden, NULL));
+    TEST_ASSERT_EQUAL(-1, approval_gate_allow_always(&config, &hidden));
+
+    ToolCall plain = shell_call("{\"command\": \"git log -1\"}");
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &plain));
+}
+
+void test_shell_allowlist_refuses_heredoc(void) {
+    const char *cat[] = {"cat"};
+    approval_gate_add_shell_allowlist(&config, cat, 1, SHELL_TYPE_UNKNOWN);
+
+    ToolCall heredoc = shell_call("{\"command\": \"cat <<EOF\\ngit stash drop\\nEOF\"}");
+
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &heredoc));
+    TEST_ASSERT_EQUAL(0, approval_gate_preview_always(&heredoc, NULL));
+    TEST_ASSERT_EQUAL(-1, approval_gate_allow_always(&config, &heredoc));
+
+    /* The body line never becomes a rule of its own. */
+    ToolCall body = shell_call("{\"command\": \"git stash drop\"}");
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &body));
+}
+
+void test_allow_always_refuses_protected_file(void) {
+    ToolCall env = shell_call("{\"command\": \"cat .env\"}");
+    AllowAlwaysSummary summary;
+
+    TEST_ASSERT_EQUAL(0, approval_gate_preview_always(&env, NULL));
+    TEST_ASSERT_EQUAL(-1, approval_gate_allow_always_ex(&config, &env, &summary));
+    TEST_ASSERT_EQUAL(0, summary.saved_count);
+    TEST_ASSERT_EQUAL(1, summary.unsaved_count);
+    TEST_ASSERT_NOT_NULL(strstr(summary.unsaved, "protected file"));
+    allow_always_summary_free(&summary);
+
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &env));
+}
+
+void test_session_rule_matches_only_its_working_dir(void) {
+    ToolCall saved = shell_call("{\"command\": \"make test\", \"working_dir\": \"/\"}");
+    ToolCall same_dir = shell_call("{\"command\": \"make test\", \"working_dir\": \"/\"}");
+    ToolCall other_dir = shell_call("{\"command\": \"make test\", \"working_dir\": \"/tmp\"}");
+    ToolCall no_dir = shell_call("{\"command\": \"make test\"}");
+
+    TEST_ASSERT_EQUAL(0, approval_gate_allow_always(&config, &saved));
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &same_dir));
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &other_dir));
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &no_dir));
+}
+
+void test_session_rule_saved_without_working_dir_uses_cwd(void) {
+    ToolCall saved = shell_call("{\"command\": \"make test\"}");
+    char cwd[PATH_MAX];
+    TEST_ASSERT_NOT_NULL(getcwd(cwd, sizeof(cwd)));
+
+    char args[PATH_MAX + 64];
+    snprintf(args, sizeof(args), "{\"command\": \"make test\", \"working_dir\": \"%s\"}",
+             cwd);
+    ToolCall explicit_cwd = shell_call(args);
+    ToolCall elsewhere = shell_call("{\"command\": \"make test\", \"working_dir\": \"/\"}");
+
+    TEST_ASSERT_EQUAL(0, approval_gate_allow_always(&config, &saved));
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &explicit_cwd));
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &elsewhere));
+}
+
+void test_preview_always_names_other_working_dir(void) {
+    ToolCall elsewhere = shell_call("{\"command\": \"make test\", \"working_dir\": \"/tmp\"}");
+    ToolCall here = shell_call("{\"command\": \"make test\"}");
+    char *label = NULL;
+
+    TEST_ASSERT_EQUAL(1, approval_gate_preview_always(&elsewhere, &label));
+    TEST_ASSERT_NOT_NULL(label);
+    TEST_ASSERT_EQUAL_STRING("\"make test\" in /tmp", label);
+    free(label);
+
+    label = NULL;
+    TEST_ASSERT_EQUAL(1, approval_gate_preview_always(&here, &label));
+    TEST_ASSERT_EQUAL_STRING("\"make test\"", label);
+    free(label);
 }
 
 void test_allow_always_stores_non_shell_pattern(void) {
@@ -2056,70 +2135,6 @@ void test_generate_file_path_pattern_escapes_special_chars(void) {
     free_generated_pattern(&pattern);
 }
 
-void test_generate_shell_command_pattern_simple_command(void) {
-    GeneratedPattern pattern;
-
-    int result = generate_shell_command_pattern("ls", &pattern);
-    TEST_ASSERT_EQUAL(0, result);
-    TEST_ASSERT_NOT_NULL(pattern.command_prefix);
-    TEST_ASSERT_EQUAL(1, pattern.prefix_len);
-    TEST_ASSERT_EQUAL_STRING("ls", pattern.command_prefix[0]);
-    TEST_ASSERT_EQUAL(1, pattern.is_exact_match);
-    TEST_ASSERT_EQUAL(0, pattern.needs_confirmation);
-
-    free_generated_pattern(&pattern);
-}
-
-void test_generate_shell_command_pattern_two_args(void) {
-    GeneratedPattern pattern;
-
-    int result = generate_shell_command_pattern("git commit -m \"msg\"", &pattern);
-    TEST_ASSERT_EQUAL(0, result);
-    TEST_ASSERT_NOT_NULL(pattern.command_prefix);
-    TEST_ASSERT_EQUAL(2, pattern.prefix_len);
-    TEST_ASSERT_EQUAL_STRING("git", pattern.command_prefix[0]);
-    TEST_ASSERT_EQUAL_STRING("commit", pattern.command_prefix[1]);
-    TEST_ASSERT_EQUAL(0, pattern.is_exact_match);
-    TEST_ASSERT_EQUAL(1, pattern.needs_confirmation);
-
-    free_generated_pattern(&pattern);
-}
-
-void test_generate_shell_command_pattern_unsafe_command_no_pattern(void) {
-    GeneratedPattern pattern_pipe;
-    GeneratedPattern pattern_chain;
-    GeneratedPattern pattern_subshell;
-
-    /* Commands with pipes should not generate patterns */
-    int result = generate_shell_command_pattern("cat /etc/passwd | grep root", &pattern_pipe);
-    TEST_ASSERT_EQUAL(0, result);
-    TEST_ASSERT_EQUAL(1, pattern_pipe.is_exact_match);
-    TEST_ASSERT_NULL(pattern_pipe.command_prefix);
-
-    /* Commands with chains should not generate patterns */
-    result = generate_shell_command_pattern("ls && rm -rf /", &pattern_chain);
-    TEST_ASSERT_EQUAL(0, result);
-    TEST_ASSERT_EQUAL(1, pattern_chain.is_exact_match);
-    TEST_ASSERT_NULL(pattern_chain.command_prefix);
-
-    /* Commands with subshells should not generate patterns */
-    result = generate_shell_command_pattern("echo $(cat /etc/passwd)", &pattern_subshell);
-    TEST_ASSERT_EQUAL(0, result);
-    TEST_ASSERT_EQUAL(1, pattern_subshell.is_exact_match);
-    TEST_ASSERT_NULL(pattern_subshell.command_prefix);
-
-    free_generated_pattern(&pattern_pipe);
-    free_generated_pattern(&pattern_chain);
-    free_generated_pattern(&pattern_subshell);
-}
-
-void test_generate_shell_command_pattern_null_params(void) {
-    GeneratedPattern pattern;
-
-    TEST_ASSERT_EQUAL(-1, generate_shell_command_pattern(NULL, &pattern));
-    TEST_ASSERT_EQUAL(-1, generate_shell_command_pattern("ls", NULL));
-}
-
 void test_generate_network_url_pattern_basic_url(void) {
     GeneratedPattern pattern;
 
@@ -2177,25 +2192,6 @@ void test_generate_network_url_pattern_null_params(void) {
 
     TEST_ASSERT_EQUAL(-1, generate_network_url_pattern(NULL, &pattern));
     TEST_ASSERT_EQUAL(-1, generate_network_url_pattern("https://example.com", NULL));
-}
-
-void test_generate_allowlist_pattern_shell_tool(void) {
-    GeneratedPattern pattern;
-
-    ToolCall call = {
-        .id = "1",
-        .name = "shell",
-        .arguments = "{\"command\": \"git status\"}"
-    };
-
-    int result = generate_allowlist_pattern(&call, &pattern);
-    TEST_ASSERT_EQUAL(0, result);
-    TEST_ASSERT_NOT_NULL(pattern.command_prefix);
-    TEST_ASSERT_EQUAL(2, pattern.prefix_len);
-    TEST_ASSERT_EQUAL_STRING("git", pattern.command_prefix[0]);
-    TEST_ASSERT_EQUAL_STRING("status", pattern.command_prefix[1]);
-
-    free_generated_pattern(&pattern);
 }
 
 void test_generate_allowlist_pattern_file_write_tool(void) {
@@ -2446,6 +2442,21 @@ void test_auto_mode_without_review_callback_denies_shell_allows_project_write(vo
 }
 
 void test_auto_mode_runs_call_the_review_allows(void) {
+    install_review_stub(1);
+    config.is_interactive = 0;
+    config.auto_mode = 1;
+
+    ToolCall call = shell_call("{\"command\": \"make test\"}");
+    ApprovedPath path;
+
+    TEST_ASSERT_EQUAL(APPROVAL_ALLOWED, check_approval_gate(&config, &call, &path));
+    TEST_ASSERT_EQUAL(1, g_review_calls);
+    approval_gate_set_callbacks(NULL);
+}
+
+void test_auto_mode_review_sees_allowlisted_shell_call(void) {
+    const char *make_test[] = {"make", "test"};
+    approval_gate_add_shell_allowlist(&config, make_test, 2, SHELL_TYPE_UNKNOWN);
     install_review_stub(1);
     config.is_interactive = 0;
     config.auto_mode = 1;
@@ -2762,8 +2773,15 @@ int main(void) {
     RUN_TEST(test_shell_allowlist_refuses_only_brace_expansion);
     RUN_TEST(test_shell_allowlist_refuses_protected_file_after_ref);
     RUN_TEST(test_shell_allowlist_refuses_glob_that_expands_to_protected_file);
-    RUN_TEST(test_auto_mode_skips_broad_shell_rules);
-    RUN_TEST(test_auto_mode_keeps_narrow_shell_rules);
+    RUN_TEST(test_auto_mode_skips_every_shell_entry);
+    RUN_TEST(test_shell_allowlist_refuses_escaped_quote_newline);
+    RUN_TEST(test_shell_allowlist_refuses_comment_hidden_newline);
+    RUN_TEST(test_shell_allowlist_refuses_heredoc);
+    RUN_TEST(test_allow_always_refuses_protected_file);
+    RUN_TEST(test_session_rule_matches_only_its_working_dir);
+    RUN_TEST(test_session_rule_saved_without_working_dir_uses_cwd);
+    RUN_TEST(test_preview_always_names_other_working_dir);
+    RUN_TEST(test_auto_mode_review_sees_allowlisted_shell_call);
     RUN_TEST(test_allow_always_stores_non_shell_pattern);
     RUN_TEST(test_classify_key_always_requires_saveable);
     RUN_TEST(test_classify_key_other_keys_unaffected);
@@ -2803,16 +2821,12 @@ int main(void) {
     RUN_TEST(test_generate_file_path_pattern_no_extension_exact_match);
     RUN_TEST(test_generate_file_path_pattern_null_params);
     RUN_TEST(test_generate_file_path_pattern_escapes_special_chars);
-    RUN_TEST(test_generate_shell_command_pattern_simple_command);
-    RUN_TEST(test_generate_shell_command_pattern_two_args);
-    RUN_TEST(test_generate_shell_command_pattern_unsafe_command_no_pattern);
-    RUN_TEST(test_generate_shell_command_pattern_null_params);
+
     RUN_TEST(test_generate_network_url_pattern_basic_url);
     RUN_TEST(test_generate_network_url_pattern_with_port);
     RUN_TEST(test_generate_network_url_pattern_prevents_subdomain_spoofing);
     RUN_TEST(test_generate_network_url_pattern_invalid_url_exact_match);
     RUN_TEST(test_generate_network_url_pattern_null_params);
-    RUN_TEST(test_generate_allowlist_pattern_shell_tool);
     RUN_TEST(test_generate_allowlist_pattern_file_write_tool);
     RUN_TEST(test_generate_allowlist_pattern_network_tool);
     RUN_TEST(test_generate_allowlist_pattern_null_params);

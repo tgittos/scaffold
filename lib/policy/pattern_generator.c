@@ -278,93 +278,6 @@ int generate_file_path_pattern(const char *path, GeneratedPattern *out_pattern) 
     return 0;
 }
 
-int generate_shell_command_pattern(const char *command, GeneratedPattern *out_pattern) {
-    if (command == NULL || out_pattern == NULL) {
-        return -1;
-    }
-
-    memset(out_pattern, 0, sizeof(*out_pattern));
-
-    ParsedShellCommand *parsed = parse_shell_command(command);
-    if (parsed == NULL) {
-        return -1;
-    }
-
-    /* Unsafe commands cannot have broad patterns; require exact approval each time */
-    if (!shell_command_is_safe_for_matching(parsed)) {
-        free_parsed_shell_command(parsed);
-        out_pattern->is_exact_match = 1;  /* Can only approve this exact command */
-        out_pattern->needs_confirmation = 0;
-        return 0;
-    }
-
-    int prefix_len = parsed->token_count >= 2 ? 2 : parsed->token_count;
-    if (prefix_len <= 0) {
-        free_parsed_shell_command(parsed);
-        return -1;
-    }
-
-    out_pattern->command_prefix = calloc(prefix_len, sizeof(char *));
-    if (out_pattern->command_prefix == NULL) {
-        free_parsed_shell_command(parsed);
-        return -1;
-    }
-
-    for (int i = 0; i < prefix_len; i++) {
-        out_pattern->command_prefix[i] = strdup(parsed->tokens[i]);
-        if (out_pattern->command_prefix[i] == NULL) {
-            for (int j = 0; j < i; j++) {
-                free(out_pattern->command_prefix[j]);
-            }
-            free(out_pattern->command_prefix);
-            out_pattern->command_prefix = NULL;
-            free_parsed_shell_command(parsed);
-            return -1;
-        }
-    }
-    out_pattern->prefix_len = prefix_len;
-
-    if (parsed->token_count > prefix_len) {
-        out_pattern->is_exact_match = 0;
-        out_pattern->needs_confirmation = 1;
-
-        out_pattern->example_matches = calloc(3, sizeof(char *));
-        if (out_pattern->example_matches != NULL) {
-            if (prefix_len == 1) {
-                if (asprintf(&out_pattern->example_matches[0], "%s --help", parsed->tokens[0]) < 0) {
-                    out_pattern->example_matches[0] = NULL;
-                }
-                if (asprintf(&out_pattern->example_matches[1], "%s -v", parsed->tokens[0]) < 0) {
-                    out_pattern->example_matches[1] = NULL;
-                }
-                if (asprintf(&out_pattern->example_matches[2], "%s <any args>", parsed->tokens[0]) < 0) {
-                    out_pattern->example_matches[2] = NULL;
-                }
-            } else {
-                if (asprintf(&out_pattern->example_matches[0], "%s %s <any args>",
-                             parsed->tokens[0], parsed->tokens[1]) < 0) {
-                    out_pattern->example_matches[0] = NULL;
-                }
-                if (asprintf(&out_pattern->example_matches[1], "%s %s -v",
-                             parsed->tokens[0], parsed->tokens[1]) < 0) {
-                    out_pattern->example_matches[1] = NULL;
-                }
-                if (asprintf(&out_pattern->example_matches[2], "%s %s --all",
-                             parsed->tokens[0], parsed->tokens[1]) < 0) {
-                    out_pattern->example_matches[2] = NULL;
-                }
-            }
-            out_pattern->example_count = 3;
-        }
-    } else {
-        out_pattern->is_exact_match = 1;
-        out_pattern->needs_confirmation = 0;
-    }
-
-    free_parsed_shell_command(parsed);
-    return 0;
-}
-
 int generate_network_url_pattern(const char *url, GeneratedPattern *out_pattern) {
     if (url == NULL || out_pattern == NULL) {
         return -1;
@@ -478,15 +391,9 @@ int generate_allowlist_pattern(const ToolCall *tool_call, GeneratedPattern *out_
     GateCategory category = get_tool_category(tool_call->name);
 
     switch (category) {
-        case GATE_CATEGORY_SHELL: {
-            char *command = tool_args_get_command(tool_call);
-            if (command == NULL) {
-                return -1;
-            }
-            int result = generate_shell_command_pattern(command, out_pattern);
-            free(command);
-            return result;
-        }
+        case GATE_CATEGORY_SHELL:
+            /* Shell calls are saved as shell rules, not patterns. */
+            return -1;
 
         case GATE_CATEGORY_NETWORK: {
             char *url = tool_args_get_url(tool_call);

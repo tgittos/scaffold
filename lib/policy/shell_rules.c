@@ -239,51 +239,9 @@ static const AlwaysAskFlag ALWAYS_ASK_FLAGS[] = {
     {NULL, NULL, NULL, 0, 0}
 };
 
-/* Commands that run whatever they are handed: a config entry naming one covers
- * every program it could run. */
-static const char *BROAD_COMMANDS[] = {
-    "python", "python3", "node", "ruby", "perl", "bash", "sh", "zsh",
-    "curl", "wget", "ssh", "scp", "rm",
-    "sed", "awk", "gawk",
-    "sudo", "env", "xargs", "nohup", "timeout", "nice",
-    "npx", "eval", "source", ".", "exec",
-    "time", "command", "builtin", "stdbuf", "chroot", "watch", "strace",
-    "flock", "parallel", "setsid", "script",
-    "dash", "ksh", "fish", "csh", "tcsh",
-    "bunx", "uvx", NULL
-};
-
-/* Subcommands that fetch, compile or containerise and then run an arbitrary
- * program. */
-static const char *BROAD_SUBCOMMANDS[][2] = {
-    {"go", "run"},
-    {"npm", "x"}, {"npm", "exec"},
-    {"pnpm", "dlx"}, {"pnpm", "exec"},
-    {"yarn", "dlx"}, {"yarn", "exec"},
-    {"pnpm", "node"}, {"yarn", "node"},
-    {"uv", "run"}, {"poetry", "run"}, {"pipx", "run"}, {"bundle", "exec"},
-    {"docker", "run"}, {"docker", "exec"},
-    {"kubectl", "run"}, {"kubectl", "exec"},
-    {NULL, NULL}
-};
-
-/* Package managers whose run/exec/test covers whatever the project defines. */
-static const char *PACKAGE_MANAGERS[] = {
-    "npm", "pnpm", "yarn", "bun", "uv", "poetry", "pipx", "bundle", NULL
-};
-
 /* ==========================================================================
  * Helpers
  * ========================================================================== */
-
-static int in_list(const char *s, const char *const *list) {
-    for (int i = 0; list[i] != NULL; i++) {
-        if (strcmp(s, list[i]) == 0) {
-            return 1;
-        }
-    }
-    return 0;
-}
 
 /*
  * How a command is looked up in the tables: by the part after the last '/', and
@@ -315,36 +273,6 @@ static CommandName command_name_of(const char *command) {
 static int command_name_is(const CommandName *name, const char *candidate) {
     return strcmp(name->base, candidate) == 0 ||
            (name->stripped[0] != '\0' && strcmp(name->stripped, candidate) == 0);
-}
-
-static int command_name_in_list(const CommandName *name, const char *const *list) {
-    if (in_list(name->base, list)) {
-        return 1;
-    }
-    return name->stripped[0] != '\0' && in_list(name->stripped, list);
-}
-
-static int is_broad_subcommand(const CommandName *name, const char *subcommand) {
-    if (subcommand == NULL) {
-        return 0;
-    }
-    for (int i = 0; BROAD_SUBCOMMANDS[i][0] != NULL; i++) {
-        if (command_name_is(name, BROAD_SUBCOMMANDS[i][0]) &&
-            strcmp(subcommand, BROAD_SUBCOMMANDS[i][1]) == 0) {
-            return 1;
-        }
-    }
-    return 0;
-}
-
-/* Whether any subcommand of the command runs whatever it is given. */
-static int has_broad_subcommands(const CommandName *name) {
-    for (int i = 0; BROAD_SUBCOMMANDS[i][0] != NULL; i++) {
-        if (command_name_is(name, BROAD_SUBCOMMANDS[i][0])) {
-            return 1;
-        }
-    }
-    return 0;
 }
 
 static int is_all_digits(const char *s) {
@@ -794,36 +722,6 @@ int shell_rule_matches(const ShellRule *rule, const ParsedShellCommand *p) {
     return 1;
 }
 
-int shell_rule_is_broad(const char *const *tokens, int count) {
-    if (tokens == NULL || count < 1 || tokens[0] == NULL) {
-        return 0;
-    }
-
-    CommandName name = command_name_of(tokens[0]);
-    if (command_name_in_list(&name, BROAD_COMMANDS)) {
-        return 1;
-    }
-
-    /* A bare tool entry covers its own command-running subcommands. */
-    if (count == 1) {
-        return command_name_in_list(&name, PACKAGE_MANAGERS) ||
-               has_broad_subcommands(&name);
-    }
-
-    if (tokens[1] != NULL) {
-        /* Naming what the wrapper runs doesn't narrow the entry: it still
-         * matches every flag and operand that follows. */
-        if (is_broad_subcommand(&name, tokens[1])) {
-            return 1;
-        }
-        if (count == 2 && command_name_in_list(&name, PACKAGE_MANAGERS)) {
-            return strcmp(tokens[1], "run") == 0 || strcmp(tokens[1], "exec") == 0 ||
-                   strcmp(tokens[1], "test") == 0;
-        }
-    }
-    return 0;
-}
-
 const char *shell_rule_status_reason(ShellRuleStatus s) {
     switch (s) {
         case SHELL_RULE_UNSAFE_SYNTAX:
@@ -834,6 +732,8 @@ const char *shell_rule_status_reason(ShellRuleStatus s) {
             return "uses an always-ask flag";
         case SHELL_RULE_EXPANSION:
             return "the shell expands part of it";
+        case SHELL_RULE_PROTECTED_FILE:
+            return "names a protected file";
         case SHELL_RULE_OK:
             break;
     }

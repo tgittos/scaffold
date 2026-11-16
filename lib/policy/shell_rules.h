@@ -17,7 +17,8 @@
  * -delete, curl -o, ...).
  *
  * Entries from the config file and --allow are not rules: they keep token
- * prefix matching, and shell_rule_is_broad() marks the ones --auto ignores.
+ * prefix matching, and --auto ignores all of them so the model review sees the
+ * call.
  *
  * Related headers:
  * - shell_parser.h: parses the command this module classifies
@@ -33,7 +34,8 @@ typedef enum {
     SHELL_RULE_UNSAFE_SYNTAX,     /* substitution, chain, unsplittable pipe, dangerous pattern */
     SHELL_RULE_REDIRECT,          /* writes to a file */
     SHELL_RULE_ALWAYS_ASK_FLAG,   /* e.g. --force */
-    SHELL_RULE_EXPANSION          /* a variable, glob or brace the shell expands */
+    SHELL_RULE_EXPANSION,         /* a variable, glob or brace the shell expands */
+    SHELL_RULE_PROTECTED_FILE     /* names a file the gate always asks about */
 } ShellRuleStatus;
 
 /**
@@ -99,20 +101,6 @@ const char *shell_rule_status_reason(ShellRuleStatus s);
  * @return Allocated string, or NULL on error. Caller must free.
  */
 char *shell_rule_label(const ShellRule *rule);
-
-/**
- * Check whether a config or --allow entry covers too much to stand in for a
- * model review.
- *
- * Broad entries name a command that runs whatever it is given: an interpreter
- * or wrapper, or a package manager's run/exec/test with no script named. In
- * --auto such an entry is skipped so the call reaches the review.
- *
- * @param tokens The entry's tokens
- * @param count Number of tokens
- * @return 1 if the entry is too broad, 0 otherwise
- */
-int shell_rule_is_broad(const char *const *tokens, int count);
 
 /**
  * Free a rule's tokens and reset it. NULL safe.

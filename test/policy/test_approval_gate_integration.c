@@ -531,20 +531,6 @@ void test_pattern_generator_for_file_path(void) {
     free_generated_pattern(&pattern);
 }
 
-void test_pattern_generator_for_shell_command(void) {
-    GeneratedPattern pattern = {0};
-
-    int result = generate_shell_command_pattern("git status", &pattern);
-    TEST_ASSERT_EQUAL(0, result);
-    TEST_ASSERT_NOT_NULL(pattern.command_prefix);
-    TEST_ASSERT_GREATER_THAN(0, pattern.prefix_len);
-
-    /* First prefix should be "git" */
-    TEST_ASSERT_EQUAL_STRING("git", pattern.command_prefix[0]);
-
-    free_generated_pattern(&pattern);
-}
-
 /* =============================================================================
  * Subagent Inheritance Tests
  * ========================================================================== */
@@ -666,7 +652,6 @@ int main(void) {
 
     /* Pattern Generator Tests */
     RUN_TEST(test_pattern_generator_for_file_path);
-    RUN_TEST(test_pattern_generator_for_shell_command);
 
     /* Subagent Inheritance Tests */
     RUN_TEST(test_child_inherits_category_config);

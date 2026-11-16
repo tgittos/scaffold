@@ -51,16 +51,6 @@ typedef enum {
  */
 int generate_file_path_pattern(const char *path, GeneratedPattern *out_pattern);
 
-/**
- * Generate an allowlist entry for a shell command.
- * Extracts base command and first argument as prefix.
- * Commands with pipes, chains, or redirects return exact match only.
- *
- * @param command The shell command string
- * @param out_pattern Output: populated GeneratedPattern struct
- * @return 0 on success, -1 on failure
- */
-int generate_shell_command_pattern(const char *command, GeneratedPattern *out_pattern);
 
 /**
  * Generate an allowlist pattern for a network URL.

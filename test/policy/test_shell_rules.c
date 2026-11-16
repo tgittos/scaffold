@@ -325,47 +325,6 @@ void test_tilde_tokens_are_unsaveable(void) {
     assert_rule("cat ./notes.txt", 2, "cat", "./notes.txt");
 }
 
-void test_broad_entries_are_recognised(void) {
-    const char *python[] = { "python" };
-    const char *usr_python[] = { "/usr/bin/python3" };
-    const char *npm_run[] = { "npm", "run" };
-    const char *npm_run_build[] = { "npm", "run", "build" };
-    const char *sudo[] = { "sudo" };
-    const char *git_status[] = { "git", "status" };
-    const char *npm_x[] = { "npm", "x" };
-    const char *docker_run[] = { "docker", "run" };
-    const char *kubectl_exec[] = { "kubectl", "exec" };
-    const char *go_run[] = { "go", "run" };
-    const char *npm[] = { "npm" };
-    const char *docker[] = { "docker" };
-    const char *uv[] = { "uv" };
-    const char *git[] = { "git" };
-    const char *docker_ps[] = { "docker", "ps" };
-    const char *docker_run_alpine[] = { "docker", "run", "alpine" };
-    const char *npm_exec_prettier[] = { "npm", "exec", "prettier" };
-
-    TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(python, 1));
-    TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(usr_python, 1));
-    TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(npm_run, 2));
-    TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(sudo, 1));
-    TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(npm_x, 2));
-    TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(docker_run, 2));
-    TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(kubectl_exec, 2));
-    TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(go_run, 2));
-    TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(npm, 1));
-    TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(docker, 1));
-    TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(uv, 1));
-    TEST_ASSERT_EQUAL_INT(0, shell_rule_is_broad(npm_run_build, 3));
-    TEST_ASSERT_EQUAL_INT(0, shell_rule_is_broad(git_status, 2));
-    TEST_ASSERT_EQUAL_INT(0, shell_rule_is_broad(git, 1));
-    TEST_ASSERT_EQUAL_INT(0, shell_rule_is_broad(docker_ps, 2));
-
-    /* Naming what the wrapper runs doesn't narrow it: the entry still matches
-     * any flags and operands that follow. */
-    TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(docker_run_alpine, 3));
-    TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(npm_exec_prettier, 3));
-}
-
 void test_brace_expansion_predicate(void) {
     TEST_ASSERT_EQUAL_INT(1, shell_token_has_brace_expansion(".{env,x}"));
     TEST_ASSERT_EQUAL_INT(1, shell_token_has_brace_expansion(".{a..c}"));
@@ -407,7 +366,6 @@ int main(void) {
     RUN_TEST(test_unsafe_syntax_and_redirects);
     RUN_TEST(test_wrappers_do_not_hide_always_ask_flags);
     RUN_TEST(test_tilde_tokens_are_unsaveable);
-    RUN_TEST(test_broad_entries_are_recognised);
     RUN_TEST(test_brace_expansion_predicate);
     RUN_TEST(test_status_reasons_and_labels);
     return UNITY_END();

@@ -107,6 +107,9 @@ typedef struct {
     ShellType shell_type;   /* Optional: only match this shell type, or UNKNOWN for any */
     int is_session_rule;    /* 1 = created by "a": matched with shell_rule_matches;
                              * 0 = config file or --allow: token prefix matching */
+    char *working_dir;      /* Session rules only: the resolved directory the call
+                             * ran in. The rule matches only calls in that
+                             * directory. NULL for config and --allow entries. */
 } ShellAllowEntry;
 
 /**

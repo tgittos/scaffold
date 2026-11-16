@@ -552,6 +552,8 @@ static void free_shell_allow_entry(ShellAllowEntry *entry) {
     }
     entry->command_prefix = NULL;
     entry->prefix_len = 0;
+    free(entry->working_dir);
+    entry->working_dir = NULL;
 }
 
 void approval_gate_cleanup(ApprovalGateConfig *config) {
@@ -927,10 +929,18 @@ static char *unsaved_name(const ParsedShellCommand *parsed, const char *segment,
  * out_name, when given, receives the name to show for a segment that has no
  * rule; it stays untouched when a rule was derived.
  */
+static int command_names_protected_file(const ParsedShellCommand *parsed);
+
 static ShellRuleStatus segment_rule(const char *segment, ShellType type,
                                     ShellRule *out_rule, char **out_name) {
     ParsedShellCommand *parsed = parse_shell_command_for_type(segment, type);
     ShellRuleStatus status = shell_rule_from_parsed(parsed, out_rule, NULL);
+    /* A saved rule is refused on every later call when it names a protected
+     * file, so it must not be offered or reported as saved either. */
+    if (status == SHELL_RULE_OK && command_names_protected_file(parsed)) {
+        shell_rule_free(out_rule);
+        status = SHELL_RULE_PROTECTED_FILE;
+    }
     if (status != SHELL_RULE_OK && out_name != NULL) {
         *out_name = unsaved_name(parsed, segment, status);
     }
@@ -938,8 +948,47 @@ static ShellRuleStatus segment_rule(const char *segment, ShellType type,
     return status;
 }
 
-static int entry_has_rule_tokens(const ShellAllowEntry *entry, const ShellRule *rule) {
+/*
+ * The directory a call runs in: its working_dir argument resolved against the
+ * current directory, or the current directory when it has none. Caller frees.
+ */
+static char *resolve_call_working_dir(const ToolCall *tool_call) {
+    char cwd[PATH_MAX];
+    if (getcwd(cwd, sizeof(cwd)) == NULL) {
+        return NULL;
+    }
+
+    char *arg = tool_args_get_string(tool_call, "working_dir");
+    if (arg == NULL || arg[0] == '\0') {
+        free(arg);
+        return strdup(cwd);
+    }
+
+    char *joined = NULL;
+    if (arg[0] == '/') {
+        joined = strdup(arg);
+    } else if (asprintf(&joined, "%s/%s", cwd, arg) < 0) {
+        joined = NULL;
+    }
+    free(arg);
+    if (joined == NULL) {
+        return NULL;
+    }
+
+    char resolved[PATH_MAX];
+    if (realpath(joined, resolved) != NULL) {
+        free(joined);
+        return strdup(resolved);
+    }
+    return joined;
+}
+
+static int entry_has_rule_tokens(const ShellAllowEntry *entry, const ShellRule *rule,
+                                 const char *working_dir) {
     if (entry->prefix_len != rule->count || entry->command_prefix == NULL) {
+        return 0;
+    }
+    if (entry->working_dir == NULL || strcmp(entry->working_dir, working_dir) != 0) {
         return 0;
     }
     for (int i = 0; i < rule->count; i++) {
@@ -951,10 +1000,11 @@ static int entry_has_rule_tokens(const ShellAllowEntry *entry, const ShellRule *
     return 1;
 }
 
-static int add_session_rule(ApprovalGateConfig *config, const ShellRule *rule) {
+static int add_session_rule(ApprovalGateConfig *config, const ShellRule *rule,
+                            const char *working_dir) {
     for (int i = 0; i < config->shell_allowlist_count; i++) {
         const ShellAllowEntry *entry = &config->shell_allowlist[i];
-        if (entry->is_session_rule && entry_has_rule_tokens(entry, rule)) {
+        if (entry->is_session_rule && entry_has_rule_tokens(entry, rule, working_dir)) {
             return 0; /* Already remembered */
         }
     }
@@ -967,7 +1017,29 @@ static int add_session_rule(ApprovalGateConfig *config, const ShellRule *rule) {
     ShellAllowEntry *stored =
         &config->shell_allowlist[config->shell_allowlist_count - 1];
     stored->is_session_rule = 1;
+    stored->working_dir = strdup(working_dir);
+    if (stored->working_dir == NULL) {
+        free_shell_allow_entry(stored);
+        config->shell_allowlist_count--;
+        return -1;
+    }
     return 0;
+}
+
+/* A label names the directory when the call doesn't run in the current one. */
+static char *label_for_dir(char *label, const char *working_dir) {
+    char cwd[PATH_MAX];
+    if (label == NULL || getcwd(cwd, sizeof(cwd)) == NULL ||
+        strcmp(cwd, working_dir) == 0) {
+        return label;
+    }
+
+    char *with_dir = NULL;
+    if (asprintf(&with_dir, "%s in %s", label, working_dir) < 0) {
+        return label;
+    }
+    free(label);
+    return with_dir;
 }
 
 /* Each segment that can have a rule gets one; the rest are named for the user. */
@@ -978,11 +1050,14 @@ static int allow_always_shell(ApprovalGateConfig *config, const ToolCall *tool_c
         return -1;
     }
 
+    char *working_dir = resolve_call_working_dir(tool_call);
     ShellType type = detect_shell_type();
     char **segments = NULL;
     int count = shell_split_segments(command, type, &segments);
     free(command);
-    if (count <= 0) {
+    if (count <= 0 || working_dir == NULL) {
+        free(working_dir);
+        free_shell_segments(segments, count > 0 ? count : 0);
         return -1;
     }
 
@@ -995,7 +1070,7 @@ static int allow_always_shell(ApprovalGateConfig *config, const ToolCall *tool_c
         ShellRule rule = {0};
         char *name = NULL;
         if (segment_rule(segments[i], type, &rule, &name) == SHELL_RULE_OK) {
-            if (add_session_rule(config, &rule) == 0) {
+            if (add_session_rule(config, &rule, working_dir) == 0) {
                 stored_any = 1;
                 /* The rule is live either way; a label we couldn't build falls
                  * back to the command name so it is never listed as unsaved. */
@@ -1029,6 +1104,7 @@ static int allow_always_shell(ApprovalGateConfig *config, const ToolCall *tool_c
     string_list_free(&saved);
     string_list_free(&unsaved);
     free_shell_segments(segments, count);
+    free(working_dir);
     return rc;
 }
 
@@ -1087,7 +1163,12 @@ static int preview_always_shell(const ToolCall *tool_call, char **out_label) {
 
     int saveable = labels.count > 0;
     if (saveable && out_label != NULL) {
+        char *working_dir = resolve_call_working_dir(tool_call);
         *out_label = string_list_join(&labels);
+        if (working_dir != NULL) {
+            *out_label = label_for_dir(*out_label, working_dir);
+        }
+        free(working_dir);
     }
 
     string_list_free(&labels);
@@ -1292,7 +1373,8 @@ static int command_names_protected_file(const ParsedShellCommand *parsed) {
 
 static int segment_matches_shell_allowlist(const ApprovalGateConfig *config,
                                            const char *segment,
-                                           ShellType type) {
+                                           ShellType type,
+                                           const char *working_dir) {
     ParsedShellCommand *parsed = parse_shell_command_for_type(segment, type);
     if (parsed == NULL) {
         return 0;
@@ -1313,18 +1395,13 @@ static int segment_matches_shell_allowlist(const ApprovalGateConfig *config,
             continue;
         }
 
-        /* An entry that covers whatever it is given would, in --auto, stand in
-         * for the model review; let the review see those calls instead. */
-        if (config->auto_mode &&
-            shell_rule_is_broad((const char *const *)entry->command_prefix,
-                                entry->prefix_len)) {
-            continue;
-        }
-
-        /* Rules from "a" cover the exact command they were saved from. */
+        /* Rules from "a" cover the exact command they were saved from, in the
+         * directory it ran in. */
         if (entry->is_session_rule) {
             ShellRule rule = { entry->command_prefix, entry->prefix_len };
-            matched = shell_rule_matches(&rule, parsed);
+            matched = entry->working_dir != NULL &&
+                      strcmp(entry->working_dir, working_dir) == 0 &&
+                      shell_rule_matches(&rule, parsed);
             continue;
         }
 
@@ -1375,22 +1452,31 @@ static int match_shell_command_allowlist(const ApprovalGateConfig *config,
         return 0;
     }
 
+    /* In --auto an allowlist entry would stand in for the model review, which
+     * can see what the entry can't: what the command runs right now. */
+    if (config->auto_mode) {
+        return 0;
+    }
+
     char *command = tool_args_get_command(tool_call);
     if (command == NULL) {
         return 0;
     }
 
+    char *working_dir = resolve_call_working_dir(tool_call);
     ShellType type = detect_shell_type();
     char **segments = NULL;
     int count = shell_split_segments(command, type, &segments);
     free(command);
 
-    int matched = count > 0;
+    int matched = count > 0 && working_dir != NULL;
     for (int i = 0; i < count && matched; i++) {
-        matched = segment_matches_shell_allowlist(config, segments[i], type);
+        matched = segment_matches_shell_allowlist(config, segments[i], type,
+                                                  working_dir);
     }
 
-    free_shell_segments(segments, count);
+    free(working_dir);
+    free_shell_segments(segments, count > 0 ? count : 0);
     return matched;
 }
 
