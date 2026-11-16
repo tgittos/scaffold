@@ -37,7 +37,6 @@
  * - Network FS: Has weaker guarantees; module sets is_network_fs flag
  *
  * Related headers:
- * - approval_gate.h: Integration with approval gates system
  * - path_normalize.h: Cross-platform path normalization
  *
  */

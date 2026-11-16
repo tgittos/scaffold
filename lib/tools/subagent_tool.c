@@ -3,7 +3,6 @@
 #include "../util/json_escape.h"
 #include "../util/interrupt.h"
 #include "../util/config.h"
-#include "../policy/subagent_approval.h"
 #include "../ipc/message_store.h"
 #include "messaging_tool.h"
 #include <cJSON.h>
@@ -18,10 +17,6 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
-
-/* Environment variable names for passing approval channel FDs to child */
-#define RALPH_APPROVAL_REQUEST_FD "RALPH_APPROVAL_REQUEST_FD"
-#define RALPH_APPROVAL_RESPONSE_FD "RALPH_APPROVAL_RESPONSE_FD"
 
 DARRAY_DEFINE(SubagentArray, Subagent)
 
@@ -38,74 +33,6 @@ DARRAY_DEFINE(SubagentArray, Subagent)
  * For the current single-threaded CLI design, this is acceptable.
  */
 static SubagentManager *g_subagent_manager = NULL;
-
-/**
- * Static approval channel for subagent processes.
- * When running as a subagent, this is initialized from environment variables
- * to communicate with the parent process for approval requests.
- */
-static ApprovalChannel *g_subagent_approval_channel = NULL;
-
-/**
- * Initialize approval channel from environment variables.
- * Called when ralph is running as a subagent process.
- * Returns 0 on success, -1 on error or if not a subagent.
- *
- * Uses strtol() instead of atoi() to properly detect parse failures.
- * FDs must be > 2 (skip stdin/stdout/stderr) and <= INT_MAX.
- */
-int subagent_init_approval_channel(void) {
-    const char *request_fd_str = getenv(RALPH_APPROVAL_REQUEST_FD);
-    const char *response_fd_str = getenv(RALPH_APPROVAL_RESPONSE_FD);
-
-    if (request_fd_str == NULL || response_fd_str == NULL) {
-        /* Not running as subagent or parent didn't set up approval channel */
-        return -1;
-    }
-
-    char *endptr;
-    errno = 0;
-    long request_fd_long = strtol(request_fd_str, &endptr, 10);
-    if (errno != 0 || *endptr != '\0' || request_fd_long <= 2 || request_fd_long > INT_MAX) {
-        return -1;
-    }
-
-    errno = 0;
-    long response_fd_long = strtol(response_fd_str, &endptr, 10);
-    if (errno != 0 || *endptr != '\0' || response_fd_long <= 2 || response_fd_long > INT_MAX) {
-        return -1;
-    }
-
-    g_subagent_approval_channel = malloc(sizeof(ApprovalChannel));
-    if (g_subagent_approval_channel == NULL) {
-        return -1;
-    }
-
-    g_subagent_approval_channel->request_fd = (int)request_fd_long;
-    g_subagent_approval_channel->response_fd = (int)response_fd_long;
-    g_subagent_approval_channel->subagent_pid = getpid();
-
-    return 0;
-}
-
-/** Clean up the subagent approval channel. */
-void subagent_cleanup_approval_channel(void) {
-    if (g_subagent_approval_channel != NULL) {
-        if (g_subagent_approval_channel->request_fd >= 0) {
-            close(g_subagent_approval_channel->request_fd);
-        }
-        if (g_subagent_approval_channel->response_fd >= 0) {
-            close(g_subagent_approval_channel->response_fd);
-        }
-        free(g_subagent_approval_channel);
-        g_subagent_approval_channel = NULL;
-    }
-}
-
-/** Returns NULL if not running as a subagent process. */
-ApprovalChannel* subagent_get_approval_channel(void) {
-    return g_subagent_approval_channel;
-}
 
 /** Initialize with explicit max_subagents and timeout. Values are clamped to safe ranges. */
 int subagent_manager_init_with_config(SubagentManager *manager, int max_subagents, int timeout_seconds) {
@@ -132,18 +59,11 @@ int subagent_manager_init_with_config(SubagentManager *manager, int max_subagent
     manager->max_subagents = max_subagents;
     manager->timeout_seconds = timeout_seconds;
     manager->is_subagent_process = 0;
-    manager->gate_config = NULL;
     manager->spawn_callback = NULL;
     manager->spawn_callback_data = NULL;
     manager->services = NULL;
 
     return 0;
-}
-
-void subagent_manager_set_gate_config(SubagentManager *manager, ApprovalGateConfig *gate_config) {
-    if (manager != NULL) {
-        manager->gate_config = gate_config;
-    }
 }
 
 void subagent_manager_set_spawn_callback(SubagentManager *manager,
@@ -259,20 +179,10 @@ int subagent_poll_all(SubagentManager *manager) {
 
 /* Set up child process FDs and environment for subagent IPC.
  * Called in the child (post-fork). Does not return on success. */
-static void child_setup_ipc(int stdout_write_fd, int request_pipe[2],
-                             int response_pipe[2]) {
+static void child_setup_ipc(int stdout_write_fd) {
     if (dup2(stdout_write_fd, STDOUT_FILENO) == -1) _exit(127);
     close(stdout_write_fd);
     if (dup2(STDOUT_FILENO, STDERR_FILENO) == -1) _exit(127);
-
-    close(request_pipe[0]);
-    close(response_pipe[1]);
-
-    char request_fd_str[32], response_fd_str[32];
-    snprintf(request_fd_str, sizeof(request_fd_str), "%d", request_pipe[1]);
-    snprintf(response_fd_str, sizeof(response_fd_str), "%d", response_pipe[0]);
-    setenv(RALPH_APPROVAL_REQUEST_FD, request_fd_str, 1);
-    setenv(RALPH_APPROVAL_RESPONSE_FD, response_fd_str, 1);
 
     char* parent_id = messaging_tool_get_agent_id();
     if (parent_id != NULL) {
@@ -286,7 +196,6 @@ static void child_setup_ipc(int stdout_write_fd, int request_pipe[2],
  * On failure kills the child and closes all FDs. */
 static int register_subagent(SubagentManager *manager, const char id[SUBAGENT_ID_LENGTH + 1],
                               pid_t pid, int stdout_read_fd,
-                              int request_read_fd, int response_write_fd,
                               const char *task, const char *context_str,
                               char *subagent_id_out) {
     Subagent new_sub;
@@ -294,8 +203,6 @@ static int register_subagent(SubagentManager *manager, const char id[SUBAGENT_ID
 
     new_sub.stdout_pipe[0] = -1;
     new_sub.stdout_pipe[1] = -1;
-    new_sub.approval_channel.request_fd = -1;
-    new_sub.approval_channel.response_fd = -1;
 
     memcpy(new_sub.id, id, SUBAGENT_ID_LENGTH);
     new_sub.id[SUBAGENT_ID_LENGTH] = '\0';
@@ -303,9 +210,6 @@ static int register_subagent(SubagentManager *manager, const char id[SUBAGENT_ID
     new_sub.status = SUBAGENT_STATUS_RUNNING;
     new_sub.stdout_pipe[0] = stdout_read_fd;
     new_sub.stdout_pipe[1] = -1;
-    new_sub.approval_channel.request_fd = request_read_fd;
-    new_sub.approval_channel.response_fd = response_write_fd;
-    new_sub.approval_channel.subagent_pid = pid;
     new_sub.task = (task != NULL) ? strdup(task) : strdup("subagent");
     new_sub.context = (context_str != NULL && strlen(context_str) > 0)
                       ? strdup(context_str) : NULL;
@@ -322,8 +226,6 @@ static int register_subagent(SubagentManager *manager, const char id[SUBAGENT_ID
         kill(pid, SIGKILL);
         waitpid(pid, NULL, 0);
         close(stdout_read_fd);
-        close(request_read_fd);
-        close(response_write_fd);
         return -1;
     }
 
@@ -333,8 +235,6 @@ static int register_subagent(SubagentManager *manager, const char id[SUBAGENT_ID
         kill(pid, SIGKILL);
         waitpid(pid, NULL, 0);
         close(stdout_read_fd);
-        close(request_read_fd);
-        close(response_write_fd);
         return -1;
     }
 
@@ -349,7 +249,7 @@ static int register_subagent(SubagentManager *manager, const char id[SUBAGENT_ID
 
 /* Common pre-fork validation and pipe creation. Returns 0 on success. */
 static int prefork_setup(SubagentManager *manager, char id_out[SUBAGENT_ID_LENGTH + 1],
-                          int stdout_pipefd[2], int request_pipe[2], int response_pipe[2]) {
+                          int stdout_pipefd[2]) {
     if (manager->is_subagent_process) return -1;
     if (manager->max_subagents <= 0 ||
         manager->subagents.count >= (size_t)manager->max_subagents) return -1;
@@ -358,31 +258,24 @@ static int prefork_setup(SubagentManager *manager, char id_out[SUBAGENT_ID_LENGT
 
     if (pipe(stdout_pipefd) == -1) return -1;
 
-    if (create_approval_channel_pipes(request_pipe, response_pipe) < 0) {
-        close(stdout_pipefd[0]);
-        close(stdout_pipefd[1]);
-        return -1;
-    }
     return 0;
 }
 
 /**
  * Spawn a new subagent to execute a task.
  * Forks a new process running ralph in subagent mode.
- * Creates approval channel pipes for IPC-based approval proxying.
  */
 int subagent_spawn(SubagentManager *manager, const char *task, const char *context, const char *model, char *subagent_id_out) {
     if (manager == NULL || task == NULL || subagent_id_out == NULL) return -1;
 
     char id[SUBAGENT_ID_LENGTH + 1];
-    int stdout_pipefd[2], request_pipe[2], response_pipe[2];
-    if (prefork_setup(manager, id, stdout_pipefd, request_pipe, response_pipe) != 0)
+    int stdout_pipefd[2];
+    if (prefork_setup(manager, id, stdout_pipefd) != 0)
         return -1;
 
     char *ralph_path = subagent_get_executable_path();
     if (ralph_path == NULL) {
         close(stdout_pipefd[0]); close(stdout_pipefd[1]);
-        cleanup_approval_channel_pipes(request_pipe, response_pipe);
         return -1;
     }
 
@@ -390,13 +283,12 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
     if (pid == -1) {
         free(ralph_path);
         close(stdout_pipefd[0]); close(stdout_pipefd[1]);
-        cleanup_approval_channel_pipes(request_pipe, response_pipe);
         return -1;
     }
 
     if (pid == 0) {
         close(stdout_pipefd[0]);
-        child_setup_ipc(stdout_pipefd[1], request_pipe, response_pipe);
+        child_setup_ipc(stdout_pipefd[1]);
 
         char *args[9];
         int ai = 0;
@@ -420,17 +312,14 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
 
     free(ralph_path);
     close(stdout_pipefd[1]);
-    close(request_pipe[1]);
-    close(response_pipe[0]);
 
     return register_subagent(manager, id, pid, stdout_pipefd[0],
-                             request_pipe[0], response_pipe[1],
                              task, context, subagent_id_out);
 }
 
 /**
  * Spawn a subagent with a custom argv array.
- * Same pipe/approval-channel setup as subagent_spawn, but the child
+ * Same pipe setup as subagent_spawn, but the child
  * calls execv(args[0], args) with the caller-provided argument list.
  * task_desc populates the Subagent.task field for completion notifications.
  */
@@ -440,30 +329,26 @@ int subagent_spawn_with_args(SubagentManager *manager, char *args[],
         return -1;
 
     char id[SUBAGENT_ID_LENGTH + 1];
-    int stdout_pipefd[2], request_pipe[2], response_pipe[2];
-    if (prefork_setup(manager, id, stdout_pipefd, request_pipe, response_pipe) != 0)
+    int stdout_pipefd[2];
+    if (prefork_setup(manager, id, stdout_pipefd) != 0)
         return -1;
 
     pid_t pid = fork();
     if (pid == -1) {
         close(stdout_pipefd[0]); close(stdout_pipefd[1]);
-        cleanup_approval_channel_pipes(request_pipe, response_pipe);
         return -1;
     }
 
     if (pid == 0) {
         close(stdout_pipefd[0]);
-        child_setup_ipc(stdout_pipefd[1], request_pipe, response_pipe);
+        child_setup_ipc(stdout_pipefd[1]);
         execv(args[0], args);
         _exit(127);
     }
 
     close(stdout_pipefd[1]);
-    close(request_pipe[1]);
-    close(response_pipe[0]);
 
     return register_subagent(manager, id, pid, stdout_pipefd[0],
-                             request_pipe[0], response_pipe[1],
                              task_desc, NULL, subagent_id_out);
 }
 
@@ -578,15 +463,6 @@ int subagent_get_status(SubagentManager *manager, const char *subagent_id, int w
             sub->error = strdup("Subagent execution timed out");
             subagent_notify_parent(sub, manager->services);
             break;
-        }
-
-        /* Handle any pending approval requests from this subagent */
-        if (manager->gate_config != NULL &&
-            sub->approval_channel.request_fd > 2) {
-            int idx = subagent_poll_approval_requests(manager, 0);
-            if (idx >= 0) {
-                subagent_handle_approval_request(manager, idx, manager->gate_config);
-            }
         }
 
         read_subagent_output_nonblocking(sub);
@@ -996,141 +872,4 @@ int execute_subagent_status_tool_call(const ToolCall *tool_call, ToolResult *res
     free(escaped_error);
 
     return 0;
-}
-
-/**
- * Poll all running subagents for pending approval requests.
- * Returns the index of the first subagent with a pending request.
- *
- * @param manager Pointer to SubagentManager
- * @param timeout_ms Maximum time to wait in milliseconds (0 for non-blocking)
- * @return Index of subagent with pending request, or -1 if none
- */
-int subagent_poll_approval_requests(SubagentManager *manager, int timeout_ms) {
-    if (manager == NULL) {
-        return -1;
-    }
-
-    int running_count = 0;
-    for (size_t i = 0; i < manager->subagents.count; i++) {
-        Subagent *sub = &manager->subagents.data[i];
-        if (sub->status == SUBAGENT_STATUS_RUNNING &&
-            sub->approval_channel.request_fd >= 0) {
-            running_count++;
-        }
-    }
-
-    if (running_count == 0) {
-        return -1;
-    }
-
-    struct pollfd *pfds = malloc(running_count * sizeof(struct pollfd));
-    int *indices = malloc(running_count * sizeof(int));
-    if (pfds == NULL || indices == NULL) {
-        free(pfds);
-        free(indices);
-        return -1;
-    }
-
-    int poll_idx = 0;
-    for (size_t i = 0; i < manager->subagents.count; i++) {
-        Subagent *sub = &manager->subagents.data[i];
-        if (sub->status == SUBAGENT_STATUS_RUNNING &&
-            sub->approval_channel.request_fd > 2) {  // > 2 to skip stdin/stdout/stderr
-            pfds[poll_idx].fd = sub->approval_channel.request_fd;
-            pfds[poll_idx].events = POLLIN;
-            pfds[poll_idx].revents = 0;
-            indices[poll_idx] = (int)i;
-            poll_idx++;
-        }
-    }
-
-    int ready = poll(pfds, poll_idx, timeout_ms);
-    if (ready <= 0) {
-        free(pfds);
-        free(indices);
-        return -1;
-    }
-
-    int result = -1;
-    for (int i = 0; i < poll_idx; i++) {
-        if (pfds[i].revents & (POLLIN | POLLERR | POLLHUP)) {
-            result = indices[i];
-            break;
-        }
-    }
-
-    free(pfds);
-    free(indices);
-    return result;
-}
-
-/**
- * Handle an approval request from a specific subagent.
- * Prompts the user via TTY and sends the response back to the subagent.
- *
- * @param manager Pointer to SubagentManager
- * @param subagent_index Index of the subagent in the manager's array
- * @param gate_config Parent's approval gate configuration
- * @return 0 on success, -1 on error
- */
-int subagent_handle_approval_request(SubagentManager *manager,
-                                     int subagent_index,
-                                     ApprovalGateConfig *gate_config) {
-    if (manager == NULL || gate_config == NULL) {
-        return -1;
-    }
-
-    if (subagent_index < 0 || (size_t)subagent_index >= manager->subagents.count) {
-        return -1;
-    }
-
-    Subagent *sub = &manager->subagents.data[subagent_index];
-    if (sub->status != SUBAGENT_STATUS_RUNNING) {
-        return -1;
-    }
-
-    int result = handle_subagent_approval_request(gate_config, &sub->approval_channel, sub->id);
-
-    if (result < 0) {
-        /* Pipe broken or closed - close the approval channel FD to prevent
-         * further polling. The subagent may have exited or crashed. */
-        if (sub->approval_channel.request_fd > 2) {
-            close(sub->approval_channel.request_fd);
-            sub->approval_channel.request_fd = -1;
-        }
-        if (sub->approval_channel.response_fd > 2) {
-            close(sub->approval_channel.response_fd);
-            sub->approval_channel.response_fd = -1;
-        }
-        return -1;
-    }
-
-    return 0;
-}
-
-/**
- * Check and handle any pending approval requests from subagents.
- * Non-blocking check that handles at most one request.
- *
- * @param manager Pointer to SubagentManager
- * @param gate_config Parent's approval gate configuration
- * @return 1 if a request was handled, 0 if none pending, -1 on error
- */
-int subagent_check_and_handle_approvals(SubagentManager *manager,
-                                        ApprovalGateConfig *gate_config) {
-    if (manager == NULL || gate_config == NULL) {
-        return -1;
-    }
-
-    int idx = subagent_poll_approval_requests(manager, 0);
-    if (idx < 0) {
-        return 0;
-    }
-
-    if (subagent_handle_approval_request(manager, idx, gate_config) == 0) {
-        return 1;
-    }
-
-    return -1;
 }

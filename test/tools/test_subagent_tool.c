@@ -65,8 +65,6 @@ static int spawn_mock_subagent(SubagentManager *manager, const char *mock_output
     sub.status = SUBAGENT_STATUS_RUNNING;
     sub.stdout_pipe[0] = pipefd[0];
     sub.stdout_pipe[1] = -1;
-    sub.approval_channel.request_fd = -1;
-    sub.approval_channel.response_fd = -1;
     sub.task = strdup("mock task");
     sub.start_time = time(NULL);
 

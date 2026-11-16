@@ -75,8 +75,6 @@ static void add_fake_subagent(SubagentManager *mgr, const char *id,
     sub.start_time = time(NULL) - 30;
     sub.stdout_pipe[0] = -1;
     sub.stdout_pipe[1] = -1;
-    sub.approval_channel.request_fd = -1;
-    sub.approval_channel.response_fd = -1;
     SubagentArray_push(&mgr->subagents, sub);
 }
 

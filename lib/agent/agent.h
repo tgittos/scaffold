@@ -86,12 +86,6 @@ typedef struct AgentConfig {
     /** Disable response streaming */
     bool no_stream;
 
-    /** Disable all approval gates (yolo mode) */
-    bool yolo;
-
-    /** Run gated calls that pass auto review without prompting */
-    bool auto_mode;
-
     /** Disable automatic message polling */
     bool no_auto_messages;
 
@@ -128,14 +122,6 @@ typedef struct AgentConfig {
     /** System prompt override from -p flag (NULL uses default) */
     const char* system_prompt_override;
 
-    /** CLI allowlist entries (tool:pattern format) */
-    const char** allow_entries;
-    int allow_entry_count;
-
-    /** CLI allow categories */
-    const char** allow_categories;
-    int allow_category_count;
-
     /** Injected services (NULL uses default singletons) */
     Services* services;
 } AgentConfig;
@@ -166,8 +152,6 @@ static inline AgentConfig agent_config_default(void) {
     config.log_http_body = false;
     config.json_mode = false;
     config.no_stream = false;
-    config.yolo = false;
-    config.auto_mode = false;
     config.no_auto_messages = false;
     config.message_poll_interval_ms = 0;  /* Use default */
     config.supervisor_phase = -1;         /* Auto-detect from goal status */

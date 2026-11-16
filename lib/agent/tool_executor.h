@@ -8,7 +8,7 @@
  * Tool Executor — Entry Point
  *
  * Thin orchestrator that wires together the tool execution pipeline:
- * 1. Initializes the orchestration context (approval + dedup)
+ * 1. Initializes the orchestration context (dedup + subagent limiting)
  * 2. Executes the initial batch via tool_batch_executor
  * 3. Hands off to iterative_loop for follow-up LLM rounds
  */
@@ -19,12 +19,6 @@
  * This is the main entry point for tool execution workflow. It executes
  * the provided tool calls, saves results to conversation history, and
  * continues making API calls until no more tool calls are returned.
- *
- * Before execution, each tool call is checked against approval gates:
- * - Protected files are blocked unconditionally
- * - Rate-limited tools return error without prompting
- * - Gated tools prompt for user approval (if interactive)
- * - Allowed tools proceed without prompting
  *
  * @param session The Ralph session containing config, conversation, and tools
  * @param tool_calls Array of tool calls to execute

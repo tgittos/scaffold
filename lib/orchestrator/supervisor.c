@@ -229,28 +229,16 @@ static int process_notifications(AgentSession *session) {
 }
 
 /**
- * Rebuild the fd_set with message poller and approval channel fds.
+ * Rebuild the fd_set with the message poller fd.
  * Returns the max fd value.
  */
-static int rebuild_fd_set(AgentSession *session, fd_set *read_fds, int notify_fd) {
+static int rebuild_fd_set(fd_set *read_fds, int notify_fd) {
     FD_ZERO(read_fds);
 
     int max_fd = -1;
     if (notify_fd >= 0) {
         FD_SET(notify_fd, read_fds);
         max_fd = notify_fd;
-    }
-
-    SubagentManager *mgr = &session->subagent_manager;
-    for (size_t i = 0; i < mgr->subagents.count; i++) {
-        Subagent *sub = &mgr->subagents.data[i];
-        if (sub->status == SUBAGENT_STATUS_RUNNING &&
-            sub->approval_channel.request_fd > 2) {
-            FD_SET(sub->approval_channel.request_fd, read_fds);
-            if (sub->approval_channel.request_fd > max_fd) {
-                max_fd = sub->approval_channel.request_fd;
-            }
-        }
     }
 
     return max_fd;
@@ -433,7 +421,7 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
     while (g_supervisor_running) {
         rc = 0;  /* Reset per iteration to avoid stale context-full signals */
         fd_set read_fds;
-        int max_fd = rebuild_fd_set(session, &read_fds, notify_fd);
+        int max_fd = rebuild_fd_set(&read_fds, notify_fd);
 
         struct timeval timeout;
         timeout.tv_sec = 5;
@@ -449,17 +437,6 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
         int changes = subagent_poll_all(&session->subagent_manager);
         if (changes > 0) {
             LOG_DEBUG("Supervisor: %d subagent state changes detected", changes);
-        }
-
-        SubagentManager *mgr = &session->subagent_manager;
-        for (size_t i = 0; i < mgr->subagents.count; i++) {
-            Subagent *sub = &mgr->subagents.data[i];
-            if (sub->status == SUBAGENT_STATUS_RUNNING &&
-                sub->approval_channel.request_fd > 2 &&
-                FD_ISSET(sub->approval_channel.request_fd, &read_fds)) {
-                subagent_handle_approval_request(mgr, (int)i,
-                                                 &session->gate_config);
-            }
         }
 
         if (notify_fd >= 0 && ready > 0 && FD_ISSET(notify_fd, &read_fds)) {

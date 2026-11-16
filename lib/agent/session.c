@@ -136,14 +136,6 @@ int session_init(AgentSession* session) {
         goto cleanup_subsystems;
     }
 
-    if (approval_gate_init(&session->gate_config) != 0) {
-        fprintf(stderr, "Warning: Failed to initialize approval gates\n");
-    } else {
-        approval_gate_detect_interactive(&session->gate_config);
-        /* Set gate_config on subagent manager for approval proxying during blocking waits */
-        subagent_manager_set_gate_config(&session->subagent_manager, &session->gate_config);
-    }
-
     /* Plugins are optional; failures are non-fatal */
     plugin_manager_init(&session->plugin_manager);
     plugin_manager_discover(&session->plugin_manager);
@@ -182,7 +174,6 @@ void session_cleanup(AgentSession* session) {
 
     tool_extension_shutdown_all();
 
-    approval_gate_cleanup(&session->gate_config);
     subagent_manager_cleanup(&session->subagent_manager);
     mcp_client_cleanup(&session->mcp_client);
 

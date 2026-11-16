@@ -71,7 +71,6 @@ LIB_AGENT_SOURCES := \
     $(LIBDIR)/agent/context_enhancement.c \
     $(LIBDIR)/agent/prompt_mode.c \
     $(LIBDIR)/agent/recap.c \
-    $(LIBDIR)/agent/tool_review.c \
     $(LIBDIR)/agent/repl.c
 
 # LLM module
@@ -104,24 +103,11 @@ LIB_SESSION_SOURCES := \
     $(LIBDIR)/session/rolling_summary.c \
     $(LIBDIR)/session/session_manager.c
 
-# Policy module (approval gates, shell parsing, file protection)
+# Policy module (path normalization, TOCTOU-safe file access)
 LIB_POLICY_SOURCES := \
-    $(LIBDIR)/policy/rate_limiter.c \
-    $(LIBDIR)/policy/allowlist.c \
-    $(LIBDIR)/policy/shell_parser.c \
-    $(LIBDIR)/policy/shell_parser_cmd.c \
-    $(LIBDIR)/policy/shell_parser_ps.c \
     $(LIBDIR)/policy/path_normalize.c \
-    $(LIBDIR)/policy/protected_files.c \
     $(LIBDIR)/policy/atomic_file.c \
-    $(LIBDIR)/policy/verified_file_context.c \
-    $(LIBDIR)/policy/tool_args.c \
-    $(LIBDIR)/policy/pattern_generator.c \
-    $(LIBDIR)/policy/gate_prompter.c \
-    $(LIBDIR)/policy/auto_approve.c \
-    $(LIBDIR)/policy/approval_gate.c \
-    $(LIBDIR)/policy/approval_errors.c \
-    $(LIBDIR)/policy/subagent_approval.c
+    $(LIBDIR)/policy/verified_file_context.c
 
 # Util module (generic utilities)
 LIB_UTIL_SOURCES := \

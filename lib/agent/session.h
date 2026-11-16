@@ -8,7 +8,6 @@
 #include "../mcp/mcp_client.h"
 #include "prompt_mode.h"
 #include "../tools/subagent_tool.h"
-#include "../policy/approval_gate.h"
 #include "../ipc/message_poller.h"
 #include "../services/services.h"
 #include "../plugin/plugin_manager.h"
@@ -41,7 +40,6 @@ typedef struct AgentSession {
     ToolRegistry tools;                 /**< Registered tools */
     MCPClient mcp_client;               /**< Model Context Protocol client */
     SubagentManager subagent_manager;   /**< Subagent process management */
-    ApprovalGateConfig gate_config;     /**< Approval gates configuration */
     message_poller_t* message_poller;   /**< Background message poller thread */
     SessionPollingConfig polling_config;/**< Polling configuration */
     Services* services;                 /**< Dependency injection container */
@@ -56,7 +54,7 @@ typedef struct AgentSession {
 
 /**
  * Initialize an agent session.
- * Sets up all subsystems: tools, MCP, subagents, approval gates, etc.
+ * Sets up all subsystems: tools, MCP, subagents, plugins, etc.
  *
  * Precondition: session must be zero-initialized or have session->services
  * pre-set before calling. session_init does NOT reset the services pointer.

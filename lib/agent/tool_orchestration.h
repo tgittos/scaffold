@@ -1,7 +1,6 @@
 #ifndef LIB_AGENT_TOOL_ORCHESTRATION_H
 #define LIB_AGENT_TOOL_ORCHESTRATION_H
 
-#include "../policy/approval_gate.h"
 #include "../types.h"
 #include "../util/ptrarray.h"
 
@@ -9,34 +8,17 @@
  * Tool Orchestration Module
  *
  * Manages cross-cutting concerns for tool execution batches:
- * - Approval gate checking (protected files, user consent)
  * - Tool call deduplication across loop iterations
  * - Subagent spawn limiting (one per batch)
  */
 
 typedef struct {
-    ApprovalGateConfig* gate_config;
     StringArray executed_tracker;
     int subagent_spawned;
 } ToolOrchestrationContext;
 
-int tool_orchestration_init(ToolOrchestrationContext* ctx,
-                            ApprovalGateConfig* gate_config);
+int tool_orchestration_init(ToolOrchestrationContext* ctx);
 void tool_orchestration_cleanup(ToolOrchestrationContext* ctx);
-
-/**
- * Check approval gates and protected files before tool execution.
- * Returns 0 to allow, -1 if blocked (result populated with error), -2 if user aborted.
- *
- * If out_path is non-NULL and approval succeeds for a file tool, the ApprovedPath
- * is written there (caller owns it and must call free_approved_path).
- * If out_path is NULL, the ApprovedPath is set on the thread-local verified
- * file context directly (legacy behavior).
- */
-int tool_orchestration_check_approval(ToolOrchestrationContext* ctx,
-                                      const ToolCall* call,
-                                      ToolResult* result,
-                                      ApprovedPath* out_path);
 
 /**
  * Returns 1 if the tool call ID has already been executed, 0 if not.

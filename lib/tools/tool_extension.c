@@ -104,27 +104,6 @@ int tool_extension_is_extension_tool(const char *name) {
     return 0;
 }
 
-const char* tool_extension_get_gate_category(const char *name) {
-    if (name == NULL) {
-        return NULL;
-    }
-
-    for (int i = 0; i < g_extension_count; i++) {
-        ToolExtension *ext = &g_extensions[i];
-
-        if (ext->metadata.is_extension_tool != NULL &&
-            ext->metadata.is_extension_tool(name)) {
-
-            if (ext->metadata.get_gate_category != NULL) {
-                return ext->metadata.get_gate_category(name);
-            }
-            return NULL;
-        }
-    }
-
-    return NULL;
-}
-
 const char* tool_extension_get_match_arg(const char *name) {
     if (name == NULL) {
         return NULL;

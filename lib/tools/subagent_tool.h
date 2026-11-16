@@ -3,7 +3,6 @@
 
 #include "tools_system.h"
 #include "../util/darray.h"
-#include "../policy/approval_gate.h"
 #include <sys/types.h>
 #include <time.h>
 
@@ -33,7 +32,6 @@ typedef struct {
     pid_t pid;                         // Process ID of spawned process
     SubagentStatus status;             // Current execution status
     int stdout_pipe[2];                // Pipe for reading child output
-    ApprovalChannel approval_channel;  // IPC channel for approval proxying
     char *task;                        // Task description passed to subagent
     char *context;                     // Optional context information
     char *output;                      // Accumulated output from child
@@ -57,16 +55,12 @@ typedef struct SubagentManager {
     int max_subagents;                 // Maximum allowed concurrent subagents
     int timeout_seconds;               // Timeout for each subagent execution
     int is_subagent_process;           // Flag: 1 if running as subagent (prevents nesting)
-    ApprovalGateConfig *gate_config;   // Parent's approval config for proxying requests
     SubagentSpawnCallback spawn_callback;  // Called when subagent spawns (optional)
     void *spawn_callback_data;             // User data for spawn callback
     Services *services;                // Dependency injection container
 } SubagentManager;
 
 int subagent_manager_init_with_config(SubagentManager *manager, int max_subagents, int timeout_seconds);
-
-/** Set the approval gate config for proxying subagent approval requests. */
-void subagent_manager_set_gate_config(SubagentManager *manager, ApprovalGateConfig *gate_config);
 
 /** Set callback to be invoked when a subagent spawns (for main loop fd_set rebuild). */
 void subagent_manager_set_spawn_callback(SubagentManager *manager,
@@ -111,26 +105,5 @@ int read_subagent_output_nonblocking(Subagent *sub);
 int read_subagent_output(Subagent *sub);
 
 void cleanup_subagent(Subagent *sub, Services *services);
-
-/** Returns index of first subagent with a pending approval request, or -1. */
-int subagent_poll_approval_requests(SubagentManager *manager, int timeout_ms);
-
-/** Prompts user via TTY and sends response back to subagent. */
-int subagent_handle_approval_request(SubagentManager *manager,
-                                     int subagent_index,
-                                     ApprovalGateConfig *gate_config);
-
-/** Non-blocking; handles at most one request. Returns 1 if handled, 0 if none, -1 on error. */
-int subagent_check_and_handle_approvals(SubagentManager *manager,
-                                        ApprovalGateConfig *gate_config);
-
-/** Returns NULL if not running as a subagent process. */
-ApprovalChannel* subagent_get_approval_channel(void);
-
-/** Initialize approval channel from environment variables (for subagent processes). */
-int subagent_init_approval_channel(void);
-
-/** Clean up approval channel resources. */
-void subagent_cleanup_approval_channel(void);
 
 #endif // SUBAGENT_TOOL_H

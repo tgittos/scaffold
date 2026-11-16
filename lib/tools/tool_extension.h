@@ -33,14 +33,7 @@ typedef struct {
     int (*is_extension_tool)(const char *name);
 
     /**
-     * Get the gate category for a tool (e.g., "file_read", "shell").
-     * @param name Tool name
-     * @return Gate category string, or NULL if not specified
-     */
-    const char* (*get_gate_category)(const char *name);
-
-    /**
-     * Get the argument name for pattern matching in approval gates.
+     * Get the argument name for display summaries.
      * @param name Tool name
      * @return Argument name (e.g., "path", "command"), or NULL if not specified
      */
@@ -114,7 +107,7 @@ void tool_extension_shutdown_all(void);
 /* =============================================================================
  * QUERY INTERFACE
  * These functions aggregate results from all registered extensions.
- * Used by approval_gate.c and prompt_loader.c
+ * Used by output_formatter.c and prompt_loader.c
  * ============================================================================= */
 
 /**
@@ -123,13 +116,6 @@ void tool_extension_shutdown_all(void);
  * @return 1 if any extension owns the tool, 0 otherwise
  */
 int tool_extension_is_extension_tool(const char *name);
-
-/**
- * Get the gate category for a tool from any registered extension.
- * @param name Tool name
- * @return Gate category string, or NULL if not specified by any extension
- */
-const char* tool_extension_get_gate_category(const char *name);
 
 /**
  * Get the match argument for a tool from any registered extension.
