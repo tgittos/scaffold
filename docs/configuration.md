@@ -243,10 +243,10 @@ What a rule never covers:
 
 - A flag that changes what the command does: `git push --force` (including abbreviations git accepts, such as `--forc`), `git push origin +main`, `git push --mirror`, `git branch -d`, `git tag -f`, `git clean --force`, `sed -i`, `find -delete`, `rm -r`, `curl -o`, `wget -O`, `tar --to-command`, `make -f`, `--output`.
 - A subcommand that runs arbitrary code or can't be undone: `git config`, `git rebase`, `git checkout`, `git restore`, `git reset`, `git clean`, `git stash`, `git filter-branch`, `git submodule`, `git worktree`, `docker build`, `docker compose`, `kubectl apply`, `kubectl delete`, and every `gh` subcommand.
-- A command that runs another command: `sudo`, `env`, `xargs`, `timeout`, `time`, `watch`, `parallel`, `npx`, `bunx`, `uvx`, `eval`, `sh -c`, `dash`, `go run`, `npm exec`, `uv run`, `poetry run`, `bundle exec`, `docker run`, `kubectl exec`, or any command with a `VAR=value` argument.
+- A command that runs another command: `sudo`, `env`, `xargs`, `timeout`, `time`, `watch`, `parallel`, `npx`, `bunx`, `uvx`, `eval`, `sh -c`, `dash`, `go run`, `npm exec`, `uv run`, `poetry run`, `bundle exec`, `docker run`, `kubectl exec`, or any command with a `VAR=value` prefix, or a `VAR=value` argument to `make`.
 - An operand that names a protected file, directly (`cat .env`), through a pattern (`cat .en?`) or after a revision (`git show HEAD:.env`).
 
-Commands that run code from their arguments keep a narrow rule matched by prefix: interpreters (`python`, `node`, `sed`, `awk`), `curl`, `wget`, `ssh`, `scp` and `rm` save two tokens, such as `python foo.py`, and script runners save the script or target — `npm run build`, `npm test`, `pnpm run build`, `yarn build`, `make test`. A bare `make` covers only a bare `make`.
+Commands that run code from their arguments keep a narrow rule matched by prefix: interpreters (`python`, `node`, `sed`, `awk`), `curl`, `wget`, `ssh`, `scp` and `rm` save two tokens, such as `python foo.py`, and script runners save the script or target — `npm run build`, `npm run-script build`, `npm test`, `pnpm run build`, `yarn build`, `make test`. A bare `make` covers only a bare `make`.
 
 In `--auto`, allowlist entries that cover whatever they are given are skipped so the model review sees the call: entries starting with an interpreter or wrapper (`python`, `curl`, `sudo`, ...), and a package manager's `run`, `exec` or `test` with no script named (`npm run`).
 

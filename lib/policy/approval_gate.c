@@ -1232,16 +1232,21 @@ static int match_regex_allowlist(const ApprovalGateConfig *config,
 
 /*
  * Whether a token names a protected file: directly, after the "REF:" of
- * "HEAD:.env", or through a pattern that expands to one in the working
- * directory.
+ * "HEAD:.env" or the "=" of "--file=.env", or through a pattern that expands to
+ * one in the working directory. Brace expansion isn't expanded here, so a token
+ * carrying one is refused outright.
  */
 static int token_names_protected_file(const char *token) {
     if (is_protected_file(token)) {
         return 1;
     }
 
-    const char *after_ref = strchr(token, ':');
+    const char *after_ref = strpbrk(token, ":=");
     if (after_ref != NULL && after_ref[1] != '\0' && is_protected_file(after_ref + 1)) {
+        return 1;
+    }
+
+    if (strchr(token, '{') != NULL) {
         return 1;
     }
 

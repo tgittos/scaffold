@@ -1462,10 +1462,14 @@ void test_shell_allowlist_refuses_protected_file_operands(void) {
     ToolCall notes = shell_call("{\"command\": \"cat notes.txt\"}");
     ToolCall dotenv = shell_call("{\"command\": \"cat .env\"}");
     ToolCall nested = shell_call("{\"command\": \"cat lib/.env.local\"}");
+    ToolCall option_value = shell_call("{\"command\": \"cat --file=.env\"}");
+    ToolCall braced = shell_call("{\"command\": \"cat .{env,x}\"}");
 
     TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &notes));
     TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &dotenv));
     TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &nested));
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &option_value));
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &braced));
 }
 
 void test_shell_allowlist_refuses_protected_file_after_ref(void) {
@@ -1490,34 +1494,54 @@ void test_shell_allowlist_refuses_glob_that_expands_to_protected_file(void) {
     TEST_ASSERT_NOT_NULL(getcwd(cwd, sizeof(cwd)));
     TEST_ASSERT_EQUAL(0, chdir(dir));
 
+    char notes_path[256];
+    snprintf(notes_path, sizeof(notes_path), "%s/notes.txt", dir);
+    f = fopen(notes_path, "w");
+    TEST_ASSERT_NOT_NULL(f);
+    fclose(f);
+
     const char *cat[] = {"cat"};
     approval_gate_add_shell_allowlist(&config, cat, 1, SHELL_TYPE_UNKNOWN);
     ToolCall globbed = shell_call("{\"command\": \"cat .en?\"}");
+    ToolCall harmless_glob = shell_call("{\"command\": \"cat *.txt\"}");
     int matched = approval_gate_matches_allowlist(&config, &globbed);
+    int harmless_matched = approval_gate_matches_allowlist(&config, &harmless_glob);
 
     TEST_ASSERT_EQUAL(0, chdir(cwd));
     unlink(env_path);
+    unlink(notes_path);
     rmdir(dir);
 
     TEST_ASSERT_EQUAL(0, matched);
+    TEST_ASSERT_EQUAL(1, harmless_matched);
 }
 
 void test_auto_mode_skips_broad_shell_rules(void) {
     const char *python[] = {"python"};
     const char *npm_run[] = {"npm", "run"};
+    const char *docker_run[] = {"docker", "run"};
+    const char *npm[] = {"npm"};
     approval_gate_add_shell_allowlist(&config, python, 1, SHELL_TYPE_UNKNOWN);
     approval_gate_add_shell_allowlist(&config, npm_run, 2, SHELL_TYPE_UNKNOWN);
+    approval_gate_add_shell_allowlist(&config, docker_run, 2, SHELL_TYPE_UNKNOWN);
+    approval_gate_add_shell_allowlist(&config, npm, 1, SHELL_TYPE_UNKNOWN);
 
     ToolCall script = shell_call("{\"command\": \"python tool.py\"}");
     ToolCall npm_build = shell_call("{\"command\": \"npm run build\"}");
+    ToolCall docker_shell = shell_call("{\"command\": \"docker run alpine sh\"}");
+    ToolCall npm_exec = shell_call("{\"command\": \"npm exec prettier\"}");
 
     config.auto_mode = 0;
     TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &script));
     TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &npm_build));
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &docker_shell));
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &npm_exec));
 
     config.auto_mode = 1;
     TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &script));
     TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &npm_build));
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &docker_shell));
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &npm_exec));
 }
 
 void test_auto_mode_keeps_narrow_shell_rules(void) {

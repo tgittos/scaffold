@@ -126,6 +126,8 @@ void test_command_runners_are_wrappers(void) {
     TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("poetry run pytest"));
     TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("pipx run black"));
     TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("bundle exec rspec"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("yarn node x.js"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("pnpm node x.js"));
     TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("bunx prettier"));
     TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("uvx ruff"));
 
@@ -148,21 +150,31 @@ void test_command_runners_are_wrappers(void) {
 }
 
 void test_script_rules_name_the_script(void) {
-    assert_rule("npm run test", 1, 3, "npm", "run", "test");
+    assert_rule("npm run test", 0, 3, "npm", "run", "test");
     TEST_ASSERT_EQUAL_INT(1, matches("npm run test", "npm run test -- -w"));
     TEST_ASSERT_EQUAL_INT(0, matches("npm run test", "npm run build"));
-    assert_rule("npm test", 1, 2, "npm", "test");
-    assert_rule("pnpm run build", 1, 3, "pnpm", "run", "build");
-    assert_rule("yarn run build", 1, 3, "yarn", "run", "build");
-    assert_rule("yarn build", 1, 2, "yarn", "build");
+    assert_rule("npm test", 0, 2, "npm", "test");
+    assert_rule("npm run-script build", 0, 3, "npm", "run-script", "build");
+    assert_rule("pnpm run build", 0, 3, "pnpm", "run", "build");
+    assert_rule("pnpm run-script build", 0, 3, "pnpm", "run-script", "build");
+    assert_rule("yarn run build", 0, 3, "yarn", "run", "build");
+    assert_rule("yarn build", 0, 2, "yarn", "build");
 
     /* A runner with no script names nothing to pin the rule to. */
     TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("npm run"));
 }
 
 void test_make_rules_name_the_target(void) {
-    assert_rule("make test", 1, 2, "make", "test");
+    assert_rule("make test", 0, 2, "make", "test");
     TEST_ASSERT_EQUAL_INT(1, matches("make test", "make test"));
+
+    /* Global options don't change the target the rule names. */
+    assert_rule("make -j 4 -C build test", 0, 2, "make", "test");
+    TEST_ASSERT_EQUAL_INT(1, matches("make -j 4 -C build test", "make -j 4 -C build test"));
+    TEST_ASSERT_EQUAL_INT(1, matches("make test", "make -C build test"));
+    /* An option we can't classify still fails closed: -j4 is not -j 4. */
+    TEST_ASSERT_EQUAL_INT(0, matches("make test", "make -j4 test"));
+
     TEST_ASSERT_EQUAL_INT(0, matches("make test", "make -f e.mk test"));
     TEST_ASSERT_EQUAL_INT(0, matches("make test", "make SHELL=x test"));
     TEST_ASSERT_EQUAL_INT(0, matches("make test", "make install"));
@@ -171,7 +183,8 @@ void test_make_rules_name_the_target(void) {
     assert_rule("make", 0, 1, "make");
     TEST_ASSERT_EQUAL_INT(0, matches("make", "make install"));
 
-    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("make CC=gcc all"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_RUNS_CODE, status_of("make CC=gcc all"));
+    TEST_ASSERT_EQUAL_INT(0, matches("make test", "make test --fi=e.mk"));
     TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("make -f e.mk test"));
     TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("make --file=e.mk test"));
     TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("make --eval=x test"));
@@ -259,6 +272,12 @@ void test_destructive_flags_on_plain_commands_always_ask(void) {
     TEST_ASSERT_EQUAL_INT(1, always_ask("rm foo -rf x"));
     TEST_ASSERT_EQUAL_INT(0, matches("rm foo", "rm foo -rf x"));
 
+    /* getopt_long accepts abbreviated long options, so the check must too. */
+    TEST_ASSERT_EQUAL_INT(1, always_ask("rm foo --rec x"));
+    TEST_ASSERT_EQUAL_INT(0, matches("rm foo", "rm foo --rec x"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("tar -xf a.tar --to-com=sh"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("wget https://x --post-f=f"));
+
     TEST_ASSERT_EQUAL_INT(1, always_ask("curl https://x -o f"));
     TEST_ASSERT_EQUAL_INT(1, always_ask("curl https://x -O"));
     TEST_ASSERT_EQUAL_INT(1, always_ask("curl https://x --remote-name"));
@@ -296,13 +315,31 @@ void test_broad_rules_are_recognised(void) {
     const char *npm_run_build[] = { "npm", "run", "build" };
     const char *sudo[] = { "sudo" };
     const char *git_status[] = { "git", "status" };
+    const char *npm_x[] = { "npm", "x" };
+    const char *docker_run[] = { "docker", "run" };
+    const char *kubectl_exec[] = { "kubectl", "exec" };
+    const char *go_run[] = { "go", "run" };
+    const char *npm[] = { "npm" };
+    const char *docker[] = { "docker" };
+    const char *uv[] = { "uv" };
+    const char *git[] = { "git" };
+    const char *docker_ps[] = { "docker", "ps" };
 
     TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(python, 1));
     TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(usr_python, 1));
     TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(npm_run, 2));
     TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(sudo, 1));
+    TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(npm_x, 2));
+    TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(docker_run, 2));
+    TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(kubectl_exec, 2));
+    TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(go_run, 2));
+    TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(npm, 1));
+    TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(docker, 1));
+    TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(uv, 1));
     TEST_ASSERT_EQUAL_INT(0, shell_rule_is_broad(npm_run_build, 3));
     TEST_ASSERT_EQUAL_INT(0, shell_rule_is_broad(git_status, 2));
+    TEST_ASSERT_EQUAL_INT(0, shell_rule_is_broad(git, 1));
+    TEST_ASSERT_EQUAL_INT(0, shell_rule_is_broad(docker_ps, 2));
 }
 
 void test_never_broaden_commands_keep_two_token_rules(void) {

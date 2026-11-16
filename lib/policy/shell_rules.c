@@ -201,6 +201,7 @@ static const char *WRAPPER_SUBCOMMANDS[][2] = {
     {"npm", "x"}, {"npm", "exec"},
     {"pnpm", "dlx"}, {"pnpm", "exec"},
     {"yarn", "dlx"}, {"yarn", "exec"},
+    {"pnpm", "node"}, {"yarn", "node"},
     {"uv", "run"}, {"poetry", "run"}, {"pipx", "run"}, {"bundle", "exec"},
     {"docker", "run"}, {"docker", "exec"},
     {"kubectl", "run"}, {"kubectl", "exec"},
@@ -250,8 +251,10 @@ typedef struct {
 
 static const ScriptRunner SCRIPT_RUNNERS[] = {
     {"npm", "run", 1},
+    {"npm", "run-script", 1},
     {"npm", "test", 0},
     {"pnpm", "run", 1},
+    {"pnpm", "run-script", 1},
     {"yarn", "run", 1},
     {"yarn", NULL, 0},
     {"make", NULL, 0},
@@ -327,6 +330,16 @@ static int is_wrapper_subcommand(const CommandName *name, const char *subcommand
     for (int i = 0; WRAPPER_SUBCOMMANDS[i][0] != NULL; i++) {
         if (command_name_is(name, WRAPPER_SUBCOMMANDS[i][0]) &&
             strcmp(subcommand, WRAPPER_SUBCOMMANDS[i][1]) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* Whether any subcommand of the command runs whatever it is given. */
+static int has_wrapper_subcommands(const CommandName *name) {
+    for (int i = 0; WRAPPER_SUBCOMMANDS[i][0] != NULL; i++) {
+        if (command_name_is(name, WRAPPER_SUBCOMMANDS[i][0])) {
             return 1;
         }
     }
@@ -464,8 +477,9 @@ static int resolve_subcommand(const ParsedShellCommand *p, const SubcommandTool 
  * unresolved: scoped entries then match any subcommand, so the check fails
  * closed instead of waving a flag through.
  *
- * allow_abbrev accepts a shortened long option as the flag it shortens, which
- * is how git reads its options: "git reset --har" is "git reset --hard".
+ * allow_abbrev accepts a shortened long option as the flag it shortens, the way
+ * git and getopt_long read options: "git reset --har" is "git reset --hard".
+ * Commands that don't accept abbreviations only fail closed.
  */
 static const AlwaysAskFlag *match_always_ask(const CommandName *name,
                                              const char *subcommand,
@@ -609,8 +623,7 @@ int shell_has_always_ask_flag(const ParsedShellCommand *p, const char **out_flag
     if (tool != NULL) {
         subcommand_known = resolve_subcommand(p, tool, &subcommand, &detail) == 0;
     }
-    /* git accepts any unambiguous abbreviation of a long option, and spells some
-     * dangerous operations out across several tokens. */
+    /* git spells some dangerous operations out across several tokens. */
     int is_git = command_name_is(&name, "git");
 
     /* Flags that write files or run programs (find's actions, sed -i, --output)
@@ -625,7 +638,7 @@ int shell_has_always_ask_flag(const ParsedShellCommand *p, const char **out_flag
             continue;
         }
         const AlwaysAskFlag *hit = match_always_ask(&name, subcommand, subcommand_known,
-                                                   t, operands_only, is_git);
+                                                   t, operands_only, 1);
         const char *offender = t;
         if (hit == NULL && is_short_cluster(t)) {
             for (const char *c = t + 1; *c != '\0' && hit == NULL; c++) {
@@ -722,7 +735,7 @@ ShellRuleStatus shell_rule_from_parsed(const ParsedShellCommand *p, ShellRule *o
     if (tool != NULL && tool->assignments) {
         for (int i = 1; i < p->token_count; i++) {
             if (is_assignment(p->tokens[i])) {
-                return SHELL_RULE_WRAPPER;
+                return SHELL_RULE_RUNS_CODE;
             }
         }
     }
@@ -751,7 +764,10 @@ ShellRuleStatus shell_rule_from_parsed(const ParsedShellCommand *p, ShellRule *o
             tokens[2] = (char *)script;
             count = 3;
         }
-        return build_rule(out, tokens, count, 1) == 0 ? SHELL_RULE_OK
+        /* Matched against the rule the command derives, so the global options a
+         * runner takes (make -j4, make -C build) don't stop the rule covering
+         * the very command it was saved from. */
+        return build_rule(out, tokens, count, 0) == 0 ? SHELL_RULE_OK
                                                       : SHELL_RULE_UNSAFE_SYNTAX;
     }
 
@@ -803,9 +819,20 @@ int shell_rule_is_broad(const char *const *tokens, int count) {
         return 1;
     }
 
-    if (count == 2 && tokens[1] != NULL && command_name_in_list(&name, PACKAGE_MANAGERS)) {
-        return strcmp(tokens[1], "run") == 0 || strcmp(tokens[1], "exec") == 0 ||
-               strcmp(tokens[1], "test") == 0;
+    /* A bare tool entry covers its own command-running subcommands. */
+    if (count == 1) {
+        return command_name_in_list(&name, PACKAGE_MANAGERS) ||
+               has_wrapper_subcommands(&name);
+    }
+
+    if (count == 2 && tokens[1] != NULL) {
+        if (is_wrapper_subcommand(&name, tokens[1])) {
+            return 1;
+        }
+        if (command_name_in_list(&name, PACKAGE_MANAGERS)) {
+            return strcmp(tokens[1], "run") == 0 || strcmp(tokens[1], "exec") == 0 ||
+                   strcmp(tokens[1], "test") == 0;
+        }
     }
     return 0;
 }
