@@ -22,6 +22,53 @@ static ToolCall make_tool_call(const char *name, const char *arguments) {
 }
 
 /* =============================================================================
+ * tool_args_has_duplicate_keys Tests
+ * ========================================================================== */
+
+void test_tool_args_duplicate_top_level_key_detected(void) {
+    ToolCall tc = make_tool_call(
+        "shell", "{\"command\":\"git status\",\"command\":\"touch x\"}");
+
+    TEST_ASSERT_EQUAL(1, tool_args_has_duplicate_keys(&tc));
+}
+
+void test_tool_args_duplicate_key_detected_case_insensitively(void) {
+    ToolCall tc = make_tool_call(
+        "shell", "{\"command\":\"git status\",\"COMMAND\":\"touch x\"}");
+
+    TEST_ASSERT_EQUAL(1, tool_args_has_duplicate_keys(&tc));
+}
+
+void test_tool_args_duplicate_key_detected_when_nested(void) {
+    ToolCall object = make_tool_call(
+        "shell", "{\"opts\":{\"path\":\"a\",\"path\":\"b\"}}");
+    ToolCall in_array = make_tool_call(
+        "shell", "{\"edits\":[{\"path\":\"a\",\"path\":\"b\"}]}");
+
+    TEST_ASSERT_EQUAL(1, tool_args_has_duplicate_keys(&object));
+    TEST_ASSERT_EQUAL(1, tool_args_has_duplicate_keys(&in_array));
+}
+
+void test_tool_args_distinct_keys_are_not_duplicates(void) {
+    ToolCall tc = make_tool_call(
+        "shell", "{\"command\":\"git status\",\"working_dir\":\"/tmp\"}");
+    ToolCall siblings = make_tool_call(
+        "shell", "{\"a\":{\"path\":\"x\"},\"b\":{\"path\":\"y\"}}");
+
+    TEST_ASSERT_EQUAL(0, tool_args_has_duplicate_keys(&tc));
+    TEST_ASSERT_EQUAL(0, tool_args_has_duplicate_keys(&siblings));
+}
+
+void test_tool_args_has_duplicate_keys_null_safe(void) {
+    ToolCall invalid = make_tool_call("shell", "not json");
+    ToolCall no_args = make_tool_call("shell", NULL);
+
+    TEST_ASSERT_EQUAL(0, tool_args_has_duplicate_keys(NULL));
+    TEST_ASSERT_EQUAL(0, tool_args_has_duplicate_keys(&invalid));
+    TEST_ASSERT_EQUAL(0, tool_args_has_duplicate_keys(&no_args));
+}
+
+/* =============================================================================
  * tool_args_get_string Tests
  * ========================================================================== */
 
@@ -291,6 +338,13 @@ int main(void) {
     RUN_TEST(test_tool_args_get_string_null_arguments_returns_null);
     RUN_TEST(test_tool_args_get_string_invalid_json_returns_null);
     RUN_TEST(test_tool_args_get_string_non_string_value_returns_null);
+
+    /* tool_args_has_duplicate_keys tests */
+    RUN_TEST(test_tool_args_duplicate_top_level_key_detected);
+    RUN_TEST(test_tool_args_duplicate_key_detected_case_insensitively);
+    RUN_TEST(test_tool_args_duplicate_key_detected_when_nested);
+    RUN_TEST(test_tool_args_distinct_keys_are_not_duplicates);
+    RUN_TEST(test_tool_args_has_duplicate_keys_null_safe);
 
     /* tool_args_get_command tests */
     RUN_TEST(test_tool_args_get_command_returns_command);

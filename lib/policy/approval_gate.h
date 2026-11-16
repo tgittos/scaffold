@@ -257,6 +257,17 @@ ApprovalResult approval_gate_prompt(ApprovalGateConfig *config,
                                     ApprovedPath *out_path);
 
 /**
+ * Whether a call's arguments are malformed in a way no decision can survive:
+ * the same key twice in one object, at any nesting level. The gate reads the
+ * first value, the executors the last, so such a call is denied before any
+ * allowlist, prompt or review sees it. Prints a short reason.
+ *
+ * @param tool_call The tool call to inspect
+ * @return 1 if the call must be denied, 0 otherwise
+ */
+int approval_gate_rejects_arguments(const ToolCall *tool_call);
+
+/**
  * Combined check and prompt.
  * First checks if approval is needed, then prompts if required.
  *

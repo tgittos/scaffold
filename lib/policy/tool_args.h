@@ -14,6 +14,21 @@
 #include "../tools/tools_system.h"  /* For ToolCall */
 
 /**
+ * Whether the arguments JSON holds the same key twice in one object, at any
+ * nesting level.
+ *
+ * cJSON keeps both members and hands out the first, while the executors that
+ * re-parse the arguments (Python's json.loads) keep the last, so a call with a
+ * duplicate key can run something the gate never saw. Such a call is denied.
+ * Names are compared case-insensitively.
+ *
+ * @param tool_call The tool call
+ * @return 1 if a duplicate key is present, 0 otherwise (including unparseable
+ *         arguments, which no extractor reads either)
+ */
+int tool_args_has_duplicate_keys(const ToolCall *tool_call);
+
+/**
  * Get a string argument by key from a tool call's arguments JSON.
  *
  * @param tool_call The tool call

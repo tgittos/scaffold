@@ -365,7 +365,9 @@ int handle_subagent_approval_request(ApprovalGateConfig *config,
     ApprovalChannel *our_channel = (cbs && cbs->get_approval_channel)
                                  ? cbs->get_approval_channel()
                                  : NULL;
-    if (our_channel != NULL) {
+    if (approval_gate_rejects_arguments(&synthetic_call)) {
+        result = APPROVAL_DENIED;
+    } else if (our_channel != NULL) {
         DEBUG_PRINT("Nested subagent: forwarding request to grandparent");
         result = subagent_request_approval(our_channel, &synthetic_call, &approved_path);
     } else {

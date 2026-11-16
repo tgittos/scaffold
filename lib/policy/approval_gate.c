@@ -1671,6 +1671,22 @@ static int auto_review_allows(const ToolCall *tool_call, char **out_reason) {
     return 0;
 }
 
+/*
+ * A call whose arguments repeat a key is denied outright: the gate reads the
+ * first value of a duplicated key and the executors read the last, so nothing
+ * the gate decides about such a call describes what would run.
+ */
+int approval_gate_rejects_arguments(const ToolCall *tool_call) {
+    if (tool_call == NULL || !tool_args_has_duplicate_keys(tool_call)) {
+        return 0;
+    }
+    fprintf(stderr, "Denied %s: its arguments repeat a key.\n",
+            tool_call->name != NULL ? tool_call->name : "tool call");
+    LOG_WARN("approval gate: duplicate argument key in call to %s",
+             tool_call->name != NULL ? tool_call->name : "(unnamed)");
+    return 1;
+}
+
 ApprovalResult check_approval_gate(ApprovalGateConfig *config,
                                    const ToolCall *tool_call,
                                    ApprovedPath *out_path) {
@@ -1680,6 +1696,10 @@ ApprovalResult check_approval_gate(ApprovalGateConfig *config,
 
     if (out_path != NULL) {
         memset(out_path, 0, sizeof(*out_path));
+    }
+
+    if (approval_gate_rejects_arguments(tool_call)) {
+        return APPROVAL_DENIED;
     }
 
     if (is_rate_limited(config, tool_call)) {
@@ -1956,6 +1976,12 @@ ApprovalResult check_approval_gate_batch(ApprovalGateConfig *config,
     int any_denied = 0;
 
     for (int i = 0; i < count; i++) {
+        if (approval_gate_rejects_arguments(&tool_calls[i])) {
+            out_batch->results[i] = APPROVAL_DENIED;
+            any_denied = 1;
+            continue;
+        }
+
         if (is_rate_limited(config, &tool_calls[i])) {
             out_batch->results[i] = APPROVAL_RATE_LIMITED;
             any_rate_limited = 1;

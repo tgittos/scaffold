@@ -2582,6 +2582,64 @@ void test_in_project_write_allowed_in_auto_mode(void) {
     TEST_ASSERT_EQUAL(APPROVAL_ALLOWED, check_approval_gate(&config, &call, &path));
 }
 
+void test_duplicate_argument_keys_deny_shell_call(void) {
+    /* The gate reads the first "command", the executor the last, so a call
+     * carrying both is denied before any rule can cover it. */
+    const char *status[] = {"git", "status"};
+    approval_gate_add_shell_allowlist(&config, status, 2, SHELL_TYPE_UNKNOWN);
+    config.is_interactive = 0;
+
+    ToolCall duplicated = shell_call(
+        "{\"command\": \"git status\", \"command\": \"touch /tmp/pwned_dup\"}");
+    ToolCall plain = shell_call("{\"command\": \"git status\"}");
+    ApprovedPath path;
+
+    TEST_ASSERT_EQUAL(APPROVAL_DENIED, check_approval_gate(&config, &duplicated, &path));
+    TEST_ASSERT_EQUAL(APPROVAL_ALLOWED, check_approval_gate(&config, &plain, &path));
+}
+
+void test_duplicate_working_dir_denies_shell_call(void) {
+    const char *make[] = {"make", "test"};
+    approval_gate_add_shell_allowlist(&config, make, 2, SHELL_TYPE_UNKNOWN);
+    config.is_interactive = 0;
+
+    ToolCall duplicated = shell_call(
+        "{\"command\": \"make test\", \"working_dir\": \"/\", \"working_dir\": \"/tmp\"}");
+    ApprovedPath path;
+
+    TEST_ASSERT_EQUAL(APPROVAL_DENIED, check_approval_gate(&config, &duplicated, &path));
+}
+
+void test_duplicate_path_denies_write_in_auto_mode(void) {
+    config.is_interactive = 0;
+    config.auto_mode = 1;
+
+    ToolCall duplicated = { .id = "c", .name = "write_file",
+                            .arguments = "{\"path\": \"src/a.c\", \"content\": \"x\","
+                                         " \"path\": \"/etc/profile\"}" };
+    ApprovedPath path;
+
+    TEST_ASSERT_EQUAL(APPROVAL_DENIED, check_approval_gate(&config, &duplicated, &path));
+}
+
+void test_duplicate_argument_keys_deny_batch_call(void) {
+    const char *status[] = {"git", "status"};
+    approval_gate_add_shell_allowlist(&config, status, 2, SHELL_TYPE_UNKNOWN);
+    config.is_interactive = 0;
+
+    ToolCall calls[2] = {
+        shell_call("{\"command\": \"git status\"}"),
+        shell_call("{\"command\": \"git status\", \"command\": \"touch /tmp/pwned\"}")
+    };
+    ApprovalBatchResult batch;
+
+    TEST_ASSERT_EQUAL(APPROVAL_DENIED,
+                      check_approval_gate_batch(&config, calls, 2, &batch));
+    TEST_ASSERT_EQUAL(APPROVAL_ALLOWED, batch.results[0]);
+    TEST_ASSERT_EQUAL(APPROVAL_DENIED, batch.results[1]);
+    free_batch_result(&batch);
+}
+
 void test_auto_mode_loaded_from_config(void) {
     approval_gate_cleanup(&config);
     FILE *f = create_test_config();
@@ -2859,6 +2917,10 @@ int main(void) {
     RUN_TEST(test_in_project_write_gated_without_auto_mode);
     RUN_TEST(test_in_project_write_allowed_in_auto_mode);
     RUN_TEST(test_auto_mode_loaded_from_config);
+    RUN_TEST(test_duplicate_argument_keys_deny_shell_call);
+    RUN_TEST(test_duplicate_working_dir_denies_shell_call);
+    RUN_TEST(test_duplicate_path_denies_write_in_auto_mode);
+    RUN_TEST(test_duplicate_argument_keys_deny_batch_call);
     RUN_TEST(test_check_approval_gate_non_interactive_allowed_category);
     RUN_TEST(test_check_approval_gate_non_interactive_allow_category_override);
     RUN_TEST(test_check_approval_gate_batch_non_interactive);
