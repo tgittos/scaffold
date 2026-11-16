@@ -1463,13 +1463,33 @@ void test_shell_allowlist_refuses_protected_file_operands(void) {
     ToolCall dotenv = shell_call("{\"command\": \"cat .env\"}");
     ToolCall nested = shell_call("{\"command\": \"cat lib/.env.local\"}");
     ToolCall option_value = shell_call("{\"command\": \"cat --file=.env\"}");
-    ToolCall braced = shell_call("{\"command\": \"cat .{env,x}\"}");
+    ToolCall option_ref = shell_call("{\"command\": \"cat --file=HEAD:.env\"}");
 
     TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &notes));
     TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &dotenv));
     TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &nested));
     TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &option_value));
-    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &braced));
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &option_ref));
+}
+
+void test_shell_allowlist_refuses_only_brace_expansion(void) {
+    /* Braces a shell would expand hide which file the command reads. */
+    const char *cat[] = {"cat"};
+    approval_gate_add_shell_allowlist(&config, cat, 1, SHELL_TYPE_UNKNOWN);
+    ToolCall list = shell_call("{\"command\": \"cat .{env,x}\"}");
+    ToolCall range = shell_call("{\"command\": \"cat .{a..c}\"}");
+
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &list));
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &range));
+
+    /* Braces in a quoted program are just text. */
+    ToolCall awk_program = shell_call("{\"command\": \"awk '{print}' f\"}");
+    ToolCall sed_program = shell_call("{\"command\": \"sed '1{p}' f\"}");
+
+    TEST_ASSERT_EQUAL(0, approval_gate_allow_always(&config, &awk_program));
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &awk_program));
+    TEST_ASSERT_EQUAL(0, approval_gate_allow_always(&config, &sed_program));
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &sed_program));
 }
 
 void test_shell_allowlist_refuses_protected_file_after_ref(void) {
@@ -2721,6 +2741,7 @@ int main(void) {
     RUN_TEST(test_preview_always_labels_the_rule_it_would_save);
     RUN_TEST(test_shell_allowlist_config_rules_keep_prefix_semantics);
     RUN_TEST(test_shell_allowlist_refuses_protected_file_operands);
+    RUN_TEST(test_shell_allowlist_refuses_only_brace_expansion);
     RUN_TEST(test_shell_allowlist_refuses_protected_file_after_ref);
     RUN_TEST(test_shell_allowlist_refuses_glob_that_expands_to_protected_file);
     RUN_TEST(test_auto_mode_skips_broad_shell_rules);

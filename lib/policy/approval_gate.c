@@ -1231,22 +1231,41 @@ static int match_regex_allowlist(const ApprovalGateConfig *config,
 }
 
 /*
- * Whether a token names a protected file: directly, after the "REF:" of
- * "HEAD:.env" or the "=" of "--file=.env", or through a pattern that expands to
- * one in the working directory. Brace expansion isn't expanded here, so a token
- * carrying one is refused outright.
+ * Whether a token carries a brace expansion the shell would turn into several
+ * words: a "{" with a "," or ".." before its "}". A quoted program such as
+ * awk's "{print}" or sed's "1{p}" is just text.
+ */
+static int has_brace_expansion(const char *token) {
+    for (const char *open = strchr(token, '{'); open != NULL;
+         open = strchr(open + 1, '{')) {
+        for (const char *p = open + 1; *p != '\0' && *p != '{' && *p != '}'; p++) {
+            if (*p == ',' || (p[0] == '.' && p[1] == '.')) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+/*
+ * Whether a token names a protected file: directly, after any ":" or "=" that
+ * precedes a path ("HEAD:.env", "--file=HEAD:.env"), or through a pattern that
+ * expands to one in the working directory. Brace expansion isn't expanded here,
+ * so a token carrying one is refused outright.
  */
 static int token_names_protected_file(const char *token) {
     if (is_protected_file(token)) {
         return 1;
     }
 
-    const char *after_ref = strpbrk(token, ":=");
-    if (after_ref != NULL && after_ref[1] != '\0' && is_protected_file(after_ref + 1)) {
-        return 1;
+    for (const char *part = strpbrk(token, ":="); part != NULL;
+         part = strpbrk(part + 1, ":=")) {
+        if (part[1] != '\0' && is_protected_file(part + 1)) {
+            return 1;
+        }
     }
 
-    if (strchr(token, '{') != NULL) {
+    if (has_brace_expansion(token)) {
         return 1;
     }
 
@@ -1254,8 +1273,14 @@ static int token_names_protected_file(const char *token) {
         return 0;
     }
     glob_t expanded;
-    if (glob(token, 0, NULL, &expanded) != 0) {
+    int rc = glob(token, 0, NULL, &expanded);
+    if (rc == GLOB_NOMATCH) {
         return 0;
+    }
+    if (rc != 0) {
+        /* Out of memory or an unreadable directory: we can't tell what the
+         * pattern covers, so treat it as covering a protected file. */
+        return 1;
     }
     int protected_match = 0;
     for (size_t i = 0; i < expanded.gl_pathc && !protected_match; i++) {

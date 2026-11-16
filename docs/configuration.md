@@ -241,7 +241,7 @@ A shell rule saved by `a` is the command name plus, for tools with subcommands (
 
 What a rule never covers:
 
-- A flag that changes what the command does: `git push --force` (including abbreviations git accepts, such as `--forc`), `git push origin +main`, `git push --mirror`, `git branch -d`, `git tag -f`, `git clean --force`, `sed -i`, `find -delete`, `rm -r`, `curl -o`, `wget -O`, `tar --to-command`, `make -f`, `--output`.
+- A flag that changes what the command does, including an abbreviated long option, which is accepted for every command (`git push --forc`, `rm --rec`, `tar --to-com`): `git push --force`, `git push origin +main`, `git push --mirror`, `git branch -d`, `git tag -f`, `git clean --force`, `sed -i`, `find -delete`, `rm -r`, `curl -o`, `wget -O`, `tar --to-command`, `make -f`, `--output`.
 - A subcommand that runs arbitrary code or can't be undone: `git config`, `git rebase`, `git checkout`, `git restore`, `git reset`, `git clean`, `git stash`, `git filter-branch`, `git submodule`, `git worktree`, `docker build`, `docker compose`, `kubectl apply`, `kubectl delete`, and every `gh` subcommand.
 - A command that runs another command: `sudo`, `env`, `xargs`, `timeout`, `time`, `watch`, `parallel`, `npx`, `bunx`, `uvx`, `eval`, `sh -c`, `dash`, `go run`, `npm exec`, `uv run`, `poetry run`, `bundle exec`, `docker run`, `kubectl exec`, or any command with a `VAR=value` prefix, or a `VAR=value` argument to `make`.
 - An operand that names a protected file, directly (`cat .env`), through a pattern (`cat .en?`) or after a revision (`git show HEAD:.env`).

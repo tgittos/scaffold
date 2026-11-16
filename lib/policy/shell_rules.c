@@ -825,11 +825,13 @@ int shell_rule_is_broad(const char *const *tokens, int count) {
                has_wrapper_subcommands(&name);
     }
 
-    if (count == 2 && tokens[1] != NULL) {
+    if (tokens[1] != NULL) {
+        /* Naming what the wrapper runs doesn't narrow the entry: it still
+         * matches every flag and operand that follows. */
         if (is_wrapper_subcommand(&name, tokens[1])) {
             return 1;
         }
-        if (command_name_in_list(&name, PACKAGE_MANAGERS)) {
+        if (count == 2 && command_name_in_list(&name, PACKAGE_MANAGERS)) {
             return strcmp(tokens[1], "run") == 0 || strcmp(tokens[1], "exec") == 0 ||
                    strcmp(tokens[1], "test") == 0;
         }

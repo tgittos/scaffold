@@ -324,6 +324,8 @@ void test_broad_rules_are_recognised(void) {
     const char *uv[] = { "uv" };
     const char *git[] = { "git" };
     const char *docker_ps[] = { "docker", "ps" };
+    const char *docker_run_alpine[] = { "docker", "run", "alpine" };
+    const char *npm_exec_prettier[] = { "npm", "exec", "prettier" };
 
     TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(python, 1));
     TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(usr_python, 1));
@@ -340,6 +342,11 @@ void test_broad_rules_are_recognised(void) {
     TEST_ASSERT_EQUAL_INT(0, shell_rule_is_broad(git_status, 2));
     TEST_ASSERT_EQUAL_INT(0, shell_rule_is_broad(git, 1));
     TEST_ASSERT_EQUAL_INT(0, shell_rule_is_broad(docker_ps, 2));
+
+    /* Naming what the wrapper runs doesn't narrow it: the rule still matches
+     * any flags and operands that follow. */
+    TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(docker_run_alpine, 3));
+    TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(npm_exec_prettier, 3));
 }
 
 void test_never_broaden_commands_keep_two_token_rules(void) {
