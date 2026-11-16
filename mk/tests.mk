@@ -34,6 +34,7 @@ endef
 # =============================================================================
 
 $(eval $(call def_test,cli_flags,ralph/test_cli_flags,))
+$(eval $(call def_test,read_tool_guidance,agent/test_read_tool_guidance,))
 $(eval $(call def_test,interrupt,ralph/test_interrupt,$(LIBDIR)/util/interrupt.c))
 $(eval $(call def_test,async_executor,ralph/test_async_executor,$(LIBDIR)/agent/async_executor.c $(LIBDIR)/util/interrupt.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/util/log.c $(LIBDIR)/ipc/pipe_notifier.c $(TESTDIR)/stubs/ralph_stub.c))
 $(eval $(call def_test,pipe_notifier,utils/test_pipe_notifier,$(LIBDIR)/ipc/pipe_notifier.c))
@@ -94,6 +95,9 @@ $(eval $(call def_test,approval_gate_integration,policy/test_approval_gate_integ
 
 $(TEST_cli_flags_TARGET): $(TEST_cli_flags_OBJECTS) $(BUILDDIR)/.scaffold-linked
 	$(CC) -o $@ $(TEST_cli_flags_OBJECTS)
+
+$(TEST_read_tool_guidance_TARGET): $(TEST_read_tool_guidance_OBJECTS)
+	$(CC) -o $@ $(TEST_read_tool_guidance_OBJECTS)
 
 $(TEST_interrupt_TARGET): $(TEST_interrupt_OBJECTS)
 	$(CC) -o $@ $(TEST_interrupt_OBJECTS)
