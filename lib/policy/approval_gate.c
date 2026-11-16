@@ -5,6 +5,7 @@
 #include "auto_approve.h"
 #include "gate_prompter.h"
 #include "pattern_generator.h"
+#include "protected_files.h"
 #include "shell_parser.h"
 #include "shell_rules.h"
 #include "subagent_approval.h"
@@ -14,6 +15,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <glob.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1228,6 +1230,46 @@ static int match_regex_allowlist(const ApprovalGateConfig *config,
     return 0;
 }
 
+/*
+ * Whether a token names a protected file: directly, after the "REF:" of
+ * "HEAD:.env", or through a pattern that expands to one in the working
+ * directory.
+ */
+static int token_names_protected_file(const char *token) {
+    if (is_protected_file(token)) {
+        return 1;
+    }
+
+    const char *after_ref = strchr(token, ':');
+    if (after_ref != NULL && after_ref[1] != '\0' && is_protected_file(after_ref + 1)) {
+        return 1;
+    }
+
+    if (strpbrk(token, "*?[") == NULL) {
+        return 0;
+    }
+    glob_t expanded;
+    if (glob(token, 0, NULL, &expanded) != 0) {
+        return 0;
+    }
+    int protected_match = 0;
+    for (size_t i = 0; i < expanded.gl_pathc && !protected_match; i++) {
+        protected_match = is_protected_file(expanded.gl_pathv[i]);
+    }
+    globfree(&expanded);
+    return protected_match;
+}
+
+/* An allowlisted command still asks when it names a protected file. */
+static int command_names_protected_file(const ParsedShellCommand *parsed) {
+    for (int i = 1; i < parsed->token_count; i++) {
+        if (token_names_protected_file(parsed->tokens[i])) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static int segment_matches_shell_allowlist(const ApprovalGateConfig *config,
                                            const char *segment,
                                            ShellType type) {
@@ -1237,7 +1279,8 @@ static int segment_matches_shell_allowlist(const ApprovalGateConfig *config,
     }
 
     const char *base_cmd = shell_command_get_base(parsed);
-    if (!shell_command_is_safe_for_matching(parsed) || base_cmd == NULL) {
+    if (!shell_command_is_safe_for_matching(parsed) || base_cmd == NULL ||
+        command_names_protected_file(parsed)) {
         free_parsed_shell_command(parsed);
         return 0;
     }
@@ -1247,6 +1290,14 @@ static int segment_matches_shell_allowlist(const ApprovalGateConfig *config,
         const ShellAllowEntry *entry = &config->shell_allowlist[i];
 
         if (entry->prefix_len <= 0 || entry->command_prefix == NULL) {
+            continue;
+        }
+
+        /* An entry that covers whatever it is given would, in --auto, stand in
+         * for the model review; let the review see those calls instead. */
+        if (config->auto_mode &&
+            shell_rule_is_broad((const char *const *)entry->command_prefix,
+                                entry->prefix_len)) {
             continue;
         }
 

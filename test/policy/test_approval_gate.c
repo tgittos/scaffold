@@ -1455,6 +1455,85 @@ void test_preview_always_labels_the_rule_it_would_save(void) {
     free(label);
 }
 
+void test_shell_allowlist_refuses_protected_file_operands(void) {
+    const char *cat[] = {"cat"};
+    approval_gate_add_shell_allowlist(&config, cat, 1, SHELL_TYPE_UNKNOWN);
+
+    ToolCall notes = shell_call("{\"command\": \"cat notes.txt\"}");
+    ToolCall dotenv = shell_call("{\"command\": \"cat .env\"}");
+    ToolCall nested = shell_call("{\"command\": \"cat lib/.env.local\"}");
+
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &notes));
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &dotenv));
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &nested));
+}
+
+void test_shell_allowlist_refuses_protected_file_after_ref(void) {
+    ToolCall show = shell_call("{\"command\": \"git show HEAD\"}");
+    ToolCall show_env = shell_call("{\"command\": \"git show HEAD:.env\"}");
+
+    TEST_ASSERT_EQUAL(0, approval_gate_allow_always(&config, &show));
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &show));
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &show_env));
+}
+
+void test_shell_allowlist_refuses_glob_that_expands_to_protected_file(void) {
+    char dir[] = "/tmp/test_gate_globXXXXXX";
+    TEST_ASSERT_NOT_NULL(mkdtemp(dir));
+    char env_path[256];
+    snprintf(env_path, sizeof(env_path), "%s/.env", dir);
+    FILE *f = fopen(env_path, "w");
+    TEST_ASSERT_NOT_NULL(f);
+    fclose(f);
+
+    char cwd[1024];
+    TEST_ASSERT_NOT_NULL(getcwd(cwd, sizeof(cwd)));
+    TEST_ASSERT_EQUAL(0, chdir(dir));
+
+    const char *cat[] = {"cat"};
+    approval_gate_add_shell_allowlist(&config, cat, 1, SHELL_TYPE_UNKNOWN);
+    ToolCall globbed = shell_call("{\"command\": \"cat .en?\"}");
+    int matched = approval_gate_matches_allowlist(&config, &globbed);
+
+    TEST_ASSERT_EQUAL(0, chdir(cwd));
+    unlink(env_path);
+    rmdir(dir);
+
+    TEST_ASSERT_EQUAL(0, matched);
+}
+
+void test_auto_mode_skips_broad_shell_rules(void) {
+    const char *python[] = {"python"};
+    const char *npm_run[] = {"npm", "run"};
+    approval_gate_add_shell_allowlist(&config, python, 1, SHELL_TYPE_UNKNOWN);
+    approval_gate_add_shell_allowlist(&config, npm_run, 2, SHELL_TYPE_UNKNOWN);
+
+    ToolCall script = shell_call("{\"command\": \"python tool.py\"}");
+    ToolCall npm_build = shell_call("{\"command\": \"npm run build\"}");
+
+    config.auto_mode = 0;
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &script));
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &npm_build));
+
+    config.auto_mode = 1;
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &script));
+    TEST_ASSERT_EQUAL(0, approval_gate_matches_allowlist(&config, &npm_build));
+}
+
+void test_auto_mode_keeps_narrow_shell_rules(void) {
+    const char *npm_run_build[] = {"npm", "run", "build"};
+    const char *git_status[] = {"git", "status"};
+    approval_gate_add_shell_allowlist(&config, npm_run_build, 3, SHELL_TYPE_UNKNOWN);
+    approval_gate_add_shell_allowlist(&config, git_status, 2, SHELL_TYPE_UNKNOWN);
+    config.auto_mode = 1;
+
+    ToolCall npm_build = shell_call("{\"command\": \"npm run build\"}");
+    ToolCall status = shell_call("{\"command\": \"git status -s\"}");
+
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &npm_build));
+    TEST_ASSERT_EQUAL(1, approval_gate_matches_allowlist(&config, &status));
+}
+
 void test_shell_allowlist_config_rules_keep_prefix_semantics(void) {
     const char *status[] = {"git", "status"};
     const char *force[] = {"git", "push", "--force"};
@@ -2617,6 +2696,11 @@ int main(void) {
     RUN_TEST(test_preview_always_reports_no_rule_for_substitution);
     RUN_TEST(test_preview_always_labels_the_rule_it_would_save);
     RUN_TEST(test_shell_allowlist_config_rules_keep_prefix_semantics);
+    RUN_TEST(test_shell_allowlist_refuses_protected_file_operands);
+    RUN_TEST(test_shell_allowlist_refuses_protected_file_after_ref);
+    RUN_TEST(test_shell_allowlist_refuses_glob_that_expands_to_protected_file);
+    RUN_TEST(test_auto_mode_skips_broad_shell_rules);
+    RUN_TEST(test_auto_mode_keeps_narrow_shell_rules);
     RUN_TEST(test_allow_always_stores_non_shell_pattern);
     RUN_TEST(test_classify_key_always_requires_saveable);
     RUN_TEST(test_classify_key_other_keys_unaffected);

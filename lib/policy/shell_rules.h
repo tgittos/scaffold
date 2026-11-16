@@ -7,18 +7,24 @@
  * Shell allow rules created by pressing "a" at the approval prompt.
  *
  * A rule is the command name plus, for tools that have subcommands (git,
- * docker, make, ...), the subcommand. Matching ignores flag order and global
+ * docker, kubectl, ...), the subcommand. Matching ignores flag order and global
  * options, so a rule saved from "git -C lib show HEAD" still matches
  * "git show --stat". Flags that change what a command does (--force, -delete,
  * ...) never create a rule and never match one.
  *
- * Commands that run other programs (sudo, xargs, bash -c) can't be saved at
- * all; commands whose rule must not broaden (interpreters, curl, rm) keep the
- * old two-token rule with prefix matching.
+ * Commands that run other programs (sudo, xargs, bash -c, npm exec) can't be
+ * saved at all, nor can subcommands that run arbitrary code or can't be undone
+ * (git config, git reset, docker build); commands whose rule must not broaden
+ * (interpreters, curl, rm) and script runners (npm run, make) keep a narrow
+ * rule that names the script or target, matched by prefix.
+ *
+ * Commands are looked up by their base name with any version suffix removed,
+ * so "/usr/bin/python3.12" is classified as "python"; a saved rule keeps the
+ * tokens as the user typed them.
  *
  * Related headers:
  * - shell_parser.h: parses the command this module classifies
- *  */
+ */
 
 typedef struct {
     char **tokens;     /* ["grep"] or ["git","show"] or, for never-broaden, ["python","foo.py"] */
@@ -32,7 +38,9 @@ typedef enum {
     SHELL_RULE_REDIRECT,          /* writes to a file */
     SHELL_RULE_ALWAYS_ASK_FLAG,   /* e.g. --force */
     SHELL_RULE_WRAPPER,           /* sudo, env, xargs, nohup, timeout, nice, sh -c */
-    SHELL_RULE_UNKNOWN_GLOBAL_OPT /* option before subcommand we can't classify */
+    SHELL_RULE_UNKNOWN_GLOBAL_OPT,/* option before subcommand we can't classify */
+    SHELL_RULE_RUNS_CODE,         /* git config, docker build, gh */
+    SHELL_RULE_IRREVERSIBLE       /* git reset, git stash, kubectl delete */
 } ShellRuleStatus;
 
 /**
@@ -85,6 +93,19 @@ const char *shell_rule_status_reason(ShellRuleStatus s);
  * @return Allocated string, or NULL on error. Caller must free.
  */
 char *shell_rule_label(const ShellRule *rule);
+
+/**
+ * Check whether a rule's tokens cover too much to stand in for a model review.
+ *
+ * Broad rules name a command that runs whatever it is given: an interpreter or
+ * wrapper, or a package manager's run/exec/test with no script named. In
+ * --auto such an entry is skipped so the call reaches the review.
+ *
+ * @param tokens The rule's tokens
+ * @param count Number of tokens
+ * @return 1 if the rule is too broad, 0 otherwise
+ */
+int shell_rule_is_broad(const char *const *tokens, int count);
 
 /**
  * Free a rule's tokens and reset it. NULL safe.

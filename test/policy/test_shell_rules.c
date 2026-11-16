@@ -78,8 +78,104 @@ void test_subcommand_rule_skips_global_options(void) {
     assert_rule("git --git-dir=/x/.git status", 0, 2, "git", "status");
     assert_rule("docker --context remote ps", 0, 2, "docker", "ps");
     assert_rule("kubectl -n kube-system get pods", 0, 2, "kubectl", "get");
-    assert_rule("make -j 4 -C build test", 0, 2, "make", "test");
-    assert_rule("make CC=gcc all", 0, 2, "make", "all");
+}
+
+void test_table_lookups_use_the_base_name(void) {
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("/usr/bin/git push --force"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_RUNS_CODE, status_of("/usr/bin/git config user.name x"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("/usr/local/bin/docker run x"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("/usr/bin/time ls"));
+
+    /* The saved tokens stay as the user typed them. */
+    assert_rule("/usr/bin/git show HEAD", 0, 2, "/usr/bin/git", "show");
+}
+
+void test_code_running_subcommands_are_unsaveable(void) {
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_RUNS_CODE, status_of("git config user.name x"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_RUNS_CODE, status_of("git rebase main"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_RUNS_CODE, status_of("git filter-branch"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_RUNS_CODE, status_of("git submodule update"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_RUNS_CODE, status_of("git worktree list"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_RUNS_CODE, status_of("docker build ."));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_RUNS_CODE, status_of("docker compose up"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_RUNS_CODE, status_of("gh pr list"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_RUNS_CODE, status_of("gh"));
+
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_IRREVERSIBLE, status_of("git checkout main"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_IRREVERSIBLE, status_of("git restore lib"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_IRREVERSIBLE, status_of("git reset HEAD~1"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_IRREVERSIBLE, status_of("git clean -n"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_IRREVERSIBLE, status_of("git stash pop"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_IRREVERSIBLE, status_of("kubectl apply -f x.yaml"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_IRREVERSIBLE, status_of("kubectl delete pod x"));
+
+    /* Harmless subcommands of the same tools still save a rule. */
+    assert_rule("docker ps", 0, 2, "docker", "ps");
+    assert_rule("git log --oneline", 0, 2, "git", "log");
+}
+
+void test_command_runners_are_wrappers(void) {
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("docker run x"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("docker exec c ls"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("kubectl exec pod -- ls"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("kubectl run x --image y"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("npm x prettier"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("pnpm exec prettier"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("yarn exec prettier"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("uv run pytest"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("poetry run pytest"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("pipx run black"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("bundle exec rspec"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("bunx prettier"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("uvx ruff"));
+
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("time ls"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("command ls"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("builtin cd x"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("stdbuf -o0 ls"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("chroot /x ls"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("watch ls"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("strace ls"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("flock /tmp/l ls"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("parallel ls"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("setsid ls"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("script out.txt"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("dash x.sh"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("ksh x.sh"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("fish x.fish"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("csh x.csh"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("tcsh x.csh"));
+}
+
+void test_script_rules_name_the_script(void) {
+    assert_rule("npm run test", 1, 3, "npm", "run", "test");
+    TEST_ASSERT_EQUAL_INT(1, matches("npm run test", "npm run test -- -w"));
+    TEST_ASSERT_EQUAL_INT(0, matches("npm run test", "npm run build"));
+    assert_rule("npm test", 1, 2, "npm", "test");
+    assert_rule("pnpm run build", 1, 3, "pnpm", "run", "build");
+    assert_rule("yarn run build", 1, 3, "yarn", "run", "build");
+    assert_rule("yarn build", 1, 2, "yarn", "build");
+
+    /* A runner with no script names nothing to pin the rule to. */
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("npm run"));
+}
+
+void test_make_rules_name_the_target(void) {
+    assert_rule("make test", 1, 2, "make", "test");
+    TEST_ASSERT_EQUAL_INT(1, matches("make test", "make test"));
+    TEST_ASSERT_EQUAL_INT(0, matches("make test", "make -f e.mk test"));
+    TEST_ASSERT_EQUAL_INT(0, matches("make test", "make SHELL=x test"));
+    TEST_ASSERT_EQUAL_INT(0, matches("make test", "make install"));
+
+    /* A bare make covers only a bare make. */
+    assert_rule("make", 0, 1, "make");
+    TEST_ASSERT_EQUAL_INT(0, matches("make", "make install"));
+
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("make CC=gcc all"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("make -f e.mk test"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("make --file=e.mk test"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("make --eval=x test"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("make -E x test"));
 }
 
 void test_unknown_global_option_is_unsaveable(void) {
@@ -118,8 +214,95 @@ void test_tokens_after_double_dash_are_operands(void) {
 void test_never_broaden_commands_with_option_payloads_are_unsaveable(void) {
     TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("python -c 'x'"));
     TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("node -e 'x'"));
-    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("curl -o f url"));
-    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("rm -f x"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("curl -o f url"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("rm -f x"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("ssh -t host ls"));
+}
+
+void test_git_always_ask_additions(void) {
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("git push origin --mirror"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("git push origin --prune"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("git branch -d merged"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("git branch --delete merged"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("git branch -m new"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("git branch -M new"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("git branch --move new"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("git branch -c copy"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("git branch -C copy"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("git tag -d v1"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("git tag --delete v1"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("git tag -f v1"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("git tag --force v1"));
+
+    /* Reading branches and tags still saves a rule. */
+    assert_rule("git branch --list", 0, 2, "git", "branch");
+    assert_rule("git tag --list", 0, 2, "git", "tag");
+}
+
+void test_git_long_option_abbreviations_always_ask(void) {
+    TEST_ASSERT_EQUAL_INT(1, always_ask("git reset --har"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("git grep --open=x foo"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("git push --forc origin main"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("git push --mir origin"));
+
+    /* Options that abbreviate nothing dangerous still pass. */
+    TEST_ASSERT_EQUAL_INT(0, always_ask("git log --oneline"));
+    TEST_ASSERT_EQUAL_INT(0, always_ask("git push origin main"));
+    TEST_ASSERT_EQUAL_INT(0, always_ask("git push origin main -- -f"));
+}
+
+void test_destructive_flags_on_plain_commands_always_ask(void) {
+    TEST_ASSERT_EQUAL_INT(1, always_ask("rm -r dir"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("rm -R dir"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("rm --recursive dir"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("rm --force x"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("rm foo -rf x"));
+    TEST_ASSERT_EQUAL_INT(0, matches("rm foo", "rm foo -rf x"));
+
+    TEST_ASSERT_EQUAL_INT(1, always_ask("curl https://x -o f"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("curl https://x -O"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("curl https://x --remote-name"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("curl https://x -T f"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("curl https://x --upload-file f"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("curl https://x -K cfg"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("curl https://x --config cfg"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("curl https://x --next https://y"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("curl https://x -d name=1"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("curl https://x --data-binary @f"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("curl https://x -F f=@g"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("curl https://x --form f=@g"));
+    TEST_ASSERT_EQUAL_INT(0, matches("curl https://x", "curl https://x -o f"));
+
+    TEST_ASSERT_EQUAL_INT(1, always_ask("wget https://x -O f"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("wget https://x --output-document f"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("wget https://x -P dir"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("wget https://x --post-file f"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("wget https://x --post-data x=1"));
+
+    TEST_ASSERT_EQUAL_INT(1, always_ask("tar -xf a.tar --to-command cat"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("tar -xf a.tar --use-compress-program cat"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("tar -I cat -xf a.tar"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("tar -xf a.tar --checkpoint-action exec=x"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("tar -xf a.tar --info-script x.sh"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("tar -xf a.tar -F x.sh"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("tar -xf a.tar --new-volume-script x.sh"));
+    TEST_ASSERT_EQUAL_INT(0, always_ask("tar -tf a.tar"));
+}
+
+void test_broad_rules_are_recognised(void) {
+    const char *python[] = { "python" };
+    const char *usr_python[] = { "/usr/bin/python3" };
+    const char *npm_run[] = { "npm", "run" };
+    const char *npm_run_build[] = { "npm", "run", "build" };
+    const char *sudo[] = { "sudo" };
+    const char *git_status[] = { "git", "status" };
+
+    TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(python, 1));
+    TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(usr_python, 1));
+    TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(npm_run, 2));
+    TEST_ASSERT_EQUAL_INT(1, shell_rule_is_broad(sudo, 1));
+    TEST_ASSERT_EQUAL_INT(0, shell_rule_is_broad(npm_run_build, 3));
+    TEST_ASSERT_EQUAL_INT(0, shell_rule_is_broad(git_status, 2));
 }
 
 void test_never_broaden_commands_keep_two_token_rules(void) {
@@ -199,7 +382,8 @@ void test_git_grep_pager_flags_always_ask(void) {
     TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG,
                           status_of("git grep --open-files-in-pager foo"));
 
-    /* The pager flags also stop read-only auto-approve. */
+    /* The flags count wherever they appear, so the check also sees them on a
+     * command whose rule was already refused for another reason. */
     TEST_ASSERT_EQUAL_INT(1, always_ask("git grep -Otouch foo"));
     TEST_ASSERT_EQUAL_INT(1, always_ask("git grep -O touch foo"));
     TEST_ASSERT_EQUAL_INT(1, always_ask("git grep --open-files-in-pager=touch foo"));
@@ -250,16 +434,12 @@ void test_code_running_commands_never_broaden(void) {
     TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("pnpm dlx prettier"));
     TEST_ASSERT_EQUAL_INT(SHELL_RULE_WRAPPER, status_of("yarn dlx prettier"));
 
-    /* Script runners that name a package script keep their subcommand rule. */
-    assert_rule("npm run build", 0, 2, "npm", "run");
-    assert_rule("npm test", 0, 2, "npm", "test");
+    /* Script runners name the script they run: see test_script_rules_name_the_script. */
     assert_rule("go build ./...", 0, 2, "go", "build");
 }
 
 void test_always_ask_spelling_variants(void) {
     TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("git clean --force -dx"));
-    TEST_ASSERT_EQUAL_INT(0, matches("git clean -n", "git clean --force -dx"));
-
     TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("git push origin +main"));
     TEST_ASSERT_EQUAL_INT(0, matches("git push origin main", "git push origin +main"));
     TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("git push origin :topic"));
@@ -271,9 +451,8 @@ void test_always_ask_spelling_variants(void) {
     TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("git branch --delete -f x"));
     TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("git branch -df x"));
 
-    /* Ordinary pushes and branch reads still save a rule. */
+    /* Ordinary pushes still save a rule. */
     assert_rule("git push origin main", 0, 2, "git", "push");
-    assert_rule("git branch -d merged", 0, 2, "git", "branch");
     assert_rule("git push https://host/x.git main", 0, 2, "git", "push");
 }
 
@@ -283,6 +462,10 @@ void test_status_reasons_and_labels(void) {
     TEST_ASSERT_TRUE(strlen(shell_rule_status_reason(SHELL_RULE_UNSAFE_SYNTAX)) > 0);
     TEST_ASSERT_TRUE(strlen(shell_rule_status_reason(SHELL_RULE_ALWAYS_ASK_FLAG)) > 0);
     TEST_ASSERT_TRUE(strlen(shell_rule_status_reason(SHELL_RULE_UNKNOWN_GLOBAL_OPT)) > 0);
+    TEST_ASSERT_EQUAL_STRING("can run arbitrary code",
+                             shell_rule_status_reason(SHELL_RULE_RUNS_CODE));
+    TEST_ASSERT_EQUAL_STRING("can't be undone",
+                             shell_rule_status_reason(SHELL_RULE_IRREVERSIBLE));
 
     ShellRule rule;
     const char *detail = NULL;
@@ -297,6 +480,15 @@ int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_plain_command_rule);
     RUN_TEST(test_subcommand_rule_skips_global_options);
+    RUN_TEST(test_table_lookups_use_the_base_name);
+    RUN_TEST(test_code_running_subcommands_are_unsaveable);
+    RUN_TEST(test_command_runners_are_wrappers);
+    RUN_TEST(test_script_rules_name_the_script);
+    RUN_TEST(test_make_rules_name_the_target);
+    RUN_TEST(test_git_always_ask_additions);
+    RUN_TEST(test_git_long_option_abbreviations_always_ask);
+    RUN_TEST(test_destructive_flags_on_plain_commands_always_ask);
+    RUN_TEST(test_broad_rules_are_recognised);
     RUN_TEST(test_unknown_global_option_is_unsaveable);
     RUN_TEST(test_always_ask_flags_block_rules);
     RUN_TEST(test_tokens_after_double_dash_are_operands);

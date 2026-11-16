@@ -237,7 +237,18 @@ Allow? [y/n/?] (a = always allow "git show …")
 - **a** -- Allow this and all matching future actions (session only), and run the current one. For a shell command, each segment that can have a rule gets one; the prompt names the rule it would save, and a partial save reports what happened, e.g. `Saved: grep. Still asks: git fetch (writes to a file).` When no part of the command can be saved, `a` isn't offered and does nothing.
 - **?** -- Show details about the action
 
-A shell rule saved by `a` is the command name plus, for tools with subcommands (`git`, `docker`, `npm`, `make`, ...), the subcommand. It ignores flag order and global options, so a rule saved from `git -C lib show HEAD` also covers `git show --stat`. It never covers a command carrying a flag that changes what the command does (`git push --force`, `git push origin +main`, `git clean --force`, `git branch -D`, `sed -i`, `find -delete`, `--output`), and it never broadens for commands that run code from their arguments: interpreters (`python`, `node`, `sed`, `awk`), `curl`, `wget`, `ssh`, `scp` and `rm` keep a two-token rule such as `python foo.py`. Commands that run another command (`sudo`, `env`, `xargs`, `timeout`, `npx`, `eval`, `sh -c`, `go run`, `npm exec`), and commands with a `VAR=value` prefix, can't be saved at all.
+A shell rule saved by `a` is the command name plus, for tools with subcommands (`git`, `docker`, `kubectl`, ...), the subcommand. It ignores flag order and global options, so a rule saved from `git -C lib show HEAD` also covers `git show --stat`. Commands are recognised by their base name with any version suffix removed, so `/usr/bin/git` and `python3.12` are treated as `git` and `python`; the rule itself keeps the tokens as you typed them.
+
+What a rule never covers:
+
+- A flag that changes what the command does: `git push --force` (including abbreviations git accepts, such as `--forc`), `git push origin +main`, `git push --mirror`, `git branch -d`, `git tag -f`, `git clean --force`, `sed -i`, `find -delete`, `rm -r`, `curl -o`, `wget -O`, `tar --to-command`, `make -f`, `--output`.
+- A subcommand that runs arbitrary code or can't be undone: `git config`, `git rebase`, `git checkout`, `git restore`, `git reset`, `git clean`, `git stash`, `git filter-branch`, `git submodule`, `git worktree`, `docker build`, `docker compose`, `kubectl apply`, `kubectl delete`, and every `gh` subcommand.
+- A command that runs another command: `sudo`, `env`, `xargs`, `timeout`, `time`, `watch`, `parallel`, `npx`, `bunx`, `uvx`, `eval`, `sh -c`, `dash`, `go run`, `npm exec`, `uv run`, `poetry run`, `bundle exec`, `docker run`, `kubectl exec`, or any command with a `VAR=value` argument.
+- An operand that names a protected file, directly (`cat .env`), through a pattern (`cat .en?`) or after a revision (`git show HEAD:.env`).
+
+Commands that run code from their arguments keep a narrow rule matched by prefix: interpreters (`python`, `node`, `sed`, `awk`), `curl`, `wget`, `ssh`, `scp` and `rm` save two tokens, such as `python foo.py`, and script runners save the script or target — `npm run build`, `npm test`, `pnpm run build`, `yarn build`, `make test`. A bare `make` covers only a bare `make`.
+
+In `--auto`, allowlist entries that cover whatever they are given are skipped so the model review sees the call: entries starting with an interpreter or wrapper (`python`, `curl`, `sudo`, ...), and a package manager's `run`, `exec` or `test` with no script named (`npm run`).
 
 For batch operations (multiple tool calls at once), you can approve/deny all or select individual items by number.
 

@@ -126,7 +126,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`shell_parser.c/h`** - POSIX shell tokenization, dangerous pattern detection, and segment splitting for compound commands
 - **`shell_parser_cmd.c`** - cmd.exe parsing with metacharacter detection
 - **`shell_parser_ps.c`** - PowerShell parsing with cmdlet detection
-- **`shell_rules.c/h`** - Rules saved by "always allow": command + subcommand, flag-order-insensitive matching, always-ask flag table shared with `auto_approve.c`
+- **`shell_rules.c/h`** - Rules saved by "always allow": command + subcommand (plus the script for runners like `npm run build`), base-name lookups, flag-order-insensitive matching, always-ask flag table, and the commands and subcommands no rule can cover
 
 ##### TOCTOU Protection
 - **`atomic_file.c/h`** - Atomic file operations with O_NOFOLLOW, O_EXCL, inode verification
