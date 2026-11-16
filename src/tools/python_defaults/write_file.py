@@ -28,7 +28,6 @@ def write_file(path: str, content: str, mode: str = "write", backup: bool = Fals
     from pathlib import Path
     from datetime import datetime
     import shutil
-    import os
 
     # Security check - prevent directory traversal
     if _is_traversal_path(path):
@@ -38,7 +37,6 @@ def write_file(path: str, content: str, mode: str = "write", backup: bool = Fals
     if mode not in ("write", "append"):
         raise ValueError(f"Invalid mode: {mode} (must be 'write' or 'append')")
 
-    open_mode = 'a' if mode == "append" else 'w'
     bytes_key = "bytes_appended" if mode == "append" else "bytes_written"
 
     # Check content size limit
@@ -46,40 +44,6 @@ def write_file(path: str, content: str, mode: str = "write", backup: bool = Fals
     if len(content_bytes) > MAX_WRITE_SIZE:
         raise ValueError(f"Content too large: {len(content_bytes)} bytes (max {MAX_WRITE_SIZE})")
 
-    # Try to use verified file I/O for TOCTOU-safe writes
-    # This is available when approval gates have verified the path
-    try:
-        import _ralph_verified_io
-        if _ralph_verified_io.has_verified_context():
-            # Use the resolved path from the verified context (not re-resolving)
-            verified_path = _ralph_verified_io.get_resolved_path()
-            if verified_path and _ralph_verified_io.path_matches(path):
-                p = Path(verified_path)
-                # Create backup if requested and file exists
-                if backup and p.exists():
-                    timestamp = datetime.now().strftime('%Y%m%d%H%M%S%f')
-                    backup_path = f"{p}.{timestamp}.bak"
-                    shutil.copy2(p, backup_path)
-                # Create parent directories if needed
-                p.parent.mkdir(parents=True, exist_ok=True)
-                # Use the verified file context for atomic open
-                fd = _ralph_verified_io.open_verified(str(p), open_mode)
-                with os.fdopen(fd, open_mode, encoding='utf-8') as f:
-                    f.write(content)
-                return {
-                    "success": True,
-                    "path": str(p),
-                    bytes_key: len(content_bytes),
-                    "verified": True
-                }
-    except ImportError:
-        # Module not available - fall through to standard I/O
-        pass
-    except OSError as e:
-        # Verification failed - report the error
-        raise OSError(f"File verification failed: {e}")
-
-    # Standard path resolution when verified context not available
     p = Path(path).resolve()
 
     # Create backup if requested and file exists (use unique timestamp-based name)
@@ -91,7 +55,6 @@ def write_file(path: str, content: str, mode: str = "write", backup: bool = Fals
     # Create parent directories if needed
     p.parent.mkdir(parents=True, exist_ok=True)
 
-    # Fall back to standard file I/O (when gates disabled or no context)
     if mode == "append":
         with open(p, 'a', encoding='utf-8') as f:
             f.write(content)

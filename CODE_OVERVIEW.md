@@ -16,7 +16,6 @@ Application-specific code that uses the library layer. This is a thin wrapper ar
 - **`python_tool_files.c/h`** - Python file-based tool loading system (supports freeform tool invocation for tools with Match: directive; "Thread-safe: true" docstring directive marks tools that run concurrently within a batch; unmodified older shipped default tool files are refreshed from the embedded versions via `SHIPPED_DEFAULT_TOOLS` hashes)
 - **`python_extension.c/h`** - Tool extension interface for Python tools integration with lib/
 - **`http_python.c/h`** - Python extension for C HTTP client (`_ralph_http` module: get, post, download)
-- **`verified_file_python.c/h`** - Python extension for TOCTOU-safe file operations (`_ralph_verified_io` module)
 - **`sys_python.c/h`** - Python extension for system info (`_ralph_sys` module: get_executable_path, get_app_home, get_config_int)
 
 ##### Python Default Tools (in `python_defaults/`)
@@ -105,13 +104,6 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`api_error.c/h`** - Enhanced API error handling with retry logic
 - **`embedded_cacert.c/h`** - Embedded Mozilla CA certificate bundle for portable SSL/TLS
 - **`image_attachment.c/h`** - Image attachment parsing (`@path` references to base64-encoded images)
-
-#### `lib/policy/` - File Access Policy
-
-- **`path_normalize.c/h`** - Cross-platform path normalization (Windows drive letters, UNC paths)
-- **`atomic_file.c/h`** - Atomic file operations with O_NOFOLLOW, O_EXCL, inode verification
-- **`verified_file_context.c/h`** - Thread-local storage for verified path context
-- See also `src/tools/verified_file_python.c/h` for the Python extension that uses this subsystem
 
 #### `lib/tools/` - Tool System
 - **`tools_system.c/h`** - Core tool registry and execution framework, `generate_tools_json_flat()` for Responses API flat tool format
@@ -326,10 +318,6 @@ The test directory mirrors the source structure:
 - **`test_spinner.c`** - Tool execution spinner tests
 - **`test_terminal.c`** - Terminal abstraction tests
 
-#### `test/policy/` - Policy Tests (File Access)
-- **`test_path_normalize.c`** - Cross-platform path normalization
-- **`test_atomic_file.c`** - TOCTOU-safe file operations
-
 #### `test/agent/` - Agent Module Tests
 - **`test_prompt_mode.c`** - Prompt mode enum and parsing tests
 - **`test_context_mode_injection.c`** - Context mode injection tests
@@ -358,7 +346,6 @@ The test directory mirrors the source structure:
 - **`test_ptrarray.c`** - Pointer array implementation tests
 - **`test_document_chunker.c`** - Document chunking algorithm tests
 - **`test_memory_management.c`** - Memory management tests
-- **`test_verified_file_context.c`** - Verified file context tests
 - **`test_libagent_header.c`** - Library public API header compilation test
 
 #### Test Infrastructure
@@ -412,24 +399,18 @@ Conversation lifecycle handling:
 - **Token Manager**: Dynamic token allocation and context trimming
 - **Compactor**: Intelligent conversation compression preserving tool sequences
 
-### 7. File Access Policy (lib/policy/)
-Tool calls run with no approval step. What remains here is path handling for the file tools:
-- **Path Normalization**: Cross-platform path handling (Windows drive letters, UNC paths)
-- **TOCTOU-Safe Access**: O_NOFOLLOW/O_EXCL opens with inode verification
-- **Verified File Context**: Thread-local verified path context for the Python file tools
-
-### 8. Service Container (lib/services/)
+### 7. Service Container (lib/services/)
 Dependency injection for testability:
 - **Services**: Container holding message store, vector DB, embeddings, task store
 - Supports both singleton instances and custom injected services
 
-### 9. MCP Protocol Integration (lib/mcp/)
+### 8. MCP Protocol Integration (lib/mcp/)
 Model Context Protocol support:
 - **Multi-Transport**: STDIO (local processes), HTTP, and SSE connections
 - **Dynamic Discovery**: Tools fetched via JSON-RPC at connection time
 - **Namespaced Tools**: Registered as `mcp_{servername}_{toolname}`
 
-### 10. Configuration System (lib/util/config.c)
+### 9. Configuration System (lib/util/config.c)
 Centralized configuration:
 - **Priority**: Local `scaffold.config.json` -> User config -> Environment -> Defaults
 - **Auto-Generation**: Creates config from environment variables

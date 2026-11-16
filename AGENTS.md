@@ -54,7 +54,7 @@ set -a && source .env && set +a && out/scaffold --debug "your message"
 | `--help`, `-h` | Print help and exit |
 | `--debug` | Enable all debug logging (backward compat: LOG_DEBUG + all modules) |
 | `--log <level>` | Set log level: error, warn, info, debug |
-| `--log-module <mods>` | Filter log modules (comma-separated): agent, tool, llm, http, context, policy, goap, mcp, db, ipc, plugin |
+| `--log-module <mods>` | Filter log modules (comma-separated): agent, tool, llm, http, context, goap, mcp, db, ipc, plugin |
 | `--log-http-body` | Enable raw HTTP body logging (CURLOPT_VERBOSE) |
 | `--no-stream` | Disable response streaming |
 | `--json` | Enable JSON output mode (structured JSONL on stdout) |
@@ -133,7 +133,7 @@ valgrind --leak-check=full ./test/test_foo.com.dbg      # x86_64
 
 ## Key Architecture Notes
 
-- Tool calls execute with no approval step: no prompts, allowlists, categories or rate limiting. `lib/policy/` holds only path normalization, TOCTOU-safe file access and the verified file context used by the Python file tools.
+- Tool calls execute with no approval step: no prompts, allowlists, categories or rate limiting, and no policy layer between the tool registry and the filesystem. The Python file tools resolve and open paths with ordinary file I/O.
 
 - Codex provider uses Responses API (not Chat Completions). Input is a flat array, not messages.
 - The iterative loop passes `user_message=""` for follow-up rounds — providers must handle empty strings correctly.

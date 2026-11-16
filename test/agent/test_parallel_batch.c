@@ -2,7 +2,6 @@
 #include "lib/agent/tool_batch_executor.h"
 #include "lib/agent/session.h"
 #include "lib/tools/tool_cache.h"
-#include "lib/policy/verified_file_context.h"
 #include <pthread.h>
 #include <string.h>
 #include <stdlib.h>

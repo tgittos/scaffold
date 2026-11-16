@@ -103,12 +103,6 @@ LIB_SESSION_SOURCES := \
     $(LIBDIR)/session/rolling_summary.c \
     $(LIBDIR)/session/session_manager.c
 
-# Policy module (path normalization, TOCTOU-safe file access)
-LIB_POLICY_SOURCES := \
-    $(LIBDIR)/policy/path_normalize.c \
-    $(LIBDIR)/policy/atomic_file.c \
-    $(LIBDIR)/policy/verified_file_context.c
-
 # Util module (generic utilities)
 LIB_UTIL_SOURCES := \
     $(LIBDIR)/util/uuid_utils.c \
@@ -190,7 +184,7 @@ LIB_AUTH_SOURCES := \
 # Combined library sources
 LIB_C_SOURCES := $(LIB_IPC_SOURCES) $(LIB_UI_SOURCES) $(LIB_TOOLS_SOURCES) \
     $(LIB_AGENT_SOURCES) $(LIB_SERVICES_SOURCES) $(LIB_LLM_SOURCES) \
-    $(LIB_SESSION_SOURCES) $(LIB_POLICY_SOURCES) $(LIB_DB_SOURCES) \
+    $(LIB_SESSION_SOURCES) $(LIB_DB_SOURCES) \
     $(LIB_WORKFLOW_SOURCES) $(LIB_UTIL_SOURCES) $(LIB_PDF_SOURCES) \
     $(LIB_NETWORK_SOURCES) $(LIB_MCP_SOURCES) $(LIB_PLUGIN_SOURCES) \
     $(LIB_UPDATER_SOURCES) $(LIB_ORCHESTRATOR_SOURCES) $(LIB_AUTH_SOURCES)

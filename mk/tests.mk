@@ -51,9 +51,6 @@ $(eval $(call def_test,tool_cache,tools/test_tool_cache,$(LIBDIR)/tools/tool_cac
 $(eval $(call def_test,prompt_mode,agent/test_prompt_mode,$(LIBDIR)/agent/prompt_mode.c))
 $(eval $(call def_test,oauth_callback_server,auth/test_oauth_callback_server,$(LIBDIR)/auth/oauth_callback_server.c))
 
-$(eval $(call def_test,atomic_file,policy/test_atomic_file,$(LIBDIR)/policy/atomic_file.c))
-$(eval $(call def_test,path_normalize,policy/test_path_normalize,$(LIBDIR)/policy/path_normalize.c))
-$(eval $(call def_test,verified_file_context,test_verified_file_context,$(LIBDIR)/policy/verified_file_context.c $(LIBDIR)/policy/atomic_file.c $(LIBDIR)/policy/path_normalize.c))
 
 $(TEST_cli_flags_TARGET): $(TEST_cli_flags_OBJECTS) $(BUILDDIR)/.scaffold-linked
 	$(CC) -o $@ $(TEST_cli_flags_OBJECTS)
@@ -105,15 +102,6 @@ $(TEST_prompt_mode_TARGET): $(TEST_prompt_mode_OBJECTS)
 
 $(TEST_oauth_callback_server_TARGET): $(TEST_oauth_callback_server_OBJECTS)
 	$(CC) -o $@ $(TEST_oauth_callback_server_OBJECTS) -lpthread
-
-$(TEST_atomic_file_TARGET): $(TEST_atomic_file_OBJECTS)
-	$(CC) -o $@ $(TEST_atomic_file_OBJECTS)
-
-$(TEST_path_normalize_TARGET): $(TEST_path_normalize_OBJECTS)
-	$(CC) -o $@ $(TEST_path_normalize_OBJECTS)
-
-$(TEST_verified_file_context_TARGET): $(TEST_verified_file_context_OBJECTS)
-	$(CC) -o $@ $(TEST_verified_file_context_OBJECTS)
 
 # =============================================================================
 # UPDATER TEST

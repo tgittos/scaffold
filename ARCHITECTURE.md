@@ -19,11 +19,6 @@ graph TB
     Core --> StreamingHandler[Streaming Handler<br/>streaming_handler.c/h]
     Core --> ToolExecutor[Tool Executor<br/>tool_executor.c/h]
 
-    %% File Access Policy
-    ToolExecutor --> VerifiedFile[Verified File Context<br/>verified_file_context.c/h]
-    VerifiedFile --> AtomicFile[Atomic File<br/>atomic_file.c/h]
-    AtomicFile --> PathNormalize[Path Normalize<br/>path_normalize.c/h]
-
     %% MCP Integration
     MCPClient --> MCPServers[MCP Server Connections<br/>STDIO/HTTP/SSE]
     MCPClient --> ToolRegistry
@@ -162,11 +157,9 @@ graph TB
     classDef vectorLayer fill:#e3f2fd
     classDef externalLayer fill:#efebe9
     classDef mcpLayer fill:#fff9c4
-    classDef policyLayer fill:#ffccbc
     classDef authLayer fill:#e8eaf6
 
     class CLI,Core,Session,ConfigSystem,MemoryCommands,ContextEnhancement,RecapModule,StreamingHandler,ToolExecutor coreLayer
-    class VerifiedFile,AtomicFile,PathNormalize policyLayer
     class LLMProvider,ProviderRegistry,Codex,Anthropic,OpenAI,LocalAI,ModelCaps,ClaudeModel,GPTModel,ModelRegistry llmLayer
     class AuthLogin,OAuthProvider,CallbackServer,JWTDecode,OAuth2Store,FormPost authLayer
     class ToolsSystem,ToolRegistry,PythonTool,PythonFileTools,PythonDefaults,TodoTool,MemoryTool,PDFTool,VectorDBTool,SubagentTool,MessagingTool,GOAPTools,OrchestratorTool,TodoManager,TodoDisplay toolsLayer
@@ -290,12 +283,8 @@ graph TB
     Core --> Utils[Utils Layer]
     Core --> Vector[Vector Layer]
     Core --> MCP[MCP Layer]
-    Core --> Policy[Policy Layer<br/>File Access]
     Core --> Plugin[Plugin Layer<br/>JSON-RPC 2.0]
     Core --> IPC[IPC Layer<br/>Inter-Agent Messaging]
-
-    Tools --> Policy
-    Policy --> Utils
 
     CLI[CLI Layer<br/>main.c] --> Core
     CLI --> Auth[Auth Layer<br/>OAuth2/PKCE]
@@ -341,13 +330,11 @@ graph TB
     classDef external fill:#ffebee,stroke:#d32f2f,stroke-width:2px
     classDef mcpLayer fill:#fff9c4,stroke:#f9a825,stroke-width:2px
     classDef cliLayer fill:#e1f5fe,stroke:#0288d1,stroke-width:2px
-    classDef policyLayer fill:#ffccbc,stroke:#e64a19,stroke-width:2px
     classDef pluginLayer fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
     classDef authLayer fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
     classDef orchLayer fill:#fff3e0,stroke:#e65100,stroke-width:2px
 
     class Core,LLM,Tools,Session,Utils,Network layer
-    class Policy policyLayer
     class Vector,Persistence vectorLayer
     class External,FileSystem,Database,Document,CPPRuntime,VectorStorage,JSONStorage external
     class MCP mcpLayer
@@ -929,11 +916,7 @@ Goals have an optional `plan_document` field (TEXT column in SQLite, `char*` in 
 
 Tool calls execute as the model issues them. There is no approval gate: no prompts, allowlists, categories, rate limiting or denial tracking, and no `--yolo`/`--auto`/`--allow` flags. An `approval_gates` section left in `scaffold.config.json` is ignored.
 
-What remains in `lib/policy/` is file-access plumbing used by the Python file tools:
-
-- **Path Normalize** (`path_normalize.c/h`): Cross-platform path normalization
-- **Atomic File** (`atomic_file.c/h`): TOCTOU-safe file operations
-- **Verified File Context** (`verified_file_context.c/h`): Thread-local verified path context consumed by `src/tools/verified_file_python.c`
+The Python file tools resolve and open paths themselves with ordinary file I/O; there is no separate policy layer between the tool registry and the filesystem.
 
 ## CLI Commands
 
@@ -1180,7 +1163,6 @@ src/
 │   ├── python_tool_files.c/h # Python file-based tools
 │   ├── python_extension.c/h  # Tool extension interface for Python
 │   ├── http_python.c/h     # Python extension for C HTTP client (_ralph_http module)
-│   ├── verified_file_python.c/h # Python extension for verified I/O
 │   ├── sys_python.c/h      # Python extension for system info (_ralph_sys module)
 │   └── python_defaults/    # Default Python tool files
 │       ├── read_file.py
@@ -1263,10 +1245,6 @@ lib/
 │   ├── api_error.c/h       # Enhanced error handling with retries
 │   ├── embedded_cacert.c/h # Embedded Mozilla CA certificate bundle
 │   └── image_attachment.c/h # Image attachment parsing (@path to base64)
-├── policy/                 # File access policy
-│   ├── path_normalize.c/h  # Cross-platform path normalization
-│   ├── atomic_file.c/h     # TOCTOU-safe file operations
-│   └── verified_file_context.c/h # Thread-local verified file context
 ├── plugin/                 # Plugin system
 │   ├── plugin_manager.c/h  # Plugin discovery, spawning, lifecycle, IPC
 │   ├── plugin_protocol.c/h # JSON-RPC 2.0 protocol serialization
