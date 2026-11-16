@@ -1,6 +1,5 @@
 """Apply text patches to files using a unified-diff-like format.
 
-Gate: file_write
 Thread-safe: true
 Match: patch
 """

@@ -1,6 +1,5 @@
 """Search for patterns in files.
 
-Gate: file_read
 Thread-safe: true
 Match: pattern
 """

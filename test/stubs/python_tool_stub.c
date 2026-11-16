@@ -10,11 +10,6 @@ int is_python_file_tool(const char *name) {
     return 0; /* No Python tools loaded in test environment */
 }
 
-const char *python_tool_get_gate_category(const char *name) {
-    (void)name;
-    return NULL; /* No metadata available in test environment */
-}
-
 const char *python_tool_get_match_arg(const char *name) {
     (void)name;
     return NULL; /* No metadata available in test environment */

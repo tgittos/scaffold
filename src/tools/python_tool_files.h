@@ -22,7 +22,6 @@ typedef struct {
     char *file_path;         // Path to the .py file
     int parameter_count;     // Number of parameters
     ToolParameter *parameters; // Parameter definitions
-    char *gate_category;     // Gate category override from "Gate:" directive (or NULL)
     char *match_arg;         // Argument name for pattern matching from "Match:" directive (or NULL)
     int thread_safe;         // 1 if "Thread-safe: true" directive present; calls may run concurrently
 } PythonToolDef;
@@ -81,15 +80,6 @@ int execute_python_file_tool_call(const ToolCall *tool_call, ToolResult *result)
  * @return 1 if it's a Python tool, 0 otherwise
  */
 int is_python_file_tool(const char *name);
-
-/**
- * Get the gate category for a Python tool.
- * Parses the "Gate:" directive from the tool's module docstring.
- *
- * @param name Tool name to look up
- * @return Gate category string (e.g., "file_read", "shell") or NULL if not specified
- */
-const char* python_tool_get_gate_category(const char *name);
 
 /**
  * Get the match argument for a Python tool.

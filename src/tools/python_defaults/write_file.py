@@ -1,6 +1,5 @@
 """Write content to a file.
 
-Gate: file_write
 Thread-safe: true
 Match: path
 """

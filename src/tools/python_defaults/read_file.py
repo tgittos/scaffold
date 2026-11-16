@@ -1,6 +1,5 @@
 """Read file contents with optional line range.
 
-Gate: file_read
 Thread-safe: true
 Match: path
 """

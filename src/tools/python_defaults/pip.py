@@ -1,6 +1,5 @@
 """Package management: install pure-Python packages or list installed packages.
 
-Gate: network
 """
 
 import os

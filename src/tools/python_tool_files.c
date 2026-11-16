@@ -170,6 +170,7 @@ static int sha256_hex_of_file(const char *path, char out[65]) {
  * the embedded version. When a default tool changes, append the hash of the
  * version being replaced here; files that match none are left alone as user edits. */
 static const struct { const char *filename; const char *sha256_hex; } SHIPPED_DEFAULT_TOOLS[] = {
+    {"apply_patch.py", "10153b7bd89bfa0eae88c55e499ca429ad63d59b99db5e0eaa063e468e3e1c90"},
     {"apply_patch.py", "125b93426bf1cd68a4918387fb897260105c1f3718764fe113b39ce8fc296e38"},
     {"apply_patch.py", "5f5bc8f7a315aaf9d588c3fc1f17591c70c5fb5d8ed89e3cd5a00e82232bd2ce"},
     {"apply_patch.py", "5f94926962bae262bcf50cdfa6bb8659638bfa5b987896e8d5f1f9bea43030b0"},
@@ -178,13 +179,16 @@ static const struct { const char *filename; const char *sha256_hex; } SHIPPED_DE
     {"apply_patch.py", "80d31248a6c07df5c68117a78d678ce21a8dc2efae28bb9e609554ddb5896184"},
     {"apply_patch.py", "a92065ad2b1fe94b72f560c06a32ae501ca24fe3b92789aebaf58ac34df27831"},
     {"apply_patch.py", "ad4ee7de4c0c1a32942c029ff312bbf88d357f2755a3db58a30e528692a5aadd"},
+    {"list_dir.py", "0dfef30d68527ce50073ecd98ed2e69a06ead427ee7fee6efbd797fb7cf5d7ae"},
     {"list_dir.py", "100b497307e8ba2830c6a3775565c274387b47c157c3963d316cdece5817222c"},
     {"list_dir.py", "3f41ba961b0e9e66a5eba35a10e79836d3169f73efd5453945209e63573fc399"},
     {"list_dir.py", "91a5223bea11e93ee27ab39979f4c826fb44ca02c9585f15fdae3ac2cb440374"},
     {"list_dir.py", "d4010ccd2be0ea4eb5cc20fb5a0df55578afbe7b9ec34790c493c60946690cd7"},
     {"list_dir.py", "e1181ec2d79b1ce78b1efd79957e432b5fd80203cbf76385d8848a57f319f2d9"},
     {"list_dir.py", "e35fa145e7f4c5e71a6140c76bdd3a46e2688d270dac8e5f4d9666583f16f58f"},
+    {"pip.py", "8fbd0ec1195ed293d22d35905a2606206f8b85634d9f37a67e3b36d9509033e6"},
     {"read_file.py", "105051de670deea01b310285d33955f23df2e16bd2264af2376038df217d25c7"},
+    {"read_file.py", "d9c0f255cf46c4635b2192efe9858487c5d7c8e8c1ba7d0bdfef660363ae8e8e"},
     {"read_file.py", "1fd7667195dcc6c5f6a73c953c82eb82abc2912243171148e544267d77406c53"},
     {"read_file.py", "3821834cd87b0c798358b4c9ef02c8d78189b1705f974a9636c3f8a86a914c3b"},
     {"read_file.py", "4a2abff9c0c130d6c5800f80c2487748d15e4a9597d3427bad4a62a3ff943dad"},
@@ -193,6 +197,7 @@ static const struct { const char *filename; const char *sha256_hex; } SHIPPED_DE
     {"read_file.py", "e45e3ef707ae55f72a661e40ca1400f1345f492871019678e5c08863a077148a"},
     {"read_file.py", "e4ba6a170bf69900951a575e9d417283e0af5198bcce5a781a93e0a6b653e77f"},
     {"search_files.py", "16d6472b1b28478432976ef79b444264ee7442ef993402b1eff37baa0a4698e5"},
+    {"search_files.py", "9b103a9605a4329686481bb7ef0746bd7a03852ecf8de944ab946f9a0fb4fc81"},
     {"search_files.py", "2319dbd276e6e47f9779a1b89ddc0040ada6e68dcb365d111cb3cb89bf34c5b6"},
     {"search_files.py", "243f9e8423911a68fe29812049387224801253820969afbef010ed04a242c3ad"},
     {"search_files.py", "29fcb300b2b6e68c44b0999b9394e18f3542e1861da55e7dec7d5081166ec142"},
@@ -201,7 +206,9 @@ static const struct { const char *filename; const char *sha256_hex; } SHIPPED_DE
     {"search_files.py", "9d97397b29a03f8141d25fd7bbda5688531067fa917ee66f9a90fa7a0d1b4e90"},
     {"search_files.py", "be736b972bb3d87c160775faf6a381c24e977a3a9d028b6450e81ab112255165"},
     {"search_history.py", "92b337b06fe7d223a508c0b0319324d8167ac352f53e0df32a344b7174c545f5"},
+    {"search_history.py", "b8800cce02b67701748479873270e52cf86245ac6ec0f505a420072bc94f1d2e"},
     {"search_history.py", "f7b947e55d8368a5da31511aea7db38050ed59d8efaa825c98d6894bd6494a84"},
+    {"shell.py", "644eba732e74f8fc5be4e9d38d0f83be0c4069728beafa872dacf8d57aafcf49"},
     {"shell.py", "75153caf7426957db7427fcbcb46725aae5802d85b5ccff9ec7f87614b09e483"},
     {"shell.py", "8d371c8b6f817de1ad2afd4e4be1d4bd667d14ccf287adf0a2a1470add1cd2ce"},
     {"shell.py", "e1fce3ed3222ce0ada23352e704c85b925c7d71d51be95764e448034655fe9ef"},
@@ -211,16 +218,19 @@ static const struct { const char *filename; const char *sha256_hex; } SHIPPED_DE
     {"shell.py", "ec0d4ec5a1e55113ca8b78c28e66967198593485c8bae868f38f9612f87c8f3c"},
     {"shell.py", "fc8934df00c2f11f0e0ee1f7b41b0318fe2bc7cd2f2575423751b98d9829140a"},
     {"shell.py", "fda6e00ede5f13cca59804379b03e21b61c8e655fc439e41afc1b1ca91735651"},
+    {"show_structure.py", "0d4b4a93d11425cc695540fd7f48ee8cab512d36edf27ff96e03d12317dcaa5e"},
     {"show_structure.py", "80e297d35bc2199241f2f7e6d29b3da2a4ebfcf31af4c58f953dd1f65a9e3e0a"},
     {"show_structure.py", "888d1f1deb44c2d0f1119b5a49666f45f0cfd591df7df194410147451d8f1ade"},
     {"show_structure.py", "fcad6505e6cc630934dde5c247149fd9752bd666bb64b4858df2cbd5dc54de47"},
     {"web_fetch.py", "107bb647786fb0c2088b84f226084741204287cc94708730ccd03ee6b77ed106"},
+    {"web_fetch.py", "ba78d8787d57a6d4bb023ae2c8455cb910d64404c53a972d110763e9e7151925"},
     {"web_fetch.py", "2484f126e8115b6588fe11012291b0d39a00749bf1a99c864699b3a5e7668b31"},
     {"web_fetch.py", "2963b0366e85fd5a6e83285952f180d3983bec264c8b5dc457d1718bbb1e2ae2"},
     {"web_fetch.py", "33ae9d881ce489831a0aa1735281c36483921cc6dfda50a225a4f4051b99884b"},
     {"web_fetch.py", "5e923b1352d393b8c708e9b87612307a71a30d418675a6877fb192c85fdf55ab"},
     {"web_fetch.py", "96d2347fc3fc0f141fd22b0b979a4210caee0a7b06b57a3db546449edb7d7361"},
     {"write_file.py", "272cc0b199193a7d392b3dcd8a712c8947cab655244ac939a95cc82a4e4ddec7"},
+    {"write_file.py", "814a285c93c3622969c1d9eaad2513fcbfaf38bc620784593c5eadeb1970a25d"},
     {"write_file.py", "2df21b4b539b9dcbfdc4bef648b18735a5f46a78e72065c0bfa9e790083c11dc"},
     {"write_file.py", "322e078f2983ccbee8e6b181fbf449437db6680e1a99f677df3c68a86d9a20ce"},
     {"write_file.py", "6063411136a12c24bc427e1f28c80be10fdec199a654eff2f9502d76136c927c"},
@@ -324,7 +334,7 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
         return -1;
     }
 
-    // Introspects function signature, docstring, and Gate:/Match: directives
+    // Introspects function signature, docstring, and Match:/Thread-safe: directives
     const char *schema_code =
         "def _ralph_parse_docstring_args(doc):\n"
         "    \"\"\"Parse Args section from Google-style docstring.\"\"\"\n"
@@ -370,16 +380,14 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
         "        args_desc[current_param] = ' '.join(current_desc)\n"
         "    return args_desc\n"
         "\n"
-        "def _ralph_parse_gate_directives(doc):\n"
-        "    \"\"\"Parse Gate:, Match: and Thread-safe: directives from docstring.\"\"\"\n"
-        "    result = {'gate_category': None, 'match_arg': None, 'thread_safe': False}\n"
+        "def _ralph_parse_tool_directives(doc):\n"
+        "    \"\"\"Parse Match: and Thread-safe: directives from docstring.\"\"\"\n"
+        "    result = {'match_arg': None, 'thread_safe': False}\n"
         "    if not doc:\n"
         "        return result\n"
         "    for line in doc.split('\\n'):\n"
         "        stripped = line.strip()\n"
-        "        if stripped.startswith('Gate:'):\n"
-        "            result['gate_category'] = stripped[5:].strip()\n"
-        "        elif stripped.startswith('Match:'):\n"
+        "        if stripped.startswith('Match:'):\n"
         "            result['match_arg'] = stripped[6:].strip()\n"
         "        elif stripped.startswith('Thread-safe:'):\n"
         "            result['thread_safe'] = stripped[12:].strip().lower() == 'true'\n"
@@ -395,18 +403,15 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
         "    try:\n"
         "        sig = inspect.signature(func)\n"
         "        doc = func.__doc__ or ''\n"
-        "        # Get module docstring for Gate:/Match:/Thread-safe: directives\n"
+        "        # Get module docstring for Match:/Thread-safe: directives\n"
         "        main_module = sys.modules.get('__main__')\n"
         "        module_doc = getattr(main_module, '__doc__', '') or ''\n"
-        "        gate_info = _ralph_parse_gate_directives(module_doc)\n"
+        "        tool_info = _ralph_parse_tool_directives(module_doc)\n"
         "        # Also check function docstring for directives\n"
-        "        if gate_info['gate_category'] is None or gate_info['match_arg'] is None:\n"
-        "            func_gate_info = _ralph_parse_gate_directives(doc)\n"
-        "            if gate_info['gate_category'] is None:\n"
-        "                gate_info['gate_category'] = func_gate_info['gate_category']\n"
-        "            if gate_info['match_arg'] is None:\n"
-        "                gate_info['match_arg'] = func_gate_info['match_arg']\n"
-        "            gate_info['thread_safe'] = gate_info['thread_safe'] or func_gate_info['thread_safe']\n"
+        "        if tool_info['match_arg'] is None:\n"
+        "            func_info = _ralph_parse_tool_directives(doc)\n"
+        "            tool_info['match_arg'] = func_info['match_arg']\n"
+        "            tool_info['thread_safe'] = tool_info['thread_safe'] or func_info['thread_safe']\n"
         "        # Get first line of docstring as description\n"
         "        desc = doc.split('\\n')[0].strip() if doc else func_name\n"
         "        # Parse Args section for parameter descriptions\n"
@@ -437,9 +442,8 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
         "            'name': func_name,\n"
         "            'description': desc,\n"
         "            'parameters': params,\n"
-        "            'gate_category': gate_info['gate_category'],\n"
-        "            'match_arg': gate_info['match_arg'],\n"
-        "            'thread_safe': gate_info['thread_safe']\n"
+        "            'match_arg': tool_info['match_arg'],\n"
+        "            'thread_safe': tool_info['thread_safe']\n"
         "        })\n"
         "    except Exception as e:\n"
         "        return None\n";
@@ -488,7 +492,6 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
     cJSON *name_item = cJSON_GetObjectItem(schema, "name");
     cJSON *desc_item = cJSON_GetObjectItem(schema, "description");
     cJSON *params_item = cJSON_GetObjectItem(schema, "parameters");
-    cJSON *gate_item = cJSON_GetObjectItem(schema, "gate_category");
     cJSON *match_item = cJSON_GetObjectItem(schema, "match_arg");
     cJSON *thread_safe_item = cJSON_GetObjectItem(schema, "thread_safe");
 
@@ -510,15 +513,11 @@ static int extract_tool_schema(const char *func_name, PythonToolDef *tool_def) {
         return -1;
     }
 
-    // Extract gate category and match argument if specified.
-    // These are optional metadata - NULL is acceptable (indicates not specified).
-    // strdup failure for optional fields is handled gracefully by leaving NULL.
-    tool_def->gate_category = NULL;
+    // Extract the match argument if specified.
+    // This is optional metadata - NULL is acceptable (indicates not specified).
+    // strdup failure is handled gracefully by leaving NULL.
     tool_def->match_arg = NULL;
     tool_def->thread_safe = cJSON_IsTrue(thread_safe_item) ? 1 : 0;
-    if (cJSON_IsString(gate_item) && gate_item->valuestring != NULL) {
-        tool_def->gate_category = strdup(gate_item->valuestring);
-    }
     if (cJSON_IsString(match_item) && match_item->valuestring != NULL) {
         tool_def->match_arg = strdup(match_item->valuestring);
     }
@@ -606,7 +605,6 @@ int python_load_tool_files(void) {
             free(tool->name);
             free(tool->description);
             free(tool->file_path);
-            free(tool->gate_category);
             free(tool->match_arg);
             if (tool->parameters != NULL) {
                 for (int j = 0; j < tool->parameter_count; j++) {
@@ -948,18 +946,6 @@ char* python_get_loaded_tools_description(void) {
     return desc;
 }
 
-const char* python_tool_get_gate_category(const char *name) {
-    if (name == NULL) return NULL;
-
-    for (int i = 0; i < python_tool_registry.count; i++) {
-        if (python_tool_registry.tools[i].name != NULL &&
-            strcmp(python_tool_registry.tools[i].name, name) == 0) {
-            return python_tool_registry.tools[i].gate_category;
-        }
-    }
-    return NULL;
-}
-
 const char* python_tool_get_match_arg(const char *name) {
     if (name == NULL) return NULL;
 
@@ -979,7 +965,6 @@ void python_cleanup_tool_files(void) {
             free(tool->name);
             free(tool->description);
             free(tool->file_path);
-            free(tool->gate_category);
             free(tool->match_arg);
             if (tool->parameters != NULL) {
                 for (int j = 0; j < tool->parameter_count; j++) {

@@ -1,6 +1,5 @@
 """Fetch web page content.
 
-Gate: network
 Thread-safe: true
 Match: url
 
