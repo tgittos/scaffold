@@ -114,6 +114,32 @@ void test_gate_prompter_hint_truncates_long_label_to_80_columns(void) {
     TEST_ASSERT_EQUAL_STRING("…\")", buf + len - strlen("…\")"));
 }
 
+void test_gate_prompter_hint_escapes_control_characters(void) {
+    char buf[256];
+    gate_prompter_format_hint(buf, sizeof(buf), "\"ls\n\x1b" "[31mrm -rf /\"");
+    TEST_ASSERT_NOT_NULL(strstr(buf, "\\n"));
+    TEST_ASSERT_NOT_NULL(strstr(buf, "\\x1b"));
+    for (const char *c = buf; *c; c++) {
+        TEST_ASSERT_TRUE((unsigned char)*c >= 0x20 || *c == '\t');
+    }
+}
+
+void test_gate_prompter_escape_control_renders_escapes(void) {
+    char buf[64];
+    gate_prompter_escape_control(buf, sizeof(buf), "a\nb\tc\x1b" "d\re");
+    TEST_ASSERT_EQUAL_STRING("a\\nb\\tc\\x1bd\\re", buf);
+
+    gate_prompter_escape_control(buf, sizeof(buf), "plain text");
+    TEST_ASSERT_EQUAL_STRING("plain text", buf);
+}
+
+void test_gate_prompter_escape_control_truncates_safely(void) {
+    char buf[6];
+    gate_prompter_escape_control(buf, sizeof(buf), "ab\x1b" "cd");
+    TEST_ASSERT_EQUAL_STRING("ab", buf);
+    TEST_ASSERT_TRUE(strlen(buf) < sizeof(buf));
+}
+
 /* =============================================================================
  * show_details Tests
  * ========================================================================== */
@@ -249,6 +275,9 @@ int main(void) {
     RUN_TEST(test_gate_prompter_hint_with_label_offers_always);
     RUN_TEST(test_gate_prompter_hint_without_label_hides_always);
     RUN_TEST(test_gate_prompter_hint_truncates_long_label_to_80_columns);
+    RUN_TEST(test_gate_prompter_hint_escapes_control_characters);
+    RUN_TEST(test_gate_prompter_escape_control_renders_escapes);
+    RUN_TEST(test_gate_prompter_escape_control_truncates_safely);
 
     /* show_details tests */
     RUN_TEST(test_gate_prompter_show_details_null_prompter_is_safe);

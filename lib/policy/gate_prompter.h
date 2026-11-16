@@ -103,6 +103,18 @@ void gate_prompter_show_single(GatePrompter *gp,
 void gate_prompter_format_hint(char *buf, size_t size, const char *always_label);
 
 /**
+ * Copy text with control characters rendered as escapes (\n, \t, \x1b), so a
+ * command can't redraw or spoof the two-line prompt.
+ *
+ * Output is truncated to fit buf, never leaving a partial escape.
+ *
+ * @param buf Output buffer
+ * @param size Size of buf
+ * @param text Text to escape (NULL yields an empty buffer)
+ */
+void gate_prompter_escape_control(char *buf, size_t size, const char *text);
+
+/**
  * Display tool details (expanded view).
  *
  * @param gp Gate prompter

@@ -195,6 +195,38 @@ void gate_prompter_clear_batch_prompt(GatePrompter *gp, int count) {
     fflush(stderr);
 }
 
+void gate_prompter_escape_control(char *buf, size_t size, const char *text) {
+    if (buf == NULL || size == 0) {
+        return;
+    }
+    size_t out = 0;
+    for (const unsigned char *c = (const unsigned char *)text;
+         text != NULL && *c != '\0'; c++) {
+        char escape[5];
+        const char *piece = escape;
+        size_t len;
+        if (*c == '\n' || *c == '\t' || *c == '\r') {
+            escape[0] = '\\';
+            escape[1] = *c == '\n' ? 'n' : (*c == '\t' ? 't' : 'r');
+            escape[2] = '\0';
+            len = 2;
+        } else if (*c < 0x20 || *c == 0x7f) {
+            snprintf(escape, sizeof(escape), "\\x%02x", *c);
+            len = 4;
+        } else {
+            escape[0] = (char)*c;
+            escape[1] = '\0';
+            len = 1;
+        }
+        if (out + len + 1 > size) {
+            break;
+        }
+        memcpy(buf + out, piece, len);
+        out += len;
+    }
+    buf[out] = '\0';
+}
+
 void gate_prompter_show_single(GatePrompter *gp,
                                const ToolCall *tool_call,
                                const char *command,
@@ -208,11 +240,12 @@ void gate_prompter_show_single(GatePrompter *gp,
 
     char detail[80] = "";
     if (command != NULL && strlen(command) > 0) {
-        size_t cmd_len = strlen(command);
-        if (cmd_len <= 60) {
-            snprintf(detail, sizeof(detail), "%s", command);
+        char safe[244]; /* 60 printable characters can escape to 4 bytes each */
+        gate_prompter_escape_control(safe, sizeof(safe), command);
+        if (strlen(safe) <= 60) {
+            snprintf(detail, sizeof(detail), "%s", safe);
         } else {
-            snprintf(detail, sizeof(detail), "%.57s...", command);
+            snprintf(detail, sizeof(detail), "%.57s...", safe);
         }
     } else if (path != NULL && strlen(path) > 0) {
         size_t path_len = strlen(path);
@@ -251,6 +284,9 @@ void gate_prompter_format_hint(char *buf, size_t size, const char *always_label)
     if (always_label == NULL) {
         snprintf(buf, size, "Allow? [y/n/?]");
     } else {
+        char escaped[256];
+        gate_prompter_escape_control(escaped, sizeof(escaped), always_label);
+        always_label = escaped;
         /* The prompt line must fit in 80 columns: 5 for "  └─ ", 1 trailing
          * space, 35 of fixed hint text and 1 closing paren. The label carries
          * its own quotes. */
