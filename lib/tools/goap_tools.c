@@ -4,6 +4,7 @@
 #include "tool_result_builder.h"
 #include "../util/common_utils.h"
 #include "../util/uuid_utils.h"
+#include "../util/app_home.h"
 #include "../util/executable_path.h"
 #include "../util/config.h"
 #include "db/goal_store.h"
@@ -734,6 +735,11 @@ int execute_goap_dispatch_action(const ToolCall *tc, ToolResult *result) {
     if (prompt_file[0]) {
         spawn_args[ai++] = "--system-prompt-file";
         spawn_args[ai++] = prompt_file;
+    }
+    /* The worker reads the parent's config and databases, not a default home. */
+    if (app_home_is_initialized()) {
+        spawn_args[ai++] = "--home";
+        spawn_args[ai++] = (char *)app_home_get();
     }
     spawn_args[ai] = NULL;
 

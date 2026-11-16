@@ -354,6 +354,62 @@ void test_read_subagent_output_from_pipe(void) {
 // subagent_spawn() tests
 // =========================================================================
 
+/* =============================================================================
+ * Child argument list tests
+ * ========================================================================== */
+
+static int args_index_of(char *args[], int count, const char *flag) {
+    for (int i = 0; i < count; i++) {
+        if (args[i] != NULL && strcmp(args[i], flag) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void test_subagent_args_carry_auto_mode(void) {
+    char *args[SUBAGENT_CHILD_ARGS_MAX];
+    int count = subagent_build_child_args(args, SUBAGENT_CHILD_ARGS_MAX, "/bin/scaffold",
+                                          "task", NULL, NULL, 1, NULL);
+
+    TEST_ASSERT_TRUE(count > 0);
+    TEST_ASSERT_NULL(args[count]);
+    TEST_ASSERT_TRUE(args_index_of(args, count, "--auto") > 0);
+    TEST_ASSERT_EQUAL_INT(-1, args_index_of(args, count, "--home"));
+}
+
+void test_subagent_args_omit_auto_mode_when_parent_prompts(void) {
+    char *args[SUBAGENT_CHILD_ARGS_MAX];
+    int count = subagent_build_child_args(args, SUBAGENT_CHILD_ARGS_MAX, "/bin/scaffold",
+                                          "task", "ctx", "gpt-4o", 0, NULL);
+
+    TEST_ASSERT_TRUE(count > 0);
+    TEST_ASSERT_EQUAL_INT(-1, args_index_of(args, count, "--auto"));
+    TEST_ASSERT_TRUE(args_index_of(args, count, "--context") > 0);
+    TEST_ASSERT_TRUE(args_index_of(args, count, "--model") > 0);
+}
+
+void test_subagent_args_carry_parent_home(void) {
+    char *args[SUBAGENT_CHILD_ARGS_MAX];
+    int count = subagent_build_child_args(args, SUBAGENT_CHILD_ARGS_MAX, "/bin/scaffold",
+                                          "task", "ctx", "gpt-4o", 1, "/tmp/parent_home");
+
+    int home = args_index_of(args, count, "--home");
+    TEST_ASSERT_TRUE(home > 0);
+    TEST_ASSERT_TRUE(home + 1 < count);
+    TEST_ASSERT_EQUAL_STRING("/tmp/parent_home", args[home + 1]);
+    TEST_ASSERT_TRUE(args_index_of(args, count, "--auto") > 0);
+}
+
+void test_subagent_args_reject_small_buffer(void) {
+    char *args[4];
+    TEST_ASSERT_EQUAL_INT(-1, subagent_build_child_args(args, 4, "/bin/scaffold", "task",
+                                                        "ctx", "gpt-4o", 1,
+                                                        "/tmp/parent_home"));
+    TEST_ASSERT_EQUAL_INT(-1, subagent_build_child_args(NULL, 16, "/bin/scaffold", "task",
+                                                        NULL, NULL, 0, NULL));
+}
+
 void test_subagent_spawn_null_params(void) {
     SubagentManager manager;
     subagent_manager_init_with_config(&manager, SUBAGENT_MAX_DEFAULT, SUBAGENT_TIMEOUT_DEFAULT);
@@ -1306,6 +1362,10 @@ int main(int argc, char **argv) {
     RUN_TEST(test_read_subagent_output_from_pipe);
 
     // Spawn tests
+    RUN_TEST(test_subagent_args_carry_auto_mode);
+    RUN_TEST(test_subagent_args_omit_auto_mode_when_parent_prompts);
+    RUN_TEST(test_subagent_args_carry_parent_home);
+    RUN_TEST(test_subagent_args_reject_small_buffer);
     RUN_TEST(test_subagent_spawn_null_params);
     RUN_TEST(test_subagent_spawn_prevents_nesting);
     RUN_TEST(test_subagent_spawn_respects_max_limit);

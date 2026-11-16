@@ -18,6 +18,7 @@ typedef struct Services Services;
 #define SUBAGENT_POLL_INTERVAL_USEC 50000  // 50ms polling interval
 #define SUBAGENT_GRACE_PERIOD_USEC 100000  // 100ms grace period before SIGKILL
 #define SUBAGENT_HARD_CAP 20               // Absolute maximum concurrent subagents
+#define SUBAGENT_CHILD_ARGS_MAX 16         // Slots for the child's argv, NULL included
 #define SUBAGENT_MAX_TIMEOUT_SEC 3600      // Maximum timeout: 1 hour
 
 typedef enum {
@@ -81,6 +82,19 @@ void subagent_manager_cleanup(SubagentManager *manager);
 
 /** subagent_id_out must be at least SUBAGENT_ID_LENGTH + 1 bytes. model may be NULL to inherit parent's model. */
 int subagent_spawn(SubagentManager *manager, const char *task, const char *context, const char *model, char *subagent_id_out);
+
+/**
+ * Build the argv a subagent is started with: --subagent --task, the optional
+ * --context and --model, --auto when the parent runs gated calls through the
+ * model review, and --home when the parent has one, so the child reads the
+ * parent's config instead of a different one. The strings are borrowed, not
+ * copied, and args[count] is set to NULL.
+ *
+ * @return Number of arguments before the NULL, or -1 if they don't fit
+ */
+int subagent_build_child_args(char *args[], int capacity, char *executable,
+                              const char *task, const char *context,
+                              const char *model, int auto_mode, const char *home);
 
 /** Spawn a subagent with a custom argv. The child execv's args[0] with args. task_desc populates the Subagent.task field for completion notifications. */
 int subagent_spawn_with_args(SubagentManager *manager, char *args[],

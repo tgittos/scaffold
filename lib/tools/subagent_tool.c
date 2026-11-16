@@ -2,6 +2,7 @@
 #include "subagent_process.h"
 #include "../util/json_escape.h"
 #include "../util/interrupt.h"
+#include "../util/app_home.h"
 #include "../util/config.h"
 #include "../policy/subagent_approval.h"
 #include "../ipc/message_store.h"
@@ -366,6 +367,47 @@ static int prefork_setup(SubagentManager *manager, char id_out[SUBAGENT_ID_LENGT
     return 0;
 }
 
+int subagent_build_child_args(char *args[], int capacity, char *executable,
+                              const char *task, const char *context,
+                              const char *model, int auto_mode, const char *home) {
+    if (args == NULL || executable == NULL || task == NULL || capacity < 1) {
+        return -1;
+    }
+
+    const char *parts[SUBAGENT_CHILD_ARGS_MAX];
+    int n = 0;
+    parts[n++] = executable;
+    parts[n++] = "--subagent";
+    parts[n++] = "--task";
+    parts[n++] = task;
+    if (context != NULL && context[0] != '\0') {
+        parts[n++] = "--context";
+        parts[n++] = context;
+    }
+    if (model != NULL && model[0] != '\0') {
+        parts[n++] = "--model";
+        parts[n++] = model;
+    }
+    /* Without --auto the child would match its config file's shell entries on
+     * its own instead of sending the call up for the parent's model review. */
+    if (auto_mode) {
+        parts[n++] = "--auto";
+    }
+    if (home != NULL && home[0] != '\0') {
+        parts[n++] = "--home";
+        parts[n++] = home;
+    }
+
+    if (n + 1 > capacity) {
+        return -1;
+    }
+    for (int i = 0; i < n; i++) {
+        args[i] = (char *)parts[i];
+    }
+    args[n] = NULL;
+    return n;
+}
+
 /**
  * Spawn a new subagent to execute a task.
  * Forks a new process running ralph in subagent mode.
@@ -386,7 +428,14 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
         return -1;
     }
 
-    pid_t pid = fork();
+    /* Built before the fork: the child must not allocate between fork and exec. */
+    char *args[SUBAGENT_CHILD_ARGS_MAX];
+    int auto_mode = manager->gate_config != NULL && manager->gate_config->auto_mode;
+    const char *home = app_home_is_initialized() ? app_home_get() : NULL;
+    int arg_count = subagent_build_child_args(args, SUBAGENT_CHILD_ARGS_MAX, ralph_path,
+                                              task, context, model, auto_mode, home);
+
+    pid_t pid = arg_count > 0 ? fork() : -1;
     if (pid == -1) {
         free(ralph_path);
         close(stdout_pipefd[0]); close(stdout_pipefd[1]);
@@ -397,23 +446,6 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
     if (pid == 0) {
         close(stdout_pipefd[0]);
         child_setup_ipc(stdout_pipefd[1], request_pipe, response_pipe);
-
-        char *args[9];
-        int ai = 0;
-        args[ai++] = ralph_path;
-        args[ai++] = "--subagent";
-        args[ai++] = "--task";
-        args[ai++] = (char*)task;
-        if (context != NULL && strlen(context) > 0) {
-            args[ai++] = "--context";
-            args[ai++] = (char*)context;
-        }
-        if (model != NULL && strlen(model) > 0) {
-            args[ai++] = "--model";
-            args[ai++] = (char*)model;
-        }
-        args[ai] = NULL;
-
         execv(ralph_path, args);
         _exit(127);
     }
