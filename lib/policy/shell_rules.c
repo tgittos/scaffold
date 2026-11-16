@@ -122,6 +122,7 @@ static const Wrapper WRAPPERS[] = {
     {"timeout", TIMEOUT_OPTS, 1},
     {"stdbuf", STDBUF_OPTS, 0},
     {"command", NO_OPTS, 0},
+    {"builtin", NO_OPTS, 0},
     {"nohup", NO_OPTS, 0},
     {"time", NO_OPTS, 0},
     {"setsid", NO_OPTS, 0},
@@ -618,8 +619,12 @@ int shell_command_changes_directory(const ParsedShellCommand *p) {
         return 0;
     }
     CommandName name = command_name_of(p->tokens[command_word]);
+    /* eval and dot-source run text this parser never sees, so a "cd" inside
+     * them is invisible: they count as a move. */
     return command_name_is(&name, "cd") || command_name_is(&name, "chdir") ||
-           command_name_is(&name, "pushd") || command_name_is(&name, "popd");
+           command_name_is(&name, "pushd") || command_name_is(&name, "popd") ||
+           command_name_is(&name, "eval") || command_name_is(&name, "source") ||
+           command_name_is(&name, ".");
 }
 
 static int always_ask_in_command(const ParsedShellCommand *p, const char **out_flag) {

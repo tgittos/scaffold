@@ -2684,6 +2684,76 @@ void test_duplicate_path_denies_write_in_auto_mode(void) {
     TEST_ASSERT_EQUAL(APPROVAL_DENIED, check_approval_gate(&config, &duplicated, &path));
 }
 
+void test_too_many_argument_keys_deny_shell_call(void) {
+    /* The duplicate scan compares members pairwise, so an object with a huge
+     * member count is refused instead of scanned. */
+    const char *status[] = {"git", "status"};
+    approval_gate_add_shell_allowlist(&config, status, 2, SHELL_TYPE_UNKNOWN);
+    config.is_interactive = 0;
+
+    size_t size = 1001 * 24 + 64;
+    char *json = malloc(size);
+    TEST_ASSERT_NOT_NULL(json);
+    size_t at = (size_t)snprintf(json, size, "{\"command\":\"git status\"");
+    for (int i = 0; i < 1001; i++) {
+        at += (size_t)snprintf(json + at, size - at, ",\"k%d\":%d", i, i);
+    }
+    snprintf(json + at, size - at, "}");
+
+    ToolCall bloated = shell_call(json);
+    ApprovedPath path;
+    TEST_ASSERT_EQUAL(APPROVAL_DENIED, check_approval_gate(&config, &bloated, &path));
+    free(json);
+}
+
+void test_forced_non_interactive_survives_a_tty(void) {
+    /* Supervisors and workers are started detached: they must never prompt,
+     * whatever stdin looks like. */
+    config.is_interactive = 1;
+    approval_gate_force_non_interactive(&config);
+    TEST_ASSERT_EQUAL_INT(0, approval_gate_is_interactive(&config));
+
+    /* A later TTY detection must not undo it. */
+    config.is_interactive = 1;
+    approval_gate_detect_interactive(&config);
+    TEST_ASSERT_EQUAL_INT(0, approval_gate_is_interactive(&config));
+
+    ToolCall call = shell_call("{\"command\": \"touch /tmp/pwned_bg\"}");
+    ApprovedPath path;
+    TEST_ASSERT_EQUAL(APPROVAL_NON_INTERACTIVE_DENIED,
+                      check_approval_gate(&config, &call, &path));
+
+    approval_gate_force_non_interactive(NULL); /* NULL safe */
+}
+
+static int stub_is_extension_tool(const char *name) {
+    return name != NULL && strcmp(name, "ext_write") == 0;
+}
+
+static const char *stub_get_match_arg(const char *name) {
+    (void)name;
+    return "path";
+}
+
+void test_extension_match_arg_lookup_is_case_sensitive(void) {
+    /* The extractors read "path" case-sensitively; the allowlist lookup has to
+     * read the same member, or it matches a value the executor never sees. */
+    ApprovalGateCallbacks cbs = { .is_extension_tool = stub_is_extension_tool,
+                                  .get_match_arg = stub_get_match_arg };
+    approval_gate_set_callbacks(&cbs);
+    approval_gate_add_allowlist(&config, "ext_write", "^/tmp/ok");
+
+    ToolCall exact = { .id = "c", .name = "ext_write",
+                       .arguments = "{\"path\": \"/tmp/ok\"}" };
+    ToolCall upper = { .id = "c", .name = "ext_write",
+                       .arguments = "{\"PATH\": \"/tmp/ok\"}" };
+
+    TEST_ASSERT_EQUAL_INT(1, approval_gate_matches_allowlist(&config, &exact));
+    TEST_ASSERT_EQUAL_INT(0, approval_gate_matches_allowlist(&config, &upper));
+
+    approval_gate_set_callbacks(NULL);
+}
+
 void test_duplicate_argument_keys_deny_batch_call(void) {
     const char *status[] = {"git", "status"};
     approval_gate_add_shell_allowlist(&config, status, 2, SHELL_TYPE_UNKNOWN);
@@ -2986,6 +3056,9 @@ int main(void) {
     RUN_TEST(test_duplicate_argument_keys_deny_shell_call);
     RUN_TEST(test_duplicate_working_dir_denies_shell_call);
     RUN_TEST(test_duplicate_path_denies_write_in_auto_mode);
+    RUN_TEST(test_too_many_argument_keys_deny_shell_call);
+    RUN_TEST(test_forced_non_interactive_survives_a_tty);
+    RUN_TEST(test_extension_match_arg_lookup_is_case_sensitive);
     RUN_TEST(test_duplicate_argument_keys_deny_batch_call);
     RUN_TEST(test_check_approval_gate_non_interactive_allowed_category);
     RUN_TEST(test_check_approval_gate_non_interactive_allow_category_override);

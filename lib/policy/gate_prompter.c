@@ -195,21 +195,95 @@ void gate_prompter_clear_batch_prompt(GatePrompter *gp, int count) {
     fflush(stderr);
 }
 
-/* How one character is shown: itself, or an escape. Returns its length. */
-static size_t escape_char(char out[5], unsigned char c) {
-    if (c == '\n' || c == '\t' || c == '\r') {
+/* Longest escape an input character turns into, plus the terminator. */
+#define ESCAPE_MAX 10
+
+/*
+ * Code points that reorder or hide the text around them: the bidi overrides,
+ * embeddings and isolates, the left/right-to-right marks, and the C1 block,
+ * which terminals read as escape sequences.
+ */
+static int codepoint_is_deceptive(unsigned long cp) {
+    return (cp >= 0x202A && cp <= 0x202E) || (cp >= 0x2066 && cp <= 0x2069) ||
+           cp == 0x200E || cp == 0x200F || (cp >= 0x0080 && cp <= 0x009F);
+}
+
+/*
+ * Decode the UTF-8 sequence at c. Returns its length in bytes, or 0 when the
+ * bytes are not a well-formed, shortest-form sequence.
+ */
+static size_t utf8_decode(const unsigned char *c, unsigned long *out_cp) {
+    size_t len;
+    unsigned long cp;
+    if ((c[0] & 0xE0) == 0xC0) {
+        len = 2;
+        cp = c[0] & 0x1Fu;
+    } else if ((c[0] & 0xF0) == 0xE0) {
+        len = 3;
+        cp = c[0] & 0x0Fu;
+    } else if ((c[0] & 0xF8) == 0xF0) {
+        len = 4;
+        cp = c[0] & 0x07u;
+    } else {
+        return 0;
+    }
+    for (size_t i = 1; i < len; i++) {
+        if ((c[i] & 0xC0) != 0x80) {
+            return 0;
+        }
+        cp = (cp << 6) | (c[i] & 0x3Fu);
+    }
+    static const unsigned long MIN_FOR_LEN[5] = {0, 0, 0x80, 0x800, 0x10000};
+    if (cp < MIN_FOR_LEN[len] || cp > 0x10FFFF) {
+        return 0;
+    }
+    *out_cp = cp;
+    return len;
+}
+
+/*
+ * How the character at c is shown: itself, or an escape. Returns the length
+ * written and the number of input bytes it stands for.
+ */
+static size_t escape_char_at(char out[ESCAPE_MAX], const unsigned char *c,
+                             size_t *out_consumed) {
+    *out_consumed = 1;
+    if (c[0] == '\n' || c[0] == '\t' || c[0] == '\r') {
         out[0] = '\\';
-        out[1] = c == '\n' ? 'n' : (c == '\t' ? 't' : 'r');
+        out[1] = c[0] == '\n' ? 'n' : (c[0] == '\t' ? 't' : 'r');
         out[2] = '\0';
         return 2;
     }
-    if (c < 0x20 || c == 0x7f) {
-        snprintf(out, 5, "\\x%02x", c);
+    if (c[0] < 0x20 || c[0] == 0x7f) {
+        snprintf(out, ESCAPE_MAX, "\\x%02x", c[0]);
         return 4;
     }
-    out[0] = (char)c;
+    if (c[0] >= 0x80) {
+        unsigned long cp = 0;
+        size_t len = utf8_decode(c, &cp);
+        if (len > 0 && codepoint_is_deceptive(cp)) {
+            snprintf(out, ESCAPE_MAX, "\\u{%04lX}", cp);
+            *out_consumed = len;
+            return 8;
+        }
+    }
+    out[0] = (char)c[0];
     out[1] = '\0';
     return 1;
+}
+
+/* Start offset of the character whose last byte is text[end - 1]. */
+static size_t char_start(const unsigned char *text, size_t end) {
+    size_t limit = end >= 4 ? end - 4 : 0;
+    size_t start = end - 1;
+    while (start > limit && (text[start] & 0xC0) == 0x80) {
+        start--;
+    }
+    unsigned long cp = 0;
+    if (text[start] >= 0x80 && utf8_decode(text + start, &cp) == end - start) {
+        return start;
+    }
+    return end - 1;
 }
 
 /*
@@ -221,15 +295,17 @@ static size_t escape_into(char *buf, size_t size, const char *text, size_t limit
     size_t out = 0;
     int complete = 1;
     for (const unsigned char *c = (const unsigned char *)text;
-         text != NULL && *c != '\0'; c++) {
-        char escape[5];
-        size_t len = escape_char(escape, *c);
+         text != NULL && *c != '\0';) {
+        char escape[ESCAPE_MAX];
+        size_t consumed = 1;
+        size_t len = escape_char_at(escape, c, &consumed);
         if (out + len + 1 > size || out + len > limit) {
             complete = 0;
             break;
         }
         memcpy(buf + out, escape, len);
         out += len;
+        c += consumed;
     }
     buf[out] = '\0';
     if (out_complete != NULL) {
@@ -270,6 +346,7 @@ char *gate_prompter_escape_alloc(const char *text) {
     if (text == NULL) {
         return NULL;
     }
+    /* The longest escape, "\u{XXXX}", stands for at least two input bytes. */
     size_t size = strlen(text) * 4 + 1;
     char *buf = malloc(size);
     if (buf == NULL) {
@@ -286,13 +363,15 @@ static void escape_tail(char *buf, size_t size, const char *text, size_t max_cha
     size_t shown = 0;
     size_t start = len;
     while (start > 0) {
-        char escape[5];
-        size_t piece = escape_char(escape, (unsigned char)text[start - 1]);
+        size_t begin = char_start((const unsigned char *)text, start);
+        char escape[ESCAPE_MAX];
+        size_t consumed = 1;
+        size_t piece = escape_char_at(escape, (const unsigned char *)text + begin, &consumed);
         if (shown + piece > budget) {
             break;
         }
         shown += piece;
-        start--;
+        start = begin;
     }
     snprintf(buf, size, "...");
     escape_into(buf + 3, size > 3 ? size - 3 : 0, text + start, budget, NULL);

@@ -1299,7 +1299,7 @@ static char *extract_match_target(const char *tool_name, const char *arguments_j
         if (match_arg != NULL) {
             cJSON *args = cJSON_Parse(arguments_json);
             if (args != NULL) {
-                cJSON *target_item = cJSON_GetObjectItem(args, match_arg);
+                cJSON *target_item = cJSON_GetObjectItemCaseSensitive(args, match_arg);
                 char *result = NULL;
                 if (cJSON_IsString(target_item) && target_item->valuestring != NULL) {
                     result = strdup(target_item->valuestring);
@@ -1741,14 +1741,29 @@ static int auto_review_allows(const ToolCall *tool_call, char **out_reason) {
  * first value of a duplicated key and the executors read the last, so nothing
  * the gate decides about such a call describes what would run.
  */
+/* Whether this process may put a prompt on the terminal at all. */
+static int gate_can_prompt(const ApprovalGateConfig *config) {
+    return config != NULL && config->is_interactive && !config->never_interactive;
+}
+
 int approval_gate_rejects_arguments(const ToolCall *tool_call) {
-    if (tool_call == NULL || !tool_args_has_duplicate_keys(tool_call)) {
+    if (tool_call == NULL) {
         return 0;
     }
-    fprintf(stderr, "Denied %s: its arguments repeat a key.\n",
-            tool_call->name != NULL ? tool_call->name : "tool call");
-    LOG_WARN("approval gate: duplicate argument key in call to %s",
-             tool_call->name != NULL ? tool_call->name : "(unnamed)");
+    const char *name = tool_call->name != NULL ? tool_call->name : "tool call";
+
+    if (tool_args_exceed_key_limit(tool_call)) {
+        fprintf(stderr, "Denied %s: its arguments hold more than %d keys in one object.\n",
+                name, TOOL_ARGS_MAX_OBJECT_MEMBERS);
+        LOG_WARN("approval gate: argument object over the key limit in call to %s", name);
+        return 1;
+    }
+
+    if (!tool_args_has_duplicate_keys(tool_call)) {
+        return 0;
+    }
+    fprintf(stderr, "Denied %s: its arguments repeat a key.\n", name);
+    LOG_WARN("approval gate: duplicate argument key in call to %s", name);
     return 1;
 }
 
@@ -1795,7 +1810,7 @@ ApprovalResult check_approval_gate(ApprovalGateConfig *config,
                     return APPROVAL_ALLOWED;
                 }
 
-                if (!config->is_interactive) {
+                if (!gate_can_prompt(config)) {
                     free(reason);
                     return APPROVAL_NON_INTERACTIVE_DENIED;
                 }
@@ -2089,7 +2104,7 @@ ApprovalResult check_approval_gate_batch(ApprovalGateConfig *config,
         return APPROVAL_ALLOWED;
     }
 
-    if (!config->is_interactive) {
+    if (!gate_can_prompt(config)) {
         for (int i = 0; i < approval_count; i++) {
             int idx = needs_approval_indices[i];
             out_batch->results[idx] = APPROVAL_NON_INTERACTIVE_DENIED;
@@ -2289,13 +2304,25 @@ void approval_gate_detect_interactive(ApprovalGateConfig *config) {
         return;
     }
 
+    if (config->never_interactive) {
+        config->is_interactive = 0;
+        return;
+    }
     config->is_interactive = isatty(STDIN_FILENO) ? 1 : 0;
+}
+
+void approval_gate_force_non_interactive(ApprovalGateConfig *config) {
+    if (config == NULL) {
+        return;
+    }
+    config->never_interactive = 1;
+    config->is_interactive = 0;
 }
 
 int approval_gate_is_interactive(const ApprovalGateConfig *config) {
     if (config == NULL) {
         return 0;
     }
-    return config->is_interactive;
+    return config->is_interactive && !config->never_interactive;
 }
 

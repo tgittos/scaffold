@@ -9,8 +9,11 @@ int process_spawn_devnull(char *args[], pid_t *out_pid) {
     if (pid < 0) return -1;
 
     if (pid == 0) {
-        int devnull = open("/dev/null", O_WRONLY);
+        /* Stdin comes from /dev/null too: a detached child shares the parent's
+         * terminal otherwise and would read keystrokes meant for the parent. */
+        int devnull = open("/dev/null", O_RDWR);
         if (devnull >= 0) {
+            dup2(devnull, STDIN_FILENO);
             dup2(devnull, STDOUT_FILENO);
             dup2(devnull, STDERR_FILENO);
             close(devnull);

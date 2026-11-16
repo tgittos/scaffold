@@ -37,6 +37,31 @@ static int object_has_duplicate_keys(const cJSON *node) {
     return 0;
 }
 
+/* Whether any object in the tree holds more members than the scan may read. */
+static int object_over_member_limit(const cJSON *node) {
+    int members = 0;
+    for (const cJSON *child = node->child; child != NULL; child = child->next) {
+        if (cJSON_IsObject(node) && ++members > TOOL_ARGS_MAX_OBJECT_MEMBERS) {
+            return 1;
+        }
+        if ((cJSON_IsObject(child) || cJSON_IsArray(child)) &&
+            object_over_member_limit(child)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int tool_args_exceed_key_limit(const ToolCall *tool_call) {
+    cJSON *args = parse_args(tool_call);
+    if (args == NULL) {
+        return 0;
+    }
+    int over = object_over_member_limit(args);
+    cJSON_Delete(args);
+    return over;
+}
+
 int tool_args_has_duplicate_keys(const ToolCall *tool_call) {
     cJSON *args = parse_args(tool_call);
     if (args == NULL) {

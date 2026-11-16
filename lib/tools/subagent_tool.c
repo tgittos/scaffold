@@ -8,10 +8,10 @@
 #include "../policy/child_mode.h"
 #include "../ipc/message_store.h"
 #include "messaging_tool.h"
+#include <limits.h>
 #include <cJSON.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <limits.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdio.h>
@@ -267,6 +267,14 @@ static void child_setup_ipc(int stdout_write_fd, int request_pipe[2],
     close(stdout_write_fd);
     if (dup2(STDOUT_FILENO, STDERR_FILENO) == -1) _exit(127);
 
+    /* Never the parent's terminal: a child that prompted would read keystrokes
+     * meant for the parent's own prompt. */
+    int devnull = open("/dev/null", O_RDONLY);
+    if (devnull >= 0) {
+        dup2(devnull, STDIN_FILENO);
+        close(devnull);
+    }
+
     close(request_pipe[0]);
     close(response_pipe[1]);
 
@@ -432,7 +440,11 @@ int subagent_spawn(SubagentManager *manager, const char *task, const char *conte
     /* Built before the fork: the child must not allocate between fork and exec. */
     char *args[SUBAGENT_CHILD_ARGS_MAX];
     const char *mode_flag = child_mode_mode_flag(manager->gate_config);
+    char home_abs[PATH_MAX];
     const char *home = app_home_is_initialized() ? app_home_get() : NULL;
+    if (home != NULL && child_mode_absolute_home(home, home_abs, sizeof(home_abs)) == 0) {
+        home = home_abs;
+    }
     int arg_count = subagent_build_child_args(args, SUBAGENT_CHILD_ARGS_MAX, ralph_path,
                                               task, context, model, mode_flag, home);
 

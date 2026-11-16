@@ -150,6 +150,48 @@ void test_gate_prompter_escape_alloc_escapes_control_characters(void) {
     TEST_ASSERT_NULL(gate_prompter_escape_alloc(NULL));
 }
 
+void test_gate_prompter_escapes_bidi_and_c1_controls(void) {
+    char buf[64];
+
+    /* U+202E reorders everything after it on a terminal that renders bidi. */
+    gate_prompter_escape_control(buf, sizeof(buf), "echo ok \xe2\x80\xaerm -rf");
+    TEST_ASSERT_EQUAL_STRING("echo ok \\u{202E}rm -rf", buf);
+
+    /* Isolates and marks hide text the same way. */
+    gate_prompter_escape_control(buf, sizeof(buf), "a\xe2\x81\xa6" "b" "\xe2\x80\x8e" "c");
+    TEST_ASSERT_EQUAL_STRING("a\\u{2066}b\\u{200E}c", buf);
+
+    /* C1 controls are escape sequences on many terminals. */
+    gate_prompter_escape_control(buf, sizeof(buf), "a\xc2\x9bm");
+    TEST_ASSERT_EQUAL_STRING("a\\u{009B}m", buf);
+
+    /* Ordinary multi-byte text is left alone. */
+    gate_prompter_escape_control(buf, sizeof(buf), "caf\xc3\xa9 \xe2\x9c\x93");
+    TEST_ASSERT_EQUAL_STRING("caf\xc3\xa9 \xe2\x9c\x93", buf);
+}
+
+void test_gate_prompter_escape_alloc_and_detail_escape_bidi(void) {
+    char *escaped = gate_prompter_escape_alloc("x\xe2\x80\xaby");
+    TEST_ASSERT_NOT_NULL(escaped);
+    TEST_ASSERT_EQUAL_STRING("x\\u{202B}y", escaped);
+    free(escaped);
+
+    char buf[256];
+    gate_prompter_format_detail(buf, sizeof(buf), "echo \xe2\x80\xad", NULL, NULL, NULL);
+    TEST_ASSERT_EQUAL_STRING("echo \\u{202D}", buf);
+}
+
+void test_gate_prompter_escape_truncate_keeps_bidi_escapes_whole(void) {
+    char buf[64];
+
+    /* "ab" plus an eight-character escape doesn't fit in nine characters. */
+    gate_prompter_escape_truncate(buf, sizeof(buf), "ab" "\xe2\x80\xae" "cdef", 9);
+    TEST_ASSERT_EQUAL_STRING("ab...", buf);
+
+    gate_prompter_escape_truncate(buf, sizeof(buf), "ab\xe2\x80\xae", 12);
+    TEST_ASSERT_EQUAL_STRING("ab\\u{202E}", buf);
+}
+
 void test_gate_prompter_escape_truncate_keeps_escapes_whole(void) {
     char buf[64];
 
@@ -337,6 +379,9 @@ int main(void) {
     RUN_TEST(test_gate_prompter_escape_control_truncates_safely);
     RUN_TEST(test_gate_prompter_escape_alloc_escapes_control_characters);
     RUN_TEST(test_gate_prompter_escape_truncate_keeps_escapes_whole);
+    RUN_TEST(test_gate_prompter_escapes_bidi_and_c1_controls);
+    RUN_TEST(test_gate_prompter_escape_alloc_and_detail_escape_bidi);
+    RUN_TEST(test_gate_prompter_escape_truncate_keeps_bidi_escapes_whole);
     RUN_TEST(test_gate_prompter_format_detail_escapes_and_names_directory);
     RUN_TEST(test_gate_prompter_format_detail_truncates_long_values);
 

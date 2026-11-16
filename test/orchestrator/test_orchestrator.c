@@ -3,7 +3,10 @@
 #include "db/goal_store.h"
 #include "util/app_home.h"
 #include "policy/child_mode.h"
+#include "util/process_spawn.h"
+#include <fcntl.h>
 #include <signal.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
@@ -319,9 +322,48 @@ void test_supervisor_args_carry_parent_mode(void) {
     TEST_ASSERT_FALSE(has_arg(args, "--yolo"));
 }
 
+void test_spawned_process_reads_from_devnull(void) {
+    /* A detached child must not share the user's terminal: it would race the
+     * parent REPL for keystrokes at an approval prompt nobody can see. */
+    const char *out = "/tmp/test_orchestrator_stdin";
+    const char *stdin_src = "/tmp/test_orchestrator_stdin_src";
+    unlink(out);
+    char script[256];
+    snprintf(script, sizeof(script), "readlink /proc/self/fd/0 > %s", out);
+    char *args[] = {"/bin/sh", "-c", script, NULL};
+
+    /* Stand in for the user's terminal: whatever this process has on stdin,
+     * the child must not get it. */
+    int src = open(stdin_src, O_RDONLY | O_CREAT, 0600);
+    TEST_ASSERT_TRUE(src >= 0);
+    int saved_stdin = dup(STDIN_FILENO);
+    TEST_ASSERT_TRUE(saved_stdin >= 0);
+    TEST_ASSERT_TRUE(dup2(src, STDIN_FILENO) >= 0);
+    close(src);
+
+    pid_t pid = 0;
+    TEST_ASSERT_EQUAL_INT(0, process_spawn_devnull(args, &pid));
+    int status = 0;
+    TEST_ASSERT_EQUAL_INT(pid, waitpid(pid, &status, 0));
+
+    dup2(saved_stdin, STDIN_FILENO);
+    close(saved_stdin);
+    unlink(stdin_src);
+
+    FILE *f = fopen(out, "r");
+    TEST_ASSERT_NOT_NULL(f);
+    char line[128] = {0};
+    TEST_ASSERT_NOT_NULL(fgets(line, sizeof(line), f));
+    fclose(f);
+    unlink(out);
+    line[strcspn(line, "\n")] = '\0';
+    TEST_ASSERT_EQUAL_STRING("/dev/null", line);
+}
+
 int main(void) {
     UNITY_BEGIN();
 
+    RUN_TEST(test_spawned_process_reads_from_devnull);
     RUN_TEST(test_supervisor_args_normal_mode_has_no_mode_flag);
     RUN_TEST(test_supervisor_args_carry_parent_mode);
 

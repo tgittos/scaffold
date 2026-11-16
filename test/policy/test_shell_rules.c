@@ -347,6 +347,53 @@ void test_directory_changing_segments_are_unsaveable(void) {
     free_parsed_shell_command(make);
 }
 
+void test_builtin_and_eval_directory_changes_are_unsaveable(void) {
+    /* The shell runs "cd" the same through "builtin" and "command". */
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_DIRECTORY_CHANGE, status_of("builtin cd /tmp/evil"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_DIRECTORY_CHANGE, status_of("builtin pushd /tmp"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_DIRECTORY_CHANGE, status_of("builtin popd"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_DIRECTORY_CHANGE, status_of("command cd /tmp/evil"));
+
+    /* eval and dot-source run text the parser can't read, so they count too. */
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_DIRECTORY_CHANGE, status_of("eval cd /tmp/evil"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_DIRECTORY_CHANGE, status_of("eval make test"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_DIRECTORY_CHANGE, status_of(". ./setup.sh"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_DIRECTORY_CHANGE, status_of("source ./setup.sh"));
+    TEST_ASSERT_EQUAL_INT(SHELL_RULE_DIRECTORY_CHANGE, status_of("sudo eval cd /"));
+
+    static const char *movers[] = {"builtin cd /tmp/evil", "command cd /tmp/evil",
+                                   "eval cd /tmp/evil", ". ./setup.sh",
+                                   "source ./setup.sh", NULL};
+    for (int i = 0; movers[i] != NULL; i++) {
+        ParsedShellCommand *p = parse(movers[i]);
+        TEST_ASSERT_EQUAL_INT(1, shell_command_changes_directory(p));
+        free_parsed_shell_command(p);
+    }
+}
+
+/* A rule with the given tokens, as if it had been saved earlier. */
+static void build_rule(ShellRule *rule, const ParsedShellCommand *p) {
+    rule->count = p->token_count;
+    rule->tokens = calloc((size_t)p->token_count, sizeof(char *));
+    TEST_ASSERT_NOT_NULL(rule->tokens);
+    for (int i = 0; i < p->token_count; i++) {
+        rule->tokens[i] = strdup(p->tokens[i]);
+    }
+}
+
+void test_rules_never_match_a_directory_change_through_builtin_or_eval(void) {
+    static const char *movers[] = {"builtin cd /tmp/evil", "command cd /tmp/evil",
+                                   "eval cd /tmp/evil", "source ./setup.sh", NULL};
+    for (int i = 0; movers[i] != NULL; i++) {
+        ParsedShellCommand *p = parse(movers[i]);
+        ShellRule rule;
+        build_rule(&rule, p);
+        TEST_ASSERT_EQUAL_INT(0, shell_rule_matches(&rule, p));
+        shell_rule_free(&rule);
+        free_parsed_shell_command(p);
+    }
+}
+
 void test_more_wrappers_and_in_place_flags_always_ask(void) {
     TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("xargs git push --force"));
     TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("exec git push -f"));
@@ -404,6 +451,8 @@ int main(void) {
     RUN_TEST(test_wrappers_do_not_hide_always_ask_flags);
     RUN_TEST(test_tilde_tokens_are_unsaveable);
     RUN_TEST(test_directory_changing_segments_are_unsaveable);
+    RUN_TEST(test_builtin_and_eval_directory_changes_are_unsaveable);
+    RUN_TEST(test_rules_never_match_a_directory_change_through_builtin_or_eval);
     RUN_TEST(test_more_wrappers_and_in_place_flags_always_ask);
     RUN_TEST(test_brace_expansion_predicate);
     RUN_TEST(test_status_reasons_and_labels);

@@ -158,6 +158,7 @@ typedef struct {
 typedef struct ApprovalGateConfig {
     int enabled;            /* Master switch for approval gates */
     int is_interactive;     /* Whether stdin is a TTY (can prompt user) */
+    int never_interactive;  /* Detached process: prompting is forbidden */
     int auto_mode;          /* Approve gated calls that pass auto review */
 
     /* Category configuration */
@@ -647,10 +648,24 @@ int approval_gate_parse_category(const char *name, GateCategory *out_category);
  * Detect whether we're running in interactive mode.
  * Checks if stdin is a TTY and updates config->is_interactive accordingly.
  * Call this after approval_gate_init() and before processing any tool calls.
+ * A configuration marked by approval_gate_force_non_interactive() stays
+ * non-interactive whatever stdin is.
  *
  * @param config Gate configuration to update
  */
 void approval_gate_detect_interactive(ApprovalGateConfig *config);
+
+/**
+ * Forbid prompting for this configuration, for good.
+ *
+ * Goal supervisors and GOAP workers run detached from the session that started
+ * them. Their stdin may still be the user's terminal, where a prompt they wrote
+ * would be invisible and the keys the user types for the parent would answer
+ * it. Such a process refuses gated calls instead (APPROVAL_NON_INTERACTIVE_DENIED).
+ *
+ * @param config Gate configuration to update (NULL safe)
+ */
+void approval_gate_force_non_interactive(ApprovalGateConfig *config);
 
 /**
  * Check if the gate configuration is in interactive mode.

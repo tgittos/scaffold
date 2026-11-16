@@ -28,6 +28,23 @@
  */
 int tool_args_has_duplicate_keys(const ToolCall *tool_call);
 
+/** Most members one object of an arguments JSON may hold. */
+#define TOOL_ARGS_MAX_OBJECT_MEMBERS 1000
+
+/**
+ * Whether any object in the arguments JSON holds more than
+ * TOOL_ARGS_MAX_OBJECT_MEMBERS members.
+ *
+ * The duplicate-key scan compares each object's members pairwise, so a call
+ * carrying a six-figure member count would stall the gate. No tool takes that
+ * many arguments; such a call is denied instead of scanned.
+ *
+ * @param tool_call The tool call
+ * @return 1 if an object is over the limit, 0 otherwise (including
+ *         unparseable arguments)
+ */
+int tool_args_exceed_key_limit(const ToolCall *tool_call);
+
 /**
  * Get a string argument by key from a tool call's arguments JSON.
  *

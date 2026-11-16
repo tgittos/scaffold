@@ -184,6 +184,14 @@ int agent_load_config(Agent* agent) {
         agent->session.gate_config.auto_mode = 1;
     }
 
+    /* Supervisors and workers run detached from the session that started them:
+     * a prompt of theirs would be invisible and the user's keystrokes for the
+     * parent would answer it. They refuse gated calls instead. */
+    if (agent->config.mode == AGENT_MODE_SUPERVISOR ||
+        agent->config.mode == AGENT_MODE_WORKER) {
+        approval_gate_force_non_interactive(&agent->session.gate_config);
+    }
+
     for (int i = 0; i < agent->config.allow_category_count; i++) {
         if (approval_gate_set_category_action(&agent->session.gate_config,
                                               agent->config.allow_categories[i],

@@ -1,6 +1,9 @@
 #include "unity.h"
 #include "policy/child_mode.h"
+#include <limits.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 void setUp(void) { child_mode_set_process_gate(NULL); }
 void tearDown(void) { child_mode_set_process_gate(NULL); }
@@ -39,6 +42,36 @@ void test_null_config_is_normal_mode(void) {
     TEST_ASSERT_EQUAL_INT(0, child_mode_flags(NULL, NULL, out));
 }
 
+void test_relative_home_is_resolved_to_an_absolute_path(void) {
+    /* A child runs in another directory, so a relative home would name a
+     * different directory there. */
+    char cwd[PATH_MAX];
+    TEST_ASSERT_NOT_NULL(getcwd(cwd, sizeof(cwd)));
+    mkdir("/tmp/child_mode_home", 0700);
+    TEST_ASSERT_EQUAL_INT(0, chdir("/tmp"));
+
+    char buf[PATH_MAX];
+    TEST_ASSERT_EQUAL_INT(0, child_mode_absolute_home("child_mode_home", buf, sizeof(buf)));
+    TEST_ASSERT_EQUAL_STRING("/tmp/child_mode_home", buf);
+
+    /* A home that doesn't exist yet still becomes absolute. */
+    TEST_ASSERT_EQUAL_INT(0, child_mode_absolute_home("missing_home/sub", buf, sizeof(buf)));
+    TEST_ASSERT_EQUAL_STRING("/tmp/missing_home/sub", buf);
+
+    TEST_ASSERT_EQUAL_INT(0, chdir(cwd));
+}
+
+void test_absolute_home_is_passed_through(void) {
+    char buf[PATH_MAX];
+    TEST_ASSERT_EQUAL_INT(0, child_mode_absolute_home("/tmp", buf, sizeof(buf)));
+    TEST_ASSERT_EQUAL_STRING("/tmp", buf);
+
+    TEST_ASSERT_EQUAL_INT(-1, child_mode_absolute_home(NULL, buf, sizeof(buf)));
+    TEST_ASSERT_EQUAL_INT(-1, child_mode_absolute_home("", buf, sizeof(buf)));
+    TEST_ASSERT_EQUAL_INT(-1, child_mode_absolute_home("/tmp", NULL, sizeof(buf)));
+    TEST_ASSERT_EQUAL_INT(-1, child_mode_absolute_home("/tmp", buf, 2));
+}
+
 void test_process_gate_registration(void) {
     ApprovalGateConfig cfg = {.enabled = 1};
     child_mode_set_process_gate(&cfg);
@@ -52,6 +85,8 @@ int main(void) {
     RUN_TEST(test_auto_mode_passes_auto);
     RUN_TEST(test_home_is_appended);
     RUN_TEST(test_null_config_is_normal_mode);
+    RUN_TEST(test_relative_home_is_resolved_to_an_absolute_path);
+    RUN_TEST(test_absolute_home_is_passed_through);
     RUN_TEST(test_process_gate_registration);
     return UNITY_END();
 }

@@ -69,6 +69,60 @@ void test_tool_args_has_duplicate_keys_null_safe(void) {
 }
 
 /* =============================================================================
+ * tool_args_exceed_key_limit Tests
+ * ========================================================================== */
+
+/* JSON object with count distinct members. Caller frees. */
+static char *object_with_members(int count) {
+    size_t size = (size_t)count * 24 + 32;
+    char *json = malloc(size);
+    TEST_ASSERT_NOT_NULL(json);
+    size_t at = (size_t)snprintf(json, size, "{");
+    for (int i = 0; i < count; i++) {
+        at += (size_t)snprintf(json + at, size - at, "%s\"k%d\":%d",
+                               i == 0 ? "" : ",", i, i);
+    }
+    snprintf(json + at, size - at, "}");
+    return json;
+}
+
+void test_tool_args_object_over_the_member_limit_is_rejected(void) {
+    char *big = object_with_members(1001);
+    char *at_limit = object_with_members(1000);
+    ToolCall over = make_tool_call("shell", big);
+    ToolCall allowed = make_tool_call("shell", at_limit);
+
+    TEST_ASSERT_EQUAL(1, tool_args_exceed_key_limit(&over));
+    TEST_ASSERT_EQUAL(0, tool_args_exceed_key_limit(&allowed));
+
+    free(big);
+    free(at_limit);
+}
+
+void test_tool_args_nested_object_over_the_member_limit_is_rejected(void) {
+    char *inner = object_with_members(1001);
+    size_t size = strlen(inner) + 32;
+    char *json = malloc(size);
+    TEST_ASSERT_NOT_NULL(json);
+    snprintf(json, size, "{\"opts\":%s}", inner);
+    ToolCall tc = make_tool_call("shell", json);
+
+    TEST_ASSERT_EQUAL(1, tool_args_exceed_key_limit(&tc));
+
+    free(json);
+    free(inner);
+}
+
+void test_tool_args_exceed_key_limit_null_safe(void) {
+    ToolCall invalid = make_tool_call("shell", "not json");
+    ToolCall no_args = make_tool_call("shell", NULL);
+
+    TEST_ASSERT_EQUAL(0, tool_args_exceed_key_limit(NULL));
+    TEST_ASSERT_EQUAL(0, tool_args_exceed_key_limit(&invalid));
+    TEST_ASSERT_EQUAL(0, tool_args_exceed_key_limit(&no_args));
+}
+
+/* =============================================================================
  * tool_args_get_string Tests
  * ========================================================================== */
 
@@ -345,6 +399,9 @@ int main(void) {
     RUN_TEST(test_tool_args_duplicate_key_detected_when_nested);
     RUN_TEST(test_tool_args_distinct_keys_are_not_duplicates);
     RUN_TEST(test_tool_args_has_duplicate_keys_null_safe);
+    RUN_TEST(test_tool_args_object_over_the_member_limit_is_rejected);
+    RUN_TEST(test_tool_args_nested_object_over_the_member_limit_is_rejected);
+    RUN_TEST(test_tool_args_exceed_key_limit_null_safe);
 
     /* tool_args_get_command tests */
     RUN_TEST(test_tool_args_get_command_returns_command);

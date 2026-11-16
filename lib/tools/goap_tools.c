@@ -14,6 +14,7 @@
 #include "workflow/workflow.h"
 #include "orchestrator/role_prompts.h"
 #include "orchestrator/goap_state.h"
+#include <limits.h>
 #include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -752,7 +753,11 @@ int execute_goap_dispatch_action(const ToolCall *tc, ToolResult *result) {
 
     char *spawn_args[GOAP_WORKER_ARGS_MAX];
     /* The worker reads the parent's config and databases, not a default home. */
+    char home_abs[PATH_MAX];
     const char *home = app_home_is_initialized() ? app_home_get() : NULL;
+    if (home != NULL && child_mode_absolute_home(home, home_abs, sizeof(home_abs)) == 0) {
+        home = home_abs;
+    }
     const ApprovalGateConfig *gate = child_mode_get_process_gate();
     if (goap_build_worker_args(spawn_args, GOAP_WORKER_ARGS_MAX, exe_path,
                                goal->queue_name, prompt_file, gate, home) < 0) {

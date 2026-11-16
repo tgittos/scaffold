@@ -6,6 +6,7 @@
 #include "../util/process_spawn.h"
 #include "../util/app_home.h"
 #include "../policy/child_mode.h"
+#include <limits.h>
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
@@ -60,7 +61,11 @@ int orchestrator_spawn_supervisor(goal_store_t* store, const char* goal_id) {
     }
 
     char* args[ORCHESTRATOR_SUPERVISOR_ARGS_MAX];
+    char home_abs[PATH_MAX];
     const char* home = app_home_is_initialized() ? app_home_get() : NULL;
+    if (home != NULL && child_mode_absolute_home(home, home_abs, sizeof(home_abs)) == 0) {
+        home = home_abs;
+    }
     if (orchestrator_build_supervisor_args(args, ORCHESTRATOR_SUPERVISOR_ARGS_MAX, exe_path,
                                            goal_id, phase_str, child_mode_get_process_gate(),
                                            home) < 0) {

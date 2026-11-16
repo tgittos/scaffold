@@ -3,6 +3,8 @@
 
 #include "approval_gate.h"
 
+#include <stddef.h>
+
 /** Largest number of argv entries child_mode_flags() writes. */
 #define CHILD_MODE_FLAGS_MAX 3
 
@@ -18,6 +20,20 @@ const ApprovalGateConfig *child_mode_get_process_gate(void);
 
 /** "--yolo", "--auto" or NULL (normal mode) for the given gate config. */
 const char *child_mode_mode_flag(const ApprovalGateConfig *config);
+
+/**
+ * Resolve a home directory to an absolute path for a child process.
+ *
+ * A child runs in its own working directory, so a relative --home would name a
+ * different directory there. An existing path is resolved with realpath(); one
+ * that doesn't exist yet is joined to the current working directory.
+ *
+ * @param home Home directory as this process knows it
+ * @param buf  Receives the absolute path
+ * @param size Size of buf
+ * @return 0 on success, -1 on bad arguments or when the path doesn't fit
+ */
+int child_mode_absolute_home(const char *home, char *buf, size_t size);
 
 /**
  * Write the argv entries that make a child use this process's approval mode:
