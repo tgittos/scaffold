@@ -70,15 +70,15 @@ static const SubcommandTool SUBCOMMAND_TOOLS[] = {
 
 /*
  * Flags that change what a command does. A segment carrying one never creates
- * a rule and never matches one. for_read_only marks the flags that also make
- * an otherwise read-only command able to write files or run programs.
+ * a rule and never matches one. anywhere marks the flags that act wherever they
+ * appear, even after "--" (find actions, sed -i, --output).
  */
 typedef struct {
     const char *command;     /* NULL = any command */
     const char *subcommand;  /* NULL = any subcommand */
     const char *flag;
     int         prefix;      /* 1 = match any flag starting with this */
-    int         for_read_only;
+    int         anywhere;
 } AlwaysAskFlag;
 
 static const AlwaysAskFlag ALWAYS_ASK_FLAGS[] = {
@@ -90,10 +90,7 @@ static const AlwaysAskFlag ALWAYS_ASK_FLAGS[] = {
     {"git", "clean", "--force", 0, 0},
     {"git", "push", "--delete", 0, 0},
     {"git", "push", "-d", 0, 0},
-    /* git grep's pager flag runs its value through the shell, so it is never
-     * read-only. The other read-only git subcommands can only run a program
-     * through repo config (--ext-diff, --textconv), which needs an earlier,
-     * separately approved config write. */
+    /* git grep's pager flag runs its value through the shell. */
     {"git", "grep", "-O", 1, 1},
     {"git", "grep", "--open-files-in-pager", 1, 1},
     {"git", "checkout", "--force", 0, 0},
@@ -105,7 +102,7 @@ static const AlwaysAskFlag ALWAYS_ASK_FLAGS[] = {
     {"git", NULL, "--exec-path", 1, 1},
     {"sed", NULL, "-i", 1, 1},
     /* find's actions run programs or write files; they are checked on every
-     * command so a read-only command can never smuggle one in. */
+     * command. */
     {NULL, NULL, "-exec", 1, 1},
     {NULL, NULL, "-ok", 1, 1},
     {NULL, NULL, "-delete", 1, 1},
@@ -290,17 +287,17 @@ static int resolve_subcommand(const ParsedShellCommand *p, const SubcommandTool 
 /*
  * Find the always-ask entry a token matches.
  *
- * for_read_only limits the search to entries that also make a read-only command
- * unsafe. subcommand_known == 0 means a global option left the subcommand
+ * anywhere_only limits the search to entries that act even after "--".
+ * subcommand_known == 0 means a global option left the subcommand
  * unresolved: scoped entries then match any subcommand, so the check fails
  * closed instead of waving a flag through.
  */
 static const AlwaysAskFlag *match_always_ask(const char *command, const char *subcommand,
                                              int subcommand_known, const char *token,
-                                             int for_read_only) {
+                                             int anywhere_only) {
     for (int i = 0; ALWAYS_ASK_FLAGS[i].flag != NULL; i++) {
         const AlwaysAskFlag *e = &ALWAYS_ASK_FLAGS[i];
-        if (for_read_only && !e->for_read_only) {
+        if (anywhere_only && !e->anywhere) {
             continue;
         }
         if (e->command != NULL && strcmp(e->command, command) != 0) {
@@ -396,8 +393,7 @@ static int build_rule(ShellRule *out, char *const *tokens, int count, int exact)
  * Public API
  * ========================================================================== */
 
-int shell_has_always_ask_flag(const ParsedShellCommand *p, int for_read_only,
-                              const char **out_flag) {
+int shell_has_always_ask_flag(const ParsedShellCommand *p, const char **out_flag) {
     if (out_flag != NULL) {
         *out_flag = NULL;
     }
@@ -425,15 +421,14 @@ int shell_has_always_ask_flag(const ParsedShellCommand *p, int for_read_only,
         if (!is_option(t)) {
             continue;
         }
-        int read_only_scope = for_read_only || operands_only;
         const AlwaysAskFlag *hit =
-            match_always_ask(command, subcommand, subcommand_known, t, read_only_scope);
+            match_always_ask(command, subcommand, subcommand_known, t, operands_only);
         const char *offender = t;
         if (hit == NULL && is_short_cluster(t)) {
             for (const char *c = t + 1; *c != '\0' && hit == NULL; c++) {
                 char single[3] = { '-', *c, '\0' };
                 hit = match_always_ask(command, subcommand, subcommand_known, single,
-                                       read_only_scope);
+                                       operands_only);
                 offender = hit != NULL ? hit->flag : t;
             }
         }
@@ -448,7 +443,7 @@ int shell_has_always_ask_flag(const ParsedShellCommand *p, int for_read_only,
         }
     }
 
-    if (!for_read_only && strcmp(command, "git") == 0 &&
+    if (strcmp(command, "git") == 0 &&
         git_spelling_always_ask(p, subcommand, out_flag)) {
         return 1;
     }
@@ -495,7 +490,7 @@ ShellRuleStatus shell_rule_from_parsed(const ParsedShellCommand *p, ShellRule *o
     }
 
     const char *flag = NULL;
-    if (shell_has_always_ask_flag(p, 0, &flag)) {
+    if (shell_has_always_ask_flag(p, &flag)) {
         if (out_detail != NULL) {
             *out_detail = flag;
         }

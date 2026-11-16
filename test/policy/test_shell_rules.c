@@ -60,9 +60,9 @@ static int matches(const char *rule_command, const char *command) {
     return ok;
 }
 
-static int always_ask(const char *command, int for_read_only) {
+static int always_ask(const char *command) {
     ParsedShellCommand *p = parse(command);
-    int ok = shell_has_always_ask_flag(p, for_read_only, NULL);
+    int ok = shell_has_always_ask_flag(p, NULL);
     free_parsed_shell_command(p);
     return ok;
 }
@@ -110,7 +110,7 @@ void test_always_ask_flags_block_rules(void) {
 void test_tokens_after_double_dash_are_operands(void) {
     assert_rule("git push origin main -- -f", 0, 2, "git", "push");
     /* Flags that write or run programs are the exception: see
-     * test_always_ask_flag_read_only_scope. */
+     * test_always_ask_flag_scope. */
     assert_rule("grep -rn foo -- -f", 0, 1, "grep");
     TEST_ASSERT_EQUAL_INT(SHELL_RULE_ALWAYS_ASK_FLAG, status_of("grep -rn foo -- --output"));
 }
@@ -164,31 +164,29 @@ void test_matching_exact_rules_uses_prefix_semantics(void) {
     TEST_ASSERT_EQUAL_INT(0, matches("python foo.py", "python"));
 }
 
-void test_always_ask_flag_read_only_scope(void) {
-    TEST_ASSERT_EQUAL_INT(1, always_ask("find . -delete", 1));
-    TEST_ASSERT_EQUAL_INT(1, always_ask("find . -delete", 0));
-    TEST_ASSERT_EQUAL_INT(0, always_ask("git push -f", 1));
-    TEST_ASSERT_EQUAL_INT(1, always_ask("git push -f", 0));
-    TEST_ASSERT_EQUAL_INT(0, always_ask("find . -name '*.c'", 1));
+void test_always_ask_flag_scope(void) {
+    TEST_ASSERT_EQUAL_INT(1, always_ask("find . -delete"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("git push -f"));
+    TEST_ASSERT_EQUAL_INT(0, always_ask("find . -name '*.c'"));
 
     /* Actions that write or run still act after "--"; git's flags don't. */
-    TEST_ASSERT_EQUAL_INT(1, always_ask("find . -- -delete", 1));
-    TEST_ASSERT_EQUAL_INT(1, always_ask("find . -- -fls out", 1));
-    TEST_ASSERT_EQUAL_INT(0, always_ask("git push origin main -- -f", 0));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("find . -- -delete"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("find . -- -fls out"));
+    TEST_ASSERT_EQUAL_INT(0, always_ask("git push origin main -- -f"));
 
     /* An unclassifiable global option hides the subcommand: fail closed. */
-    TEST_ASSERT_EQUAL_INT(1, always_ask("git --weird x push -f", 0));
-    TEST_ASSERT_EQUAL_INT(1, always_ask("git --weird x status", 0));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("git --weird x push -f"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("git --weird x status"));
 
     const char *flag = NULL;
     ParsedShellCommand *p = parse("find . -fprintf out");
-    TEST_ASSERT_EQUAL_INT(1, shell_has_always_ask_flag(p, 1, &flag));
+    TEST_ASSERT_EQUAL_INT(1, shell_has_always_ask_flag(p, &flag));
     TEST_ASSERT_EQUAL_STRING("-fprintf", flag);
     free_parsed_shell_command(p);
 
     /* A cluster reports the single offending flag, not the whole cluster. */
     p = parse("git push -fu origin main");
-    TEST_ASSERT_EQUAL_INT(1, shell_has_always_ask_flag(p, 0, &flag));
+    TEST_ASSERT_EQUAL_INT(1, shell_has_always_ask_flag(p, &flag));
     TEST_ASSERT_EQUAL_STRING("-f", flag);
     free_parsed_shell_command(p);
 }
@@ -202,9 +200,9 @@ void test_git_grep_pager_flags_always_ask(void) {
                           status_of("git grep --open-files-in-pager foo"));
 
     /* The pager flags also stop read-only auto-approve. */
-    TEST_ASSERT_EQUAL_INT(1, always_ask("git grep -Otouch foo", 1));
-    TEST_ASSERT_EQUAL_INT(1, always_ask("git grep -O touch foo", 1));
-    TEST_ASSERT_EQUAL_INT(1, always_ask("git grep --open-files-in-pager=touch foo", 1));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("git grep -Otouch foo"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("git grep -O touch foo"));
+    TEST_ASSERT_EQUAL_INT(1, always_ask("git grep --open-files-in-pager=touch foo"));
 
     /* An ordinary grep still saves a rule. */
     assert_rule("git grep -n foo", 0, 2, "git", "grep");
@@ -308,7 +306,7 @@ int main(void) {
     RUN_TEST(test_unsafe_syntax_and_redirects);
     RUN_TEST(test_matching_ignores_flag_order_and_global_options);
     RUN_TEST(test_matching_exact_rules_uses_prefix_semantics);
-    RUN_TEST(test_always_ask_flag_read_only_scope);
+    RUN_TEST(test_always_ask_flag_scope);
     RUN_TEST(test_git_grep_pager_flags_always_ask);
     RUN_TEST(test_environment_assignment_prefix_is_unsaveable);
     RUN_TEST(test_interpreter_detection_uses_base_name);

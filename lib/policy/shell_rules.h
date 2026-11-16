@@ -18,8 +18,7 @@
  *
  * Related headers:
  * - shell_parser.h: parses the command this module classifies
- * - auto_approve.h: uses shell_has_always_ask_flag() to gate read-only calls
- */
+ *  */
 
 typedef struct {
     char **tokens;     /* ["grep"] or ["git","show"] or, for never-broaden, ["python","foo.py"] */
@@ -66,14 +65,10 @@ int shell_rule_matches(const ShellRule *rule, const ParsedShellCommand *p);
  * Check whether a command carries a flag that must always be approved.
  *
  * @param p The parsed command
- * @param for_read_only 1 to consider only flags that also make an otherwise
- *                      read-only command unsafe (-delete, --output, sed -i);
- *                      0 to consider every always-ask flag
  * @param out_flag Optional output: the matching token, points into p->tokens
  * @return 1 if an always-ask flag is present, 0 otherwise
  */
-int shell_has_always_ask_flag(const ParsedShellCommand *p, int for_read_only,
-                              const char **out_flag);
+int shell_has_always_ask_flag(const ParsedShellCommand *p, const char **out_flag);
 
 /**
  * Short user-facing reason a command couldn't be saved as a rule.

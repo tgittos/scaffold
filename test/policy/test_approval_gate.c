@@ -2278,17 +2278,31 @@ static void install_review_stub(int verdict) {
     g_review_verdict = verdict;
 }
 
-void test_auto_mode_approves_read_only_command_without_review(void) {
+void test_auto_mode_sends_read_only_looking_shell_to_review(void) {
     install_review_stub(0);
     config.is_interactive = 0;
     config.auto_mode = 1;
 
-    ToolCall call = shell_call("{\"command\": \"git status && ls\"}");
+    ToolCall call = shell_call("{\"command\": \"grep foo x\"}");
     ApprovedPath path;
 
-    TEST_ASSERT_EQUAL(APPROVAL_ALLOWED, check_approval_gate(&config, &call, &path));
-    TEST_ASSERT_EQUAL(0, g_review_calls);
+    TEST_ASSERT_EQUAL(APPROVAL_NON_INTERACTIVE_DENIED, check_approval_gate(&config, &call, &path));
+    TEST_ASSERT_EQUAL(1, g_review_calls);
     approval_gate_set_callbacks(NULL);
+}
+
+void test_auto_mode_without_review_callback_denies_shell_allows_project_write(void) {
+    approval_gate_set_callbacks(NULL);
+    config.is_interactive = 0;
+    config.auto_mode = 1;
+    ApprovedPath path;
+
+    ToolCall shell = shell_call("{\"command\": \"grep foo x\"}");
+    TEST_ASSERT_EQUAL(APPROVAL_NON_INTERACTIVE_DENIED, check_approval_gate(&config, &shell, &path));
+
+    ToolCall write = { .id = "c", .name = "write_file",
+                       .arguments = "{\"path\": \"src/new_file.c\", \"content\": \"x\"}" };
+    TEST_ASSERT_EQUAL(APPROVAL_ALLOWED, check_approval_gate(&config, &write, &path));
 }
 
 void test_auto_mode_runs_call_the_review_allows(void) {
@@ -2337,14 +2351,14 @@ static ApprovalChannel *stub_channel(void) {
     return &g_dummy_channel;
 }
 
-void test_read_only_shell_allowed_without_auto_mode(void) {
+void test_read_only_looking_shell_gated_without_auto_mode(void) {
     config.is_interactive = 0;
     config.auto_mode = 0;
 
     ToolCall call = shell_call("{\"command\": \"grep foo x\"}");
     ApprovedPath path;
 
-    TEST_ASSERT_EQUAL(APPROVAL_ALLOWED, check_approval_gate(&config, &call, &path));
+    TEST_ASSERT_EQUAL(APPROVAL_NON_INTERACTIVE_DENIED, check_approval_gate(&config, &call, &path));
 }
 
 void test_non_read_only_shell_still_gated_without_auto_mode(void) {
@@ -2367,7 +2381,7 @@ void test_dq_substitution_not_auto_allowed(void) {
     TEST_ASSERT_EQUAL(APPROVAL_NON_INTERACTIVE_DENIED, check_approval_gate(&config, &call, &path));
 }
 
-void test_read_only_skips_subagent_channel(void) {
+void test_read_only_looking_shell_uses_subagent_channel(void) {
     ApprovalGateCallbacks cbs = { .get_approval_channel = stub_channel };
     approval_gate_set_callbacks(&cbs);
     g_channel_requests = 0;
@@ -2376,8 +2390,8 @@ void test_read_only_skips_subagent_channel(void) {
     ToolCall call = shell_call("{\"command\": \"grep foo x\"}");
     ApprovedPath path;
 
-    TEST_ASSERT_EQUAL(APPROVAL_ALLOWED, check_approval_gate(&config, &call, &path));
-    TEST_ASSERT_EQUAL(0, g_channel_requests);
+    check_approval_gate(&config, &call, &path);
+    TEST_ASSERT_EQUAL(1, g_channel_requests);
     approval_gate_set_callbacks(NULL);
 }
 
@@ -2671,14 +2685,15 @@ int main(void) {
     RUN_TEST(test_format_non_interactive_error_file_write);
     RUN_TEST(test_format_non_interactive_error_special_chars);
     RUN_TEST(test_check_approval_gate_non_interactive_gated_category);
-    RUN_TEST(test_auto_mode_approves_read_only_command_without_review);
+    RUN_TEST(test_auto_mode_sends_read_only_looking_shell_to_review);
+    RUN_TEST(test_auto_mode_without_review_callback_denies_shell_allows_project_write);
     RUN_TEST(test_auto_mode_runs_call_the_review_allows);
     RUN_TEST(test_auto_mode_escalates_call_the_review_rejects);
     RUN_TEST(test_review_skipped_outside_auto_mode);
-    RUN_TEST(test_read_only_shell_allowed_without_auto_mode);
+    RUN_TEST(test_read_only_looking_shell_gated_without_auto_mode);
     RUN_TEST(test_non_read_only_shell_still_gated_without_auto_mode);
     RUN_TEST(test_dq_substitution_not_auto_allowed);
-    RUN_TEST(test_read_only_skips_subagent_channel);
+    RUN_TEST(test_read_only_looking_shell_uses_subagent_channel);
     RUN_TEST(test_writing_shell_uses_subagent_channel);
     RUN_TEST(test_in_project_write_gated_without_auto_mode);
     RUN_TEST(test_in_project_write_allowed_in_auto_mode);

@@ -952,10 +952,7 @@ graph TB
 
     CategoryCheck -->|ALLOW| Allow
     CategoryCheck -->|DENY| Deny
-    CategoryCheck -->|GATE| ReadOnlyCheck{Read-only shell?}
-
-    ReadOnlyCheck -->|Yes| Allow
-    ReadOnlyCheck -->|No| SubagentCheck{Is Subagent?}
+    CategoryCheck -->|GATE| SubagentCheck{Is Subagent?}
 
     SubagentCheck -->|Yes| ProxyRequest[Proxy to Parent]
     SubagentCheck -->|No| AutoCheck{Auto Mode?}
@@ -1012,11 +1009,11 @@ graph TB
 - **Allowlist** (`allowlist.c/h`): Regex and shell command pattern matching
 - **Gate Prompter** (`gate_prompter.c/h`): Terminal UI for user approval
 - **Pattern Generator** (`pattern_generator.c/h`): Auto-generate allowlist patterns
-- **Auto Approve** (`auto_approve.c/h`): Checks decided without a model call: read-only shell segments (allowed in every mode) and file writes inside the git project (auto mode only). A segment naming a protected file is not read-only
+- **Auto Approve** (`auto_approve.c/h`): Checks decided without a model call: file writes inside the git project (auto mode only). Shell calls never qualify: in normal mode they prompt, in auto mode they go to the model review
 - **Tool Review** (`lib/agent/tool_review.c/h`): Auto mode's model review, injected as `ApprovalGateCallbacks.review_tool_call`; a one-off request to the session's model carrying user messages and the call, never tool output
 - **Protected Files** (`protected_files.c/h`): Hard-block access to sensitive files
 - **Shell Parser** (`shell_parser.c/h`): Cross-platform shell command parsing (POSIX/CMD/PowerShell); `shell_split_segments()` splits POSIX chains so allowlist matching and "allow always" work per segment
-- **Shell Rules** (`shell_rules.c/h`): Rules created by "allow always" for shell calls: a rule is the command plus the subcommand for tools that have one, matched independently of flag order and global options. Holds the shared always-ask flag table (`--force`, `-delete`, `--output`, ...) that also blocks read-only auto-approve, and names the commands that can't be saved (wrappers like `sudo`/`xargs`/`bash -c`) or must not broaden (interpreters, `curl`, `rm`)
+- **Shell Rules** (`shell_rules.c/h`): Rules created by "allow always" for shell calls: a rule is the command plus the subcommand for tools that have one, matched independently of flag order and global options. Holds the shared always-ask flag table (`--force`, `-delete`, `--output`, ...) that also stops "allow always" from saving a rule, and names the commands that can't be saved (wrappers like `sudo`/`xargs`/`bash -c`) or must not broaden (interpreters, `curl`, `rm`)
 - **Atomic File** (`atomic_file.c/h`): TOCTOU-safe file operations
 - **Subagent Approval** (`subagent_approval.c/h`): IPC-based approval proxying for child processes
 
@@ -1379,7 +1376,7 @@ lib/
 │   └── image_attachment.c/h # Image attachment parsing (@path to base64)
 ├── policy/                 # Approval gate system
 │   ├── approval_gate.c/h   # Core approval orchestration
-│   ├── auto_approve.c/h    # Auto mode read-only and in-project tier
+│   ├── auto_approve.c/h    # Auto mode in-project write tier
 │   ├── allowlist.c/h       # Pattern matching allowlist
 │   ├── rate_limiter.c/h    # Denial rate limiting
 │   ├── gate_prompter.c/h   # Terminal UI prompts

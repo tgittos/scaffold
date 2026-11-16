@@ -115,7 +115,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`allowlist.c/h`** - Opaque allowlist type for regex and shell pattern matching
 - **`gate_prompter.c/h`** - Terminal UI for single and batch approval prompts
 - **`pattern_generator.c/h`** - Pure functions for generating allowlist patterns
-- **`auto_approve.c/h`** - Auto mode's no-model tier: read-only shell segments, writes inside the git project
+- **`auto_approve.c/h`** - Auto mode's no-model tier: writes inside the git project (shell calls never qualify)
 - **`tool_args.c/h`** - Centralized cJSON argument extraction from ToolCall structs
 
 ##### Protected Files
@@ -364,7 +364,7 @@ The test directory mirrors the source structure:
 - **`test_protected_files.c`** - Protected file detection
 - **`test_atomic_file.c`** - TOCTOU-safe file operations
 - **`test_subagent_approval.c`** - Approval proxy pipe management
-- **`test_auto_approve.c`** - Auto mode read-only shell and in-project write rules
+- **`test_auto_approve.c`** - Auto mode in-project write rules and shell calls never auto-approved
 
 #### `test/agent/` - Agent Module Tests
 - **`test_prompt_mode.c`** - Prompt mode enum and parsing tests
@@ -454,7 +454,7 @@ Conversation lifecycle handling:
 Security-aware tool execution control:
 - **Category-Based Gates**: Tools categorized as file_read, file_write, shell, network, memory, subagent, mcp, python, plugin
 - **Allowlist Matching**: Regex patterns for paths/URLs, shell command prefix matching per segment of a compound command
-- **Auto Mode**: Read-only and in-project calls run; others go to a model review before the prompt
+- **Auto Mode**: In-project writes run; shell calls and everything else go to a model review before the prompt
 - **Protected Files**: Hard-block access to config files via basename, glob, and inode detection
 - **Rate Limiting**: Exponential backoff after repeated denials
 - **Subagent Proxy**: IPC-based approval forwarding for child processes

@@ -213,7 +213,7 @@ A POSIX command chained with `;`, `&&`, `||`, `|` or newlines matches only when 
 
 ### Auto mode
 
-In every mode, a gated shell call whose every segment is read-only runs without a prompt: `ls`, `cat`, `grep`, `sed -n '1,20p'`, `find` without `-exec`/`-delete`, `git status`/`log`/`diff`/`show`/`grep`, and the like. A segment that names a protected file (`cat .env`), carries a flag that can write a file or run a program (`--output`, `-delete`, `git grep -O`), redirects anywhere but `/dev/null`, or contains a command substitution is not read-only and still prompts.
+Gated shell calls always prompt in normal mode, however harmless they look; the agent has approval-free read tools for reading files. With `--auto` they go to the model review below.
 
 With `--auto` or `"auto_mode": true`, a gated call that matches no allowlist entry is reviewed before scaffold prompts:
 

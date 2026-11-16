@@ -1,143 +1,17 @@
 #include "auto_approve.h"
 #include "protected_files.h"
-#include "shell_parser.h"
-#include "shell_rules.h"
 #include "tool_args.h"
 #include "../util/project_scope.h"
 
-#include <ctype.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-static const char *READ_ONLY_COMMANDS[] = {
-    "basename", "cat", "cd", "cmp", "cut", "df", "diff", "dirname", "du",
-    "echo", "find", "git", "grep", "head", "ls", "pwd", "realpath", "stat",
-    "tail", "tr", "true", "wc", "which", NULL
-};
-
-static const char *READ_ONLY_GIT_SUBCOMMANDS[] = {
-    "blame", "diff", "grep", "log", "ls-files", "rev-parse", "show", "status", NULL
-};
-
 static const char *PATCH_PATH_PREFIXES[] = {
     "*** Update File: ", "*** Add File: ", "*** Delete File: ", "*** Move to: ", NULL
 };
-
-static int in_list(const char *s, const char *const *list) {
-    for (int i = 0; list[i] != NULL; i++) {
-        if (strcmp(s, list[i]) == 0) {
-            return 1;
-        }
-    }
-    return 0;
-}
-
-/* Matches a sed line-print script: "N", "$", or "N,M" followed by 'p'. */
-static int is_sed_print_script(const char *s) {
-    for (int part = 0; part < 2; part++) {
-        if (*s == '$') {
-            s++;
-        } else if (isdigit((unsigned char)*s)) {
-            while (isdigit((unsigned char)*s)) {
-                s++;
-            }
-        } else {
-            return 0;
-        }
-        if (part == 0 && *s == ',') {
-            s++;
-        } else {
-            break;
-        }
-    }
-    return s[0] == 'p' && s[1] == '\0';
-}
-
-/* sed only prints when -n is given and every script is a plain line print;
- * anything else (s///, w, e, -i, -f, ...) can write files or run programs. */
-static int sed_is_read_only(const ParsedShellCommand *parsed) {
-    int quiet = 0;
-    int have_script = 0;
-    int ok = 1;
-
-    for (int i = 1; ok && i < parsed->token_count; i++) {
-        const char *t = parsed->tokens[i];
-        if (strcmp(t, "-n") == 0) {
-            quiet = 1;
-        } else if (strcmp(t, "-E") == 0 || strcmp(t, "-r") == 0) {
-            continue;
-        } else if (strcmp(t, "-e") == 0) {
-            ok = i + 1 < parsed->token_count &&
-                 is_sed_print_script(parsed->tokens[++i]);
-            have_script = 1;
-        } else if (t[0] == '-' && t[1] != '\0') {
-            ok = 0;
-        } else if (!have_script) {
-            ok = is_sed_print_script(t);
-            have_script = 1;
-        }
-    }
-    return ok && quiet && have_script;
-}
-
-static int segment_is_read_only(const char *segment) {
-    ParsedShellCommand *parsed = parse_shell_command_for_type(segment, SHELL_TYPE_POSIX);
-    int ok = parsed != NULL && shell_command_is_safe_for_matching(parsed) &&
-             parsed->token_count > 0 &&
-             (in_list(parsed->tokens[0], READ_ONLY_COMMANDS) ||
-              strcmp(parsed->tokens[0], "sed") == 0);
-
-    if (ok && strcmp(parsed->tokens[0], "sed") == 0) {
-        ok = sed_is_read_only(parsed);
-    }
-
-    if (ok && strcmp(parsed->tokens[0], "git") == 0) {
-        ok = parsed->token_count >= 2 &&
-             in_list(parsed->tokens[1], READ_ONLY_GIT_SUBCOMMANDS);
-    }
-    if (ok) {
-        ok = !shell_has_always_ask_flag(parsed, 1, NULL);
-    }
-
-    /* Reading a protected file is not harmless: its contents would reach the
-     * model with no approval. The segment prompts, it isn't blocked. */
-    for (int i = 1; ok && i < parsed->token_count; i++) {
-        const char *t = parsed->tokens[i];
-        if (t[0] != '-' && is_protected_file(t)) {
-            ok = 0;
-        }
-    }
-
-    free_parsed_shell_command(parsed);
-    return ok;
-}
-
-static int shell_is_read_only(const ToolCall *tool_call) {
-    ShellType type = detect_shell_type();
-    if (type != SHELL_TYPE_POSIX && type != SHELL_TYPE_UNKNOWN) {
-        return 0;
-    }
-
-    char *command = tool_args_get_command(tool_call);
-    if (command == NULL) {
-        return 0;
-    }
-
-    char **segments = NULL;
-    int count = shell_split_segments(command, SHELL_TYPE_POSIX, &segments);
-    free(command);
-
-    int ok = count > 0;
-    for (int i = 0; i < count && ok; i++) {
-        ok = segment_is_read_only(segments[i]);
-    }
-
-    free_shell_segments(segments, count);
-    return ok;
-}
 
 static int has_dotdot_component(const char *path) {
     const char *p = path;
@@ -283,9 +157,6 @@ int auto_approve_without_review(const ToolCall *tool_call) {
         return 0;
     }
 
-    if (strcmp(tool_call->name, "shell") == 0) {
-        return shell_is_read_only(tool_call);
-    }
     if (strcmp(tool_call->name, "write_file") == 0 ||
         strcmp(tool_call->name, "apply_patch") == 0) {
         return file_write_in_project(tool_call);
@@ -293,10 +164,3 @@ int auto_approve_without_review(const ToolCall *tool_call) {
     return 0;
 }
 
-int auto_approve_read_only_shell(const ToolCall *tool_call) {
-    if (tool_call == NULL || tool_call->name == NULL ||
-        strcmp(tool_call->name, "shell") != 0) {
-        return 0;
-    }
-    return shell_is_read_only(tool_call);
-}

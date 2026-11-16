@@ -43,13 +43,6 @@ static int approve_shell(const char *command) {
     return auto_approve_without_review(&call);
 }
 
-static int read_only_shell(const char *command) {
-    char args[1024];
-    snprintf(args, sizeof(args), "{\"command\": \"%s\"}", command);
-    ToolCall call = { .id = "c", .name = "shell", .arguments = args };
-    return auto_approve_read_only_shell(&call);
-}
-
 static int approve_write(const char *path) {
     char args[1024];
     snprintf(args, sizeof(args), "{\"path\": \"%s\", \"content\": \"x\"}", path);
@@ -64,44 +57,16 @@ static int approve_patch(const char *patch) {
     return auto_approve_without_review(&call);
 }
 
-void test_read_only_shell_commands_approved(void) {
-    TEST_ASSERT_EQUAL_INT(1, approve_shell("git status && ls -la | head -20"));
-    TEST_ASSERT_EQUAL_INT(1, approve_shell("grep -rn foo src 2>/dev/null | wc -l"));
-    TEST_ASSERT_EQUAL_INT(1, approve_shell("cd src && git log --oneline -5"));
-    TEST_ASSERT_EQUAL_INT(1, approve_shell("find . -name '*.c'"));
-}
-
-void test_sed_print_and_null_redirects_approved(void) {
-    TEST_ASSERT_EQUAL_INT(1, approve_shell("sed -n 80,175p lib/a.c"));
-    TEST_ASSERT_EQUAL_INT(1, approve_shell("sed -n '1,$p' f"));
-    TEST_ASSERT_EQUAL_INT(1, approve_shell("sed -n -e 5p -e 9p f"));
-    TEST_ASSERT_EQUAL_INT(1, approve_shell("git status 2>/dev/null"));
-    TEST_ASSERT_EQUAL_INT(1, approve_shell("ls 2>&1 | head"));
-    TEST_ASSERT_EQUAL_INT(1, approve_shell("grep -v \\\"\\\\.h\\\" x"));
-    TEST_ASSERT_EQUAL_INT(1, approve_shell("grep -rn foo lib --include=*.c"));
-}
-
-void test_sed_writes_and_other_redirects_need_review(void) {
-    TEST_ASSERT_EQUAL_INT(0, approve_shell("sed 's/a/b/' f"));
-    TEST_ASSERT_EQUAL_INT(0, approve_shell("sed -n 1p -i f"));
-    TEST_ASSERT_EQUAL_INT(0, approve_shell("sed -n '1p;w out' f"));
-    TEST_ASSERT_EQUAL_INT(0, approve_shell("sed -n '1e id' f"));
-    TEST_ASSERT_EQUAL_INT(0, approve_shell("sed -n 1p `id`"));
-    TEST_ASSERT_EQUAL_INT(0, approve_shell("ls > out"));
-    TEST_ASSERT_EQUAL_INT(0, approve_shell("ls 2>out"));
-    TEST_ASSERT_EQUAL_INT(0, approve_shell("echo \\\"$(touch x)\\\""));
-}
-
-void test_writing_shell_commands_need_review(void) {
-    TEST_ASSERT_EQUAL_INT(0, approve_shell("git push"));
-    TEST_ASSERT_EQUAL_INT(0, approve_shell("ls > out.txt"));
-    TEST_ASSERT_EQUAL_INT(0, approve_shell("cat script | sh"));
-    TEST_ASSERT_EQUAL_INT(0, approve_shell("find . -name x -delete"));
-    TEST_ASSERT_EQUAL_INT(0, approve_shell("find . -exec touch {} +"));
-    TEST_ASSERT_EQUAL_INT(0, approve_shell("git -C .. status"));
-    TEST_ASSERT_EQUAL_INT(0, approve_shell("git diff --output=patch.txt"));
-    TEST_ASSERT_EQUAL_INT(0, approve_shell("echo $(rm x)"));
-    TEST_ASSERT_EQUAL_INT(0, approve_shell("ls\\nmake install"));
+void test_shell_calls_never_approved_without_review(void) {
+    const char *commands[] = {
+        "grep foo x", "ls -la", "git status", "sed -n 1p f",
+        "git status && ls -la | head -20", "find . -name x",
+        "git grep -Ocat foo", "cat .env", "cat README.md",
+        "ls &>/dev/null", "echo \\\"$(touch x)\\\"", "ls > out", NULL
+    };
+    for (int i = 0; commands[i] != NULL; i++) {
+        TEST_ASSERT_EQUAL_INT_MESSAGE(0, approve_shell(commands[i]), commands[i]);
+    }
 }
 
 void test_write_inside_project_approved(void) {
@@ -150,31 +115,6 @@ void test_patch_touching_outside_file_needs_review(void) {
     TEST_ASSERT_EQUAL_INT(0, approve_patch("*** Begin Patch\\n*** End Patch"));
 }
 
-void test_git_grep_pager_needs_review(void) {
-    TEST_ASSERT_EQUAL_INT(0, approve_shell("git grep -Ocat foo"));
-    TEST_ASSERT_EQUAL_INT(0, approve_shell("git grep -O cat foo"));
-    TEST_ASSERT_EQUAL_INT(0, approve_shell("git grep --open-files-in-pager=cat foo"));
-    TEST_ASSERT_EQUAL_INT(0, read_only_shell("git grep -Ocat foo"));
-    TEST_ASSERT_EQUAL_INT(0, read_only_shell("git grep -O cat foo"));
-    TEST_ASSERT_EQUAL_INT(0, read_only_shell("git grep --open-files-in-pager=cat foo"));
-    TEST_ASSERT_EQUAL_INT(1, approve_shell("git grep -n foo"));
-}
-
-void test_protected_file_operand_needs_review(void) {
-    TEST_ASSERT_EQUAL_INT(0, approve_shell("cat .env"));
-    TEST_ASSERT_EQUAL_INT(0, read_only_shell("cat .env"));
-    TEST_ASSERT_EQUAL_INT(0, approve_shell("grep -rn KEY .env.local"));
-    TEST_ASSERT_EQUAL_INT(0, approve_shell("cat src/../.env"));
-    TEST_ASSERT_EQUAL_INT(1, approve_shell("cat README.md"));
-}
-
-void test_merged_null_redirect_approved(void) {
-    TEST_ASSERT_EQUAL_INT(1, approve_shell("ls &>/dev/null"));
-    TEST_ASSERT_EQUAL_INT(1, approve_shell("ls &> /dev/null"));
-    TEST_ASSERT_EQUAL_INT(0, approve_shell("ls & rm x"));
-    TEST_ASSERT_EQUAL_INT(0, approve_shell("ls &> out"));
-}
-
 void test_other_tools_need_review(void) {
     ToolCall fetch = { .id = "c", .name = "web_fetch", .arguments = "{\"url\": \"https://x\"}" };
     TEST_ASSERT_EQUAL_INT(0, auto_approve_without_review(&fetch));
@@ -183,19 +123,13 @@ void test_other_tools_need_review(void) {
 
 int main(void) {
     UNITY_BEGIN();
-    RUN_TEST(test_read_only_shell_commands_approved);
-    RUN_TEST(test_writing_shell_commands_need_review);
-    RUN_TEST(test_sed_print_and_null_redirects_approved);
-    RUN_TEST(test_sed_writes_and_other_redirects_need_review);
+    RUN_TEST(test_shell_calls_never_approved_without_review);
     RUN_TEST(test_write_inside_project_approved);
     RUN_TEST(test_write_outside_project_needs_review);
     RUN_TEST(test_write_through_symlink_out_of_project_needs_review);
     RUN_TEST(test_write_without_git_project_needs_review);
     RUN_TEST(test_patch_inside_project_approved);
     RUN_TEST(test_patch_touching_outside_file_needs_review);
-    RUN_TEST(test_git_grep_pager_needs_review);
-    RUN_TEST(test_protected_file_operand_needs_review);
-    RUN_TEST(test_merged_null_redirect_approved);
     RUN_TEST(test_other_tools_need_review);
     return UNITY_END();
 }
