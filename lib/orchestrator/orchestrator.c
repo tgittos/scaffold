@@ -39,7 +39,6 @@ int orchestrator_spawn_supervisor(goal_store_t* store, const char* goal_id) {
         "--supervisor",
         "--goal", (char*)goal_id,
         "--phase", (char*)phase_str,
-        "--yolo",
         NULL
     };
 

@@ -20,8 +20,6 @@
 #include "../tools/python_extension.h"
 #include "build/version.h"
 
-#define MAX_CLI_ALLOW_ENTRIES 64
-#define MAX_CLI_ALLOW_CATEGORIES 16
 
 /**
  * Collect version info from active plugins into caller-allocated arrays.
@@ -59,8 +57,6 @@ static void print_help(const char *program_name) {
     printf("  --no-stream       Disable response streaming\n");
     printf("  --json            Enable JSON output mode\n");
     printf("  --home <path>     Override home directory (default: ~/.local/scaffold)\n");
-    printf("  --yolo            Disable all approval gates for this session\n");
-    printf("  --auto            Run gated calls that pass auto review without prompting\n");
     printf("  --context-window <n>  Override context window size (tokens)\n");
     printf("  -p, --prompt <text>   Use custom system prompt (skips default + AGENTS.md)\n");
     printf("  --login           Log in to OpenAI via OAuth (ChatGPT subscription)\n");
@@ -352,11 +348,6 @@ int main(int argc, char *argv[]) {
     AgentConfig config = agent_config_default();
     config.app_name = "scaffold";
 
-    const char *cli_allow_entries[MAX_CLI_ALLOW_ENTRIES];
-    int cli_allow_count = 0;
-    const char *cli_allow_categories[MAX_CLI_ALLOW_CATEGORIES];
-    int cli_allow_category_count = 0;
-
     const char *log_level_str = NULL;
     const char *log_module_str = NULL;
 
@@ -387,10 +378,6 @@ int main(int argc, char *argv[]) {
             config.no_stream = true;
         } else if (strcmp(argv[i], "--json") == 0) {
             config.json_mode = true;
-        } else if (strcmp(argv[i], "--yolo") == 0) {
-            config.yolo = true;
-        } else if (strcmp(argv[i], "--auto") == 0) {
-            config.auto_mode = true;
         } else if (strcmp(argv[i], "--no-auto-messages") == 0) {
             config.no_auto_messages = true;
         } else if (strcmp(argv[i], "--message-poll-interval") == 0 && i + 1 < argc) {
@@ -400,21 +387,6 @@ int main(int argc, char *argv[]) {
             }
         } else if (strcmp(argv[i], "--home") == 0 && i + 1 < argc) {
             config.home_dir = argv[++i];
-        } else if (strcmp(argv[i], "--allow") == 0 && i + 1 < argc) {
-            if (cli_allow_count < MAX_CLI_ALLOW_ENTRIES) {
-                cli_allow_entries[cli_allow_count++] = argv[++i];
-            } else {
-                fprintf(stderr, "Warning: Too many --allow entries (max %d)\n",
-                        MAX_CLI_ALLOW_ENTRIES);
-                i++;
-            }
-        } else if (strncmp(argv[i], "--allow-category=", 17) == 0) {
-            if (cli_allow_category_count < MAX_CLI_ALLOW_CATEGORIES) {
-                cli_allow_categories[cli_allow_category_count++] = argv[i] + 17;
-            } else {
-                fprintf(stderr, "Warning: Too many --allow-category entries (max %d)\n",
-                        MAX_CLI_ALLOW_CATEGORIES);
-            }
         } else if (strcmp(argv[i], "--subagent") == 0) {
             subagent_mode = 1;
         } else if (strcmp(argv[i], "--task") == 0 && i + 1 < argc) {
@@ -447,11 +419,6 @@ int main(int argc, char *argv[]) {
             message_arg_index = i;
         }
     }
-
-    config.allow_entries = cli_allow_entries;
-    config.allow_entry_count = cli_allow_count;
-    config.allow_categories = cli_allow_categories;
-    config.allow_category_count = cli_allow_category_count;
 
     if (supervisor_mode) {
         if (supervisor_goal_id == NULL) {
