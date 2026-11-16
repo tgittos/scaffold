@@ -28,27 +28,6 @@ If `MESSAGE` is provided, scaffold processes it and exits (one-shot mode). Witho
 | `--model <name>` | Override the default model for this session |
 | `--system-prompt-file <path>` | Load a custom system prompt from file |
 
-### Approval gates
-
-| Flag | Description |
-|------|-------------|
-| `--yolo` | Disable all approval gates for this session |
-| `--auto` | Run gated calls that pass auto review without prompting (see [auto mode](configuration.md#auto-mode)) |
-| `--allow <spec>` | Add an allowlist entry (see below) |
-| `--allow-category=<cat>` | Allow an entire category (`file_read`, `file_write`, `shell`, `network`, `memory`, `subagent`, `mcp`, `python`, `plugin`). `python` (gated by default) also covers tools with no declared category |
-
-#### `--allow` format
-
-Regex pattern for file/network tools:
-```bash
-./scaffold --allow "write_file:^src/.*\\.js$"
-```
-
-Shell command prefix:
-```bash
-./scaffold --allow "shell:npm,install"
-```
-
 ### Authentication
 
 | Flag | Description |
@@ -97,20 +76,11 @@ These are used by scaffold's agent system and are not typically invoked directly
 # Pipe a spec file
 cat SPEC.md | ./scaffold
 
-# Fully autonomous (no approval prompts)
-./scaffold --yolo "build a REST API with Express"
-
 # Use a specific model
 ./scaffold --model gpt-4o "explain this codebase"
 
 # Debug mode to see HTTP traffic
 ./scaffold --debug "why is the auth endpoint failing?"
-
-# Allow all shell commands for this session
-./scaffold --allow-category=shell
-
-# Allow specific file writes
-./scaffold --allow "write_file:^src/.*" "add logging to the server"
 
 # Log in with ChatGPT subscription (no API key needed)
 ./scaffold --login

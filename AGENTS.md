@@ -44,9 +44,6 @@ set -a && source .env && set +a && out/scaffold --model gpt-4o "your message"
 
 # With debug HTTP traffic
 set -a && source .env && set +a && out/scaffold --debug "your message"
-
-# Disable approval gates
-set -a && source .env && set +a && out/scaffold --yolo "your message"
 ```
 
 ### CLI flags
@@ -61,8 +58,6 @@ set -a && source .env && set +a && out/scaffold --yolo "your message"
 | `--log-http-body` | Enable raw HTTP body logging (CURLOPT_VERBOSE) |
 | `--no-stream` | Disable response streaming |
 | `--json` | Enable JSON output mode (structured JSONL on stdout) |
-| `--yolo` | Disable all approval gates for this session |
-| `--auto` | Run gated calls that pass auto review without prompting |
 | `--model <name>` | Select model (e.g. `gpt-4o`) |
 | `--context-window <n>` | Override context window size (tokens) |
 | `-p`, `--prompt <text>` | Use custom system prompt (skips default + AGENTS.md) |
@@ -73,8 +68,6 @@ set -a && source .env && set +a && out/scaffold --yolo "your message"
 | `--update` | Self-update the binary |
 | `--check-plugin-updates` | Check for newer plugin versions via GitHub Releases |
 | `--update-plugins` | Download and install latest plugin versions from GitHub Releases |
-| `--allow <entry>` | Allow a specific tool/command pattern |
-| `--allow-category=<cat>` | Allow all tools in a category |
 | `--system-prompt-file <path>` | Load system prompt from file (scaffold reads and deletes it) |
 
 Internal flags used by the orchestrator/subagent system (not for direct user invocation): `--subagent`, `--task`, `--context`, `--worker`, `--queue`, `--supervisor`, `--goal`, `--phase`, `--no-auto-messages`, `--message-poll-interval`.
@@ -139,6 +132,8 @@ valgrind --leak-check=full ./test/test_foo.com.dbg      # x86_64
 ```
 
 ## Key Architecture Notes
+
+- Tool calls execute with no approval step: no prompts, allowlists, categories or rate limiting. `lib/policy/` holds only path normalization, TOCTOU-safe file access and the verified file context used by the Python file tools.
 
 - Codex provider uses Responses API (not Chat Completions). Input is a flat array, not messages.
 - The iterative loop passes `user_message=""` for follow-up rounds — providers must handle empty strings correctly.

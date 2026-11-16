@@ -1,6 +1,6 @@
 # scaffold
 
-Scaffold is an autonomous coding agent. You give it a description of an application, and it plans the work, writes the code, runs the tests and fixes what breaks — approval prompts only if you want them.
+Scaffold is an autonomous coding agent. You give it a description of an application, and it plans the work, writes the code, runs the tests and fixes what breaks — every tool call runs without an approval prompt.
 
 ```bash
 wget https://github.com/tgittos/scaffold/releases/latest/download/scaffold
@@ -74,9 +74,6 @@ cat SPEC.md | ./scaffold
 
 # Select a specific model
 ./scaffold --model gpt-4o "build a blog with Next.js"
-
-# No approval prompts
-./scaffold --yolo "build a blog with Next.js"
 ```
 
 The [Getting Started guide](docs/getting-started.md) goes into more detail.
@@ -126,7 +123,7 @@ It's written in C and compiled with [Cosmopolitan](https://github.com/jart/cosmo
 | Guide | Description |
 |-------|-------------|
 | [Getting Started](docs/getting-started.md) | Installation, first run, basic usage |
-| [Configuration](docs/configuration.md) | Config file, environment variables, API providers, approval gates |
+| [Configuration](docs/configuration.md) | Config file, environment variables, API providers |
 | [Interactive Mode](docs/interactive-mode.md) | Slash commands, image attachments, behavioral modes |
 | [Autonomous Mode](docs/autonomous-mode.md) | How the orchestrator, supervisors, and workers operate |
 | [Memory System](docs/memory.md) | Long-term semantic memory storage and retrieval |

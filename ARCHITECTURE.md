@@ -19,17 +19,10 @@ graph TB
     Core --> StreamingHandler[Streaming Handler<br/>streaming_handler.c/h]
     Core --> ToolExecutor[Tool Executor<br/>tool_executor.c/h]
 
-    %% Approval Gate System
-    ToolExecutor --> ApprovalGate[Approval Gate<br/>approval_gate.c/h]
-    ApprovalGate --> RateLimiter[Rate Limiter<br/>rate_limiter.c/h]
-    ApprovalGate --> Allowlist[Allowlist<br/>allowlist.c/h]
-    ApprovalGate --> GatePrompter[Gate Prompter<br/>gate_prompter.c/h]
-    ApprovalGate --> ProtectedFiles[Protected Files<br/>protected_files.c/h]
-    ApprovalGate --> ShellParser[Shell Parser<br/>shell_parser.c/h]
-    ApprovalGate --> AtomicFile[Atomic File<br/>atomic_file.c/h]
-    ApprovalGate --> SubagentApproval[Subagent Approval<br/>subagent_approval.c/h]
-    GatePrompter --> PatternGen[Pattern Generator<br/>pattern_generator.c/h]
-    ProtectedFiles --> PathNormalize[Path Normalize<br/>path_normalize.c/h]
+    %% File Access Policy
+    ToolExecutor --> VerifiedFile[Verified File Context<br/>verified_file_context.c/h]
+    VerifiedFile --> AtomicFile[Atomic File<br/>atomic_file.c/h]
+    AtomicFile --> PathNormalize[Path Normalize<br/>path_normalize.c/h]
 
     %% MCP Integration
     MCPClient --> MCPServers[MCP Server Connections<br/>STDIO/HTTP/SSE]
@@ -173,7 +166,7 @@ graph TB
     classDef authLayer fill:#e8eaf6
 
     class CLI,Core,Session,ConfigSystem,MemoryCommands,ContextEnhancement,RecapModule,StreamingHandler,ToolExecutor coreLayer
-    class ApprovalGate,RateLimiter,Allowlist,GatePrompter,ProtectedFiles,ShellParser,AtomicFile,SubagentApproval,PatternGen,PathNormalize policyLayer
+    class VerifiedFile,AtomicFile,PathNormalize policyLayer
     class LLMProvider,ProviderRegistry,Codex,Anthropic,OpenAI,LocalAI,ModelCaps,ClaudeModel,GPTModel,ModelRegistry llmLayer
     class AuthLogin,OAuthProvider,CallbackServer,JWTDecode,OAuth2Store,FormPost authLayer
     class ToolsSystem,ToolRegistry,PythonTool,PythonFileTools,PythonDefaults,TodoTool,MemoryTool,PDFTool,VectorDBTool,SubagentTool,MessagingTool,GOAPTools,OrchestratorTool,TodoManager,TodoDisplay toolsLayer
@@ -297,7 +290,7 @@ graph TB
     Core --> Utils[Utils Layer]
     Core --> Vector[Vector Layer]
     Core --> MCP[MCP Layer]
-    Core --> Policy[Policy Layer<br/>Approval Gates]
+    Core --> Policy[Policy Layer<br/>File Access]
     Core --> Plugin[Plugin Layer<br/>JSON-RPC 2.0]
     Core --> IPC[IPC Layer<br/>Inter-Agent Messaging]
 
@@ -573,7 +566,7 @@ Three layers:
 1. **Discovery**: Scan `~/.local/scaffold/plugins/` for executable files (skip hidden files and symlinks)
 2. **Spawn**: Fork/exec each plugin, set up stdin/stdout pipes for bidirectional JSON-RPC
 3. **Handshake**: Send `initialize` request, receive manifest (name, version, hooks, tools, priority). Plugin names are validated: must not contain underscores, forward slashes, or backslashes, must be 1-64 chars. Duplicate names are rejected (second plugin is killed)
-4. **Tool Registration**: Plugin tools registered as `plugin_<pluginname>_<toolname>` in the ToolRegistry as schema-only entries (`execute_func=NULL`). Execution is dispatched explicitly by `tool_batch_executor.c` via `plugin_manager_execute_tool()`, following the same pattern as MCP tools. Classified as `GATE_CATEGORY_PLUGIN` (default: gated, requires approval)
+4. **Tool Registration**: Plugin tools registered as `plugin_<pluginname>_<toolname>` in the ToolRegistry as schema-only entries (`execute_func=NULL`). Execution is dispatched explicitly by `tool_batch_executor.c` via `plugin_manager_execute_tool()`, following the same pattern as MCP tools
 5. **Runtime**: Hook dispatcher routes pipeline events to subscribed plugins via IPC. Crash detection via lazy `waitpid` before each request
 6. **Shutdown**: Send `shutdown` request, SIGTERM, wait, SIGKILL if needed
 
@@ -932,116 +925,15 @@ Goals have an optional `plan_document` field (TEXT column in SQLite, `char*` in 
 - **Injected as**: `plan_guidance` in `build_work_context()` during execute phase
 - **Schema migration**: Existing databases auto-migrate to add the `plan_document` column
 
-## Approval Gate System
+## Tool Execution Policy
 
-Ralph implements a comprehensive approval gate system that controls tool execution based on security categories and user preferences.
+Tool calls execute as the model issues them. There is no approval gate: no prompts, allowlists, categories, rate limiting or denial tracking, and no `--yolo`/`--auto`/`--allow` flags. An `approval_gates` section left in `scaffold.config.json` is ignored.
 
-```mermaid
-graph TB
-    ToolExec[Tool Executor] --> CheckGate[check_approval_gate]
+What remains in `lib/policy/` is file-access plumbing used by the Python file tools:
 
-    CheckGate --> ProtectedCheck{Protected File?}
-    ProtectedCheck -->|Yes| Deny[Hard Deny]
-    ProtectedCheck -->|No| RateCheck{Rate Limited?}
-
-    RateCheck -->|Yes| RateLimitErr[Rate Limit Error]
-    RateCheck -->|No| AllowlistCheck{Matches Allowlist?}
-
-    AllowlistCheck -->|Yes| Allow[Allow Execution]
-    AllowlistCheck -->|No| CategoryCheck{Category Action}
-
-    CategoryCheck -->|ALLOW| Allow
-    CategoryCheck -->|DENY| Deny
-    CategoryCheck -->|GATE| SubagentCheck{Is Subagent?}
-
-    SubagentCheck -->|Yes| ProxyRequest[Proxy to Parent]
-    SubagentCheck -->|No| AutoCheck{Auto Mode?}
-
-    ProxyRequest --> ParentCheck[Parent runs check_approval_gate]
-    ParentCheck --> ProxyResponse[Response to Subagent]
-
-    AutoCheck -->|Read-only or in-project write| Allow
-    AutoCheck -->|Model review allows| Allow
-    AutoCheck -->|Off or escalated| InteractiveCheck{Interactive?}
-
-    InteractiveCheck -->|No| NonInteractiveDeny[Non-Interactive Deny]
-    InteractiveCheck -->|Yes| UserPrompt[User Prompt]
-
-    UserPrompt --> UserDecision{User Decision}
-    ProxyResponse --> UserDecision
-
-    UserDecision -->|Allow| Allow
-    UserDecision -->|Deny| TrackDenial[Track Denial]
-    UserDecision -->|Allow Always| AddPattern[Add to Allowlist]
-
-    TrackDenial --> Deny
-    AddPattern --> Allow
-
-    classDef check fill:#e3f2fd
-    classDef action fill:#e8f5e8
-    classDef deny fill:#ffcdd2
-    classDef prompt fill:#fff3e0
-
-    class CheckGate,ProtectedCheck,RateCheck,AllowlistCheck,CategoryCheck,InteractiveCheck,SubagentCheck,AutoCheck check
-    class Allow,AddPattern action
-    class Deny,RateLimitErr,NonInteractiveDeny,TrackDenial deny
-    class UserPrompt,ParentCheck,ProxyRequest,ProxyResponse,UserDecision prompt
-```
-
-### Tool Categories
-
-| Category | Default Action | Description |
-|----------|---------------|-------------|
-| `file_read` | ALLOW | File reading operations |
-| `file_write` | GATE | File writing operations |
-| `shell` | GATE | Shell command execution |
-| `network` | GATE | Network requests |
-| `memory` | ALLOW | Memory tool operations |
-| `subagent` | GATE | Spawning subagents |
-| `mcp` | GATE | MCP tool execution |
-| `python` | GATE | Python code execution; fallback for tools with no declared category |
-| `plugin` | GATE | Plugin tool execution |
-
-### Key Components
-
-- **Approval Gate** (`approval_gate.c/h`): Core orchestration logic for gate checking
-- **Rate Limiter** (`rate_limiter.c/h`): Exponential backoff after repeated denials
-- **Allowlist** (`allowlist.c/h`): Regex and shell command pattern matching
-- **Gate Prompter** (`gate_prompter.c/h`): Terminal UI for user approval
-- **Pattern Generator** (`pattern_generator.c/h`): Auto-generate allowlist patterns
-- **Auto Approve** (`auto_approve.c/h`): Auto mode's no-model tier: read-only shell segments and file writes inside the git project
-- **Tool Review** (`lib/agent/tool_review.c/h`): Auto mode's model review, injected as `ApprovalGateCallbacks.review_tool_call`; a one-off request to the session's model carrying user messages and the call, never tool output
-- **Protected Files** (`protected_files.c/h`): Hard-block access to sensitive files
-- **Shell Parser** (`shell_parser.c/h`): Cross-platform shell command parsing (POSIX/CMD/PowerShell); `shell_split_segments()` splits POSIX chains so allowlist matching and "allow always" work per segment
+- **Path Normalize** (`path_normalize.c/h`): Cross-platform path normalization
 - **Atomic File** (`atomic_file.c/h`): TOCTOU-safe file operations
-- **Subagent Approval** (`subagent_approval.c/h`): IPC-based approval proxying for child processes
-
-### CLI Flags
-
-- `--yolo`: Disable all approval gates for the session
-- `--auto`: Enable auto mode (also `approval_gates.auto_mode` in config)
-- `--allow "tool:pattern"`: Add entry to session allowlist
-- `--allow-category=<category>`: Set category action to ALLOW
-
-### Configuration
-
-Gates are configured in `scaffold.config.json`:
-```json
-{
-  "approval_gates": {
-    "enabled": true,
-    "auto_mode": false,
-    "categories": {
-      "file_write": "gate",
-      "shell": "gate",
-      "network": "allow"
-    },
-    "allowlist": [
-      {"tool": "shell", "pattern": ["git", "status"]}
-    ]
-  }
-}
-```
+- **Verified File Context** (`verified_file_context.c/h`): Thread-local verified path context consumed by `src/tools/verified_file_python.c`
 
 ## CLI Commands
 
@@ -1199,7 +1091,6 @@ Memory and conversation-history indices are per project. `project_scope_index_na
 
 - **Multi-Provider Support**: Seamlessly works with Anthropic, OpenAI, and local LLM servers
 - **Extensible Tools**: Plugin architecture for adding new tools and capabilities
-- **Approval Gates**: Category-based tool access control with user prompts, allowlists, and rate limiting
 - **MCP Integration**: Model Context Protocol support for external tool servers (STDIO/HTTP/SSE)
 - **Interactive CLI Commands**: Slash commands for direct memory management (`/memory`)
 - **Conversation Persistence**: Automatic conversation tracking with vector database integration
@@ -1243,8 +1134,8 @@ On init, an installed default tool file is replaced with the embedded version wh
 - **`shell`**: Execute shell commands
 - **`web_fetch`**: Fetch web content
 - **`pip`**: Package management (action: "install" or "list") — install pure-Python packages from PyPI or list installed packages
-- **`search_history`**: Search git history with structured output (operations: log, pickaxe, blame, diff). Gate: file_read
-- **`show_structure`**: Analyze code structure without reading full files (operations: outline, imports, hierarchy, exports). Supports Python, JS/TS, Rust, Go, Java, C/C++, Ruby, and more. Gate: file_read
+- **`search_history`**: Search git history with structured output (operations: log, pickaxe, blame, diff)
+- **`show_structure`**: Analyze code structure without reading full files (operations: outline, imports, hierarchy, exports). Supports Python, JS/TS, Rust, Go, Java, C/C++, Ruby, and more
 
 ### Subagent Tools (2 tools)
 - **`subagent`**: Spawn a child scaffold process for parallel task execution
@@ -1313,13 +1204,12 @@ lib/
 │   ├── message_processor.c/h   # Buffered response handling
 │   ├── api_round_trip.c/h  # Single LLM request-response cycle
 │   ├── conversation_state.c/h  # Conversation history append helpers
-│   ├── tool_batch_executor.c/h # Batch tool execution with approval gates
+│   ├── tool_batch_executor.c/h # Batch tool execution
 │   ├── tool_orchestration.c/h  # Tool call deduplication and tracking
 │   ├── repl.c/h            # Read-Eval-Print-Loop for interactive mode
 │   ├── async_executor.c/h  # Non-blocking message processing thread
 │   ├── context_enhancement.c/h  # Split prompt builder (base + dynamic context)
 │   ├── recap.c/h           # Startup recap and first-run greeting
-│   ├── tool_review.c/h     # Auto mode model review of gated tool calls
 │   ├── streaming_handler.c/h   # Streaming orchestration layer
 │   ├── tool_executor.c/h   # Tool execution entry point
 │   ├── iterative_loop.c/h  # Iterative tool-calling loop
@@ -1373,22 +1263,9 @@ lib/
 │   ├── api_error.c/h       # Enhanced error handling with retries
 │   ├── embedded_cacert.c/h # Embedded Mozilla CA certificate bundle
 │   └── image_attachment.c/h # Image attachment parsing (@path to base64)
-├── policy/                 # Approval gate system
-│   ├── approval_gate.c/h   # Core approval orchestration
-│   ├── auto_approve.c/h    # Auto mode read-only and in-project tier
-│   ├── allowlist.c/h       # Pattern matching allowlist
-│   ├── rate_limiter.c/h    # Denial rate limiting
-│   ├── gate_prompter.c/h   # Terminal UI prompts
-│   ├── pattern_generator.c/h # Auto-generate patterns
-│   ├── tool_args.c/h       # Tool argument extraction
-│   ├── protected_files.c/h # Protected file detection
+├── policy/                 # File access policy
 │   ├── path_normalize.c/h  # Cross-platform path normalization
-│   ├── shell_parser.c/h    # POSIX shell parsing
-│   ├── shell_parser_cmd.c  # cmd.exe parsing
-│   ├── shell_parser_ps.c   # PowerShell parsing
 │   ├── atomic_file.c/h     # TOCTOU-safe file operations
-│   ├── subagent_approval.c/h # Subagent approval proxy
-│   ├── approval_errors.c   # Approval gate error formatting
 │   └── verified_file_context.c/h # Thread-local verified file context
 ├── plugin/                 # Plugin system
 │   ├── plugin_manager.c/h  # Plugin discovery, spawning, lifecycle, IPC
