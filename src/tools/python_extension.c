@@ -51,7 +51,6 @@ static const ToolExtension g_python_extension = {
     .shutdown = python_extension_shutdown,
     .metadata = {
         .is_extension_tool = is_python_file_tool,
-        .get_gate_category = python_tool_get_gate_category,
         .get_match_arg = python_tool_get_match_arg,
         .get_tools_description = python_get_loaded_tools_description
     }

@@ -23,7 +23,6 @@ typedef enum {
     LOG_MOD_LLM     = (1 << 2),
     LOG_MOD_HTTP    = (1 << 3),
     LOG_MOD_CONTEXT = (1 << 4),
-    LOG_MOD_POLICY  = (1 << 5),
     LOG_MOD_GOAP    = (1 << 6),
     LOG_MOD_MCP     = (1 << 7),
     LOG_MOD_DB      = (1 << 8),

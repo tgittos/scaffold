@@ -47,48 +47,10 @@ $(eval $(call def_test,document_chunker,test_document_chunker,$(LIBDIR)/util/doc
 $(eval $(call def_test,streaming,network/test_streaming,$(LIBDIR)/network/streaming.c))
 $(eval $(call def_test,darray,test_darray,))
 $(eval $(call def_test,ptrarray,test_ptrarray,))
-$(eval $(call def_test,rate_limiter,policy/test_rate_limiter,$(LIBDIR)/policy/rate_limiter.c))
-$(eval $(call def_test,allowlist,policy/test_allowlist,$(LIBDIR)/policy/allowlist.c $(LIBDIR)/policy/shell_parser.c $(LIBDIR)/policy/shell_parser_cmd.c $(LIBDIR)/policy/shell_parser_ps.c))
-$(eval $(call def_test,tool_args,test_tool_args,$(LIBDIR)/policy/tool_args.c))
-$(eval $(call def_test,gate_prompter,policy/test_gate_prompter,$(LIBDIR)/policy/gate_prompter.c))
 $(eval $(call def_test,tool_cache,tools/test_tool_cache,$(LIBDIR)/tools/tool_cache.c))
 $(eval $(call def_test,prompt_mode,agent/test_prompt_mode,$(LIBDIR)/agent/prompt_mode.c))
 $(eval $(call def_test,oauth_callback_server,auth/test_oauth_callback_server,$(LIBDIR)/auth/oauth_callback_server.c))
 
-# Gate dependencies (used by multiple gate-related tests)
-GATE_DEPS := \
-    $(LIBDIR)/policy/allowlist.c \
-    $(LIBDIR)/policy/approval_gate.c \
-    $(LIBDIR)/policy/approval_errors.c \
-    $(LIBDIR)/policy/auto_approve.c \
-    $(LIBDIR)/policy/atomic_file.c \
-    $(LIBDIR)/policy/gate_prompter.c \
-    $(LIBDIR)/policy/path_normalize.c \
-    $(LIBDIR)/policy/pattern_generator.c \
-    $(LIBDIR)/policy/protected_files.c \
-    $(LIBDIR)/policy/rate_limiter.c \
-    $(LIBDIR)/policy/shell_parser.c \
-    $(LIBDIR)/policy/shell_parser_cmd.c \
-    $(LIBDIR)/policy/shell_parser_ps.c \
-    $(LIBDIR)/policy/subagent_approval.c \
-    $(LIBDIR)/policy/tool_args.c \
-    $(LIBDIR)/util/debug_output.c \
-    $(LIBDIR)/util/log.c \
-    $(LIBDIR)/util/app_home.c \
-    $(LIBDIR)/util/json_escape.c \
-    $(LIBDIR)/util/project_scope.c
-
-$(eval $(call def_test,approval_gate,policy/test_approval_gate,$(GATE_DEPS)))
-$(eval $(call def_test,auto_approve,policy/test_auto_approve,$(LIBDIR)/policy/auto_approve.c $(LIBDIR)/policy/protected_files.c $(LIBDIR)/policy/path_normalize.c $(LIBDIR)/policy/shell_parser.c $(LIBDIR)/policy/shell_parser_cmd.c $(LIBDIR)/policy/shell_parser_ps.c $(LIBDIR)/policy/tool_args.c $(LIBDIR)/util/project_scope.c $(LIBDIR)/util/app_home.c))
-$(eval $(call def_test,atomic_file,policy/test_atomic_file,$(LIBDIR)/policy/atomic_file.c))
-$(eval $(call def_test,path_normalize,policy/test_path_normalize,$(LIBDIR)/policy/path_normalize.c))
-$(eval $(call def_test,verified_file_context,test_verified_file_context,$(LIBDIR)/policy/verified_file_context.c $(LIBDIR)/policy/atomic_file.c $(LIBDIR)/policy/path_normalize.c))
-$(eval $(call def_test,protected_files,policy/test_protected_files,$(LIBDIR)/policy/protected_files.c $(LIBDIR)/policy/path_normalize.c $(LIBDIR)/util/app_home.c))
-$(eval $(call def_test,shell_parser,policy/test_shell_parser,$(LIBDIR)/policy/shell_parser.c $(LIBDIR)/policy/shell_parser_cmd.c $(LIBDIR)/policy/shell_parser_ps.c))
-$(eval $(call def_test,shell_parser_cmd,policy/test_shell_parser_cmd,$(LIBDIR)/policy/shell_parser_cmd.c $(LIBDIR)/policy/shell_parser.c $(LIBDIR)/policy/shell_parser_ps.c))
-$(eval $(call def_test,shell_parser_ps,policy/test_shell_parser_ps,$(LIBDIR)/policy/shell_parser_ps.c $(LIBDIR)/policy/shell_parser.c $(LIBDIR)/policy/shell_parser_cmd.c))
-$(eval $(call def_test,subagent_approval,policy/test_subagent_approval,$(GATE_DEPS)))
-$(eval $(call def_test,approval_gate_integration,policy/test_approval_gate_integration,$(GATE_DEPS) $(TESTDIR)/stubs/python_tool_stub.c))
 
 $(TEST_cli_flags_TARGET): $(TEST_cli_flags_OBJECTS) $(BUILDDIR)/.scaffold-linked
 	$(CC) -o $@ $(TEST_cli_flags_OBJECTS)
@@ -132,18 +94,6 @@ $(TEST_darray_TARGET): $(TEST_darray_OBJECTS)
 $(TEST_ptrarray_TARGET): $(TEST_ptrarray_OBJECTS)
 	$(CC) -o $@ $(TEST_ptrarray_OBJECTS)
 
-$(TEST_rate_limiter_TARGET): $(TEST_rate_limiter_OBJECTS)
-	$(CC) -o $@ $(TEST_rate_limiter_OBJECTS)
-
-$(TEST_allowlist_TARGET): $(TEST_allowlist_OBJECTS)
-	$(CC) -o $@ $(TEST_allowlist_OBJECTS)
-
-$(TEST_tool_args_TARGET): $(TEST_tool_args_OBJECTS) $(CJSON_LIB)
-	$(CC) -o $@ $(TEST_tool_args_OBJECTS) $(CJSON_LIB)
-
-$(TEST_gate_prompter_TARGET): $(TEST_gate_prompter_OBJECTS)
-	$(CC) -o $@ $(TEST_gate_prompter_OBJECTS)
-
 $(TEST_tool_cache_TARGET): $(TEST_tool_cache_OBJECTS) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_tool_cache_OBJECTS) $(CJSON_LIB) -lpthread
 
@@ -152,39 +102,6 @@ $(TEST_prompt_mode_TARGET): $(TEST_prompt_mode_OBJECTS)
 
 $(TEST_oauth_callback_server_TARGET): $(TEST_oauth_callback_server_OBJECTS)
 	$(CC) -o $@ $(TEST_oauth_callback_server_OBJECTS) -lpthread
-
-$(TEST_approval_gate_TARGET): $(TEST_approval_gate_OBJECTS) $(CJSON_LIB)
-	$(CC) -o $@ $(TEST_approval_gate_OBJECTS) $(CJSON_LIB) -lpthread
-
-$(TEST_auto_approve_TARGET): $(TEST_auto_approve_OBJECTS) $(CJSON_LIB)
-	$(CC) -o $@ $(TEST_auto_approve_OBJECTS) $(CJSON_LIB)
-
-$(TEST_atomic_file_TARGET): $(TEST_atomic_file_OBJECTS)
-	$(CC) -o $@ $(TEST_atomic_file_OBJECTS)
-
-$(TEST_path_normalize_TARGET): $(TEST_path_normalize_OBJECTS)
-	$(CC) -o $@ $(TEST_path_normalize_OBJECTS)
-
-$(TEST_protected_files_TARGET): $(TEST_protected_files_OBJECTS)
-	$(CC) -o $@ $(TEST_protected_files_OBJECTS)
-
-$(TEST_verified_file_context_TARGET): $(TEST_verified_file_context_OBJECTS)
-	$(CC) -o $@ $(TEST_verified_file_context_OBJECTS)
-
-$(TEST_shell_parser_TARGET): $(TEST_shell_parser_OBJECTS)
-	$(CC) -o $@ $(TEST_shell_parser_OBJECTS)
-
-$(TEST_shell_parser_cmd_TARGET): $(TEST_shell_parser_cmd_OBJECTS)
-	$(CC) -o $@ $(TEST_shell_parser_cmd_OBJECTS)
-
-$(TEST_shell_parser_ps_TARGET): $(TEST_shell_parser_ps_OBJECTS)
-	$(CC) -o $@ $(TEST_shell_parser_ps_OBJECTS)
-
-$(TEST_subagent_approval_TARGET): $(TEST_subagent_approval_OBJECTS) $(CJSON_LIB)
-	$(CC) -o $@ $(TEST_subagent_approval_OBJECTS) $(CJSON_LIB) -lpthread
-
-$(TEST_approval_gate_integration_TARGET): $(TEST_approval_gate_integration_OBJECTS) $(CJSON_LIB)
-	$(CC) -o $@ $(TEST_approval_gate_integration_OBJECTS) $(CJSON_LIB) -lpthread
 
 # =============================================================================
 # UPDATER TEST
@@ -388,7 +305,6 @@ $(eval $(call def_test_lib,iterative_loop_empty,ralph/test_iterative_loop_empty,
 $(eval $(call def_test_lib,message_dispatcher,ralph/test_message_dispatcher,))
 $(eval $(call def_test_lib,message_processor,ralph/test_message_processor,))
 $(eval $(call def_test_lib,recap,ralph/test_recap,))
-$(eval $(call def_test_lib,tool_review,agent/test_tool_review,$(TESTDIR)/mock_api_server.c))
 $(eval $(call def_test_lib,parallel_batch,agent/test_parallel_batch,))
 $(eval $(call def_test_lib,tool_wire_format,agent/test_tool_wire_format,$(TESTDIR)/mock_api_server.c))
 $(eval $(call def_test_lib,model_commands,ui/test_model_commands,))
@@ -422,7 +338,7 @@ LIBAGENT_TESTS := tool_param_dsl json_output output tools_system vector_db_tool 
     memory_mgmt token_manager conversation_compactor rolling_summary model_tools embeddings_service embeddings_service_reinit \
     openai_streaming anthropic_streaming codex_provider messages_array_bug openai_message_format mcp_client subagent_tool \
     incomplete_task_bug conversation conversation_vdb tool_calls_not_stored document_store \
-    message_dispatcher message_processor recap tool_review parallel_batch tool_wire_format model_commands \
+    message_dispatcher message_processor recap parallel_batch tool_wire_format model_commands \
     iterative_loop_empty \
     slash_commands task_commands agent_commands goal_commands mode_tool mode_commands status_line \
     context_mode_injection repo_context image_attachment goap_tools orchestrator_tool goap_lifecycle \

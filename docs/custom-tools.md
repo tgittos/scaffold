@@ -39,7 +39,7 @@ Scaffold automatically:
 - **Type annotations** -- used to generate the parameter schema (`str`, `int`, `float`, `bool`)
 - **Google-style docstrings** -- `Args:` section defines parameter descriptions, main docstring becomes the tool description
 - **Return a string** -- tool results are returned as strings to the LLM
-- **`Gate:` / `Thread-safe:` directives** -- a line `Gate: <category>` in the module docstring sets the approval category. `Thread-safe: true` lets calls to the tool run concurrently with other thread-safe calls in the same batch; the default is serial. Only set it if the tool keeps no shared mutable state.
+- **`Thread-safe:` directive** -- `Thread-safe: true` in the module docstring lets calls to the tool run concurrently with other thread-safe calls in the same batch; the default is serial. Only set it if the tool keeps no shared mutable state.
 
 ### Built-in Python tools
 
@@ -61,10 +61,9 @@ These are extracted to `~/.local/scaffold/tools/` on first run:
 
 ### Python extensions
 
-Custom tools have access to three C extension modules:
+Custom tools have access to two C extension modules:
 
 - **`_ralph_http`** -- HTTP client (get, post, download)
-- **`_ralph_verified_io`** -- TOCTOU-safe file operations
 - **`_ralph_sys`** -- System utilities (get_executable_path, get_app_home, get_config_int)
 
 ## Worker role prompts

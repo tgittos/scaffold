@@ -23,9 +23,7 @@ typedef struct async_executor async_executor_t;
 typedef enum {
     ASYNC_EVENT_COMPLETE = 'C',    /* Execution completed successfully */
     ASYNC_EVENT_ERROR = 'E',       /* Execution failed with error */
-    ASYNC_EVENT_APPROVAL = 'A',    /* Approval needed from user */
-    ASYNC_EVENT_INTERRUPTED = 'I', /* Execution interrupted by Ctrl+C */
-    ASYNC_EVENT_SUBAGENT_SPAWNED = 'S' /* Subagent was spawned, rebuild fd_set */
+    ASYNC_EVENT_INTERRUPTED = 'I'  /* Execution interrupted by Ctrl+C */
 } AsyncEventType;
 
 /**
@@ -125,17 +123,6 @@ const char* async_executor_get_error(async_executor_t* executor);
  * @return 0 for success, negative for various error types.
  */
 int async_executor_get_result(async_executor_t* executor);
-
-/**
- * Notify the main thread that a subagent was spawned.
- * This wakes up the select() loop so it can rebuild its fd_set
- * to include the new subagent's approval channel.
- *
- * Thread-safe: can be called from any thread.
- *
- * @param executor The executor (may be NULL, in which case this is a no-op).
- */
-void async_executor_notify_subagent_spawned(async_executor_t* executor);
 
 /**
  * Get the currently active async executor.

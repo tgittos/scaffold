@@ -2,7 +2,6 @@
 #include "lib/agent/tool_batch_executor.h"
 #include "lib/agent/session.h"
 #include "lib/tools/tool_cache.h"
-#include "lib/policy/verified_file_context.h"
 #include <pthread.h>
 #include <string.h>
 #include <stdlib.h>
@@ -68,7 +67,7 @@ void setUp(void) {
     session.tools.functions.data[session.tools.functions.count - 1].execute_func = big_tool_execute;
 
     memset(&orchestration, 0, sizeof(orchestration));
-    tool_orchestration_init(&orchestration, NULL);
+    tool_orchestration_init(&orchestration);
 
     batch_ctx.session = &session;
     batch_ctx.orchestration = &orchestration;
@@ -191,6 +190,55 @@ void test_compact_mode_parallel(void) {
     TEST_ASSERT_EQUAL_INT(0, call_indices[0]);
     TEST_ASSERT_EQUAL_INT(1, call_indices[1]);
     TEST_ASSERT_LESS_THAN_INT64(200, elapsed);
+
+    free_calls(calls, 2);
+    free_results(results, 2);
+}
+
+/* Formerly gated tools (write_file, shell) run straight through the batch
+ * executor: no approval check, no prompt, no denial error. */
+static int g_unprompted_runs = 0;
+
+static int recording_tool_execute(const ToolCall *call, ToolResult *result) {
+    g_unprompted_runs++;
+    result->tool_call_id = call->id ? strdup(call->id) : NULL;
+    result->result = strdup("{\"ran\": true}");
+    result->success = 1;
+    return 0;
+}
+
+static void register_recording_tool(ToolRegistry *reg, const char *name) {
+    ToolFunction func = {0};
+    func.name = strdup(name);
+    func.description = strdup("formerly gated tool");
+    func.execute_func = recording_tool_execute;
+    func.thread_safe = 0;
+    func.parameter_count = 0;
+    func.parameters = NULL;
+    ToolFunctionArray_push(&reg->functions, func);
+}
+
+void test_formerly_gated_tools_run_without_approval(void) {
+    register_recording_tool(&session.tools, "write_file");
+    register_recording_tool(&session.tools, "shell");
+    g_unprompted_runs = 0;
+
+    ToolCall calls[2] = {
+        make_call("c1", "write_file", "{\"path\": \"/tmp/.env\", \"content\": \"x\"}"),
+        make_call("c2", "shell", "{\"command\": \"rm -rf /tmp/does-not-exist\"}")
+    };
+    ToolResult results[2] = {0};
+    int executed = 0;
+
+    int rc = tool_batch_execute(&batch_ctx, calls, 2, results, NULL, &executed);
+
+    TEST_ASSERT_EQUAL_INT(0, rc);
+    TEST_ASSERT_EQUAL_INT(2, executed);
+    TEST_ASSERT_EQUAL_INT(2, g_unprompted_runs);
+    for (int i = 0; i < 2; i++) {
+        TEST_ASSERT_EQUAL_INT(1, results[i].success);
+        TEST_ASSERT_EQUAL_STRING("{\"ran\": true}", results[i].result);
+    }
 
     free_calls(calls, 2);
     free_results(results, 2);
@@ -359,6 +407,7 @@ int main(void) {
     RUN_TEST(test_single_tool_inline);
     RUN_TEST(test_compact_mode_parallel);
     RUN_TEST(test_results_in_correct_slots);
+    RUN_TEST(test_formerly_gated_tools_run_without_approval);
     RUN_TEST(test_non_thread_safe_falls_back_to_serial);
     RUN_TEST(test_tool_cache_thread_safety);
     RUN_TEST(test_null_context_returns_error);

@@ -69,8 +69,6 @@ When spawning subagents or workers, use these flags:
 - --queue <name>: Queue name for worker mode
 - --supervisor: Run as goal supervisor (requires --goal)
 - --goal <id>: Goal ID for supervisor mode
-- --allow <spec>: Add allowlist entry (e.g., 'shell:git,status')
-- --allow-category=<cat>: Allow category without prompting (file_write, shell, network)
 - --model <name>: Override model (tier name or model ID)
 - --no-auto-messages: Disable automatic message polling
 - --message-poll-interval <ms>: Set message poll interval (default: 2000)

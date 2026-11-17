@@ -919,54 +919,6 @@ void display_message_notification_clear(void) {
     fflush(stdout);
 }
 
-/*
- * ApprovalResult enum values from policy/approval_gate.h.
- * We maintain a local copy of result names here to avoid creating a dependency
- * on the entire approval_gate module from output_formatter. If the enum changes,
- * this array must be updated as well.
- */
-static const char *APPROVAL_RESULT_NAMES[] = {
-    "allowed",              /* APPROVAL_ALLOWED = 0 */
-    "denied",               /* APPROVAL_DENIED = 1 */
-    "always",               /* APPROVAL_ALLOWED_ALWAYS = 2 */
-    "aborted",              /* APPROVAL_ABORTED = 3 */
-    "rate-limited",         /* APPROVAL_RATE_LIMITED = 4 */
-    "no-tty"                /* APPROVAL_NON_INTERACTIVE_DENIED = 5 */
-};
-#define APPROVAL_RESULT_COUNT 6
-
-void log_subagent_approval(const char *subagent_id,
-                           const char *tool_name,
-                           const char *display_summary,
-                           int result) {
-    if (g_json_output_mode) return;
-    if (subagent_id == NULL || tool_name == NULL) return;
-
-    /* Abbreviate ID to first 4 chars */
-    char short_id[5] = {0};
-    strncpy(short_id, subagent_id, 4);
-    short_id[4] = '\0';  /* Explicit null termination for safety */
-
-    /* Map result to display text using local array */
-    const char *result_text = (result >= 0 && result < APPROVAL_RESULT_COUNT)
-                              ? APPROVAL_RESULT_NAMES[result]
-                              : "unknown";
-
-    /* Format detail (truncate if long) */
-    char detail[60] = {0};
-    if (display_summary != NULL && strlen(display_summary) > 0) {
-        if (strlen(display_summary) <= 50) {
-            snprintf(detail, sizeof(detail), " (%s)", display_summary);
-        } else {
-            snprintf(detail, sizeof(detail), " (%.47s...)", display_summary);
-        }
-    }
-
-    printf(TERM_DIM TERM_GRAY "  ↳ [%s] %s%s → %s" TERM_RESET "\n",
-           short_id, tool_name, detail, result_text);
-    fflush(stdout);
-}
-
 #define AGENT_TASK_DISPLAY_MAX 60
 #define AGENT_TASK_TRUNC_LEN  (AGENT_TASK_DISPLAY_MAX - 3)
 

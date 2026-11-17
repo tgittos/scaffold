@@ -3,7 +3,6 @@
 #include "../util/log.h"
 #include "agent.h"
 #include "repl.h"
-#include "tool_review.h"
 #include "../workflow/workflow.h"
 #include "../session/conversation_tracker.h"
 #include "../util/ansi_codes.h"
@@ -12,7 +11,6 @@
 #include "../util/app_home.h"
 #include "../ui/spinner.h"
 #include "../ui/status_line.h"
-#include "../policy/approval_gate.h"
 #include "../tools/subagent_tool.h"
 #include "../tools/tool_extension.h"
 #include "../ui/slash_commands.h"
@@ -129,18 +127,6 @@ int agent_init(Agent* agent, const AgentConfig* config) {
     context_retriever_set_services(agent->services);
     session_wire_services(&agent->session);
 
-    /* Wire policy→tools callbacks so the policy layer never imports tools headers */
-    ApprovalGateCallbacks gate_cbs = {
-        .is_extension_tool = tool_extension_is_extension_tool,
-        .get_gate_category = tool_extension_get_gate_category,
-        .get_match_arg     = tool_extension_get_match_arg,
-        .get_approval_channel = subagent_get_approval_channel,
-        .log_approval      = log_subagent_approval,
-        .review_tool_call  = tool_review_run,
-        .review_ctx        = &agent->session,
-    };
-    approval_gate_set_callbacks(&gate_cbs);
-
     if (agent->config.mode == AGENT_MODE_BACKGROUND) {
         agent->session.subagent_manager.is_subagent_process = 1;
     }
@@ -175,30 +161,6 @@ int agent_load_config(Agent* agent) {
         agent->session.session_data.config.system_prompt = dup;
     }
 
-    if (agent->config.yolo) {
-        approval_gate_enable_yolo(&agent->session.gate_config);
-        LOG_INFO("Approval gates disabled (yolo mode)");
-    }
-
-    if (agent->config.auto_mode) {
-        agent->session.gate_config.auto_mode = 1;
-    }
-
-    for (int i = 0; i < agent->config.allow_category_count; i++) {
-        if (approval_gate_set_category_action(&agent->session.gate_config,
-                                              agent->config.allow_categories[i],
-                                              GATE_ACTION_ALLOW) != 0) {
-            LOG_WARN("Warning: Unknown category '%s'", agent->config.allow_categories[i]);
-        }
-    }
-
-    for (int i = 0; i < agent->config.allow_entry_count; i++) {
-        if (approval_gate_add_cli_allow(&agent->session.gate_config,
-                                        agent->config.allow_entries[i]) != 0) {
-            LOG_WARN("Warning: Invalid allow entry '%s'", agent->config.allow_entries[i]);
-        }
-    }
-
     if (agent->config.no_stream) {
         agent->session.session_data.config.enable_streaming = false;
     }
@@ -231,8 +193,6 @@ int agent_run(Agent* agent) {
                 return -1;
             }
 
-            subagent_init_approval_channel();
-
             /* Subagents run with fresh context, not parent conversation history */
             cleanup_conversation_history(&agent->session.session_data.conversation);
             init_conversation_history(&agent->session.session_data.conversation);
@@ -253,14 +213,12 @@ int agent_run(Agent* agent) {
             }
 
             if (message == NULL) {
-                subagent_cleanup_approval_channel();
                 return -1;
             }
 
             int result = session_process_message(&agent->session, message);
 
             free(message);
-            subagent_cleanup_approval_channel();
             return result;
         }
 

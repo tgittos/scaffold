@@ -73,9 +73,8 @@ void generate_subagent_id(char *id_out) {
  * Clean up resources for a single subagent.
  * Closes pipes and frees allocated strings.
  *
- * Note: We use > 0 checks for stdout_pipe (original behavior) and > 2 checks
- * for approval_channel FDs to avoid closing stdin/stdout/stderr (0,1,2) when
- * the struct was zero-initialized with memset.
+ * Note: We use > 0 checks for stdout_pipe so a zero-initialized struct does
+ * not close stdin.
  */
 void cleanup_subagent(Subagent *sub, Services *services) {
     if (sub == NULL) {
@@ -90,16 +89,6 @@ void cleanup_subagent(Subagent *sub, Services *services) {
         close(sub->stdout_pipe[1]);
         sub->stdout_pipe[1] = -1;
     }
-
-    if (sub->approval_channel.request_fd > 2) {
-        close(sub->approval_channel.request_fd);
-        sub->approval_channel.request_fd = -1;
-    }
-    if (sub->approval_channel.response_fd > 2) {
-        close(sub->approval_channel.response_fd);
-        sub->approval_channel.response_fd = -1;
-    }
-    sub->approval_channel.subagent_pid = 0;
 
     if (sub->task) {
         free(sub->task);

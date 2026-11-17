@@ -23,7 +23,7 @@ int tool_executor_run_workflow(AgentSession* session, ToolCall* tool_calls, int 
     LOG_INFO("Executing %d tool call(s)", call_count);
 
     ToolOrchestrationContext ctx;
-    if (tool_orchestration_init(&ctx, &session->gate_config) != 0) {
+    if (tool_orchestration_init(&ctx) != 0) {
         return -1;
     }
 

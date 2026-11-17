@@ -54,8 +54,6 @@ void test_help_long_flag(void) {
     TEST_ASSERT_NOT_NULL(strstr(output, "--no-stream"));
     TEST_ASSERT_NOT_NULL(strstr(output, "--json"));
     TEST_ASSERT_NOT_NULL(strstr(output, "--home"));
-    TEST_ASSERT_NOT_NULL(strstr(output, "--yolo"));
-    TEST_ASSERT_NOT_NULL(strstr(output, "--auto"));
 }
 
 void test_help_short_flag(void) {
@@ -73,7 +71,6 @@ void test_help_excludes_internal_flags(void) {
     TEST_ASSERT_NULL(strstr(output, "--subagent"));
     TEST_ASSERT_NULL(strstr(output, "--task"));
     TEST_ASSERT_NULL(strstr(output, "--context "));
-    TEST_ASSERT_NULL(strstr(output, "--allow"));
     TEST_ASSERT_NULL(strstr(output, "--worker"));
     TEST_ASSERT_NULL(strstr(output, "--queue"));
     TEST_ASSERT_NULL(strstr(output, "--no-auto-messages"));

@@ -1,6 +1,5 @@
 """Execute shell commands.
 
-Gate: shell
 Thread-safe: true
 Match: command
 

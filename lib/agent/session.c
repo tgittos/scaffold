@@ -37,16 +37,6 @@
 #include <string.h>
 #include <time.h>
 
-/**
- * Callback invoked when a subagent spawns to notify the async executor's select loop.
- * This allows the main thread to immediately rebuild its fd_set to include the new
- * subagent's approval channel instead of waiting for the next timeout.
- */
-static void on_subagent_spawn(void *user_data) {
-    (void)user_data;
-    async_executor_notify_subagent_spawned(async_executor_get_active());
-}
-
 int session_init(AgentSession* session) {
     if (session == NULL) return -1;
 
@@ -121,8 +111,6 @@ int session_init(AgentSession* session) {
                                           SUBAGENT_TIMEOUT_DEFAULT) != 0) {
         fprintf(stderr, "Warning: Failed to initialize subagent manager\n");
     } else {
-        /* Wake select() immediately when a subagent spawns so it adds the new fd */
-        subagent_manager_set_spawn_callback(&session->subagent_manager, on_subagent_spawn, NULL);
         if (register_subagent_tool(&session->tools, &session->subagent_manager) != 0) {
             fprintf(stderr, "Warning: Failed to register subagent tool\n");
         }
@@ -134,14 +122,6 @@ int session_init(AgentSession* session) {
     if (llm_client_init() != 0) {
         fprintf(stderr, "Error: Failed to initialize LLM HTTP subsystem\n");
         goto cleanup_subsystems;
-    }
-
-    if (approval_gate_init(&session->gate_config) != 0) {
-        fprintf(stderr, "Warning: Failed to initialize approval gates\n");
-    } else {
-        approval_gate_detect_interactive(&session->gate_config);
-        /* Set gate_config on subagent manager for approval proxying during blocking waits */
-        subagent_manager_set_gate_config(&session->subagent_manager, &session->gate_config);
     }
 
     /* Plugins are optional; failures are non-fatal */
@@ -182,7 +162,6 @@ void session_cleanup(AgentSession* session) {
 
     tool_extension_shutdown_all();
 
-    approval_gate_cleanup(&session->gate_config);
     subagent_manager_cleanup(&session->subagent_manager);
     mcp_client_cleanup(&session->mcp_client);
 

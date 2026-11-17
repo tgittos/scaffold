@@ -962,6 +962,8 @@ void test_retired_default_tools_removed_only_when_unmodified(void) {
     rmdir_recursive(home);
 }
 
+/* A historical shipped read_file.py, kept verbatim (including the retired
+ * "Gate:" directive) so its SHA-256 still matches SHIPPED_DEFAULT_TOOLS. */
 static const char *SHIPPED_READ_FILE_PY =
     "\"\"\"Read file contents with optional line range.\n"
     "\n"
@@ -1386,7 +1388,7 @@ void test_custom_tool_defaults_serial(void) {
     write_text_file(tool_path,
         "\"\"\"Plain tool.\n"
         "\n"
-        "Gate: file_read\n"
+        "Match: x\n"
         "\"\"\"\n"
         "\n"
         "def plain_tool(x: str) -> dict:\n"
@@ -1430,7 +1432,7 @@ void test_custom_tool_without_module_docstring_is_serial(void) {
     TEST_ASSERT_EQUAL_INT(0, python_load_tool_files());
     TEST_ASSERT_EQUAL_INT(0, python_register_tool_schemas(&registry));
     TEST_ASSERT_EQUAL_INT(0, registry_thread_safe(&registry, "nodoc_tool"));
-    TEST_ASSERT_NULL(python_tool_get_gate_category("nodoc_tool"));
+    TEST_ASSERT_NULL(python_tool_get_match_arg("nodoc_tool"));
 
     python_cleanup_tool_files();
     app_home_cleanup();

@@ -390,20 +390,6 @@ int async_executor_get_result(async_executor_t* executor) {
     return executor->last_result;
 }
 
-void async_executor_notify_subagent_spawned(async_executor_t* executor) {
-    if (executor == NULL) {
-        return;
-    }
-
-    /* Only notify if executor is currently running, otherwise the main
-     * thread isn't blocked in select() waiting for events */
-    if (!atomic_load(&executor->running)) {
-        return;
-    }
-
-    send_event(executor, ASYNC_EVENT_SUBAGENT_SPAWNED);
-}
-
 async_executor_t* async_executor_get_active(void) {
     ensure_executor_mutex_initialized();
     pthread_mutex_lock(&g_executor_mutex);

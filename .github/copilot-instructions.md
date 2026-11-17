@@ -58,7 +58,6 @@ scaffold/
 │   │   ├── models/         # Model capability implementations
 │   │   └── providers/      # Codex, OpenAI, Anthropic, local AI providers
 │   ├── network/            # HTTP client, streaming, API error handling
-│   ├── policy/             # Approval gates, allowlists, protected files
 │   ├── plugin/             # Plugin system (discovery, JSON-RPC, hooks)
 │   ├── tools/              # Tool registry, built-in tools (memory, PDF, etc.)
 │   ├── mcp/                # Model Context Protocol client
@@ -89,7 +88,6 @@ scaffold/
 | `lib/agent/session.c/h` | Session coordinator |
 | `lib/db/vector_db.c/h` | Vector database operations |
 | `lib/network/http_client.c/h` | HTTP client using libcurl |
-| `lib/policy/approval_gate.c/h` | Approval gate system |
 
 ## Testing
 

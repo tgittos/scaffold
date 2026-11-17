@@ -8,9 +8,6 @@
 #include "../ui/json_output.h"
 #include "../mcp/mcp_client.h"
 #include "../ui/spinner.h"
-#include "../policy/protected_files.h"
-#include "../policy/verified_file_context.h"
-#include "../policy/atomic_file.h"
 #include "../plugin/hook_dispatcher.h"
 #include "../plugin/plugin_manager.h"
 #include "../util/config.h"
@@ -28,8 +25,6 @@ typedef struct {
     int is_plugin;
     int approved;
     int thread_safe;
-    ApprovedPath approved_path;
-    int has_approved_path;
 } PreScreenEntry;
 
 typedef struct {
@@ -110,10 +105,6 @@ static void execute_single_tool(ToolBatchContext* ctx, ToolCall* call,
         return;
     }
 
-    if (entry->has_approved_path) {
-        verified_file_context_set(&entry->approved_path);
-    }
-
     if (entry->is_mcp) {
         if (mcp_client_execute_tool(&ctx->session->mcp_client, call, result) == 0) {
             LOG_INFO("Executed tool: %s (id=%s)", call->name, call->id);
@@ -128,8 +119,6 @@ static void execute_single_tool(ToolBatchContext* ctx, ToolCall* call,
     } else {
         LOG_INFO("Executed tool: %s (id=%s)", call->name, call->id);
     }
-
-    verified_file_context_clear();
 
     hook_dispatch_post_tool_execute(&ctx->session->plugin_manager,
                                     ctx->session, call, result);
@@ -156,9 +145,7 @@ int tool_batch_execute(ToolBatchContext* ctx,
     int status = 0;
     int json_mode = ctx->session->session_data.config.json_output_mode;
 
-    force_protected_inode_refresh();
-
-    /* Phase 1: Pre-screen (serial) — dedup, subagent limits, approval */
+    /* Phase 1: Pre-screen (serial) — dedup, subagent limits */
     PreScreenEntry* approved = calloc(call_count, sizeof(PreScreenEntry));
     if (approved == NULL) {
         *executed_count = 0;
@@ -211,40 +198,6 @@ int tool_batch_execute(ToolBatchContext* ctx,
             LOG_DEBUG("First subagent call (id=%s)", calls[i].id);
         }
 
-        ApprovedPath out_path;
-        init_approved_path(&out_path);
-        int approval = tool_orchestration_check_approval(ctx->orchestration,
-                                                          &calls[i], &results[slot],
-                                                          &out_path);
-        if (approval == -2) {
-            free_approved_path(&out_path);
-            status = -1;
-            LOG_WARN("User aborted tool execution at tool %d of %d", i + 1, call_count);
-            fill_error_result(&results[slot], calls[i].id,
-                              "{\"error\": \"aborted\", \"message\": \"Operation aborted by user\"}");
-            display_streaming_tool_result(calls[i].id, calls[i].name,
-                                        calls[i].arguments, "Aborted by user", 0);
-            count++;
-            if (!compact) {
-                for (int j = i + 1; j < call_count; j++) {
-                    fill_error_result(&results[j], calls[j].id,
-                                      "{\"error\": \"aborted\", \"message\": \"Operation aborted by user\"}");
-                }
-                count = call_count;
-            }
-            break;
-        }
-        if (approval == -1) {
-            free_approved_path(&out_path);
-            LOG_INFO("Tool %s blocked by approval gate", calls[i].name);
-            if (json_mode) {
-                json_output_tool_result(calls[i].id, results[slot].result,
-                                        !results[slot].success);
-            }
-            count++;
-            continue;
-        }
-
         PreScreenEntry* e = &approved[approved_count++];
         e->call_index = i;
         e->slot = slot;
@@ -258,23 +211,10 @@ int tool_batch_execute(ToolBatchContext* ctx,
                 break;
             }
         }
-        if (out_path.resolved_path != NULL) {
-            e->approved_path = out_path;
-            e->has_approved_path = 1;
-        } else {
-            free_approved_path(&out_path);
-            e->has_approved_path = 0;
-        }
-
         count++;
     }
 
     if (status != 0 || approved_count == 0) {
-        for (int k = 0; k < approved_count; k++) {
-            if (approved[k].has_approved_path) {
-                free_approved_path(&approved[k].approved_path);
-            }
-        }
         free(approved);
         if (!json_mode && count > 0) {
             printf("\n");
@@ -370,10 +310,6 @@ int tool_batch_execute(ToolBatchContext* ctx,
 
         if (cap > 0) {
             tool_result_apply_cap(&results[slot], (size_t)cap);
-        }
-
-        if (e->has_approved_path) {
-            free_approved_path(&e->approved_path);
         }
 
         if (!json_mode) {

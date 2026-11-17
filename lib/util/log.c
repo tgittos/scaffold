@@ -91,7 +91,6 @@ static const struct { const char *name; uint32_t bit; } module_map[] = {
     {"llm",     LOG_MOD_LLM},
     {"http",    LOG_MOD_HTTP},
     {"context", LOG_MOD_CONTEXT},
-    {"policy",  LOG_MOD_POLICY},
     {"goap",    LOG_MOD_GOAP},
     {"mcp",     LOG_MOD_MCP},
     {"db",      LOG_MOD_DB},

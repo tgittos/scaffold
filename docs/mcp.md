@@ -99,26 +99,6 @@ For example, a tool named `search` from a server named `docs` becomes `mcp_docs_
 3. Tools are registered in scaffold's tool registry with their namespaced names
 4. When the LLM calls an MCP tool, scaffold routes the call to the appropriate server via JSON-RPC `tools/call`
 
-## Approval gates
-
-MCP tools are in the `mcp` category, which is **gated by default**. You'll be prompted before any MCP tool executes. To auto-allow:
-
-```json
-{
-  "approval_gates": {
-    "categories": {
-      "mcp": "allow"
-    }
-  }
-}
-```
-
-Or per-session:
-
-```bash
-./scaffold --allow-category=mcp
-```
-
 ## Graceful degradation
 
 MCP is optional. If no servers are configured, or if a server fails to connect, scaffold continues operating with its built-in tools. Server connection failures are logged but don't block startup.

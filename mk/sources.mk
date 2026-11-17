@@ -6,7 +6,6 @@ TOOL_SOURCES := \
     $(SRCDIR)/tools/python_tool_files.c \
     $(SRCDIR)/tools/python_extension.c \
     $(SRCDIR)/tools/http_python.c \
-    $(SRCDIR)/tools/verified_file_python.c \
     $(SRCDIR)/tools/sys_python.c
 
 # LLM (in lib/llm/)

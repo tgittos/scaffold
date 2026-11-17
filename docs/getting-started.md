@@ -85,27 +85,9 @@ When you give scaffold a description, it doesn't start writing code immediately.
 4. **Verification** -- Each goal is verified complete before the orchestrator advances to the next one
 5. **Completion** -- Repeat until the application exists
 
-## Approval gates
+## Tool execution
 
-By default, scaffold asks for your permission before writing files, running shell commands, or making network requests. You'll see prompts like:
-
-```
-[GATE] shell: npm install express
-Allow? [y]es / [n]o / [a]lways allow this pattern
-```
-
-Your options:
-- **y** -- Allow this one action
-- **n** -- Deny this action
-- **a** -- Allow this action and all future actions matching this pattern (session only)
-
-To skip all prompts and let scaffold run fully autonomously:
-
-```bash
-./scaffold --yolo "build a blog with Next.js"
-```
-
-See [Configuration](configuration.md#approval-gates) for fine-grained control.
+Scaffold runs every tool call — file writes, shell commands, network requests — without asking for approval. Run it on work you are willing to let it change.
 
 ## Watching progress
 
@@ -138,7 +120,7 @@ In interactive mode, scaffold checks for updates on startup and notifies you if 
 
 ## Next steps
 
-- [Configuration](configuration.md) -- API keys, models, approval gates, and more
+- [Configuration](configuration.md) -- API keys, models, and more
 - [Interactive Mode](interactive-mode.md) -- Slash commands and real-time monitoring
 - [Autonomous Mode](autonomous-mode.md) -- How the orchestrator, supervisors, and workers operate
 - [Memory System](memory.md) -- Long-term semantic memory

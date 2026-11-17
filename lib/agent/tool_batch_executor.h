@@ -8,7 +8,7 @@
 /**
  * Tool Batch Executor
  *
- * Executes a batch of tool calls with approval gates, dedup, and interrupt
+ * Executes a batch of tool calls with dedup, and interrupt
  * handling. Supports two indexing modes:
  *
  * Direct mode (call_indices == NULL):

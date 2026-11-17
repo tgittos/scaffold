@@ -1,6 +1,5 @@
 """List directory contents.
 
-Gate: file_read
 Thread-safe: true
 Match: path
 """

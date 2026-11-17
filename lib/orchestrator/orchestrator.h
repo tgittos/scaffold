@@ -7,7 +7,7 @@
 /**
  * Spawn a supervisor process for a goal.
  *
- * Forks the current executable with --supervisor --goal <id> --yolo.
+ * Forks the current executable with --supervisor --goal <id>.
  * Stores the PID and start timestamp in the goal store.
  *
  * @param store  Goal store for PID persistence

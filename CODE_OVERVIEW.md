@@ -16,7 +16,6 @@ Application-specific code that uses the library layer. This is a thin wrapper ar
 - **`python_tool_files.c/h`** - Python file-based tool loading system (supports freeform tool invocation for tools with Match: directive; "Thread-safe: true" docstring directive marks tools that run concurrently within a batch; unmodified older shipped default tool files are refreshed from the embedded versions via `SHIPPED_DEFAULT_TOOLS` hashes)
 - **`python_extension.c/h`** - Tool extension interface for Python tools integration with lib/
 - **`http_python.c/h`** - Python extension for C HTTP client (`_ralph_http` module: get, post, download)
-- **`verified_file_python.c/h`** - Python extension for TOCTOU-safe file operations (`_ralph_verified_io` module)
 - **`sys_python.c/h`** - Python extension for system info (`_ralph_sys` module: get_executable_path, get_app_home, get_config_int)
 
 ##### Python Default Tools (in `python_defaults/`)
@@ -28,8 +27,8 @@ Application-specific code that uses the library layer. This is a thin wrapper ar
 - **`shell.py`** - Shell command execution with timeout
 - **`web_fetch.py`** - Fetch and process web content
 - **`pip.py`** - Package management: install pure-Python packages or list installed packages (action parameter: "install" or "list")
-- **`search_history.py`** - Search git history with structured output (operations: log, pickaxe, blame, diff). Gate: file_read
-- **`show_structure.py`** - Analyze code structure without reading full files (operations: outline, imports, hierarchy, exports). Supports 10+ languages. Gate: file_read
+- **`search_history.py`** - Search git history with structured output (operations: log, pickaxe, blame, diff)
+- **`show_structure.py`** - Analyze code structure without reading full files (operations: outline, imports, hierarchy, exports). Supports 10+ languages
 
 ---
 
@@ -45,13 +44,12 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`message_processor.c/h`** - Buffered (non-streaming) response handling and tool call extraction
 - **`api_round_trip.c/h`** - Single LLM request-response cycle (payload build, HTTP, parse)
 - **`conversation_state.c/h`** - Conversation history append helpers (assistant messages, tool results)
-- **`tool_batch_executor.c/h`** - Batch tool execution with approval gate integration; explicitly dispatches MCP and plugin tools (schema-only registry entries); caps each result at `tool_result_max_bytes` (default 32768) keeping head and tail around a `[... N bytes omitted ...]` marker
+- **`tool_batch_executor.c/h`** - Batch tool execution; explicitly dispatches MCP and plugin tools (schema-only registry entries); caps each result at `tool_result_max_bytes` (default 32768) keeping head and tail around a `[... N bytes omitted ...]` marker
 - **`tool_orchestration.c/h`** - Tool call deduplication and per-batch tracking
 - **`repl.c/h`** - Read-Eval-Print-Loop for interactive mode with readline, async processing, and periodic supervisor recovery
 - **`async_executor.c/h`** - Non-blocking message processing using background thread with pipe notification; running flag and condition broadcast occur inside mutex to prevent signal loss
 - **`context_enhancement.c/h`** - Split prompt builder: returns `EnhancedPromptParts` with session-stable base prompt and per-request dynamic context (repo snapshot on first turn, todo state, mode, memories, context retrieval). `build_repo_snapshot()` gathers git metadata and directory tree; `build_directory_tree()` produces a depth-limited directory listing
 - **`recap.c/h`** - Startup recap and first-run greeting (one-shot LLM calls without history persistence)
-- **`tool_review.c/h`** - Auto mode model review of a gated tool call: one-off request to the session's model with the user's recent messages and the call, parsed as a JSON allow/block verdict
 - **`streaming_handler.c/h`** - Application-layer streaming orchestration and provider registry management
 - **`tool_executor.c/h`** - Thin entry point for tool execution workflow (init, initial batch, clear_history support, hand-off)
 - **`iterative_loop.c/h`** - Iterative tool-calling loop for follow-up LLM rounds; bounded retry of empty rounds (no text, reasoning or tool calls) with a visible warning
@@ -106,35 +104,6 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`api_error.c/h`** - Enhanced API error handling with retry logic
 - **`embedded_cacert.c/h`** - Embedded Mozilla CA certificate bundle for portable SSL/TLS
 - **`image_attachment.c/h`** - Image attachment parsing (`@path` references to base64-encoded images)
-
-#### `lib/policy/` - Approval Gate System
-
-##### Core Components
-- **`approval_gate.c/h`** - Core orchestration: category lookup, gate checking, config management
-- **`rate_limiter.c/h`** - Opaque rate limiter type with exponential backoff tracking
-- **`allowlist.c/h`** - Opaque allowlist type for regex and shell pattern matching
-- **`gate_prompter.c/h`** - Terminal UI for single and batch approval prompts
-- **`pattern_generator.c/h`** - Pure functions for generating allowlist patterns
-- **`auto_approve.c/h`** - Auto mode's no-model tier: read-only shell segments, writes inside the git project
-- **`tool_args.c/h`** - Centralized cJSON argument extraction from ToolCall structs
-
-##### Protected Files
-- **`protected_files.c/h`** - Protected file detection via basename, prefix, glob, and inode matching
-- **`path_normalize.c/h`** - Cross-platform path normalization (Windows drive letters, UNC paths)
-
-##### Shell Parsing
-- **`shell_parser.c/h`** - POSIX shell tokenization, dangerous pattern detection, and segment splitting for compound commands
-- **`shell_parser_cmd.c`** - cmd.exe parsing with metacharacter detection
-- **`shell_parser_ps.c`** - PowerShell parsing with cmdlet detection
-
-##### TOCTOU Protection
-- **`atomic_file.c/h`** - Atomic file operations with O_NOFOLLOW, O_EXCL, inode verification
-- **`verified_file_context.c/h`** - Thread-local storage for approved path context
-- See also `src/tools/verified_file_python.c/h` for the Python extension that uses this subsystem
-
-##### Subagent Support
-- **`subagent_approval.c/h`** - IPC-based approval proxying for child processes
-- **`approval_errors.c`** - JSON error message formatting for approval gate denials
 
 #### `lib/tools/` - Tool System
 - **`tools_system.c/h`** - Core tool registry and execution framework, `generate_tools_json_flat()` for Responses API flat tool format
@@ -349,24 +318,8 @@ The test directory mirrors the source structure:
 - **`test_spinner.c`** - Tool execution spinner tests
 - **`test_terminal.c`** - Terminal abstraction tests
 
-#### `test/policy/` - Policy Tests (Approval Gates)
-- **`test_approval_gate.c`** - Gate config initialization, category lookup, non-interactive mode
-- **`test_approval_gate_integration.c`** - End-to-end approval flow tests
-- **`test_rate_limiter.c`** - Denial tracking, exponential backoff, reset behavior
-- **`test_allowlist.c`** - Regex and shell pattern matching, JSON loading
-- **`test_gate_prompter.c`** - Gate prompter terminal UI tests
-- **`test_shell_parser.c`** - POSIX shell tokenization and dangerous pattern detection
-- **`test_shell_parser_cmd.c`** - cmd.exe parsing tests
-- **`test_shell_parser_ps.c`** - PowerShell parsing and dangerous cmdlet detection
-- **`test_path_normalize.c`** - Cross-platform path normalization
-- **`test_protected_files.c`** - Protected file detection
-- **`test_atomic_file.c`** - TOCTOU-safe file operations
-- **`test_subagent_approval.c`** - Approval proxy pipe management
-- **`test_auto_approve.c`** - Auto mode read-only shell and in-project write rules
-
 #### `test/agent/` - Agent Module Tests
 - **`test_prompt_mode.c`** - Prompt mode enum and parsing tests
-- **`test_tool_review.c`** - Auto mode review verdicts and request contents against the mock API server
 - **`test_context_mode_injection.c`** - Context mode injection tests
 - **`test_parallel_batch.c`** - Parallel batch execution tests
 
@@ -393,8 +346,6 @@ The test directory mirrors the source structure:
 - **`test_ptrarray.c`** - Pointer array implementation tests
 - **`test_document_chunker.c`** - Document chunking algorithm tests
 - **`test_memory_management.c`** - Memory management tests
-- **`test_tool_args.c`** - Tool argument extraction tests
-- **`test_verified_file_context.c`** - Verified file context tests
 - **`test_libagent_header.c`** - Library public API header compilation test
 
 #### Test Infrastructure
@@ -420,7 +371,7 @@ The codebase follows a library-first design where all core functionality lives i
 ### 2. Agent Abstraction (lib/agent/)
 The agent module provides a clean lifecycle API:
 - **Agent**: High-level wrapper with mode-based execution (interactive, single-shot, background, worker)
-- **AgentSession**: Aggregates all components (tools, MCP, subagents, approval gates, message polling, first-turn repo context flag)
+- **AgentSession**: Aggregates all components (tools, MCP, subagents, message polling, first-turn repo context flag)
 - **AgentConfig**: Configuration struct with dependency injection support
 
 ### 3. Multi-Provider LLM System (lib/llm/)
@@ -448,27 +399,18 @@ Conversation lifecycle handling:
 - **Token Manager**: Dynamic token allocation and context trimming
 - **Compactor**: Intelligent conversation compression preserving tool sequences
 
-### 7. Approval Gate System (lib/policy/)
-Security-aware tool execution control:
-- **Category-Based Gates**: Tools categorized as file_read, file_write, shell, network, memory, subagent, mcp, python, plugin
-- **Allowlist Matching**: Regex patterns for paths/URLs, shell command prefix matching per segment of a compound command
-- **Auto Mode**: Read-only and in-project calls run; others go to a model review before the prompt
-- **Protected Files**: Hard-block access to config files via basename, glob, and inode detection
-- **Rate Limiting**: Exponential backoff after repeated denials
-- **Subagent Proxy**: IPC-based approval forwarding for child processes
-
-### 8. Service Container (lib/services/)
+### 7. Service Container (lib/services/)
 Dependency injection for testability:
 - **Services**: Container holding message store, vector DB, embeddings, task store
 - Supports both singleton instances and custom injected services
 
-### 9. MCP Protocol Integration (lib/mcp/)
+### 8. MCP Protocol Integration (lib/mcp/)
 Model Context Protocol support:
 - **Multi-Transport**: STDIO (local processes), HTTP, and SSE connections
 - **Dynamic Discovery**: Tools fetched via JSON-RPC at connection time
 - **Namespaced Tools**: Registered as `mcp_{servername}_{toolname}`
 
-### 10. Configuration System (lib/util/config.c)
+### 9. Configuration System (lib/util/config.c)
 Centralized configuration:
 - **Priority**: Local `scaffold.config.json` -> User config -> Environment -> Defaults
 - **Auto-Generation**: Creates config from environment variables

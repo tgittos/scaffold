@@ -206,16 +206,6 @@ int repl_run_session(AgentSession* session, bool json_mode) {
         }
 
         SubagentManager* mgr = &session->subagent_manager;
-        for (size_t i = 0; i < mgr->subagents.count; i++) {
-            Subagent* sub = &mgr->subagents.data[i];
-            if (sub->status == SUBAGENT_STATUS_RUNNING &&
-                sub->approval_channel.request_fd > 2) {
-                FD_SET(sub->approval_channel.request_fd, &read_fds);
-                if (sub->approval_channel.request_fd > max_fd) {
-                    max_fd = sub->approval_channel.request_fd;
-                }
-            }
-        }
 
         struct timeval timeout;
         timeout.tv_sec = 1;
@@ -262,22 +252,6 @@ int repl_run_session(AgentSession* session, bool json_mode) {
 
         if (ready == 0) {
             continue;
-        }
-
-        for (size_t i = 0; i < mgr->subagents.count; i++) {
-            Subagent* sub = &mgr->subagents.data[i];
-            if (sub->status == SUBAGENT_STATUS_RUNNING &&
-                sub->approval_channel.request_fd > 2 &&
-                FD_ISSET(sub->approval_channel.request_fd, &read_fds)) {
-                rl_callback_handler_remove();
-                repl_clear_prompt_area();
-
-                subagent_handle_approval_request(mgr, (int)i, &session->gate_config);
-
-                if (g_repl_running) {
-                    repl_install_prompt();
-                }
-            }
         }
 
         if (FD_ISSET(STDIN_FILENO, &read_fds)) {

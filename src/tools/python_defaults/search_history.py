@@ -1,6 +1,5 @@
 """Search git history to understand code evolution.
 
-Gate: file_read
 Thread-safe: true
 Match: path
 """

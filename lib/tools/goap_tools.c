@@ -730,7 +730,6 @@ int execute_goap_dispatch_action(const ToolCall *tc, ToolResult *result) {
     spawn_args[ai++] = "--worker";
     spawn_args[ai++] = "--queue";
     spawn_args[ai++] = goal->queue_name;
-    spawn_args[ai++] = "--yolo";
     if (prompt_file[0]) {
         spawn_args[ai++] = "--system-prompt-file";
         spawn_args[ai++] = prompt_file;

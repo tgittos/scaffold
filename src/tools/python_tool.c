@@ -1,6 +1,5 @@
 #include "python_tool.h"
 #include "python_tool_files.h"
-#include "verified_file_python.h"
 #include "http_python.h"
 #include "sys_python.h"
 #include "util/app_home.h"
@@ -15,7 +14,6 @@
 #include <unistd.h>
 
 /* Track whether C extension modules were registered (must be before Py_Initialize) */
-static int verified_file_module_registered = 0;
 static int http_module_registered = 0;
 static int sys_module_registered = 0;
 
@@ -77,11 +75,6 @@ int python_interpreter_init(void) {
     }
 
     /* C extension modules must be registered before Py_Initialize() */
-    if (!verified_file_module_registered) {
-        if (verified_file_python_init() == 0) {
-            verified_file_module_registered = 1;
-        }
-    }
     if (!http_module_registered) {
         if (http_python_init() == 0) {
             http_module_registered = 1;

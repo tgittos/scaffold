@@ -1,6 +1,5 @@
 """Analyze code structure without reading full files.
 
-Gate: file_read
 Thread-safe: true
 Match: path
 """
