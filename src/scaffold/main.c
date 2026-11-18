@@ -17,6 +17,7 @@
 #include "../../lib/util/config.h"
 #include "../../lib/auth/openai_login.h"
 #include "../../lib/util/log.h"
+#include "../../lib/util/stdin_reader.h"
 #include "../tools/python_extension.h"
 #include "../../lib/ui/slash_commands.h"
 #include "build/version.h"
@@ -358,6 +359,7 @@ int main(int argc, char *argv[]) {
     const char *log_module_str = NULL;
 
     int message_arg_index = -1;
+    char *stdin_message = NULL;
     int subagent_mode = 0;
     char *subagent_task = NULL;
     char *subagent_context = NULL;
@@ -513,6 +515,50 @@ int main(int argc, char *argv[]) {
         config.mode = AGENT_MODE_BACKGROUND;
         config.subagent_task = subagent_task;
         config.subagent_context = subagent_context;
+    } else if (!isatty(STDIN_FILENO)) {
+        /* Piped/redirected stdin: read it all and run single-shot */
+        int truncated = 0;
+        char *stdin_text = stdin_read_all(stdin, 8 * 1024 * 1024, &truncated);
+        if (truncated) {
+            fprintf(stderr, "Error: stdin exceeds 8 MiB limit\n");
+            free(stdin_text);
+            return 2;
+        }
+        if (stdin_text == NULL || stdin_text[0] == '\0') {
+            if (message_arg_index == -1) {
+                fprintf(stderr, "Error: no input on stdin\n");
+                free(stdin_text);
+                return 2;
+            }
+            /* Empty stdin but arg given: use arg only */
+            free(stdin_text);
+            config.mode = AGENT_MODE_SINGLE_SHOT;
+            config.initial_message = argv[message_arg_index];
+        } else if (message_arg_index != -1) {
+            /* Merge: arg + "\n\n" + stdin */
+            const char *arg = argv[message_arg_index];
+            size_t arg_len = strlen(arg);
+            size_t stdin_len = strlen(stdin_text);
+            char *merged = malloc(arg_len + 2 + stdin_len + 1);
+            if (merged == NULL) {
+                fprintf(stderr, "Error: out of memory\n");
+                free(stdin_text);
+                return EXIT_FAILURE;
+            }
+            memcpy(merged, arg, arg_len);
+            merged[arg_len] = '\n';
+            merged[arg_len + 1] = '\n';
+            memcpy(merged + arg_len + 2, stdin_text, stdin_len + 1);
+            free(stdin_text);
+            stdin_message = merged;
+            config.mode = AGENT_MODE_SINGLE_SHOT;
+            config.initial_message = stdin_message;
+        } else {
+            /* Only stdin, no arg */
+            stdin_message = stdin_text;
+            config.mode = AGENT_MODE_SINGLE_SHOT;
+            config.initial_message = stdin_message;
+        }
     } else if (message_arg_index != -1) {
         config.mode = AGENT_MODE_SINGLE_SHOT;
         config.initial_message = argv[message_arg_index];
@@ -624,5 +670,6 @@ int main(int argc, char *argv[]) {
     agent_cleanup(&agent);
     openai_auth_cleanup();
     free(loaded_system_prompt);
+    free(stdin_message);
     return (result == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

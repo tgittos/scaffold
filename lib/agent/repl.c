@@ -30,6 +30,7 @@
 static volatile int g_repl_running = 1;
 static AgentSession* g_repl_session = NULL;
 static char* g_current_prompt = NULL;
+static bool g_json_mode = false;
 
 static void repl_line_callback(char* line);
 
@@ -78,7 +79,11 @@ static void repl_line_callback(char* line) {
     }
 
     if (strcmp(line, "quit") == 0 || strcmp(line, "exit") == 0) {
-        printf("Goodbye!\n");
+        if (g_json_mode) {
+            fprintf(stderr, "Goodbye!\n");
+        } else {
+            printf("Goodbye!\n");
+        }
         free(line);
         g_repl_running = 0;
         rl_callback_handler_remove();
@@ -170,9 +175,13 @@ static void process_pending_notifications(AgentSession* session) {
 }
 
 int repl_run_session(AgentSession* session, bool json_mode) {
-    (void)json_mode;
     g_repl_session = session;
     g_repl_running = 1;
+    g_json_mode = json_mode;
+
+    if (json_mode) {
+        rl_outstream = stderr;
+    }
 
     if (interrupt_init() != 0) {
         fprintf(stderr, "Warning: Failed to initialize interrupt handling\n");

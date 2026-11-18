@@ -171,6 +171,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`project_scope.c/h`** - Per-project index names and git root lookup from the nearest `.git` root of the working directory
 - **`process_spawn.c/h`** - Common fork/exec helper with stdout/stderr redirected to /dev/null
 - **`executable_path.c/h`** - Executable path resolution for APE binaries
+- **`stdin_reader.c/h`** - Read all of a FILE stream into a heap-allocated string with an 8 MiB cap; returns NULL with `*truncated=1` when the limit is exceeded
 
 #### `lib/pdf/` - PDF Processing
 - **`pdf_extractor.c/h`** - PDF text extraction using PDFio library

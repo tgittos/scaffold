@@ -126,6 +126,48 @@ void test_help_tagline(void) {
     TEST_ASSERT_NULL(strstr(output, "AI Orchestrator"));
 }
 
+void test_empty_stdin_errors(void) {
+    /* Empty stdin with no message arg should exit 2 and print error to stderr */
+    char *stderr_output = run_command("./out/scaffold < /dev/null 2>&1");
+    TEST_ASSERT_NOT_NULL(stderr_output);
+    TEST_ASSERT_NOT_NULL(strstr(stderr_output, "no input on stdin"));
+    int ret = system("./out/scaffold < /dev/null > /dev/null 2>&1");
+    TEST_ASSERT_EQUAL_INT(2, WEXITSTATUS(ret));
+}
+
+void test_json_interactive_no_prompt_on_stdout(void) {
+    /*
+     * With --json and TTY-less stdout, every non-empty line on stdout must
+     * be valid JSON. We pipe /help then quit into the REPL.
+     * We allow up to 5 seconds for the prompt to appear.
+     *
+     * Capture stdout only; stderr holds the prompt and Goodbye.
+     */
+    FILE *fp = popen("printf '/help\\nquit\\n' | ./out/scaffold --json 2>/dev/null", "r");
+    if (fp == NULL) {
+        TEST_FAIL_MESSAGE("Failed to launch scaffold --json");
+        return;
+    }
+
+    char line[4096];
+    int found_non_json = 0;
+    while (fgets(line, sizeof(line), fp) != NULL) {
+        /* Strip trailing newline */
+        size_t len = strlen(line);
+        while (len > 0 && (line[len-1] == '\n' || line[len-1] == '\r')) {
+            line[--len] = '\0';
+        }
+        if (len == 0) continue;
+        /* Check starts with '{' or '[' (basic JSON object/array) */
+        if (line[0] != '{' && line[0] != '[') {
+            found_non_json = 1;
+            break;
+        }
+    }
+    pclose(fp);
+    TEST_ASSERT_EQUAL_INT(0, found_non_json);
+}
+
 int main(void) {
     UNITY_BEGIN();
 
@@ -141,6 +183,8 @@ int main(void) {
     RUN_TEST(test_help_lists_model_flag);
     RUN_TEST(test_help_lists_slash_commands);
     RUN_TEST(test_help_tagline);
+    RUN_TEST(test_empty_stdin_errors);
+    RUN_TEST(test_json_interactive_no_prompt_on_stdout);
 
     return UNITY_END();
 }

@@ -118,7 +118,8 @@ LIB_UTIL_SOURCES := \
     $(LIBDIR)/util/project_scope.c \
     $(LIBDIR)/util/context_retriever.c \
     $(LIBDIR)/util/executable_path.c \
-    $(LIBDIR)/util/process_spawn.c
+    $(LIBDIR)/util/process_spawn.c \
+    $(LIBDIR)/util/stdin_reader.c
 
 # PDF module
 LIB_PDF_SOURCES := $(LIBDIR)/pdf/pdf_extractor.c
