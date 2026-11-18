@@ -462,6 +462,21 @@ void test_file_reference_at_sign_not_filename(void) {
 }
 
 
+void test_system_prompt_mentions_commit_reporting(void) {
+    char *prompt_content = NULL;
+
+    unlink("AGENTS.md");
+    int result = load_system_prompt(&prompt_content);
+
+    TEST_ASSERT_EQUAL(0, result);
+    TEST_ASSERT_NOT_NULL(prompt_content);
+
+    /* The system prompt must instruct the agent to report commits in its summary. */
+    TEST_ASSERT_TRUE(strstr(prompt_content, "say so in your summary") != NULL);
+
+    cleanup_system_prompt(&prompt_content);
+}
+
 void test_platform_info_present(void) {
     char *prompt_content = NULL;
 
@@ -509,6 +524,9 @@ int main(void) {
 
     // Platform information tests
     RUN_TEST(test_platform_info_present);
+
+    // Change reporting
+    RUN_TEST(test_system_prompt_mentions_commit_reporting);
 
     return UNITY_END();
 }

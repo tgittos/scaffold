@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include "../types.h"
+#include "../agent/change_report.h"
 
 /**
  * Initialize the JSON output system.
@@ -69,5 +70,14 @@ void json_output_error(const char* error);
  * @param result The final result text
  */
 void json_output_result(const char* result);
+
+/**
+ * Output a change_report event in JSON format.
+ *
+ * Emits: {"type":"change_report","files":N,"insertions":A,"deletions":D,"commits":[...]}
+ *
+ * @param report The change report (must not be NULL)
+ */
+void json_output_change_report(const change_report_t *report);
 
 #endif /* JSON_OUTPUT_H */

@@ -19,6 +19,7 @@ static const char *PROMPT_IMPLEMENTATION =
     "- Handle errors explicitly — no silent failures\n"
     "- Test your changes by building and running relevant tests\n"
     "- Report what you built, what files you changed, and any decisions you made\n"
+    "- If you made commits, say so in your summary: list what was committed and which files changed\n"
     "- If the task is ambiguous, make reasonable assumptions and document them\n"
     "- Do not leave TODOs or placeholders — implement fully or redesign";
 

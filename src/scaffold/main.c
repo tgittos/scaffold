@@ -9,7 +9,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <limits.h>
 #include "../../lib/agent/agent.h"
+#include "../../lib/agent/change_report.h"
+#include "../../lib/util/project_scope.h"
+#include "../../lib/ui/json_output.h"
 #include "../../lib/updater/updater.h"
 #include "../../lib/plugin/plugin_manager.h"
 #include "../../lib/util/executable_path.h"
@@ -669,7 +673,49 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    /* Capture git HEAD before the agent runs (single-shot only). */
+    char cr_repo_root[PATH_MAX] = {0};
+    char cr_head_before[64] = {0};
+    bool cr_enabled = false;
+
+    if (config.mode == AGENT_MODE_SINGLE_SHOT) {
+        char cwd[PATH_MAX];
+        if (getcwd(cwd, sizeof(cwd)) != NULL &&
+            project_scope_git_root(cwd, cr_repo_root, sizeof(cr_repo_root)) == 0) {
+            char git_cmd[PATH_MAX + 64];
+            snprintf(git_cmd, sizeof(git_cmd),
+                     "git -C '%s' rev-parse HEAD 2>/dev/null", cr_repo_root);
+            FILE *git_fp = popen(git_cmd, "r");
+            if (git_fp) {
+                if (fgets(cr_head_before, sizeof(cr_head_before), git_fp)) {
+                    size_t hlen = strlen(cr_head_before);
+                    if (hlen > 0 && cr_head_before[hlen - 1] == '\n')
+                        cr_head_before[hlen - 1] = '\0';
+                    if (cr_head_before[0] != '\0') cr_enabled = true;
+                }
+                pclose(git_fp);
+            }
+        }
+    }
+
     int result = agent_run(&agent);
+
+    /* Emit change report after a single-shot run. */
+    if (cr_enabled) {
+        change_report_t *cr = change_report_collect(cr_repo_root, cr_head_before);
+        if (cr) {
+            if (config.json_mode) {
+                json_output_change_report(cr);
+            } else {
+                char *text = change_report_format(cr);
+                if (text) {
+                    fprintf(stderr, "%s\n", text);
+                    free(text);
+                }
+            }
+            change_report_free(cr);
+        }
+    }
 
     agent_cleanup(&agent);
     openai_auth_cleanup();
