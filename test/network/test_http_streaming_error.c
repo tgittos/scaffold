@@ -5,7 +5,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#define TEST_PORT 9878
+#define TEST_PORT 9880
 
 static MockAPIServer g_server;
 static MockAPIResponse g_responses[2];
@@ -87,7 +87,7 @@ void test_streaming_302_is_failure(void)
         .response_body  = "",
     };
     g_server = (MockAPIServer){
-        .port           = TEST_PORT + 1,  /* distinct port to avoid state bleed */
+        .port           = TEST_PORT + 1,  /* 9881 — avoids collisions with oauth tests (9878/9879) and test_http_form_post (9877) */
         .responses      = g_responses,
         .response_count = 1,
     };
@@ -106,6 +106,11 @@ void test_streaming_302_is_failure(void)
     APIError err;
     get_last_api_error(&err);
     TEST_ASSERT_EQUAL(302, err.http_status);
+
+    const char *msg = api_error_user_message(&err);
+    TEST_ASSERT_NOT_NULL(msg);
+    TEST_ASSERT_TRUE(strstr(msg, "302") != NULL);
+    TEST_ASSERT_TRUE(strstr(msg, "redirect") != NULL);
 }
 
 int main(void)

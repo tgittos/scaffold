@@ -286,9 +286,13 @@ static int stream_unsaved_reply(AgentSession* session, const char* prompt) {
             provider->cleanup_stream_state(provider);
         }
         streaming_context_free(ctx);
-        APIError api_err;
-        get_last_api_error(&api_err);
-        fprintf(stderr, "Error: %s\n", api_error_user_message(&api_err));
+        if (result == -2) {
+            /* Cancelled by user interrupt — no error message on the recap path. */
+        } else {
+            APIError api_err;
+            get_last_api_error(&api_err);
+            fprintf(stderr, "Error: %s\n", api_error_user_message(&api_err));
+        }
         return -1;
     }
 

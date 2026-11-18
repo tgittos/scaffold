@@ -49,8 +49,8 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`repl.c/h`** - Read-Eval-Print-Loop for interactive mode with readline, async processing, and periodic supervisor recovery
 - **`async_executor.c/h`** - Non-blocking message processing using background thread with pipe notification; running flag and condition broadcast occur inside mutex to prevent signal loss
 - **`context_enhancement.c/h`** - Split prompt builder: returns `EnhancedPromptParts` with session-stable base prompt and per-request dynamic context (repo snapshot on first turn, todo state, mode, memories, context retrieval). `build_repo_snapshot()` gathers git metadata and directory tree; `build_directory_tree()` produces a depth-limited directory listing
-- **`recap.c/h`** - Conversation recap (one-shot LLM call, no history persistence); `session_generate_recap` is called by `/recap` command. Startup no longer calls LLM — `repl_show_greeting` prints a static banner for new sessions, or a resume line for existing ones.
-- **`streaming_handler.c/h`** - Application-layer streaming orchestration and provider registry management
+- **`recap.c/h`** - Conversation recap (one-shot LLM call, no history persistence); `session_generate_recap` is called by `/recap` command; `-2` (user interrupt) returns -1 silently. Startup no longer calls LLM — `repl_show_greeting` prints a static banner for new sessions, or a resume line for existing ones.
+- **`streaming_handler.c/h`** - Application-layer streaming orchestration and provider registry management; `-2` (user interrupt) prints `Request cancelled.` without touching the api_error path
 - **`tool_executor.c/h`** - Thin entry point for tool execution workflow (init, initial batch, clear_history support, hand-off)
 - **`iterative_loop.c/h`** - Iterative tool-calling loop for follow-up LLM rounds; bounded retry of empty rounds (no text, reasoning or tool calls) with a visible warning
 - **`prompt_mode.c/h`** - Behavioral prompt mode definitions and parsing (plan, explore, debug, review)
@@ -101,7 +101,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`http_form_post.c/h`** - Form-urlencoded POST for OAuth token endpoints (URL-encodes via `curl_easy_escape`, sets Content-Type)
 - **`api_common.c/h`** - JSON payload building with prompt caching support (`SystemPromptParts` split, Anthropic `cache_control` markers, model-aware payload construction), canonical OpenAI tool message formatting (`role:tool` + `tool_call_id`, assistant `tool_calls` verbatim), `streaming_add_params()` shared utility for adding stream/store params
 - **`streaming.c/h`** - SSE streaming infrastructure for real-time response handling
-- **`api_error.c/h`** - Enhanced API error handling with retry logic; `APIError.provider_body[1024]` captures the first 1 KiB of a non-2xx response body; `api_error_user_message()` includes HTTP status and the provider's `error.message` when the body is JSON
+- **`api_error.c/h`** - Enhanced API error handling with retry logic; `APIError.provider_body[1024]` captures the first 1 KiB of a non-2xx response body; `api_error_user_message()` includes HTTP status and the provider's `error.message` when the body is JSON; 3xx responses with no body produce a redirect hint with the status code; function-local statics are single-threaded display-path only
 - **`embedded_cacert.c/h`** - Embedded Mozilla CA certificate bundle for portable SSL/TLS
 - **`image_attachment.c/h`** - Image attachment parsing (`@path` references to base64-encoded images)
 

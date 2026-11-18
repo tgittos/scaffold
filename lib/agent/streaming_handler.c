@@ -193,9 +193,13 @@ static StreamingContext* streaming_send_request(AgentSession* session,
             provider->cleanup_stream_state(provider);
         }
         streaming_context_free(ctx);
-        APIError api_err;
-        get_last_api_error(&api_err);
-        fprintf(stderr, "Error: %s\n", api_error_user_message(&api_err));
+        if (rc == -2) {
+            fprintf(stderr, "Request cancelled.\n");
+        } else {
+            APIError api_err;
+            get_last_api_error(&api_err);
+            fprintf(stderr, "Error: %s\n", api_error_user_message(&api_err));
+        }
         return NULL;
     }
 

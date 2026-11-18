@@ -100,8 +100,8 @@ const char* api_error_user_message(const APIError *err)
     /* When we have a provider body, try to extract error.message and
      * include both the HTTP status and the provider's own description. */
     if (err->provider_body[0] != '\0') {
-        static char provider_msg[256];
-        static char formatted[1280];  /* "HTTP NNNNN: " + up to 1023-byte body + NUL */
+        static char provider_msg[256];  /* not thread-safe; display-path only */
+        static char formatted[1280];    /* not thread-safe; display-path only */  /* "HTTP NNNNN: " + up to 1023-byte body + NUL */
         const char *extracted = extract_error_message(err->provider_body,
                                                       provider_msg,
                                                       sizeof(provider_msg));
@@ -165,6 +165,12 @@ const char* api_error_user_message(const APIError *err)
                 return "API server error. The service may be temporarily unavailable.";
             } else if (err->http_status >= 400) {
                 return "API request failed. Check your configuration.";
+            } else if (err->http_status >= 300) {
+                static char redirect_msg[128];  /* not thread-safe; display-path only */
+                snprintf(redirect_msg, sizeof(redirect_msg),
+                         "Unexpected redirect (HTTP %ld). Check your API URL configuration.",
+                         err->http_status);
+                return redirect_msg;
             }
             return "Unknown error occurred.";
     }
