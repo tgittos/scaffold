@@ -354,7 +354,7 @@ int agent_run(Agent* agent) {
         case AGENT_MODE_INTERACTIVE:
         default: {
             if (!agent->config.json_mode) {
-                printf(TERM_BOLD "Scaffold" TERM_RESET " - AI Orchestrator\n");
+                printf(TERM_BOLD "Scaffold" TERM_RESET " - autonomous coding agent\n");
                 printf("Type /help for commands | quit, exit, Ctrl+D to end\n\n");
             }
 

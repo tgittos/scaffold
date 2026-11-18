@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <sys/wait.h>
 #include "build/version.h"
 
 void setUp(void) {}
@@ -89,6 +90,42 @@ void test_help_exits_immediately(void) {
     TEST_ASSERT_EQUAL_INT(0, ret);
 }
 
+void test_unknown_flag_errors(void) {
+    char *output = run_command("./out/scaffold --bogus 2>&1");
+    TEST_ASSERT_NOT_NULL(output);
+    TEST_ASSERT_NOT_NULL(strstr(output, "unknown option '--bogus'"));
+    int ret = system("./out/scaffold --bogus > /dev/null 2>&1");
+    TEST_ASSERT_EQUAL_INT(2, WEXITSTATUS(ret));
+}
+
+void test_flag_missing_value_errors(void) {
+    char *output = run_command("./out/scaffold --model 2>&1");
+    TEST_ASSERT_NOT_NULL(output);
+    TEST_ASSERT_NOT_NULL(strstr(output, "--model requires a value"));
+    int ret = system("./out/scaffold --model > /dev/null 2>&1");
+    TEST_ASSERT_EQUAL_INT(2, WEXITSTATUS(ret));
+}
+
+void test_help_lists_model_flag(void) {
+    char *output = run_command("./out/scaffold --help 2>&1");
+    TEST_ASSERT_NOT_NULL(output);
+    TEST_ASSERT_NOT_NULL(strstr(output, "--model <name>"));
+}
+
+void test_help_lists_slash_commands(void) {
+    char *output = run_command("./out/scaffold --help 2>&1");
+    TEST_ASSERT_NOT_NULL(output);
+    TEST_ASSERT_NOT_NULL(strstr(output, "/goals"));
+    TEST_ASSERT_NOT_NULL(strstr(output, "/model"));
+}
+
+void test_help_tagline(void) {
+    char *output = run_command("./out/scaffold --help 2>&1");
+    TEST_ASSERT_NOT_NULL(output);
+    TEST_ASSERT_NOT_NULL(strstr(output, "autonomous coding agent"));
+    TEST_ASSERT_NULL(strstr(output, "AI Orchestrator"));
+}
+
 int main(void) {
     UNITY_BEGIN();
 
@@ -99,6 +136,11 @@ int main(void) {
     RUN_TEST(test_help_excludes_internal_flags);
     RUN_TEST(test_version_exits_immediately);
     RUN_TEST(test_help_exits_immediately);
+    RUN_TEST(test_unknown_flag_errors);
+    RUN_TEST(test_flag_missing_value_errors);
+    RUN_TEST(test_help_lists_model_flag);
+    RUN_TEST(test_help_lists_slash_commands);
+    RUN_TEST(test_help_tagline);
 
     return UNITY_END();
 }
