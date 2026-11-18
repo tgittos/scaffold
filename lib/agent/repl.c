@@ -100,7 +100,21 @@ static void repl_line_callback(char* line) {
     add_history(line);
 
     if (!repl_should_forward_to_llm(line)) {
-        slash_command_dispatch(line, g_repl_session);
+        if (g_json_mode) {
+            /* In --json mode stdout must carry only JSON lines. Redirect
+             * STDOUT_FILENO to stderr for the duration of the dispatch so
+             * all handler printf() calls land on stderr instead.  Plain C
+             * has no exceptions, so the dup2 restore is always reached on
+             * the single fallthrough path. */
+            int saved_stdout = dup(STDOUT_FILENO);
+            dup2(STDERR_FILENO, STDOUT_FILENO);
+            slash_command_dispatch(line, g_repl_session);
+            fflush(stdout);
+            dup2(saved_stdout, STDOUT_FILENO);
+            close(saved_stdout);
+        } else {
+            slash_command_dispatch(line, g_repl_session);
+        }
         free(line);
         return;
     }

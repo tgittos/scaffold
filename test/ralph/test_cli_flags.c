@@ -159,11 +159,12 @@ void test_json_interactive_no_prompt_on_stdout(void) {
      * scaffold reads from the PTY slave (isatty == true -> REPL mode).
      * scaffold's own stdout/stderr are redirected to files, bypassing the
      * PTY, so they can be checked for content independently. */
-    /* Send 'quit' multiple times (1s apart) so the REPL receives it
-     * regardless of startup latency — no dependence on a single fixed sleep.
+    /* Send /help then quit (with retries) so the REPL receives both
+     * regardless of startup latency.  /help exercises handler stdout
+     * suppression in --json mode; quit terminates the session.
      * The outer timeout 20 is the hard ceiling. */
     int ret = system(
-        "sh -c 'sleep 1; echo quit; sleep 2; echo quit; sleep 2; echo quit' | "
+        "sh -c 'sleep 1; echo /help; sleep 1; echo quit; sleep 2; echo quit; sleep 2; echo quit' | "
         "timeout 20 script -qec "
         "'./out/scaffold --json"
         " >/tmp/scaffold_json_test_stdout.txt"
