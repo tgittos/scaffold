@@ -3,6 +3,7 @@
 #include "../util/log.h"
 #include "repl.h"
 #include "recap.h"
+#include "../session/conversation_tracker.h"
 #include "../util/ansi_codes.h"
 #include "../util/interrupt.h"
 #include "../ui/output_formatter.h"
@@ -288,26 +289,46 @@ int repl_run_session(AgentSession* session, bool json_mode) {
     return 0;
 }
 
-void repl_show_greeting(AgentSession* session, bool json_mode) {
+/* Format a human-readable relative time string into buf.
+ * Both event_time and now are injected so the helper is deterministic in tests.
+ * If event_time is 0 or in the future, writes "unknown".
+ */
+static void format_relative_time(time_t event_time, time_t now,
+                                  char* buf, size_t buf_size) {
+    if (buf == NULL || buf_size == 0) return;
+    if (event_time == 0 || now == 0 || event_time > now) {
+        snprintf(buf, buf_size, "unknown");
+        return;
+    }
+    double diff = difftime(now, event_time);
+    if (diff < 60.0) {
+        snprintf(buf, buf_size, "just now");
+    } else if (diff < 3600.0) {
+        snprintf(buf, buf_size, "%dm ago", (int)(diff / 60.0));
+    } else if (diff < 86400.0) {
+        snprintf(buf, buf_size, "%dh ago", (int)(diff / 3600.0));
+    } else {
+        snprintf(buf, buf_size, "%dd ago", (int)(diff / 86400.0));
+    }
+}
+
+void repl_show_greeting(AgentSession* session, bool json_mode, time_t last_time, time_t now) {
     if (json_mode) {
         return;
     }
 
     if (session->session_data.conversation.count == 0) {
-        LOG_DEBUG("Generating welcome message...");
-
-        const char *name = "scaffold";
-        int result = recap_greet(session, name);
-        if (result != 0) {
-            printf("Hello! I'm %s, your AI assistant. What can I help you with today?\n", name);
-        }
+        LOG_DEBUG("Showing static welcome banner.");
+        printf("Hello! I'm scaffold, your AI assistant. "
+               "Type a message to get started, or /help for commands.\n");
     } else {
-        LOG_DEBUG("Generating recap of recent conversation (%zu messages)...",
-                     session->session_data.conversation.count);
-
-        int result = session_generate_recap(session, 5);
-        if (result != 0) {
-            printf("Welcome back! Ready to continue where we left off.\n");
-        }
+        size_t count = session->session_data.conversation.count;
+        LOG_DEBUG("Showing resume banner (%zu messages).", count);
+        time_t effective_last = last_time ? last_time : conversation_tracker_last_message_time();
+        time_t effective_now  = now        ? now        : time(NULL);
+        char rel_time[32];
+        format_relative_time(effective_last, effective_now, rel_time, sizeof(rel_time));
+        printf("Resumed session: %zu messages, last active %s. /recap for a summary.\n",
+               count, rel_time);
     }
 }

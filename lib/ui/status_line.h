@@ -32,6 +32,12 @@ void status_line_set_busy(const char *label);
 void status_line_set_idle(void);
 
 /**
+ * Return true if the system is currently busy.
+ * Primarily for tests.
+ */
+bool status_line_is_busy(void);
+
+/**
  * Update token counters. prompt_tokens overwrites (tracks current context
  * size); completion_tokens accumulates (tracks total generated output).
  */
