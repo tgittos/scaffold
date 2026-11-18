@@ -3,6 +3,7 @@
 #include "../util/log.h"
 #include "recap.h"
 #include "../network/api_common.h"
+#include "../network/api_error.h"
 #include "../network/streaming.h"
 #include "../llm/llm_provider.h"
 #include "../llm/llm_client.h"
@@ -285,7 +286,9 @@ static int stream_unsaved_reply(AgentSession* session, const char* prompt) {
             provider->cleanup_stream_state(provider);
         }
         streaming_context_free(ctx);
-        fprintf(stderr, "Error: Streaming HTTP request failed\n");
+        APIError api_err;
+        get_last_api_error(&api_err);
+        fprintf(stderr, "Error: %s\n", api_error_user_message(&api_err));
         return -1;
     }
 

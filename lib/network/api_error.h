@@ -9,6 +9,7 @@ typedef struct {
     long http_status;           // 0 if network error (no HTTP response)
     CURLcode curl_code;
     char error_message[256];
+    char provider_body[1024];   // first 1 KiB of a non-2xx response body
 } APIError;
 
 void api_error_init(APIError *err);

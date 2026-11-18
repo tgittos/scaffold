@@ -175,6 +175,15 @@ $(TEST_http_form_post_TARGET): $(TEST_http_form_post_OBJECTS) $(LIBAGENT) $(ALL_
 	$(CXX) $(LDFLAGS) -o $@ $(TEST_http_form_post_OBJECTS) $(LIBAGENT) $(LIBS) -lpthread
 
 # =============================================================================
+# HTTP STREAMING ERROR TEST
+# =============================================================================
+
+$(eval $(call def_test_lib,http_streaming_error,network/test_http_streaming_error,$(TESTDIR)/mock_api_server.c))
+
+$(TEST_http_streaming_error_TARGET): $(TEST_http_streaming_error_OBJECTS) $(LIBAGENT) $(ALL_LIBS)
+	$(CXX) $(LDFLAGS) -o $@ $(TEST_http_streaming_error_OBJECTS) $(LIBAGENT) $(LIBS) -lpthread
+
+# =============================================================================
 # SQLITE TESTS
 # =============================================================================
 

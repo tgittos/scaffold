@@ -593,8 +593,8 @@ const struct StreamingHTTPConfig DEFAULT_STREAMING_HTTP_CONFIG = {
     .base = {
         .timeout_seconds = 0, // SSE streams have no overall timeout; stall detection uses low_speed_*
         .connect_timeout_seconds = 30,
-        .follow_redirects = 1,
-        .max_redirects = 5
+        .follow_redirects = 0,  // 3xx is a configuration error for an SSE endpoint
+        .max_redirects = 0
     },
     .stream_callback = NULL,
     .callback_data = NULL,
@@ -619,6 +619,7 @@ struct StreamingGateData {
     long http_status;
     int data_forwarded;
     int retry_after_seconds;
+    char error_body[1024];  /* first 1023 bytes of a non-2xx response body + NUL */
 };
 
 static size_t streaming_gate_callback(void *contents, size_t size, size_t nmemb, void *userp)
@@ -627,11 +628,20 @@ static size_t streaming_gate_callback(void *contents, size_t size, size_t nmemb,
     size_t total = size * nmemb;
 
     /* Only forward body data to the user callback on 2xx responses.
-     * On error responses, silently consume the body so the SSE parser
-     * buffer stays clean for a potential retry. */
-    if (gate->http_status >= 200 && gate->http_status < 400) {
+     * 3xx and other non-2xx statuses are failures — capture the body for
+     * the error message instead of forwarding it to the SSE parser. */
+    if (gate->http_status >= 200 && gate->http_status < 300) {
         gate->data_forwarded = 1;
         return streaming_write_callback(contents, size, nmemb, (void *)gate->user_config);
+    }
+
+    /* Capture the error body (capped at 1023 bytes + NUL). */
+    size_t existing = strlen(gate->error_body);
+    if (existing < 1023) {
+        size_t space = 1023 - existing;
+        size_t to_copy = total < space ? total : space;
+        memcpy(gate->error_body + existing, contents, to_copy);
+        gate->error_body[existing + to_copy] = '\0';
     }
 
     return total;
@@ -697,7 +707,8 @@ int http_post_streaming(const char *url, const char *post_data,
         .user_config = config,
         .http_status = 0,
         .data_forwarded = 0,
-        .retry_after_seconds = 0
+        .retry_after_seconds = 0,
+        .error_body = {0}
     };
 
     int attempt = 0;
@@ -705,6 +716,7 @@ int http_post_streaming(const char *url, const char *post_data,
         gate.http_status = 0;
         gate.data_forwarded = 0;
         gate.retry_after_seconds = 0;
+        gate.error_body[0] = '\0';
 
         curl = curl_easy_init();
         if (curl == NULL) {
@@ -770,7 +782,7 @@ int http_post_streaming(const char *url, const char *post_data,
         curl_easy_cleanup(curl);
         curl = NULL;
 
-        if (res == CURLE_OK && http_status >= 200 && http_status < 400) {
+        if (res == CURLE_OK && http_status >= 200 && http_status < 300) {
             return_code = 0;
             break;
         }
@@ -785,6 +797,8 @@ int http_post_streaming(const char *url, const char *post_data,
          * the SSE parser state cannot be rewound. */
         if (gate.data_forwarded) {
             api_error_set(&api_err, http_status, res, attempt + 1);
+            strncpy(api_err.provider_body, gate.error_body, sizeof(api_err.provider_body) - 1);
+            api_err.provider_body[sizeof(api_err.provider_body) - 1] = '\0';
             set_last_api_error(&api_err);
             if (res != CURLE_OK) {
                 LOG_ERROR("Streaming request failed mid-stream: %s", curl_easy_strerror(res));
@@ -799,6 +813,8 @@ int http_post_streaming(const char *url, const char *post_data,
 
         if (!is_retryable || attempt == max_retries) {
             api_error_set(&api_err, http_status, res, attempt + 1);
+            strncpy(api_err.provider_body, gate.error_body, sizeof(api_err.provider_body) - 1);
+            api_err.provider_body[sizeof(api_err.provider_body) - 1] = '\0';
             set_last_api_error(&api_err);
 
             if (res != CURLE_OK) {
