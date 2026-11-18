@@ -159,7 +159,7 @@ void test_startup_greeting_makes_no_request(void) {
     dup2(devnull, STDOUT_FILENO);
     close(devnull);
 
-    repl_show_greeting(&session, false);
+    repl_show_greeting(&session, false, 0, 0);
 
     fflush(stdout);
     dup2(saved_out, STDOUT_FILENO);
@@ -187,7 +187,9 @@ void test_resume_banner_text(void) {
     dup2(pipefd[1], STDOUT_FILENO);
     close(pipefd[1]);
 
-    repl_show_greeting(&session, false);
+    time_t fake_now = time(NULL);
+    time_t fake_last = fake_now - 7200; /* 2 hours ago */
+    repl_show_greeting(&session, false, fake_last, fake_now);
 
     fflush(stdout);
     dup2(saved_out, STDOUT_FILENO);
@@ -201,6 +203,8 @@ void test_resume_banner_text(void) {
     cleanup_bare_session(&session);
 
     TEST_ASSERT_TRUE(strstr(buf, "Resumed session: 4 messages") != NULL);
+    TEST_ASSERT_TRUE(strstr(buf, "/recap for a summary.") != NULL);
+    TEST_ASSERT_TRUE(strstr(buf, "2h ago") != NULL);
 }
 
 static const char* THINKING_SSE_BODY =

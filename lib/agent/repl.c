@@ -303,7 +303,7 @@ static void format_relative_time(time_t event_time, time_t now,
     }
 }
 
-void repl_show_greeting(AgentSession* session, bool json_mode) {
+void repl_show_greeting(AgentSession* session, bool json_mode, time_t last_time, time_t now) {
     if (json_mode) {
         return;
     }
@@ -315,9 +315,10 @@ void repl_show_greeting(AgentSession* session, bool json_mode) {
     } else {
         size_t count = session->session_data.conversation.count;
         LOG_DEBUG("Showing resume banner (%zu messages).", count);
-        time_t last_time = conversation_tracker_last_message_time();
+        time_t effective_last = last_time ? last_time : conversation_tracker_last_message_time();
+        time_t effective_now  = now        ? now        : time(NULL);
         char rel_time[32];
-        format_relative_time(last_time, time(NULL), rel_time, sizeof(rel_time));
+        format_relative_time(effective_last, effective_now, rel_time, sizeof(rel_time));
         printf("Resumed session: %zu messages, last active %s. /recap for a summary.\n",
                count, rel_time);
     }
