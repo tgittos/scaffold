@@ -1,6 +1,9 @@
 #ifndef SPINNER_H
 #define SPINNER_H
 
+#include <time.h>
+#include <stddef.h>
+
 /**
  * Pulsing spinner for local tool execution feedback.
  *
@@ -40,5 +43,35 @@ void spinner_stop(void);
  * resources are released. Safe to call multiple times.
  */
 void spinner_cleanup(void);
+
+/* =============================================================================
+ * Test hooks — not for use in production code.
+ * =============================================================================
+ */
+
+/**
+ * Injectable clock: defaults to time(NULL). Override in tests.
+ * The function takes no arguments and returns the current time as time_t.
+ */
+typedef time_t (*spinner_clock_fn)(void);
+void spinner_set_clock_for_test(spinner_clock_fn fn);
+
+/**
+ * Build one spinner frame into buf without outputting to stdout.
+ * Useful for asserting elapsed-time formatting without background threads.
+ *
+ * @param buf        Output buffer.
+ * @param buf_size   Size of buf.
+ * @param tool_name  Tool name to embed in the frame.
+ * @param arg_summary Argument summary string (may be NULL).
+ * @param start_time  Spinner start time (uses g_clock_fn() for "now").
+ */
+void spinner_build_frame_for_test(char *buf, size_t buf_size,
+                                   const char *tool_name,
+                                   const char *arg_summary,
+                                   time_t start_time);
+
+/** Return non-zero if the spinner background thread is currently running. */
+int spinner_is_running_for_test(void);
 
 #endif /* SPINNER_H */

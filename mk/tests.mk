@@ -128,7 +128,7 @@ $(TEST_plugin_updater_TARGET): $(TEST_plugin_updater_OBJECTS) $(CJSON_LIB)
 $(eval $(call def_test,config,utils/test_config,$(LIBDIR)/util/config.c $(LIBDIR)/util/app_home.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/util/log.c))
 $(eval $(call def_test,debug_output,utils/test_debug_output,$(LIBDIR)/util/debug_output.c))
 $(eval $(call def_test,log,utils/test_log,$(LIBDIR)/util/log.c $(LIBDIR)/util/debug_output.c))
-$(eval $(call def_test,spinner,utils/test_spinner,$(LIBDIR)/ui/terminal.c $(LIBDIR)/ui/spinner.c $(LIBDIR)/util/common_utils.c $(TESTDIR)/stubs/output_formatter_stub.c))
+$(eval $(call def_test,spinner,utils/test_spinner,$(LIBDIR)/ui/terminal.c $(LIBDIR)/ui/terminal_width.c $(LIBDIR)/ui/spinner.c $(LIBDIR)/util/common_utils.c $(TESTDIR)/stubs/output_formatter_stub.c))
 $(eval $(call def_test,terminal,utils/test_terminal,$(LIBDIR)/ui/terminal.c $(LIBDIR)/util/common_utils.c $(TESTDIR)/stubs/output_formatter_stub.c))
 $(eval $(call def_test_lib,slash_commands,ui/test_slash_commands,))
 

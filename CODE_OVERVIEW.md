@@ -141,8 +141,9 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`ui.h`** - Public UI API header
 - **`output.h`** - Output formatting header
 - **`terminal.c/h`** - Terminal abstraction with colors, ANSI escapes, and layout helpers
-- **`spinner.c/h`** - Pulsing spinner for tool execution visual feedback
-- **`output_formatter.c/h`** - Response formatting and display for LLM responses
+- **`terminal_width.c/h`** - Terminal width detection (`terminal_columns()`, 80 for non-TTY), `visible_width()`, and `tool_summary_budget()` for width-aware argument display; test hooks `terminal_set_columns_for_test()` and injectable clock support
+- **`spinner.c/h`** - Pulsing spinner for tool execution visual feedback; no-op on non-TTY stdout; shows elapsed seconds after 2s; injectable clock (`spinner_set_clock_for_test()`)
+- **`output_formatter.c/h`** - Response formatting and display for LLM responses; uses `tool_summary_budget()` for width-aware argument truncation; `format_batch_label()` for parallel tool batch labels
 - **`json_output.c/h`** - JSON output mode for programmatic integration (--json flag)
 - **`slash_commands.c/h`** - Slash command registry and dispatch (`/help`, `/goals`, etc.)
 - **`memory_commands.c/h`** - Interactive `/memory` slash commands for direct memory management

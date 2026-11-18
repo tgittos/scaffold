@@ -1,6 +1,8 @@
 #include "unity.h"
 #include "ui/spinner.h"
 #include "ui/output_formatter.h"
+#include <time.h>
+#include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -110,6 +112,41 @@ void test_spinner_null_tool_name(void) {
     TEST_PASS();
 }
 
+/* ---------------------------------------------------------------------------
+ * New tests for elapsed time and TTY gating.
+ * ---------------------------------------------------------------------------
+ */
+
+static time_t g_fake_time = 0;
+static time_t fake_clock(void) { return g_fake_time; }
+
+void test_spinner_elapsed(void) {
+    /* Set clock to report 0 at start, then 3 seconds later. */
+    g_fake_time = 0;
+    spinner_set_clock_for_test(fake_clock);
+
+    char frame[512];
+    /* Build a frame with start_time=0, current clock=3 (3s elapsed). */
+    g_fake_time = 3;
+    spinner_build_frame_for_test(frame, sizeof(frame), "shell", NULL, 0);
+
+    spinner_set_clock_for_test(NULL); /* restore */
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(frame, "(3s)"),
+        "Spinner frame must contain \"(3s)\" after 3 seconds elapsed");
+}
+
+void test_no_ansi_when_not_tty(void) {
+    /* setUp already redirected stdout to /dev/null, which is not a TTY.
+     * spinner_start() must be a complete no-op on non-TTY stdout. */
+    spinner_start("test_tool", NULL);
+    int running = spinner_is_running_for_test();
+    /* spinner_stop() must not crash even though the spinner never started. */
+    spinner_stop();
+    TEST_ASSERT_FALSE_MESSAGE(running,
+        "Spinner must not start (and emit no ANSI codes) when stdout is not a TTY");
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_spinner_start_stop_basic);
@@ -121,5 +158,7 @@ int main(void) {
     RUN_TEST(test_spinner_json_mode_noop);
     RUN_TEST(test_spinner_start_while_running);
     RUN_TEST(test_spinner_null_tool_name);
+    RUN_TEST(test_spinner_elapsed);
+    RUN_TEST(test_no_ansi_when_not_tty);
     return UNITY_END();
 }

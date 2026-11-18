@@ -1,6 +1,7 @@
 #include "output_formatter.h"
 #include "status_line.h"
 #include "terminal.h"
+#include "terminal_width.h"
 #include "json_output.h"
 #include "../llm/model_capabilities.h"
 #include "../util/interrupt.h"
@@ -478,8 +479,6 @@ static bool is_informational_check(const char *tool_name, const char *arguments)
     return false;
 }
 
-#define ARG_DISPLAY_MAX_LEN 50
-
 char* extract_arg_summary(const char *tool_name, const char *arguments) {
     if (!arguments || strlen(arguments) == 0) {
         return NULL;
@@ -517,10 +516,15 @@ char* extract_arg_summary(const char *tool_name, const char *arguments) {
             const char *pattern_val = cJSON_GetStringValue(search_pattern);
             const char *path_val = path && cJSON_IsString(path) ? cJSON_GetStringValue(path) : ".";
             size_t pattern_len = strlen(pattern_val);
-            if (pattern_len <= ARG_DISPLAY_MAX_LEN - 10) {
+            size_t budget = tool_summary_budget(tool_name);
+            size_t path_len = strlen(path_val);
+            /* overhead: " → /" (4) + "/" (1) = 5; "..." (3) adds 3 when truncating */
+            if (pattern_len + path_len + 5 <= budget) {
                 snprintf(summary, sizeof(summary), "%s → /%s/", path_val, pattern_val);
             } else {
-                snprintf(summary, sizeof(summary), "%s → /%.37s.../", path_val, pattern_val);
+                size_t overhead = path_len + 8; /* " → /" + "..." + "/" = 4+3+1=8 */
+                int pat_chars = (int)(budget > overhead ? budget - overhead : 1);
+                snprintf(summary, sizeof(summary), "%s → /%.*s.../", path_val, pat_chars, pattern_val);
             }
             cJSON_Delete(json);
             return strdup(summary);
@@ -618,10 +622,13 @@ char* extract_arg_summary(const char *tool_name, const char *arguments) {
 
     if (value && strlen(value) > 0) {
         size_t value_len = strlen(value);
-        if (value_len <= ARG_DISPLAY_MAX_LEN) {
+        size_t budget = tool_summary_budget(tool_name);
+        size_t label_len = label ? strlen(label) : 0;
+        if (label_len + value_len <= budget) {
             snprintf(summary, sizeof(summary), "%s%s", label, value);
         } else {
-            snprintf(summary, sizeof(summary), "%s%.47s...", label, value);
+            int val_chars = (int)(budget > label_len + 3 ? budget - label_len - 3 : 1);
+            snprintf(summary, sizeof(summary), "%s%.*s...", label, val_chars, value);
         }
     }
 
@@ -631,6 +638,19 @@ char* extract_arg_summary(const char *tool_name, const char *arguments) {
         return strdup(summary);
     }
     return NULL;
+}
+
+void format_batch_label(char *buf, size_t buf_size, const char **names, int count) {
+    if (!buf || buf_size == 0) return;
+    buf[0] = '\0';
+    for (int i = 0; i < count; i++) {
+        if (i > 0) {
+            strncat(buf, ", ", buf_size - strlen(buf) - 1);
+        }
+        if (names[i]) {
+            strncat(buf, names[i], buf_size - strlen(buf) - 1);
+        }
+    }
 }
 
 void log_tool_execution_improved(const char *tool_name, const char *arguments, bool success, const char *result) {
