@@ -155,8 +155,9 @@ static const SlashCommandHandler g_builtin_handlers[] = {
 };
 
 _Static_assert(
-    sizeof(g_builtin_handlers) / sizeof(g_builtin_handlers[0]) <= MAX_SLASH_COMMANDS,
-    "Too many built-in commands for registry");
+    sizeof(g_builtin_handlers) / sizeof(g_builtin_handlers[0]) ==
+    sizeof(SLASH_COMMAND_TABLE) / sizeof(SLASH_COMMAND_TABLE[0]),
+    "g_builtin_handlers must have the same number of entries as SLASH_COMMAND_TABLE");
 
 void slash_commands_init(AgentSession *session) {
     (void)session;
