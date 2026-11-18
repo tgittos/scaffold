@@ -40,6 +40,7 @@ static char* repl_get_prompt(void) {
 }
 
 static void repl_clear_prompt_area(void) {
+    if (g_json_mode) return;
     printf(TERM_CLEAR_LINE);
     printf("\033[A" TERM_CLEAR_LINE);
     status_line_clear_rendered();

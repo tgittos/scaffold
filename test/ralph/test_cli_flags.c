@@ -137,35 +137,83 @@ void test_empty_stdin_errors(void) {
 
 void test_json_interactive_no_prompt_on_stdout(void) {
     /*
-     * With --json and TTY-less stdout, every non-empty line on stdout must
-     * be valid JSON. We pipe /help then quit into the REPL.
-     * We allow up to 5 seconds for the prompt to appear.
+     * Run the interactive REPL in --json mode with a real PTY stdin (via
+     * script(1)) so isatty(STDIN_FILENO) is true and main enters REPL mode.
+     * scaffold's stdout and stderr are redirected to separate files so they
+     * can be inspected independently of the PTY session.  "timeout 5" ensures
+     * the test cannot hang.
      *
-     * Capture stdout only; stderr holds the prompt and Goodbye.
+     * Asserts:
+     *   1. REPL ran: stderr contains "Goodbye" (sent there by repl.c in
+     *      json mode).
+     *   2. JSON purity: every non-empty stdout line starts with '{' or '['.
      */
-    FILE *fp = popen("printf '/help\\nquit\\n' | ./out/scaffold --json 2>/dev/null", "r");
-    if (fp == NULL) {
-        TEST_FAIL_MESSAGE("Failed to launch scaffold --json");
-        return;
+    const char *out_path = "/tmp/scaffold_json_test_stdout.txt";
+    const char *err_path = "/tmp/scaffold_json_test_stderr.txt";
+    unlink(out_path);
+    unlink(err_path);
+
+    /* script -qec 'CMD' /dev/null runs CMD inside a PTY; the piped input
+     * from the outer subshell is forwarded by script to the PTY master.
+     * scaffold reads from the PTY slave (isatty == true -> REPL mode).
+     * scaffold's own stdout/stderr are redirected to files, bypassing the
+     * PTY, so they can be checked for content independently. */
+    int ret = system(
+        "sh -c 'sleep 0.2; echo quit; sleep 0.3' | "
+        "timeout 5 script -qec "
+        "'./out/scaffold --json"
+        " >/tmp/scaffold_json_test_stdout.txt"
+        " 2>/tmp/scaffold_json_test_stderr.txt' "
+        "/dev/null >/dev/null 2>&1"
+    );
+    (void)ret;
+
+    /* 1. Verify the REPL ran: stderr must contain "Goodbye" */
+    FILE *err_fp = fopen(err_path, "r");
+    TEST_ASSERT_NOT_NULL_MESSAGE(err_fp,
+        "stderr file not created; REPL may not have started");
+    char err_buf[4096] = {0};
+    size_t err_pos = 0;
+    char tmp_line[256];
+    while (err_pos < sizeof(err_buf) - 1 &&
+           fgets(tmp_line, sizeof(tmp_line), err_fp) != NULL) {
+        size_t n = strlen(tmp_line);
+        if (err_pos + n >= sizeof(err_buf) - 1) n = sizeof(err_buf) - 1 - err_pos;
+        memcpy(err_buf + err_pos, tmp_line, n);
+        err_pos += n;
     }
+    fclose(err_fp);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(err_buf, "Goodbye"),
+        "REPL did not send 'Goodbye' to stderr; did not enter interactive mode");
+
+    /* 2. Verify JSON purity: every non-empty stdout line must start with
+     * '{' or '['.  Empty lines (e.g. from readline's \n) are allowed. */
+    FILE *out_fp = fopen(out_path, "r");
+    if (out_fp == NULL) return;  /* no stdout output at all is acceptable */
 
     char line[4096];
     int found_non_json = 0;
-    while (fgets(line, sizeof(line), fp) != NULL) {
-        /* Strip trailing newline */
+    char bad_line[4096] = {0};
+    while (fgets(line, sizeof(line), out_fp) != NULL) {
         size_t len = strlen(line);
         while (len > 0 && (line[len-1] == '\n' || line[len-1] == '\r')) {
             line[--len] = '\0';
         }
         if (len == 0) continue;
-        /* Check starts with '{' or '[' (basic JSON object/array) */
         if (line[0] != '{' && line[0] != '[') {
             found_non_json = 1;
+            memcpy(bad_line, line, len < sizeof(bad_line)-1 ? len : sizeof(bad_line)-1);
             break;
         }
     }
-    pclose(fp);
-    TEST_ASSERT_EQUAL_INT(0, found_non_json);
+    fclose(out_fp);
+
+    if (found_non_json) {
+        char msg[5120];
+        snprintf(msg, sizeof(msg),
+                 "--json stdout must contain only JSON lines; got: %.256s", bad_line);
+        TEST_FAIL_MESSAGE(msg);
+    }
 }
 
 int main(void) {
