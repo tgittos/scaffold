@@ -101,7 +101,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`http_form_post.c/h`** - Form-urlencoded POST for OAuth token endpoints (URL-encodes via `curl_easy_escape`, sets Content-Type)
 - **`api_common.c/h`** - JSON payload building with prompt caching support (`SystemPromptParts` split, Anthropic `cache_control` markers, model-aware payload construction), canonical OpenAI tool message formatting (`role:tool` + `tool_call_id`, assistant `tool_calls` verbatim), `streaming_add_params()` shared utility for adding stream/store params
 - **`streaming.c/h`** - SSE streaming infrastructure for real-time response handling
-- **`api_error.c/h`** - Enhanced API error handling with retry logic
+- **`api_error.c/h`** - Enhanced API error handling with retry logic; `APIError.provider_body[1024]` captures the first 1 KiB of a non-2xx response body; `api_error_user_message()` includes HTTP status and the provider's `error.message` when the body is JSON
 - **`embedded_cacert.c/h`** - Embedded Mozilla CA certificate bundle for portable SSL/TLS
 - **`image_attachment.c/h`** - Image attachment parsing (`@path` references to base64-encoded images)
 
@@ -248,6 +248,7 @@ The test directory mirrors the source structure:
 - **`test_openai_message_format.c`** - Canonical OpenAI tool message shape (`role:tool`, assistant `tool_calls`)
 - **`test_streaming.c`** - SSE streaming infrastructure tests
 - **`test_http_retry.c`** - HTTP retry logic tests
+- **`test_http_streaming_error.c`** - Streaming error propagation tests: 404 body extraction and 302-as-failure via mock API server
 - **`test_http_python.c`** - Python HTTP extension tests
 - **`test_image_attachment.c`** - Image attachment parsing tests
 
