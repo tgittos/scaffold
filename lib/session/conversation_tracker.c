@@ -614,3 +614,28 @@ ConversationHistory* search_conversation_history(const char *query, size_t max_r
     
     return history;
 }
+
+time_t conversation_tracker_last_message_time(void) {
+    document_store_t* store = services_get_document_store(g_services);
+    if (store == NULL) return 0;
+
+    time_t now = time(NULL);
+    document_search_results_t* results = document_store_search_by_time(
+        store, CONVERSATION_INDEX, 0, now, 0);
+
+    if (results == NULL || results->results.count == 0) {
+        if (results) document_store_free_results(results);
+        return 0;
+    }
+
+    time_t latest = 0;
+    for (size_t i = 0; i < results->results.count; i++) {
+        document_t* doc = results->results.data[i].document;
+        if (doc && doc->timestamp > latest) {
+            latest = doc->timestamp;
+        }
+    }
+
+    document_store_free_results(results);
+    return latest;
+}

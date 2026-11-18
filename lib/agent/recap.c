@@ -101,6 +101,7 @@ static void recap_text_callback(const char* text, size_t len, void* user_data) {
 
 static void recap_thinking_callback(const char* text, size_t len, void* user_data) {
     (void)user_data;
+    status_line_set_idle();
     display_streaming_thinking(text, len);
 }
 
@@ -256,6 +257,13 @@ static int stream_unsaved_reply(AgentSession* session, const char* prompt) {
         .low_speed_limit = 1,
         .low_speed_time = 30
     };
+
+    /* Refresh credential before building headers, matching the streaming handler. */
+    char refreshed_key[4096];
+    if (llm_client_refresh_credential(refreshed_key, sizeof(refreshed_key)) == 0) {
+        free(session->session_data.config.api_key);
+        session->session_data.config.api_key = strdup(refreshed_key);
+    }
 
     const char* hdrs[8] = {0};
     if (provider->build_headers) {

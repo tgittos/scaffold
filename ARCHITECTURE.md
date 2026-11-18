@@ -1191,7 +1191,7 @@ lib/
 │   ├── repl.c/h            # Read-Eval-Print-Loop for interactive mode
 │   ├── async_executor.c/h  # Non-blocking message processing thread
 │   ├── context_enhancement.c/h  # Split prompt builder (base + dynamic context)
-│   ├── recap.c/h           # Startup recap and first-run greeting
+│   ├── recap.c/h           # Conversation recap (via /recap); no LLM call at startup
 │   ├── streaming_handler.c/h   # Streaming orchestration layer
 │   ├── tool_executor.c/h   # Tool execution entry point
 │   ├── iterative_loop.c/h  # Iterative tool-calling loop

@@ -125,6 +125,14 @@ void status_line_set_idle(void) {
     }
 }
 
+bool status_line_is_busy(void) {
+    if (!g_status.initialized) return false;
+    pthread_mutex_lock(&g_status.mutex);
+    bool busy = g_status.system_busy;
+    pthread_mutex_unlock(&g_status.mutex);
+    return busy;
+}
+
 void status_line_update_tokens(int prompt_tokens, int completion_tokens) {
     if (!g_status.initialized) return;
     pthread_mutex_lock(&g_status.mutex);

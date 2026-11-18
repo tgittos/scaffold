@@ -52,6 +52,7 @@ static void streaming_text_callback(const char* text, size_t len, void* user_dat
 
 static void streaming_thinking_callback(const char* text, size_t len, void* user_data) {
     (void)user_data;
+    status_line_set_idle();
     display_streaming_thinking(text, len);
 }
 

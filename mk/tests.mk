@@ -304,7 +304,7 @@ $(eval $(call def_test_lib,ralph,ralph/test_ralph,$(TESTDIR)/mock_api_server.c))
 $(eval $(call def_test_lib,iterative_loop_empty,ralph/test_iterative_loop_empty,$(TESTDIR)/mock_api_server.c))
 $(eval $(call def_test_lib,message_dispatcher,ralph/test_message_dispatcher,))
 $(eval $(call def_test_lib,message_processor,ralph/test_message_processor,))
-$(eval $(call def_test_lib,recap,ralph/test_recap,))
+$(eval $(call def_test_lib,recap,ralph/test_recap,$(TESTDIR)/mock_api_server.c))
 $(eval $(call def_test_lib,parallel_batch,agent/test_parallel_batch,))
 $(eval $(call def_test_lib,tool_wire_format,agent/test_tool_wire_format,$(TESTDIR)/mock_api_server.c))
 $(eval $(call def_test_lib,model_commands,ui/test_model_commands,))
@@ -338,7 +338,7 @@ LIBAGENT_TESTS := tool_param_dsl json_output output tools_system vector_db_tool 
     memory_mgmt token_manager conversation_compactor rolling_summary model_tools embeddings_service embeddings_service_reinit \
     openai_streaming anthropic_streaming codex_provider messages_array_bug openai_message_format mcp_client subagent_tool \
     incomplete_task_bug conversation conversation_vdb tool_calls_not_stored document_store \
-    message_dispatcher message_processor recap parallel_batch tool_wire_format model_commands \
+    message_dispatcher message_processor parallel_batch tool_wire_format model_commands \
     iterative_loop_empty \
     slash_commands task_commands agent_commands goal_commands mode_tool mode_commands status_line \
     context_mode_injection repo_context image_attachment goap_tools orchestrator_tool goap_lifecycle \
@@ -355,6 +355,10 @@ $(TEST_http_TARGET): $(TEST_http_OBJECTS) $(LIBAGENT) $(ALL_LIBS)
 # ralph test needs LDFLAGS and mock_api_server
 $(TEST_ralph_TARGET): $(TEST_ralph_OBJECTS) $(LIBAGENT) $(ALL_LIBS)
 	$(CXX) $(LDFLAGS) -o $@ $(TEST_ralph_OBJECTS) $(LIBAGENT) $(LIBS) -lpthread
+
+# recap test calls repl_show_greeting which pulls in readline
+$(TEST_recap_TARGET): $(TEST_recap_OBJECTS) $(LIBAGENT) $(ALL_LIBS)
+	$(CXX) $(LDFLAGS) -o $@ $(TEST_recap_OBJECTS) $(LIBAGENT) $(LIBS) -lpthread
 
 # =============================================================================
 # PYTHON TESTS (need stdlib embedding)
