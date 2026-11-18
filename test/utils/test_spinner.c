@@ -136,6 +136,17 @@ void test_spinner_elapsed(void) {
         "Spinner frame must contain \"(3s)\" after 3 seconds elapsed");
 }
 
+void test_spinner_detail_shown(void) {
+    /* After setting a detail line, the built frame must contain it. */
+    spinner_set_detail("Collecting flask");
+
+    char frame[512];
+    spinner_build_frame_for_test(frame, sizeof(frame), "shell", NULL, 0);
+
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(frame, "Collecting flask"),
+        "Spinner frame must contain the detail line set via spinner_set_detail");
+}
+
 void test_no_ansi_when_not_tty(void) {
     /* setUp already redirected stdout to /dev/null, which is not a TTY.
      * spinner_start() must be a complete no-op on non-TTY stdout. */
@@ -159,6 +170,7 @@ int main(void) {
     RUN_TEST(test_spinner_start_while_running);
     RUN_TEST(test_spinner_null_tool_name);
     RUN_TEST(test_spinner_elapsed);
+    RUN_TEST(test_spinner_detail_shown);
     RUN_TEST(test_no_ansi_when_not_tty);
     return UNITY_END();
 }

@@ -1,5 +1,6 @@
 #include "spinner.h"
 #include "terminal.h"
+#include "terminal_width.h"
 #include "output_formatter.h"
 #include <pthread.h>
 #include <stdio.h>
@@ -18,6 +19,7 @@ static volatile int g_spinner_running = 0;
 static volatile int g_spinner_initialized = 0;
 static char *g_spinner_tool_name = NULL;
 static char *g_spinner_arg_summary = NULL;
+static char *g_spinner_detail = NULL;
 static time_t g_spinner_start_time = 0;
 
 /* Injectable clock for testing elapsed time without wall-clock sleeps. */
@@ -56,15 +58,40 @@ static void build_spinner_frame(char *buf, size_t buf_size, int bright) {
         snprintf(context, sizeof(context), "%s", elapsed_str);
     }
 
+    char detail[256];
+    memset(detail, 0, sizeof(detail));
+    if (g_spinner_detail != NULL && g_spinner_detail[0]) {
+        size_t budget = tool_summary_budget(g_spinner_tool_name);
+        if (strlen(g_spinner_detail) <= budget) {
+            snprintf(detail, sizeof(detail), " %s", g_spinner_detail);
+        } else {
+            int chars = (int)(budget > 3 ? budget - 3 : 1);
+            snprintf(detail, sizeof(detail), " %.*s...", chars, g_spinner_detail);
+        }
+    }
+
     if (bright) {
         snprintf(buf, buf_size,
-                 TERM_CLEAR_LINE TERM_CYAN TERM_SYM_ACTIVE TERM_RESET " %s" TERM_DIM "%s" TERM_RESET,
-                 g_spinner_tool_name ? g_spinner_tool_name : "", context);
+                 TERM_CLEAR_LINE TERM_CYAN TERM_SYM_ACTIVE TERM_RESET " %s" TERM_DIM "%s%s" TERM_RESET,
+                 g_spinner_tool_name ? g_spinner_tool_name : "", context, detail);
     } else {
         snprintf(buf, buf_size,
-                 TERM_CLEAR_LINE TERM_DIM TERM_CYAN TERM_SYM_ACTIVE TERM_RESET " %s" TERM_DIM "%s" TERM_RESET,
-                 g_spinner_tool_name ? g_spinner_tool_name : "", context);
+                 TERM_CLEAR_LINE TERM_DIM TERM_CYAN TERM_SYM_ACTIVE TERM_RESET " %s" TERM_DIM "%s%s" TERM_RESET,
+                 g_spinner_tool_name ? g_spinner_tool_name : "", context, detail);
     }
+}
+
+void spinner_set_detail(const char *line) {
+    pthread_once(&g_spinner_init_once, spinner_do_init);
+    pthread_mutex_lock(&g_spinner_mutex);
+    if (g_spinner_detail != NULL) {
+        free(g_spinner_detail);
+        g_spinner_detail = NULL;
+    }
+    if (line != NULL && line[0]) {
+        g_spinner_detail = strdup(line);
+    }
+    pthread_mutex_unlock(&g_spinner_mutex);
 }
 
 void spinner_build_frame_for_test(char *buf, size_t buf_size, const char *tool_name,
@@ -143,6 +170,11 @@ void spinner_start(const char *tool_name, const char *arguments) {
         g_spinner_arg_summary = NULL;
     }
 
+    if (g_spinner_detail != NULL) {
+        free(g_spinner_detail);
+        g_spinner_detail = NULL;
+    }
+
     g_spinner_tool_name = tool_name ? strdup(tool_name) : NULL;
     g_spinner_arg_summary = extract_arg_summary(tool_name, arguments);
     g_spinner_start_time = g_clock_fn();
@@ -189,6 +221,10 @@ void spinner_stop(void) {
     if (g_spinner_arg_summary != NULL) {
         free(g_spinner_arg_summary);
         g_spinner_arg_summary = NULL;
+    }
+    if (g_spinner_detail != NULL) {
+        free(g_spinner_detail);
+        g_spinner_detail = NULL;
     }
     pthread_mutex_unlock(&g_spinner_mutex);
 }

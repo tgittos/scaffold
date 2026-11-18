@@ -27,6 +27,20 @@
 void spinner_start(const char *tool_name, const char *arguments);
 
 /**
+ * Set the live detail line shown by the spinner.
+ *
+ * Used to stream the last line of a running tool's output (e.g. shell
+ * command progress) into the spinner. The text is displayed truncated to
+ * the available width budget. Passing NULL or an empty string clears it.
+ *
+ * Thread-safe: may be called from a tool worker thread while the spinner
+ * animates on its own thread.
+ *
+ * @param line Detail text to display (copied; may be NULL)
+ */
+void spinner_set_detail(const char *line);
+
+/**
  * Stop the pulsing spinner and clear the line.
  *
  * Clears the spinner line with \r\033[K to prepare for the result
