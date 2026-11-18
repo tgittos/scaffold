@@ -17,7 +17,9 @@
 #include "../../lib/util/config.h"
 #include "../../lib/auth/openai_login.h"
 #include "../../lib/util/log.h"
+#include "../../lib/util/stdin_reader.h"
 #include "../tools/python_extension.h"
+#include "../../lib/ui/slash_commands.h"
 #include "build/version.h"
 
 
@@ -45,35 +47,40 @@ static void print_version(void) {
 }
 
 static void print_help(const char *program_name) {
-    printf("scaffold %s - AI Orchestrator\n\n", RALPH_VERSION);
+    printf("scaffold %s - autonomous coding agent\n\n", RALPH_VERSION);
     printf("Usage: %s [OPTIONS] [MESSAGE]\n\n", program_name);
     printf("Options:\n");
-    printf("  -h, --help        Show this help message and exit\n");
-    printf("  -v, --version     Show version information and exit\n");
-    printf("  --debug           Enable all debug output (legacy, same as --log debug)\n");
-    printf("  --log <level>     Set log level: error, warn, info, debug\n");
-    printf("  --log-module <m>  Comma-separated module filter (e.g. tool,goap,http)\n");
-    printf("  --log-http-body   Enable raw HTTP body logging (CURLOPT_VERBOSE)\n");
-    printf("  --no-stream       Disable response streaming\n");
-    printf("  --json            Enable JSON output mode\n");
-    printf("  --home <path>     Override home directory (default: ~/.local/scaffold)\n");
-    printf("  --context-window <n>  Override context window size (tokens)\n");
-    printf("  -p, --prompt <text>   Use custom system prompt (skips default + AGENTS.md)\n");
-    printf("  --login           Log in to OpenAI via OAuth (ChatGPT subscription)\n");
-    printf("  --logout          Log out of OpenAI OAuth session\n");
-    printf("  --check-update    Check for updates and exit\n");
-    printf("  --update          Download and apply the latest update, then exit\n");
-    printf("  --check-plugin-updates  Check for plugin updates and exit\n");
-    printf("  --update-plugins  Download and install all available plugin updates, then exit\n");
+    printf("  -h, --help                   Show this help message and exit\n");
+    printf("  -v, --version                Show version information and exit\n");
+    printf("  --debug                      Enable all debug output (legacy, same as --log debug)\n");
+    printf("  --log <level>                Set log level: error, warn, info, debug\n");
+    printf("  --log-module <modules>       Comma-separated module filter (e.g. tool,goap,http)\n");
+    printf("  --log-http-body              Enable raw HTTP body logging (CURLOPT_VERBOSE)\n");
+    printf("  --no-stream                  Disable response streaming\n");
+    printf("  --json                       Enable JSON output mode\n");
+    printf("  --model <name>               Select model (e.g. gpt-4o)\n");
+    printf("  --context-window <n>         Override context window size (tokens)\n");
+    printf("  --home <path>                Override home directory (default: ~/.local/scaffold)\n");
+    printf("  -p, --prompt <text>          Use custom system prompt (skips default + AGENTS.md)\n");
+    printf("  --system-prompt-file <path>  Load system prompt from file (read then deleted)\n");
+    printf("  --login                      Log in to OpenAI via OAuth (ChatGPT subscription)\n");
+    printf("  --logout                     Log out of OpenAI OAuth session\n");
+    printf("  --check-update               Check for updates and exit\n");
+    printf("  --update                     Download and apply the latest update, then exit\n");
+    printf("  --check-plugin-updates       Check for plugin updates and exit\n");
+    printf("  --update-plugins             Download and install all available plugin updates, then exit\n");
     printf("\n");
     printf("Arguments:\n");
     printf("  MESSAGE           Process a single message and exit\n");
     printf("                    If omitted, enters interactive mode\n");
     printf("\n");
     printf("Interactive Mode Commands:\n");
-    printf("  quit, exit        Exit the program\n");
-    printf("  /memory           Memory management commands (use /memory help for details)\n");
-    printf("  Ctrl+D            End session\n");
+    for (size_t i = 0; i < SLASH_COMMAND_COUNT; i++) {
+        printf("  /%-12s  %s\n",
+               SLASH_COMMAND_TABLE[i].name, SLASH_COMMAND_TABLE[i].description);
+    }
+    printf("  quit, exit    Exit the program\n");
+    printf("  Ctrl+D        End session\n");
 }
 
 static int handle_check_update(void) {
@@ -352,6 +359,7 @@ int main(int argc, char *argv[]) {
     const char *log_module_str = NULL;
 
     int message_arg_index = -1;
+    char *stdin_message = NULL;
     int subagent_mode = 0;
     char *subagent_task = NULL;
     char *subagent_context = NULL;
@@ -368,9 +376,17 @@ int main(int argc, char *argv[]) {
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--debug") == 0) {
             config.debug = true;
-        } else if (strcmp(argv[i], "--log") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--log") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: --log requires a value\n");
+                return 2;
+            }
             log_level_str = argv[++i];
-        } else if (strcmp(argv[i], "--log-module") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--log-module") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: --log-module requires a value\n");
+                return 2;
+            }
             log_module_str = argv[++i];
         } else if (strcmp(argv[i], "--log-http-body") == 0) {
             config.log_http_body = true;
@@ -380,43 +396,90 @@ int main(int argc, char *argv[]) {
             config.json_mode = true;
         } else if (strcmp(argv[i], "--no-auto-messages") == 0) {
             config.no_auto_messages = true;
-        } else if (strcmp(argv[i], "--message-poll-interval") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--message-poll-interval") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: --message-poll-interval requires a value\n");
+                return 2;
+            }
             config.message_poll_interval_ms = atoi(argv[++i]);
             if (config.message_poll_interval_ms < 100) {
                 config.message_poll_interval_ms = 100;
             }
-        } else if (strcmp(argv[i], "--home") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--home") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: --home requires a value\n");
+                return 2;
+            }
             config.home_dir = argv[++i];
         } else if (strcmp(argv[i], "--subagent") == 0) {
             subagent_mode = 1;
-        } else if (strcmp(argv[i], "--task") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--task") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: --task requires a value\n");
+                return 2;
+            }
             subagent_task = argv[++i];
-        } else if (strcmp(argv[i], "--context") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--context") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: --context requires a value\n");
+                return 2;
+            }
             subagent_context = argv[++i];
-        } else if (strcmp(argv[i], "--model") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--model") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: --model requires a value\n");
+                return 2;
+            }
             model_override = argv[++i];
-        } else if (strcmp(argv[i], "--context-window") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--context-window") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: --context-window requires a value\n");
+                return 2;
+            }
             context_window_override = atoi(argv[++i]);
             if (context_window_override <= 0) {
                 fprintf(stderr, "Error: --context-window requires a positive integer\n");
-                return EXIT_FAILURE;
+                return 2;
             }
         } else if (strcmp(argv[i], "--worker") == 0) {
             worker_mode = 1;
-        } else if (strcmp(argv[i], "--queue") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--queue") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: --queue requires a value\n");
+                return 2;
+            }
             worker_queue = argv[++i];
         } else if (strcmp(argv[i], "--supervisor") == 0) {
             supervisor_mode = 1;
-        } else if (strcmp(argv[i], "--goal") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--goal") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: --goal requires a value\n");
+                return 2;
+            }
             supervisor_goal_id = argv[++i];
-        } else if (strcmp(argv[i], "--phase") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--phase") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: --phase requires a value\n");
+                return 2;
+            }
             supervisor_phase_str = argv[++i];
-        } else if ((strcmp(argv[i], "--prompt") == 0 || strcmp(argv[i], "-p") == 0) && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--prompt") == 0 || strcmp(argv[i], "-p") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: %s requires a value\n", argv[i]);
+                return 2;
+            }
             system_prompt_override = argv[++i];
-        } else if (strcmp(argv[i], "--system-prompt-file") == 0 && i + 1 < argc) {
+        } else if (strcmp(argv[i], "--system-prompt-file") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "Error: --system-prompt-file requires a value\n");
+                return 2;
+            }
             system_prompt_file = argv[++i];
         } else if (message_arg_index == -1 && argv[i][0] != '-') {
             message_arg_index = i;
+        } else if (argv[i][0] == '-') {
+            fprintf(stderr, "Error: unknown option '%s'. Try --help.\n", argv[i]);
+            return 2;
         }
     }
 
@@ -452,6 +515,54 @@ int main(int argc, char *argv[]) {
         config.mode = AGENT_MODE_BACKGROUND;
         config.subagent_task = subagent_task;
         config.subagent_context = subagent_context;
+    } else if (!isatty(STDIN_FILENO)) {
+        /* Piped/redirected stdin: read it all and run single-shot */
+        int truncated = 0;
+        char *stdin_text = stdin_read_all(stdin, 8 * 1024 * 1024, &truncated);
+        if (truncated) {
+            fprintf(stderr, "Error: stdin exceeds 8 MiB limit\n");
+            free(stdin_text);
+            return 2;
+        }
+        if (stdin_text == NULL) {
+            fprintf(stderr, "Error: failed to read stdin\n");
+            return 1;
+        }
+        if (stdin_text[0] == '\0') {
+            if (message_arg_index == -1) {
+                fprintf(stderr, "Error: no input on stdin\n");
+                free(stdin_text);
+                return 2;
+            }
+            /* Empty stdin but arg given: use arg only */
+            free(stdin_text);
+            config.mode = AGENT_MODE_SINGLE_SHOT;
+            config.initial_message = argv[message_arg_index];
+        } else if (message_arg_index != -1) {
+            /* Merge: arg + "\n\n" + stdin */
+            const char *arg = argv[message_arg_index];
+            size_t arg_len = strlen(arg);
+            size_t stdin_len = strlen(stdin_text);
+            char *merged = malloc(arg_len + 2 + stdin_len + 1);
+            if (merged == NULL) {
+                fprintf(stderr, "Error: out of memory\n");
+                free(stdin_text);
+                return EXIT_FAILURE;
+            }
+            memcpy(merged, arg, arg_len);
+            merged[arg_len] = '\n';
+            merged[arg_len + 1] = '\n';
+            memcpy(merged + arg_len + 2, stdin_text, stdin_len + 1);
+            free(stdin_text);
+            stdin_message = merged;
+            config.mode = AGENT_MODE_SINGLE_SHOT;
+            config.initial_message = stdin_message;
+        } else {
+            /* Only stdin, no arg */
+            stdin_message = stdin_text;
+            config.mode = AGENT_MODE_SINGLE_SHOT;
+            config.initial_message = stdin_message;
+        }
     } else if (message_arg_index != -1) {
         config.mode = AGENT_MODE_SINGLE_SHOT;
         config.initial_message = argv[message_arg_index];
@@ -563,5 +674,6 @@ int main(int argc, char *argv[]) {
     agent_cleanup(&agent);
     openai_auth_cleanup();
     free(loaded_system_prompt);
+    free(stdin_message);
     return (result == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

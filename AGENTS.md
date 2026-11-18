@@ -36,8 +36,9 @@ set -a && source .env && set +a && out/scaffold
 # One-shot mode (process single message and exit)
 set -a && source .env && set +a && out/scaffold "your message here"
 
-# Pipe input
-set -a && source .env && set +a && echo "your message" | out/scaffold
+# Pipe input (entire stdin is read as one message; combined with arg if given)
+set -a && source .env && set +a && cat SPEC.md | out/scaffold
+set -a && source .env && set +a && echo "extra context" | out/scaffold "summarize this"
 
 # With specific model
 set -a && source .env && set +a && out/scaffold --model gpt-4o "your message"

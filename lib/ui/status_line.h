@@ -64,6 +64,12 @@ void status_line_format_context(char *buf, size_t buf_size);
 void status_line_render_info(void);
 
 /**
+ * Print a plain-text usage footer to stderr for one-shot mode.
+ * Skipped in JSON mode. ANSI codes are omitted when stderr is not a TTY.
+ */
+void status_line_render_info_oneshot(void);
+
+/**
  * Clear previously rendered status info line from the terminal.
  * Must only be called from the main (REPL) thread.
  */

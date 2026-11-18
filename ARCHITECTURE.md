@@ -1157,7 +1157,7 @@ On init, an installed default tool file is replaced with the embedded version wh
 ```
 src/
 ├── scaffold/               # Scaffold CLI (single binary)
-│   └── main.c              # Entry point (REPL, one-shot, --supervisor, --worker, --phase plan|execute, --check-update, --update)
+│   └── main.c              # Entry point (REPL, one-shot, --supervisor, --worker, --phase plan|execute, --check-update, --update); piped stdin → single-shot (8 MiB cap; arg+stdin merged with two newlines; empty stdin exits 2)
 ├── tools/                  # Python tool integration
 │   ├── python_tool.c/h     # Embedded Python interpreter
 │   ├── python_tool_files.c/h # Python file-based tools

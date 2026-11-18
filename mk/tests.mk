@@ -37,6 +37,7 @@ $(eval $(call def_test,cli_flags,ralph/test_cli_flags,))
 $(eval $(call def_test,interrupt,ralph/test_interrupt,$(LIBDIR)/util/interrupt.c))
 $(eval $(call def_test,async_executor,ralph/test_async_executor,$(LIBDIR)/agent/async_executor.c $(LIBDIR)/util/interrupt.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/util/log.c $(LIBDIR)/ipc/pipe_notifier.c $(TESTDIR)/stubs/ralph_stub.c))
 $(eval $(call def_test,pipe_notifier,utils/test_pipe_notifier,$(LIBDIR)/ipc/pipe_notifier.c))
+$(eval $(call def_test,stdin_reader,utils/test_stdin_reader,$(LIBDIR)/util/stdin_reader.c))
 $(eval $(call def_test,agent_identity,ralph/test_agent_identity,$(LIBDIR)/ipc/agent_identity.c))
 $(eval $(call def_test,prompt,utils/test_prompt_loader,$(LIBDIR)/util/prompt_loader.c $(LIBDIR)/util/app_home.c $(LIBDIR)/util/config.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/util/log.c))
 $(eval $(call def_test,app_home,utils/test_app_home,$(LIBDIR)/util/app_home.c))
@@ -63,6 +64,9 @@ $(TEST_async_executor_TARGET): $(TEST_async_executor_OBJECTS) $(CJSON_LIB)
 
 $(TEST_pipe_notifier_TARGET): $(TEST_pipe_notifier_OBJECTS)
 	$(CC) -o $@ $(TEST_pipe_notifier_OBJECTS)
+
+$(TEST_stdin_reader_TARGET): $(TEST_stdin_reader_OBJECTS)
+	$(CC) -o $@ $(TEST_stdin_reader_OBJECTS)
 
 $(TEST_agent_identity_TARGET): $(TEST_agent_identity_OBJECTS)
 	$(CC) -o $@ $(TEST_agent_identity_OBJECTS) -lpthread

@@ -22,16 +22,6 @@ static const char *find_tier_for_model(const char *model_id) {
     return NULL;
 }
 
-static void show_current_model(AgentSession *session) {
-    const char *model = session->session_data.config.model;
-    const char *tier = find_tier_for_model(model);
-
-    if (tier) {
-        printf(TERM_BOLD "Current model:" TERM_RESET " %s (tier: %s)\n", model, tier);
-    } else {
-        printf(TERM_BOLD "Current model:" TERM_RESET " %s\n", model ? model : "unknown");
-    }
-}
 
 static void show_model_list(AgentSession *session) {
     const char *simple = config_get_string("model_simple");
@@ -101,7 +91,7 @@ int process_model_command(const char *args, AgentSession *session) {
     if (!args || !session) return -1;
 
     if (*args == '\0') {
-        show_current_model(session);
+        printf("Usage: /model [list|<name>]\n");
         return 0;
     }
 

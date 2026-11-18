@@ -98,7 +98,7 @@ void status_line_set_busy(const char *label) {
         g_status.activity_label[0] = '\0';
     }
     g_status.activity_start_time = time(NULL);
-    bool should_render = !get_json_output_mode();
+    bool should_render = !get_json_output_mode() && isatty(STDOUT_FILENO);
     if (should_render) {
         g_status.busy_rendered = true;
     }
@@ -352,6 +352,64 @@ void status_line_render_info(void) {
 
     g_info_rendered = printed;
     fflush(stdout);
+}
+
+void status_line_render_info_oneshot(void) {
+    if (!g_status.initialized) return;
+    if (get_json_output_mode()) return;
+
+    pthread_mutex_lock(&g_status.mutex);
+    int last_response  = g_status.last_response_tokens;
+    int prompt_tokens  = g_status.session_prompt_tokens;
+    char model[STATUS_MODEL_NAME_LEN];
+    memcpy(model, g_status.model_name, sizeof(model));
+    int window = g_status.context_window;
+    pthread_mutex_unlock(&g_status.mutex);
+
+    /* Build left portion: last-response token count */
+    char left[128] = "";
+    if (last_response > 0) {
+        char resp_str[16];
+        format_token_count(last_response, resp_str, sizeof(resp_str));
+        snprintf(left, sizeof(left), "  \xe2\x94\x94 %s tokens", resp_str);
+    }
+
+    /* Build right portion: context usage + model name.
+     * Use ANSI only when stderr is a TTY; otherwise plain text. */
+    char segment[256] = "";
+    if (isatty(STDERR_FILENO)) {
+        format_context(segment, sizeof(segment), true);
+    } else {
+        char ctx[48] = {0};
+        if (window > 0) {
+            char win_str[16] = {0};
+            format_token_count(window, win_str, sizeof(win_str));
+            if (prompt_tokens > 0) {
+                double pct = prompt_tokens * 100.0 / window;
+                snprintf(ctx, sizeof(ctx), "%.1f%%/%s", pct, win_str);
+            } else {
+                snprintf(ctx, sizeof(ctx), "?/%s", win_str);
+            }
+        } else if (model[0]) {
+            snprintf(ctx, sizeof(ctx), "?");
+        }
+        if (ctx[0] && model[0]) {
+            snprintf(segment, sizeof(segment), "%s  %s", ctx, model);
+        } else if (ctx[0]) {
+            snprintf(segment, sizeof(segment), "%s", ctx);
+        } else if (model[0]) {
+            snprintf(segment, sizeof(segment), "%s", model);
+        }
+    }
+
+    if (left[0] && segment[0]) {
+        fprintf(stderr, "%s   %s\n", left, segment);
+    } else if (left[0]) {
+        fprintf(stderr, "%s\n", left);
+    } else if (segment[0]) {
+        fprintf(stderr, "  %s\n", segment);
+    }
+    fflush(stderr);
 }
 
 void status_line_clear_rendered(void) {

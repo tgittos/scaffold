@@ -25,6 +25,7 @@ LIB_UI_SOURCES := \
     $(LIBDIR)/ui/mode_commands.c \
     $(LIBDIR)/ui/model_commands.c \
     $(LIBDIR)/ui/slash_commands.c \
+    $(LIBDIR)/ui/recap_command.c \
     $(LIBDIR)/ui/task_commands.c \
     $(LIBDIR)/ui/agent_commands.c \
     $(LIBDIR)/ui/goal_commands.c \
@@ -118,7 +119,8 @@ LIB_UTIL_SOURCES := \
     $(LIBDIR)/util/project_scope.c \
     $(LIBDIR)/util/context_retriever.c \
     $(LIBDIR)/util/executable_path.c \
-    $(LIBDIR)/util/process_spawn.c
+    $(LIBDIR)/util/process_spawn.c \
+    $(LIBDIR)/util/stdin_reader.c
 
 # PDF module
 LIB_PDF_SOURCES := $(LIBDIR)/pdf/pdf_extractor.c

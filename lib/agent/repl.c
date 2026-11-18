@@ -30,6 +30,7 @@
 static volatile int g_repl_running = 1;
 static AgentSession* g_repl_session = NULL;
 static char* g_current_prompt = NULL;
+static bool g_json_mode = false;
 
 static void repl_line_callback(char* line);
 
@@ -39,6 +40,7 @@ static char* repl_get_prompt(void) {
 }
 
 static void repl_clear_prompt_area(void) {
+    if (g_json_mode) return;
     printf(TERM_CLEAR_LINE);
     printf("\033[A" TERM_CLEAR_LINE);
     status_line_clear_rendered();
@@ -47,7 +49,7 @@ static void repl_clear_prompt_area(void) {
 
 static void repl_install_prompt(void) {
     status_line_render_info();
-    printf("\n");
+    if (!g_json_mode) printf("\n");
     free(g_current_prompt);
     g_current_prompt = repl_get_prompt();
     rl_callback_handler_install(g_current_prompt, repl_line_callback);
@@ -71,14 +73,18 @@ static void repl_update_agent_status(SubagentManager *mgr) {
 
 static void repl_line_callback(char* line) {
     if (line == NULL) {
-        printf("\n");
+        if (!g_json_mode) printf("\n");
         g_repl_running = 0;
         rl_callback_handler_remove();
         return;
     }
 
     if (strcmp(line, "quit") == 0 || strcmp(line, "exit") == 0) {
-        printf("Goodbye!\n");
+        if (g_json_mode) {
+            fprintf(stderr, "Goodbye!\n");
+        } else {
+            printf("Goodbye!\n");
+        }
         free(line);
         g_repl_running = 0;
         rl_callback_handler_remove();
@@ -92,14 +98,13 @@ static void repl_line_callback(char* line) {
 
     add_history(line);
 
-    if (line[0] == '/') {
-        if (slash_command_dispatch(line, g_repl_session) == 0) {
-            free(line);
-            return;
-        }
+    if (!repl_should_forward_to_llm(line)) {
+        slash_command_dispatch(line, g_repl_session);
+        free(line);
+        return;
     }
 
-    printf("\n");
+    if (!g_json_mode) printf("\n");
     int result = session_process_message(g_repl_session, line);
     if (result == SESSION_CONTEXT_FULL) {
         fprintf(stderr, "\nContext window full. Try /compact or start a new session.\n");
@@ -170,9 +175,13 @@ static void process_pending_notifications(AgentSession* session) {
 }
 
 int repl_run_session(AgentSession* session, bool json_mode) {
-    (void)json_mode;
     g_repl_session = session;
     g_repl_running = 1;
+    g_json_mode = json_mode;
+
+    if (json_mode) {
+        rl_outstream = stderr;
+    }
 
     if (interrupt_init() != 0) {
         fprintf(stderr, "Warning: Failed to initialize interrupt handling\n");

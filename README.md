@@ -69,8 +69,11 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 # One-shot autonomous mode
 ./scaffold "build a todo app with React and Express"
 
-# Pipe a spec file
+# Pipe a spec file (entire stdin becomes the message)
 cat SPEC.md | ./scaffold
+
+# Combine a piped file with an inline instruction (arg + newlines + stdin)
+cat SPEC.md | ./scaffold "implement this spec"
 
 # Select a specific model
 ./scaffold --model gpt-4o "build a blog with Next.js"

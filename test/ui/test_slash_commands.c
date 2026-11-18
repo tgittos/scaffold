@@ -1,7 +1,10 @@
 #include "../../test/unity/unity.h"
 #include "ui/slash_commands.h"
+#include <stdbool.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 /* Track which handler was called and with what args */
 static int g_handler_called;
@@ -65,8 +68,17 @@ void test_dispatch_strips_leading_spaces(void) {
 
 void test_dispatch_unknown_command(void) {
     slash_command_register("known", "desc", mock_handler_a);
-    TEST_ASSERT_EQUAL_INT(-1, slash_command_dispatch("/unknown", NULL));
+    TEST_ASSERT_EQUAL_INT(SLASH_NOT_FOUND, slash_command_dispatch("/unknown", NULL));
     TEST_ASSERT_EQUAL_INT(0, g_handler_called);
+}
+
+void test_handler_error_not_forwarded(void) {
+    /* Lines starting with '/' are never forwarded to the LLM,
+     * regardless of dispatch result. */
+    TEST_ASSERT_FALSE(repl_should_forward_to_llm("/memory bad"));
+    TEST_ASSERT_FALSE(repl_should_forward_to_llm("/unknown"));
+    TEST_ASSERT_TRUE(repl_should_forward_to_llm("hello world"));
+    TEST_ASSERT_FALSE(repl_should_forward_to_llm(NULL));
 }
 
 void test_dispatch_null_line(void) {
@@ -91,7 +103,7 @@ void test_dispatch_correct_handler(void) {
 void test_dispatch_prefix_not_matched(void) {
     slash_command_register("foo", "desc", mock_handler_a);
     /* "/foobar" should NOT match "/foo" — requires word boundary */
-    TEST_ASSERT_EQUAL_INT(-1, slash_command_dispatch("/foobar", NULL));
+    TEST_ASSERT_EQUAL_INT(SLASH_NOT_FOUND, slash_command_dispatch("/foobar", NULL));
     TEST_ASSERT_EQUAL_INT(0, g_handler_called);
 }
 
@@ -125,11 +137,41 @@ void test_cleanup_resets(void) {
     TEST_ASSERT_EQUAL_INT(0, slash_command_dispatch("/cmd", NULL));
 
     slash_commands_cleanup();
-    TEST_ASSERT_EQUAL_INT(-1, slash_command_dispatch("/cmd", NULL));
+    TEST_ASSERT_EQUAL_INT(SLASH_NOT_FOUND, slash_command_dispatch("/cmd", NULL));
 }
 
 void test_empty_registry(void) {
-    TEST_ASSERT_EQUAL_INT(-1, slash_command_dispatch("/anything", NULL));
+    TEST_ASSERT_EQUAL_INT(SLASH_NOT_FOUND, slash_command_dispatch("/anything", NULL));
+}
+
+/* Unknown command with args: error must name only the command token, not the args */
+void test_unknown_command_message_first_token_only(void) {
+    /* Redirect stderr to a temp file to capture the error message */
+    char path[] = "/tmp/test_slash_stderr.XXXXXX";
+    int fd = mkstemp(path);
+    TEST_ASSERT_TRUE(fd >= 0);
+    fflush(stderr);
+    int saved = dup(STDERR_FILENO);
+    dup2(fd, STDERR_FILENO);
+    close(fd);
+
+    slash_command_dispatch("/foo bar baz", NULL);
+
+    fflush(stderr);
+    dup2(saved, STDERR_FILENO);
+    close(saved);
+
+    FILE *in = fopen(path, "r");
+    TEST_ASSERT_NOT_NULL(in);
+    char captured[512] = {0};
+    size_t n = fread(captured, 1, sizeof(captured) - 1, in);
+    captured[n] = '\0';
+    fclose(in);
+    remove(path);
+
+    TEST_ASSERT_NOT_NULL(strstr(captured, "/foo"));
+    TEST_ASSERT_NULL(strstr(captured, "bar"));
+    TEST_ASSERT_NULL(strstr(captured, "baz"));
 }
 
 int main(void) {
@@ -139,6 +181,7 @@ int main(void) {
     RUN_TEST(test_dispatch_with_args);
     RUN_TEST(test_dispatch_strips_leading_spaces);
     RUN_TEST(test_dispatch_unknown_command);
+    RUN_TEST(test_handler_error_not_forwarded);
     RUN_TEST(test_dispatch_null_line);
     RUN_TEST(test_dispatch_no_slash_prefix);
     RUN_TEST(test_dispatch_correct_handler);
@@ -148,6 +191,7 @@ int main(void) {
     RUN_TEST(test_register_overflow);
     RUN_TEST(test_cleanup_resets);
     RUN_TEST(test_empty_registry);
+    RUN_TEST(test_unknown_command_message_first_token_only);
 
     return UNITY_END();
 }
