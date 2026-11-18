@@ -249,6 +249,45 @@ void test_goal_status_not_found(void) {
  * start_goal (validation only — supervisor spawn requires fork/exec)
  * ======================================================================== */
 
+/* When a PLANNING goal already has actions, start_goal must transition it to
+ * ACTIVE immediately so the supervisor spawns with --phase execute instead of
+ * running a redundant second plan pass. */
+void test_start_goal_with_actions_skips_plan(void) {
+    char goal_id[40];
+    create_test_goal(goal_id);
+    /* Goal is in PLANNING status (default from goal_store_insert) */
+
+    /* Pre-populate an action — simulates plan already done */
+    char action_id[40];
+    action_store_insert(as, goal_id, NULL, "Phase 1",
+                        "[]", "[]", true, NULL, action_id);
+
+    char args[128];
+    snprintf(args, sizeof(args), "{\"goal_id\":\"%s\"}", goal_id);
+    ToolCall tc = make_tc("sg_act", "start_goal", args);
+    ToolResult tr = {0};
+
+    TEST_ASSERT_EQUAL(0, execute_start_goal(&tc, &tr));
+
+    /* Goal must be ACTIVE — that is what causes orchestrator_spawn_supervisor
+     * to pass --phase execute (it uses PLANNING→"plan", else→"execute"). */
+    Goal *goal = goal_store_get(gs, goal_id);
+    TEST_ASSERT_NOT_NULL(goal);
+    TEST_ASSERT_EQUAL(GOAL_STATUS_ACTIVE, goal->status);
+    goal_free(goal);
+
+    /* Tool must report success and status="active" */
+    cJSON *resp = parse_result(&tr);
+    TEST_ASSERT_NOT_NULL(resp);
+    TEST_ASSERT_TRUE(cJSON_IsTrue(cJSON_GetObjectItem(resp, "success")));
+    TEST_ASSERT_EQUAL_STRING("active",
+        cJSON_GetStringValue(cJSON_GetObjectItem(resp, "status")));
+
+    cJSON_Delete(resp);
+    free_tc(&tc);
+    free_tr(&tr);
+}
+
 void test_start_goal_wrong_status(void) {
     char goal_id[40];
     create_test_goal(goal_id);
@@ -394,7 +433,12 @@ void test_cancel_goal_not_found(void) {
  * Runner
  * ======================================================================== */
 
-int main(void) {
+int main(int argc, char **argv) {
+    (void)argv;
+    /* Spawned agents exec this test binary with agent flags; exit as a failed launch. */
+    if (argc > 1) {
+        return 127;
+    }
     UNITY_BEGIN();
 
     /* execute_plan */
@@ -409,7 +453,8 @@ int main(void) {
     RUN_TEST(test_goal_status);
     RUN_TEST(test_goal_status_not_found);
 
-    /* start_goal (validation only) */
+    /* start_goal */
+    RUN_TEST(test_start_goal_with_actions_skips_plan);
     RUN_TEST(test_start_goal_wrong_status);
     RUN_TEST(test_start_goal_not_found);
 

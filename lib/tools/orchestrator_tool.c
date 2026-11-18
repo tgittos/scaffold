@@ -322,6 +322,7 @@ int execute_start_goal(const ToolCall *tc, ToolResult *result) {
     }
 
     goal_store_t *gs = services_get_goal_store(g_services);
+    action_store_t *as = services_get_action_store(g_services);
     if (!gs) {
         tool_result_set_error(result, "Goal store not available");
         free(goal_id);
@@ -353,15 +354,28 @@ int execute_start_goal(const ToolCall *tc, ToolResult *result) {
     }
 
     GoalStatus original_status = goal->status;
+    goal_free(goal);
+    goal = NULL;
 
-    /* PAUSED goals resume as ACTIVE (they were previously planned).
-     * PLANNING goals stay PLANNING — the planner phase will transition
-     * them to ACTIVE after plan_is_complete() fires. */
-    if (original_status == GOAL_STATUS_PAUSED) {
+    /* Determine if actions already exist for this goal.  When a PLANNING goal
+     * has actions (e.g. the plan was done in a prior session), skip the plan
+     * phase entirely: set it ACTIVE now so orchestrator_spawn_supervisor will
+     * pass --phase execute and avoid a redundant second decomposition. */
+    bool has_actions = false;
+    if (original_status == GOAL_STATUS_PLANNING && as != NULL) {
+        size_t action_count = 0;
+        Action **existing = action_store_list_by_goal(as, goal_id, &action_count);
+        if (existing != NULL) action_free_list(existing, action_count);
+        has_actions = (action_count > 0);
+    }
+
+    /* PAUSED goals or PLANNING goals that already have actions resume as ACTIVE.
+     * Fresh PLANNING goals (no actions yet) stay PLANNING so the supervisor
+     * starts in plan phase and builds the action list. */
+    if (original_status == GOAL_STATUS_PAUSED || has_actions) {
         int rc = goal_store_update_status(gs, goal_id, GOAL_STATUS_ACTIVE);
         if (rc != 0) {
             tool_result_set_error(result, "Failed to activate goal");
-            goal_free(goal);
             free(goal_id);
             return 0;
         }
@@ -370,15 +384,13 @@ int execute_start_goal(const ToolCall *tc, ToolResult *result) {
     int rc = orchestrator_spawn_supervisor(gs, goal_id);
     if (rc != 0) {
         tool_result_set_error(result, "Failed to spawn supervisor");
-        if (original_status == GOAL_STATUS_PAUSED)
+        if (original_status == GOAL_STATUS_PAUSED || has_actions)
             goal_store_update_status(gs, goal_id, original_status);
-        goal_free(goal);
         free(goal_id);
         return 0;
     }
 
     /* Re-read to get the updated PID and current status */
-    goal_free(goal);
     goal = goal_store_get(gs, goal_id);
 
     const char *status_str = goal ? goal_status_to_string(goal->status) : "unknown";

@@ -378,8 +378,13 @@ int execute_goap_create_actions(const ToolCall *tc, ToolResult *result) {
         return 0;
     }
 
-    cJSON *ids = cJSON_CreateArray();
-    int failed = 0;
+    /* Load existing actions so we can detect duplicate descriptions. */
+    size_t existing_count = 0;
+    Action **existing_actions = action_store_list_by_goal(as, goal_id, &existing_count);
+
+    cJSON *ids  = cJSON_CreateArray();
+    cJSON *dups = cJSON_CreateArray();
+    int failed  = 0;
 
     cJSON *action_obj;
     cJSON_ArrayForEach(action_obj, actions_arr) {
@@ -408,6 +413,22 @@ int execute_goap_create_actions(const ToolCall *tc, ToolResult *result) {
             continue;
         }
 
+        /* Reject duplicate: description already exists for this goal. */
+        bool is_dup = false;
+        for (size_t ei = 0; ei < existing_count; ei++) {
+            if (existing_actions[ei]->description != NULL &&
+                strcmp(existing_actions[ei]->description, desc) == 0) {
+                is_dup = true;
+                break;
+            }
+        }
+        if (is_dup) {
+            cJSON_AddItemToArray(dups, cJSON_CreateString(desc));
+            free(precond_str);
+            free(effects_str);
+            continue;
+        }
+
         char out_id[40] = {0};
         int rc = action_store_insert(as, goal_id, parent, desc,
                                      precond_str, effects_str,
@@ -422,8 +443,12 @@ int execute_goap_create_actions(const ToolCall *tc, ToolResult *result) {
         free(effects_str);
     }
 
-    int created = cJSON_GetArraySize(ids);
-    bool ok = (created > 0 || failed == 0);
+    if (existing_actions != NULL)
+        action_free_list(existing_actions, existing_count);
+
+    int created   = cJSON_GetArraySize(ids);
+    int dup_count = cJSON_GetArraySize(dups);
+    bool ok = (created > 0 || (failed == 0 && dup_count == 0));
 
     cJSON *json = cJSON_CreateObject();
     if (ok)
@@ -434,6 +459,28 @@ int execute_goap_create_actions(const ToolCall *tc, ToolResult *result) {
     cJSON_AddNumberToObject(json, "created", created);
     if (failed > 0)
         cJSON_AddNumberToObject(json, "failed", failed);
+    if (dup_count > 0) {
+        cJSON_AddItemToObject(json, "duplicates", dups);
+        /* Build a human-readable warning so the agent sees the problem. */
+        char warn_buf[512];
+        int wlen = snprintf(warn_buf, sizeof(warn_buf),
+            "%d action(s) skipped — description already exists: ", dup_count);
+        int first = 1;
+        cJSON *dup_arr = cJSON_GetObjectItem(json, "duplicates");
+        cJSON *d;
+        cJSON_ArrayForEach(d, dup_arr) {
+            const char *s = cJSON_GetStringValue(d);
+            if (s != NULL && wlen < (int)sizeof(warn_buf) - 2) {
+                if (!first)
+                    wlen += snprintf(warn_buf + wlen, sizeof(warn_buf) - (size_t)wlen, ", ");
+                wlen += snprintf(warn_buf + wlen, sizeof(warn_buf) - (size_t)wlen, "\"%s\"", s);
+                first = 0;
+            }
+        }
+        cJSON_AddStringToObject(json, "warning", warn_buf);
+    } else {
+        cJSON_Delete(dups);
+    }
 
     result->result = cJSON_PrintUnformatted(json);
     result->success = ok ? 1 : 0;

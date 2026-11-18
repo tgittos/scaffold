@@ -28,22 +28,57 @@ static void supervisor_signal_handler(int sig) {
 /**
  * Build initial message for the PLAN phase.
  * Instructs LLM to research, decompose into actions, and save a plan document.
+ * Lists any existing actions so the model can extend rather than duplicate.
  * Caller owns the returned string.
  */
 static char *build_planner_message(AgentSession *session, const char *goal_id) {
     goal_store_t *gs = services_get_goal_store(session->services);
+    action_store_t *as = services_get_action_store(session->services);
     if (gs == NULL) return NULL;
 
     Goal *goal = goal_store_get(gs, goal_id);
     if (goal == NULL) return NULL;
 
+    /* Collect any existing actions so the planner can extend them without
+     * creating duplicates. */
+    size_t existing_count = 0;
+    Action **existing = NULL;
+    if (as != NULL)
+        existing = action_store_list_by_goal(as, goal_id, &existing_count);
+
+    /* Build the existing-actions section (empty string when none). */
+    size_t existing_section_len = 0;
+    char *existing_section = NULL;
+    if (existing_count > 0) {
+        size_t sec_size = 128 + existing_count * 256;
+        existing_section = malloc(sec_size);
+        if (existing_section != NULL) {
+            int w = snprintf(existing_section, sec_size,
+                "\nExisting actions (%zu already created — do NOT recreate these):\n",
+                existing_count);
+            for (size_t i = 0; i < existing_count && w < (int)sec_size - 2; i++) {
+                int n = snprintf(existing_section + w, sec_size - (size_t)w,
+                    "- %s\n",
+                    existing[i]->description ? existing[i]->description : "(no description)");
+                if (n > 0) w += n;
+            }
+            existing_section_len = (size_t)w;
+        }
+    }
+    if (existing != NULL) action_free_list(existing, existing_count);
+
     size_t buf_size = 2048 + strlen(goal->name) + strlen(goal_id)
         + (goal->description ? strlen(goal->description) : 0)
-        + (goal->goal_state ? strlen(goal->goal_state) : 0);
+        + (goal->goal_state ? strlen(goal->goal_state) : 0)
+        + existing_section_len;
     char *msg = malloc(buf_size);
-    if (msg == NULL) { goal_free(goal); return NULL; }
+    if (msg == NULL) {
+        goal_free(goal);
+        free(existing_section);
+        return NULL;
+    }
 
-    snprintf(msg, buf_size,
+    int written = snprintf(msg, buf_size,
         "You are the PLANNER for goal \"%s\" (ID: %s).\n\n"
         "Description: %s\n\n"
         "Goal state (acceptance criteria):\n%s\n\n"
@@ -55,6 +90,13 @@ static char *build_planner_message(AgentSession *session, const char *goal_id) {
         goal->name, goal_id,
         goal->description ? goal->description : "(none)",
         goal->goal_state ? goal->goal_state : "{}");
+
+    if (existing_section != NULL && written > 0 && (size_t)written < buf_size) {
+        strncat(msg, existing_section, buf_size - (size_t)written - 1);
+        free(existing_section);
+    } else {
+        free(existing_section);
+    }
 
     goal_free(goal);
     return msg;
@@ -333,8 +375,9 @@ static int handle_context_full_exit(AgentSession *session, const char *goal_id,
 
 /**
  * Phase-aware completion check.
- * Plan phase: plan_is_complete → transition to ACTIVE.
- * Execute phase: goal_is_complete → mark COMPLETED.
+ * Plan phase: plan_is_complete → set goal ACTIVE, return SUPERVISOR_EXIT_COMPLETE
+ *   (caller continues into execute in the same process).
+ * Execute phase: goal_is_complete → mark COMPLETED, return SUPERVISOR_EXIT_COMPLETE.
  * Returns SUPERVISOR_EXIT_COMPLETE when done, -1 to continue.
  */
 static int check_phase_completion(AgentSession *session, const char *goal_id,
@@ -343,7 +386,7 @@ static int check_phase_completion(AgentSession *session, const char *goal_id,
 
     if (phase == SUPERVISOR_PHASE_PLAN) {
         if (plan_is_complete(session, goal_id)) {
-            LOG_INFO("Supervisor: plan complete for goal %s, transitioning to ACTIVE", goal_id);
+            LOG_INFO("Supervisor: plan complete for goal %s, activating", goal_id);
             if (gs != NULL)
                 goal_store_update_status(gs, goal_id, GOAL_STATUS_ACTIVE);
             return SUPERVISOR_EXIT_COMPLETE;
@@ -371,105 +414,140 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
     sigaction(SIGTERM, &sa, NULL);
     sigaction(SIGINT, &sa, NULL);
 
-    LOG_INFO("Supervisor started for goal %s (phase=%s)", goal_id,
-                 phase == SUPERVISOR_PHASE_PLAN ? "plan" : "execute");
+    /*
+     * Phase loop: run PLAN then, in the same process, continue as EXECUTE.
+     * When the plan phase completes, check_phase_completion sets the goal
+     * ACTIVE and returns SUPERVISOR_EXIT_COMPLETE.  Instead of returning to
+     * the OS we simply advance `phase` and loop — one decomposition, one
+     * supervisor process.
+     */
+    for (;;) {
+        LOG_INFO("Supervisor started for goal %s (phase=%s)", goal_id,
+                     phase == SUPERVISOR_PHASE_PLAN ? "plan" : "execute");
 
-    /* Only recover orphaned actions for executor phase */
-    if (phase == SUPERVISOR_PHASE_EXECUTE) {
-        int orphans = supervisor_recover_orphaned_actions(session->services, goal_id);
-        if (orphans > 0) {
-            LOG_INFO("Supervisor: recovered %d orphaned actions", orphans);
+        /* Recover orphaned running actions at the start of execute phase. */
+        if (phase == SUPERVISOR_PHASE_EXECUTE) {
+            int orphans = supervisor_recover_orphaned_actions(session->services, goal_id);
+            if (orphans > 0) {
+                LOG_INFO("Supervisor: recovered %d orphaned actions", orphans);
+            }
         }
-    }
 
-    char *initial_msg = (phase == SUPERVISOR_PHASE_PLAN)
-        ? build_planner_message(session, goal_id)
-        : build_executor_message(session, goal_id);
+        char *initial_msg = (phase == SUPERVISOR_PHASE_PLAN)
+            ? build_planner_message(session, goal_id)
+            : build_executor_message(session, goal_id);
 
-    if (initial_msg == NULL) {
-        fprintf(stderr, "Supervisor: failed to build initial message for goal %s\n", goal_id);
-        return SUPERVISOR_EXIT_ERROR;
-    }
+        if (initial_msg == NULL) {
+            fprintf(stderr, "Supervisor: failed to build initial message for goal %s\n", goal_id);
+            return SUPERVISOR_EXIT_ERROR;
+        }
 
-    int rc = session_process_message(session, initial_msg);
-    free(initial_msg);
+        int rc = session_process_message(session, initial_msg);
+        free(initial_msg);
 
-    if (rc == SESSION_CONTEXT_FULL) {
-        return handle_context_full_exit(session, goal_id, phase);
-    }
+        if (rc == SESSION_CONTEXT_FULL) {
+            return handle_context_full_exit(session, goal_id, phase);
+        }
 
-    if (rc != 0) {
-        fprintf(stderr, "Supervisor: initial session_process_message failed (%d)\n", rc);
-        return SUPERVISOR_EXIT_ERROR;
-    }
+        if (rc != 0) {
+            fprintf(stderr, "Supervisor: initial session_process_message failed (%d)\n", rc);
+            return SUPERVISOR_EXIT_ERROR;
+        }
 
-    int completion = check_phase_completion(session, goal_id, phase);
-    if (completion == SUPERVISOR_EXIT_COMPLETE) {
-        LOG_INFO("Supervisor: phase complete after initial processing for goal %s", goal_id);
-        return SUPERVISOR_EXIT_COMPLETE;
-    }
+        int completion = check_phase_completion(session, goal_id, phase);
+        if (completion == SUPERVISOR_EXIT_COMPLETE) {
+            if (phase == SUPERVISOR_PHASE_PLAN) {
+                /* Plan done in one shot — continue as executor. */
+                LOG_INFO("Supervisor: plan complete (initial pass), continuing as executor for goal %s",
+                         goal_id);
+                phase = SUPERVISOR_PHASE_EXECUTE;
+                continue;
+            }
+            return SUPERVISOR_EXIT_COMPLETE;
+        }
 
-    int notify_fd = -1;
-    if (session->message_poller != NULL) {
-        notify_fd = message_poller_get_notify_fd(session->message_poller);
-    }
+        int notify_fd = -1;
+        if (session->message_poller != NULL) {
+            notify_fd = message_poller_get_notify_fd(session->message_poller);
+        }
 
-    int consecutive_errors = 0;
-    /* Single failures may be transient notification issues; give up after 3 */
-    const int max_consecutive_errors = 3;
+        int consecutive_errors = 0;
+        /* Single failures may be transient notification issues; give up after 3 */
+        const int max_consecutive_errors = 3;
+        bool plan_phase_complete = false;
 
-    while (g_supervisor_running) {
-        rc = 0;  /* Reset per iteration to avoid stale context-full signals */
-        fd_set read_fds;
-        int max_fd = rebuild_fd_set(&read_fds, notify_fd);
+        while (g_supervisor_running) {
+            rc = 0;  /* Reset per iteration to avoid stale context-full signals */
+            fd_set read_fds;
+            int max_fd = rebuild_fd_set(&read_fds, notify_fd);
 
-        struct timeval timeout;
-        timeout.tv_sec = 5;
-        timeout.tv_usec = 0;
+            struct timeval timeout;
+            timeout.tv_sec = 5;
+            timeout.tv_usec = 0;
 
-        int ready = select(max_fd + 1, &read_fds, NULL, NULL, &timeout);
+            int ready = select(max_fd + 1, &read_fds, NULL, NULL, &timeout);
 
-        if (ready < 0) {
-            if (!g_supervisor_running) break;
+            if (ready < 0) {
+                if (!g_supervisor_running) break;
+                continue;
+            }
+
+            int changes = subagent_poll_all(&session->subagent_manager);
+            if (changes > 0) {
+                LOG_DEBUG("Supervisor: %d subagent state changes detected", changes);
+            }
+
+            if (notify_fd >= 0 && ready > 0 && FD_ISSET(notify_fd, &read_fds)) {
+                message_poller_clear_notification(session->message_poller);
+                rc = process_notifications(session);
+            }
+
+            /* On timeout with subagent changes, check for notifications
+             * that arrived between the poller cycle and the select wake */
+            if (changes > 0 && !(notify_fd >= 0 && ready > 0 &&
+                                 FD_ISSET(notify_fd, &read_fds))) {
+                rc = process_notifications(session);
+            }
+
+            if (rc == SUPERVISOR_EXIT_CONTEXT) {
+                return handle_context_full_exit(session, goal_id, phase);
+            }
+            if (rc != 0) {
+                consecutive_errors++;
+                if (consecutive_errors >= max_consecutive_errors) {
+                    fprintf(stderr, "Supervisor: too many consecutive errors, exiting\n");
+                    return SUPERVISOR_EXIT_ERROR;
+                }
+            } else {
+                consecutive_errors = 0;
+            }
+
+            completion = check_phase_completion(session, goal_id, phase);
+            if (completion == SUPERVISOR_EXIT_COMPLETE) {
+                if (phase == SUPERVISOR_PHASE_PLAN) {
+                    /* Break inner loop to transition to execute phase. */
+                    plan_phase_complete = true;
+                    break;
+                }
+                return SUPERVISOR_EXIT_COMPLETE;
+            }
+        }
+
+        if (!g_supervisor_running) {
+            LOG_INFO("Supervisor: shutting down (signal received)");
+            return SUPERVISOR_EXIT_ERROR;
+        }
+
+        if (plan_phase_complete) {
+            LOG_INFO("Supervisor: plan complete (event loop), continuing as executor for goal %s",
+                     goal_id);
+            phase = SUPERVISOR_PHASE_EXECUTE;
             continue;
         }
 
-        int changes = subagent_poll_all(&session->subagent_manager);
-        if (changes > 0) {
-            LOG_DEBUG("Supervisor: %d subagent state changes detected", changes);
-        }
-
-        if (notify_fd >= 0 && ready > 0 && FD_ISSET(notify_fd, &read_fds)) {
-            message_poller_clear_notification(session->message_poller);
-            rc = process_notifications(session);
-        }
-
-        /* On timeout with subagent changes, check for notifications
-         * that arrived between the poller cycle and the select wake */
-        if (changes > 0 && !(notify_fd >= 0 && ready > 0 &&
-                             FD_ISSET(notify_fd, &read_fds))) {
-            rc = process_notifications(session);
-        }
-
-        if (rc == SUPERVISOR_EXIT_CONTEXT) {
-            return handle_context_full_exit(session, goal_id, phase);
-        }
-        if (rc != 0) {
-            consecutive_errors++;
-            if (consecutive_errors >= max_consecutive_errors) {
-                fprintf(stderr, "Supervisor: too many consecutive errors, exiting\n");
-                return SUPERVISOR_EXIT_ERROR;
-            }
-        } else {
-            consecutive_errors = 0;
-        }
-
-        completion = check_phase_completion(session, goal_id, phase);
-        if (completion == SUPERVISOR_EXIT_COMPLETE) {
-            return SUPERVISOR_EXIT_COMPLETE;
-        }
+        /* Should only reach here on signal exit (handled above) */
+        break;
     }
 
-    LOG_INFO("Supervisor: shutting down (signal received)");
     return SUPERVISOR_EXIT_ERROR;
 }

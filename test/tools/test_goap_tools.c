@@ -356,6 +356,52 @@ void test_create_actions_with_parent(void) {
     free_tr(&tr);
 }
 
+/* A batch that includes a description already in the store must insert 0 for
+ * that action and return a "duplicates" array naming the offenders. */
+void test_create_actions_rejects_duplicate_description(void) {
+    char goal_id[40];
+    create_test_goal(goal_id);
+
+    /* Pre-insert an action */
+    char existing_id[40];
+    action_store_insert(as, goal_id, NULL, "Set up infra",
+                        "[]", "[]", false, NULL, existing_id);
+
+    /* Batch: one duplicate, one new */
+    char args[1024];
+    snprintf(args, sizeof(args),
+        "{\"goal_id\":\"%s\",\"actions\":["
+        "{\"description\":\"Set up infra\",\"is_compound\":false}"
+        ",{\"description\":\"Build backend\",\"is_compound\":false}"
+        "]}", goal_id);
+
+    ToolCall tc = make_tc("dup1", "goap_create_actions", args);
+    ToolResult tr = {0};
+
+    TEST_ASSERT_EQUAL(0, execute_goap_create_actions(&tc, &tr));
+
+    cJSON *resp = parse_result(&tr);
+    TEST_ASSERT_NOT_NULL(resp);
+
+    /* 1 new action created, 1 duplicate skipped */
+    TEST_ASSERT_EQUAL(1, (int)cJSON_GetNumberValue(
+        cJSON_GetObjectItem(resp, "created")));
+
+    /* duplicates array must name the offending description */
+    cJSON *dups = cJSON_GetObjectItem(resp, "duplicates");
+    TEST_ASSERT_NOT_NULL(dups);
+    TEST_ASSERT_EQUAL(1, cJSON_GetArraySize(dups));
+    TEST_ASSERT_EQUAL_STRING("Set up infra",
+        cJSON_GetStringValue(cJSON_GetArrayItem(dups, 0)));
+
+    /* Tool still reports a warning/error so the agent sees it */
+    TEST_ASSERT_NOT_NULL(cJSON_GetObjectItem(resp, "warning"));
+
+    cJSON_Delete(resp);
+    free_tc(&tc);
+    free_tr(&tr);
+}
+
 /* ========================================================================
  * goap_list_actions
  * ======================================================================== */
@@ -996,6 +1042,7 @@ int main(int argc, char **argv) {
     RUN_TEST(test_create_actions_all_fail);
     RUN_TEST(test_create_actions_optional_effects);
     RUN_TEST(test_create_actions_with_parent);
+    RUN_TEST(test_create_actions_rejects_duplicate_description);
 
     /* goap_list_actions */
     RUN_TEST(test_list_actions);
