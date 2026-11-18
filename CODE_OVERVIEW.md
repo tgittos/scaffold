@@ -46,7 +46,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`conversation_state.c/h`** - Conversation history append helpers (assistant messages, tool results)
 - **`tool_batch_executor.c/h`** - Batch tool execution; explicitly dispatches MCP and plugin tools (schema-only registry entries); caps each result at `tool_result_max_bytes` (default 32768) keeping head and tail around a `[... N bytes omitted ...]` marker
 - **`tool_orchestration.c/h`** - Tool call deduplication and per-batch tracking
-- **`repl.c/h`** - Read-Eval-Print-Loop for interactive mode with readline, async processing, and periodic supervisor recovery
+- **`repl.c/h`** - Read-Eval-Print-Loop for interactive mode with readline, async processing, and periodic supervisor recovery. Lines starting with `/` are dispatched to slash commands and never forwarded to the LLM regardless of dispatch result.
 - **`async_executor.c/h`** - Non-blocking message processing using background thread with pipe notification; running flag and condition broadcast occur inside mutex to prevent signal loss
 - **`context_enhancement.c/h`** - Split prompt builder: returns `EnhancedPromptParts` with session-stable base prompt and per-request dynamic context (repo snapshot on first turn, todo state, mode, memories, context retrieval). `build_repo_snapshot()` gathers git metadata and directory tree; `build_directory_tree()` produces a depth-limited directory listing
 - **`recap.c/h`** - Startup recap and first-run greeting (one-shot LLM calls without history persistence)
@@ -144,12 +144,13 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`spinner.c/h`** - Pulsing spinner for tool execution visual feedback
 - **`output_formatter.c/h`** - Response formatting and display for LLM responses
 - **`json_output.c/h`** - JSON output mode for programmatic integration (--json flag)
-- **`slash_commands.c/h`** - Slash command registry and dispatch (`/help`, `/goals`, etc.)
+- **`slash_commands.c/h`** - Slash command registry and dispatch. Returns `SLASH_NOT_FOUND` (-2) for unknown commands (prints error; never forwarded to LLM). Exposes `repl_should_forward_to_llm` helper used by the REPL.
 - **`memory_commands.c/h`** - Interactive `/memory` slash commands for direct memory management
 - **`task_commands.c/h`** - `/tasks` command for viewing task store entries
 - **`agent_commands.c/h`** - `/agents` command for subagent and supervisor status
 - **`goal_commands.c/h`** - `/goals` command for GOAP goal listing and action tree display
-- **`model_commands.c/h`** - `/model` command for switching AI models
+- **`model_commands.c/h`** - `/model` command: no args shows usage, `list` shows tiers, `<name>` switches model
+- **`recap_command.c/h`** - `/recap` command; calls `session_generate_recap` to stream a conversation summary
 - **`mode_commands.c/h`** - `/mode` command for switching behavioral prompt modes
 - **`status_line.c/h`** - Status info line rendering (busy, agents, last response, context %/window, model name)
 
@@ -325,11 +326,11 @@ The test directory mirrors the source structure:
 - **`test_parallel_batch.c`** - Parallel batch execution tests
 
 #### `test/ui/` - UI Component Tests
-- **`test_slash_commands.c`** - Slash command registry tests
+- **`test_slash_commands.c`** - Slash command registry tests including SLASH_NOT_FOUND return and repl_should_forward_to_llm helper
 - **`test_agent_commands.c`** - /agents command tests
 - **`test_goal_commands.c`** - /goals command tests
 - **`test_mode_commands.c`** - /mode command tests
-- **`test_model_commands.c`** - /model command tests
+- **`test_model_commands.c`** - /model command tests (usage, list, model switching)
 - **`test_task_commands.c`** - /tasks command tests
 
 #### `test/updater/` - Updater Tests

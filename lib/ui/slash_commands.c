@@ -2,6 +2,7 @@
 #include "memory_commands.h"
 #include "mode_commands.h"
 #include "model_commands.h"
+#include "recap_command.h"
 #include "task_commands.h"
 #include "agent_commands.h"
 #include "goal_commands.h"
@@ -31,6 +32,7 @@ const SlashCommandInfo SLASH_COMMAND_TABLE[] = {
     {"help",    "Show available commands"},
     {"memory",  "Manage semantic memories"},
     {"model",   "Switch AI models"},
+    {"recap",   "Show a recap of recent conversation"},
     {"tasks",   "View and manage tasks"},
     {"mode",    "Switch behavioral mode"},
     {"agents",  "View subagent status"},
@@ -69,7 +71,12 @@ int slash_command_dispatch(const char *line, AgentSession *session) {
             return g_commands[i].handler(args, session);
         }
     }
-    return -1;
+    fprintf(stderr, "Unknown command '%s'. Type /help for commands.\n", line);
+    return SLASH_NOT_FOUND;
+}
+
+bool repl_should_forward_to_llm(const char *line) {
+    return line != NULL && line[0] != '/';
 }
 
 static int handle_help(const char *args, AgentSession *session) {
@@ -147,6 +154,7 @@ static const SlashCommandHandler g_builtin_handlers[] = {
     handle_help,
     process_memory_command,
     process_model_command,
+    process_recap_command,
     process_task_command,
     process_mode_command,
     process_agent_command,

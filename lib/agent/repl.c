@@ -98,11 +98,10 @@ static void repl_line_callback(char* line) {
 
     add_history(line);
 
-    if (line[0] == '/') {
-        if (slash_command_dispatch(line, g_repl_session) == 0) {
-            free(line);
-            return;
-        }
+    if (!repl_should_forward_to_llm(line)) {
+        slash_command_dispatch(line, g_repl_session);
+        free(line);
+        return;
     }
 
     printf("\n");

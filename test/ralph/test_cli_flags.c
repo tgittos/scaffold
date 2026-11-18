@@ -117,6 +117,7 @@ void test_help_lists_slash_commands(void) {
     TEST_ASSERT_NOT_NULL(output);
     TEST_ASSERT_NOT_NULL(strstr(output, "/goals"));
     TEST_ASSERT_NOT_NULL(strstr(output, "/model"));
+    TEST_ASSERT_NOT_NULL(strstr(output, "/recap"));
 }
 
 void test_help_tagline(void) {

@@ -1,5 +1,6 @@
 #include "../../test/unity/unity.h"
 #include "ui/slash_commands.h"
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -65,8 +66,17 @@ void test_dispatch_strips_leading_spaces(void) {
 
 void test_dispatch_unknown_command(void) {
     slash_command_register("known", "desc", mock_handler_a);
-    TEST_ASSERT_EQUAL_INT(-1, slash_command_dispatch("/unknown", NULL));
+    TEST_ASSERT_EQUAL_INT(SLASH_NOT_FOUND, slash_command_dispatch("/unknown", NULL));
     TEST_ASSERT_EQUAL_INT(0, g_handler_called);
+}
+
+void test_handler_error_not_forwarded(void) {
+    /* Lines starting with '/' are never forwarded to the LLM,
+     * regardless of dispatch result. */
+    TEST_ASSERT_FALSE(repl_should_forward_to_llm("/memory bad"));
+    TEST_ASSERT_FALSE(repl_should_forward_to_llm("/unknown"));
+    TEST_ASSERT_TRUE(repl_should_forward_to_llm("hello world"));
+    TEST_ASSERT_FALSE(repl_should_forward_to_llm(NULL));
 }
 
 void test_dispatch_null_line(void) {
@@ -91,7 +101,7 @@ void test_dispatch_correct_handler(void) {
 void test_dispatch_prefix_not_matched(void) {
     slash_command_register("foo", "desc", mock_handler_a);
     /* "/foobar" should NOT match "/foo" — requires word boundary */
-    TEST_ASSERT_EQUAL_INT(-1, slash_command_dispatch("/foobar", NULL));
+    TEST_ASSERT_EQUAL_INT(SLASH_NOT_FOUND, slash_command_dispatch("/foobar", NULL));
     TEST_ASSERT_EQUAL_INT(0, g_handler_called);
 }
 
@@ -125,11 +135,11 @@ void test_cleanup_resets(void) {
     TEST_ASSERT_EQUAL_INT(0, slash_command_dispatch("/cmd", NULL));
 
     slash_commands_cleanup();
-    TEST_ASSERT_EQUAL_INT(-1, slash_command_dispatch("/cmd", NULL));
+    TEST_ASSERT_EQUAL_INT(SLASH_NOT_FOUND, slash_command_dispatch("/cmd", NULL));
 }
 
 void test_empty_registry(void) {
-    TEST_ASSERT_EQUAL_INT(-1, slash_command_dispatch("/anything", NULL));
+    TEST_ASSERT_EQUAL_INT(SLASH_NOT_FOUND, slash_command_dispatch("/anything", NULL));
 }
 
 int main(void) {
@@ -139,6 +149,7 @@ int main(void) {
     RUN_TEST(test_dispatch_with_args);
     RUN_TEST(test_dispatch_strips_leading_spaces);
     RUN_TEST(test_dispatch_unknown_command);
+    RUN_TEST(test_handler_error_not_forwarded);
     RUN_TEST(test_dispatch_null_line);
     RUN_TEST(test_dispatch_no_slash_prefix);
     RUN_TEST(test_dispatch_correct_handler);

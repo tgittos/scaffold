@@ -25,6 +25,7 @@ LIB_UI_SOURCES := \
     $(LIBDIR)/ui/mode_commands.c \
     $(LIBDIR)/ui/model_commands.c \
     $(LIBDIR)/ui/slash_commands.c \
+    $(LIBDIR)/ui/recap_command.c \
     $(LIBDIR)/ui/task_commands.c \
     $(LIBDIR)/ui/agent_commands.c \
     $(LIBDIR)/ui/goal_commands.c \
