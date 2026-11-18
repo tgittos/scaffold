@@ -1,5 +1,6 @@
 #include "status_line.h"
 #include "output_formatter.h"
+#include "terminal_width.h"
 #include "../agent/prompt_mode.h"
 #include "../util/ansi_codes.h"
 #include <stdio.h>
@@ -220,32 +221,6 @@ void status_line_format_context(char *buf, size_t buf_size) {
     format_context(buf, buf_size, true);
 }
 
-/* 0 when unknown (no TTY and no $COLUMNS): rendering is then unclamped. */
-static int terminal_columns(void) {
-    struct winsize ws;
-    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0) {
-        return ws.ws_col;
-    }
-    const char *env = getenv("COLUMNS");
-    int cols = env ? atoi(env) : 0;
-    return cols > 0 ? cols : 0;
-}
-
-/* Terminal columns used by s: skips CSI escapes, counts UTF-8 code points. */
-static int visible_width(const char *s) {
-    int width = 0;
-    while (*s) {
-        if (s[0] == '\033' && s[1] == '[') {
-            s += 2;
-            while (*s && !(*s >= '@' && *s <= '~')) s++;
-            if (*s) s++;
-            continue;
-        }
-        if (((unsigned char)*s & 0xC0) != 0x80) width++;
-        s++;
-    }
-    return width;
-}
 
 void status_line_set_mode(int mode) {
     if (!g_status.initialized) return;
@@ -338,11 +313,11 @@ void status_line_render_info(void) {
     int cols = terminal_columns();
     if (cols > 0) {
         int budget = cols - 1;
-        int left_width = visible_width(left) + (left[0] ? 3 : 2);
-        if (left_width + visible_width(segment) > budget) {
+        int left_width = (int)visible_width(left) + (left[0] ? 3 : 2);
+        if (left_width + (int)visible_width(segment) > budget) {
             format_context(segment, sizeof(segment), false);
         }
-        if (left_width + visible_width(segment) > budget) {
+        if (left_width + (int)visible_width(segment) > budget) {
             segment[0] = '\0';
         }
     }

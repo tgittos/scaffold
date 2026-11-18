@@ -16,7 +16,7 @@ Application-specific code that uses the library layer. This is a thin wrapper ar
 - **`python_tool_files.c/h`** - Python file-based tool loading system (supports freeform tool invocation for tools with Match: directive; "Thread-safe: true" docstring directive marks tools that run concurrently within a batch; unmodified older shipped default tool files are refreshed from the embedded versions via `SHIPPED_DEFAULT_TOOLS` hashes)
 - **`python_extension.c/h`** - Tool extension interface for Python tools integration with lib/
 - **`http_python.c/h`** - Python extension for C HTTP client (`_ralph_http` module: get, post, download)
-- **`sys_python.c/h`** - Python extension for system info (`_ralph_sys` module: get_executable_path, get_app_home, get_config_int)
+- **`sys_python.c/h`** - Python extension for system info (`_ralph_sys` module: get_executable_path, get_app_home, get_config_int, progress — forwards a tool's live output line to the spinner's detail)
 
 ##### Python Default Tools (in `python_defaults/`)
 - **`read_file.py`** - Read file contents with line numbers, returns dict with content/total_lines/range
@@ -24,7 +24,7 @@ Application-specific code that uses the library layer. This is a thin wrapper ar
 - **`list_dir.py`** - List directory contents with filtering and ISO timestamps
 - **`search_files.py`** - Search files by content/pattern with optional context lines, matched_files, total_matches_found
 - **`apply_patch.py`** - Apply text patches using Codex-compatible block find-and-replace format; appends "run the relevant tests" hint to success details
-- **`shell.py`** - Shell command execution with timeout
+- **`shell.py`** - Shell command execution with timeout; streams output via `Popen` (one reader thread per pipe to avoid deadlock), reporting each line to `_ralph_sys.progress()` as it arrives while keeping returned stdout/stderr byte-identical to the previous blocking behavior
 - **`web_fetch.py`** - Fetch and process web content
 - **`pip.py`** - Package management: install pure-Python packages or list installed packages (action parameter: "install" or "list")
 - **`search_history.py`** - Search git history with structured output (operations: log, pickaxe, blame, diff)
@@ -141,8 +141,9 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`ui.h`** - Public UI API header
 - **`output.h`** - Output formatting header
 - **`terminal.c/h`** - Terminal abstraction with colors, ANSI escapes, and layout helpers
-- **`spinner.c/h`** - Pulsing spinner for tool execution visual feedback
-- **`output_formatter.c/h`** - Response formatting and display for LLM responses
+- **`terminal_width.c/h`** - Terminal width detection (`terminal_columns()`, 80 for non-TTY), `visible_width()`, and `tool_summary_budget()` for width-aware argument display; test hooks `terminal_set_columns_for_test()` and injectable clock support
+- **`spinner.c/h`** - Pulsing spinner for tool execution visual feedback; no-op on non-TTY stdout; shows elapsed seconds after 2s; shows a live detail line truncated to the width budget (`spinner_set_detail()`, thread-safe); injectable clock (`spinner_set_clock_for_test()`)
+- **`output_formatter.c/h`** - Response formatting and display for LLM responses; uses `tool_summary_budget()` for width-aware argument truncation; `format_batch_label()` for parallel tool batch labels
 - **`json_output.c/h`** - JSON output mode for programmatic integration (--json flag)
 - **`slash_commands.c/h`** - Slash command registry and dispatch. Returns `SLASH_NOT_FOUND` (-2) for unknown commands (prints error; never forwarded to LLM). Exposes `repl_should_forward_to_llm` helper used by the REPL.
 - **`memory_commands.c/h`** - Interactive `/memory` slash commands for direct memory management

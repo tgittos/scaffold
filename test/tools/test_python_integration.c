@@ -1,6 +1,7 @@
 #include "unity.h"
 #include "tools/python_tool.h"
 #include "tools/python_tool_files.h"
+#include "tools/sys_python.h"
 #include "lib/tools/tools_system.h"
 #include "util/app_home.h"
 #include "../test_fs_utils.h"
@@ -246,6 +247,53 @@ void test_python_stdlib_math(void) {
 
     cleanup_python_params(&params);
     cleanup_python_result(&result);
+}
+
+/* Capture buffer for the shell progress-hook test. */
+#define MAX_PROGRESS_LINES 16
+static char g_progress_lines[MAX_PROGRESS_LINES][256];
+static int g_progress_count = 0;
+
+static void capture_progress(const char *line) {
+    if (line != NULL && g_progress_count < MAX_PROGRESS_LINES) {
+        strncpy(g_progress_lines[g_progress_count], line, 255);
+        g_progress_lines[g_progress_count][255] = '\0';
+        g_progress_count++;
+    }
+}
+
+// Test that the shell tool streams output lines to the progress hook in order
+void test_shell_reports_progress_lines(void) {
+    TEST_ASSERT_EQUAL_INT(0, python_init_tool_files());
+    TEST_ASSERT_EQUAL_INT(0, python_load_tool_files());
+
+    g_progress_count = 0;
+    sys_python_set_progress_sink_for_test(capture_progress);
+
+    ToolCall call = {
+        .id = "shell-progress",
+        .name = "shell",
+        .arguments = "{\"command\": \"printf 'a\\nb\\n'\"}"
+    };
+    ToolResult result = {0};
+    TEST_ASSERT_EQUAL_INT(0, execute_python_file_tool_call(&call, &result));
+
+    sys_python_set_progress_sink_for_test(NULL);
+
+    TEST_ASSERT_EQUAL_INT_MESSAGE(2, g_progress_count,
+        "Shell tool must report exactly two progress lines for printf 'a\\nb\\n'");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("a", g_progress_lines[0],
+        "First progress line must be 'a'");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("b", g_progress_lines[1],
+        "Second progress line must be 'b'");
+
+    TEST_ASSERT_NOT_NULL(result.result);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(result.result, "a\\nb\\n"),
+        "Returned stdout must remain byte-identical ('a\\nb\\n')");
+
+    free(result.tool_call_id);
+    free(result.result);
+    python_cleanup_tool_files();
 }
 
 // Test that shell tool exit_code propagates to result->success
@@ -1499,6 +1547,7 @@ int main(void) {
     RUN_TEST(test_python_stdlib_json);
     RUN_TEST(test_python_stdlib_math);
     RUN_TEST(test_shell_tool_exit_code_propagates);
+    RUN_TEST(test_shell_reports_progress_lines);
     RUN_TEST(test_python_tool_docstring_parsing);
     RUN_TEST(test_sys_module_accessible);
     RUN_TEST(test_pip_version_key_ordering);

@@ -1,5 +1,6 @@
 #include "unity.h"
 #include "ui/output_formatter.h"
+#include "ui/terminal_width.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -560,12 +561,62 @@ void test_search_files_display(void) {
         true, "Found matches");
 
     // search_files with long pattern should truncate with ellipsis
-    // Pattern exceeds ARG_DISPLAY_MAX_LEN-10, so it should be truncated to 37 chars + "..."
+    // Pattern is wider than the terminal budget, so it is truncated and ends with "..."
     log_tool_execution_improved("search_files",
         "{\"path\": \"src/\", \"pattern\": \"this_is_a_very_long_pattern_that_should_be_truncated\"}",
         true, "Found matches");
 
     TEST_ASSERT_TRUE(1);
+}
+
+void test_summary_fits_terminal_120(void) {
+    printf("\n--- Testing 120-col terminal: long command shows in full ---\n");
+    terminal_set_columns_for_test(120);
+
+    /* 100-char command: at 120 cols the budget is well above 100, so no truncation. */
+    static const char *long_cmd =
+        "{\"command\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}";
+    /* strlen of command value = 102 chars, budget = 120 - 5 - 4 - 4 = 107 */
+    char *summary = extract_arg_summary("shell", long_cmd);
+    TEST_ASSERT_NOT_NULL_MESSAGE(summary, "extract_arg_summary must return non-NULL for a valid command");
+    /* The returned summary must be the full command without truncation (no "..."). */
+    TEST_ASSERT_NULL_MESSAGE(strstr(summary, "..."),
+        "At 120 cols a 100-char command must NOT be truncated");
+    free(summary);
+
+    terminal_set_columns_for_test(-1);
+}
+
+void test_summary_truncates_40(void) {
+    printf("\n--- Testing 40-col terminal: line truncated to fit ---\n");
+    terminal_set_columns_for_test(40);
+
+    static const char *long_cmd =
+        "{\"command\": \"find /usr -name '*.so' -exec ls -la {} \\\\; | grep lib | head -20 | sort | uniq\"}";
+    char *summary = extract_arg_summary("shell", long_cmd);
+    TEST_ASSERT_NOT_NULL_MESSAGE(summary, "extract_arg_summary must return non-NULL");
+    /* Must end with "..." (truncated). */
+    size_t len = strlen(summary);
+    TEST_ASSERT_TRUE_MESSAGE(len >= 3 && strcmp(summary + len - 3, "...") == 0,
+        "At 40 cols a long command must be truncated with \"...\"");
+    /* Visible length of the whole line must be <= 40. */
+    /* Line = \"✓ shell (summary)\" */
+    char line[512];
+    snprintf(line, sizeof(line), "\xe2\x9c\x93 shell (%s)", summary);
+    size_t vw = visible_width(line);
+    TEST_ASSERT_TRUE_MESSAGE(vw <= 40,
+        "Visible line width at 40 cols must not exceed 40");
+    free(summary);
+
+    terminal_set_columns_for_test(-1);
+}
+
+void test_batch_label_lists_names(void) {
+    printf("\n--- Testing batch label lists tool names ---\n");
+    char buf[128];
+    const char *names[] = { "shell", "write_file" };
+    format_batch_label(buf, sizeof(buf), names, 2);
+    TEST_ASSERT_EQUAL_STRING("shell, write_file", buf);
 }
 
 void test_task_tool_display(void) {
@@ -703,6 +754,11 @@ int main(void) {
     RUN_TEST(test_todowrite_display);
     RUN_TEST(test_search_files_display);
     RUN_TEST(test_task_tool_display);
+
+    // Width-aware display tests
+    RUN_TEST(test_summary_fits_terminal_120);
+    RUN_TEST(test_summary_truncates_40);
+    RUN_TEST(test_batch_label_lists_names);
 
     return UNITY_END();
 }

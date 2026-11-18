@@ -18,6 +18,7 @@ LIB_IPC_SOURCES := \
 # UI module
 LIB_UI_SOURCES := \
     $(LIBDIR)/ui/terminal.c \
+    $(LIBDIR)/ui/terminal_width.c \
     $(LIBDIR)/ui/spinner.c \
     $(LIBDIR)/ui/output_formatter.c \
     $(LIBDIR)/ui/json_output.c \
