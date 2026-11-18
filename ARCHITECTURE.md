@@ -1067,8 +1067,10 @@ graph TB
 | Memory | 100,000 | 16 | 200 | Long-term semantic memory |
 | Documents | 10,000 | 16 | 200 | PDF and document storage |
 
-### Memory Scopes
-Memory and conversation-history indices are per project. `project_scope_index_name()` (`lib/util/project_scope.c`) resolves the nearest ancestor of the working directory containing a `.git` entry, falling back to the working directory, and names the index `<prefix>_<basename>_<fnv1a64(root)>`. The memory tool and conversation tracker resolve their names once, when their services are set. Project memories go to `memory_<…>`; `remember` with `scope=user` writes `memory_user`, which every project shares. `recall_memories` searches both and merges by distance. History is stored in `conversations_<…>`, so the startup recap only covers the current project.
+### Memory and Todo Scopes
+Memory, conversation-history, and todo indices are all per project. `project_scope_index_name()` (`lib/util/project_scope.c`) resolves the nearest ancestor of the working directory containing a `.git` entry, falling back to the working directory, and names the index `<prefix>_<basename>_<fnv1a64(root)>`. The memory tool and conversation tracker resolve their names once, when their services are set. Project memories go to `memory_<…>`; `remember` with `scope=user` writes `memory_user`, which every project shares. `recall_memories` searches both and merges by distance. History is stored in `conversations_<…>`, so the startup recap only covers the current project.
+
+Todos are scoped via `todo_session_key()` (`lib/tools/todo_tool.c`), which calls `project_scope_index_name("todos", …)` on each store read/write. The session key is computed from the current working directory at the time of each call, so todos from one project are never visible in another. The `/tasks` slash command (`lib/ui/task_commands.c`) uses the same `todo_session_key()` for consistency.
 
 ## Key Features
 
