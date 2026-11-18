@@ -152,7 +152,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`model_commands.c/h`** - `/model` command: no args shows usage, `list` shows tiers, `<name>` switches model
 - **`recap_command.c/h`** - `/recap` command; calls `session_generate_recap` to stream a conversation summary
 - **`mode_commands.c/h`** - `/mode` command for switching behavioral prompt modes
-- **`status_line.c/h`** - Status info line rendering (busy, agents, last response, context %/window, model name)
+- **`status_line.c/h`** - Status info line rendering (busy, agents, last response, context %/window, model name). `status_line_render_info_oneshot()` writes a plain-text token/model footer to stderr for single-shot mode (no ANSI codes on non-TTY, silent in JSON mode).
 
 #### `lib/util/` - Generic Utilities
 - **`darray.h`** - Type-safe dynamic array macros (header-only)

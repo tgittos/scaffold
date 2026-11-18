@@ -181,12 +181,20 @@ int agent_run(Agent* agent) {
     }
 
     switch (agent->config.mode) {
-        case AGENT_MODE_SINGLE_SHOT:
+        case AGENT_MODE_SINGLE_SHOT: {
             if (agent->config.initial_message == NULL) {
                 return -1;
             }
             agent->session.polling_config.auto_poll_enabled = 0;
-            return session_process_message(&agent->session, agent->config.initial_message);
+            status_line_init();
+            status_line_set_model(agent->session.session_data.config.model,
+                                  agent->session.session_data.config.context_window);
+            int ss_result = session_process_message(&agent->session,
+                                                    agent->config.initial_message);
+            status_line_render_info_oneshot();
+            status_line_cleanup();
+            return ss_result;
+        }
 
         case AGENT_MODE_BACKGROUND: {
             if (agent->config.subagent_task == NULL) {
