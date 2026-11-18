@@ -98,7 +98,7 @@ void status_line_set_busy(const char *label) {
         g_status.activity_label[0] = '\0';
     }
     g_status.activity_start_time = time(NULL);
-    bool should_render = !get_json_output_mode();
+    bool should_render = !get_json_output_mode() && isatty(STDOUT_FILENO);
     if (should_render) {
         g_status.busy_rendered = true;
     }

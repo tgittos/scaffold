@@ -262,6 +262,34 @@ void test_render_too_narrow_drops_segment(void) {
     TEST_ASSERT_EQUAL_INT(1, count_char(out, '\n'));
 }
 
+/* When stdout is a file (not a TTY), set_busy and set_idle must produce
+ * no output — escape sequences must not be interleaved into piped output. */
+void test_set_busy_non_tty_no_output(void) {
+    /* capture_begin() redirects STDOUT_FILENO to a tmpfile, making isatty() false */
+    capture_begin();
+    status_line_set_busy("doing work");
+    const char *out = capture_end();
+    TEST_ASSERT_EQUAL_STRING("", out);
+}
+
+void test_set_idle_non_tty_no_output(void) {
+    capture_begin();
+    /* set_busy then set_idle: neither should write to the non-TTY stdout */
+    status_line_set_busy("work");
+    status_line_set_idle();
+    const char *out = capture_end();
+    TEST_ASSERT_EQUAL_STRING("", out);
+}
+
+void test_set_busy_json_mode_no_output(void) {
+    set_json_output_mode(true);
+    capture_begin();
+    status_line_set_busy("doing work");
+    const char *out = capture_end();
+    set_json_output_mode(false);
+    TEST_ASSERT_EQUAL_STRING("", out);
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_format_no_usage_shows_question);
@@ -287,5 +315,8 @@ int main(void) {
     RUN_TEST(test_render_fits_exactly_keeps_model);
     RUN_TEST(test_render_too_narrow_drops_segment);
     RUN_TEST(test_render_info_single_shot);
+    RUN_TEST(test_set_busy_non_tty_no_output);
+    RUN_TEST(test_set_idle_non_tty_no_output);
+    RUN_TEST(test_set_busy_json_mode_no_output);
     return UNITY_END();
 }

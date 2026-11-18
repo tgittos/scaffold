@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -89,11 +90,32 @@ void test_read_all_empty_file(void) {
     free(result);
 }
 
+/* When an I/O error occurs (ferror), returns NULL with truncated == 0,
+ * distinct from the over-limit case (truncated == 1). */
+void test_read_all_ferror_returns_null_not_truncated(void) {
+    FILE *f = tmpfile();
+    TEST_ASSERT_NOT_NULL(f);
+    /* Write some data so the read has content to process */
+    char data[128];
+    memset(data, 'a', sizeof(data));
+    fwrite(data, 1, sizeof(data), f);
+    rewind(f);
+    /* Close the underlying fd to trigger ferror on the next fread */
+    close(fileno(f));
+
+    int truncated = -1;
+    char *result = stdin_read_all(f, 8 * 1024 * 1024, &truncated);
+    /* Don't fclose(f) — fd is already closed */
+    TEST_ASSERT_NULL(result);
+    TEST_ASSERT_EQUAL_INT(0, truncated); /* not truncation — I/O error */
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_read_all_multiline);
     RUN_TEST(test_read_all_over_limit);
     RUN_TEST(test_read_all_null_input);
     RUN_TEST(test_read_all_empty_file);
+    RUN_TEST(test_read_all_ferror_returns_null_not_truncated);
     return UNITY_END();
 }

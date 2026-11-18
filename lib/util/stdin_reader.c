@@ -38,8 +38,12 @@ char *stdin_read_all(FILE *in, size_t max_bytes, int *truncated) {
         }
 
         if (n < to_read) {
-            /* Short read: EOF or error */
-            break;
+            /* Short read: check for I/O error vs. EOF */
+            if (ferror(in)) {
+                free(buf);
+                return NULL; /* truncated stays 0 — distinguish from over-limit */
+            }
+            break; /* EOF */
         }
     }
 

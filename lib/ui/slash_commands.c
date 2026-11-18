@@ -71,7 +71,15 @@ int slash_command_dispatch(const char *line, AgentSession *session) {
             return g_commands[i].handler(args, session);
         }
     }
-    fprintf(stderr, "Unknown command '%s'. Type /help for commands.\n", line);
+    /* Print only the command token (stop at the first space) */
+    char cmd_token[64];
+    size_t tok_len = 0;
+    while (line[tok_len] && line[tok_len] != ' ' && tok_len < sizeof(cmd_token) - 1) {
+        cmd_token[tok_len] = line[tok_len];
+        tok_len++;
+    }
+    cmd_token[tok_len] = '\0';
+    fprintf(stderr, "Unknown command '%s'. Type /help for commands.\n", cmd_token);
     return SLASH_NOT_FOUND;
 }
 

@@ -465,7 +465,7 @@ int main(int argc, char *argv[]) {
             supervisor_phase_str = argv[++i];
         } else if (strcmp(argv[i], "--prompt") == 0 || strcmp(argv[i], "-p") == 0) {
             if (i + 1 >= argc) {
-                fprintf(stderr, "Error: --prompt requires a value\n");
+                fprintf(stderr, "Error: %s requires a value\n", argv[i]);
                 return 2;
             }
             system_prompt_override = argv[++i];
@@ -524,7 +524,11 @@ int main(int argc, char *argv[]) {
             free(stdin_text);
             return 2;
         }
-        if (stdin_text == NULL || stdin_text[0] == '\0') {
+        if (stdin_text == NULL) {
+            fprintf(stderr, "Error: failed to read stdin\n");
+            return 1;
+        }
+        if (stdin_text[0] == '\0') {
             if (message_arg_index == -1) {
                 fprintf(stderr, "Error: no input on stdin\n");
                 free(stdin_text);
