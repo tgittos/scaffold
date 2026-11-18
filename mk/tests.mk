@@ -278,6 +278,7 @@ $(eval $(call def_test_lib,tool_param_dsl,tools/test_tool_param_dsl,))
 $(eval $(call def_test_lib,json_output,utils/test_json_output,))
 $(eval $(call def_test_lib,output,utils/test_output_formatter,))
 $(eval $(call def_test_lib,tools_system,tools/test_tools_system,))
+$(eval $(call def_test_lib,todo_tool_scope,tools/test_todo_tool_scope,))
 $(eval $(call def_test_lib,vector_db_tool,tools/test_vector_db_tool,$(MOCK_EMBEDDINGS_SOURCES)))
 $(eval $(call def_test_lib,memory_tool,tools/test_memory_tool,$(MOCK_EMBEDDINGS_SOURCES)))
 $(eval $(call def_test_lib,memory_mgmt,test_memory_management,))
@@ -334,7 +335,7 @@ $(TEST_plugin_protocol_TARGET): $(TEST_plugin_protocol_OBJECTS) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_plugin_protocol_OBJECTS) $(CJSON_LIB)
 
 # Batch link rule for libagent-linked tests
-LIBAGENT_TESTS := tool_param_dsl json_output output tools_system vector_db_tool memory_tool \
+LIBAGENT_TESTS := tool_param_dsl json_output output tools_system todo_tool_scope vector_db_tool memory_tool \
     memory_mgmt token_manager conversation_compactor rolling_summary model_tools embeddings_service embeddings_service_reinit \
     openai_streaming anthropic_streaming codex_provider messages_array_bug openai_message_format mcp_client subagent_tool \
     incomplete_task_bug conversation conversation_vdb tool_calls_not_stored document_store \

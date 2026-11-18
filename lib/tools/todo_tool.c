@@ -2,6 +2,7 @@
 #include "todo_display.h"
 #include "db/task_store.h"
 #include "../services/services.h"
+#include "../util/project_scope.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -13,8 +14,23 @@ static TodoList* g_todo_list = NULL;
  * after initialization. Falls back to singletons if NULL. */
 static Services* g_services = NULL;
 
-// Tasks persist across all ralph invocations using a fixed session key
-static const char* GLOBAL_SESSION_ID = "global";
+// Return the per-project session key used to scope todos in the task store.
+// The key is derived from the nearest .git ancestor of the current working
+// directory (or the cwd itself when no git root exists), so todos are
+// isolated between projects automatically.
+//
+// The returned pointer is into a static buffer that is overwritten on each
+// call; callers must use the value immediately (do not hold two calls' values
+// simultaneously).
+const char *todo_session_key(void) {
+    static char key[PROJECT_SCOPE_NAME_MAX];
+    if (project_scope_index_name("todos", key, sizeof(key)) != 0) {
+        /* Fallback: old global todos are intentionally unreachable */
+        strncpy(key, "todos_global", sizeof(key) - 1);
+        key[sizeof(key) - 1] = '\0';
+    }
+    return key;
+}
 
 // Keep in-memory TodoList in sync with the SQLite-backed store
 static void sync_todolist_from_store(void) {
@@ -28,12 +44,15 @@ static void sync_todolist_from_store(void) {
     }
 
     size_t count = 0;
-    Task** tasks = task_store_list_by_session(store, GLOBAL_SESSION_ID, -1, &count);
+    Task** tasks = task_store_list_by_session(store, todo_session_key(), -1, &count);
+
+    /* Clear before checking for NULL: when count==0 the store returns NULL but
+     * the in-memory list must still be reset (e.g. after switching projects). */
+    TodoList_clear(g_todo_list);
+
     if (tasks == NULL) {
         return;
     }
-
-    TodoList_clear(g_todo_list);
 
     for (size_t i = 0; i < count; i++) {
         Task* task = tasks[i];
@@ -336,7 +355,7 @@ int execute_todo_tool_call(const ToolCall *tool_call, ToolResult *result) {
                 free(todos_json);
 
                 if (use_sqlite && bulk_tasks && bulk_count > 0) {
-                    task_store_replace_session_tasks(store, GLOBAL_SESSION_ID, bulk_tasks, bulk_count);
+                    task_store_replace_session_tasks(store, todo_session_key(), bulk_tasks, bulk_count);
                     sync_todolist_from_store();
                 }
 
