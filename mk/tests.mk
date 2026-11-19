@@ -50,7 +50,7 @@ $(eval $(call def_test,darray,test_darray,))
 $(eval $(call def_test,ptrarray,test_ptrarray,))
 $(eval $(call def_test,tool_cache,tools/test_tool_cache,$(LIBDIR)/tools/tool_cache.c))
 $(eval $(call def_test,prompt_mode,agent/test_prompt_mode,$(LIBDIR)/agent/prompt_mode.c))
-$(eval $(call def_test,change_report,agent/test_change_report,$(LIBDIR)/agent/change_report.c))
+$(eval $(call def_test,change_report,agent/test_change_report,$(LIBDIR)/agent/change_report.c $(LIBDIR)/util/process_spawn.c))
 $(eval $(call def_test,oauth_callback_server,auth/test_oauth_callback_server,$(LIBDIR)/auth/oauth_callback_server.c))
 
 

@@ -58,6 +58,7 @@ LIB_TOOLS_SOURCES := \
 # Agent module
 LIB_AGENT_SOURCES := \
     $(LIBDIR)/agent/agent.c \
+    $(LIBDIR)/agent/change_report.c \
     $(LIBDIR)/agent/session.c \
     $(LIBDIR)/agent/session_configurator.c \
     $(LIBDIR)/agent/message_dispatcher.c \

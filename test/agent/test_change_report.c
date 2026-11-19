@@ -98,12 +98,26 @@ void test_report_lists_new_commit(void) {
     /* File stats should be non-zero. */
     TEST_ASSERT_GREATER_THAN(0, report->files_changed);
 
+    /* Obtain the short hash of the new commit to verify it appears in the report. */
+    char short_hash[16] = {0};
+    snprintf(cmd, sizeof(cmd), "git -C '%s' rev-parse --short HEAD 2>/dev/null", g_tmpdir);
+    TEST_ASSERT_EQUAL_INT(0, popen_line(cmd, short_hash, sizeof(short_hash)));
+    TEST_ASSERT_TRUE(short_hash[0] != '\0');
+
+    /* Short hash should appear in commits_text. */
+    TEST_ASSERT_NOT_NULL(strstr(report->commits_text, short_hash));
+
     /* Format and verify text representation. */
     char *text = change_report_format(report);
     TEST_ASSERT_NOT_NULL(text);
     TEST_ASSERT_NOT_NULL(strstr(text, "Changed:"));
     TEST_ASSERT_NOT_NULL(strstr(text, "Commits:"));
     TEST_ASSERT_NOT_NULL(strstr(text, "add feature"));
+
+    /* Verify the Commits line starts with the short hash. */
+    char commits_prefix[32];
+    snprintf(commits_prefix, sizeof(commits_prefix), "Commits: %s", short_hash);
+    TEST_ASSERT_NOT_NULL(strstr(text, commits_prefix));
     free(text);
 
     change_report_free(report);

@@ -702,18 +702,18 @@ int main(int argc, char *argv[]) {
 
     /* Emit change report after a single-shot run. */
     if (cr_enabled) {
-        change_report_t *cr = change_report_collect(cr_repo_root, cr_head_before);
-        if (cr) {
-            if (config.json_mode) {
+        if (config.json_mode) {
+            change_report_t *cr = change_report_collect(cr_repo_root, cr_head_before);
+            if (cr) {
                 json_output_change_report(cr);
-            } else {
-                char *text = change_report_format(cr);
-                if (text) {
-                    fprintf(stderr, "%s\n", text);
-                    free(text);
-                }
+                change_report_free(cr);
             }
-            change_report_free(cr);
+        } else {
+            char *text = change_report_build(cr_repo_root, cr_head_before);
+            if (text) {
+                fprintf(stderr, "%s\n", text);
+                free(text);
+            }
         }
     }
 

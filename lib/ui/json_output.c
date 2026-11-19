@@ -367,18 +367,13 @@ void json_output_change_report(const change_report_t *report) {
             const char *nl = strchr(p, '\n');
             size_t len = nl ? (size_t)(nl - p) : strlen(p);
             if (len > 0) {
-                cJSON *entry = cJSON_CreateStringReference(""); /* placeholder */
-                if (entry) {
-                    /* Replace with an actual string of the right length. */
-                    cJSON_Delete(entry);
-                    char *line = malloc(len + 1);
-                    if (line) {
-                        memcpy(line, p, len);
-                        line[len] = '\0';
-                        cJSON *s = cJSON_CreateString(line);
-                        free(line);
-                        if (s) cJSON_AddItemToArray(commits_arr, s);
-                    }
+                char *line = malloc(len + 1);
+                if (line) {
+                    memcpy(line, p, len);
+                    line[len] = '\0';
+                    cJSON *s = cJSON_CreateString(line);
+                    free(line);
+                    if (s) cJSON_AddItemToArray(commits_arr, s);
                 }
             }
             p = nl ? nl + 1 : p + len;

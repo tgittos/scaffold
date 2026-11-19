@@ -38,4 +38,14 @@ char *change_report_format(const change_report_t *report);
  */
 void change_report_free(change_report_t *report);
 
+/**
+ * Convenience facade: collect + format + free in one call.
+ *
+ * @param repo_root   Absolute path to the git repository root.
+ * @param head_before Git ref or hash captured before the agent ran.
+ * @return malloc'd formatted report string, or NULL if nothing changed
+ *         or an error occurred. Caller frees.
+ */
+char *change_report_build(const char *repo_root, const char *head_before);
+
 #endif /* CHANGE_REPORT_H */

@@ -1,4 +1,5 @@
 #include "change_report.h"
+#include "../util/process_spawn.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -6,29 +7,11 @@
 
 #define COMMITS_BUF_SIZE  8192
 #define STAT_BUF_SIZE     512
-#define CMD_BUF_SIZE      1024
 
-/* Run cmd via popen, read all output into buf (NUL-terminated).
- * Returns bytes read, or -1 on error. */
-static int read_cmd(const char *cmd, char *buf, size_t buf_size) {
-    if (buf_size == 0) return -1;
-    buf[0] = '\0';
-
-    FILE *fp = popen(cmd, "r");
-    if (!fp) return -1;
-
-    size_t pos = 0;
-    char line[1024];
-    while (fgets(line, sizeof(line), fp)) {
-        size_t len = strlen(line);
-        if (pos + len >= buf_size - 1) len = buf_size - 1 - pos;
-        if (len == 0) break;
-        memcpy(buf + pos, line, len);
-        pos += len;
-    }
-    buf[pos] = '\0';
-    pclose(fp);
-    return (int)pos;
+/* Run git with the given NULL-terminated args, capture stdout into buf.
+ * Returns bytes written (>=0), or -1 on error. */
+static int run_git(char **git_args, char *buf, size_t buf_size) {
+    return process_spawn_capture(git_args, buf, buf_size);
 }
 
 /* Scan backwards from ptr (which must point to a keyword like " file") to
@@ -75,22 +58,25 @@ static int count_lines(const char *s) {
 change_report_t *change_report_collect(const char *repo_root, const char *head_before) {
     if (!repo_root || !head_before || head_before[0] == '\0') return NULL;
 
-    char cmd[CMD_BUF_SIZE];
     char commits_buf[COMMITS_BUF_SIZE];
+    char range[128];
+
+    /* Build "head_before..HEAD" range (head_before is a hex sha, safe). */
+    snprintf(range, sizeof(range), "%s..HEAD", head_before);
 
     /* Get commits made since head_before. */
-    snprintf(cmd, sizeof(cmd),
-             "git -C '%s' log '%s..HEAD' --oneline 2>/dev/null",
-             repo_root, head_before);
-    int clen = read_cmd(cmd, commits_buf, sizeof(commits_buf));
+    char *log_args[] = {
+        "/usr/bin/git", "-C", (char *)repo_root, "log", range, "--oneline", NULL
+    };
+    int clen = run_git(log_args, commits_buf, sizeof(commits_buf));
     if (clen <= 0 || commits_buf[0] == '\0') return NULL;
 
     /* Get file-change statistics. */
     char stat_buf[STAT_BUF_SIZE] = {0};
-    snprintf(cmd, sizeof(cmd),
-             "git -C '%s' diff --shortstat '%s..HEAD' 2>/dev/null",
-             repo_root, head_before);
-    read_cmd(cmd, stat_buf, sizeof(stat_buf));
+    char *diff_args[] = {
+        "/usr/bin/git", "-C", (char *)repo_root, "diff", "--shortstat", range, NULL
+    };
+    run_git(diff_args, stat_buf, sizeof(stat_buf));
 
     change_report_t *r = calloc(1, sizeof(change_report_t));
     if (!r) return NULL;
@@ -146,4 +132,12 @@ void change_report_free(change_report_t *report) {
     if (!report) return;
     free(report->commits_text);
     free(report);
+}
+
+char *change_report_build(const char *repo_root, const char *head_before) {
+    change_report_t *r = change_report_collect(repo_root, head_before);
+    if (!r) return NULL;
+    char *text = change_report_format(r);
+    change_report_free(r);
+    return text;
 }
