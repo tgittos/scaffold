@@ -69,7 +69,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`document_store.c/h`** - High-level document storage with embeddings and JSON persistence
 - **`metadata_store.c/h`** - Chunk metadata storage layer (separate from vectors)
 - **`task_store.c/h`** - SQLite-based persistent task storage with hierarchies and dependencies
-- **`goal_store.c/h`** - GOAP goal persistence: goal state, world state, plan_document (TEXT column), supervisor PID tracking, lock/unlock API for atomic read-modify-write sequences, `goal_store_update_plan_document()`, schema migration for existing DBs
+- **`goal_store.c/h`** - GOAP goal persistence: goal state, world state, plan_document (TEXT column), supervisor PID and heartbeat tracking (`supervisor_heartbeat_at`, written by `goal_store_heartbeat()`), lock/unlock API for atomic read-modify-write sequences, `goal_store_update_plan_document()`, schema migration for existing DBs
 - **`action_store.c/h`** - GOAP action persistence: hierarchy (compound/primitive), preconditions/effects, readiness queries, work_item_id correlation for dispatch tracking. `action_store_has_actions()` returns true if any actions exist for a goal (used by both `supervisor_resolve_phase` and `execute_start_goal` as the shared plan-detection helper).
 - **`oauth2_store.c/h`** - OAuth2 token management with PKCE, AES-256-GCM encryption, vtable-based provider pattern (unified `refresh_token` callback with optional rotation, nullable `revoke_token` hook), auto-refresh with 60s margin, heap-allocated refresh context, value-copied provider ops, `oauth2_error_string()` utility
 - **`sqlite_dal.c/h`** - SQLite data access layer with recursive mutex protection (supports nested locking for atomic read-modify-write), ref-counted shared connections, schema initialization, and common query patterns
@@ -172,7 +172,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`ansi_codes.h`** - Terminal color codes, box-drawing characters, and status symbols
 - **`app_home.c/h`** - Centralized application home directory management (~/.local/<app_name>/)
 - **`project_scope.c/h`** - Per-project index names and git root lookup from the nearest `.git` root of the working directory
-- **`process_spawn.c/h`** - Fork/exec helpers: `process_spawn_devnull` (stdout/stderr to /dev/null, non-blocking); `process_spawn_capture` (stdout captured into caller-supplied buffer, stderr discarded, waits for exit — used by `change_report.c` to run git without a shell)
+- **`process_spawn.c/h`** - Fork/exec helpers: `process_spawn_devnull` (stdout/stderr to /dev/null, non-blocking); `process_spawn_capture` (stdout captured into caller-supplied buffer, stderr discarded, waits for exit — used by `change_report.c` to run git without a shell); `process_spawn_logged` (setsid, stdin from /dev/null, stdout+stderr appended to a log file)
 - **`executable_path.c/h`** - Executable path resolution for APE binaries
 - **`stdin_reader.c/h`** - Read all of a FILE stream into a heap-allocated string with an 8 MiB cap; returns NULL with `*truncated=1` when the limit is exceeded
 
@@ -209,8 +209,8 @@ Built to `out/plugins/`. Not embedded in the scaffold binary — users install b
 - **`jwt_decode.c/h`** - JWT payload decoding: base64url decode via mbedTLS, nested claim extraction (`https://api.openai.com/auth` -> `chatgpt_account_id`)
 
 #### `lib/orchestrator/` - Scaffold Orchestration
-- **`supervisor.c/h`** - Supervisor event loop with `SupervisorPhase` enum (`SUPERVISOR_PHASE_PLAN`, `SUPERVISOR_PHASE_EXECUTE`): phase-aware execution via `supervisor_run(phase)`, split message builders (`build_planner_message`, `build_executor_message`), `plan_is_complete()` check, context pressure exit (`SUPERVISOR_EXIT_CONTEXT`), message-poller-based wake-on-worker-completion, orphaned action recovery on startup. `supervisor_resolve_phase()` checks at startup whether a PLANNING goal already has actions and promotes to EXECUTE, closing the teardown+respawn gap for manually restarted supervisors.
-- **`orchestrator.c/h`** - Supervisor spawning (via process_spawn) with auto-detected `--phase` flag from goal status, liveness checks, zombie reaping, stale PID cleanup (dead processes only), respawn for both PLANNING and ACTIVE goals
+- **`supervisor.c/h`** - Supervisor event loop (10s idle timeout; heartbeats the goal on every wake; re-prompts with the current world state after two consecutive wakes with no running actions) with `SupervisorPhase` enum (`SUPERVISOR_PHASE_PLAN`, `SUPERVISOR_PHASE_EXECUTE`): phase-aware execution via `supervisor_run(phase)`, split message builders (`build_planner_message`, `build_executor_message`), `plan_is_complete()` check, context pressure exit (`SUPERVISOR_EXIT_CONTEXT`), message-poller-based wake-on-worker-completion, orphaned action recovery on startup (ASSIGNED work items of dead workers go back to the queue, or FAIL once attempts run out). `supervisor_resolve_phase()` checks at startup whether a PLANNING goal already has actions and promotes to EXECUTE, closing the teardown+respawn gap for manually restarted supervisors.
+- **`orchestrator.c/h`** - Supervisor spawning (via `process_spawn_logged`, with `--log info` into `logs/supervisor-<goal_id>.log`) with auto-detected `--phase` flag from goal status, heartbeat-based liveness (`orchestrator_supervisor_alive(const Goal*, time_t)`: live pid, not a zombie, heartbeat < 30s), zombie reaping, stale PID cleanup (dead processes only), respawn for PLANNING and ACTIVE goals whose supervisor process is gone, `orchestrator_supervisor_log_path()`
 - **`goap_state.c/h`** - Shared GOAP state evaluation: precondition checking (`goap_preconditions_met`) and progress tracking (`goap_check_progress`) used by 5 call sites
 - **`role_prompts.c/h`** - Role-based system prompts for workers: loads from `<app_home>/prompts/<role>.md` with built-in defaults for 6 standard roles (implementation, code_review, architecture_review, design_review, pm_review, testing)
 
@@ -287,7 +287,7 @@ The test directory mirrors the source structure:
 - **`test_task_store.c`** - Task store persistence tests
 - **`test_message_store.c`** - Inter-agent messaging storage tests
 - **`test_sqlite_dal.c`** - SQLite Data Access Layer tests
-- **`test_goal_store.c`** - GOAP goal store persistence tests (20+ tests: CRUD, status transitions, world state, summary, active-goals query, supervisor PID tracking, plan_document persistence and migration)
+- **`test_goal_store.c`** - GOAP goal store persistence tests (29 tests: CRUD, status transitions, world state, summary, active-goals query, supervisor PID and heartbeat tracking, plan_document persistence and migration)
 - **`test_action_store.c`** - GOAP action store tests (23 tests: hierarchy, precondition matching, readiness queries, skip_pending, work_item_id correlation)
 - **`test_oauth2_store.c`** - OAuth2 store tests (28 tests: lifecycle, provider registry/validation, auth flow, pending overflow, token access, multi-provider, encryption with auto-refresh, NULL safety)
 - **`test_oauth2_refresh_rotate.c`** - OAuth2 refresh token tests (rotation stores new RT, non-rotating preserves RT, refresh failure, no refresh capability)
@@ -341,9 +341,9 @@ The test directory mirrors the source structure:
 - **`test_plugin_updater.c`** - Plugin update checking and installation tests
 
 #### `test/orchestrator/` - Orchestrator Tests
-- **`test_orchestrator.c`** - Supervisor process lifecycle tests (12 tests: spawn, alive checks, kill, reap, stale PID cleanup, respawn)
+- **`test_orchestrator.c`** - Supervisor process lifecycle tests (22 tests: spawn, heartbeat/zombie-aware liveness, kill, reap, stale PID cleanup, respawn of killed supervisors, logged spawn)
 - **`test_role_prompts.c`** - Role-based system prompt tests (17 tests: built-in roles, file overrides, unknown role fallback)
-- **`test_goap_lifecycle.c`** - GOAP lifecycle integration test (6 tests: full supervisor workflow simulation, readiness ordering, parallel readiness, world state accumulation, multi-goal isolation, replanning)
+- **`test_goap_lifecycle.c`** - GOAP lifecycle integration test (7 tests: full supervisor workflow simulation, readiness ordering, parallel readiness, world state accumulation, multi-goal isolation, replanning, orphaned-worker recovery)
 - **`test_goap_state.c`** - GOAP state evaluation tests (precondition checking, progress tracking, NULL/empty/malformed JSON edge cases)
 
 #### `test/` - Root-Level Tests

@@ -34,6 +34,14 @@ DARRAY_DEFINE(SubagentArray, Subagent)
  */
 static SubagentManager *g_subagent_manager = NULL;
 
+int subagent_timeout_from_config(void) {
+    int timeout = config_get_int("subagent_timeout", SUBAGENT_TIMEOUT_DEFAULT);
+    if (timeout < 1 || timeout > SUBAGENT_MAX_TIMEOUT_SEC) {
+        return SUBAGENT_TIMEOUT_DEFAULT;
+    }
+    return timeout;
+}
+
 /** Initialize with explicit max_subagents and timeout. Values are clamped to safe ranges. */
 int subagent_manager_init_with_config(SubagentManager *manager, int max_subagents, int timeout_seconds) {
     if (manager == NULL) {

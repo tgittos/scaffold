@@ -8,7 +8,7 @@
   "api_retry_delay_ms": 1000,
   "api_backoff_factor": 2.0,
   "max_subagents": 5,
-  "subagent_timeout": 300,
+  "subagent_timeout": 1800,
   "shell_max_timeout": 300,
   "enable_streaming": true,
   "json_output_mode": false,

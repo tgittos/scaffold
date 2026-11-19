@@ -26,6 +26,7 @@ typedef struct {
     char queue_name[64];
     pid_t supervisor_pid;
     int64_t supervisor_started_at;
+    time_t supervisor_heartbeat_at;
     time_t created_at;
     time_t updated_at;
 } Goal;
@@ -59,6 +60,12 @@ void goal_store_lock(goal_store_t* store);
 void goal_store_unlock(goal_store_t* store);
 int goal_store_update_supervisor(goal_store_t* store, const char* id,
                                   pid_t pid, int64_t started_at);
+
+// Record that the supervisor for this goal is still alive at `now`.
+// Written on every wake of the supervisor loop; read by
+// orchestrator_supervisor_alive() to distinguish a live supervisor from a
+// stale pid.
+void goal_store_heartbeat(goal_store_t* store, const char* goal_id, time_t now);
 
 // Caller owns returned arrays and must free with goal_free_list().
 Goal** goal_store_list_all(goal_store_t* store, size_t* count);

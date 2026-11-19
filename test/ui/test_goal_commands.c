@@ -4,6 +4,8 @@
 #include "services/services.h"
 #include "db/goal_store.h"
 #include "db/action_store.h"
+#include "util/app_home.h"
+#include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -13,15 +15,49 @@ static AgentSession g_session;
 static Services *g_services;
 static const char *TEST_DB = "/tmp/test_goal_commands.db";
 
+static const char *CAPTURE_PATH = "/tmp/test_goal_commands_capture.txt";
+static char g_capture[16384];
+static int g_real_stdout = -1;
+
+/* Point stdout at a file, keeping the test runner's own stdout for Unity. */
+static void stdout_to(const char *path) {
+    fflush(stdout);
+    if (g_real_stdout < 0) g_real_stdout = dup(STDOUT_FILENO);
+    int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    if (fd >= 0) {
+        dup2(fd, STDOUT_FILENO);
+        close(fd);
+    }
+}
+
 static void redirect_stdout(void) {
-    freopen("/dev/null", "w", stdout);
+    stdout_to("/dev/null");
 }
 
 static void restore_stdout(void) {
-    freopen("/dev/tty", "w", stdout);
+    fflush(stdout);
+    if (g_real_stdout >= 0) dup2(g_real_stdout, STDOUT_FILENO);
+}
+
+/* Run a /goals command with stdout captured into g_capture. */
+static int run_capturing(const char *args, AgentSession *session) {
+    stdout_to(CAPTURE_PATH);
+    int rc = process_goals_command(args, session);
+    redirect_stdout();
+
+    g_capture[0] = '\0';
+    FILE *f = fopen(CAPTURE_PATH, "r");
+    if (f != NULL) {
+        size_t n = fread(g_capture, 1, sizeof(g_capture) - 1, f);
+        g_capture[n] = '\0';
+        fclose(f);
+    }
+    unlink(CAPTURE_PATH);
+    return rc;
 }
 
 void setUp(void) {
+    app_home_init(NULL);
     unlink_sqlite_db(TEST_DB);
     memset(&g_session, 0, sizeof(g_session));
 
@@ -45,6 +81,7 @@ void tearDown(void) {
     }
     g_session.services = NULL;
     unlink_sqlite_db(TEST_DB);
+    app_home_cleanup();
 }
 
 void test_goals_list_empty(void) {
@@ -188,6 +225,58 @@ void test_goals_show_with_completed_actions(void) {
     TEST_ASSERT_EQUAL_INT(0, result);
 }
 
+void test_goals_shows_stalled(void) {
+    char id[40];
+    goal_store_insert(g_services->goal_store, "Stalled Goal",
+                      "An active goal with no live supervisor",
+                      "{\"done\": true}", "stalled_queue", id);
+    goal_store_update_status(g_services->goal_store, id, GOAL_STATUS_ACTIVE);
+
+    int rc = run_capturing("", &g_session);
+    TEST_ASSERT_EQUAL_INT(0, rc);
+    TEST_ASSERT_NOT_NULL(strstr(g_capture, "stalled"));
+}
+
+void test_goals_shows_action_counts(void) {
+    char id[40];
+    goal_store_insert(g_services->goal_store, "Counted Goal", "Goal with actions",
+                      "{\"a\":true,\"b\":true,\"c\":true,\"d\":true,"
+                      "\"e\":true,\"f\":true,\"g\":true}",
+                      "count_queue", id);
+    goal_store_update_world_state(g_services->goal_store, id,
+                                  "{\"a\":true,\"b\":true,\"c\":false}");
+
+    char action_ids[14][40];
+    for (int i = 0; i < 14; i++) {
+        char desc[32];
+        snprintf(desc, sizeof(desc), "action %d", i);
+        action_store_insert(g_services->action_store, id, NULL, desc,
+                            "[]", "[]", false, "implementation", action_ids[i]);
+    }
+    for (int i = 0; i < 3; i++) {
+        action_store_update_status(g_services->action_store, action_ids[i],
+                                   ACTION_STATUS_COMPLETED, "done");
+    }
+
+    int rc = run_capturing("", &g_session);
+    TEST_ASSERT_EQUAL_INT(0, rc);
+    TEST_ASSERT_NOT_NULL(strstr(g_capture, "actions 3/14"));
+    TEST_ASSERT_NOT_NULL(strstr(g_capture, "state 2/7"));
+}
+
+void test_goals_detail_shows_log_path(void) {
+    char id[40];
+    goal_store_insert(g_services->goal_store, "Logged Goal", "Goal with a log",
+                      "{\"done\": true}", "log_queue", id);
+
+    char expected[128];
+    snprintf(expected, sizeof(expected), "logs/supervisor-%s.log", id);
+
+    int rc = run_capturing(id, &g_session);
+    TEST_ASSERT_EQUAL_INT(0, rc);
+    TEST_ASSERT_NOT_NULL(strstr(g_capture, expected));
+}
+
 void test_goals_no_store(void) {
     /* Remove goal store from services */
     goal_store_destroy(g_services->goal_store);
@@ -213,6 +302,9 @@ int main(void) {
     RUN_TEST(test_goals_show_with_world_state);
     RUN_TEST(test_goals_show_with_actions);
     RUN_TEST(test_goals_show_with_completed_actions);
+    RUN_TEST(test_goals_shows_stalled);
+    RUN_TEST(test_goals_shows_action_counts);
+    RUN_TEST(test_goals_detail_shows_log_path);
     RUN_TEST(test_goals_no_store);
 
     return UNITY_END();

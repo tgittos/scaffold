@@ -5,6 +5,7 @@
 #include "../test_fs_utils.h"
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 static char g_test_db_path[256];
@@ -305,6 +306,54 @@ void test_goal_store_update_plan_document_null_params(void) {
     TEST_ASSERT_EQUAL(-1, goal_store_update_plan_document(g_store, "id", NULL));
 }
 
+void test_goal_store_heartbeat_zero_initially(void) {
+    char goal_id[40];
+    goal_store_insert(g_store, "Heartbeat Test", NULL, "{}", "q1", goal_id);
+
+    Goal *goal = goal_store_get(g_store, goal_id);
+    TEST_ASSERT_NOT_NULL(goal);
+    TEST_ASSERT_EQUAL(0, goal->supervisor_heartbeat_at);
+    goal_free(goal);
+}
+
+void test_goal_store_heartbeat_persists(void) {
+    char goal_id[40];
+    goal_store_insert(g_store, "Heartbeat Test", NULL, "{}", "q1", goal_id);
+
+    goal_store_heartbeat(g_store, goal_id, (time_t)1700000123);
+
+    Goal *goal = goal_store_get(g_store, goal_id);
+    TEST_ASSERT_NOT_NULL(goal);
+    TEST_ASSERT_EQUAL(1700000123, goal->supervisor_heartbeat_at);
+    goal_free(goal);
+}
+
+void test_goal_store_update_supervisor_stamps_heartbeat(void) {
+    char goal_id[40];
+    goal_store_insert(g_store, "Heartbeat Test", NULL, "{}", "q1", goal_id);
+
+    time_t before = time(NULL);
+    goal_store_update_supervisor(g_store, goal_id, 4242, 1700000000000LL);
+
+    Goal *goal = goal_store_get(g_store, goal_id);
+    TEST_ASSERT_NOT_NULL(goal);
+    TEST_ASSERT_TRUE(goal->supervisor_heartbeat_at >= before);
+    goal_free(goal);
+
+    /* Clearing the supervisor clears the heartbeat too. */
+    goal_store_update_supervisor(g_store, goal_id, 0, 0);
+    goal = goal_store_get(g_store, goal_id);
+    TEST_ASSERT_NOT_NULL(goal);
+    TEST_ASSERT_EQUAL(0, goal->supervisor_heartbeat_at);
+    goal_free(goal);
+}
+
+void test_goal_store_heartbeat_null_params(void) {
+    /* Must not crash. */
+    goal_store_heartbeat(NULL, "id", time(NULL));
+    goal_store_heartbeat(g_store, NULL, time(NULL));
+}
+
 int main(void) {
     UNITY_BEGIN();
 
@@ -333,6 +382,10 @@ int main(void) {
     RUN_TEST(test_goal_store_update_plan_document_overwrite);
     RUN_TEST(test_goal_store_update_plan_document_nonexistent);
     RUN_TEST(test_goal_store_update_plan_document_null_params);
+    RUN_TEST(test_goal_store_heartbeat_zero_initially);
+    RUN_TEST(test_goal_store_heartbeat_persists);
+    RUN_TEST(test_goal_store_update_supervisor_stamps_heartbeat);
+    RUN_TEST(test_goal_store_heartbeat_null_params);
 
     return UNITY_END();
 }

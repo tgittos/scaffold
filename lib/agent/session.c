@@ -107,8 +107,9 @@ int session_init(AgentSession* session) {
     }
 
     if (subagent_manager_init_with_config(&session->subagent_manager,
-                                          SUBAGENT_MAX_DEFAULT,
-                                          SUBAGENT_TIMEOUT_DEFAULT) != 0) {
+                                          config_get_int("max_subagents",
+                                                         SUBAGENT_MAX_DEFAULT),
+                                          subagent_timeout_from_config()) != 0) {
         fprintf(stderr, "Warning: Failed to initialize subagent manager\n");
     } else {
         if (register_subagent_tool(&session->tools, &session->subagent_manager) != 0) {

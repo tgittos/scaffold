@@ -21,6 +21,7 @@ static const char *SCHEMA_SQL =
     "    queue_name TEXT NOT NULL,"
     "    supervisor_pid INTEGER DEFAULT 0,"
     "    supervisor_started_at INTEGER DEFAULT 0,"
+    "    supervisor_heartbeat_at INTEGER DEFAULT 0,"
     "    created_at INTEGER NOT NULL,"
     "    updated_at INTEGER NOT NULL,"
     "    plan_document TEXT"
@@ -30,10 +31,19 @@ static const char *SCHEMA_SQL =
 static const char *MIGRATION_ADD_PLAN_DOCUMENT =
     "ALTER TABLE goals ADD COLUMN plan_document TEXT;";
 
+static const char *MIGRATION_ADD_HEARTBEAT =
+    "ALTER TABLE goals ADD COLUMN supervisor_heartbeat_at INTEGER DEFAULT 0;";
+
+/* Rows that predate the heartbeat column have no liveness information; a zero
+ * heartbeat reads as "not alive", which is the safe default. */
+static const char *BACKFILL_HEARTBEAT =
+    "UPDATE goals SET supervisor_heartbeat_at = 0 "
+    "WHERE supervisor_heartbeat_at IS NULL;";
+
 #define GOAL_COLUMNS \
     "id, name, description, goal_state, world_state, summary, " \
     "status, supervisor_pid, queue_name, supervisor_started_at, created_at, updated_at, " \
-    "plan_document"
+    "plan_document, supervisor_heartbeat_at"
 
 #define GOAL_COL_ID                  0
 #define GOAL_COL_NAME                1
@@ -48,6 +58,7 @@ static const char *MIGRATION_ADD_PLAN_DOCUMENT =
 #define GOAL_COL_CREATED_AT         10
 #define GOAL_COL_UPDATED_AT         11
 #define GOAL_COL_PLAN_DOCUMENT      12
+#define GOAL_COL_SUPERVISOR_HEARTBEAT 13
 
 static void *map_goal(sqlite3_stmt *stmt, void *user_data) {
     (void)user_data;
@@ -92,6 +103,8 @@ static void *map_goal(sqlite3_stmt *stmt, void *user_data) {
     goal->status = (GoalStatus)sqlite3_column_int(stmt, GOAL_COL_STATUS);
     goal->supervisor_pid = (pid_t)sqlite3_column_int(stmt, GOAL_COL_SUPERVISOR_PID);
     goal->supervisor_started_at = sqlite3_column_int64(stmt, GOAL_COL_SUPERVISOR_STARTED);
+    goal->supervisor_heartbeat_at =
+        (time_t)sqlite3_column_int64(stmt, GOAL_COL_SUPERVISOR_HEARTBEAT);
     goal->created_at = (time_t)sqlite3_column_int64(stmt, GOAL_COL_CREATED_AT);
     goal->updated_at = (time_t)sqlite3_column_int64(stmt, GOAL_COL_UPDATED_AT);
     return goal;
@@ -100,7 +113,8 @@ static void *map_goal(sqlite3_stmt *stmt, void *user_data) {
 /* Additional binder helpers */
 typedef struct { int i1; int64_t i2; const char *s1; } BindIntInt64Text;
 typedef struct { const char *s1; int64_t i2; const char *s2; } BindTextInt64Text;
-typedef struct { int i1; int64_t i2; int64_t i3; const char *s1; } BindIntInt64Int64Text;
+typedef struct { int i1; int64_t i2; int64_t i3; int64_t i4; const char *s1; } BindIntInt64x3Text;
+typedef struct { int64_t i1; const char *s1; } BindInt64Text;
 
 static int bind_int_int64_text(sqlite3_stmt *stmt, void *data) {
     BindIntInt64Text *b = data;
@@ -118,12 +132,20 @@ static int bind_text_int64_text(sqlite3_stmt *stmt, void *data) {
     return 0;
 }
 
-static int bind_int_int64_int64_text(sqlite3_stmt *stmt, void *data) {
-    BindIntInt64Int64Text *b = data;
+static int bind_int_int64x3_text(sqlite3_stmt *stmt, void *data) {
+    BindIntInt64x3Text *b = data;
     sqlite3_bind_int(stmt, 1, b->i1);
     sqlite3_bind_int64(stmt, 2, b->i2);
     sqlite3_bind_int64(stmt, 3, b->i3);
-    sqlite3_bind_text(stmt, 4, b->s1, -1, SQLITE_STATIC);
+    sqlite3_bind_int64(stmt, 4, b->i4);
+    sqlite3_bind_text(stmt, 5, b->s1, -1, SQLITE_STATIC);
+    return 0;
+}
+
+static int bind_int64_text(sqlite3_stmt *stmt, void *data) {
+    BindInt64Text *b = data;
+    sqlite3_bind_int64(stmt, 1, b->i1);
+    sqlite3_bind_text(stmt, 2, b->s1, -1, SQLITE_STATIC);
     return 0;
 }
 
@@ -142,8 +164,10 @@ goal_store_t *goal_store_create(const char *db_path) {
         return NULL;
     }
 
-    /* Migration: add plan_document column to existing databases. */
+    /* Migrations: columns added to existing databases. */
     sqlite_dal_exec(store->dal, MIGRATION_ADD_PLAN_DOCUMENT);
+    sqlite_dal_exec(store->dal, MIGRATION_ADD_HEARTBEAT);
+    sqlite_dal_exec(store->dal, BACKFILL_HEARTBEAT);
 
     return store;
 }
@@ -159,8 +183,10 @@ goal_store_t *goal_store_create_with_dal(sqlite_dal_t *dal) {
         return NULL;
     }
 
-    /* Migration: add plan_document column to existing databases. */
+    /* Migrations: columns added to existing databases. */
     sqlite_dal_exec(dal, MIGRATION_ADD_PLAN_DOCUMENT);
+    sqlite_dal_exec(dal, MIGRATION_ADD_HEARTBEAT);
+    sqlite_dal_exec(dal, BACKFILL_HEARTBEAT);
 
     store->dal = sqlite_dal_retain(dal);
     return store;
@@ -259,11 +285,24 @@ int goal_store_update_plan_document(goal_store_t *store, const char *id,
 int goal_store_update_supervisor(goal_store_t *store, const char *id,
                                   pid_t pid, int64_t started_at) {
     if (!store || !id) return -1;
-    BindIntInt64Int64Text params = { (int)pid, started_at, time(NULL), id };
+    time_t now = time(NULL);
+    /* A supervisor counts as alive from the moment it is recorded; clearing
+     * the pid clears the heartbeat with it. */
+    int64_t heartbeat = (pid > 0) ? (int64_t)now : 0;
+    BindIntInt64x3Text params = { (int)pid, started_at, heartbeat, now, id };
     int changes = sqlite_dal_exec_p(store->dal,
-        "UPDATE goals SET supervisor_pid = ?, supervisor_started_at = ?, updated_at = ? WHERE id = ?;",
-        bind_int_int64_int64_text, &params);
+        "UPDATE goals SET supervisor_pid = ?, supervisor_started_at = ?, "
+        "supervisor_heartbeat_at = ?, updated_at = ? WHERE id = ?;",
+        bind_int_int64x3_text, &params);
     return (changes > 0) ? 0 : -1;
+}
+
+void goal_store_heartbeat(goal_store_t *store, const char *goal_id, time_t now) {
+    if (!store || !goal_id) return;
+    BindInt64Text params = { (int64_t)now, goal_id };
+    sqlite_dal_exec_p(store->dal,
+        "UPDATE goals SET supervisor_heartbeat_at = ? WHERE id = ?;",
+        bind_int64_text, &params);
 }
 
 int goal_store_has_active_goals(goal_store_t *store) {

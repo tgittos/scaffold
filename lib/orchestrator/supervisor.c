@@ -17,9 +17,18 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/select.h>
+#include <time.h>
 #include <unistd.h>
 
 static volatile sig_atomic_t g_supervisor_running = 1;
+
+/** Seconds the idle wait blocks before waking to heartbeat and re-check. */
+#define SUPERVISOR_IDLE_TIMEOUT_SEC 10
+
+/** Consecutive idle wakes with no workers before the LLM is re-prompted. */
+#define SUPERVISOR_IDLE_WAKES_BEFORE_REPROMPT 2
+
+#define DEAD_WORKER_REASON "worker died without reporting a result"
 
 static void supervisor_signal_handler(int sig) {
     (void)sig;
@@ -272,6 +281,24 @@ static int process_notifications(AgentSession *session) {
 }
 
 /**
+ * Record that this supervisor is still alive.
+ */
+static void supervisor_heartbeat(AgentSession *session, const char *goal_id) {
+    goal_store_t *gs = services_get_goal_store(session->services);
+    if (gs != NULL) goal_store_heartbeat(gs, goal_id, time(NULL));
+}
+
+/**
+ * Number of actions currently being worked on by a worker.
+ */
+static int running_action_count(AgentSession *session, const char *goal_id) {
+    action_store_t *as = services_get_action_store(session->services);
+    if (as == NULL) return 0;
+    int count = action_store_count_by_status(as, goal_id, ACTION_STATUS_RUNNING);
+    return (count > 0) ? count : 0;
+}
+
+/**
  * Rebuild the fd_set with the message poller fd.
  * Returns the max fd value.
  */
@@ -340,9 +367,27 @@ int supervisor_recover_orphaned_actions(Services *services, const char *goal_id)
                                            wi->error);
                 recovered++;
                 break;
-            case WORK_ITEM_ASSIGNED:
-                /* Worker is actively processing — leave as RUNNING */
+            case WORK_ITEM_ASSIGNED: {
+                /* Recovery runs when a supervisor starts, before it dispatches
+                 * anything, so this item was claimed by a worker of a previous
+                 * supervisor that is no longer reporting. Hand it back to the
+                 * queue (or fail it once its attempts run out) instead of
+                 * letting it hold a worker slot forever. */
+                work_queue_fail(wq, a->work_item_id, DEAD_WORKER_REASON);
+                WorkItem *after = work_queue_get_item(wq, a->work_item_id);
+                bool exhausted = (after != NULL && after->status == WORK_ITEM_FAILED);
+                if (after != NULL) work_item_free(after);
+
+                if (exhausted) {
+                    action_store_update_status(as, a->id, ACTION_STATUS_FAILED,
+                                               DEAD_WORKER_REASON);
+                } else {
+                    action_store_update_status(as, a->id, ACTION_STATUS_PENDING,
+                                               NULL);
+                }
+                recovered++;
                 break;
+            }
             default:
                 action_store_update_status(as, a->id, ACTION_STATUS_PENDING, NULL);
                 recovered++;
@@ -372,6 +417,27 @@ static int handle_context_full_exit(AgentSession *session, const char *goal_id,
         goal_store_update_summary(gs, goal_id, summary);
     }
     return SUPERVISOR_EXIT_CONTEXT;
+}
+
+/**
+ * Re-prompt the model for the current phase with the latest world state.
+ * Returns 0 on success, SUPERVISOR_EXIT_CONTEXT when the context filled up,
+ * SUPERVISOR_EXIT_ERROR otherwise.
+ */
+static int reprompt_with_world_state(AgentSession *session, const char *goal_id,
+                                      SupervisorPhase phase) {
+    char *msg = (phase == SUPERVISOR_PHASE_PLAN)
+        ? build_planner_message(session, goal_id)
+        : build_executor_message(session, goal_id);
+    if (msg == NULL) return SUPERVISOR_EXIT_ERROR;
+
+    LOG_INFO("Supervisor: no workers running for goal %s, re-prompting with "
+             "current world state", goal_id);
+    int rc = session_process_message(session, msg);
+    free(msg);
+
+    if (rc == SESSION_CONTEXT_FULL) return SUPERVISOR_EXIT_CONTEXT;
+    return (rc == 0) ? 0 : SUPERVISOR_EXIT_ERROR;
 }
 
 /**
@@ -456,6 +522,8 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
         LOG_INFO("Supervisor started for goal %s (phase=%s)", goal_id,
                      phase == SUPERVISOR_PHASE_PLAN ? "plan" : "execute");
 
+        supervisor_heartbeat(session, goal_id);
+
         /* Recover orphaned running actions at the start of execute phase. */
         if (phase == SUPERVISOR_PHASE_EXECUTE) {
             int orphans = supervisor_recover_orphaned_actions(session->services, goal_id);
@@ -505,6 +573,7 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
         int consecutive_errors = 0;
         /* Single failures may be transient notification issues; give up after 3 */
         const int max_consecutive_errors = 3;
+        int idle_wakes = 0;
         bool plan_phase_complete = false;
 
         while (g_supervisor_running) {
@@ -513,10 +582,12 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
             int max_fd = rebuild_fd_set(&read_fds, notify_fd);
 
             struct timeval timeout;
-            timeout.tv_sec = 5;
+            timeout.tv_sec = SUPERVISOR_IDLE_TIMEOUT_SEC;
             timeout.tv_usec = 0;
 
             int ready = select(max_fd + 1, &read_fds, NULL, NULL, &timeout);
+
+            supervisor_heartbeat(session, goal_id);
 
             if (ready < 0) {
                 if (!g_supervisor_running) break;
@@ -551,6 +622,29 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
                 }
             } else {
                 consecutive_errors = 0;
+            }
+
+            /* No workers running means nothing will report back: nudge the
+             * model with the current world state rather than spinning on an
+             * empty queue. */
+            idle_wakes = (running_action_count(session, goal_id) == 0)
+                ? idle_wakes + 1 : 0;
+            if (idle_wakes >= SUPERVISOR_IDLE_WAKES_BEFORE_REPROMPT) {
+                idle_wakes = 0;
+                int reprompt_rc = reprompt_with_world_state(session, goal_id, phase);
+                if (reprompt_rc == SUPERVISOR_EXIT_CONTEXT) {
+                    return handle_context_full_exit(session, goal_id, phase);
+                }
+                if (reprompt_rc != 0) {
+                    consecutive_errors++;
+                    if (consecutive_errors >= max_consecutive_errors) {
+                        fprintf(stderr, "Supervisor: too many consecutive errors, exiting\n");
+                        return SUPERVISOR_EXIT_ERROR;
+                    }
+                } else {
+                    consecutive_errors = 0;
+                }
+                supervisor_heartbeat(session, goal_id);
             }
 
             completion = check_phase_completion(session, goal_id, phase);

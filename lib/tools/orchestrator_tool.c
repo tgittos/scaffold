@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 static Services *g_services = NULL;
 
@@ -347,7 +348,7 @@ int execute_start_goal(const ToolCall *tc, ToolResult *result) {
         return 0;
     }
 
-    if (goal->supervisor_pid > 0 && orchestrator_supervisor_alive(gs, goal_id)) {
+    if (orchestrator_supervisor_alive(goal, time(NULL))) {
         tool_result_set_error(result, "Supervisor already running for this goal");
         goal_free(goal);
         free(goal_id);

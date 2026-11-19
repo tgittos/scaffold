@@ -1,6 +1,8 @@
 #include "unity.h"
 #include "tools/goap_tools.h"
 #include "tools/orchestrator_tool.h"
+#include "orchestrator/supervisor.h"
+#include "workflow/workflow.h"
 #include "db/goal_store.h"
 #include "db/action_store.h"
 #include "services/services.h"
@@ -919,9 +921,62 @@ void test_replan_skip_pending(void) {
     action_free_list(ready, ready_count);
 }
 
-/* ========================================================================
- * Runner
- * ======================================================================== */
+/*
+ * A worker that dies without reporting leaves its work item ASSIGNED and its
+ * action RUNNING, consuming a worker slot forever. Recovery runs when a
+ * supervisor starts — before it dispatches anything — so any ASSIGNED item
+ * belongs to a worker of a previous, now dead supervisor and goes back to the
+ * queue.
+ */
+void test_recover_resets_assigned_with_dead_worker(void) {
+    /* Work queues live in the app home; point it at a scratch dir. */
+    setenv("SCAFFOLD_HOME", "/tmp/test_goap_lifecycle_home", 1);
+    app_home_cleanup();
+    app_home_init(NULL);
+    app_home_ensure_exists();
+    unlink_sqlite_db("/tmp/test_goap_lifecycle_home/work_queues.db");
+
+    char goal_id[40];
+    TEST_ASSERT_EQUAL(0, goal_store_insert(gs, "Recovery", "orphan recovery",
+                                           "{\"done\":true}", "recover_queue",
+                                           goal_id));
+
+    char action_id[40];
+    TEST_ASSERT_EQUAL(0, action_store_insert(as, goal_id, NULL, "do the work",
+                                             "[]", "[\"done\"]", false,
+                                             "implementation", action_id));
+
+    WorkQueue *wq = work_queue_create("recover_queue");
+    TEST_ASSERT_NOT_NULL(wq);
+
+    char item_id[40];
+    TEST_ASSERT_EQUAL(0, work_queue_enqueue(wq, "do the work", NULL, 3, item_id));
+
+    WorkItem *claimed = work_queue_claim(wq, "worker-that-died");
+    TEST_ASSERT_NOT_NULL(claimed);
+    TEST_ASSERT_EQUAL(WORK_ITEM_ASSIGNED, claimed->status);
+    work_item_free(claimed);
+
+    action_store_update_work_item(as, action_id, item_id);
+    action_store_update_status(as, action_id, ACTION_STATUS_RUNNING, NULL);
+
+    int recovered = supervisor_recover_orphaned_actions(svc, goal_id);
+    TEST_ASSERT_EQUAL(1, recovered);
+
+    Action *a = action_store_get(as, action_id);
+    TEST_ASSERT_NOT_NULL(a);
+    TEST_ASSERT_EQUAL(ACTION_STATUS_PENDING, a->status);
+    action_free(a);
+
+    WorkItem *after = work_queue_get_item(wq, item_id);
+    TEST_ASSERT_NOT_NULL(after);
+    TEST_ASSERT_EQUAL(WORK_ITEM_PENDING, after->status);
+    work_item_free(after);
+
+    work_queue_destroy(wq);
+    unlink_sqlite_db("/tmp/test_goap_lifecycle_home/work_queues.db");
+    unsetenv("SCAFFOLD_HOME");
+}
 
 int main(void) {
     UNITY_BEGIN();
@@ -932,6 +987,7 @@ int main(void) {
     RUN_TEST(test_world_state_accumulation);
     RUN_TEST(test_multi_goal_isolation);
     RUN_TEST(test_replan_skip_pending);
+    RUN_TEST(test_recover_resets_assigned_with_dead_worker);
 
     return UNITY_END();
 }

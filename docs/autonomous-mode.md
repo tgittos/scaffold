@@ -44,6 +44,10 @@ The supervisor dispatches workers until the world state satisfies the goal state
 
 Supervisors persist their state to SQLite. If a supervisor crashes, it recovers from its last known state and resumes where it left off.
 
+Each supervisor writes a heartbeat to its goal on every loop tick (at most 10s apart). A supervisor counts as alive only while its process exists and its heartbeat is less than 30s old; otherwise `/goals` shows the goal as `stalled` and the next `scaffold` launch in that project respawns it. Supervisor output goes to `~/.local/scaffold/logs/supervisor-<goal_id>.log` at `info` level; `/goals <id>` prints the path.
+
+When a supervisor restarts, work items still marked as assigned belong to workers that died without reporting. Recovery returns them to the queue (or fails them once their attempts run out) so they stop holding worker slots. If the queue is empty and the goal is still incomplete for two consecutive ticks, the supervisor re-prompts the model with the current world state instead of waiting on nothing.
+
 ### Workers
 
 Workers are fast, focused, and disposable. Each one handles a single task:
@@ -167,6 +171,7 @@ While scaffold is building, use slash commands to watch progress:
 ## Concurrency
 
 - Multiple workers can run in parallel within a goal (up to `max_workers_per_goal`, default 3)
+- A worker is killed if it runs longer than `subagent_timeout` (default 1800s)
 - Goals execute sequentially by default (the orchestrator advances one at a time)
 - Workers are isolated processes -- they don't share memory with each other
 - Inter-agent communication happens through a SQLite-backed message store
