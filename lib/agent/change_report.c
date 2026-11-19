@@ -66,7 +66,7 @@ change_report_t *change_report_collect(const char *repo_root, const char *head_b
 
     /* Get commits made since head_before. */
     char *log_args[] = {
-        "/usr/bin/git", "-C", (char *)repo_root, "log", range, "--oneline", NULL
+        "git", "-C", (char *)repo_root, "log", range, "--oneline", NULL
     };
     int clen = run_git(log_args, commits_buf, sizeof(commits_buf));
     if (clen <= 0 || commits_buf[0] == '\0') return NULL;
@@ -74,7 +74,7 @@ change_report_t *change_report_collect(const char *repo_root, const char *head_b
     /* Get file-change statistics. */
     char stat_buf[STAT_BUF_SIZE] = {0};
     char *diff_args[] = {
-        "/usr/bin/git", "-C", (char *)repo_root, "diff", "--shortstat", range, NULL
+        "git", "-C", (char *)repo_root, "diff", "--shortstat", range, NULL
     };
     run_git(diff_args, stat_buf, sizeof(stat_buf));
 

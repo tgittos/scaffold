@@ -65,7 +65,7 @@ int process_spawn_capture(char *args[], char *buf, size_t buf_size) {
             close(fd);
         }
 
-        execv(args[0], args);
+        execvp(args[0], args);
         _exit(127);
     }
 

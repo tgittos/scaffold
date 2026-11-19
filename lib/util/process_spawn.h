@@ -16,7 +16,8 @@ int process_spawn_devnull(char *args[], pid_t *out_pid);
  * Spawn a child process, capture its stdout into buf (NUL-terminated).
  * stderr is discarded. Waits for the child to exit.
  *
- * @param args      NULL-terminated argument array (args[0] is the executable)
+ * @param args      NULL-terminated argument array (args[0] is the executable:
+ *                  an absolute path, or a bare command name resolved via PATH)
  * @param buf       Buffer to receive stdout
  * @param buf_size  Size of buf (including space for NUL terminator)
  * @return Bytes written to buf (>=0), or -1 on fork/exec failure.
