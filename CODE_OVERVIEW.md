@@ -50,6 +50,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`async_executor.c/h`** - Non-blocking message processing using background thread with pipe notification; running flag and condition broadcast occur inside mutex to prevent signal loss
 - **`context_enhancement.c/h`** - Split prompt builder: returns `EnhancedPromptParts` with session-stable base prompt and per-request dynamic context (repo snapshot on first turn, todo state, mode, memories, context retrieval). `build_repo_snapshot()` gathers git metadata and directory tree; `build_directory_tree()` produces a depth-limited directory listing
 - **`recap.c/h`** - Conversation recap (one-shot LLM call, no history persistence); `session_generate_recap` is called by `/recap` command; `-2` (user interrupt) returns -1 silently. Startup no longer calls LLM — `repl_show_greeting` prints a static banner for new sessions, or a resume line for existing ones.
+- **`change_report.c/h`** - Post-run change report comparing HEAD to a captured pre-run ref. `change_report_collect` runs `git log` and `git diff --shortstat` via `process_spawn_capture` (no shell, no interpolation) and returns a `change_report_t`; `change_report_format` renders it as human-readable text; `change_report_build` is the string facade (collect+format+free, returns NULL if nothing changed). JSON mode calls `json_output_change_report` with the struct directly.
 - **`streaming_handler.c/h`** - Application-layer streaming orchestration and provider registry management; `-2` (user interrupt) prints `Request cancelled.` without touching the api_error path
 - **`tool_executor.c/h`** - Thin entry point for tool execution workflow (init, initial batch, clear_history support, hand-off)
 - **`iterative_loop.c/h`** - Iterative tool-calling loop for follow-up LLM rounds; bounded retry of empty rounds (no text, reasoning or tool calls) with a visible warning
@@ -171,7 +172,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`ansi_codes.h`** - Terminal color codes, box-drawing characters, and status symbols
 - **`app_home.c/h`** - Centralized application home directory management (~/.local/<app_name>/)
 - **`project_scope.c/h`** - Per-project index names and git root lookup from the nearest `.git` root of the working directory
-- **`process_spawn.c/h`** - Common fork/exec helper with stdout/stderr redirected to /dev/null
+- **`process_spawn.c/h`** - Fork/exec helpers: `process_spawn_devnull` (stdout/stderr to /dev/null, non-blocking); `process_spawn_capture` (stdout captured into caller-supplied buffer, stderr discarded, waits for exit — used by `change_report.c` to run git without a shell)
 - **`executable_path.c/h`** - Executable path resolution for APE binaries
 - **`stdin_reader.c/h`** - Read all of a FILE stream into a heap-allocated string with an 8 MiB cap; returns NULL with `*truncated=1` when the limit is exceeded
 

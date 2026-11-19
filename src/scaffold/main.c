@@ -9,7 +9,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <limits.h>
 #include "../../lib/agent/agent.h"
+#include "../../lib/agent/change_report.h"
+#include "../../lib/util/project_scope.h"
+#include "../../lib/util/process_spawn.h"
+#include "../../lib/ui/json_output.h"
 #include "../../lib/updater/updater.h"
 #include "../../lib/plugin/plugin_manager.h"
 #include "../../lib/util/executable_path.h"
@@ -669,7 +674,48 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    /* Capture git HEAD before the agent runs (single-shot only). */
+    char cr_repo_root[PATH_MAX] = {0};
+    char cr_head_before[64] = {0};
+    bool cr_enabled = false;
+
+    if (config.mode == AGENT_MODE_SINGLE_SHOT) {
+        char cwd[PATH_MAX];
+        if (getcwd(cwd, sizeof(cwd)) != NULL &&
+            project_scope_git_root(cwd, cr_repo_root, sizeof(cr_repo_root)) == 0) {
+            char out[64] = {0};
+            char *args[] = {
+                "git", "-C", cr_repo_root, "rev-parse", "HEAD", NULL
+            };
+            if (process_spawn_capture(args, out, sizeof(out)) > 0) {
+                size_t hlen = strlen(out);
+                if (hlen > 0 && out[hlen - 1] == '\n') out[--hlen] = '\0';
+                if (out[0] != '\0') {
+                    snprintf(cr_head_before, sizeof(cr_head_before), "%s", out);
+                    cr_enabled = true;
+                }
+            }
+        }
+    }
+
     int result = agent_run(&agent);
+
+    /* Emit change report after a single-shot run. */
+    if (cr_enabled) {
+        if (config.json_mode) {
+            change_report_t *cr = change_report_collect(cr_repo_root, cr_head_before);
+            if (cr) {
+                json_output_change_report(cr);
+                change_report_free(cr);
+            }
+        } else {
+            char *text = change_report_build(cr_repo_root, cr_head_before);
+            if (text) {
+                fprintf(stderr, "%s\n", text);
+                free(text);
+            }
+        }
+    }
 
     agent_cleanup(&agent);
     openai_auth_cleanup();

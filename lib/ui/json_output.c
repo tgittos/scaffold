@@ -1,4 +1,5 @@
 #include "json_output.h"
+#include "../agent/change_report.h"
 #include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -334,6 +335,50 @@ void json_output_result(const char* result) {
 
     cJSON_AddStringToObject(root, "type", JSON_TYPE_RESULT);
     cJSON_AddStringToObject(root, "result", result);
+
+    print_and_free_json(root);
+}
+
+void json_output_change_report(const change_report_t *report) {
+    if (report == NULL) return;
+
+    cJSON *root = cJSON_CreateObject();
+    if (root == NULL) {
+        log_alloc_failure("json_output_change_report root");
+        return;
+    }
+
+    cJSON_AddStringToObject(root, "type", "change_report");
+    cJSON_AddNumberToObject(root, "files", report->files_changed);
+    cJSON_AddNumberToObject(root, "insertions", report->insertions);
+    cJSON_AddNumberToObject(root, "deletions", report->deletions);
+
+    cJSON *commits_arr = cJSON_CreateArray();
+    if (commits_arr == NULL) {
+        log_alloc_failure("json_output_change_report commits_arr");
+        cJSON_Delete(root);
+        return;
+    }
+    cJSON_AddItemToObject(root, "commits", commits_arr);
+
+    if (report->commits_text) {
+        const char *p = report->commits_text;
+        while (*p) {
+            const char *nl = strchr(p, '\n');
+            size_t len = nl ? (size_t)(nl - p) : strlen(p);
+            if (len > 0) {
+                char *line = malloc(len + 1);
+                if (line) {
+                    memcpy(line, p, len);
+                    line[len] = '\0';
+                    cJSON *s = cJSON_CreateString(line);
+                    free(line);
+                    if (s) cJSON_AddItemToArray(commits_arr, s);
+                }
+            }
+            p = nl ? nl + 1 : p + len;
+        }
+    }
 
     print_and_free_json(root);
 }

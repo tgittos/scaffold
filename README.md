@@ -81,6 +81,19 @@ cat SPEC.md | ./scaffold "implement this spec"
 
 The [Getting Started guide](docs/getting-started.md) goes into more detail.
 
+### Change report
+
+After a one-shot run in a git repository, scaffold prints a change report to
+stderr summarizing what the run did: a `Changed: N files (+A −D)` line and a
+`Commits: <hash> <subject>` line for each commit made since the run started.
+The report reflects the working tree, so uncommitted edits to tracked files are
+included; if nothing changed, no report is printed.
+
+In `--json` mode the same information is emitted as a single-line
+`change_report` JSON event on stdout with fields `type` (`"change_report"`),
+`files`, `insertions`, `deletions`, and `commits` (an array of
+`"<hash> <subject>"` strings).
+
 ---
 
 ## Why this exists

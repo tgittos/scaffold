@@ -50,6 +50,7 @@ $(eval $(call def_test,darray,test_darray,))
 $(eval $(call def_test,ptrarray,test_ptrarray,))
 $(eval $(call def_test,tool_cache,tools/test_tool_cache,$(LIBDIR)/tools/tool_cache.c))
 $(eval $(call def_test,prompt_mode,agent/test_prompt_mode,$(LIBDIR)/agent/prompt_mode.c))
+$(eval $(call def_test,change_report,agent/test_change_report,$(LIBDIR)/agent/change_report.c $(LIBDIR)/util/process_spawn.c))
 $(eval $(call def_test,oauth_callback_server,auth/test_oauth_callback_server,$(LIBDIR)/auth/oauth_callback_server.c))
 
 
@@ -103,6 +104,9 @@ $(TEST_tool_cache_TARGET): $(TEST_tool_cache_OBJECTS) $(CJSON_LIB)
 
 $(TEST_prompt_mode_TARGET): $(TEST_prompt_mode_OBJECTS)
 	$(CC) -o $@ $(TEST_prompt_mode_OBJECTS)
+
+$(TEST_change_report_TARGET): $(TEST_change_report_OBJECTS)
+	$(CC) -o $@ $(TEST_change_report_OBJECTS)
 
 $(TEST_oauth_callback_server_TARGET): $(TEST_oauth_callback_server_OBJECTS)
 	$(CC) -o $@ $(TEST_oauth_callback_server_OBJECTS) -lpthread
