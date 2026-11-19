@@ -371,6 +371,57 @@ void test_message_cleanup_channel_messages(void) {
     TEST_ASSERT_TRUE(deleted >= 1);
 }
 
+void test_message_cleanup_channel_messages_by_prefix_scopes_by_name(void) {
+    channel_create(g_store, "goals:proj-a", "Progress", "creator", 0);
+    channel_create(g_store, "agents:chat", "Coordination", "creator", 0);
+    channel_subscribe(g_store, "goals:proj-a", "repl");
+    channel_subscribe(g_store, "agents:chat", "worker");
+
+    char msg_id[40] = {0};
+    channel_publish(g_store, "goals:proj-a", "pub", "progress event", msg_id);
+    channel_publish(g_store, "agents:chat", "pub", "coordination message", msg_id);
+
+    /* Negative max_age puts the cutoff in the future, so every existing
+     * row qualifies without needing a real sleep. */
+    int deleted = message_cleanup_channel_messages_by_prefix(g_store, "goals:", -1);
+    TEST_ASSERT_TRUE(deleted >= 1);
+
+    size_t progress_count = 0;
+    ChannelMessage** progress_msgs = channel_receive(g_store, "goals:proj-a", "repl", 10,
+                                                      &progress_count);
+    TEST_ASSERT_NULL(progress_msgs);
+    TEST_ASSERT_EQUAL(0, progress_count);
+
+    size_t other_count = 0;
+    ChannelMessage** other_msgs = channel_receive(g_store, "agents:chat", "worker", 10,
+                                                   &other_count);
+    TEST_ASSERT_NOT_NULL(other_msgs);
+    TEST_ASSERT_EQUAL(1, other_count);
+    channel_message_free_list(other_msgs, other_count);
+}
+
+void test_message_cleanup_channel_messages_by_prefix_null_args(void) {
+    TEST_ASSERT_EQUAL(-1, message_cleanup_channel_messages_by_prefix(NULL, "goals:", 0));
+    TEST_ASSERT_EQUAL(-1, message_cleanup_channel_messages_by_prefix(g_store, NULL, 0));
+}
+
+void test_channel_set_persistent_flips_flag(void) {
+    channel_create(g_store, "legacy-ch", "Legacy", "creator", 1);
+
+    Channel* before = channel_get(g_store, "legacy-ch");
+    TEST_ASSERT_NOT_NULL(before);
+    TEST_ASSERT_EQUAL(1, before->is_persistent);
+    channel_free(before);
+
+    int rc = channel_set_persistent(g_store, "legacy-ch", 0);
+    TEST_ASSERT_EQUAL(0, rc);
+
+    Channel* after = channel_get(g_store, "legacy-ch");
+    TEST_ASSERT_NOT_NULL(after);
+    TEST_ASSERT_EQUAL(0, after->is_persistent);
+    channel_free(after);
+}
+
 void test_cross_process_access(void) {
     channel_create(g_store, "cross-process", "Cross process test", "creator", 0);
 
@@ -807,6 +858,9 @@ int main(void) {
     RUN_TEST(test_message_cleanup_expired);
     RUN_TEST(test_message_cleanup_agent);
     RUN_TEST(test_message_cleanup_channel_messages);
+    RUN_TEST(test_message_cleanup_channel_messages_by_prefix_scopes_by_name);
+    RUN_TEST(test_message_cleanup_channel_messages_by_prefix_null_args);
+    RUN_TEST(test_channel_set_persistent_flips_flag);
 
     RUN_TEST(test_cross_process_access);
     RUN_TEST(test_channel_delete_cascades);

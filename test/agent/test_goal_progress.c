@@ -192,6 +192,66 @@ void test_progress_channel_cleanup_removes_old_messages(void) {
     TEST_ASSERT_EQUAL(0, count);
 }
 
+/* Key regression guard: goal_progress_cleanup() must only ever reach the
+ * "goals:" namespace. A non-progress, non-persistent channel (as
+ * messaging_tool.c creates for agent-to-agent coordination) sharing the
+ * same message store must be untouched, even though the OLD unscoped
+ * message_cleanup_channel_messages() would have deleted it too. */
+void test_cleanup_does_not_touch_other_channels(void) {
+    TEST_ASSERT_EQUAL(0, channel_create(g_store, "agents:chat", "Agent coordination",
+                                         "worker-1", 0));
+    TEST_ASSERT_EQUAL(0, channel_subscribe(g_store, "agents:chat", "worker-2"));
+    char other_msg_id[40];
+    TEST_ASSERT_EQUAL(0, channel_publish(g_store, "agents:chat", "worker-1",
+                                          "unrelated coordination message", other_msg_id));
+
+    TEST_ASSERT_EQUAL(0, goal_progress_subscribe(g_store, "proj-h", "repl"));
+    goal_progress_publish(g_store, "proj-h", "action_finished", "goal", "detail");
+
+    usleep(20000);
+
+    int rc = goal_progress_cleanup(g_store, 0);
+    TEST_ASSERT_TRUE(rc >= 0);
+
+    /* Progress message is gone. */
+    size_t progress_count = 0;
+    ChannelMessage **progress_msgs = channel_receive(g_store, "goals:proj-h", "repl", 10,
+                                                      &progress_count);
+    TEST_ASSERT_NULL(progress_msgs);
+    TEST_ASSERT_EQUAL(0, progress_count);
+
+    /* Unrelated agent channel message survives. */
+    size_t other_count = 0;
+    ChannelMessage **other_msgs = channel_receive(g_store, "agents:chat", "worker-2", 10,
+                                                   &other_count);
+    TEST_ASSERT_NOT_NULL(other_msgs);
+    TEST_ASSERT_EQUAL(1, other_count);
+    TEST_ASSERT_EQUAL_STRING("unrelated coordination message", other_msgs[0]->content);
+    channel_message_free_list(other_msgs, other_count);
+}
+
+void test_ensure_channel_self_heals_legacy_persistent_row(void) {
+    /* Simulate a channel created by a pre-fix build, which used
+     * is_persistent=1. channel_create() below is then a silent no-op (the
+     * row already exists), so without the self-heal in ensure_channel_exists
+     * the flag would never flip and cleanup would stay a permanent no-op
+     * for this channel. */
+    TEST_ASSERT_EQUAL(0, channel_create(g_store, "goals:proj-i", "Goal progress events",
+                                         "system", 1));
+
+    Channel *before = channel_get(g_store, "goals:proj-i");
+    TEST_ASSERT_NOT_NULL(before);
+    TEST_ASSERT_EQUAL(1, before->is_persistent);
+    channel_free(before);
+
+    TEST_ASSERT_EQUAL(0, goal_progress_subscribe(g_store, "proj-i", "repl"));
+
+    Channel *after = channel_get(g_store, "goals:proj-i");
+    TEST_ASSERT_NOT_NULL(after);
+    TEST_ASSERT_EQUAL(0, after->is_persistent);
+    channel_free(after);
+}
+
 /* ========================================================================
  * Snapshot seeding (FIX 1: no replay on supervisor restart)
  * ======================================================================== */
@@ -286,6 +346,8 @@ int main(void) {
     RUN_TEST(test_quit_warning_empty);
     RUN_TEST(test_progress_channel_is_non_persistent);
     RUN_TEST(test_progress_channel_cleanup_removes_old_messages);
+    RUN_TEST(test_cleanup_does_not_touch_other_channels);
+    RUN_TEST(test_ensure_channel_self_heals_legacy_persistent_row);
     RUN_TEST(test_seed_snapshot_prevents_replay_on_restart);
     RUN_TEST(test_unseeded_snapshot_still_detects_genuine_transition);
     RUN_TEST(test_skipped_action_publishes_event);

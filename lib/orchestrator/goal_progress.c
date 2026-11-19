@@ -8,12 +8,19 @@
 /* Diamond marker prefixing every rendered progress line: "<marker> <goal>: <symbol> <detail>" */
 #define GOAL_PROGRESS_MARKER "\xE2\x97\x86" /* U+25C6 BLACK DIAMOND */
 
+/* Every progress channel name starts with this, and ONLY this namespace is
+ * ever passed to message_cleanup_channel_messages_by_prefix() below — the
+ * message store is a single file shared by every project and every
+ * agent/subagent channel (see messaging_tool.c), so cleanup here must never
+ * reach outside "goals:*". */
+#define GOAL_PROGRESS_CHANNEL_PREFIX "goals:"
+
 char *goal_progress_channel_name(const char *project) {
     const char *p = (project != NULL && project[0] != '\0') ? project : "default";
-    size_t len = strlen("goals:") + strlen(p) + 1;
+    size_t len = strlen(GOAL_PROGRESS_CHANNEL_PREFIX) + strlen(p) + 1;
     char *buf = malloc(len);
     if (buf == NULL) return NULL;
-    snprintf(buf, len, "goals:%s", p);
+    snprintf(buf, len, GOAL_PROGRESS_CHANNEL_PREFIX "%s", p);
     return buf;
 }
 
@@ -22,18 +29,23 @@ char *goal_progress_channel_name(const char *project) {
  * to channels(id)). Failure here almost always means the channel already
  * exists, which is fine — ignore it.
  *
- * Created NON-persistent (is_persistent=0) on purpose: message_cleanup_
- * channel_messages() only ever trims non-persistent channels, and progress
- * events are ephemeral UI chatter, not state that needs to survive forever.
- * A persistent channel here would accumulate rows with no retention path,
- * since nothing else in the codebase calls message_cleanup_*. */
+ * Created NON-persistent (is_persistent=0): progress events are ephemeral
+ * UI chatter, not state that needs to survive forever. channel_set_persistent()
+ * self-heals rows created by an older build that still has is_persistent=1
+ * (channel_create() above is a silent no-op for an id that already exists,
+ * so without this the flag would never flip). */
 static void ensure_channel_exists(message_store_t *store, const char *channel_name) {
     channel_create(store, channel_name, "Goal progress events", "system", 0);
+    channel_set_persistent(store, channel_name, 0);
 }
 
 int goal_progress_cleanup(message_store_t *store, int max_age_seconds) {
     if (store == NULL) return -1;
-    return message_cleanup_channel_messages(store, max_age_seconds);
+    /* Scoped to the "goals:" namespace — NOT message_cleanup_channel_messages(),
+     * which is unscoped and would also trim unrelated agent/subagent channels
+     * sharing this same message store. */
+    return message_cleanup_channel_messages_by_prefix(store, GOAL_PROGRESS_CHANNEL_PREFIX,
+                                                       max_age_seconds);
 }
 
 int goal_progress_publish(message_store_t *store, const char *project,
