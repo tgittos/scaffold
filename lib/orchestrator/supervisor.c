@@ -2,6 +2,7 @@
 #define LOG_MODULE_STR "goap"
 #include "../util/log.h"
 #include "supervisor.h"
+#include "orchestrator.h"
 #include "goap_state.h"
 #include "../ipc/message_poller.h"
 #include "workflow/workflow.h"
@@ -402,8 +403,38 @@ static int check_phase_completion(AgentSession *session, const char *goal_id,
     return -1;  /* not complete yet */
 }
 
+SupervisorPhase supervisor_resolve_phase(Services *services, const char *goal_id,
+                                          SupervisorPhase requested) {
+    if (services == NULL || goal_id == NULL) return requested;
+    if (requested != SUPERVISOR_PHASE_PLAN) return requested;
+
+    goal_store_t *gs = services_get_goal_store(services);
+    action_store_t *as = services_get_action_store(services);
+    if (gs == NULL || as == NULL) return requested;
+
+    Goal *goal = goal_store_get(gs, goal_id);
+    if (goal == NULL) return requested;
+
+    bool is_planning = (goal->status == GOAL_STATUS_PLANNING);
+    goal_free(goal);
+
+    if (is_planning && action_store_has_actions(as, goal_id)) {
+        LOG_INFO("Supervisor: PLANNING goal %s has existing actions, skipping plan phase",
+                 goal_id);
+        goal_store_update_status(gs, goal_id, GOAL_STATUS_ACTIVE);
+        return SUPERVISOR_PHASE_EXECUTE;
+    }
+
+    return requested;
+}
+
 int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase phase) {
     if (session == NULL || goal_id == NULL) return SUPERVISOR_EXIT_ERROR;
+
+    /* If the caller passes PLAN but the goal already has actions (e.g. plan was
+     * done in a prior session and the supervisor is being restarted without
+     * --phase execute), skip straight to execute. */
+    phase = supervisor_resolve_phase(session->services, goal_id, phase);
 
     g_supervisor_running = 1;
 

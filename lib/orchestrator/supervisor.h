@@ -28,6 +28,22 @@ typedef enum {
 int supervisor_recover_orphaned_actions(Services *services, const char *goal_id);
 
 /**
+ * Resolve the actual phase to use for a supervisor invocation.
+ *
+ * If the requested phase is PLAN but the goal is in PLANNING status and
+ * already has existing actions (plan completed in a prior session), promotes
+ * the goal to ACTIVE and returns SUPERVISOR_PHASE_EXECUTE instead.
+ * This is the shared helper used by both supervisor_run and execute_start_goal.
+ *
+ * @param services  Services container
+ * @param goal_id   UUID of the goal
+ * @param requested The phase the caller requested
+ * @return The phase to actually use
+ */
+SupervisorPhase supervisor_resolve_phase(Services *services, const char *goal_id,
+                                          SupervisorPhase requested);
+
+/**
  * Run the supervisor event loop for a goal.
  *
  * The supervisor drives a goal to completion by calling GOAP tools

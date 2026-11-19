@@ -4,6 +4,7 @@
 #include "db/goal_store.h"
 #include "db/action_store.h"
 #include "services/services.h"
+#include "orchestrator/supervisor.h"
 #include "util/app_home.h"
 #include "util/common_utils.h"
 #include <cJSON.h>
@@ -324,6 +325,54 @@ void test_start_goal_not_found(void) {
 }
 
 /* ========================================================================
+ * supervisor_resolve_phase — no-phase-arg path
+ * Tests the shared helper used by supervisor_run when started without
+ * --phase execute for a goal that already has actions.
+ * ======================================================================== */
+
+void test_resolve_phase_planning_no_actions_stays_plan(void) {
+    char goal_id[40];
+    create_test_goal(goal_id);
+    /* Goal is PLANNING, no actions yet */
+    SupervisorPhase phase = supervisor_resolve_phase(svc, goal_id,
+                                                      SUPERVISOR_PHASE_PLAN);
+    TEST_ASSERT_EQUAL(SUPERVISOR_PHASE_PLAN, phase);
+    /* Status unchanged */
+    Goal *goal = goal_store_get(gs, goal_id);
+    TEST_ASSERT_NOT_NULL(goal);
+    TEST_ASSERT_EQUAL(GOAL_STATUS_PLANNING, goal->status);
+    goal_free(goal);
+}
+
+void test_resolve_phase_planning_with_actions_promotes_to_execute(void) {
+    char goal_id[40];
+    create_test_goal(goal_id);
+    /* Pre-populate an action — simulates plan done in prior session */
+    char action_id[40];
+    action_store_insert(as, goal_id, NULL, "Step 1",
+                        "[]", "[]", false, NULL, action_id);
+
+    SupervisorPhase phase = supervisor_resolve_phase(svc, goal_id,
+                                                      SUPERVISOR_PHASE_PLAN);
+    /* Must switch to execute */
+    TEST_ASSERT_EQUAL(SUPERVISOR_PHASE_EXECUTE, phase);
+    /* Goal must have been promoted to ACTIVE */
+    Goal *goal = goal_store_get(gs, goal_id);
+    TEST_ASSERT_NOT_NULL(goal);
+    TEST_ASSERT_EQUAL(GOAL_STATUS_ACTIVE, goal->status);
+    goal_free(goal);
+}
+
+void test_resolve_phase_explicit_execute_unchanged(void) {
+    char goal_id[40];
+    create_test_goal(goal_id);
+    /* Even without actions, explicit EXECUTE is returned unchanged */
+    SupervisorPhase phase = supervisor_resolve_phase(svc, goal_id,
+                                                      SUPERVISOR_PHASE_EXECUTE);
+    TEST_ASSERT_EQUAL(SUPERVISOR_PHASE_EXECUTE, phase);
+}
+
+/* ========================================================================
  * pause_goal
  * ======================================================================== */
 
@@ -457,6 +506,11 @@ int main(int argc, char **argv) {
     RUN_TEST(test_start_goal_with_actions_skips_plan);
     RUN_TEST(test_start_goal_wrong_status);
     RUN_TEST(test_start_goal_not_found);
+
+    /* supervisor_resolve_phase */
+    RUN_TEST(test_resolve_phase_planning_no_actions_stays_plan);
+    RUN_TEST(test_resolve_phase_planning_with_actions_promotes_to_execute);
+    RUN_TEST(test_resolve_phase_explicit_execute_unchanged);
 
     /* pause_goal */
     RUN_TEST(test_pause_goal_wrong_status);

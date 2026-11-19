@@ -891,9 +891,10 @@ graph TB
 ### Phase Lifecycle
 
 1. **Orchestrator spawns supervisor** with auto-detected `--phase` flag based on goal status (PLANNING = plan, ACTIVE = execute)
-2. **Plan phase**: Supervisor builds a planner message with goal description and decomposition instructions. The LLM creates actions and optionally saves a plan document via `goap_save_plan_document`. When `plan_is_complete()` detects actions exist, the goal transitions to ACTIVE and the supervisor exits
-3. **Execute phase**: Supervisor builds an executor message with work context and `plan_guidance` (from the goal's `plan_document`). The LLM dispatches actions to workers and updates world state. Goal completion triggers COMPLETED status
-4. **Respawn**: Orchestrator respawns dead supervisors for both PLANNING and ACTIVE goals, re-detecting the appropriate phase
+2. **Plan-skip detection**: `supervisor_resolve_phase()` runs at the top of `supervisor_run`. If the goal is PLANNING but already has actions (plan done in a prior session), it promotes the goal to ACTIVE and returns EXECUTE — preventing redundant re-planning. The same `action_store_has_actions()` check is used by `execute_start_goal` in orchestrator_tool.c.
+3. **Plan phase**: Supervisor builds a planner message with goal description and decomposition instructions. The LLM creates actions and optionally saves a plan document via `goap_save_plan_document`. When `plan_is_complete()` detects actions exist, the goal transitions to ACTIVE and the supervisor loops into execute phase in-process.
+4. **Execute phase**: Supervisor builds an executor message with work context and `plan_guidance` (from the goal's `plan_document`). The LLM dispatches actions to workers and updates world state. Goal completion triggers COMPLETED status
+5. **Respawn**: Orchestrator respawns dead supervisors for both PLANNING and ACTIVE goals, re-detecting the appropriate phase
 
 ### Context Pressure Detection
 

@@ -464,7 +464,7 @@ int execute_goap_create_actions(const ToolCall *tc, ToolResult *result) {
         /* Build a human-readable warning so the agent sees the problem. */
         char warn_buf[512];
         int wlen = snprintf(warn_buf, sizeof(warn_buf),
-            "%d action(s) skipped — description already exists: ", dup_count);
+            "%d duplicate(s) skipped: ", dup_count);
         int first = 1;
         cJSON *dup_arr = cJSON_GetObjectItem(json, "duplicates");
         cJSON *d;

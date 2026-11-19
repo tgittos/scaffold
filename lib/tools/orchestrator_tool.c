@@ -7,6 +7,7 @@
 #include "services/services.h"
 #include "orchestrator/orchestrator.h"
 #include "orchestrator/goap_state.h"
+#include "orchestrator/supervisor.h"
 #include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -360,14 +361,10 @@ int execute_start_goal(const ToolCall *tc, ToolResult *result) {
     /* Determine if actions already exist for this goal.  When a PLANNING goal
      * has actions (e.g. the plan was done in a prior session), skip the plan
      * phase entirely: set it ACTIVE now so orchestrator_spawn_supervisor will
-     * pass --phase execute and avoid a redundant second decomposition. */
-    bool has_actions = false;
-    if (original_status == GOAL_STATUS_PLANNING && as != NULL) {
-        size_t action_count = 0;
-        Action **existing = action_store_list_by_goal(as, goal_id, &action_count);
-        if (existing != NULL) action_free_list(existing, action_count);
-        has_actions = (action_count > 0);
-    }
+     * pass --phase execute and avoid a redundant second decomposition.
+     * Uses action_store_has_actions — the same check supervisor_run uses. */
+    bool has_actions = (original_status == GOAL_STATUS_PLANNING &&
+                        action_store_has_actions(as, goal_id));
 
     /* PAUSED goals or PLANNING goals that already have actions resume as ACTIVE.
      * Fresh PLANNING goals (no actions yet) stay PLANNING so the supervisor

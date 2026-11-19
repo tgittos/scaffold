@@ -80,6 +80,9 @@ int action_store_count_by_status(action_store_t* store, const char* goal_id,
 // Mark all PENDING actions for a goal as SKIPPED.
 int action_store_skip_pending(action_store_t* store, const char* goal_id);
 
+// Return true if any actions exist for the given goal (regardless of status).
+bool action_store_has_actions(action_store_t* store, const char* goal_id);
+
 void action_free(Action* action);
 void action_free_list(Action** actions, size_t count);
 

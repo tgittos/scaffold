@@ -70,7 +70,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`metadata_store.c/h`** - Chunk metadata storage layer (separate from vectors)
 - **`task_store.c/h`** - SQLite-based persistent task storage with hierarchies and dependencies
 - **`goal_store.c/h`** - GOAP goal persistence: goal state, world state, plan_document (TEXT column), supervisor PID tracking, lock/unlock API for atomic read-modify-write sequences, `goal_store_update_plan_document()`, schema migration for existing DBs
-- **`action_store.c/h`** - GOAP action persistence: hierarchy (compound/primitive), preconditions/effects, readiness queries, work_item_id correlation for dispatch tracking
+- **`action_store.c/h`** - GOAP action persistence: hierarchy (compound/primitive), preconditions/effects, readiness queries, work_item_id correlation for dispatch tracking. `action_store_has_actions()` returns true if any actions exist for a goal (used by both `supervisor_resolve_phase` and `execute_start_goal` as the shared plan-detection helper).
 - **`oauth2_store.c/h`** - OAuth2 token management with PKCE, AES-256-GCM encryption, vtable-based provider pattern (unified `refresh_token` callback with optional rotation, nullable `revoke_token` hook), auto-refresh with 60s margin, heap-allocated refresh context, value-copied provider ops, `oauth2_error_string()` utility
 - **`sqlite_dal.c/h`** - SQLite data access layer with recursive mutex protection (supports nested locking for atomic read-modify-write), ref-counted shared connections, schema initialization, and common query patterns
 - **`hnswlib_wrapper.cpp/h`** - C++ wrapper for HNSW vector indexing
@@ -125,8 +125,8 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`todo_manager.c/h`** - Todo data structures and operations
 - **`todo_tool.c/h`** - Todo tool call handler
 - **`todo_display.c/h`** - Todo console visualization
-- **`goap_tools.c/h`** - GOAP dispatch tool for supervisors (single `goap` tool with `operation` enum: get_goal, list_actions, create_goal, create_actions, update_action, dispatch_action, update_world_state, check_complete, get_action_results, save_plan_document). Includes plan_document persistence and plan_guidance injection via `build_work_context()`
-- **`orchestrator_tool.c/h`** - Orchestrator dispatch tool (single `orchestrator` tool with `operation` enum: execute_plan, list_goals, goal_status, start_goal, pause_goal, cancel_goal)
+- **`goap_tools.c/h`** - GOAP dispatch tool for supervisors (single `goap` tool with `operation` enum: get_goal, list_actions, create_goal, create_actions, update_action, dispatch_action, update_world_state, check_complete, get_action_results, save_plan_document). Includes plan_document persistence and plan_guidance injection via `build_work_context()`. `create_actions` performs per-action duplicate detection (checks existing descriptions for each action in the batch, inserts non-duplicates, reports all duplicates by name + count in a `warning` field).
+- **`orchestrator_tool.c/h`** - Orchestrator dispatch tool (single `orchestrator` tool with `operation` enum: execute_plan, list_goals, goal_status, start_goal, pause_goal, cancel_goal). `start_goal` uses `action_store_has_actions` to detect plans completed in a prior session and promotes PLANNING→ACTIVE before spawning so the supervisor uses `--phase execute`.
 - **`mode_tool.c/h`** - LLM-callable switch_mode tool for changing behavioral modes
 - **`tool_cache.c/h`** - Thread-safe tool result caching with file mtime invalidation
 
@@ -209,7 +209,7 @@ Built to `out/plugins/`. Not embedded in the scaffold binary — users install b
 - **`jwt_decode.c/h`** - JWT payload decoding: base64url decode via mbedTLS, nested claim extraction (`https://api.openai.com/auth` -> `chatgpt_account_id`)
 
 #### `lib/orchestrator/` - Scaffold Orchestration
-- **`supervisor.c/h`** - Supervisor event loop with `SupervisorPhase` enum (`SUPERVISOR_PHASE_PLAN`, `SUPERVISOR_PHASE_EXECUTE`): phase-aware execution via `supervisor_run(phase)`, split message builders (`build_planner_message`, `build_executor_message`), `plan_is_complete()` check, context pressure exit (`SUPERVISOR_EXIT_CONTEXT`), message-poller-based wake-on-worker-completion, orphaned action recovery on startup
+- **`supervisor.c/h`** - Supervisor event loop with `SupervisorPhase` enum (`SUPERVISOR_PHASE_PLAN`, `SUPERVISOR_PHASE_EXECUTE`): phase-aware execution via `supervisor_run(phase)`, split message builders (`build_planner_message`, `build_executor_message`), `plan_is_complete()` check, context pressure exit (`SUPERVISOR_EXIT_CONTEXT`), message-poller-based wake-on-worker-completion, orphaned action recovery on startup. `supervisor_resolve_phase()` checks at startup whether a PLANNING goal already has actions and promotes to EXECUTE, closing the teardown+respawn gap for manually restarted supervisors.
 - **`orchestrator.c/h`** - Supervisor spawning (via process_spawn) with auto-detected `--phase` flag from goal status, liveness checks, zombie reaping, stale PID cleanup (dead processes only), respawn for both PLANNING and ACTIVE goals
 - **`goap_state.c/h`** - Shared GOAP state evaluation: precondition checking (`goap_preconditions_met`) and progress tracking (`goap_check_progress`) used by 5 call sites
 - **`role_prompts.c/h`** - Role-based system prompts for workers: loads from `<app_home>/prompts/<role>.md` with built-in defaults for 6 standard roles (implementation, code_review, architecture_review, design_review, pm_review, testing)
