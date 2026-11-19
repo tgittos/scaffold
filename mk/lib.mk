@@ -176,7 +176,8 @@ LIB_ORCHESTRATOR_SOURCES := \
     $(LIBDIR)/orchestrator/supervisor.c \
     $(LIBDIR)/orchestrator/orchestrator.c \
     $(LIBDIR)/orchestrator/role_prompts.c \
-    $(LIBDIR)/orchestrator/goap_state.c
+    $(LIBDIR)/orchestrator/goap_state.c \
+    $(LIBDIR)/orchestrator/goal_progress.c
 
 # Auth module (OAuth2 providers, JWT, login orchestration)
 LIB_AUTH_SOURCES := \

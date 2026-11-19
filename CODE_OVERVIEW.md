@@ -46,7 +46,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`conversation_state.c/h`** - Conversation history append helpers (assistant messages, tool results)
 - **`tool_batch_executor.c/h`** - Batch tool execution; explicitly dispatches MCP and plugin tools (schema-only registry entries); caps each result at `tool_result_max_bytes` (default 32768) keeping head and tail around a `[... N bytes omitted ...]` marker
 - **`tool_orchestration.c/h`** - Tool call deduplication and per-batch tracking
-- **`repl.c/h`** - Read-Eval-Print-Loop for interactive mode with readline, async processing, and periodic supervisor recovery. Lines starting with `/` are dispatched to slash commands and never forwarded to the LLM regardless of dispatch result.
+- **`repl.c/h`** - Read-Eval-Print-Loop for interactive mode with readline, async processing, and periodic supervisor recovery. Lines starting with `/` are dispatched to slash commands and never forwarded to the LLM regardless of dispatch result. Subscribes to the current project's goal progress channel (`goals:<project>`, see `orchestrator/goal_progress.c`) at startup and renders new events between prompts (plain line, or a `goal_progress` JSON system event in `--json` mode); on `quit`/`exit`/EOF, warns on stderr if any of the project's goals still have a live supervisor.
 - **`async_executor.c/h`** - Non-blocking message processing using background thread with pipe notification; running flag and condition broadcast occur inside mutex to prevent signal loss
 - **`context_enhancement.c/h`** - Split prompt builder: returns `EnhancedPromptParts` with session-stable base prompt and per-request dynamic context (repo snapshot on first turn, todo state, mode, memories, context retrieval). `build_repo_snapshot()` gathers git metadata and directory tree; `build_directory_tree()` produces a depth-limited directory listing
 - **`recap.c/h`** - Conversation recap (one-shot LLM call, no history persistence); `session_generate_recap` is called by `/recap` command; `-2` (user interrupt) returns -1 silently. Startup no longer calls LLM — `repl_show_greeting` prints a static banner for new sessions, or a resume line for existing ones.
@@ -213,6 +213,7 @@ Built to `out/plugins/`. Not embedded in the scaffold binary — users install b
 - **`orchestrator.c/h`** - Supervisor spawning (via `process_spawn_logged`, with `--log info` into `logs/supervisor-<goal_id>.log`) with auto-detected `--phase` flag from goal status, heartbeat-based liveness (`orchestrator_supervisor_alive(const Goal*, time_t)`: live pid, not a zombie, heartbeat < 30s), zombie reaping, stale PID cleanup (dead processes only), respawn for PLANNING and ACTIVE goals of one project whose supervisor process is gone (`orchestrator_respawn_dead(store, project)`), `orchestrator_supervisor_log_path()`
 - **`goap_state.c/h`** - Shared GOAP state evaluation: precondition checking (`goap_preconditions_met`) and progress tracking (`goap_check_progress`) used by 5 call sites
 - **`role_prompts.c/h`** - Role-based system prompts for workers: loads from `<app_home>/prompts/<role>.md` with built-in defaults for 6 standard roles (implementation, code_review, architecture_review, design_review, pm_review, testing)
+- **`goal_progress.c/h`** - Live goal progress events on top of `message_store`'s channel primitives: per-project channel `goals:<project>` (`goal_progress_channel_name`), `goal_progress_publish`/`goal_progress_subscribe` (lazily create the channel), `goal_progress_format` (renders one event into a display line, e.g. `◆ todo-web-app: ✓ Write tests/conftest.py (3/7)`), `goal_progress_quit_warning` (REPL quit message listing goals still running)
 
 #### `lib/workflow/` - Task Queue
 - **`workflow.c/h`** - SQLite-backed work queue for asynchronous task processing and work item lifecycle (enqueue, claim, complete, fail, remove). Workers are spawned via the subagent system (`subagent_spawn_with_args`), not directly from workflow.
@@ -327,6 +328,7 @@ The test directory mirrors the source structure:
 - **`test_prompt_mode.c`** - Prompt mode enum and parsing tests
 - **`test_context_mode_injection.c`** - Context mode injection tests
 - **`test_parallel_batch.c`** - Parallel batch execution tests
+- **`test_goal_progress.c`** - Goal progress channel tests (publish/subscribe project scoping, event-to-display-line formatting, REPL quit warning text)
 
 #### `test/ui/` - UI Component Tests
 - **`test_slash_commands.c`** - Slash command registry tests including SLASH_NOT_FOUND return and repl_should_forward_to_llm helper

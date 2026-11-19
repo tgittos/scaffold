@@ -904,6 +904,16 @@ graph TB
 - **Idle re-prompt**: `supervisor_idle_next()` (pure, in `supervisor.c`) tracks idle wakes. Only idle *timeout* wakes count — notification wakes never shorten the window — and after two of them with nothing in flight the supervisor re-prompts the model with the current world state. Re-prompts that produce no work consume the loop's error budget (3), after which the supervisor exits with `SUPERVISOR_EXIT_ERROR` instead of prompting forever. In the plan phase "work in flight" means actions exist; in execute it means an action is RUNNING.
 - **Orphan recovery**: on supervisor start, running actions whose work item is still ASSIGNED belong to workers of a dead supervisor. The item is handed back to the queue via `work_queue_fail()` (action → PENDING), or marked FAILED once its attempts are exhausted.
 
+### Live Progress (REPL)
+
+Goal work runs out-of-band (supervisor process, possibly across REPL restarts), so progress is surfaced through a pub/sub channel rather than direct calls:
+
+- **Channel**: `lib/orchestrator/goal_progress.c` builds a per-project channel name `goals:<project>` on top of the existing `message_store` channel primitives (`channel_create`/`channel_subscribe`/`channel_publish`/`channel_receive` in `lib/ipc/message_store.c`). The channel is created lazily on first publish or subscribe.
+- **Publish**: `supervisor_run()` calls `goal_progress_publish(store, project, event, goal_name, detail)` on phase transitions (`phase_started`) and action status transitions it observes between LLM turns (`action_started`, `action_finished`, `action_failed`), plus `goal_completed` when the goal finishes. Action transitions are detected by diffing each poll's `action_store_list_by_goal()` result against a fixed-size, stack-allocated snapshot of previously-seen statuses (`ProgressSnapshotEntry[SUPERVISOR_PROGRESS_SNAPSHOT_MAX]`) — no heap allocation needed across the loop's many return paths.
+- **Format**: `goal_progress_format(json_event)` renders one event into a single display line, e.g. `◆ todo-web-app: ✓ Write tests/conftest.py (3/7)` (✓/✗/● symbols from `ansi_codes.h`, chosen by the event tag).
+- **Consume**: `repl_run_session()` subscribes to its project's channel at startup (subscriber id `"repl"`) and drains+renders new events once per loop tick, between prompts. In `--json` mode the formatted line goes out as a `goal_progress` JSON system event (`json_output_system`) instead of a plain stdout line, keeping stdout JSON-only.
+- **Quit warning**: on `quit`/`exit`/EOF, the REPL lists this project's goals with a live supervisor (`orchestrator_supervisor_alive()`) and prints `goal_progress_quit_warning()`'s message to stderr, e.g. `2 goals still running in the background (todo-web-app, api). Run scaffold here and /goals to check on them.`
+
 ### Context Pressure Detection
 
 Context detection prevents supervisors from running out of context window space:

@@ -50,6 +50,16 @@ Goals are scoped to the project they were created in (the nearest `.git` ancesto
 
 When a supervisor restarts, work items still marked as assigned belong to workers that died without reporting. Recovery returns them to the queue (or fails them once their attempts run out) so they stop holding worker slots. If nothing is running and the goal is still incomplete after two consecutive idle ticks, the supervisor re-prompts the model with the current world state instead of waiting on nothing. Notification ticks don't count toward that, and re-prompts that produce no work are capped -- a model that never creates an action makes the supervisor exit rather than re-prompt forever.
 
+### Live progress
+
+While a supervisor works in the background, an interactive `scaffold` session in the same project shows its progress between prompts -- phase changes, actions starting, finishing, or failing -- without you having to run `/goals` yourself. In `--json` mode these arrive as `goal_progress` system events instead of plain lines, so stdout stays JSON-only.
+
+If you quit (`quit`, `exit`, or Ctrl-D) while goals are still running, scaffold prints a reminder before exiting so background work isn't forgotten:
+
+```
+2 goals still running in the background (todo-web-app, api). Run scaffold here and /goals to check on them.
+```
+
 ### Workers
 
 Workers are fast, focused, and disposable. Each one handles a single task:

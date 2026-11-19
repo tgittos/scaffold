@@ -16,6 +16,7 @@
 #include "../ipc/notification_formatter.h"
 #include "../session/conversation_tracker.h"
 #include "../orchestrator/orchestrator.h"
+#include "../orchestrator/goal_progress.h"
 #include "../services/services.h"
 #include <cJSON.h>
 #include <stdio.h>
@@ -34,6 +35,40 @@ static char* g_current_prompt = NULL;
 static bool g_json_mode = false;
 
 static void repl_line_callback(char* line);
+
+/* Live = this project's goals that still have a supervisor beating a
+ * heartbeat; printed on quit so the user knows background work continues. */
+static void repl_print_quit_warning(AgentSession* session) {
+    if (session == NULL || session->services == NULL) return;
+    goal_store_t* gs = services_get_goal_store(session->services);
+    if (gs == NULL) return;
+
+    size_t count = 0;
+    Goal** goals = goal_store_list_by_project(gs, goal_project_key(), &count);
+    if (goals == NULL) return;
+
+    time_t now = time(NULL);
+    const char* names[64];
+    size_t live_count = 0;
+    for (size_t i = 0; i < count && live_count < 64; i++) {
+        Goal* g = goals[i];
+        bool running = (g->status == GOAL_STATUS_ACTIVE) ||
+                       (g->status == GOAL_STATUS_PLANNING && g->supervisor_pid > 0);
+        if (running && orchestrator_supervisor_alive(g, now)) {
+            names[live_count++] = g->name;
+        }
+    }
+
+    if (live_count > 0) {
+        char* warning = goal_progress_quit_warning(names, live_count);
+        if (warning != NULL) {
+            fprintf(stderr, "%s\n", warning);
+            free(warning);
+        }
+    }
+
+    goal_free_list(goals, count);
+}
 
 static char* repl_get_prompt(void) {
     char *p = status_line_build_prompt();
@@ -75,6 +110,7 @@ static void repl_update_agent_status(SubagentManager *mgr) {
 static void repl_line_callback(char* line) {
     if (line == NULL) {
         if (!g_json_mode) printf("\n");
+        repl_print_quit_warning(g_repl_session);
         g_repl_running = 0;
         rl_callback_handler_remove();
         return;
@@ -86,6 +122,7 @@ static void repl_line_callback(char* line) {
         } else {
             printf("Goodbye!\n");
         }
+        repl_print_quit_warning(g_repl_session);
         free(line);
         g_repl_running = 0;
         rl_callback_handler_remove();
@@ -133,6 +170,43 @@ static void repl_line_callback(char* line) {
         rl_callback_handler_remove();
         repl_install_prompt();
     }
+}
+
+/* Drain and render any goal progress events published since the last poll.
+ * In --json mode these go out as JSON system events (stdout stays JSON-only);
+ * otherwise they're printed as plain lines between prompts. */
+static void repl_render_goal_progress(AgentSession* session, const char* channel) {
+    if (session == NULL || channel == NULL) return;
+    message_store_t* ms = services_get_message_store(session->services);
+    if (ms == NULL) return;
+
+    size_t count = 0;
+    ChannelMessage** msgs = channel_receive(ms, channel, "repl", 20, &count);
+    if (msgs == NULL) return;
+
+    bool cleared_prompt = false;
+    for (size_t i = 0; i < count; i++) {
+        char* line = goal_progress_format(msgs[i]->content);
+        if (line == NULL) continue;
+
+        if (g_json_mode) {
+            json_output_system("goal_progress", line);
+        } else {
+            if (!cleared_prompt) {
+                rl_callback_handler_remove();
+                repl_clear_prompt_area();
+                cleared_prompt = true;
+            }
+            printf("%s\n", line);
+        }
+        free(line);
+    }
+
+    if (cleared_prompt && g_repl_running) {
+        repl_install_prompt();
+    }
+
+    channel_message_free_list(msgs, count);
 }
 
 static void process_pending_notifications(AgentSession* session) {
@@ -213,6 +287,12 @@ int repl_run_session(AgentSession* session, bool json_mode) {
     time_t last_recovery_check = time(NULL);
     const int recovery_check_interval_secs = 5;
 
+    message_store_t *progress_store = services_get_message_store(session->services);
+    char *progress_channel = goal_progress_channel_name(goal_project_key());
+    if (progress_store != NULL && progress_channel != NULL) {
+        goal_progress_subscribe(progress_store, goal_project_key(), "repl");
+    }
+
     while (g_repl_running) {
         interrupt_clear();
 
@@ -275,6 +355,8 @@ int repl_run_session(AgentSession* session, bool json_mode) {
             }
         }
 
+        repl_render_goal_progress(session, progress_channel);
+
         if (ready == 0) {
             continue;
         }
@@ -299,6 +381,7 @@ int repl_run_session(AgentSession* session, bool json_mode) {
     rl_callback_handler_remove();
     free(g_current_prompt);
     g_current_prompt = NULL;
+    free(progress_channel);
     status_line_cleanup();
     interrupt_cleanup();
     return 0;

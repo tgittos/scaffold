@@ -5,6 +5,7 @@
 #include "orchestrator.h"
 #include "goap_state.h"
 #include "../ipc/message_poller.h"
+#include "goal_progress.h"
 #include "workflow/workflow.h"
 #include "../ipc/notification_formatter.h"
 #include "../session/conversation_tracker.h"
@@ -24,6 +25,12 @@ static volatile sig_atomic_t g_supervisor_running = 1;
 
 /** Seconds the idle wait blocks before waking to heartbeat and re-check. */
 #define SUPERVISOR_IDLE_TIMEOUT_SEC 10
+
+/** Bound on per-goal actions tracked for progress-event deltas. Goals with
+ *  more actions than this simply stop getting new-action progress events
+ *  (existing ones already tracked keep working) rather than growing memory
+ *  unboundedly. */
+#define SUPERVISOR_PROGRESS_SNAPSHOT_MAX 512
 
 #define DEAD_WORKER_REASON "worker died without reporting a result"
 
@@ -526,6 +533,89 @@ SupervisorPhase supervisor_resolve_phase(Services *services, const char *goal_id
     return requested;
 }
 
+/** Tracks the last-seen status of one action, so progress events fire only
+ *  on a transition rather than on every poll. */
+typedef struct {
+    char id[40];
+    ActionStatus status;
+} ProgressSnapshotEntry;
+
+/**
+ * Publish a goal-level progress event (phase/goal transitions, not tied to
+ * a specific action). No-op when the message store is unavailable.
+ */
+static void supervisor_publish_goal_event(AgentSession *session, const char *project,
+                                           const char *goal_name, const char *event,
+                                           const char *detail) {
+    message_store_t *ms = services_get_message_store(session->services);
+    if (ms == NULL || goal_name[0] == '\0') return;
+    goal_progress_publish(ms, project, event, goal_name, detail);
+}
+
+/**
+ * Diff the goal's current actions against `snapshot` and publish a progress
+ * event for each action that newly transitioned into RUNNING, COMPLETED, or
+ * FAILED since the last call. Updates `snapshot` in place.
+ */
+static void supervisor_publish_action_events(AgentSession *session, const char *goal_id,
+                                              const char *project, const char *goal_name,
+                                              ProgressSnapshotEntry *snapshot,
+                                              size_t *snapshot_count) {
+    message_store_t *ms = services_get_message_store(session->services);
+    action_store_t *as = services_get_action_store(session->services);
+    if (ms == NULL || as == NULL || goal_name[0] == '\0') return;
+
+    size_t count = 0;
+    Action **actions = action_store_list_by_goal(as, goal_id, &count);
+    if (actions == NULL) return;
+
+    int completed = 0;
+    for (size_t i = 0; i < count; i++) {
+        if (actions[i]->status == ACTION_STATUS_COMPLETED) completed++;
+    }
+
+    for (size_t i = 0; i < count; i++) {
+        Action *a = actions[i];
+
+        ActionStatus prev = ACTION_STATUS_PENDING;
+        bool known = false;
+        size_t slot = *snapshot_count;
+        for (size_t j = 0; j < *snapshot_count; j++) {
+            if (strcmp(snapshot[j].id, a->id) == 0) {
+                prev = snapshot[j].status;
+                known = true;
+                slot = j;
+                break;
+            }
+        }
+        if (!known && *snapshot_count < SUPERVISOR_PROGRESS_SNAPSHOT_MAX) {
+            slot = (*snapshot_count)++;
+            strncpy(snapshot[slot].id, a->id, sizeof(snapshot[slot].id) - 1);
+            snapshot[slot].id[sizeof(snapshot[slot].id) - 1] = '\0';
+        }
+        if (slot < SUPERVISOR_PROGRESS_SNAPSHOT_MAX) snapshot[slot].status = a->status;
+
+        if (known && prev == a->status) continue;
+        if (!known && a->status == ACTION_STATUS_PENDING) continue;
+
+        const char *desc = a->description ? a->description : "(action)";
+        char detail[320];
+
+        if (a->status == ACTION_STATUS_COMPLETED) {
+            snprintf(detail, sizeof(detail), "%s (%d/%zu)", desc, completed, count);
+            goal_progress_publish(ms, project, "action_finished", goal_name, detail);
+        } else if (a->status == ACTION_STATUS_FAILED) {
+            snprintf(detail, sizeof(detail), "%s (%d/%zu)", desc, completed, count);
+            goal_progress_publish(ms, project, "action_failed", goal_name, detail);
+        } else if (a->status == ACTION_STATUS_RUNNING) {
+            snprintf(detail, sizeof(detail), "%s", desc);
+            goal_progress_publish(ms, project, "action_started", goal_name, detail);
+        }
+    }
+
+    action_free_list(actions, count);
+}
+
 int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase phase) {
     if (session == NULL || goal_id == NULL) return SUPERVISOR_EXIT_ERROR;
 
@@ -533,6 +623,24 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
      * done in a prior session and the supervisor is being restarted without
      * --phase execute), skip straight to execute. */
     phase = supervisor_resolve_phase(session->services, goal_id, phase);
+
+    /* Progress events are published under the goal's name/project, fetched
+     * once up front — both are immutable after goal creation. */
+    char progress_goal_name[128] = {0};
+    char progress_project[128] = {0};
+    goal_store_t *progress_gs = services_get_goal_store(session->services);
+    if (progress_gs != NULL) {
+        Goal *progress_goal = goal_store_get(progress_gs, goal_id);
+        if (progress_goal != NULL) {
+            snprintf(progress_goal_name, sizeof(progress_goal_name), "%s", progress_goal->name);
+            if (progress_goal->project != NULL) {
+                snprintf(progress_project, sizeof(progress_project), "%s", progress_goal->project);
+            }
+            goal_free(progress_goal);
+        }
+    }
+    ProgressSnapshotEntry progress_snapshot[SUPERVISOR_PROGRESS_SNAPSHOT_MAX];
+    size_t progress_snapshot_count = 0;
 
     g_supervisor_running = 1;
 
@@ -553,6 +661,10 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
     for (;;) {
         LOG_INFO("Supervisor started for goal %s (phase=%s)", goal_id,
                      phase == SUPERVISOR_PHASE_PLAN ? "plan" : "execute");
+
+        supervisor_publish_goal_event(session, progress_project, progress_goal_name,
+                                       "phase_started",
+                                       phase == SUPERVISOR_PHASE_PLAN ? "planning" : "executing");
 
         supervisor_heartbeat(session, goal_id);
 
@@ -585,6 +697,9 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
             return SUPERVISOR_EXIT_ERROR;
         }
 
+        supervisor_publish_action_events(session, goal_id, progress_project, progress_goal_name,
+                                          progress_snapshot, &progress_snapshot_count);
+
         int completion = check_phase_completion(session, goal_id, phase);
         if (completion == SUPERVISOR_EXIT_COMPLETE) {
             if (phase == SUPERVISOR_PHASE_PLAN) {
@@ -594,6 +709,8 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
                 phase = SUPERVISOR_PHASE_EXECUTE;
                 continue;
             }
+            supervisor_publish_goal_event(session, progress_project, progress_goal_name,
+                                           "goal_completed", "all actions complete");
             return SUPERVISOR_EXIT_COMPLETE;
         }
 
@@ -687,6 +804,9 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
                 supervisor_heartbeat(session, goal_id);
             }
 
+            supervisor_publish_action_events(session, goal_id, progress_project, progress_goal_name,
+                                              progress_snapshot, &progress_snapshot_count);
+
             completion = check_phase_completion(session, goal_id, phase);
             if (completion == SUPERVISOR_EXIT_COMPLETE) {
                 if (phase == SUPERVISOR_PHASE_PLAN) {
@@ -694,6 +814,8 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
                     plan_phase_complete = true;
                     break;
                 }
+                supervisor_publish_goal_event(session, progress_project, progress_goal_name,
+                                               "goal_completed", "all actions complete");
                 return SUPERVISOR_EXIT_COMPLETE;
             }
         }
