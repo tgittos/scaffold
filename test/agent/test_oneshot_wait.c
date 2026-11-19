@@ -1,6 +1,7 @@
 #include "unity.h"
 #include "agent/oneshot_wait.h"
 #include "orchestrator/orchestrator.h"
+#include "orchestrator/supervisor.h"
 #include "db/goal_store.h"
 #include "services/services.h"
 #include "util/app_home.h"
@@ -271,6 +272,40 @@ void test_wait_interrupt_prints_resume_hint(void) {
     TEST_ASSERT_NOT_NULL(strstr(err, "still running"));
 }
 
+/* A supervisor that gives up (idle re-prompt budget exhausted) must mark the
+ * goal FAILED so the one-shot wait resolves to 1 instead of respawning a
+ * terminally-stuck goal forever — the "does not hang" acceptance criterion.
+ * Drives the real give-up decision, applies the mark, then confirms the wait
+ * sees a terminal FAILED goal and returns 1. */
+void test_supervisor_giveup_marks_failed_and_wait_resolves(void) {
+    char id[40];
+    create_goal("todo-web-app", id);
+    goal_store_update_status(g_gs, id, GOAL_STATUS_ACTIVE);
+
+    /* Drive the idle tracker to GIVE_UP exactly as the loop does: timeout
+     * wakes, no work in flight, re-prompt budget of 1. */
+    SupervisorIdle idle = { 0, 0 };
+    SupervisorIdleAction act = SUPERVISOR_IDLE_WAIT;
+    int guard = 0;
+    while (act != SUPERVISOR_IDLE_GIVE_UP && guard++ < 100) {
+        act = supervisor_idle_next(&idle, true /* timeout wake */, false /* no work */, 1);
+    }
+    TEST_ASSERT_EQUAL(SUPERVISOR_IDLE_GIVE_UP, act);
+
+    /* The loop marks the goal failed on GIVE_UP. */
+    supervisor_mark_goal_failed(&g_session, id,
+                                "Supervisor gave up: no progress after re-prompt budget");
+
+    Goal *g = goal_store_get(g_gs, id);
+    TEST_ASSERT_NOT_NULL(g);
+    TEST_ASSERT_EQUAL(GOAL_STATUS_FAILED, g->status);
+    goal_free(g);
+
+    /* The wait now sees a terminal FAILED goal and returns 1 (does not hang). */
+    int rc = oneshot_wait_for_goals(&g_session, goal_project_key(), time(NULL) - 1, 50);
+    TEST_ASSERT_EQUAL(1, rc);
+}
+
 int main(void) {
     UNITY_BEGIN();
 
@@ -280,6 +315,7 @@ int main(void) {
     RUN_TEST(test_wait_returns_1_on_failed_goal);
     RUN_TEST(test_wait_respawns_dead_supervisor);
     RUN_TEST(test_wait_interrupt_prints_resume_hint);
+    RUN_TEST(test_supervisor_giveup_marks_failed_and_wait_resolves);
 
     return UNITY_END();
 }

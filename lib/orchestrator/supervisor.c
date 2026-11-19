@@ -644,6 +644,22 @@ void supervisor_publish_action_events(Services *services, const char *goal_id,
     action_free_list(actions, count);
 }
 
+/**
+ * Mark the goal FAILED (terminal) with a human-readable reason so that:
+ *  - oneshot_wait_for_goals() sees a terminal state and returns 1 (exits 1), and
+ *  - orchestrator_respawn_dead() stops respawning it (it only restarts
+ *    PLANNING/ACTIVE goals), so a terminally-stuck goal cannot hang a one-shot run.
+ * Called from the supervisor's give-up / error exits. Signal shutdowns are NOT
+ * marked failed — they leave the goal ACTIVE so it can be resumed.
+ */
+void supervisor_mark_goal_failed(AgentSession *session, const char *goal_id,
+                                        const char *reason) {
+    goal_store_t *gs = services_get_goal_store(session->services);
+    if (gs == NULL) return;
+    goal_store_update_status(gs, goal_id, GOAL_STATUS_FAILED);
+    if (reason != NULL) goal_store_update_summary(gs, goal_id, reason);
+}
+
 int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase phase) {
     if (session == NULL || goal_id == NULL) return SUPERVISOR_EXIT_ERROR;
 
@@ -803,6 +819,8 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
                 consecutive_errors++;
                 if (consecutive_errors >= max_consecutive_errors) {
                     fprintf(stderr, "Supervisor: too many consecutive errors, exiting\n");
+                    supervisor_mark_goal_failed(session, goal_id,
+                                                 "Supervisor gave up: too many consecutive errors");
                     return SUPERVISOR_EXIT_ERROR;
                 }
             } else {
@@ -820,6 +838,8 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
             if (idle_action == SUPERVISOR_IDLE_GIVE_UP) {
                 fprintf(stderr, "Supervisor: no progress after %d re-prompts for goal %s, "
                                 "exiting\n", max_consecutive_errors, goal_id);
+                supervisor_mark_goal_failed(session, goal_id,
+                                             "Supervisor gave up: no progress after re-prompt budget");
                 return SUPERVISOR_EXIT_ERROR;
             }
 
@@ -832,6 +852,8 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
                     consecutive_errors++;
                     if (consecutive_errors >= max_consecutive_errors) {
                         fprintf(stderr, "Supervisor: too many consecutive errors, exiting\n");
+                        supervisor_mark_goal_failed(session, goal_id,
+                                                     "Supervisor gave up: too many consecutive errors");
                         return SUPERVISOR_EXIT_ERROR;
                     }
                 } else {

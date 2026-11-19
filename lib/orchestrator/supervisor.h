@@ -49,6 +49,17 @@ SupervisorIdleAction supervisor_idle_next(SupervisorIdle *idle, bool timeout_wak
                                            bool work_in_flight, int max_reprompts);
 
 /**
+ * Mark the goal FAILED (terminal) with a human-readable reason. Called from the
+ * supervisor's give-up / error exits so a terminally-stuck goal resolves to a
+ * terminal state: oneshot_wait_for_goals() then returns 1 and
+ * orchestrator_respawn_dead() stops respawning it (a one-shot run cannot hang).
+ * Signal shutdowns are deliberately NOT marked failed — the goal stays ACTIVE
+ * so it can be resumed.
+ */
+void supervisor_mark_goal_failed(AgentSession *session, const char *goal_id,
+                                 const char *reason);
+
+/**
  * Recover orphaned RUNNING actions for a goal.
  *
  * Checks each RUNNING action's work_item_id against the work queue:
