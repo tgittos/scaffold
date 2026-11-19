@@ -721,5 +721,12 @@ int main(int argc, char *argv[]) {
     openai_auth_cleanup();
     free(loaded_system_prompt);
     free(stdin_message);
+
+    /* A single-shot run that waited for its goals (lib/agent/oneshot_wait.c)
+     * can return 130 for an interrupted wait; propagate that distinct code
+     * instead of collapsing every non-zero result to EXIT_FAILURE. */
+    if (result == 130) {
+        return 130;
+    }
     return (result == 0) ? EXIT_SUCCESS : EXIT_FAILURE;
 }

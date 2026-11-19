@@ -917,6 +917,17 @@ Goal work runs out-of-band (supervisor process, possibly across REPL restarts), 
 - **Quit warning**: on `quit`/`exit`/EOF, the REPL lists this project's goals with a live supervisor (`orchestrator_supervisor_alive()`) and prints `goal_progress_quit_warning()`'s message to stderr, e.g. `2 goals still running in the background (todo-web-app, api). Run scaffold here and /goals to check on them.`
 - **Known limitation**: the REPL always subscribes as agent id `"repl"`, so two concurrent interactive sessions in the same project would share one subscription cursor and each could steal the other's unread events. Not fixed in this round (low probability under the one-process-one-directory model).
 
+### One-Shot Goal Wait
+
+A no-phase goal created by a one-shot turn (`scaffold "build a todo app"`) keeps running under a supervisor process after `session_process_message()` returns. `lib/agent/oneshot_wait.c`'s `oneshot_wait_for_goals(session, project, started_after, poll_ms)` makes the one-shot invocation block until that goal finishes, so the process doesn't hand control back mid-build.
+
+- **Scope**: called from `agent_run()`'s `AGENT_MODE_SINGLE_SHOT` case only after a successful turn (`ss_result == 0`); a turn-level error is returned as-is. It lists the project's goals (`goal_store_list_by_project`) and tracks only those with `created_at >= started_after` (the timestamp captured just before the turn), so a pre-existing goal from an earlier invocation is never waited on. No tracked goals means an immediate return.
+- **Poll loop**: each tick drains and renders `goals:<project>` progress (subscriber id `"oneshot"`, same `goal_progress_format()` path as the REPL) and re-reads each tracked goal's status. A PLANNING/ACTIVE goal whose supervisor isn't alive (`orchestrator_supervisor_alive()`) triggers `orchestrator_respawn_dead()`. The loop has no independent timeout — it's bounded by the goal's own lifecycle (the supervisor's idle re-prompt/give-up budget), not an arbitrary deadline here.
+- **Signature**: `int oneshot_wait_for_goals(AgentSession*, const char *project, time_t started_after, int poll_ms);`
+- **Outcome**: returns 0 once every tracked goal is COMPLETED, 1 if any is FAILED (printing `Goal <name> failed: <reason>` — the goal's `summary` if set, else a generic message — plus `orchestrator_supervisor_log_path()` to stderr or as a `goal_failed` JSON system event), 130 if interrupted. `main.c` propagates 130 through to the process exit instead of collapsing every non-zero result to `EXIT_FAILURE`.
+- **Interrupt**: the function owns its own `interrupt_init()`/`interrupt_cleanup()` pair (idempotent, so install is a no-op if already installed — tests exploit this to pre-set the pending flag with `interrupt_handler_trigger()` before calling in). On interrupt it reuses `goal_progress_quit_warning()` for the still-running goal names, printing the same "N goals still running in the background... Run scaffold here and /goals to check on them" hint the REPL prints on quit.
+- **`--json` mode**: progress and the final summary go out as `json_output_system()` events on stdout (subtypes `goal_progress`, `goal_completed`, `goal_failed`, `interrupted`); otherwise they're plain lines on stderr. stdout never carries non-JSON text in `--json` mode.
+
 ### Context Pressure Detection
 
 Context detection prevents supervisors from running out of context window space:

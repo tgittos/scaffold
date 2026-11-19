@@ -3,6 +3,7 @@
 #include "../util/log.h"
 #include "agent.h"
 #include "repl.h"
+#include "oneshot_wait.h"
 #include "../workflow/workflow.h"
 #include "../session/conversation_tracker.h"
 #include "../util/ansi_codes.h"
@@ -26,6 +27,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <signal.h>
+#include <time.h>
 #include <unistd.h>
 #include <readline/history.h>
 
@@ -189,11 +191,23 @@ int agent_run(Agent* agent) {
             status_line_init();
             status_line_set_model(agent->session.session_data.config.model,
                                   agent->session.session_data.config.context_window);
+            time_t turn_started_at = time(NULL);
             int ss_result = session_process_message(&agent->session,
                                                     agent->config.initial_message);
             status_line_render_info_oneshot();
             status_line_cleanup();
-            return ss_result;
+
+            /* A no-phase goal created by this turn keeps running under a
+             * supervisor after the turn's LLM call returns; wait for it so
+             * `scaffold "build a todo app"` actually finishes instead of
+             * handing control back while the goal is still in flight. Only
+             * done after a successful turn — a turn-level error (e.g.
+             * context full) is reported as-is. */
+            if (ss_result != 0) {
+                return ss_result;
+            }
+            return oneshot_wait_for_goals(&agent->session, goal_project_key(),
+                                          turn_started_at, 500);
         }
 
         case AGENT_MODE_BACKGROUND: {

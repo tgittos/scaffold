@@ -67,6 +67,8 @@ Pass your description as an argument for fully autonomous execution:
 ./scaffold "build a REST API with Express and SQLite for a todo app"
 ```
 
+This blocks until the goal it creates finishes: scaffold prints progress lines as the goal's supervisor works, then exits 0 once it's done. If the goal fails, scaffold exits 1 and prints `Goal <name> failed: <reason>` plus the supervisor's log path to stderr. Ctrl+C exits 130 and leaves the goal running in the background — the hint printed on interrupt explains how to check on it.
+
 ### Piping a spec
 
 For larger projects, write a spec file and pipe it in:
@@ -83,7 +85,7 @@ When you give scaffold a description, it doesn't start writing code immediately.
 2. **Goal creation** -- Each goal gets a supervisor agent with explicit completion criteria (boolean assertions about what should exist)
 3. **Worker dispatch** -- Supervisors dispatch specialized workers (implementation, testing, code review, etc.) to do the actual building
 4. **Verification** -- Each goal is verified complete before the orchestrator advances to the next one
-5. **Completion** -- Repeat until the application exists
+5. **Completion** -- Repeat until the application exists; in one-shot mode scaffold waits for this before exiting
 
 ## Tool execution
 

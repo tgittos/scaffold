@@ -17,6 +17,8 @@ seed the database with a handful of demo users and posts so the app feels alive 
 first launch."
 ```
 
+That last command blocks until the app is actually built: scaffold prints progress as the goal's supervisor works, then exits 0 with a working, tested app on disk. If the goal fails, it exits 1 and prints `Goal <name> failed: <reason>` plus the supervisor log path to stderr instead of silently returning. Ctrl+C exits 130 and leaves the goal running in the background.
+
 > **Alpha software.** It works, but there are rough edges. If you're comfortable running a binary straight off a README, you'll be fine.
 
 ---

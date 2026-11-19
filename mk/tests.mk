@@ -344,6 +344,7 @@ $(eval $(call def_test_lib,orchestrator_tool,tools/test_orchestrator_tool,))
 $(eval $(call def_test_lib,goap_lifecycle,orchestrator/test_goap_lifecycle,))
 $(eval $(call def_test_lib,goap_state,orchestrator/test_goap_state,))
 $(eval $(call def_test_lib,goal_progress,agent/test_goal_progress,))
+$(eval $(call def_test_lib,oneshot_wait,agent/test_oneshot_wait,))
 $(eval $(call def_test,plugin_protocol,plugin/test_plugin_protocol,$(LIBDIR)/plugin/plugin_protocol.c))
 $(eval $(call def_test_lib,plugin_manager,plugin/test_plugin_manager,))
 $(eval $(call def_test_lib,hook_dispatcher,plugin/test_hook_dispatcher,))
@@ -361,7 +362,7 @@ LIBAGENT_TESTS := tool_param_dsl json_output output tools_system todo_tool_scope
     iterative_loop_empty \
     slash_commands task_commands agent_commands goal_commands mode_tool mode_commands status_line \
     context_mode_injection repo_context image_attachment goap_tools orchestrator_tool goap_lifecycle \
-    goap_state plugin_manager hook_dispatcher plugin_integration goal_progress
+    goap_state plugin_manager hook_dispatcher plugin_integration goal_progress oneshot_wait
 
 $(foreach t,$(LIBAGENT_TESTS),$(eval \
 $$(TEST_$(t)_TARGET): $$(TEST_$(t)_OBJECTS) $$(LIBAGENT) $$(ALL_LIBS) ; \
