@@ -139,6 +139,8 @@ valgrind --leak-check=full ./test/test_foo.com.dbg      # x86_64
 - Codex provider uses Responses API (not Chat Completions). Input is a flat array, not messages.
 - The iterative loop passes `user_message=""` for follow-up rounds — providers must handle empty strings correctly.
 - `--json` mode is output-only; does not affect API payloads or conversation structure.
+- After a one-shot run in a git repo, scaffold prints a change report to stderr (a `Changed: N files (+A −D)` line plus one `Commits: <hash> <subject>` line per commit made during the run). The diff is taken against the HEAD captured before the run using the working tree, so uncommitted edits to tracked files count; a run with no changes prints nothing. In `--json` mode it is emitted instead as a single-line `change_report` event on stdout with fields `type`, `files`, `insertions`, `deletions`, and `commits` (array of `"<hash> <subject>"` strings). See `lib/agent/change_report.c` and `lib/ui/json_output.c`.
+- HEAD is captured before the run and git is invoked via `process_spawn_capture` (non-shell `fork`/`execvp`); no `popen`/`system` with an interpolated path is used anywhere in change reporting.
 - `shell.py` strips `PYTHONHOME` and `PYTHONDONTWRITEBYTECODE` from subprocesses to prevent the embedded Python from breaking system Python.
 - `apply_patch.py` uses a custom patch format (`*** Begin Patch` / `*** Update File:` / `*** Add File:` / `*** Delete File:` / `*** End Patch`), not standard unified diff.
 - Streaming includes transient error retry with exponential backoff and `response.failed` event detection.

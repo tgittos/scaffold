@@ -69,14 +69,18 @@ change_report_t *change_report_collect(const char *repo_root, const char *head_b
         "git", "-C", (char *)repo_root, "log", range, "--oneline", NULL
     };
     int clen = run_git(log_args, commits_buf, sizeof(commits_buf));
-    if (clen <= 0 || commits_buf[0] == '\0') return NULL;
+    if (clen < 0) commits_buf[0] = '\0';
 
-    /* Get file-change statistics. */
+    /* Get file-change statistics for the working tree vs head_before. This
+     * includes uncommitted modifications to tracked files, not just commits. */
     char stat_buf[STAT_BUF_SIZE] = {0};
     char *diff_args[] = {
-        "git", "-C", (char *)repo_root, "diff", "--shortstat", range, NULL
+        "git", "-C", (char *)repo_root, "diff", "--shortstat", (char *)head_before, NULL
     };
     run_git(diff_args, stat_buf, sizeof(stat_buf));
+
+    /* Nothing to report if there are neither changed files nor new commits. */
+    if (stat_buf[0] == '\0' && commits_buf[0] == '\0') return NULL;
 
     change_report_t *r = calloc(1, sizeof(change_report_t));
     if (!r) return NULL;

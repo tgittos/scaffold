@@ -164,10 +164,62 @@ void test_report_non_git_dir_returns_null(void) {
     TEST_ASSERT_NULL(report);
 }
 
+/* -------------------------------------------------------------------------
+ * test_report_uncommitted_worktree_change
+ * A tracked file is modified in the worktree but NOT committed. The report
+ * must still be produced with a Changed: line and no Commits: lines.
+ * ------------------------------------------------------------------------- */
+void test_report_uncommitted_worktree_change(void) {
+    TEST_ASSERT_EQUAL_INT(0, sh("git -C '%s' init -q", g_tmpdir));
+    TEST_ASSERT_EQUAL_INT(0, sh("git -C '%s' config user.email 'test@example.com'", g_tmpdir));
+    TEST_ASSERT_EQUAL_INT(0, sh("git -C '%s' config user.name 'Test'", g_tmpdir));
+    TEST_ASSERT_EQUAL_INT(0, sh("git -C '%s' config commit.gpgsign false", g_tmpdir));
+
+    /* Commit a tracked file (this will be head_before). */
+    char file_path[512];
+    snprintf(file_path, sizeof(file_path), "%s/tracked.txt", g_tmpdir);
+    FILE *f = fopen(file_path, "w");
+    TEST_ASSERT_NOT_NULL(f);
+    fputs("line one\n", f);
+    fclose(f);
+    TEST_ASSERT_EQUAL_INT(0, sh("git -C '%s' add tracked.txt", g_tmpdir));
+    TEST_ASSERT_EQUAL_INT(0, sh("git -C '%s' commit -q -m 'initial'", g_tmpdir));
+
+    /* Capture head_before. */
+    char head_before[64] = {0};
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd), "git -C '%s' rev-parse HEAD 2>/dev/null", g_tmpdir);
+    TEST_ASSERT_EQUAL_INT(0, popen_line(cmd, head_before, sizeof(head_before)));
+    TEST_ASSERT_TRUE(head_before[0] != '\0');
+
+    /* Modify the tracked file in the worktree WITHOUT committing. */
+    f = fopen(file_path, "a");
+    TEST_ASSERT_NOT_NULL(f);
+    fputs("line two\nline three\n", f);
+    fclose(f);
+
+    /* A report should still be produced. */
+    change_report_t *report = change_report_collect(g_tmpdir, head_before);
+    TEST_ASSERT_NOT_NULL(report);
+
+    /* Uncommitted change => no commits, but a changed file. */
+    TEST_ASSERT_EQUAL_INT(0, report->commit_count);
+    TEST_ASSERT_GREATER_THAN(0, report->files_changed);
+
+    char *text = change_report_format(report);
+    TEST_ASSERT_NOT_NULL(text);
+    TEST_ASSERT_NOT_NULL(strstr(text, "Changed:"));
+    TEST_ASSERT_NULL(strstr(text, "Commits:"));
+    free(text);
+
+    change_report_free(report);
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_report_lists_new_commit);
     RUN_TEST(test_report_null_when_unchanged);
     RUN_TEST(test_report_non_git_dir_returns_null);
+    RUN_TEST(test_report_uncommitted_worktree_change);
     return UNITY_END();
 }
