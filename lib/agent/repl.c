@@ -266,7 +266,8 @@ int repl_run_session(AgentSession* session, bool json_mode) {
             if (now - last_recovery_check >= recovery_check_interval_secs) {
                 last_recovery_check = now;
                 orchestrator_reap_supervisors(recovery_gs);
-                int respawned = orchestrator_respawn_dead(recovery_gs);
+                int respawned = orchestrator_respawn_dead(recovery_gs,
+                                                          goal_project_key());
                 if (respawned > 0) {
                     LOG_INFO("REPL: respawned %d dead supervisors",
                                  respawned);

@@ -105,9 +105,9 @@ static int cmd_goals_list(AgentSession *session) {
     }
 
     size_t count = 0;
-    Goal **goals = goal_store_list_all(store, &count);
+    Goal **goals = goal_store_list_by_project(store, goal_project_key(), &count);
     if (goals == NULL || count == 0) {
-        printf(TERM_DIM "  No goals.\n" TERM_RESET);
+        printf(TERM_DIM "  No goals in this project.\n" TERM_RESET);
         if (goals) goal_free_list(goals, count);
         return 0;
     }
@@ -226,7 +226,7 @@ static int cmd_goals_show(const char *id_prefix, AgentSession *session) {
     Goal *goal = goal_store_get(gstore, id_prefix);
     if (goal == NULL) {
         size_t count = 0;
-        Goal **all = goal_store_list_all(gstore, &count);
+        Goal **all = goal_store_list_by_project(gstore, goal_project_key(), &count);
         if (all != NULL) {
             size_t prefix_len = strlen(id_prefix);
             for (size_t i = 0; i < count; i++) {

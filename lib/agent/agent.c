@@ -371,7 +371,7 @@ int agent_run(Agent* agent) {
                 goal_store_t *gs = services_get_goal_store(agent->services);
                 if (gs != NULL) {
                     orchestrator_check_stale(gs);
-                    orchestrator_respawn_dead(gs);
+                    orchestrator_respawn_dead(gs, goal_project_key());
                 }
             }
 

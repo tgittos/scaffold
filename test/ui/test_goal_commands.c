@@ -6,7 +6,10 @@
 #include "db/action_store.h"
 #include "util/app_home.h"
 #include <fcntl.h>
+#include <limits.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <sys/stat.h>
 #include <string.h>
 #include <unistd.h>
 #include "../test_fs_utils.h"
@@ -277,6 +280,52 @@ void test_goals_detail_shows_log_path(void) {
     TEST_ASSERT_NOT_NULL(strstr(g_capture, expected));
 }
 
+/* Create a minimal git repo so project scoping resolves to this directory. */
+static void make_git_repo(const char *path) {
+    mkdir(path, 0755);
+    char git_dir[PATH_MAX];
+    int n = snprintf(git_dir, sizeof(git_dir) - 1, "%s", path);
+    if (n > 0 && n < (int)(sizeof(git_dir) - 6)) {
+        memcpy(git_dir + n, "/.git", 6);
+        mkdir(git_dir, 0755);
+    }
+}
+
+void test_goals_list_scoped_to_project(void) {
+    char saved_cwd[PATH_MAX];
+    TEST_ASSERT_NOT_NULL(getcwd(saved_cwd, sizeof(saved_cwd)));
+
+    char base[] = "/tmp/test_goal_cmd_scope_XXXXXX";
+    TEST_ASSERT_NOT_NULL(mkdtemp(base));
+
+    char proj_a[PATH_MAX], proj_b[PATH_MAX];
+    int base_len = (int)strlen(base);
+    memcpy(proj_a, base, (size_t)base_len);
+    memcpy(proj_a + base_len, "/projA", 7);
+    memcpy(proj_b, base, (size_t)base_len);
+    memcpy(proj_b + base_len, "/projB", 7);
+    make_git_repo(proj_a);
+    make_git_repo(proj_b);
+
+    /* Create the goal while project A is the working directory. */
+    TEST_ASSERT_EQUAL_INT(0, chdir(proj_a));
+    char id[40];
+    TEST_ASSERT_EQUAL_INT(0, goal_store_insert(g_services->goal_store, "ProjAGoal",
+                                               "only project A", "{\"done\": true}",
+                                               "a_queue", id));
+
+    TEST_ASSERT_EQUAL_INT(0, run_capturing("", &g_session));
+    TEST_ASSERT_NOT_NULL(strstr(g_capture, "ProjAGoal"));
+
+    /* Project B must not see it. */
+    TEST_ASSERT_EQUAL_INT(0, chdir(proj_b));
+    TEST_ASSERT_EQUAL_INT(0, run_capturing("", &g_session));
+    TEST_ASSERT_NULL(strstr(g_capture, "ProjAGoal"));
+    TEST_ASSERT_NOT_NULL(strstr(g_capture, "No goals in this project"));
+
+    TEST_ASSERT_EQUAL_INT(0, chdir(saved_cwd));
+}
+
 void test_goals_no_store(void) {
     /* Remove goal store from services */
     goal_store_destroy(g_services->goal_store);
@@ -305,6 +354,7 @@ int main(void) {
     RUN_TEST(test_goals_shows_stalled);
     RUN_TEST(test_goals_shows_action_counts);
     RUN_TEST(test_goals_detail_shows_log_path);
+    RUN_TEST(test_goals_list_scoped_to_project);
     RUN_TEST(test_goals_no_store);
 
     return UNITY_END();

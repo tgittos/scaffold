@@ -24,6 +24,7 @@ typedef struct {
     char* plan_document;
     GoalStatus status;
     char queue_name[64];
+    char* project;            // Per-project scope key; NULL for pre-scoping rows
     pid_t supervisor_pid;
     int64_t supervisor_started_at;
     time_t supervisor_heartbeat_at;
@@ -33,6 +34,11 @@ typedef struct {
 
 typedef struct goal_store goal_store_t;
 typedef struct sqlite_dal sqlite_dal_t;
+
+// Per-project scope key for goals, derived from the nearest .git ancestor of
+// the current working directory (same helper as the todo store uses).
+// Returns a pointer into a static buffer overwritten on each call.
+const char* goal_project_key(void);
 
 goal_store_t* goal_store_create(const char* db_path);
 goal_store_t* goal_store_create_with_dal(sqlite_dal_t* dal);
@@ -70,6 +76,10 @@ void goal_store_heartbeat(goal_store_t* store, const char* goal_id, time_t now);
 // Caller owns returned arrays and must free with goal_free_list().
 Goal** goal_store_list_all(goal_store_t* store, size_t* count);
 Goal** goal_store_list_by_status(goal_store_t* store, GoalStatus status, size_t* count);
+// Goals belonging to one project. Rows written before project scoping have a
+// NULL project and are never returned.
+Goal** goal_store_list_by_project(goal_store_t* store, const char* project,
+                                   size_t* count);
 
 int goal_store_has_active_goals(goal_store_t* store);
 

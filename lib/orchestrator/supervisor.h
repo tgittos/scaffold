@@ -3,6 +3,7 @@
 
 #include "../agent/session.h"
 #include "services/services.h"
+#include <stdbool.h>
 
 #define SUPERVISOR_EXIT_COMPLETE    0
 #define SUPERVISOR_EXIT_ERROR      -1
@@ -12,6 +13,39 @@ typedef enum {
     SUPERVISOR_PHASE_PLAN    = 0,
     SUPERVISOR_PHASE_EXECUTE = 1
 } SupervisorPhase;
+
+/** Consecutive idle timeout wakes before the model is re-prompted. */
+#define SUPERVISOR_IDLE_WAKES_BEFORE_REPROMPT 2
+
+/** Idle re-prompt bookkeeping for one phase. Zero-initialise before use. */
+typedef struct {
+    int idle_wakes;              /* consecutive idle timeout wakes with no work */
+    int unproductive_reprompts;  /* re-prompts that produced no work */
+} SupervisorIdle;
+
+typedef enum {
+    SUPERVISOR_IDLE_WAIT = 0,  /* keep waiting */
+    SUPERVISOR_IDLE_REPROMPT,  /* nudge the model with the current world state */
+    SUPERVISOR_IDLE_GIVE_UP    /* re-prompting is not making progress */
+} SupervisorIdleAction;
+
+/**
+ * Decide what an idle supervisor should do on this wake.
+ *
+ * Only idle timeout wakes count toward a re-prompt: a notification wake means
+ * something reported in, so it never shortens the idle window. Work in flight
+ * (or produced by the last re-prompt) resets the whole tracker. Re-prompts that
+ * produce nothing are capped at max_reprompts so a model that never creates
+ * work cannot be prompted forever.
+ *
+ * @param idle  Tracker, updated in place
+ * @param timeout_wake  True when the idle wait expired with no fd ready
+ * @param work_in_flight  True when the goal has work running (or, in the plan
+ *                        phase, actions to execute)
+ * @param max_reprompts  Budget of unproductive re-prompts for this phase
+ */
+SupervisorIdleAction supervisor_idle_next(SupervisorIdle *idle, bool timeout_wake,
+                                           bool work_in_flight, int max_reprompts);
 
 /**
  * Recover orphaned RUNNING actions for a goal.

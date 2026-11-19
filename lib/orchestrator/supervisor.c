@@ -25,9 +25,6 @@ static volatile sig_atomic_t g_supervisor_running = 1;
 /** Seconds the idle wait blocks before waking to heartbeat and re-check. */
 #define SUPERVISOR_IDLE_TIMEOUT_SEC 10
 
-/** Consecutive idle wakes with no workers before the LLM is re-prompted. */
-#define SUPERVISOR_IDLE_WAKES_BEFORE_REPROMPT 2
-
 #define DEAD_WORKER_REASON "worker died without reporting a result"
 
 static void supervisor_signal_handler(int sig) {
@@ -289,13 +286,48 @@ static void supervisor_heartbeat(AgentSession *session, const char *goal_id) {
 }
 
 /**
- * Number of actions currently being worked on by a worker.
+ * Is there work in flight for this goal?
+ *
+ * Execute phase: at least one action is RUNNING, so a worker will report back.
+ * Plan phase: no worker ever runs, so "work" means the planner produced actions
+ * for the execute phase to pick up.
  */
-static int running_action_count(AgentSession *session, const char *goal_id) {
+static bool work_in_flight(AgentSession *session, const char *goal_id,
+                            SupervisorPhase phase) {
     action_store_t *as = services_get_action_store(session->services);
-    if (as == NULL) return 0;
-    int count = action_store_count_by_status(as, goal_id, ACTION_STATUS_RUNNING);
-    return (count > 0) ? count : 0;
+    if (as == NULL) return false;
+
+    if (phase == SUPERVISOR_PHASE_PLAN) {
+        return action_store_has_actions(as, goal_id);
+    }
+    return action_store_count_by_status(as, goal_id, ACTION_STATUS_RUNNING) > 0;
+}
+
+SupervisorIdleAction supervisor_idle_next(SupervisorIdle *idle, bool timeout_wake,
+                                           bool work_in_flight_now, int max_reprompts) {
+    if (idle == NULL) return SUPERVISOR_IDLE_WAIT;
+
+    if (work_in_flight_now) {
+        idle->idle_wakes = 0;
+        idle->unproductive_reprompts = 0;
+        return SUPERVISOR_IDLE_WAIT;
+    }
+
+    /* Notification wakes mean something reported in; they must not shorten the
+     * idle window. */
+    if (!timeout_wake) return SUPERVISOR_IDLE_WAIT;
+
+    idle->idle_wakes++;
+    if (idle->idle_wakes < SUPERVISOR_IDLE_WAKES_BEFORE_REPROMPT) {
+        return SUPERVISOR_IDLE_WAIT;
+    }
+
+    idle->idle_wakes = 0;
+    if (idle->unproductive_reprompts >= max_reprompts) {
+        return SUPERVISOR_IDLE_GIVE_UP;
+    }
+    idle->unproductive_reprompts++;
+    return SUPERVISOR_IDLE_REPROMPT;
 }
 
 /**
@@ -573,7 +605,7 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
         int consecutive_errors = 0;
         /* Single failures may be transient notification issues; give up after 3 */
         const int max_consecutive_errors = 3;
-        int idle_wakes = 0;
+        SupervisorIdle idle = { 0, 0 };
         bool plan_phase_complete = false;
 
         while (g_supervisor_running) {
@@ -624,13 +656,21 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
                 consecutive_errors = 0;
             }
 
-            /* No workers running means nothing will report back: nudge the
-             * model with the current world state rather than spinning on an
-             * empty queue. */
-            idle_wakes = (running_action_count(session, goal_id) == 0)
-                ? idle_wakes + 1 : 0;
-            if (idle_wakes >= SUPERVISOR_IDLE_WAKES_BEFORE_REPROMPT) {
-                idle_wakes = 0;
+            /* Nothing running means nothing will report back: nudge the model
+             * with the current world state rather than spinning on an empty
+             * queue — but only after two idle timeouts, and only while the
+             * re-prompt budget lasts. */
+            SupervisorIdleAction idle_action = supervisor_idle_next(
+                &idle, ready == 0, work_in_flight(session, goal_id, phase),
+                max_consecutive_errors);
+
+            if (idle_action == SUPERVISOR_IDLE_GIVE_UP) {
+                fprintf(stderr, "Supervisor: no progress after %d re-prompts for goal %s, "
+                                "exiting\n", max_consecutive_errors, goal_id);
+                return SUPERVISOR_EXIT_ERROR;
+            }
+
+            if (idle_action == SUPERVISOR_IDLE_REPROMPT) {
                 int reprompt_rc = reprompt_with_world_state(session, goal_id, phase);
                 if (reprompt_rc == SUPERVISOR_EXIT_CONTEXT) {
                     return handle_context_full_exit(session, goal_id, phase);

@@ -291,7 +291,7 @@ void test_respawn_dead_no_respawnable_goals(void) {
     create_test_goal("test", goal_id);
     /* Set to PAUSED — only PLANNING and ACTIVE goals are respawned */
     goal_store_update_status(g_store, goal_id, GOAL_STATUS_PAUSED);
-    int count = orchestrator_respawn_dead(g_store);
+    int count = orchestrator_respawn_dead(g_store, goal_project_key());
     TEST_ASSERT_EQUAL(0, count);
 }
 
@@ -307,7 +307,7 @@ void test_respawn_dead_planning_goal(void) {
     TEST_ASSERT_EQUAL(0, goal->supervisor_pid);
     goal_free(goal);
 
-    int count = orchestrator_respawn_dead(g_store);
+    int count = orchestrator_respawn_dead(g_store, goal_project_key());
     TEST_ASSERT_EQUAL(1, count);
 
     /* Verify a supervisor was assigned */
@@ -329,7 +329,7 @@ void test_respawn_dead_both_planning_and_active(void) {
     create_test_goal("active", id2);
     goal_store_update_status(g_store, id2, GOAL_STATUS_ACTIVE);
 
-    int count = orchestrator_respawn_dead(g_store);
+    int count = orchestrator_respawn_dead(g_store, goal_project_key());
     TEST_ASSERT_EQUAL(2, count);
 
     /* Clean up */
@@ -361,7 +361,7 @@ void test_killed_supervisor_respawned(void) {
     kill(pid, SIGKILL);
     await_exit(read_fd);
 
-    int count = orchestrator_respawn_dead(g_store);
+    int count = orchestrator_respawn_dead(g_store, goal_project_key());
     TEST_ASSERT_EQUAL(1, count);
 
     Goal *goal = goal_store_get(g_store, goal_id);
@@ -385,7 +385,7 @@ void test_live_supervisor_not_respawned(void) {
     goal_store_update_supervisor(g_store, goal_id, pid, now_millis());
     goal_store_heartbeat(g_store, goal_id, time(NULL));
 
-    TEST_ASSERT_EQUAL(0, orchestrator_respawn_dead(g_store));
+    TEST_ASSERT_EQUAL(0, orchestrator_respawn_dead(g_store, goal_project_key()));
 
     Goal *goal = goal_store_get(g_store, goal_id);
     TEST_ASSERT_EQUAL(pid, goal->supervisor_pid);
@@ -393,6 +393,39 @@ void test_live_supervisor_not_respawned(void) {
 
     kill(pid, SIGKILL);
     waitpid(pid, NULL, 0);
+}
+
+void test_respawn_dead_skips_other_project(void) {
+    char goal_id[40];
+    create_test_goal("other project goal", goal_id);
+    goal_store_update_status(g_store, goal_id, GOAL_STATUS_ACTIVE);
+
+    int read_fd = -1;
+    pid_t pid = fork_sleeper_watched(&read_fd);
+    TEST_ASSERT_TRUE(pid > 0);
+    goal_store_update_supervisor(g_store, goal_id, pid, now_millis());
+    kill(pid, SIGKILL);
+    await_exit(read_fd);
+
+    /* The goal belongs to this project; another project must not touch it. */
+    TEST_ASSERT_EQUAL(0, orchestrator_respawn_dead(g_store, "goals_elsewhere_dead"));
+
+    Goal *goal = goal_store_get(g_store, goal_id);
+    TEST_ASSERT_NOT_NULL(goal);
+    TEST_ASSERT_EQUAL(pid, goal->supervisor_pid);
+    goal_free(goal);
+
+    /* Its own project still respawns it. */
+    TEST_ASSERT_EQUAL(1, orchestrator_respawn_dead(g_store, goal_project_key()));
+
+    goal = goal_store_get(g_store, goal_id);
+    TEST_ASSERT_NOT_NULL(goal);
+    if (goal->supervisor_pid > 0) {
+        kill(goal->supervisor_pid, SIGKILL);
+        waitpid(goal->supervisor_pid, NULL, 0);
+    }
+    goal_free(goal);
+    waitpid(pid, NULL, WNOHANG);
 }
 
 void test_spawn_logged_writes_file(void) {
@@ -449,7 +482,8 @@ void test_null_params(void) {
     TEST_ASSERT_EQUAL(-1, orchestrator_kill_supervisor(NULL, "id"));
     TEST_ASSERT_EQUAL(-1, orchestrator_kill_supervisor(g_store, NULL));
     orchestrator_check_stale(NULL);
-    TEST_ASSERT_EQUAL(-1, orchestrator_respawn_dead(NULL));
+    TEST_ASSERT_EQUAL(-1, orchestrator_respawn_dead(NULL, goal_project_key()));
+    TEST_ASSERT_EQUAL(-1, orchestrator_respawn_dead(g_store, NULL));
 }
 
 int main(void) {
@@ -473,6 +507,7 @@ int main(void) {
     RUN_TEST(test_respawn_dead_both_planning_and_active);
     RUN_TEST(test_killed_supervisor_respawned);
     RUN_TEST(test_live_supervisor_not_respawned);
+    RUN_TEST(test_respawn_dead_skips_other_project);
     RUN_TEST(test_spawn_logged_writes_file);
     RUN_TEST(test_spawn_logged_null_params);
     RUN_TEST(test_supervisor_log_path);

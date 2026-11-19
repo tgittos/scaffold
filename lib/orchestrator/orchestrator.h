@@ -77,14 +77,17 @@ void orchestrator_check_stale(goal_store_t* store);
 /**
  * Respawn supervisors for goals whose supervisor is gone.
  *
- * Finds PLANNING and ACTIVE goals whose supervisor process no longer exists
- * (never started, exited, or killed) and spawns a new supervisor for each. A
- * goal whose supervisor process is still running is left alone even when its
- * heartbeat is stale, so a busy supervisor never gets a twin.
+ * Finds PLANNING and ACTIVE goals of one project whose supervisor process no
+ * longer exists (never started, exited, or killed) and spawns a new supervisor
+ * for each. Goals of other projects — and goals written before project scoping,
+ * whose project is NULL — are never touched. A goal whose supervisor process is
+ * still running is left alone even when its heartbeat is stale, so a busy
+ * supervisor never gets a twin.
  *
  * @param store  Goal store
+ * @param project  Project scope key (see goal_project_key())
  * @return Number of supervisors respawned, -1 on error
  */
-int orchestrator_respawn_dead(goal_store_t* store);
+int orchestrator_respawn_dead(goal_store_t* store, const char* project);
 
 #endif /* ORCHESTRATOR_H */

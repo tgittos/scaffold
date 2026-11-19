@@ -978,6 +978,57 @@ void test_recover_resets_assigned_with_dead_worker(void) {
     unsetenv("SCAFFOLD_HOME");
 }
 
+/*
+ * The idle re-prompt must be bounded: a model that never creates an action
+ * (plan phase, where no worker ever runs) gets a fixed number of nudges and
+ * then the supervisor gives up instead of prompting forever.
+ */
+void test_idle_reprompt_stops_after_cap(void) {
+    SupervisorIdle idle = { 0, 0 };
+    int reprompts = 0;
+    bool gave_up = false;
+
+    for (int i = 0; i < 1000; i++) {
+        SupervisorIdleAction action =
+            supervisor_idle_next(&idle, true /* timeout wake */,
+                                 false /* nothing in flight */, 3);
+        if (action == SUPERVISOR_IDLE_REPROMPT) reprompts++;
+        if (action == SUPERVISOR_IDLE_GIVE_UP) { gave_up = true; break; }
+    }
+
+    TEST_ASSERT_TRUE(gave_up);
+    TEST_ASSERT_EQUAL(3, reprompts);
+}
+
+/* Notification wakes must not shorten the idle window. */
+void test_idle_reprompt_ignores_notification_wakes(void) {
+    SupervisorIdle idle = { 0, 0 };
+    for (int i = 0; i < 20; i++) {
+        TEST_ASSERT_EQUAL(SUPERVISOR_IDLE_WAIT,
+            supervisor_idle_next(&idle, false /* notification wake */, false, 3));
+    }
+    TEST_ASSERT_EQUAL(0, idle.idle_wakes);
+
+    /* Two idle timeouts then trigger one re-prompt. */
+    TEST_ASSERT_EQUAL(SUPERVISOR_IDLE_WAIT,
+        supervisor_idle_next(&idle, true, false, 3));
+    TEST_ASSERT_EQUAL(SUPERVISOR_IDLE_REPROMPT,
+        supervisor_idle_next(&idle, true, false, 3));
+}
+
+/* Work in flight resets both counters, so the budget is per stall. */
+void test_idle_reprompt_resets_when_work_runs(void) {
+    SupervisorIdle idle = { 0, 0 };
+    supervisor_idle_next(&idle, true, false, 3);
+    supervisor_idle_next(&idle, true, false, 3);   /* one re-prompt spent */
+    TEST_ASSERT_EQUAL(1, idle.unproductive_reprompts);
+
+    TEST_ASSERT_EQUAL(SUPERVISOR_IDLE_WAIT,
+        supervisor_idle_next(&idle, true, true /* work running */, 3));
+    TEST_ASSERT_EQUAL(0, idle.unproductive_reprompts);
+    TEST_ASSERT_EQUAL(0, idle.idle_wakes);
+}
+
 int main(void) {
     UNITY_BEGIN();
 
@@ -988,6 +1039,9 @@ int main(void) {
     RUN_TEST(test_multi_goal_isolation);
     RUN_TEST(test_replan_skip_pending);
     RUN_TEST(test_recover_resets_assigned_with_dead_worker);
+    RUN_TEST(test_idle_reprompt_stops_after_cap);
+    RUN_TEST(test_idle_reprompt_ignores_notification_wakes);
+    RUN_TEST(test_idle_reprompt_resets_when_work_runs);
 
     return UNITY_END();
 }

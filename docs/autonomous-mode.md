@@ -46,7 +46,9 @@ Supervisors persist their state to SQLite. If a supervisor crashes, it recovers 
 
 Each supervisor writes a heartbeat to its goal on every loop tick (at most 10s apart). A supervisor counts as alive only while its process exists and its heartbeat is less than 30s old; otherwise `/goals` shows the goal as `stalled` and the next `scaffold` launch in that project respawns it. Supervisor output goes to `~/.local/scaffold/logs/supervisor-<goal_id>.log` at `info` level; `/goals <id>` prints the path.
 
-When a supervisor restarts, work items still marked as assigned belong to workers that died without reporting. Recovery returns them to the queue (or fails them once their attempts run out) so they stop holding worker slots. If the queue is empty and the goal is still incomplete for two consecutive ticks, the supervisor re-prompts the model with the current world state instead of waiting on nothing.
+Goals are scoped to the project they were created in (the nearest `.git` ancestor of the working directory). `/goals` lists only that project's goals, and respawn only restarts that project's supervisors, so two projects with active goals never touch each other's work.
+
+When a supervisor restarts, work items still marked as assigned belong to workers that died without reporting. Recovery returns them to the queue (or fails them once their attempts run out) so they stop holding worker slots. If nothing is running and the goal is still incomplete after two consecutive idle ticks, the supervisor re-prompts the model with the current world state instead of waiting on nothing. Notification ticks don't count toward that, and re-prompts that produce no work are capped -- a model that never creates an action makes the supervisor exit rather than re-prompt forever.
 
 ### Workers
 

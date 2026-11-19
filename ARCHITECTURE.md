@@ -894,14 +894,14 @@ graph TB
 2. **Plan-skip detection**: `supervisor_resolve_phase()` runs at the top of `supervisor_run`. If the goal is PLANNING but already has actions (plan done in a prior session), it promotes the goal to ACTIVE and returns EXECUTE — preventing redundant re-planning. The same `action_store_has_actions()` check is used by `execute_start_goal` in orchestrator_tool.c.
 3. **Plan phase**: Supervisor builds a planner message with goal description and decomposition instructions. The LLM creates actions and optionally saves a plan document via `goap_save_plan_document`. When `plan_is_complete()` detects actions exist, the goal transitions to ACTIVE and the supervisor loops into execute phase in-process.
 4. **Execute phase**: Supervisor builds an executor message with work context and `plan_guidance` (from the goal's `plan_document`). The LLM dispatches actions to workers and updates world state. Goal completion triggers COMPLETED status
-5. **Respawn**: Orchestrator respawns supervisors for PLANNING and ACTIVE goals whose supervisor process is gone, re-detecting the appropriate phase. A process that still exists but has stopped heartbeating is left alone so a busy supervisor never gets a twin.
+5. **Respawn**: Orchestrator respawns supervisors for the current project's PLANNING and ACTIVE goals whose supervisor process is gone, re-detecting the appropriate phase. A process that still exists but has stopped heartbeating is left alone so a busy supervisor never gets a twin.
 
 ### Supervisor Liveness
 
 - **Heartbeat**: `goals.supervisor_heartbeat_at` (INTEGER column, auto-migrated and backfilled to 0) is written by `goal_store_heartbeat()` on every wake of the supervisor loop. The idle wait uses a 10s `select` timeout, so a running supervisor heartbeats at least that often.
-- **Predicate**: `orchestrator_supervisor_alive(const Goal*, time_t now)` is true when the pid exists, is not a zombie (zombie children are reaped by the check), and `now - supervisor_heartbeat_at < SUPERVISOR_HEARTBEAT_TIMEOUT_SEC` (30s). `goal_store_update_supervisor()` stamps the heartbeat when a pid is recorded and clears it when the pid is cleared.
+- **Predicate**: `orchestrator_supervisor_alive(const Goal*, time_t now)` is true when the pid exists (`kill(pid, 0)` succeeding, or failing with EPERM for another user's process), is not a zombie (zombie children are reaped by the check), and `now - supervisor_heartbeat_at < SUPERVISOR_HEARTBEAT_TIMEOUT_SEC` (30s). `goal_store_update_supervisor()` stamps the heartbeat when a pid is recorded and clears it when the pid is cleared.
 - **Logs**: supervisors are spawned with `process_spawn_logged()` (setsid, stdin from /dev/null, stdout+stderr appended) and `--log info`, writing to `~/.local/scaffold/logs/supervisor-<goal_id>.log`. `orchestrator_supervisor_log_path()` builds the path for `/goals <id>`.
-- **Idle re-prompt**: when no action is RUNNING for two consecutive wakes and the goal is incomplete, the supervisor re-prompts the model with the current world state rather than spinning on an empty queue.
+- **Idle re-prompt**: `supervisor_idle_next()` (pure, in `supervisor.c`) tracks idle wakes. Only idle *timeout* wakes count — notification wakes never shorten the window — and after two of them with nothing in flight the supervisor re-prompts the model with the current world state. Re-prompts that produce no work consume the loop's error budget (3), after which the supervisor exits with `SUPERVISOR_EXIT_ERROR` instead of prompting forever. In the plan phase "work in flight" means actions exist; in execute it means an action is RUNNING.
 - **Orphan recovery**: on supervisor start, running actions whose work item is still ASSIGNED belong to workers of a dead supervisor. The item is handed back to the queue via `work_queue_fail()` (action → PENDING), or marked FAILED once its attempts are exhausted.
 
 ### Context Pressure Detection
@@ -1285,7 +1285,7 @@ lib/
 │   ├── memory_commands.c/h # /memory slash commands
 │   ├── task_commands.c/h   # /tasks slash commands
 │   ├── agent_commands.c/h  # /agents slash commands (subagents + supervisors)
-│   ├── goal_commands.c/h   # /goals slash commands
+│   ├── goal_commands.c/h   # /goals slash commands (project-scoped list, stalled status, log path)
 │   ├── model_commands.c/h  # /model slash commands
 │   ├── mode_commands.c/h   # /mode slash commands
 │   └── status_line.c/h     # Status info line (activity, context %/window, model)
@@ -1335,7 +1335,7 @@ lib/
 │   └── updater.c/h        # GitHub releases check, download, and apply
 ├── orchestrator/          # Scaffold orchestration layer
 │   ├── supervisor.c/h     # Supervisor event loop with phase-aware execution (plan/execute), context pressure exit, orphaned action recovery
-│   ├── orchestrator.c/h   # Supervisor spawning (logged, --log info) with auto-detected --phase flag, heartbeat liveness, stale-PID cleanup (dead-only), respawn for PLANNING+ACTIVE goals with no live process
+│   ├── orchestrator.c/h   # Supervisor spawning (logged, --log info) with auto-detected --phase flag, heartbeat liveness, stale-PID cleanup (dead-only), per-project respawn for PLANNING+ACTIVE goals with no live process
 │   ├── goap_state.c/h     # Shared GOAP state evaluation (precondition checking, progress tracking)
 │   └── role_prompts.c/h   # Role-based system prompts for workers (file override + built-in defaults)
 └── workflow/               # Task queue

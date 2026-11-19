@@ -30,7 +30,11 @@ static int64_t now_millis(void) {
  */
 static bool pid_is_running(pid_t pid) {
     if (pid <= 0) return false;
-    if (kill(pid, 0) != 0) return false;
+    if (kill(pid, 0) != 0) {
+        /* EPERM means the process exists but belongs to another user; only
+         * ESRCH means it is gone. */
+        return errno == EPERM;
+    }
     if (waitpid(pid, NULL, WNOHANG) == pid) return false;
     return true;
 }
@@ -205,45 +209,44 @@ void orchestrator_check_stale(goal_store_t* store) {
     goal_free_list(goals, count);
 }
 
-int orchestrator_respawn_dead(goal_store_t* store) {
-    if (store == NULL) return -1;
+int orchestrator_respawn_dead(goal_store_t* store, const char* project) {
+    if (store == NULL || project == NULL) return -1;
+
+    size_t count = 0;
+    Goal** goals = goal_store_list_by_project(store, project, &count);
+    if (goals == NULL) return 0;
 
     int respawned = 0;
+    time_t now = time(NULL);
+    for (size_t i = 0; i < count; i++) {
+        if (goals[i]->status != GOAL_STATUS_PLANNING &&
+            goals[i]->status != GOAL_STATUS_ACTIVE) {
+            continue;
+        }
+        if (orchestrator_supervisor_alive(goals[i], now)) continue;
 
-    GoalStatus respawn_statuses[] = { GOAL_STATUS_PLANNING, GOAL_STATUS_ACTIVE };
-    for (int s = 0; s < 2; s++) {
-        size_t count = 0;
-        Goal** goals = goal_store_list_by_status(store, respawn_statuses[s], &count);
-        if (goals == NULL) continue;
-
-        time_t now = time(NULL);
-        for (size_t i = 0; i < count; i++) {
-            if (orchestrator_supervisor_alive(goals[i], now)) continue;
-
-            /* A live process with a stale heartbeat is busy or wedged, not
-             * gone: starting a second supervisor would duplicate its work. */
-            if (pid_is_running(goals[i]->supervisor_pid)) {
-                LOG_WARN("orchestrator: supervisor pid=%d for goal %s is stalled "
-                             "(no heartbeat for %llds), not respawning",
-                             goals[i]->supervisor_pid, goals[i]->id,
-                             (long long)(now - goals[i]->supervisor_heartbeat_at));
-                continue;
-            }
-
-            if (goals[i]->supervisor_pid != 0) {
-                goal_store_update_supervisor(store, goals[i]->id, 0, 0);
-            }
-
-            LOG_INFO("orchestrator: respawning supervisor for goal %s (%s, status=%s)",
-                         goals[i]->id, goals[i]->name,
-                         goal_status_to_string(goals[i]->status));
-            if (orchestrator_spawn_supervisor(store, goals[i]->id) == 0) {
-                respawned++;
-            }
+        /* A live process with a stale heartbeat is busy or wedged, not
+         * gone: starting a second supervisor would duplicate its work. */
+        if (pid_is_running(goals[i]->supervisor_pid)) {
+            LOG_WARN("orchestrator: supervisor pid=%d for goal %s is stalled "
+                         "(no heartbeat for %llds), not respawning",
+                         goals[i]->supervisor_pid, goals[i]->id,
+                         (long long)(now - goals[i]->supervisor_heartbeat_at));
+            continue;
         }
 
-        goal_free_list(goals, count);
+        if (goals[i]->supervisor_pid != 0) {
+            goal_store_update_supervisor(store, goals[i]->id, 0, 0);
+        }
+
+        LOG_INFO("orchestrator: respawning supervisor for goal %s (%s, status=%s)",
+                     goals[i]->id, goals[i]->name,
+                     goal_status_to_string(goals[i]->status));
+        if (orchestrator_spawn_supervisor(store, goals[i]->id) == 0) {
+            respawned++;
+        }
     }
 
+    goal_free_list(goals, count);
     return respawned;
 }
