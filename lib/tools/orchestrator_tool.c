@@ -135,7 +135,7 @@ int execute_list_goals(const ToolCall *tc, ToolResult *result) {
     }
 
     size_t count = 0;
-    Goal **goals = goal_store_list_all(gs, &count);
+    Goal **goals = goal_store_list_by_project(gs, goal_project_key(), &count);
 
     cJSON *json = cJSON_CreateObject();
     cJSON_AddBoolToObject(json, "success", cJSON_True);

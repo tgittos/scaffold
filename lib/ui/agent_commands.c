@@ -60,7 +60,7 @@ static void print_supervisors(AgentSession *session) {
     if (store == NULL) return;
 
     size_t count = 0;
-    Goal **goals = goal_store_list_all(store, &count);
+    Goal **goals = goal_store_list_by_project(store, goal_project_key(), &count);
     if (goals == NULL || count == 0) {
         if (goals) goal_free_list(goals, count);
         return;

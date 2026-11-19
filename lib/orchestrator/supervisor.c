@@ -733,6 +733,8 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
 
         if (initial_msg == NULL) {
             fprintf(stderr, "Supervisor: failed to build initial message for goal %s\n", goal_id);
+            supervisor_mark_goal_failed(session, goal_id,
+                                         "Supervisor failed to build the initial message");
             return SUPERVISOR_EXIT_ERROR;
         }
 
@@ -745,6 +747,8 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
 
         if (rc != 0) {
             fprintf(stderr, "Supervisor: initial session_process_message failed (%d)\n", rc);
+            supervisor_mark_goal_failed(session, goal_id,
+                                         "Supervisor failed on the initial message");
             return SUPERVISOR_EXIT_ERROR;
         }
 

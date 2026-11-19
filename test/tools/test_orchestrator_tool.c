@@ -11,6 +11,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdio.h>
+#include <limits.h>
+#include <sys/stat.h>
 #include "../test_fs_utils.h"
 
 static const char *TEST_DB = "/tmp/test_orchestrator_tool.db";
@@ -166,6 +169,64 @@ void test_list_goals_with_data(void) {
     cJSON_Delete(resp);
     free_tc(&tc);
     free_tr(&tr);
+}
+
+static void make_git_repo(const char *path) {
+    mkdir(path, 0755);
+    char git_dir[PATH_MAX];
+    int n = snprintf(git_dir, sizeof(git_dir) - 1, "%s", path);
+    if (n > 0 && n < (int)(sizeof(git_dir) - 6)) {
+        memcpy(git_dir + n, "/.git", 6);
+        mkdir(git_dir, 0755);
+    }
+}
+
+/* list_goals is project-scoped: a goal created in project A must not be
+ * visible from project B (the orchestrator tool must not leak other
+ * projects' goal state to the LLM). */
+void test_list_goals_scoped_to_project(void) {
+    char saved_cwd[PATH_MAX];
+    TEST_ASSERT_NOT_NULL(getcwd(saved_cwd, sizeof(saved_cwd)));
+
+    char base[] = "/tmp/test_orch_scope_XXXXXX";
+    TEST_ASSERT_NOT_NULL(mkdtemp(base));
+
+    char proj_a[PATH_MAX], proj_b[PATH_MAX];
+    int base_len = (int)strlen(base);
+    memcpy(proj_a, base, (size_t)base_len);
+    memcpy(proj_a + base_len, "/projA", 7);
+    memcpy(proj_b, base, (size_t)base_len);
+    memcpy(proj_b + base_len, "/projB", 7);
+    make_git_repo(proj_a);
+    make_git_repo(proj_b);
+
+    /* Create a goal while project A is the working directory. */
+    TEST_ASSERT_EQUAL_INT(0, chdir(proj_a));
+    char id[40];
+    TEST_ASSERT_EQUAL_INT(0, goal_store_insert(gs, "ProjAGoal", "only project A",
+                                               "{\"done\": true}", "a_queue", id));
+
+    ToolCall tc = make_tc("scope1", "list_goals", "{}");
+    ToolResult tr = {0};
+    TEST_ASSERT_EQUAL(0, execute_list_goals(&tc, &tr));
+    cJSON *resp = parse_result(&tr);
+    TEST_ASSERT_EQUAL(1, (int)cJSON_GetNumberValue(cJSON_GetObjectItem(resp, "count")));
+    cJSON_Delete(resp);
+    free_tc(&tc);
+    free_tr(&tr);
+
+    /* Project B must not see project A's goal. */
+    TEST_ASSERT_EQUAL_INT(0, chdir(proj_b));
+    tc = make_tc("scope2", "list_goals", "{}");
+    memset(&tr, 0, sizeof(tr));
+    TEST_ASSERT_EQUAL(0, execute_list_goals(&tc, &tr));
+    resp = parse_result(&tr);
+    TEST_ASSERT_EQUAL(0, (int)cJSON_GetNumberValue(cJSON_GetObjectItem(resp, "count")));
+    cJSON_Delete(resp);
+    free_tc(&tc);
+    free_tr(&tr);
+
+    TEST_ASSERT_EQUAL_INT(0, chdir(saved_cwd));
 }
 
 /* ========================================================================
@@ -497,6 +558,7 @@ int main(int argc, char **argv) {
     /* list_goals */
     RUN_TEST(test_list_goals_empty);
     RUN_TEST(test_list_goals_with_data);
+    RUN_TEST(test_list_goals_scoped_to_project);
 
     /* goal_status */
     RUN_TEST(test_goal_status);
