@@ -31,6 +31,7 @@ def shell(command: str, working_dir: str = None, timeout: int = 30,
         Dictionary with stdout, stderr, exit_code, and execution_time
     """
     import subprocess
+    import threading
     import time
     from pathlib import Path
     import _ralph_sys
@@ -103,26 +104,57 @@ def shell(command: str, working_dir: str = None, timeout: int = 30,
     clean_env = {k: v for k, v in _os.environ.items()
                  if k not in ("PYTHONHOME", "PYTHONDONTWRITEBYTECODE")}
 
+    # Report each output line to the spinner's live detail as it arrives.
+    # Convert happens in C; guard so shell.py still works if unavailable.
+    _progress = getattr(_ralph_sys, "progress", None)
+
+    def _drain(stream, chunks):
+        """Read a text stream line by line, buffering and reporting each line.
+
+        stdout and stderr each get their own thread so neither pipe can fill
+        and deadlock the child while we read the other.
+        """
+        try:
+            for line in iter(stream.readline, ''):
+                chunks.append(line)
+                if _progress is not None:
+                    _progress(line.rstrip('\n'))
+        finally:
+            stream.close()
+
     try:
-        result = subprocess.run(
+        proc = subprocess.Popen(
             command,
             shell=True,
             cwd=working_dir,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=timeout,
             env=clean_env,
         )
 
-        stdout = result.stdout
-        stderr = result.stderr if capture_stderr else ""
-        exit_code = result.returncode
+        stdout_chunks = []
+        stderr_chunks = []
+        t_out = threading.Thread(target=_drain, args=(proc.stdout, stdout_chunks))
+        t_err = threading.Thread(target=_drain, args=(proc.stderr, stderr_chunks))
+        t_out.start()
+        t_err.start()
 
-    except subprocess.TimeoutExpired as e:
-        timed_out = True
-        stdout = e.stdout if e.stdout else ""
-        stderr = e.stderr if e.stderr and capture_stderr else ""
-        exit_code = -1
+        try:
+            proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            proc.kill()
+            proc.wait()
+
+        # Join the readers so all buffered output is captured, including the
+        # final chunk flushed when the pipes close.
+        t_out.join()
+        t_err.join()
+
+        stdout = ''.join(stdout_chunks)
+        stderr = ''.join(stderr_chunks) if capture_stderr else ""
+        exit_code = -1 if timed_out else proc.returncode
 
     except Exception as e:
         stdout = ""

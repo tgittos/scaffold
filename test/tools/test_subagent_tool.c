@@ -100,7 +100,7 @@ void test_subagent_manager_init_defaults(void) {
     TEST_ASSERT_EQUAL_INT(0, (int)manager.subagents.count);
     TEST_ASSERT_EQUAL_INT(0, manager.subagents.count);
     TEST_ASSERT_EQUAL_INT(5, manager.max_subagents);  // Default
-    TEST_ASSERT_EQUAL_INT(300, manager.timeout_seconds);  // Default
+    TEST_ASSERT_EQUAL_INT(1800, manager.timeout_seconds);  // Default
     TEST_ASSERT_EQUAL_INT(0, manager.is_subagent_process);
 
     subagent_manager_cleanup(&manager);
@@ -119,6 +119,27 @@ void test_subagent_manager_init_with_config(void) {
     TEST_ASSERT_EQUAL_INT(0, manager.is_subagent_process);
 
     subagent_manager_cleanup(&manager);
+}
+
+void test_subagent_timeout_from_config(void) {
+    agent_config_t *cfg = config_get();
+    TEST_ASSERT_NOT_NULL(cfg);
+    int saved = cfg->subagent_timeout;
+
+    cfg->subagent_timeout = 1800;
+    TEST_ASSERT_EQUAL_INT(1800, subagent_timeout_from_config());
+
+    SubagentManager manager;
+    TEST_ASSERT_EQUAL_INT(0, subagent_manager_init_with_config(
+        &manager, SUBAGENT_MAX_DEFAULT, subagent_timeout_from_config()));
+    TEST_ASSERT_EQUAL_INT(1800, manager.timeout_seconds);
+    subagent_manager_cleanup(&manager);
+
+    /* Out-of-range config values fall back to the compiled-in default. */
+    cfg->subagent_timeout = 0;
+    TEST_ASSERT_EQUAL_INT(SUBAGENT_TIMEOUT_DEFAULT, subagent_timeout_from_config());
+
+    cfg->subagent_timeout = saved;
 }
 
 void test_subagent_manager_init_null_pointer(void) {
@@ -147,7 +168,7 @@ void test_subagent_manager_init_clamps_values(void) {
     // Test clamping timeout (too low)
     result = subagent_manager_init_with_config(&manager, 5, 0);
     TEST_ASSERT_EQUAL_INT(0, result);
-    TEST_ASSERT_EQUAL_INT(300, manager.timeout_seconds);  // Should be clamped to default
+    TEST_ASSERT_EQUAL_INT(SUBAGENT_TIMEOUT_DEFAULT, manager.timeout_seconds);  // Clamped to default
     subagent_manager_cleanup(&manager);
 
     // Test clamping timeout (too high)
@@ -1270,6 +1291,7 @@ int main(int argc, char **argv) {
     // Manager initialization tests
     RUN_TEST(test_subagent_manager_init_defaults);
     RUN_TEST(test_subagent_manager_init_with_config);
+    RUN_TEST(test_subagent_timeout_from_config);
     RUN_TEST(test_subagent_manager_init_null_pointer);
     RUN_TEST(test_subagent_manager_init_clamps_values);
 

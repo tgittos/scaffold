@@ -354,6 +354,30 @@ int action_store_count_by_status(action_store_t *store, const char *goal_id,
     return result;
 }
 
+bool action_store_has_actions(action_store_t *store, const char *goal_id) {
+    if (!store || !goal_id) return false;
+
+    sqlite_dal_lock(store->dal);
+    sqlite3 *db = sqlite_dal_get_db(store->dal);
+
+    sqlite3_stmt *stmt = NULL;
+    int rc = sqlite3_prepare_v2(db,
+        "SELECT COUNT(*) FROM actions WHERE goal_id = ? LIMIT 1;",
+        -1, &stmt, NULL);
+    if (rc != SQLITE_OK) { sqlite_dal_unlock(store->dal); return false; }
+
+    sqlite3_bind_text(stmt, 1, goal_id, -1, SQLITE_STATIC);
+
+    bool result = false;
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        result = (sqlite3_column_int(stmt, 0) > 0);
+    }
+
+    sqlite3_finalize(stmt);
+    sqlite_dal_unlock(store->dal);
+    return result;
+}
+
 int action_store_skip_pending(action_store_t *store, const char *goal_id) {
     if (!store || !goal_id) return -1;
 

@@ -32,6 +32,12 @@ void status_line_set_busy(const char *label);
 void status_line_set_idle(void);
 
 /**
+ * Return true if the system is currently busy.
+ * Primarily for tests.
+ */
+bool status_line_is_busy(void);
+
+/**
  * Update token counters. prompt_tokens overwrites (tracks current context
  * size); completion_tokens accumulates (tracks total generated output).
  */
@@ -62,6 +68,12 @@ void status_line_format_context(char *buf, size_t buf_size);
  * Must only be called from the main (REPL) thread.
  */
 void status_line_render_info(void);
+
+/**
+ * Print a plain-text usage footer to stderr for one-shot mode.
+ * Skipped in JSON mode. ANSI codes are omitted when stderr is not a TTY.
+ */
+void status_line_render_info_oneshot(void);
 
 /**
  * Clear previously rendered status info line from the terminal.

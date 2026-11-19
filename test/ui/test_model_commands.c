@@ -8,6 +8,35 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
+
+static int g_saved_stdout = -1;
+static char g_capture_path[64];
+static char g_capture_buf[1024];
+
+static void capture_begin(void) {
+    fflush(stdout);
+    g_saved_stdout = dup(STDOUT_FILENO);
+    snprintf(g_capture_path, sizeof(g_capture_path), "/tmp/test_model_cmds.XXXXXX");
+    int fd = mkstemp(g_capture_path);
+    TEST_ASSERT_TRUE(fd >= 0);
+    dup2(fd, STDOUT_FILENO);
+    close(fd);
+}
+
+static const char *capture_end(void) {
+    fflush(stdout);
+    dup2(g_saved_stdout, STDOUT_FILENO);
+    close(g_saved_stdout);
+    g_saved_stdout = -1;
+    FILE *in = fopen(g_capture_path, "r");
+    TEST_ASSERT_NOT_NULL(in);
+    size_t n = fread(g_capture_buf, 1, sizeof(g_capture_buf) - 1, in);
+    g_capture_buf[n] = '\0';
+    fclose(in);
+    remove(g_capture_path);
+    return g_capture_buf;
+}
 
 static AgentSession g_session;
 
@@ -37,6 +66,14 @@ void test_model_command_null_params(void) {
 void test_model_command_show_current(void) {
     int result = process_model_command("", &g_session);
     TEST_ASSERT_EQUAL_INT(0, result);
+}
+
+void test_model_no_args_shows_usage(void) {
+    capture_begin();
+    int result = process_model_command("", &g_session);
+    const char *out = capture_end();
+    TEST_ASSERT_EQUAL_INT(0, result);
+    TEST_ASSERT_NOT_NULL(strstr(out, "Usage: /model [list|<name>]"));
 }
 
 void test_model_command_list(void) {
@@ -96,6 +133,7 @@ int main(void) {
 
     RUN_TEST(test_model_command_null_params);
     RUN_TEST(test_model_command_show_current);
+    RUN_TEST(test_model_no_args_shows_usage);
     RUN_TEST(test_model_command_list);
     RUN_TEST(test_model_command_switch_tier);
     RUN_TEST(test_model_command_switch_raw_id);

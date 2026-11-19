@@ -17,6 +17,8 @@ seed the database with a handful of demo users and posts so the app feels alive 
 first launch."
 ```
 
+That last command blocks until the app is actually built: scaffold prints progress as the goal's supervisor works, then exits 0 with a working, tested app on disk. If the goal fails, it exits 1 and prints `Goal <name> failed: <reason>` plus the supervisor log path to stderr instead of silently returning. Ctrl+C exits 130 and leaves the goal running in the background.
+
 > **Alpha software.** It works, but there are rough edges. If you're comfortable running a binary straight off a README, you'll be fine.
 
 ---
@@ -69,14 +71,30 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 # One-shot autonomous mode
 ./scaffold "build a todo app with React and Express"
 
-# Pipe a spec file
+# Pipe a spec file (entire stdin becomes the message)
 cat SPEC.md | ./scaffold
+
+# Combine a piped file with an inline instruction (arg + newlines + stdin)
+cat SPEC.md | ./scaffold "implement this spec"
 
 # Select a specific model
 ./scaffold --model gpt-4o "build a blog with Next.js"
 ```
 
 The [Getting Started guide](docs/getting-started.md) goes into more detail.
+
+### Change report
+
+After a one-shot run in a git repository, scaffold prints a change report to
+stderr summarizing what the run did: a `Changed: N files (+A −D)` line and a
+`Commits: <hash> <subject>` line for each commit made since the run started.
+The report reflects the working tree, so uncommitted edits to tracked files are
+included; if nothing changed, no report is printed.
+
+In `--json` mode the same information is emitted as a single-line
+`change_report` JSON event on stdout with fields `type` (`"change_report"`),
+`files`, `insertions`, `deletions`, and `commits` (an array of
+`"<hash> <subject>"` strings).
 
 ---
 

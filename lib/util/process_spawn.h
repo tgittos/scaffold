@@ -12,4 +12,28 @@
  */
 int process_spawn_devnull(char *args[], pid_t *out_pid);
 
+/**
+ * Spawn a child process, capture its stdout into buf (NUL-terminated).
+ * stderr is discarded. Waits for the child to exit.
+ *
+ * @param args      NULL-terminated argument array (args[0] is the executable:
+ *                  an absolute path, or a bare command name resolved via PATH)
+ * @param buf       Buffer to receive stdout
+ * @param buf_size  Size of buf (including space for NUL terminator)
+ * @return Bytes written to buf (>=0), or -1 on fork/exec failure.
+ */
+int process_spawn_capture(char *args[], char *buf, size_t buf_size);
+
+/**
+ * Spawn a detached child process with its output captured in a log file.
+ *
+ * The child gets its own session (setsid), reads stdin from /dev/null and has
+ * stdout and stderr appended to log_path (created with mode 0600 if missing).
+ *
+ * @param argv  NULL-terminated argument array (argv[0] is the executable path)
+ * @param log_path  File to append the child's stdout and stderr to
+ * @return Child PID on success, -1 on failure (including an unwritable log)
+ */
+pid_t process_spawn_logged(char *const argv[], const char *log_path);
+
 #endif /* PROCESS_SPAWN_H */

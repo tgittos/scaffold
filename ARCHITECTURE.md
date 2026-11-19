@@ -774,7 +774,7 @@ graph TB
 
 ### Subagent Configuration
 - `max_subagents`: Maximum concurrent subagents (default: 5)
-- `subagent_timeout`: Timeout in seconds (default: 300)
+- `subagent_timeout`: Timeout in seconds (default: 1800, max 3600). Read from config at session startup via `subagent_timeout_from_config()`; out-of-range values fall back to `SUBAGENT_TIMEOUT_DEFAULT`.
 
 ### Subagent Tool Commands
 - `subagent`: Spawn a new subagent with a task
@@ -891,9 +891,42 @@ graph TB
 ### Phase Lifecycle
 
 1. **Orchestrator spawns supervisor** with auto-detected `--phase` flag based on goal status (PLANNING = plan, ACTIVE = execute)
-2. **Plan phase**: Supervisor builds a planner message with goal description and decomposition instructions. The LLM creates actions and optionally saves a plan document via `goap_save_plan_document`. When `plan_is_complete()` detects actions exist, the goal transitions to ACTIVE and the supervisor exits
-3. **Execute phase**: Supervisor builds an executor message with work context and `plan_guidance` (from the goal's `plan_document`). The LLM dispatches actions to workers and updates world state. Goal completion triggers COMPLETED status
-4. **Respawn**: Orchestrator respawns dead supervisors for both PLANNING and ACTIVE goals, re-detecting the appropriate phase
+2. **Plan-skip detection**: `supervisor_resolve_phase()` runs at the top of `supervisor_run`. If the goal is PLANNING but already has actions (plan done in a prior session), it promotes the goal to ACTIVE and returns EXECUTE — preventing redundant re-planning. The same `action_store_has_actions()` check is used by `execute_start_goal` in orchestrator_tool.c.
+3. **Plan phase**: Supervisor builds a planner message with goal description and decomposition instructions. The LLM creates actions and optionally saves a plan document via `goap_save_plan_document`. When `plan_is_complete()` detects actions exist, the goal transitions to ACTIVE and the supervisor loops into execute phase in-process.
+4. **Execute phase**: Supervisor builds an executor message with work context and `plan_guidance` (from the goal's `plan_document`). The LLM dispatches actions to workers and updates world state. Goal completion triggers COMPLETED status
+5. **Respawn**: Orchestrator respawns supervisors for the current project's PLANNING and ACTIVE goals whose supervisor process is gone, re-detecting the appropriate phase. A process that still exists but has stopped heartbeating is left alone so a busy supervisor never gets a twin.
+
+### Supervisor Liveness
+
+- **Heartbeat**: `goals.supervisor_heartbeat_at` (INTEGER column, auto-migrated and backfilled to 0) is written by `goal_store_heartbeat()` on every wake of the supervisor loop. The idle wait uses a 10s `select` timeout, so a running supervisor heartbeats at least that often.
+- **Predicate**: `orchestrator_supervisor_alive(const Goal*, time_t now)` is true when the pid exists (`kill(pid, 0)` succeeding, or failing with EPERM for another user's process), is not a zombie (zombie children are reaped by the check), and `now - supervisor_heartbeat_at < SUPERVISOR_HEARTBEAT_TIMEOUT_SEC` (30s). `goal_store_update_supervisor()` stamps the heartbeat when a pid is recorded and clears it when the pid is cleared.
+- **Logs**: supervisors are spawned with `process_spawn_logged()` (setsid, stdin from /dev/null, stdout+stderr appended) and `--log info`, writing to `~/.local/scaffold/logs/supervisor-<goal_id>.log`. `orchestrator_supervisor_log_path()` builds the path for `/goals <id>`.
+- **Idle re-prompt**: `supervisor_idle_next()` (pure, in `supervisor.c`) tracks idle wakes. Only idle *timeout* wakes count — notification wakes never shorten the window — and after two of them with nothing in flight the supervisor re-prompts the model with the current world state. Re-prompts that produce no work consume the loop's error budget (3), after which the supervisor exits with `SUPERVISOR_EXIT_ERROR` instead of prompting forever. In the plan phase "work in flight" means actions exist; in execute it means an action is RUNNING.
+- **Orphan recovery**: on supervisor start, running actions whose work item is still ASSIGNED belong to workers of a dead supervisor. The item is handed back to the queue via `work_queue_fail()` (action → PENDING), or marked FAILED once its attempts are exhausted.
+
+### Live Progress (REPL)
+
+Goal work runs out-of-band (supervisor process, possibly across REPL restarts), so progress is surfaced through a pub/sub channel rather than direct calls:
+
+- **Channel**: `lib/orchestrator/goal_progress.c` builds a per-project channel name `goals:<project>` on top of the existing `message_store` channel primitives (`channel_create`/`channel_subscribe`/`channel_publish`/`channel_receive` in `lib/ipc/message_store.c`). The channel is created lazily on first publish or subscribe.
+- **Publish**: `supervisor_run()` calls `goal_progress_publish(store, project, event, goal_name, detail)` on phase transitions (`phase_started`) and action status transitions it observes between LLM turns (`action_started`, `action_finished`, `action_failed`, `action_skipped`), plus `goal_completed` when the goal finishes. Action transitions are detected by diffing each poll's `action_store_list_by_goal()` result against a fixed-size, stack-allocated snapshot of previously-seen statuses (`ProgressSnapshotEntry[SUPERVISOR_PROGRESS_SNAPSHOT_MAX]`, declared in `supervisor.h` so tests can drive the diff directly) — no heap allocation needed across the loop's many return paths.
+- **Restart-safe**: `supervisor_seed_action_snapshot()` runs once, before the phase loop, populating the snapshot with the goal's actions at their CURRENT status without publishing. Without this, every respawn (routine — `orchestrator_respawn_dead` runs on a ~5s timer plus on every supervisor startup) would replay `action_finished`/`action_failed`/`action_started` for every action already terminal from the previous process lifetime.
+- **Format**: `goal_progress_format(json_event)` renders one event into a single display line, e.g. `◆ todo-web-app: ✓ Write tests/conftest.py (3/7)` (✓/✗/●/◦ symbols from `ansi_codes.h`, chosen by the event tag).
+- **Retention**: the `goals:<project>` channel is created non-persistent for hygiene, but growth is actually bounded by `message_cleanup_channel_messages_by_prefix(store, "goals:", max_age_seconds)` (`lib/ipc/message_store.c`), scoped to the `goals:` channel-id prefix. The message store is a single file shared by every project and by generic agent/subagent coordination channels (`lib/tools/messaging_tool.c`), so the plain `message_cleanup_channel_messages()` (unscoped: trims ALL non-persistent channels) must never be used from this path — `goal_progress_cleanup(store, max_age_seconds)` wraps the prefix-scoped variant. `ensure_channel_exists()` also calls `channel_set_persistent(store, channel_name, 0)` to self-heal channels created by an older build that still has `is_persistent=1` (otherwise `channel_create()`'s no-op on an existing id would leave the flag stuck). Both `supervisor_run()` (every loop tick, so headless/no-REPL goals are still bounded) and the REPL's ~5s recovery tick call `goal_progress_cleanup()` with `GOAL_PROGRESS_RETENTION_SECONDS` (1 hour).
+- **Consume**: `repl_run_session()` subscribes to its project's channel at startup (subscriber id `"repl"`) and drains+renders new events once per loop tick, between prompts. In `--json` mode the formatted line goes out as a `goal_progress` JSON system event (`json_output_system`) instead of a plain stdout line, keeping stdout JSON-only.
+- **Quit warning**: on `quit`/`exit`/EOF, the REPL lists this project's goals with a live supervisor (`orchestrator_supervisor_alive()`) and prints `goal_progress_quit_warning()`'s message to stderr, e.g. `2 goals still running in the background (todo-web-app, api). Run scaffold here and /goals to check on them.`
+- **Known limitation**: the REPL always subscribes as agent id `"repl"`, so two concurrent interactive sessions in the same project would share one subscription cursor and each could steal the other's unread events. Not fixed in this round (low probability under the one-process-one-directory model).
+
+### One-Shot Goal Wait
+
+A no-phase goal created by a one-shot turn (`scaffold "build a todo app"`) keeps running under a supervisor process after `session_process_message()` returns. `lib/agent/oneshot_wait.c`'s `oneshot_wait_for_goals(session, project, started_after, poll_ms)` makes the one-shot invocation block until that goal finishes, so the process doesn't hand control back mid-build.
+
+- **Scope**: called from `agent_run()`'s `AGENT_MODE_SINGLE_SHOT` case only after a successful turn (`ss_result == 0`); a turn-level error is returned as-is. It lists the project's goals (`goal_store_list_by_project`) and tracks only those with `created_at >= started_after` (the timestamp captured just before the turn), so a pre-existing goal from an earlier invocation is never waited on. No tracked goals means an immediate return.
+- **Poll loop**: each tick drains and renders `goals:<project>` progress (subscriber id `"oneshot"`, same `goal_progress_format()` path as the REPL) and re-reads each tracked goal's status. A PLANNING/ACTIVE goal whose supervisor isn't alive (`orchestrator_supervisor_alive()`) triggers `orchestrator_respawn_dead()`. The loop has no independent timeout — it's bounded by the goal's own lifecycle (the supervisor's idle re-prompt/give-up budget), not an arbitrary deadline here.
+- **Signature**: `int oneshot_wait_for_goals(AgentSession*, const char *project, time_t started_after, int poll_ms);`
+- **Outcome**: returns 0 once every tracked goal is COMPLETED, 1 if any is FAILED (printing `Goal <name> failed: <reason>` — the goal's `summary` if set, else a generic message — plus `orchestrator_supervisor_log_path()` to stderr or as a `goal_failed` JSON system event), 130 if interrupted. `main.c` propagates 130 through to the process exit instead of collapsing every non-zero result to `EXIT_FAILURE`.
+- **Interrupt**: the function owns its own `interrupt_init()`/`interrupt_cleanup()` pair (idempotent, so install is a no-op if already installed — tests exploit this to pre-set the pending flag with `interrupt_handler_trigger()` before calling in). On interrupt it reuses `goal_progress_quit_warning()` for the still-running goal names, printing the same "N goals still running in the background... Run scaffold here and /goals to check on them" hint the REPL prints on quit.
+- **`--json` mode**: progress and the final summary go out as `json_output_system()` events on stdout (subtypes `goal_progress`, `goal_completed`, `goal_failed`, `interrupted`); otherwise they're plain lines on stderr. stdout never carries non-JSON text in `--json` mode.
 
 ### Context Pressure Detection
 
@@ -1067,8 +1100,10 @@ graph TB
 | Memory | 100,000 | 16 | 200 | Long-term semantic memory |
 | Documents | 10,000 | 16 | 200 | PDF and document storage |
 
-### Memory Scopes
-Memory and conversation-history indices are per project. `project_scope_index_name()` (`lib/util/project_scope.c`) resolves the nearest ancestor of the working directory containing a `.git` entry, falling back to the working directory, and names the index `<prefix>_<basename>_<fnv1a64(root)>`. The memory tool and conversation tracker resolve their names once, when their services are set. Project memories go to `memory_<…>`; `remember` with `scope=user` writes `memory_user`, which every project shares. `recall_memories` searches both and merges by distance. History is stored in `conversations_<…>`, so the startup recap only covers the current project.
+### Memory and Todo Scopes
+Memory, conversation-history, and todo indices are all per project. `project_scope_index_name()` (`lib/util/project_scope.c`) resolves the nearest ancestor of the working directory containing a `.git` entry, falling back to the working directory, and names the index `<prefix>_<basename>_<fnv1a64(root)>`. The memory tool and conversation tracker resolve their names once, when their services are set. Project memories go to `memory_<…>`; `remember` with `scope=user` writes `memory_user`, which every project shares. `recall_memories` searches both and merges by distance. History is stored in `conversations_<…>`, so the startup recap only covers the current project.
+
+Todos are scoped via `todo_session_key()` (`lib/tools/todo_tool.c`), which calls `project_scope_index_name("todos", …)` on each store read/write. The session key is computed from the current working directory at the time of each call, so todos from one project are never visible in another. The `/tasks` slash command (`lib/ui/task_commands.c`) uses the same `todo_session_key()` for consistency.
 
 ## Key Features
 
@@ -1157,7 +1192,7 @@ On init, an installed default tool file is replaced with the embedded version wh
 ```
 src/
 ├── scaffold/               # Scaffold CLI (single binary)
-│   └── main.c              # Entry point (REPL, one-shot, --supervisor, --worker, --phase plan|execute, --check-update, --update)
+│   └── main.c              # Entry point (REPL, one-shot, --supervisor, --worker, --phase plan|execute, --check-update, --update); piped stdin → single-shot (8 MiB cap; arg+stdin merged with two newlines; empty stdin exits 2)
 ├── tools/                  # Python tool integration
 │   ├── python_tool.c/h     # Embedded Python interpreter
 │   ├── python_tool_files.c/h # Python file-based tools
@@ -1191,7 +1226,7 @@ lib/
 │   ├── repl.c/h            # Read-Eval-Print-Loop for interactive mode
 │   ├── async_executor.c/h  # Non-blocking message processing thread
 │   ├── context_enhancement.c/h  # Split prompt builder (base + dynamic context)
-│   ├── recap.c/h           # Startup recap and first-run greeting
+│   ├── recap.c/h           # Conversation recap (via /recap); no LLM call at startup
 │   ├── streaming_handler.c/h   # Streaming orchestration layer
 │   ├── tool_executor.c/h   # Tool execution entry point
 │   ├── iterative_loop.c/h  # Iterative tool-calling loop
@@ -1274,7 +1309,7 @@ lib/
 │   ├── memory_commands.c/h # /memory slash commands
 │   ├── task_commands.c/h   # /tasks slash commands
 │   ├── agent_commands.c/h  # /agents slash commands (subagents + supervisors)
-│   ├── goal_commands.c/h   # /goals slash commands
+│   ├── goal_commands.c/h   # /goals slash commands (project-scoped list, stalled status, log path)
 │   ├── model_commands.c/h  # /model slash commands
 │   ├── mode_commands.c/h   # /mode slash commands
 │   └── status_line.c/h     # Status info line (activity, context %/window, model)
@@ -1318,13 +1353,13 @@ lib/
 │   ├── context_retriever.c/h # Vector context retrieval
 │   ├── ansi_codes.h        # Terminal color codes and box-drawing characters
 │   ├── app_home.c/h        # Centralized home directory management
-│   ├── process_spawn.c/h  # Common fork/exec with stdout/stderr to /dev/null
+│   ├── process_spawn.c/h  # Common fork/exec: to /dev/null, or detached with stdout/stderr appended to a log file
 │   └── executable_path.c/h # Executable path resolution for APE binaries
 ├── updater/               # Self-update system
 │   └── updater.c/h        # GitHub releases check, download, and apply
 ├── orchestrator/          # Scaffold orchestration layer
 │   ├── supervisor.c/h     # Supervisor event loop with phase-aware execution (plan/execute), context pressure exit, orphaned action recovery
-│   ├── orchestrator.c/h   # Supervisor spawning (via process_spawn) with auto-detected --phase flag, monitoring, stale-PID cleanup (dead-only), respawn for PLANNING+ACTIVE goals
+│   ├── orchestrator.c/h   # Supervisor spawning (logged, --log info) with auto-detected --phase flag, heartbeat liveness, stale-PID cleanup (dead-only), per-project respawn for PLANNING+ACTIVE goals with no live process
 │   ├── goap_state.c/h     # Shared GOAP state evaluation (precondition checking, progress tracking)
 │   └── role_prompts.c/h   # Role-based system prompts for workers (file override + built-in defaults)
 └── workflow/               # Task queue

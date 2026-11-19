@@ -1,6 +1,7 @@
 #ifndef CONVERSATION_TRACKER_H
 #define CONVERSATION_TRACKER_H
 
+#include <time.h>
 #include "../util/darray.h"
 
 typedef struct Services Services;
@@ -32,5 +33,11 @@ int load_extended_conversation_history(ConversationHistory *history, int days_ba
 
 // Caller owns returned history and must free with cleanup_conversation_history + free
 ConversationHistory* search_conversation_history(const char *query, size_t max_results);
+
+/**
+ * Return the timestamp of the most recent conversation message stored in the
+ * document store, or 0 if the store is unavailable or empty.
+ */
+time_t conversation_tracker_last_message_time(void);
 
 #endif // CONVERSATION_TRACKER_H

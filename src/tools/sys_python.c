@@ -2,8 +2,20 @@
 #include "util/executable_path.h"
 #include "util/app_home.h"
 #include "util/config.h"
+#include "ui/spinner.h"
 #include <Python.h>
 #include <stdlib.h>
+
+/*
+ * Sink for progress lines forwarded from Python tools. Defaults to the
+ * spinner's live detail line; tests may override it to capture the lines.
+ */
+typedef void (*progress_sink_fn)(const char *line);
+static progress_sink_fn g_progress_sink = spinner_set_detail;
+
+void sys_python_set_progress_sink_for_test(progress_sink_fn fn) {
+    g_progress_sink = fn ? fn : spinner_set_detail;
+}
 
 /**
  * _ralph_sys.get_executable_path()
@@ -60,6 +72,29 @@ static PyObject *py_get_config_int(PyObject *self, PyObject *args) {
     return PyLong_FromLong(config_get_int(key, default_value));
 }
 
+/**
+ * _ralph_sys.progress(line)
+ *
+ * Forwards a single output line to the live progress sink (the spinner's
+ * detail line by default). Called from tool worker threads as output
+ * streams in; the string is converted to C here so no per-byte round trips
+ * cross the C/Python boundary.
+ */
+static PyObject *py_progress(PyObject *self, PyObject *args) {
+    (void)self;
+
+    const char *line = NULL;
+    if (!PyArg_ParseTuple(args, "s", &line)) {
+        return NULL;
+    }
+
+    if (line != NULL) {
+        g_progress_sink(line);
+    }
+
+    Py_RETURN_NONE;
+}
+
 static PyMethodDef SysMethods[] = {
     {"get_executable_path", py_get_executable_path, METH_NOARGS,
      "Get the path to the current executable."},
@@ -67,6 +102,8 @@ static PyMethodDef SysMethods[] = {
      "Get the application home directory path."},
     {"get_config_int", py_get_config_int, METH_VARARGS,
      "Get an integer config value, or the given default."},
+    {"progress", py_progress, METH_VARARGS,
+     "Report a progress line to the live spinner detail."},
     {NULL, NULL, 0, NULL}
 };
 

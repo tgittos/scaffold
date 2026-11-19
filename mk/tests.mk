@@ -37,6 +37,7 @@ $(eval $(call def_test,cli_flags,ralph/test_cli_flags,))
 $(eval $(call def_test,interrupt,ralph/test_interrupt,$(LIBDIR)/util/interrupt.c))
 $(eval $(call def_test,async_executor,ralph/test_async_executor,$(LIBDIR)/agent/async_executor.c $(LIBDIR)/util/interrupt.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/util/log.c $(LIBDIR)/ipc/pipe_notifier.c $(TESTDIR)/stubs/ralph_stub.c))
 $(eval $(call def_test,pipe_notifier,utils/test_pipe_notifier,$(LIBDIR)/ipc/pipe_notifier.c))
+$(eval $(call def_test,stdin_reader,utils/test_stdin_reader,$(LIBDIR)/util/stdin_reader.c))
 $(eval $(call def_test,agent_identity,ralph/test_agent_identity,$(LIBDIR)/ipc/agent_identity.c))
 $(eval $(call def_test,prompt,utils/test_prompt_loader,$(LIBDIR)/util/prompt_loader.c $(LIBDIR)/util/app_home.c $(LIBDIR)/util/config.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/util/log.c))
 $(eval $(call def_test,app_home,utils/test_app_home,$(LIBDIR)/util/app_home.c))
@@ -49,6 +50,7 @@ $(eval $(call def_test,darray,test_darray,))
 $(eval $(call def_test,ptrarray,test_ptrarray,))
 $(eval $(call def_test,tool_cache,tools/test_tool_cache,$(LIBDIR)/tools/tool_cache.c))
 $(eval $(call def_test,prompt_mode,agent/test_prompt_mode,$(LIBDIR)/agent/prompt_mode.c))
+$(eval $(call def_test,change_report,agent/test_change_report,$(LIBDIR)/agent/change_report.c $(LIBDIR)/util/process_spawn.c))
 $(eval $(call def_test,oauth_callback_server,auth/test_oauth_callback_server,$(LIBDIR)/auth/oauth_callback_server.c))
 
 
@@ -63,6 +65,9 @@ $(TEST_async_executor_TARGET): $(TEST_async_executor_OBJECTS) $(CJSON_LIB)
 
 $(TEST_pipe_notifier_TARGET): $(TEST_pipe_notifier_OBJECTS)
 	$(CC) -o $@ $(TEST_pipe_notifier_OBJECTS)
+
+$(TEST_stdin_reader_TARGET): $(TEST_stdin_reader_OBJECTS)
+	$(CC) -o $@ $(TEST_stdin_reader_OBJECTS)
 
 $(TEST_agent_identity_TARGET): $(TEST_agent_identity_OBJECTS)
 	$(CC) -o $@ $(TEST_agent_identity_OBJECTS) -lpthread
@@ -100,6 +105,9 @@ $(TEST_tool_cache_TARGET): $(TEST_tool_cache_OBJECTS) $(CJSON_LIB)
 $(TEST_prompt_mode_TARGET): $(TEST_prompt_mode_OBJECTS)
 	$(CC) -o $@ $(TEST_prompt_mode_OBJECTS)
 
+$(TEST_change_report_TARGET): $(TEST_change_report_OBJECTS)
+	$(CC) -o $@ $(TEST_change_report_OBJECTS)
+
 $(TEST_oauth_callback_server_TARGET): $(TEST_oauth_callback_server_OBJECTS)
 	$(CC) -o $@ $(TEST_oauth_callback_server_OBJECTS) -lpthread
 
@@ -128,7 +136,7 @@ $(TEST_plugin_updater_TARGET): $(TEST_plugin_updater_OBJECTS) $(CJSON_LIB)
 $(eval $(call def_test,config,utils/test_config,$(LIBDIR)/util/config.c $(LIBDIR)/util/app_home.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/util/log.c))
 $(eval $(call def_test,debug_output,utils/test_debug_output,$(LIBDIR)/util/debug_output.c))
 $(eval $(call def_test,log,utils/test_log,$(LIBDIR)/util/log.c $(LIBDIR)/util/debug_output.c))
-$(eval $(call def_test,spinner,utils/test_spinner,$(LIBDIR)/ui/terminal.c $(LIBDIR)/ui/spinner.c $(LIBDIR)/util/common_utils.c $(TESTDIR)/stubs/output_formatter_stub.c))
+$(eval $(call def_test,spinner,utils/test_spinner,$(LIBDIR)/ui/terminal.c $(LIBDIR)/ui/terminal_width.c $(LIBDIR)/ui/spinner.c $(LIBDIR)/util/common_utils.c $(TESTDIR)/stubs/output_formatter_stub.c))
 $(eval $(call def_test,terminal,utils/test_terminal,$(LIBDIR)/ui/terminal.c $(LIBDIR)/util/common_utils.c $(TESTDIR)/stubs/output_formatter_stub.c))
 $(eval $(call def_test_lib,slash_commands,ui/test_slash_commands,))
 
@@ -175,6 +183,15 @@ $(TEST_http_form_post_TARGET): $(TEST_http_form_post_OBJECTS) $(LIBAGENT) $(ALL_
 	$(CXX) $(LDFLAGS) -o $@ $(TEST_http_form_post_OBJECTS) $(LIBAGENT) $(LIBS) -lpthread
 
 # =============================================================================
+# HTTP STREAMING ERROR TEST
+# =============================================================================
+
+$(eval $(call def_test_lib,http_streaming_error,network/test_http_streaming_error,$(TESTDIR)/mock_api_server.c))
+
+$(TEST_http_streaming_error_TARGET): $(TEST_http_streaming_error_OBJECTS) $(LIBAGENT) $(ALL_LIBS)
+	$(CXX) $(LDFLAGS) -o $@ $(TEST_http_streaming_error_OBJECTS) $(LIBAGENT) $(LIBS) -lpthread
+
+# =============================================================================
 # SQLITE TESTS
 # =============================================================================
 
@@ -191,7 +208,7 @@ $(TEST_task_store_TARGET): $(TEST_task_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_
 $(TEST_message_store_TARGET): $(TEST_message_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB)
 	$(CC) -o $@ $(TEST_message_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) -lpthread -lm
 
-$(eval $(call def_test,goal_store,db/test_goal_store,$(LIBDIR)/db/goal_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/uuid_utils.c $(LIBDIR)/util/app_home.c))
+$(eval $(call def_test,goal_store,db/test_goal_store,$(LIBDIR)/db/goal_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/uuid_utils.c $(LIBDIR)/util/app_home.c $(LIBDIR)/util/project_scope.c))
 $(eval $(call def_test,action_store,db/test_action_store,$(LIBDIR)/db/action_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/orchestrator/goap_state.c $(LIBDIR)/util/uuid_utils.c $(LIBDIR)/util/app_home.c))
 
 $(TEST_goal_store_TARGET): $(TEST_goal_store_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB)
@@ -223,7 +240,7 @@ $(eval $(call def_test,jwt_decode,auth/test_jwt_decode,$(LIBDIR)/auth/jwt_decode
 $(TEST_jwt_decode_TARGET): $(TEST_jwt_decode_OBJECTS) $(CJSON_LIB) $(LIBS_MBEDTLS)
 	$(CC) -o $@ $(TEST_jwt_decode_OBJECTS) $(CJSON_LIB) $(LIBS_MBEDTLS) -lm
 
-$(eval $(call def_test,orchestrator,orchestrator/test_orchestrator,$(LIBDIR)/orchestrator/orchestrator.c $(LIBDIR)/db/goal_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/uuid_utils.c $(LIBDIR)/util/app_home.c $(LIBDIR)/util/executable_path.c $(LIBDIR)/util/process_spawn.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/util/log.c))
+$(eval $(call def_test,orchestrator,orchestrator/test_orchestrator,$(LIBDIR)/orchestrator/orchestrator.c $(LIBDIR)/db/goal_store.c $(LIBDIR)/db/sqlite_dal.c $(LIBDIR)/util/uuid_utils.c $(LIBDIR)/util/app_home.c $(LIBDIR)/util/executable_path.c $(LIBDIR)/util/process_spawn.c $(LIBDIR)/util/project_scope.c $(LIBDIR)/util/debug_output.c $(LIBDIR)/util/log.c))
 
 $(TEST_orchestrator_TARGET): $(TEST_orchestrator_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_orchestrator_OBJECTS) $(SQLITE_LIB) $(OSSP_UUID_LIB) $(CJSON_LIB) -lpthread -lm
@@ -278,6 +295,7 @@ $(eval $(call def_test_lib,tool_param_dsl,tools/test_tool_param_dsl,))
 $(eval $(call def_test_lib,json_output,utils/test_json_output,))
 $(eval $(call def_test_lib,output,utils/test_output_formatter,))
 $(eval $(call def_test_lib,tools_system,tools/test_tools_system,))
+$(eval $(call def_test_lib,todo_tool_scope,tools/test_todo_tool_scope,))
 $(eval $(call def_test_lib,vector_db_tool,tools/test_vector_db_tool,$(MOCK_EMBEDDINGS_SOURCES)))
 $(eval $(call def_test_lib,memory_tool,tools/test_memory_tool,$(MOCK_EMBEDDINGS_SOURCES)))
 $(eval $(call def_test_lib,memory_mgmt,test_memory_management,))
@@ -304,7 +322,7 @@ $(eval $(call def_test_lib,ralph,ralph/test_ralph,$(TESTDIR)/mock_api_server.c))
 $(eval $(call def_test_lib,iterative_loop_empty,ralph/test_iterative_loop_empty,$(TESTDIR)/mock_api_server.c))
 $(eval $(call def_test_lib,message_dispatcher,ralph/test_message_dispatcher,))
 $(eval $(call def_test_lib,message_processor,ralph/test_message_processor,))
-$(eval $(call def_test_lib,recap,ralph/test_recap,))
+$(eval $(call def_test_lib,recap,ralph/test_recap,$(TESTDIR)/mock_api_server.c))
 $(eval $(call def_test_lib,parallel_batch,agent/test_parallel_batch,))
 $(eval $(call def_test_lib,tool_wire_format,agent/test_tool_wire_format,$(TESTDIR)/mock_api_server.c))
 $(eval $(call def_test_lib,model_commands,ui/test_model_commands,))
@@ -325,6 +343,8 @@ $(eval $(call def_test_lib,goap_tools,tools/test_goap_tools,))
 $(eval $(call def_test_lib,orchestrator_tool,tools/test_orchestrator_tool,))
 $(eval $(call def_test_lib,goap_lifecycle,orchestrator/test_goap_lifecycle,))
 $(eval $(call def_test_lib,goap_state,orchestrator/test_goap_state,))
+$(eval $(call def_test_lib,goal_progress,agent/test_goal_progress,))
+$(eval $(call def_test_lib,oneshot_wait,agent/test_oneshot_wait,))
 $(eval $(call def_test,plugin_protocol,plugin/test_plugin_protocol,$(LIBDIR)/plugin/plugin_protocol.c))
 $(eval $(call def_test_lib,plugin_manager,plugin/test_plugin_manager,))
 $(eval $(call def_test_lib,hook_dispatcher,plugin/test_hook_dispatcher,))
@@ -334,15 +354,15 @@ $(TEST_plugin_protocol_TARGET): $(TEST_plugin_protocol_OBJECTS) $(CJSON_LIB)
 	$(CC) -o $@ $(TEST_plugin_protocol_OBJECTS) $(CJSON_LIB)
 
 # Batch link rule for libagent-linked tests
-LIBAGENT_TESTS := tool_param_dsl json_output output tools_system vector_db_tool memory_tool \
+LIBAGENT_TESTS := tool_param_dsl json_output output tools_system todo_tool_scope vector_db_tool memory_tool \
     memory_mgmt token_manager conversation_compactor rolling_summary model_tools embeddings_service embeddings_service_reinit \
     openai_streaming anthropic_streaming codex_provider messages_array_bug openai_message_format mcp_client subagent_tool \
     incomplete_task_bug conversation conversation_vdb tool_calls_not_stored document_store \
-    message_dispatcher message_processor recap parallel_batch tool_wire_format model_commands \
+    message_dispatcher message_processor parallel_batch tool_wire_format model_commands \
     iterative_loop_empty \
     slash_commands task_commands agent_commands goal_commands mode_tool mode_commands status_line \
     context_mode_injection repo_context image_attachment goap_tools orchestrator_tool goap_lifecycle \
-    goap_state plugin_manager hook_dispatcher plugin_integration
+    goap_state plugin_manager hook_dispatcher plugin_integration goal_progress oneshot_wait
 
 $(foreach t,$(LIBAGENT_TESTS),$(eval \
 $$(TEST_$(t)_TARGET): $$(TEST_$(t)_OBJECTS) $$(LIBAGENT) $$(ALL_LIBS) ; \
@@ -355,6 +375,10 @@ $(TEST_http_TARGET): $(TEST_http_OBJECTS) $(LIBAGENT) $(ALL_LIBS)
 # ralph test needs LDFLAGS and mock_api_server
 $(TEST_ralph_TARGET): $(TEST_ralph_OBJECTS) $(LIBAGENT) $(ALL_LIBS)
 	$(CXX) $(LDFLAGS) -o $@ $(TEST_ralph_OBJECTS) $(LIBAGENT) $(LIBS) -lpthread
+
+# recap test calls repl_show_greeting which pulls in readline
+$(TEST_recap_TARGET): $(TEST_recap_OBJECTS) $(LIBAGENT) $(ALL_LIBS)
+	$(CXX) $(LDFLAGS) -o $@ $(TEST_recap_OBJECTS) $(LIBAGENT) $(LIBS) -lpthread
 
 # =============================================================================
 # PYTHON TESTS (need stdlib embedding)

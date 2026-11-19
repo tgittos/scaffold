@@ -29,4 +29,12 @@
  */
 int sys_python_init(void);
 
+/**
+ * Test hook: override the sink that _ralph_sys.progress() forwards to.
+ *
+ * Pass NULL to restore the default (spinner_set_detail). Not for production
+ * use.
+ */
+void sys_python_set_progress_sink_for_test(void (*fn)(const char *line));
+
 #endif /* SYS_PYTHON_H */

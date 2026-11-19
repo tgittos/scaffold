@@ -1,5 +1,6 @@
 #include "status_line.h"
 #include "output_formatter.h"
+#include "terminal_width.h"
 #include "../agent/prompt_mode.h"
 #include "../util/ansi_codes.h"
 #include <stdio.h>
@@ -98,7 +99,7 @@ void status_line_set_busy(const char *label) {
         g_status.activity_label[0] = '\0';
     }
     g_status.activity_start_time = time(NULL);
-    bool should_render = !get_json_output_mode();
+    bool should_render = !get_json_output_mode() && isatty(STDOUT_FILENO);
     if (should_render) {
         g_status.busy_rendered = true;
     }
@@ -123,6 +124,14 @@ void status_line_set_idle(void) {
         fprintf(stdout, TERM_CLEAR_LINE);
         fflush(stdout);
     }
+}
+
+bool status_line_is_busy(void) {
+    if (!g_status.initialized) return false;
+    pthread_mutex_lock(&g_status.mutex);
+    bool busy = g_status.system_busy;
+    pthread_mutex_unlock(&g_status.mutex);
+    return busy;
 }
 
 void status_line_update_tokens(int prompt_tokens, int completion_tokens) {
@@ -212,32 +221,6 @@ void status_line_format_context(char *buf, size_t buf_size) {
     format_context(buf, buf_size, true);
 }
 
-/* 0 when unknown (no TTY and no $COLUMNS): rendering is then unclamped. */
-static int terminal_columns(void) {
-    struct winsize ws;
-    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0) {
-        return ws.ws_col;
-    }
-    const char *env = getenv("COLUMNS");
-    int cols = env ? atoi(env) : 0;
-    return cols > 0 ? cols : 0;
-}
-
-/* Terminal columns used by s: skips CSI escapes, counts UTF-8 code points. */
-static int visible_width(const char *s) {
-    int width = 0;
-    while (*s) {
-        if (s[0] == '\033' && s[1] == '[') {
-            s += 2;
-            while (*s && !(*s >= '@' && *s <= '~')) s++;
-            if (*s) s++;
-            continue;
-        }
-        if (((unsigned char)*s & 0xC0) != 0x80) width++;
-        s++;
-    }
-    return width;
-}
 
 void status_line_set_mode(int mode) {
     if (!g_status.initialized) return;
@@ -330,11 +313,11 @@ void status_line_render_info(void) {
     int cols = terminal_columns();
     if (cols > 0) {
         int budget = cols - 1;
-        int left_width = visible_width(left) + (left[0] ? 3 : 2);
-        if (left_width + visible_width(segment) > budget) {
+        int left_width = (int)visible_width(left) + (left[0] ? 3 : 2);
+        if (left_width + (int)visible_width(segment) > budget) {
             format_context(segment, sizeof(segment), false);
         }
-        if (left_width + visible_width(segment) > budget) {
+        if (left_width + (int)visible_width(segment) > budget) {
             segment[0] = '\0';
         }
     }
@@ -352,6 +335,64 @@ void status_line_render_info(void) {
 
     g_info_rendered = printed;
     fflush(stdout);
+}
+
+void status_line_render_info_oneshot(void) {
+    if (!g_status.initialized) return;
+    if (get_json_output_mode()) return;
+
+    pthread_mutex_lock(&g_status.mutex);
+    int last_response  = g_status.last_response_tokens;
+    int prompt_tokens  = g_status.session_prompt_tokens;
+    char model[STATUS_MODEL_NAME_LEN];
+    memcpy(model, g_status.model_name, sizeof(model));
+    int window = g_status.context_window;
+    pthread_mutex_unlock(&g_status.mutex);
+
+    /* Build left portion: last-response token count */
+    char left[128] = "";
+    if (last_response > 0) {
+        char resp_str[16];
+        format_token_count(last_response, resp_str, sizeof(resp_str));
+        snprintf(left, sizeof(left), "  \xe2\x94\x94 %s tokens", resp_str);
+    }
+
+    /* Build right portion: context usage + model name.
+     * Use ANSI only when stderr is a TTY; otherwise plain text. */
+    char segment[256] = "";
+    if (isatty(STDERR_FILENO)) {
+        format_context(segment, sizeof(segment), true);
+    } else {
+        char ctx[48] = {0};
+        if (window > 0) {
+            char win_str[16] = {0};
+            format_token_count(window, win_str, sizeof(win_str));
+            if (prompt_tokens > 0) {
+                double pct = prompt_tokens * 100.0 / window;
+                snprintf(ctx, sizeof(ctx), "%.1f%%/%s", pct, win_str);
+            } else {
+                snprintf(ctx, sizeof(ctx), "?/%s", win_str);
+            }
+        } else if (model[0]) {
+            snprintf(ctx, sizeof(ctx), "?");
+        }
+        if (ctx[0] && model[0]) {
+            snprintf(segment, sizeof(segment), "%s  %s", ctx, model);
+        } else if (ctx[0]) {
+            snprintf(segment, sizeof(segment), "%s", ctx);
+        } else if (model[0]) {
+            snprintf(segment, sizeof(segment), "%s", model);
+        }
+    }
+
+    if (left[0] && segment[0]) {
+        fprintf(stderr, "%s   %s\n", left, segment);
+    } else if (left[0]) {
+        fprintf(stderr, "%s\n", left);
+    } else if (segment[0]) {
+        fprintf(stderr, "  %s\n", segment);
+    }
+    fflush(stderr);
 }
 
 void status_line_clear_rendered(void) {

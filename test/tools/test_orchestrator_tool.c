@@ -4,12 +4,16 @@
 #include "db/goal_store.h"
 #include "db/action_store.h"
 #include "services/services.h"
+#include "orchestrator/supervisor.h"
 #include "util/app_home.h"
 #include "util/common_utils.h"
 #include <cJSON.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdio.h>
+#include <limits.h>
+#include <sys/stat.h>
 #include "../test_fs_utils.h"
 
 static const char *TEST_DB = "/tmp/test_orchestrator_tool.db";
@@ -167,6 +171,64 @@ void test_list_goals_with_data(void) {
     free_tr(&tr);
 }
 
+static void make_git_repo(const char *path) {
+    mkdir(path, 0755);
+    char git_dir[PATH_MAX];
+    int n = snprintf(git_dir, sizeof(git_dir) - 1, "%s", path);
+    if (n > 0 && n < (int)(sizeof(git_dir) - 6)) {
+        memcpy(git_dir + n, "/.git", 6);
+        mkdir(git_dir, 0755);
+    }
+}
+
+/* list_goals is project-scoped: a goal created in project A must not be
+ * visible from project B (the orchestrator tool must not leak other
+ * projects' goal state to the LLM). */
+void test_list_goals_scoped_to_project(void) {
+    char saved_cwd[PATH_MAX];
+    TEST_ASSERT_NOT_NULL(getcwd(saved_cwd, sizeof(saved_cwd)));
+
+    char base[] = "/tmp/test_orch_scope_XXXXXX";
+    TEST_ASSERT_NOT_NULL(mkdtemp(base));
+
+    char proj_a[PATH_MAX], proj_b[PATH_MAX];
+    int base_len = (int)strlen(base);
+    memcpy(proj_a, base, (size_t)base_len);
+    memcpy(proj_a + base_len, "/projA", 7);
+    memcpy(proj_b, base, (size_t)base_len);
+    memcpy(proj_b + base_len, "/projB", 7);
+    make_git_repo(proj_a);
+    make_git_repo(proj_b);
+
+    /* Create a goal while project A is the working directory. */
+    TEST_ASSERT_EQUAL_INT(0, chdir(proj_a));
+    char id[40];
+    TEST_ASSERT_EQUAL_INT(0, goal_store_insert(gs, "ProjAGoal", "only project A",
+                                               "{\"done\": true}", "a_queue", id));
+
+    ToolCall tc = make_tc("scope1", "list_goals", "{}");
+    ToolResult tr = {0};
+    TEST_ASSERT_EQUAL(0, execute_list_goals(&tc, &tr));
+    cJSON *resp = parse_result(&tr);
+    TEST_ASSERT_EQUAL(1, (int)cJSON_GetNumberValue(cJSON_GetObjectItem(resp, "count")));
+    cJSON_Delete(resp);
+    free_tc(&tc);
+    free_tr(&tr);
+
+    /* Project B must not see project A's goal. */
+    TEST_ASSERT_EQUAL_INT(0, chdir(proj_b));
+    tc = make_tc("scope2", "list_goals", "{}");
+    memset(&tr, 0, sizeof(tr));
+    TEST_ASSERT_EQUAL(0, execute_list_goals(&tc, &tr));
+    resp = parse_result(&tr);
+    TEST_ASSERT_EQUAL(0, (int)cJSON_GetNumberValue(cJSON_GetObjectItem(resp, "count")));
+    cJSON_Delete(resp);
+    free_tc(&tc);
+    free_tr(&tr);
+
+    TEST_ASSERT_EQUAL_INT(0, chdir(saved_cwd));
+}
+
 /* ========================================================================
  * goal_status
  * ======================================================================== */
@@ -249,6 +311,45 @@ void test_goal_status_not_found(void) {
  * start_goal (validation only — supervisor spawn requires fork/exec)
  * ======================================================================== */
 
+/* When a PLANNING goal already has actions, start_goal must transition it to
+ * ACTIVE immediately so the supervisor spawns with --phase execute instead of
+ * running a redundant second plan pass. */
+void test_start_goal_with_actions_skips_plan(void) {
+    char goal_id[40];
+    create_test_goal(goal_id);
+    /* Goal is in PLANNING status (default from goal_store_insert) */
+
+    /* Pre-populate an action — simulates plan already done */
+    char action_id[40];
+    action_store_insert(as, goal_id, NULL, "Phase 1",
+                        "[]", "[]", true, NULL, action_id);
+
+    char args[128];
+    snprintf(args, sizeof(args), "{\"goal_id\":\"%s\"}", goal_id);
+    ToolCall tc = make_tc("sg_act", "start_goal", args);
+    ToolResult tr = {0};
+
+    TEST_ASSERT_EQUAL(0, execute_start_goal(&tc, &tr));
+
+    /* Goal must be ACTIVE — that is what causes orchestrator_spawn_supervisor
+     * to pass --phase execute (it uses PLANNING→"plan", else→"execute"). */
+    Goal *goal = goal_store_get(gs, goal_id);
+    TEST_ASSERT_NOT_NULL(goal);
+    TEST_ASSERT_EQUAL(GOAL_STATUS_ACTIVE, goal->status);
+    goal_free(goal);
+
+    /* Tool must report success and status="active" */
+    cJSON *resp = parse_result(&tr);
+    TEST_ASSERT_NOT_NULL(resp);
+    TEST_ASSERT_TRUE(cJSON_IsTrue(cJSON_GetObjectItem(resp, "success")));
+    TEST_ASSERT_EQUAL_STRING("active",
+        cJSON_GetStringValue(cJSON_GetObjectItem(resp, "status")));
+
+    cJSON_Delete(resp);
+    free_tc(&tc);
+    free_tr(&tr);
+}
+
 void test_start_goal_wrong_status(void) {
     char goal_id[40];
     create_test_goal(goal_id);
@@ -282,6 +383,54 @@ void test_start_goal_not_found(void) {
 
     free_tc(&tc);
     free_tr(&tr);
+}
+
+/* ========================================================================
+ * supervisor_resolve_phase — no-phase-arg path
+ * Tests the shared helper used by supervisor_run when started without
+ * --phase execute for a goal that already has actions.
+ * ======================================================================== */
+
+void test_resolve_phase_planning_no_actions_stays_plan(void) {
+    char goal_id[40];
+    create_test_goal(goal_id);
+    /* Goal is PLANNING, no actions yet */
+    SupervisorPhase phase = supervisor_resolve_phase(svc, goal_id,
+                                                      SUPERVISOR_PHASE_PLAN);
+    TEST_ASSERT_EQUAL(SUPERVISOR_PHASE_PLAN, phase);
+    /* Status unchanged */
+    Goal *goal = goal_store_get(gs, goal_id);
+    TEST_ASSERT_NOT_NULL(goal);
+    TEST_ASSERT_EQUAL(GOAL_STATUS_PLANNING, goal->status);
+    goal_free(goal);
+}
+
+void test_resolve_phase_planning_with_actions_promotes_to_execute(void) {
+    char goal_id[40];
+    create_test_goal(goal_id);
+    /* Pre-populate an action — simulates plan done in prior session */
+    char action_id[40];
+    action_store_insert(as, goal_id, NULL, "Step 1",
+                        "[]", "[]", false, NULL, action_id);
+
+    SupervisorPhase phase = supervisor_resolve_phase(svc, goal_id,
+                                                      SUPERVISOR_PHASE_PLAN);
+    /* Must switch to execute */
+    TEST_ASSERT_EQUAL(SUPERVISOR_PHASE_EXECUTE, phase);
+    /* Goal must have been promoted to ACTIVE */
+    Goal *goal = goal_store_get(gs, goal_id);
+    TEST_ASSERT_NOT_NULL(goal);
+    TEST_ASSERT_EQUAL(GOAL_STATUS_ACTIVE, goal->status);
+    goal_free(goal);
+}
+
+void test_resolve_phase_explicit_execute_unchanged(void) {
+    char goal_id[40];
+    create_test_goal(goal_id);
+    /* Even without actions, explicit EXECUTE is returned unchanged */
+    SupervisorPhase phase = supervisor_resolve_phase(svc, goal_id,
+                                                      SUPERVISOR_PHASE_EXECUTE);
+    TEST_ASSERT_EQUAL(SUPERVISOR_PHASE_EXECUTE, phase);
 }
 
 /* ========================================================================
@@ -394,7 +543,12 @@ void test_cancel_goal_not_found(void) {
  * Runner
  * ======================================================================== */
 
-int main(void) {
+int main(int argc, char **argv) {
+    (void)argv;
+    /* Spawned agents exec this test binary with agent flags; exit as a failed launch. */
+    if (argc > 1) {
+        return 127;
+    }
     UNITY_BEGIN();
 
     /* execute_plan */
@@ -404,14 +558,21 @@ int main(void) {
     /* list_goals */
     RUN_TEST(test_list_goals_empty);
     RUN_TEST(test_list_goals_with_data);
+    RUN_TEST(test_list_goals_scoped_to_project);
 
     /* goal_status */
     RUN_TEST(test_goal_status);
     RUN_TEST(test_goal_status_not_found);
 
-    /* start_goal (validation only) */
+    /* start_goal */
+    RUN_TEST(test_start_goal_with_actions_skips_plan);
     RUN_TEST(test_start_goal_wrong_status);
     RUN_TEST(test_start_goal_not_found);
+
+    /* supervisor_resolve_phase */
+    RUN_TEST(test_resolve_phase_planning_no_actions_stays_plan);
+    RUN_TEST(test_resolve_phase_planning_with_actions_promotes_to_execute);
+    RUN_TEST(test_resolve_phase_explicit_execute_unchanged);
 
     /* pause_goal */
     RUN_TEST(test_pause_goal_wrong_status);

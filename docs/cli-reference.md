@@ -6,7 +6,7 @@
 scaffold [OPTIONS] [MESSAGE]
 ```
 
-If `MESSAGE` is provided, scaffold processes it and exits (one-shot mode). Without a message, scaffold enters interactive mode.
+If `MESSAGE` is provided, scaffold processes it in one-shot mode. If the turn creates a goal (no explicit `--phase`), scaffold waits for that goal's supervisor to finish before exiting, printing progress lines as the goal runs, so the process doesn't return control while work is still in flight. Without a message, scaffold enters interactive mode.
 
 ## Options
 
@@ -93,8 +93,9 @@ cat SPEC.md | ./scaffold
 
 | Code | Meaning |
 |------|---------|
-| 0 | Success |
-| 1 | Error |
+| 0 | Success — including a one-shot run whose goal(s) completed |
+| 1 | Error — including a one-shot run whose goal failed (see stderr for `Goal <name> failed: <reason>` and the supervisor log path) |
+| 130 | One-shot run interrupted (Ctrl+C) while waiting for a goal; the goal keeps running in the background |
 
 ## Environment
 

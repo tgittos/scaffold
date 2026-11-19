@@ -1,5 +1,6 @@
 #include "../../test/unity/unity.h"
 #include "ui/status_line.h"
+#include "ui/output_formatter.h"
 #include <stdio.h>
 #include <string.h>
 #include <fcntl.h>
@@ -10,6 +11,7 @@
 #define DIM_MODEL "\033[2m" MODEL "\033[0m"
 
 static char buf[512];
+static char stderr_buf[512];
 
 void setUp(void) {
     status_line_init();
@@ -120,6 +122,8 @@ void test_set_model_switch_updates_segment(void) {
 
 static int g_saved_stdout = -1;
 static char g_capture_path[64];
+static int g_saved_stderr = -1;
+static char g_capture_stderr_path[64];
 
 static void capture_begin(void) {
     fflush(stdout);
@@ -150,6 +154,32 @@ static const char *render_capture(void) {
     capture_begin();
     status_line_render_info();
     return capture_end();
+}
+
+static void capture_stderr_begin(void) {
+    fflush(stderr);
+    g_saved_stderr = dup(STDERR_FILENO);
+    snprintf(g_capture_stderr_path, sizeof(g_capture_stderr_path),
+             "/tmp/test_status_line_err.XXXXXX");
+    int fd = mkstemp(g_capture_stderr_path);
+    TEST_ASSERT_TRUE(fd >= 0);
+    dup2(fd, STDERR_FILENO);
+    close(fd);
+}
+
+static const char *capture_stderr_end(void) {
+    fflush(stderr);
+    dup2(g_saved_stderr, STDERR_FILENO);
+    close(g_saved_stderr);
+    g_saved_stderr = -1;
+
+    FILE *in = fopen(g_capture_stderr_path, "r");
+    TEST_ASSERT_NOT_NULL(in);
+    size_t n = fread(stderr_buf, 1, sizeof(stderr_buf) - 1, in);
+    stderr_buf[n] = '\0';
+    fclose(in);
+    remove(g_capture_stderr_path);
+    return stderr_buf;
 }
 
 static int count_char(const char *s, char c) {
@@ -201,6 +231,24 @@ void test_render_fits_exactly_keeps_model(void) {
     TEST_ASSERT_EQUAL_STRING("  ?/200k  " DIM_MODEL "\n", render_capture());
 }
 
+void test_render_info_single_shot(void) {
+    status_line_set_model(MODEL, 200000);
+    status_line_update_tokens(24600, 0);
+    status_line_set_last_response_tokens(500);
+    capture_stderr_begin();
+    status_line_render_info_oneshot();
+    const char *out = capture_stderr_end();
+    TEST_ASSERT_NOT_NULL(strstr(out, "tokens"));
+    TEST_ASSERT_NOT_NULL(strstr(out, MODEL));
+    /* JSON mode: footer must be empty */
+    set_json_output_mode(true);
+    capture_stderr_begin();
+    status_line_render_info_oneshot();
+    out = capture_stderr_end();
+    TEST_ASSERT_EQUAL_STRING("", out);
+    set_json_output_mode(false);
+}
+
 void test_render_too_narrow_drops_segment(void) {
     setenv("COLUMNS", "22", 1);
     status_line_set_model(MODEL, 200000);
@@ -212,6 +260,34 @@ void test_render_too_narrow_drops_segment(void) {
     TEST_ASSERT_NULL(strstr(out, "12.3%"));
     TEST_ASSERT_NOT_NULL(strstr(out, "building"));
     TEST_ASSERT_EQUAL_INT(1, count_char(out, '\n'));
+}
+
+/* When stdout is a file (not a TTY), set_busy and set_idle must produce
+ * no output — escape sequences must not be interleaved into piped output. */
+void test_set_busy_non_tty_no_output(void) {
+    /* capture_begin() redirects STDOUT_FILENO to a tmpfile, making isatty() false */
+    capture_begin();
+    status_line_set_busy("doing work");
+    const char *out = capture_end();
+    TEST_ASSERT_EQUAL_STRING("", out);
+}
+
+void test_set_idle_non_tty_no_output(void) {
+    capture_begin();
+    /* set_busy then set_idle: neither should write to the non-TTY stdout */
+    status_line_set_busy("work");
+    status_line_set_idle();
+    const char *out = capture_end();
+    TEST_ASSERT_EQUAL_STRING("", out);
+}
+
+void test_set_busy_json_mode_no_output(void) {
+    set_json_output_mode(true);
+    capture_begin();
+    status_line_set_busy("doing work");
+    const char *out = capture_end();
+    set_json_output_mode(false);
+    TEST_ASSERT_EQUAL_STRING("", out);
 }
 
 int main(void) {
@@ -238,5 +314,9 @@ int main(void) {
     RUN_TEST(test_render_narrow_drops_model);
     RUN_TEST(test_render_fits_exactly_keeps_model);
     RUN_TEST(test_render_too_narrow_drops_segment);
+    RUN_TEST(test_render_info_single_shot);
+    RUN_TEST(test_set_busy_non_tty_no_output);
+    RUN_TEST(test_set_idle_non_tty_no_output);
+    RUN_TEST(test_set_busy_json_mode_no_output);
     return UNITY_END();
 }

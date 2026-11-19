@@ -3,6 +3,7 @@
 #include "../util/log.h"
 #include "agent.h"
 #include "repl.h"
+#include "oneshot_wait.h"
 #include "../workflow/workflow.h"
 #include "../session/conversation_tracker.h"
 #include "../util/ansi_codes.h"
@@ -26,6 +27,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <signal.h>
+#include <time.h>
 #include <unistd.h>
 #include <readline/history.h>
 
@@ -181,12 +183,32 @@ int agent_run(Agent* agent) {
     }
 
     switch (agent->config.mode) {
-        case AGENT_MODE_SINGLE_SHOT:
+        case AGENT_MODE_SINGLE_SHOT: {
             if (agent->config.initial_message == NULL) {
                 return -1;
             }
             agent->session.polling_config.auto_poll_enabled = 0;
-            return session_process_message(&agent->session, agent->config.initial_message);
+            status_line_init();
+            status_line_set_model(agent->session.session_data.config.model,
+                                  agent->session.session_data.config.context_window);
+            time_t turn_started_at = time(NULL);
+            int ss_result = session_process_message(&agent->session,
+                                                    agent->config.initial_message);
+            status_line_render_info_oneshot();
+            status_line_cleanup();
+
+            /* A no-phase goal created by this turn keeps running under a
+             * supervisor after the turn's LLM call returns; wait for it so
+             * `scaffold "build a todo app"` actually finishes instead of
+             * handing control back while the goal is still in flight. Only
+             * done after a successful turn — a turn-level error (e.g.
+             * context full) is reported as-is. */
+            if (ss_result != 0) {
+                return ss_result;
+            }
+            return oneshot_wait_for_goals(&agent->session, goal_project_key(),
+                                          turn_started_at, 500);
+        }
 
         case AGENT_MODE_BACKGROUND: {
             if (agent->config.subagent_task == NULL) {
@@ -354,7 +376,7 @@ int agent_run(Agent* agent) {
         case AGENT_MODE_INTERACTIVE:
         default: {
             if (!agent->config.json_mode) {
-                printf(TERM_BOLD "Scaffold" TERM_RESET " - AI Orchestrator\n");
+                printf(TERM_BOLD "Scaffold" TERM_RESET " - autonomous coding agent\n");
                 printf("Type /help for commands | quit, exit, Ctrl+D to end\n\n");
             }
 
@@ -363,14 +385,14 @@ int agent_run(Agent* agent) {
                 goal_store_t *gs = services_get_goal_store(agent->services);
                 if (gs != NULL) {
                     orchestrator_check_stale(gs);
-                    orchestrator_respawn_dead(gs);
+                    orchestrator_respawn_dead(gs, goal_project_key());
                 }
             }
 
             status_line_init();
             status_line_set_model(agent->session.session_data.config.model,
                                   agent->session.session_data.config.context_window);
-            repl_show_greeting(&agent->session, agent->config.json_mode);
+            repl_show_greeting(&agent->session, agent->config.json_mode, 0, 0);
 
             using_history();
             slash_commands_init(&agent->session);

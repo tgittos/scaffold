@@ -163,8 +163,24 @@ int message_cleanup_expired(message_store_t* store);
 /* Delete all messages and subscriptions for an agent (when agent terminates). */
 int message_cleanup_agent(message_store_t* store, const char* agent_id);
 
-/* Delete old channel messages from non-persistent channels. */
+/* Delete old channel messages from non-persistent channels. UNSCOPED: this
+ * reaches every non-persistent channel across every project/agent sharing
+ * this message store. Callers that own a specific channel namespace (e.g.
+ * a "goals:<project>" prefix) must use message_cleanup_channel_messages_by_prefix()
+ * instead so they never trim channels they don't own. */
 int message_cleanup_channel_messages(message_store_t* store, int max_age_seconds);
+
+/* Delete channel messages older than max_age_seconds, scoped to channels
+ * whose id starts with name_prefix (regardless of is_persistent). Use this
+ * instead of message_cleanup_channel_messages() when you only want to trim
+ * your own channel namespace. Returns rows deleted, or -1 on error. */
+int message_cleanup_channel_messages_by_prefix(message_store_t* store, const char* name_prefix,
+                                               int max_age_seconds);
+
+/* Flip a channel's is_persistent flag (e.g. to self-heal rows created
+ * before a channel namespace switched to non-persistent). Returns 0 on
+ * success, -1 on error. */
+int channel_set_persistent(message_store_t* store, const char* channel_name, int is_persistent);
 
 /* Memory management */
 void direct_message_free(DirectMessage* msg);

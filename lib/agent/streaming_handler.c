@@ -6,6 +6,7 @@
 #include "context_enhancement.h"
 #include "message_dispatcher.h"
 #include "../network/api_common.h"
+#include "../network/api_error.h"
 #include "../util/interrupt.h"
 #include "tool_executor.h"
 #include "conversation_state.h"
@@ -52,6 +53,7 @@ static void streaming_text_callback(const char* text, size_t len, void* user_dat
 
 static void streaming_thinking_callback(const char* text, size_t len, void* user_data) {
     (void)user_data;
+    status_line_set_idle();
     display_streaming_thinking(text, len);
 }
 
@@ -191,7 +193,13 @@ static StreamingContext* streaming_send_request(AgentSession* session,
             provider->cleanup_stream_state(provider);
         }
         streaming_context_free(ctx);
-        fprintf(stderr, "Error: Streaming HTTP request failed\n");
+        if (rc == -2) {
+            fprintf(stderr, "Request cancelled.\n");
+        } else {
+            APIError api_err;
+            get_last_api_error(&api_err);
+            fprintf(stderr, "Error: %s\n", api_error_user_message(&api_err));
+        }
         return NULL;
     }
 

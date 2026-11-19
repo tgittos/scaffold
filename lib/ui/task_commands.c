@@ -3,11 +3,10 @@
 #include "../agent/session.h"
 #include "../services/services.h"
 #include "../db/task_store.h"
+#include "../tools/todo_tool.h"
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
-
-static const char *GLOBAL_SESSION_ID = "global";
 
 static const char *status_color(TaskStatus status) {
     switch (status) {
@@ -48,7 +47,7 @@ static int cmd_tasks_list(AgentSession *session) {
     }
 
     size_t count = 0;
-    Task **tasks = task_store_list_by_session(store, GLOBAL_SESSION_ID, -1, &count);
+    Task **tasks = task_store_list_by_session(store, todo_session_key(), -1, &count);
     if (tasks == NULL || count == 0) {
         printf(TERM_DIM "  No tasks.\n" TERM_RESET);
         if (tasks) task_free_list(tasks, count);
@@ -88,7 +87,7 @@ static int cmd_tasks_ready(AgentSession *session) {
     }
 
     size_t count = 0;
-    Task **tasks = task_store_list_ready(store, GLOBAL_SESSION_ID, &count);
+    Task **tasks = task_store_list_ready(store, todo_session_key(), &count);
     if (tasks == NULL || count == 0) {
         printf(TERM_DIM "  No ready tasks.\n" TERM_RESET);
         if (tasks) task_free_list(tasks, count);
@@ -121,7 +120,7 @@ static int cmd_tasks_show(const char *id_prefix, AgentSession *session) {
     Task *task = task_store_get_task(store, id_prefix);
     if (task == NULL) {
         size_t count = 0;
-        Task **all = task_store_list_by_session(store, GLOBAL_SESSION_ID, -1, &count);
+        Task **all = task_store_list_by_session(store, todo_session_key(), -1, &count);
         if (all != NULL) {
             size_t prefix_len = strlen(id_prefix);
             for (size_t i = 0; i < count; i++) {

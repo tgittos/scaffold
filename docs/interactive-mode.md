@@ -14,15 +14,29 @@ Slash commands give you direct access to scaffold's internal state without going
 
 ### `/goals` -- Goal progress
 
-View the GOAP goal tree with completion tracking.
+View the GOAP goal tree with completion tracking. The list is scoped to the
+current project (the nearest `.git` ancestor of the working directory), so goals
+from other repositories never appear. Goals created before project scoping have
+no project and are not listed.
 
 ```
 > /goals
-Goals:
-  abc123  ACTIVE   [3/5]  Set up Express server with routes  (supervisor)
-  def456  PLANNING [0/4]  Build React frontend
-  ghi789  PENDING  [0/3]  Deploy to production
+Goals (3)
+  abc123    active      actions 4/12  state 3/5   Set up Express server with routes [sup]
+  def456    stalled     actions 0/4   state 0/4   Build React frontend
+  ghi789    planning    actions --    state 0/3   Deploy to production
 ```
+
+`actions` counts completed/total actions; `state` counts satisfied/total goal-state
+assertions. `[sup]` marks a goal with a live supervisor. `stalled` replaces the
+status of a planning or active goal whose supervisor is gone or has stopped
+heartbeating (more than 30s ago) -- the next `scaffold` launch in that project
+respawns it.
+
+If a goal stays `stalled` forever, its recorded PID has been recycled by an
+unrelated process, so scaffold sees a live process and refuses to start a second
+supervisor. Ask scaffold to pause and restart that goal (`orchestrator`
+`pause_goal` then `start_goal`): pausing clears the recorded PID.
 
 Show details for a specific goal:
 
@@ -32,6 +46,7 @@ Goal: Set up Express server with routes
 Status: ACTIVE
 Progress: 3/5 assertions satisfied
 Supervisor: PID 12345
+Log: ~/.local/scaffold/logs/supervisor-abc123.log
 
 World State:
   express_installed: true

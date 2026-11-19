@@ -55,7 +55,7 @@ Create a `scaffold.config.json` in your project directory or `~/.local/scaffold/
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `max_subagents` | number | `5` | Maximum concurrent subagents |
-| `subagent_timeout` | number | `300` | Subagent timeout in seconds |
+| `subagent_timeout` | number | `1800` | Subagent (worker) timeout in seconds, 1-3600 |
 | `max_workers_per_goal` | number | `3` | Max workers per GOAP goal (1-20) |
 
 #### Model tiers

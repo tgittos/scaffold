@@ -18,6 +18,7 @@ LIB_IPC_SOURCES := \
 # UI module
 LIB_UI_SOURCES := \
     $(LIBDIR)/ui/terminal.c \
+    $(LIBDIR)/ui/terminal_width.c \
     $(LIBDIR)/ui/spinner.c \
     $(LIBDIR)/ui/output_formatter.c \
     $(LIBDIR)/ui/json_output.c \
@@ -25,6 +26,7 @@ LIB_UI_SOURCES := \
     $(LIBDIR)/ui/mode_commands.c \
     $(LIBDIR)/ui/model_commands.c \
     $(LIBDIR)/ui/slash_commands.c \
+    $(LIBDIR)/ui/recap_command.c \
     $(LIBDIR)/ui/task_commands.c \
     $(LIBDIR)/ui/agent_commands.c \
     $(LIBDIR)/ui/goal_commands.c \
@@ -56,6 +58,8 @@ LIB_TOOLS_SOURCES := \
 # Agent module
 LIB_AGENT_SOURCES := \
     $(LIBDIR)/agent/agent.c \
+    $(LIBDIR)/agent/change_report.c \
+    $(LIBDIR)/agent/oneshot_wait.c \
     $(LIBDIR)/agent/session.c \
     $(LIBDIR)/agent/session_configurator.c \
     $(LIBDIR)/agent/message_dispatcher.c \
@@ -118,7 +122,8 @@ LIB_UTIL_SOURCES := \
     $(LIBDIR)/util/project_scope.c \
     $(LIBDIR)/util/context_retriever.c \
     $(LIBDIR)/util/executable_path.c \
-    $(LIBDIR)/util/process_spawn.c
+    $(LIBDIR)/util/process_spawn.c \
+    $(LIBDIR)/util/stdin_reader.c
 
 # PDF module
 LIB_PDF_SOURCES := $(LIBDIR)/pdf/pdf_extractor.c
@@ -172,7 +177,8 @@ LIB_ORCHESTRATOR_SOURCES := \
     $(LIBDIR)/orchestrator/supervisor.c \
     $(LIBDIR)/orchestrator/orchestrator.c \
     $(LIBDIR)/orchestrator/role_prompts.c \
-    $(LIBDIR)/orchestrator/goap_state.c
+    $(LIBDIR)/orchestrator/goap_state.c \
+    $(LIBDIR)/orchestrator/goal_progress.c
 
 # Auth module (OAuth2 providers, JWT, login orchestration)
 LIB_AUTH_SOURCES := \

@@ -5,8 +5,10 @@
 #include "../db/goal_store.h"
 #include "../db/action_store.h"
 #include "../orchestrator/goap_state.h"
+#include "../orchestrator/orchestrator.h"
 #include <cJSON.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
@@ -63,17 +65,49 @@ static void format_elapsed_since(int64_t started_at_ms, char *buf, size_t buf_si
     }
 }
 
+/* Completed/total actions for a goal; counts are 0 when there are none. */
+static void count_actions(action_store_t *store, const char *goal_id,
+                           int *out_completed, int *out_total) {
+    *out_completed = 0;
+    *out_total = 0;
+    if (store == NULL) return;
+
+    size_t count = 0;
+    Action **actions = action_store_list_by_goal(store, goal_id, &count);
+    if (actions == NULL) return;
+
+    for (size_t i = 0; i < count; i++) {
+        if (actions[i]->status == ACTION_STATUS_COMPLETED) (*out_completed)++;
+    }
+    *out_total = (int)count;
+    action_free_list(actions, count);
+}
+
+/* A goal that needs a supervisor but has none alive is stalled: nothing is
+ * driving it until the next launch respawns one. A PLANNING goal that never
+ * had a supervisor has simply not been started yet. */
+static bool goal_is_stalled(const Goal *g, time_t now) {
+    if (g->status == GOAL_STATUS_ACTIVE) {
+        return !orchestrator_supervisor_alive(g, now);
+    }
+    if (g->status == GOAL_STATUS_PLANNING && g->supervisor_pid > 0) {
+        return !orchestrator_supervisor_alive(g, now);
+    }
+    return false;
+}
+
 static int cmd_goals_list(AgentSession *session) {
     goal_store_t *store = services_get_goal_store(session->services);
+    action_store_t *astore = services_get_action_store(session->services);
     if (store == NULL) {
         printf(TERM_DIM "  No goal store available.\n" TERM_RESET);
         return 0;
     }
 
     size_t count = 0;
-    Goal **goals = goal_store_list_all(store, &count);
+    Goal **goals = goal_store_list_by_project(store, goal_project_key(), &count);
     if (goals == NULL || count == 0) {
-        printf(TERM_DIM "  No goals.\n" TERM_RESET);
+        printf(TERM_DIM "  No goals in this project.\n" TERM_RESET);
         if (goals) goal_free_list(goals, count);
         return 0;
     }
@@ -81,16 +115,29 @@ static int cmd_goals_list(AgentSession *session) {
     printf("\n" TERM_BOLD "Goals" TERM_RESET " (%zu)\n", count);
     printf(TERM_SEP_LIGHT_40 "\n");
 
+    time_t now = time(NULL);
     for (size_t i = 0; i < count; i++) {
         Goal *g = goals[i];
         GoapProgress gp = goap_check_progress(g->goal_state, g->world_state);
         int total = gp.total, satisfied = gp.satisfied;
 
-        char progress[32];
+        char state_progress[32];
         if (total > 0) {
-            snprintf(progress, sizeof(progress), "%d/%d", satisfied, total);
+            snprintf(state_progress, sizeof(state_progress), "state %d/%d",
+                     satisfied, total);
         } else {
-            snprintf(progress, sizeof(progress), "--");
+            snprintf(state_progress, sizeof(state_progress), "state --");
+        }
+
+        int done_actions = 0, total_actions = 0;
+        count_actions(astore, g->id, &done_actions, &total_actions);
+
+        char action_progress[32];
+        if (total_actions > 0) {
+            snprintf(action_progress, sizeof(action_progress), "actions %d/%d",
+                     done_actions, total_actions);
+        } else {
+            snprintf(action_progress, sizeof(action_progress), "actions --");
         }
 
         char name_trunc[40];
@@ -101,15 +148,19 @@ static int cmd_goals_list(AgentSession *session) {
             snprintf(name_trunc, sizeof(name_trunc), "%s", g->name);
         }
 
+        bool stalled = goal_is_stalled(g, now);
+        const char *status_label = stalled ? "stalled" : goal_status_to_string(g->status);
+        const char *status_color = stalled ? TERM_YELLOW : goal_status_color(g->status);
+
         const char *sup_indicator = "";
-        if (g->supervisor_pid > 0) {
+        if (!stalled && g->supervisor_pid > 0) {
             sup_indicator = TERM_DIM " [sup]" TERM_RESET;
         }
 
-        printf("  %.8s  %s%-10s" TERM_RESET "  %5s  %s%s\n",
+        printf("  %.8s  %s%-10s" TERM_RESET "  %-12s  %-10s  %s%s\n",
                g->id,
-               goal_status_color(g->status), goal_status_to_string(g->status),
-               progress, name_trunc, sup_indicator);
+               status_color, status_label,
+               action_progress, state_progress, name_trunc, sup_indicator);
     }
     printf("\n");
 
@@ -175,7 +226,7 @@ static int cmd_goals_show(const char *id_prefix, AgentSession *session) {
     Goal *goal = goal_store_get(gstore, id_prefix);
     if (goal == NULL) {
         size_t count = 0;
-        Goal **all = goal_store_list_all(gstore, &count);
+        Goal **all = goal_store_list_by_project(gstore, goal_project_key(), &count);
         if (all != NULL) {
             size_t prefix_len = strlen(id_prefix);
             for (size_t i = 0; i < count; i++) {
@@ -198,9 +249,12 @@ static int cmd_goals_show(const char *id_prefix, AgentSession *session) {
 
     printf("\n" TERM_BOLD "Goal %.8s" TERM_RESET "\n", goal->id);
     printf(TERM_SEP_LIGHT_40 "\n");
+    bool stalled = goal_is_stalled(goal, time(NULL));
     printf("  " TERM_BOLD "Name:     " TERM_RESET "%s\n", goal->name);
-    printf("  " TERM_BOLD "Status:   " TERM_RESET "%s%s" TERM_RESET "\n",
-           goal_status_color(goal->status), goal_status_to_string(goal->status));
+    printf("  " TERM_BOLD "Status:   " TERM_RESET "%s%s" TERM_RESET "%s\n",
+           stalled ? TERM_YELLOW : goal_status_color(goal->status),
+           stalled ? "stalled" : goal_status_to_string(goal->status),
+           stalled ? TERM_DIM " (no live supervisor)" TERM_RESET : "");
     if (total > 0) {
         printf("  " TERM_BOLD "Progress: " TERM_RESET "%d/%d assertions\n",
                satisfied, total);
@@ -223,6 +277,11 @@ static int cmd_goals_show(const char *id_prefix, AgentSession *session) {
     }
     if (goal->summary && goal->summary[0]) {
         printf("  " TERM_BOLD "Summary:  " TERM_RESET "%s\n", goal->summary);
+    }
+    char *log_path = orchestrator_supervisor_log_path(goal->id);
+    if (log_path != NULL) {
+        printf("  " TERM_BOLD "Log:      " TERM_RESET "%s\n", log_path);
+        free(log_path);
     }
 
     /* World state progress */

@@ -16,7 +16,7 @@ Application-specific code that uses the library layer. This is a thin wrapper ar
 - **`python_tool_files.c/h`** - Python file-based tool loading system (supports freeform tool invocation for tools with Match: directive; "Thread-safe: true" docstring directive marks tools that run concurrently within a batch; unmodified older shipped default tool files are refreshed from the embedded versions via `SHIPPED_DEFAULT_TOOLS` hashes)
 - **`python_extension.c/h`** - Tool extension interface for Python tools integration with lib/
 - **`http_python.c/h`** - Python extension for C HTTP client (`_ralph_http` module: get, post, download)
-- **`sys_python.c/h`** - Python extension for system info (`_ralph_sys` module: get_executable_path, get_app_home, get_config_int)
+- **`sys_python.c/h`** - Python extension for system info (`_ralph_sys` module: get_executable_path, get_app_home, get_config_int, progress — forwards a tool's live output line to the spinner's detail)
 
 ##### Python Default Tools (in `python_defaults/`)
 - **`read_file.py`** - Read file contents with line numbers, returns dict with content/total_lines/range
@@ -24,7 +24,7 @@ Application-specific code that uses the library layer. This is a thin wrapper ar
 - **`list_dir.py`** - List directory contents with filtering and ISO timestamps
 - **`search_files.py`** - Search files by content/pattern with optional context lines, matched_files, total_matches_found
 - **`apply_patch.py`** - Apply text patches using Codex-compatible block find-and-replace format; appends "run the relevant tests" hint to success details
-- **`shell.py`** - Shell command execution with timeout
+- **`shell.py`** - Shell command execution with timeout; streams output via `Popen` (one reader thread per pipe to avoid deadlock), reporting each line to `_ralph_sys.progress()` as it arrives while keeping returned stdout/stderr byte-identical to the previous blocking behavior
 - **`web_fetch.py`** - Fetch and process web content
 - **`pip.py`** - Package management: install pure-Python packages or list installed packages (action parameter: "install" or "list")
 - **`search_history.py`** - Search git history with structured output (operations: log, pickaxe, blame, diff)
@@ -46,11 +46,13 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`conversation_state.c/h`** - Conversation history append helpers (assistant messages, tool results)
 - **`tool_batch_executor.c/h`** - Batch tool execution; explicitly dispatches MCP and plugin tools (schema-only registry entries); caps each result at `tool_result_max_bytes` (default 32768) keeping head and tail around a `[... N bytes omitted ...]` marker
 - **`tool_orchestration.c/h`** - Tool call deduplication and per-batch tracking
-- **`repl.c/h`** - Read-Eval-Print-Loop for interactive mode with readline, async processing, and periodic supervisor recovery
+- **`repl.c/h`** - Read-Eval-Print-Loop for interactive mode with readline, async processing, and periodic supervisor recovery. Lines starting with `/` are dispatched to slash commands and never forwarded to the LLM regardless of dispatch result. Subscribes to the current project's goal progress channel (`goals:<project>`, see `orchestrator/goal_progress.c`) at startup and renders new events between prompts (plain line, or a `goal_progress` JSON system event in `--json` mode); on `quit`/`exit`/EOF, warns on stderr if any of the project's goals still have a live supervisor.
 - **`async_executor.c/h`** - Non-blocking message processing using background thread with pipe notification; running flag and condition broadcast occur inside mutex to prevent signal loss
 - **`context_enhancement.c/h`** - Split prompt builder: returns `EnhancedPromptParts` with session-stable base prompt and per-request dynamic context (repo snapshot on first turn, todo state, mode, memories, context retrieval). `build_repo_snapshot()` gathers git metadata and directory tree; `build_directory_tree()` produces a depth-limited directory listing
-- **`recap.c/h`** - Startup recap and first-run greeting (one-shot LLM calls without history persistence)
-- **`streaming_handler.c/h`** - Application-layer streaming orchestration and provider registry management
+- **`recap.c/h`** - Conversation recap (one-shot LLM call, no history persistence); `session_generate_recap` is called by `/recap` command; `-2` (user interrupt) returns -1 silently. Startup no longer calls LLM — `repl_show_greeting` prints a static banner for new sessions, or a resume line for existing ones.
+- **`change_report.c/h`** - Post-run change report comparing HEAD to a captured pre-run ref. `change_report_collect` runs `git log` and `git diff --shortstat` via `process_spawn_capture` (no shell, no interpolation) and returns a `change_report_t`; `change_report_format` renders it as human-readable text; `change_report_build` is the string facade (collect+format+free, returns NULL if nothing changed). JSON mode calls `json_output_change_report` with the struct directly.
+- **`oneshot_wait.c/h`** - Makes a one-shot turn (`AGENT_MODE_SINGLE_SHOT`) block until the goal(s) it created finish, instead of returning while a supervisor is still working in the background. `oneshot_wait_for_goals(session, project, started_after, poll_ms)` tracks only goals created at/after `started_after` (never a pre-existing one), polls to a terminal status, respawns a dead supervisor via `orchestrator_respawn_dead()`, and renders `goals:<project>` progress the same way the REPL does. Returns 0 (all completed), 1 (any failed — prints `Goal <name> failed: <reason>` and the supervisor log path), or 130 (interrupted — prints `goal_progress_quit_warning()`'s resume hint). `main.c` propagates 130 through to the process exit code instead of collapsing it to `EXIT_FAILURE`.
+- **`streaming_handler.c/h`** - Application-layer streaming orchestration and provider registry management; `-2` (user interrupt) prints `Request cancelled.` without touching the api_error path
 - **`tool_executor.c/h`** - Thin entry point for tool execution workflow (init, initial batch, clear_history support, hand-off)
 - **`iterative_loop.c/h`** - Iterative tool-calling loop for follow-up LLM rounds; bounded retry of empty rounds (no text, reasoning or tool calls) with a visible warning
 - **`prompt_mode.c/h`** - Behavioral prompt mode definitions and parsing (plan, explore, debug, review)
@@ -68,8 +70,8 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`document_store.c/h`** - High-level document storage with embeddings and JSON persistence
 - **`metadata_store.c/h`** - Chunk metadata storage layer (separate from vectors)
 - **`task_store.c/h`** - SQLite-based persistent task storage with hierarchies and dependencies
-- **`goal_store.c/h`** - GOAP goal persistence: goal state, world state, plan_document (TEXT column), supervisor PID tracking, lock/unlock API for atomic read-modify-write sequences, `goal_store_update_plan_document()`, schema migration for existing DBs
-- **`action_store.c/h`** - GOAP action persistence: hierarchy (compound/primitive), preconditions/effects, readiness queries, work_item_id correlation for dispatch tracking
+- **`goal_store.c/h`** - GOAP goal persistence: goal state, world state, plan_document (TEXT column), per-project scoping (`project` column stamped on insert from `goal_project_key()`, which uses the same `project_scope_index_name` helper as the todo store; `goal_store_list_by_project()`; pre-scoping rows keep a NULL project and are never listed or respawned), supervisor PID and heartbeat tracking (`supervisor_heartbeat_at`, written by `goal_store_heartbeat()`), lock/unlock API for atomic read-modify-write sequences, `goal_store_update_plan_document()`, schema migration for existing DBs
+- **`action_store.c/h`** - GOAP action persistence: hierarchy (compound/primitive), preconditions/effects, readiness queries, work_item_id correlation for dispatch tracking. `action_store_has_actions()` returns true if any actions exist for a goal (used by both `supervisor_resolve_phase` and `execute_start_goal` as the shared plan-detection helper).
 - **`oauth2_store.c/h`** - OAuth2 token management with PKCE, AES-256-GCM encryption, vtable-based provider pattern (unified `refresh_token` callback with optional rotation, nullable `revoke_token` hook), auto-refresh with 60s margin, heap-allocated refresh context, value-copied provider ops, `oauth2_error_string()` utility
 - **`sqlite_dal.c/h`** - SQLite data access layer with recursive mutex protection (supports nested locking for atomic read-modify-write), ref-counted shared connections, schema initialization, and common query patterns
 - **`hnswlib_wrapper.cpp/h`** - C++ wrapper for HNSW vector indexing
@@ -101,7 +103,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`http_form_post.c/h`** - Form-urlencoded POST for OAuth token endpoints (URL-encodes via `curl_easy_escape`, sets Content-Type)
 - **`api_common.c/h`** - JSON payload building with prompt caching support (`SystemPromptParts` split, Anthropic `cache_control` markers, model-aware payload construction), canonical OpenAI tool message formatting (`role:tool` + `tool_call_id`, assistant `tool_calls` verbatim), `streaming_add_params()` shared utility for adding stream/store params
 - **`streaming.c/h`** - SSE streaming infrastructure for real-time response handling
-- **`api_error.c/h`** - Enhanced API error handling with retry logic
+- **`api_error.c/h`** - Enhanced API error handling with retry logic; `APIError.provider_body[1024]` captures the first 1 KiB of a non-2xx response body; `api_error_user_message()` includes HTTP status and the provider's `error.message` when the body is JSON; 3xx responses with no body produce a redirect hint with the status code; function-local statics are single-threaded display-path only
 - **`embedded_cacert.c/h`** - Embedded Mozilla CA certificate bundle for portable SSL/TLS
 - **`image_attachment.c/h`** - Image attachment parsing (`@path` references to base64-encoded images)
 
@@ -124,8 +126,8 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`todo_manager.c/h`** - Todo data structures and operations
 - **`todo_tool.c/h`** - Todo tool call handler
 - **`todo_display.c/h`** - Todo console visualization
-- **`goap_tools.c/h`** - GOAP dispatch tool for supervisors (single `goap` tool with `operation` enum: get_goal, list_actions, create_goal, create_actions, update_action, dispatch_action, update_world_state, check_complete, get_action_results, save_plan_document). Includes plan_document persistence and plan_guidance injection via `build_work_context()`
-- **`orchestrator_tool.c/h`** - Orchestrator dispatch tool (single `orchestrator` tool with `operation` enum: execute_plan, list_goals, goal_status, start_goal, pause_goal, cancel_goal)
+- **`goap_tools.c/h`** - GOAP dispatch tool for supervisors (single `goap` tool with `operation` enum: get_goal, list_actions, create_goal, create_actions, update_action, dispatch_action, update_world_state, check_complete, get_action_results, save_plan_document). Includes plan_document persistence and plan_guidance injection via `build_work_context()`. `create_actions` performs per-action duplicate detection (checks existing descriptions for each action in the batch, inserts non-duplicates, reports all duplicates by name + count in a `warning` field).
+- **`orchestrator_tool.c/h`** - Orchestrator dispatch tool (single `orchestrator` tool with `operation` enum: execute_plan, list_goals, goal_status, start_goal, pause_goal, cancel_goal). `start_goal` uses `action_store_has_actions` to detect plans completed in a prior session and promotes PLANNING→ACTIVE before spawning so the supervisor uses `--phase execute`.
 - **`mode_tool.c/h`** - LLM-callable switch_mode tool for changing behavioral modes
 - **`tool_cache.c/h`** - Thread-safe tool result caching with file mtime invalidation
 
@@ -133,7 +135,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`ipc.h`** - Public IPC API header
 - **`pipe_notifier.c/h`** - Thread-safe pipe-based notification for async event handling
 - **`agent_identity.c/h`** - Thread-safe agent identity management (ID, parent ID, subagent status)
-- **`message_store.c/h`** - SQLite-backed inter-agent messaging storage (direct messages, pub/sub channels, peek-then-consume API)
+- **`message_store.c/h`** - SQLite-backed inter-agent messaging storage (direct messages, pub/sub channels, peek-then-consume API). `message_cleanup_channel_messages()` is UNSCOPED (trims every non-persistent channel in the store); `message_cleanup_channel_messages_by_prefix(store, name_prefix, max_age_seconds)` scopes the same delete to channels whose id starts with `name_prefix`, for callers (like `orchestrator/goal_progress.c`) that own one channel namespace in a store shared across projects/agents. `channel_set_persistent()` flips a channel's `is_persistent` flag post-creation.
 - **`message_poller.c/h`** - Background thread for polling new messages with PipeNotifier integration
 - **`notification_formatter.c/h`** - Formats messages for LLM context injection
 
@@ -141,17 +143,19 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`ui.h`** - Public UI API header
 - **`output.h`** - Output formatting header
 - **`terminal.c/h`** - Terminal abstraction with colors, ANSI escapes, and layout helpers
-- **`spinner.c/h`** - Pulsing spinner for tool execution visual feedback
-- **`output_formatter.c/h`** - Response formatting and display for LLM responses
+- **`terminal_width.c/h`** - Terminal width detection (`terminal_columns()`, 80 for non-TTY), `visible_width()`, and `tool_summary_budget()` for width-aware argument display; test hooks `terminal_set_columns_for_test()` and injectable clock support
+- **`spinner.c/h`** - Pulsing spinner for tool execution visual feedback; no-op on non-TTY stdout; shows elapsed seconds after 2s; shows a live detail line truncated to the width budget (`spinner_set_detail()`, thread-safe); injectable clock (`spinner_set_clock_for_test()`)
+- **`output_formatter.c/h`** - Response formatting and display for LLM responses; uses `tool_summary_budget()` for width-aware argument truncation; `format_batch_label()` for parallel tool batch labels
 - **`json_output.c/h`** - JSON output mode for programmatic integration (--json flag)
-- **`slash_commands.c/h`** - Slash command registry and dispatch (`/help`, `/goals`, etc.)
+- **`slash_commands.c/h`** - Slash command registry and dispatch. Returns `SLASH_NOT_FOUND` (-2) for unknown commands (prints error; never forwarded to LLM). Exposes `repl_should_forward_to_llm` helper used by the REPL.
 - **`memory_commands.c/h`** - Interactive `/memory` slash commands for direct memory management
 - **`task_commands.c/h`** - `/tasks` command for viewing task store entries
 - **`agent_commands.c/h`** - `/agents` command for subagent and supervisor status
-- **`goal_commands.c/h`** - `/goals` command for GOAP goal listing and action tree display
-- **`model_commands.c/h`** - `/model` command for switching AI models
+- **`goal_commands.c/h`** - `/goals` command for GOAP goal listing (current project only: action/state counts, `stalled` status, supervisor log path) and action tree display
+- **`model_commands.c/h`** - `/model` command: no args shows usage, `list` shows tiers, `<name>` switches model
+- **`recap_command.c/h`** - `/recap` command; calls `session_generate_recap` to stream a conversation summary
 - **`mode_commands.c/h`** - `/mode` command for switching behavioral prompt modes
-- **`status_line.c/h`** - Status info line rendering (busy, agents, last response, context %/window, model name)
+- **`status_line.c/h`** - Status info line rendering (busy, agents, last response, context %/window, model name). `status_line_render_info_oneshot()` writes a plain-text token/model footer to stderr for single-shot mode (no ANSI codes on non-TTY, silent in JSON mode).
 
 #### `lib/util/` - Generic Utilities
 - **`darray.h`** - Type-safe dynamic array macros (header-only)
@@ -169,8 +173,9 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`ansi_codes.h`** - Terminal color codes, box-drawing characters, and status symbols
 - **`app_home.c/h`** - Centralized application home directory management (~/.local/<app_name>/)
 - **`project_scope.c/h`** - Per-project index names and git root lookup from the nearest `.git` root of the working directory
-- **`process_spawn.c/h`** - Common fork/exec helper with stdout/stderr redirected to /dev/null
+- **`process_spawn.c/h`** - Fork/exec helpers: `process_spawn_devnull` (stdout/stderr to /dev/null, non-blocking); `process_spawn_capture` (stdout captured into caller-supplied buffer, stderr discarded, waits for exit — used by `change_report.c` to run git without a shell); `process_spawn_logged` (setsid, stdin from /dev/null, stdout+stderr appended to a log file)
 - **`executable_path.c/h`** - Executable path resolution for APE binaries
+- **`stdin_reader.c/h`** - Read all of a FILE stream into a heap-allocated string with an 8 MiB cap; returns NULL with `*truncated=1` when the limit is exceeded
 
 #### `lib/pdf/` - PDF Processing
 - **`pdf_extractor.c/h`** - PDF text extraction using PDFio library
@@ -205,10 +210,11 @@ Built to `out/plugins/`. Not embedded in the scaffold binary — users install b
 - **`jwt_decode.c/h`** - JWT payload decoding: base64url decode via mbedTLS, nested claim extraction (`https://api.openai.com/auth` -> `chatgpt_account_id`)
 
 #### `lib/orchestrator/` - Scaffold Orchestration
-- **`supervisor.c/h`** - Supervisor event loop with `SupervisorPhase` enum (`SUPERVISOR_PHASE_PLAN`, `SUPERVISOR_PHASE_EXECUTE`): phase-aware execution via `supervisor_run(phase)`, split message builders (`build_planner_message`, `build_executor_message`), `plan_is_complete()` check, context pressure exit (`SUPERVISOR_EXIT_CONTEXT`), message-poller-based wake-on-worker-completion, orphaned action recovery on startup
-- **`orchestrator.c/h`** - Supervisor spawning (via process_spawn) with auto-detected `--phase` flag from goal status, liveness checks, zombie reaping, stale PID cleanup (dead processes only), respawn for both PLANNING and ACTIVE goals
+- **`supervisor.c/h`** - Supervisor event loop (10s idle timeout; heartbeats the goal on every wake; re-prompts with the current world state after two consecutive wakes with no running actions) with `SupervisorPhase` enum (`SUPERVISOR_PHASE_PLAN`, `SUPERVISOR_PHASE_EXECUTE`): phase-aware execution via `supervisor_run(phase)`, split message builders (`build_planner_message`, `build_executor_message`), `plan_is_complete()` check, context pressure exit (`SUPERVISOR_EXIT_CONTEXT`), message-poller-based wake-on-worker-completion, orphaned action recovery on startup (ASSIGNED work items of dead workers go back to the queue, or FAIL once attempts run out). `supervisor_resolve_phase()` checks at startup whether a PLANNING goal already has actions and promotes to EXECUTE, closing the teardown+respawn gap for manually restarted supervisors.
+- **`orchestrator.c/h`** - Supervisor spawning (via `process_spawn_logged`, with `--log info` into `logs/supervisor-<goal_id>.log`) with auto-detected `--phase` flag from goal status, heartbeat-based liveness (`orchestrator_supervisor_alive(const Goal*, time_t)`: live pid, not a zombie, heartbeat < 30s), zombie reaping, stale PID cleanup (dead processes only), respawn for PLANNING and ACTIVE goals of one project whose supervisor process is gone (`orchestrator_respawn_dead(store, project)`), `orchestrator_supervisor_log_path()`
 - **`goap_state.c/h`** - Shared GOAP state evaluation: precondition checking (`goap_preconditions_met`) and progress tracking (`goap_check_progress`) used by 5 call sites
 - **`role_prompts.c/h`** - Role-based system prompts for workers: loads from `<app_home>/prompts/<role>.md` with built-in defaults for 6 standard roles (implementation, code_review, architecture_review, design_review, pm_review, testing)
+- **`goal_progress.c/h`** - Live goal progress events on top of `message_store`'s channel primitives: per-project channel `goals:<project>` (`goal_progress_channel_name`), `goal_progress_publish`/`goal_progress_subscribe` (lazily create the channel, non-persistent, self-healing legacy persistent rows via `channel_set_persistent`), `goal_progress_format` (renders one event into a display line, e.g. `◆ todo-web-app: ✓ Write tests/conftest.py (3/7)`), `goal_progress_quit_warning` (REPL quit message listing goals still running), `goal_progress_cleanup` (bounds channel growth via `message_cleanup_channel_messages_by_prefix("goals:")` — never the unscoped cleanup, since the message store is shared with unrelated agent/subagent channels)
 
 #### `lib/workflow/` - Task Queue
 - **`workflow.c/h`** - SQLite-backed work queue for asynchronous task processing and work item lifecycle (enqueue, claim, complete, fail, remove). Workers are spawned via the subagent system (`subagent_spawn_with_args`), not directly from workflow.
@@ -227,7 +233,7 @@ The test directory mirrors the source structure:
 - **`test_ralph.c`** - Core Ralph functionality tests
 - **`test_iterative_loop_empty.c`** - Empty-round retry and give-up behavior of the tool loop (mock SSE server)
 - **`test_cli_flags.c`** - CLI flag parsing tests
-- **`test_recap.c`** - Recap and greeting tests
+- **`test_recap.c`** - Recap, greeting banner, and thinking-callback idle-state tests (mock API server)
 - **`test_async_executor.c`** - Async executor background thread tests
 - **`test_interrupt.c`** - Cooperative Ctrl+C cancellation tests
 - **`test_agent_identity.c`** - Agent identity thread-safety tests
@@ -248,6 +254,7 @@ The test directory mirrors the source structure:
 - **`test_openai_message_format.c`** - Canonical OpenAI tool message shape (`role:tool`, assistant `tool_calls`)
 - **`test_streaming.c`** - SSE streaming infrastructure tests
 - **`test_http_retry.c`** - HTTP retry logic tests
+- **`test_http_streaming_error.c`** - Streaming error propagation tests: 404 body extraction and 302-as-failure via mock API server
 - **`test_http_python.c`** - Python HTTP extension tests
 - **`test_image_attachment.c`** - Image attachment parsing tests
 
@@ -282,7 +289,7 @@ The test directory mirrors the source structure:
 - **`test_task_store.c`** - Task store persistence tests
 - **`test_message_store.c`** - Inter-agent messaging storage tests
 - **`test_sqlite_dal.c`** - SQLite Data Access Layer tests
-- **`test_goal_store.c`** - GOAP goal store persistence tests (20+ tests: CRUD, status transitions, world state, summary, active-goals query, supervisor PID tracking, plan_document persistence and migration)
+- **`test_goal_store.c`** - GOAP goal store persistence tests (29 tests: CRUD, status transitions, world state, summary, active-goals query, supervisor PID and heartbeat tracking, plan_document persistence and migration)
 - **`test_action_store.c`** - GOAP action store tests (23 tests: hierarchy, precondition matching, readiness queries, skip_pending, work_item_id correlation)
 - **`test_oauth2_store.c`** - OAuth2 store tests (28 tests: lifecycle, provider registry/validation, auth flow, pending overflow, token access, multi-provider, encryption with auto-refresh, NULL safety)
 - **`test_oauth2_refresh_rotate.c`** - OAuth2 refresh token tests (rotation stores new RT, non-rotating preserves RT, refresh failure, no refresh capability)
@@ -322,13 +329,14 @@ The test directory mirrors the source structure:
 - **`test_prompt_mode.c`** - Prompt mode enum and parsing tests
 - **`test_context_mode_injection.c`** - Context mode injection tests
 - **`test_parallel_batch.c`** - Parallel batch execution tests
+- **`test_goal_progress.c`** - Goal progress channel tests (publish/subscribe project scoping, event-to-display-line formatting, REPL quit warning text)
 
 #### `test/ui/` - UI Component Tests
-- **`test_slash_commands.c`** - Slash command registry tests
+- **`test_slash_commands.c`** - Slash command registry tests including SLASH_NOT_FOUND return and repl_should_forward_to_llm helper
 - **`test_agent_commands.c`** - /agents command tests
 - **`test_goal_commands.c`** - /goals command tests
 - **`test_mode_commands.c`** - /mode command tests
-- **`test_model_commands.c`** - /model command tests
+- **`test_model_commands.c`** - /model command tests (usage, list, model switching)
 - **`test_task_commands.c`** - /tasks command tests
 
 #### `test/updater/` - Updater Tests
@@ -336,9 +344,9 @@ The test directory mirrors the source structure:
 - **`test_plugin_updater.c`** - Plugin update checking and installation tests
 
 #### `test/orchestrator/` - Orchestrator Tests
-- **`test_orchestrator.c`** - Supervisor process lifecycle tests (12 tests: spawn, alive checks, kill, reap, stale PID cleanup, respawn)
+- **`test_orchestrator.c`** - Supervisor process lifecycle tests (22 tests: spawn, heartbeat/zombie-aware liveness, kill, reap, stale PID cleanup, respawn of killed supervisors, logged spawn)
 - **`test_role_prompts.c`** - Role-based system prompt tests (17 tests: built-in roles, file overrides, unknown role fallback)
-- **`test_goap_lifecycle.c`** - GOAP lifecycle integration test (6 tests: full supervisor workflow simulation, readiness ordering, parallel readiness, world state accumulation, multi-goal isolation, replanning)
+- **`test_goap_lifecycle.c`** - GOAP lifecycle integration test (7 tests: full supervisor workflow simulation, readiness ordering, parallel readiness, world state accumulation, multi-goal isolation, replanning, orphaned-worker recovery)
 - **`test_goap_state.c`** - GOAP state evaluation tests (precondition checking, progress tracking, NULL/empty/malformed JSON edge cases)
 
 #### `test/` - Root-Level Tests

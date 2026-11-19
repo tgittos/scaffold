@@ -99,6 +99,19 @@ void log_tool_execution_improved(const char *tool_name, const char *arguments, b
 char *extract_arg_summary(const char *tool_name, const char *arguments);
 
 /**
+ * Format a comma-separated list of tool names into buf.
+ *
+ * Used to build the spinner label for a parallel tool batch, e.g.
+ * "shell, write_file".  buf is always NUL-terminated.
+ *
+ * @param buf        Output buffer.
+ * @param buf_size   Size of buf in bytes.
+ * @param names      Array of tool name strings.
+ * @param count      Number of entries in names.
+ */
+void format_batch_label(char *buf, size_t buf_size, const char **names, int count);
+
+/**
  * Display start of system info group with visual separator
  */
 void display_system_info_group_start(void);

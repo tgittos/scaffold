@@ -150,6 +150,15 @@ static int bind_int64_text2(sqlite3_stmt *stmt, void *data) {
     return 0;
 }
 
+typedef struct { const char *s1; int64_t i1; } BindTextInt64;
+
+static int bind_text_int64(sqlite3_stmt *stmt, void *data) {
+    BindTextInt64 *b = data;
+    sqlite3_bind_text(stmt, 1, b->s1, -1, SQLITE_STATIC);
+    sqlite3_bind_int64(stmt, 2, b->i1);
+    return 0;
+}
+
 /* Store lifecycle */
 message_store_t *message_store_create(const char *db_path) {
     message_store_t *store = calloc(1, sizeof(message_store_t));
@@ -770,6 +779,35 @@ int message_cleanup_channel_messages(message_store_t *store, int max_age_seconds
         "DELETE FROM channel_messages WHERE channel_id IN "
         "(SELECT id FROM channels WHERE is_persistent = 0) AND created_at < ?;",
         bind_int64, &params);
+}
+
+int message_cleanup_channel_messages_by_prefix(message_store_t *store, const char *name_prefix,
+                                               int max_age_seconds) {
+    if (!store || !name_prefix) return -1;
+
+    /* Scoped by channel id prefix, NOT is_persistent: the message store is a
+     * single file shared by every project and every agent/subagent channel
+     * (see messaging_tool.c), so a caller trimming its own namespace must
+     * never reach into unrelated channels regardless of their persistence
+     * flag. */
+    char pattern[160];
+    int n = snprintf(pattern, sizeof(pattern), "%s%%", name_prefix);
+    if (n < 0 || (size_t)n >= sizeof(pattern)) return -1;
+
+    BindTextInt64 params = { pattern, get_time_millis() - ((int64_t)max_age_seconds * 1000) };
+    return sqlite_dal_exec_p(store->dal,
+        "DELETE FROM channel_messages WHERE channel_id IN "
+        "(SELECT id FROM channels WHERE id LIKE ?) AND created_at < ?;",
+        bind_text_int64, &params);
+}
+
+int channel_set_persistent(message_store_t *store, const char *channel_name, int is_persistent) {
+    if (!store || !channel_name) return -1;
+    BindInt64Text params = { is_persistent ? 1 : 0, channel_name };
+    int changed = sqlite_dal_exec_p(store->dal,
+        "UPDATE channels SET is_persistent = ? WHERE id = ?;",
+        bind_int64_text, &params);
+    return (changed >= 0) ? 0 : -1;
 }
 
 /* Free functions */

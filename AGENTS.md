@@ -36,8 +36,9 @@ set -a && source .env && set +a && out/scaffold
 # One-shot mode (process single message and exit)
 set -a && source .env && set +a && out/scaffold "your message here"
 
-# Pipe input
-set -a && source .env && set +a && echo "your message" | out/scaffold
+# Pipe input (entire stdin is read as one message; combined with arg if given)
+set -a && source .env && set +a && cat SPEC.md | out/scaffold
+set -a && source .env && set +a && echo "extra context" | out/scaffold "summarize this"
 
 # With specific model
 set -a && source .env && set +a && out/scaffold --model gpt-4o "your message"
@@ -138,10 +139,13 @@ valgrind --leak-check=full ./test/test_foo.com.dbg      # x86_64
 - Codex provider uses Responses API (not Chat Completions). Input is a flat array, not messages.
 - The iterative loop passes `user_message=""` for follow-up rounds — providers must handle empty strings correctly.
 - `--json` mode is output-only; does not affect API payloads or conversation structure.
+- A one-shot run (`scaffold "..."` with no `--phase`) blocks until the goal(s) it created finish: `lib/agent/oneshot_wait.c`'s `oneshot_wait_for_goals()` polls those goals (never a pre-existing one — scoped by creation time), respawning a dead supervisor and rendering `goals:<project>` progress the same way the REPL does. Exit code reflects the outcome: 0 completed, 1 failed (`Goal <name> failed: <reason>` plus the supervisor log path on stderr), 130 interrupted (prints a resume hint and leaves the goal running). `main.c` propagates 130 through instead of collapsing every non-zero result to `EXIT_FAILURE`.
+- After a one-shot run in a git repo, scaffold prints a change report to stderr (a `Changed: N files (+A −D)` line plus one `Commits: <hash> <subject>` line per commit made during the run). The diff is taken against the HEAD captured before the run using the working tree, so uncommitted edits to tracked files count; a run with no changes prints nothing. In `--json` mode it is emitted instead as a single-line `change_report` event on stdout with fields `type`, `files`, `insertions`, `deletions`, and `commits` (array of `"<hash> <subject>"` strings). See `lib/agent/change_report.c` and `lib/ui/json_output.c`.
+- HEAD is captured before the run and git is invoked via `process_spawn_capture` (non-shell `fork`/`execvp`); no `popen`/`system` with an interpolated path is used anywhere in change reporting.
 - `shell.py` strips `PYTHONHOME` and `PYTHONDONTWRITEBYTECODE` from subprocesses to prevent the embedded Python from breaking system Python.
 - `apply_patch.py` uses a custom patch format (`*** Begin Patch` / `*** Update File:` / `*** Add File:` / `*** Delete File:` / `*** End Patch`), not standard unified diff.
 - Streaming includes transient error retry with exponential backoff and `response.failed` event detection.
-- Memories and conversation history are per project: `lib/util/project_scope.c` derives index names from the nearest `.git` root of the working directory. `remember` with `scope=user` writes the shared `memory_user` index; recall searches both.
+- Memories, conversation history, and todo lists are per project: `lib/util/project_scope.c` derives index names from the nearest `.git` root of the working directory. The todo list is scoped via `todo_session_key()` which uses the same project identity; todos from one repository are isolated from others. `remember` with `scope=user` writes the shared `memory_user` index; recall searches both. Pre-existing todos stored under the global `todos_global` key (from before scoping was implemented) are intentionally left untouched and no longer read by the application.
 - Embedding vector dimension is resolved by probing the configured model at startup (see ARCHITECTURE.md). If the probe fails the embedding feature is hard-disabled — index code must use `embeddings_service_get_dimension()`, never a literal dimension. The endpoint comes from `EMBEDDING_API_URL`/`EMBEDDING_MODEL`, then the `embedding_api_url`/`embedding_model` config keys; a key is required only for providers that need auth (OpenAI).
 
 ## System Prompts

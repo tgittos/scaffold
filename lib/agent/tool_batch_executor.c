@@ -250,8 +250,18 @@ int tool_batch_execute(ToolBatchContext* ctx,
             spinner_stop();
         }
     } else {
-        char label[32];
-        snprintf(label, sizeof(label), "%d tools", approved_count);
+        char label[256];
+        /* Build a comma-separated list of tool names for the spinner label. */
+        const char **names = malloc(approved_count * sizeof(const char *));
+        if (names) {
+            for (int k = 0; k < approved_count; k++) {
+                names[k] = calls[approved[k].call_index].name;
+            }
+            format_batch_label(label, sizeof(label), names, approved_count);
+            free(names);
+        } else {
+            snprintf(label, sizeof(label), "%d tools", approved_count);
+        }
         spinner_start(label, NULL);
 
         pthread_t* threads = malloc(approved_count * sizeof(pthread_t));

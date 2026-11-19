@@ -356,6 +356,101 @@ void test_create_actions_with_parent(void) {
     free_tr(&tr);
 }
 
+/* A batch that includes a description already in the store must insert 0 for
+ * that action and return a "duplicates" array naming the offenders. */
+void test_create_actions_rejects_duplicate_description(void) {
+    char goal_id[40];
+    create_test_goal(goal_id);
+
+    /* Pre-insert an action */
+    char existing_id[40];
+    action_store_insert(as, goal_id, NULL, "Set up infra",
+                        "[]", "[]", false, NULL, existing_id);
+
+    /* Batch: one duplicate, one new */
+    char args[1024];
+    snprintf(args, sizeof(args),
+        "{\"goal_id\":\"%s\",\"actions\":["
+        "{\"description\":\"Set up infra\",\"is_compound\":false}"
+        ",{\"description\":\"Build backend\",\"is_compound\":false}"
+        "]}", goal_id);
+
+    ToolCall tc = make_tc("dup1", "goap_create_actions", args);
+    ToolResult tr = {0};
+
+    TEST_ASSERT_EQUAL(0, execute_goap_create_actions(&tc, &tr));
+
+    cJSON *resp = parse_result(&tr);
+    TEST_ASSERT_NOT_NULL(resp);
+
+    /* 1 new action created, 1 duplicate skipped */
+    TEST_ASSERT_EQUAL(1, (int)cJSON_GetNumberValue(
+        cJSON_GetObjectItem(resp, "created")));
+
+    /* duplicates array must name the offending description */
+    cJSON *dups = cJSON_GetObjectItem(resp, "duplicates");
+    TEST_ASSERT_NOT_NULL(dups);
+    TEST_ASSERT_EQUAL(1, cJSON_GetArraySize(dups));
+    TEST_ASSERT_EQUAL_STRING("Set up infra",
+        cJSON_GetStringValue(cJSON_GetArrayItem(dups, 0)));
+
+    /* Tool still reports a warning/error so the agent sees it */
+    cJSON *warn = cJSON_GetObjectItem(resp, "warning");
+    TEST_ASSERT_NOT_NULL(warn);
+    /* Warning must include the count */
+    TEST_ASSERT_NOT_NULL(strstr(cJSON_GetStringValue(warn), "1"));
+
+    cJSON_Delete(resp);
+    free_tc(&tc);
+    free_tr(&tr);
+}
+
+/* When every action in the batch is a duplicate the tool evaluates all of
+ * them (no early break), reports created=0, and lists all duplicates. */
+void test_create_actions_all_duplicates_no_early_break(void) {
+    char goal_id[40];
+    create_test_goal(goal_id);
+
+    /* Pre-insert two actions */
+    char id1[40], id2[40];
+    action_store_insert(as, goal_id, NULL, "Alpha", "[]", "[]", false, NULL, id1);
+    action_store_insert(as, goal_id, NULL, "Beta",  "[]", "[]", false, NULL, id2);
+
+    /* Batch: both are duplicates */
+    char args[512];
+    snprintf(args, sizeof(args),
+        "{\"goal_id\":\"%s\",\"actions\":["
+        "{\"description\":\"Alpha\",\"is_compound\":false}"
+        ",{\"description\":\"Beta\",\"is_compound\":false}"
+        "]}", goal_id);
+
+    ToolCall tc = make_tc("dup_all", "goap_create_actions", args);
+    ToolResult tr = {0};
+
+    TEST_ASSERT_EQUAL(0, execute_goap_create_actions(&tc, &tr));
+
+    cJSON *resp = parse_result(&tr);
+    TEST_ASSERT_NOT_NULL(resp);
+
+    /* 0 new actions created, both duplicates reported */
+    TEST_ASSERT_EQUAL(0, (int)cJSON_GetNumberValue(
+        cJSON_GetObjectItem(resp, "created")));
+
+    cJSON *dups = cJSON_GetObjectItem(resp, "duplicates");
+    TEST_ASSERT_NOT_NULL(dups);
+    /* Both duplicates must be listed — not just the first (no early break) */
+    TEST_ASSERT_EQUAL(2, cJSON_GetArraySize(dups));
+
+    /* Warning must report the count */
+    cJSON *warn = cJSON_GetObjectItem(resp, "warning");
+    TEST_ASSERT_NOT_NULL(warn);
+    TEST_ASSERT_NOT_NULL(strstr(cJSON_GetStringValue(warn), "2"));
+
+    cJSON_Delete(resp);
+    free_tc(&tc);
+    free_tr(&tr);
+}
+
 /* ========================================================================
  * goap_list_actions
  * ======================================================================== */
@@ -996,6 +1091,8 @@ int main(int argc, char **argv) {
     RUN_TEST(test_create_actions_all_fail);
     RUN_TEST(test_create_actions_optional_effects);
     RUN_TEST(test_create_actions_with_parent);
+    RUN_TEST(test_create_actions_rejects_duplicate_description);
+    RUN_TEST(test_create_actions_all_duplicates_no_early_break);
 
     /* goap_list_actions */
     RUN_TEST(test_list_actions);

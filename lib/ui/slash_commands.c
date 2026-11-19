@@ -2,6 +2,7 @@
 #include "memory_commands.h"
 #include "mode_commands.h"
 #include "model_commands.h"
+#include "recap_command.h"
 #include "task_commands.h"
 #include "agent_commands.h"
 #include "goal_commands.h"
@@ -12,7 +13,6 @@
 #include <assert.h>
 
 #define MAX_SLASH_COMMANDS 16
-#define BUILTIN_COMMAND_COUNT 8
 
 typedef struct {
     const char *name;
@@ -22,6 +22,25 @@ typedef struct {
 
 static SlashCommand g_commands[MAX_SLASH_COMMANDS];
 static int g_command_count = 0;
+
+/*
+ * Public compile-time table of built-in slash commands (name + description).
+ * print_help iterates this to show the Interactive Mode Commands section.
+ * slash_commands_init pairs each entry with the corresponding handler below.
+ */
+const SlashCommandInfo SLASH_COMMAND_TABLE[] = {
+    {"help",    "Show available commands"},
+    {"memory",  "Manage semantic memories"},
+    {"model",   "Switch AI models"},
+    {"recap",   "Show a recap of recent conversation"},
+    {"tasks",   "View and manage tasks"},
+    {"mode",    "Switch behavioral mode"},
+    {"agents",  "View subagent status"},
+    {"goals",   "View GOAP goals and actions"},
+    {"plugins", "Show loaded plugins"},
+};
+const size_t SLASH_COMMAND_COUNT =
+    sizeof(SLASH_COMMAND_TABLE) / sizeof(SLASH_COMMAND_TABLE[0]);
 
 int slash_command_register(const char *name, const char *description,
                            SlashCommandHandler handler) {
@@ -52,7 +71,20 @@ int slash_command_dispatch(const char *line, AgentSession *session) {
             return g_commands[i].handler(args, session);
         }
     }
-    return -1;
+    /* Print only the command token (stop at the first space) */
+    char cmd_token[64];
+    size_t tok_len = 0;
+    while (line[tok_len] && line[tok_len] != ' ' && tok_len < sizeof(cmd_token) - 1) {
+        cmd_token[tok_len] = line[tok_len];
+        tok_len++;
+    }
+    cmd_token[tok_len] = '\0';
+    fprintf(stderr, "Unknown command '%s'. Type /help for commands.\n", cmd_token);
+    return SLASH_NOT_FOUND;
+}
+
+bool repl_should_forward_to_llm(const char *line) {
+    return line != NULL && line[0] != '/';
 }
 
 static int handle_help(const char *args, AgentSession *session) {
@@ -122,20 +154,36 @@ static int handle_plugins(const char *args, AgentSession *session) {
     return 0;
 }
 
+/*
+ * Handlers paired with SLASH_COMMAND_TABLE by index.
+ * Must stay in sync with SLASH_COMMAND_TABLE order.
+ */
+static const SlashCommandHandler g_builtin_handlers[] = {
+    handle_help,
+    process_memory_command,
+    process_model_command,
+    process_recap_command,
+    process_task_command,
+    process_mode_command,
+    process_agent_command,
+    process_goals_command,
+    handle_plugins,
+};
+
+_Static_assert(
+    sizeof(g_builtin_handlers) / sizeof(g_builtin_handlers[0]) ==
+    sizeof(SLASH_COMMAND_TABLE) / sizeof(SLASH_COMMAND_TABLE[0]),
+    "g_builtin_handlers must have the same number of entries as SLASH_COMMAND_TABLE");
+
 void slash_commands_init(AgentSession *session) {
     (void)session;
-    _Static_assert(BUILTIN_COMMAND_COUNT <= MAX_SLASH_COMMANDS,
-                   "Too many built-in commands for registry");
     g_command_count = 0;
     int rc = 0;
-    rc |= slash_command_register("help", "Show available commands", handle_help);
-    rc |= slash_command_register("memory", "Manage semantic memories", process_memory_command);
-    rc |= slash_command_register("model", "Switch AI models", process_model_command);
-    rc |= slash_command_register("tasks", "View and manage tasks", process_task_command);
-    rc |= slash_command_register("mode", "Switch behavioral mode", process_mode_command);
-    rc |= slash_command_register("agents", "View subagent status", process_agent_command);
-    rc |= slash_command_register("goals", "View GOAP goals and actions", process_goals_command);
-    rc |= slash_command_register("plugins", "Show loaded plugins", handle_plugins);
+    for (size_t i = 0; i < SLASH_COMMAND_COUNT; i++) {
+        rc |= slash_command_register(SLASH_COMMAND_TABLE[i].name,
+                                     SLASH_COMMAND_TABLE[i].description,
+                                     g_builtin_handlers[i]);
+    }
     assert(rc == 0 && "Failed to register built-in slash commands");
     (void)rc;
 }

@@ -1,5 +1,6 @@
 #include "goal_store.h"
 #include "sqlite_dal.h"
+#include "util/project_scope.h"
 #include "util/uuid_utils.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,6 +22,8 @@ static const char *SCHEMA_SQL =
     "    queue_name TEXT NOT NULL,"
     "    supervisor_pid INTEGER DEFAULT 0,"
     "    supervisor_started_at INTEGER DEFAULT 0,"
+    "    supervisor_heartbeat_at INTEGER DEFAULT 0,"
+    "    project TEXT,"
     "    created_at INTEGER NOT NULL,"
     "    updated_at INTEGER NOT NULL,"
     "    plan_document TEXT"
@@ -30,10 +33,23 @@ static const char *SCHEMA_SQL =
 static const char *MIGRATION_ADD_PLAN_DOCUMENT =
     "ALTER TABLE goals ADD COLUMN plan_document TEXT;";
 
+/* Existing rows get 0 from the column default, which reads as "not alive". */
+static const char *MIGRATION_ADD_HEARTBEAT =
+    "ALTER TABLE goals ADD COLUMN supervisor_heartbeat_at INTEGER DEFAULT 0;";
+
+/* Goals written before project scoping keep a NULL project: they are never
+ * listed per project and never auto-respawned, exactly like the pre-scoping
+ * todos the task store leaves behind. */
+static const char *MIGRATION_ADD_PROJECT =
+    "ALTER TABLE goals ADD COLUMN project TEXT;";
+
+static const char *INDEX_PROJECT =
+    "CREATE INDEX IF NOT EXISTS idx_goals_project ON goals(project);";
+
 #define GOAL_COLUMNS \
     "id, name, description, goal_state, world_state, summary, " \
     "status, supervisor_pid, queue_name, supervisor_started_at, created_at, updated_at, " \
-    "plan_document"
+    "plan_document, supervisor_heartbeat_at, project"
 
 #define GOAL_COL_ID                  0
 #define GOAL_COL_NAME                1
@@ -48,6 +64,8 @@ static const char *MIGRATION_ADD_PLAN_DOCUMENT =
 #define GOAL_COL_CREATED_AT         10
 #define GOAL_COL_UPDATED_AT         11
 #define GOAL_COL_PLAN_DOCUMENT      12
+#define GOAL_COL_SUPERVISOR_HEARTBEAT 13
+#define GOAL_COL_PROJECT            14
 
 static void *map_goal(sqlite3_stmt *stmt, void *user_data) {
     (void)user_data;
@@ -89,9 +107,17 @@ static void *map_goal(sqlite3_stmt *stmt, void *user_data) {
         if (!goal->plan_document) { free(goal->summary); free(goal->world_state); free(goal->goal_state); free(goal->description); free(goal); return NULL; }
     }
 
+    const char *project = (const char *)sqlite3_column_text(stmt, GOAL_COL_PROJECT);
+    if (project) {
+        goal->project = strdup(project);
+        if (!goal->project) { goal_free(goal); return NULL; }
+    }
+
     goal->status = (GoalStatus)sqlite3_column_int(stmt, GOAL_COL_STATUS);
     goal->supervisor_pid = (pid_t)sqlite3_column_int(stmt, GOAL_COL_SUPERVISOR_PID);
     goal->supervisor_started_at = sqlite3_column_int64(stmt, GOAL_COL_SUPERVISOR_STARTED);
+    goal->supervisor_heartbeat_at =
+        (time_t)sqlite3_column_int64(stmt, GOAL_COL_SUPERVISOR_HEARTBEAT);
     goal->created_at = (time_t)sqlite3_column_int64(stmt, GOAL_COL_CREATED_AT);
     goal->updated_at = (time_t)sqlite3_column_int64(stmt, GOAL_COL_UPDATED_AT);
     return goal;
@@ -100,7 +126,8 @@ static void *map_goal(sqlite3_stmt *stmt, void *user_data) {
 /* Additional binder helpers */
 typedef struct { int i1; int64_t i2; const char *s1; } BindIntInt64Text;
 typedef struct { const char *s1; int64_t i2; const char *s2; } BindTextInt64Text;
-typedef struct { int i1; int64_t i2; int64_t i3; const char *s1; } BindIntInt64Int64Text;
+typedef struct { int i1; int64_t i2; int64_t i3; int64_t i4; const char *s1; } BindIntInt64x3Text;
+typedef struct { int64_t i1; const char *s1; } BindInt64Text;
 
 static int bind_int_int64_text(sqlite3_stmt *stmt, void *data) {
     BindIntInt64Text *b = data;
@@ -118,13 +145,32 @@ static int bind_text_int64_text(sqlite3_stmt *stmt, void *data) {
     return 0;
 }
 
-static int bind_int_int64_int64_text(sqlite3_stmt *stmt, void *data) {
-    BindIntInt64Int64Text *b = data;
+static int bind_int_int64x3_text(sqlite3_stmt *stmt, void *data) {
+    BindIntInt64x3Text *b = data;
     sqlite3_bind_int(stmt, 1, b->i1);
     sqlite3_bind_int64(stmt, 2, b->i2);
     sqlite3_bind_int64(stmt, 3, b->i3);
-    sqlite3_bind_text(stmt, 4, b->s1, -1, SQLITE_STATIC);
+    sqlite3_bind_int64(stmt, 4, b->i4);
+    sqlite3_bind_text(stmt, 5, b->s1, -1, SQLITE_STATIC);
     return 0;
+}
+
+static int bind_int64_text(sqlite3_stmt *stmt, void *data) {
+    BindInt64Text *b = data;
+    sqlite3_bind_int64(stmt, 1, b->i1);
+    sqlite3_bind_text(stmt, 2, b->s1, -1, SQLITE_STATIC);
+    return 0;
+}
+
+const char *goal_project_key(void) {
+    static char key[PROJECT_SCOPE_NAME_MAX];
+    if (project_scope_index_name("goals", key, sizeof(key)) != 0) {
+        /* Fallback: unscoped goals from before project scoping are
+         * intentionally unreachable under this key. */
+        strncpy(key, "goals_global", sizeof(key) - 1);
+        key[sizeof(key) - 1] = '\0';
+    }
+    return key;
 }
 
 goal_store_t *goal_store_create(const char *db_path) {
@@ -142,8 +188,11 @@ goal_store_t *goal_store_create(const char *db_path) {
         return NULL;
     }
 
-    /* Migration: add plan_document column to existing databases. */
+    /* Migrations: columns added to existing databases. */
     sqlite_dal_exec(store->dal, MIGRATION_ADD_PLAN_DOCUMENT);
+    sqlite_dal_exec(store->dal, MIGRATION_ADD_HEARTBEAT);
+    sqlite_dal_exec(store->dal, MIGRATION_ADD_PROJECT);
+    sqlite_dal_exec(store->dal, INDEX_PROJECT);
 
     return store;
 }
@@ -159,8 +208,11 @@ goal_store_t *goal_store_create_with_dal(sqlite_dal_t *dal) {
         return NULL;
     }
 
-    /* Migration: add plan_document column to existing databases. */
+    /* Migrations: columns added to existing databases. */
     sqlite_dal_exec(dal, MIGRATION_ADD_PLAN_DOCUMENT);
+    sqlite_dal_exec(dal, MIGRATION_ADD_HEARTBEAT);
+    sqlite_dal_exec(dal, MIGRATION_ADD_PROJECT);
+    sqlite_dal_exec(dal, INDEX_PROJECT);
 
     store->dal = sqlite_dal_retain(dal);
     return store;
@@ -184,11 +236,14 @@ int goal_store_insert(goal_store_t *store, const char *name,
     sqlite_dal_lock(store->dal);
     sqlite3 *db = sqlite_dal_get_db(store->dal);
 
+    const char *project = goal_project_key();
+
     sqlite3_stmt *stmt = NULL;
     int rc = sqlite3_prepare_v2(db,
         "INSERT INTO goals (id, name, description, goal_state, world_state, "
-        "status, queue_name, supervisor_pid, supervisor_started_at, created_at, updated_at) "
-        "VALUES (?, ?, ?, ?, '{}', 0, ?, 0, 0, ?, ?);", -1, &stmt, NULL);
+        "status, queue_name, supervisor_pid, supervisor_started_at, project, "
+        "created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, '{}', 0, ?, 0, 0, ?, ?, ?);", -1, &stmt, NULL);
     if (rc != SQLITE_OK) { sqlite_dal_unlock(store->dal); return -1; }
 
     sqlite3_bind_text(stmt, 1, goal_id, -1, SQLITE_STATIC);
@@ -198,8 +253,9 @@ int goal_store_insert(goal_store_t *store, const char *name,
     if (goal_state_json) sqlite3_bind_text(stmt, 4, goal_state_json, -1, SQLITE_STATIC);
     else sqlite3_bind_text(stmt, 4, "{}", -1, SQLITE_STATIC);
     sqlite3_bind_text(stmt, 5, queue_name, -1, SQLITE_STATIC);
-    sqlite3_bind_int64(stmt, 6, now);
+    sqlite3_bind_text(stmt, 6, project, -1, SQLITE_STATIC);
     sqlite3_bind_int64(stmt, 7, now);
+    sqlite3_bind_int64(stmt, 8, now);
 
     rc = sqlite3_step(stmt);
     sqlite3_finalize(stmt);
@@ -259,11 +315,24 @@ int goal_store_update_plan_document(goal_store_t *store, const char *id,
 int goal_store_update_supervisor(goal_store_t *store, const char *id,
                                   pid_t pid, int64_t started_at) {
     if (!store || !id) return -1;
-    BindIntInt64Int64Text params = { (int)pid, started_at, time(NULL), id };
+    time_t now = time(NULL);
+    /* A supervisor counts as alive from the moment it is recorded; clearing
+     * the pid clears the heartbeat with it. */
+    int64_t heartbeat = (pid > 0) ? (int64_t)now : 0;
+    BindIntInt64x3Text params = { (int)pid, started_at, heartbeat, now, id };
     int changes = sqlite_dal_exec_p(store->dal,
-        "UPDATE goals SET supervisor_pid = ?, supervisor_started_at = ?, updated_at = ? WHERE id = ?;",
-        bind_int_int64_int64_text, &params);
+        "UPDATE goals SET supervisor_pid = ?, supervisor_started_at = ?, "
+        "supervisor_heartbeat_at = ?, updated_at = ? WHERE id = ?;",
+        bind_int_int64x3_text, &params);
     return (changes > 0) ? 0 : -1;
+}
+
+void goal_store_heartbeat(goal_store_t *store, const char *goal_id, time_t now) {
+    if (!store || !goal_id) return;
+    BindInt64Text params = { (int64_t)now, goal_id };
+    sqlite_dal_exec_p(store->dal,
+        "UPDATE goals SET supervisor_heartbeat_at = ? WHERE id = ?;",
+        bind_int64_text, &params);
 }
 
 int goal_store_has_active_goals(goal_store_t *store) {
@@ -289,6 +358,23 @@ Goal **goal_store_list_all(goal_store_t *store, size_t *count) {
     return (Goal **)items;
 }
 
+Goal **goal_store_list_by_project(goal_store_t *store, const char *project,
+                                   size_t *count) {
+    if (!store || !project || !count) return NULL;
+    *count = 0;
+
+    BindText1 params = { project };
+    void **items = NULL;
+    size_t c = 0;
+    int rc = sqlite_dal_query_list_p(store->dal,
+        "SELECT " GOAL_COLUMNS " FROM goals WHERE project = ? ORDER BY created_at;",
+        bind_text1, &params, map_goal, (sqlite_item_free_t)goal_free,
+        NULL, &items, &c);
+    if (rc != 0 || c == 0) return NULL;
+    *count = c;
+    return (Goal **)items;
+}
+
 Goal **goal_store_list_by_status(goal_store_t *store, GoalStatus status, size_t *count) {
     if (!store || !count) return NULL;
     *count = 0;
@@ -307,6 +393,7 @@ Goal **goal_store_list_by_status(goal_store_t *store, GoalStatus status, size_t 
 
 void goal_free(Goal *goal) {
     if (!goal) return;
+    free(goal->project);
     free(goal->description);
     free(goal->goal_state);
     free(goal->world_state);

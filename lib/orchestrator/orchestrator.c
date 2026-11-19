@@ -2,9 +2,11 @@
 #define LOG_MODULE_STR "goap"
 #include "../util/log.h"
 #include "orchestrator.h"
+#include "../util/app_home.h"
 #include "../util/executable_path.h"
 #include "../util/process_spawn.h"
 #include <errno.h>
+#include <sys/stat.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,6 +19,44 @@ static int64_t now_millis(void) {
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
     return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+/**
+ * Does this PID belong to a running process?
+ *
+ * A zombie still answers kill(pid, 0), so children are probed with
+ * waitpid(WNOHANG) as well — which reaps them, exactly as
+ * orchestrator_reap_supervisors would.
+ */
+static bool pid_is_running(pid_t pid) {
+    if (pid <= 0) return false;
+    if (kill(pid, 0) != 0) {
+        /* EPERM means the process exists but belongs to another user; only
+         * ESRCH means it is gone. */
+        return errno == EPERM;
+    }
+    if (waitpid(pid, NULL, WNOHANG) == pid) return false;
+    return true;
+}
+
+char* orchestrator_supervisor_log_path(const char* goal_id) {
+    if (goal_id == NULL) return NULL;
+
+    char relative[128];
+    snprintf(relative, sizeof(relative), "logs/supervisor-%s.log", goal_id);
+    return app_home_path(relative);
+}
+
+/* Create the log directory; returns the log path (caller frees) or NULL. */
+static char* prepare_log_path(const char* goal_id) {
+    app_home_ensure_exists();
+
+    char* log_dir = app_home_path("logs");
+    if (log_dir == NULL) return NULL;
+    mkdir(log_dir, 0700);
+    free(log_dir);
+
+    return orchestrator_supervisor_log_path(goal_id);
 }
 
 int orchestrator_spawn_supervisor(goal_store_t* store, const char* goal_id) {
@@ -34,16 +74,27 @@ int orchestrator_spawn_supervisor(goal_store_t* store, const char* goal_id) {
         return -1;
     }
 
+    char* log_path = prepare_log_path(goal_id);
+    if (log_path == NULL) {
+        fprintf(stderr, "orchestrator: failed to build supervisor log path\n");
+        free(exe_path);
+        return -1;
+    }
+
     char* args[] = {
         exe_path,
         "--supervisor",
         "--goal", (char*)goal_id,
         "--phase", (char*)phase_str,
+        "--log", "info",
         NULL
     };
 
-    pid_t pid;
-    if (process_spawn_devnull(args, &pid) != 0) {
+    pid_t pid = process_spawn_logged(args, log_path);
+    if (pid <= 0) {
+        fprintf(stderr, "orchestrator: failed to spawn supervisor (log %s)\n",
+                log_path);
+        free(log_path);
         free(exe_path);
         return -1;
     }
@@ -55,31 +106,20 @@ int orchestrator_spawn_supervisor(goal_store_t* store, const char* goal_id) {
     if (rc != 0) {
         kill(pid, SIGKILL);
         waitpid(pid, NULL, 0);
+        free(log_path);
         return -1;
     }
 
-    LOG_INFO("orchestrator: spawned supervisor pid=%d for goal %s (phase=%s)",
-                 pid, goal_id, phase_str);
+    LOG_INFO("orchestrator: spawned supervisor pid=%d for goal %s (phase=%s, log=%s)",
+                 pid, goal_id, phase_str, log_path);
+    free(log_path);
     return 0;
 }
 
-bool orchestrator_supervisor_alive(goal_store_t* store, const char* goal_id) {
-    if (store == NULL || goal_id == NULL) return false;
-
-    Goal* goal = goal_store_get(store, goal_id);
-    if (goal == NULL) return false;
-
-    pid_t pid = goal->supervisor_pid;
-    goal_free(goal);
-
-    if (pid <= 0) return false;
-
-    if (kill(pid, 0) == 0) return true;
-
-    if (errno == ESRCH) {
-        goal_store_update_supervisor(store, goal_id, 0, 0);
-    }
-    return false;
+bool orchestrator_supervisor_alive(const Goal* g, time_t now) {
+    if (g == NULL) return false;
+    if (!pid_is_running(g->supervisor_pid)) return false;
+    return (now - g->supervisor_heartbeat_at) < SUPERVISOR_HEARTBEAT_TIMEOUT_SEC;
 }
 
 void orchestrator_reap_supervisors(goal_store_t* store) {
@@ -169,30 +209,44 @@ void orchestrator_check_stale(goal_store_t* store) {
     goal_free_list(goals, count);
 }
 
-int orchestrator_respawn_dead(goal_store_t* store) {
-    if (store == NULL) return -1;
+int orchestrator_respawn_dead(goal_store_t* store, const char* project) {
+    if (store == NULL || project == NULL) return -1;
+
+    size_t count = 0;
+    Goal** goals = goal_store_list_by_project(store, project, &count);
+    if (goals == NULL) return 0;
 
     int respawned = 0;
+    time_t now = time(NULL);
+    for (size_t i = 0; i < count; i++) {
+        if (goals[i]->status != GOAL_STATUS_PLANNING &&
+            goals[i]->status != GOAL_STATUS_ACTIVE) {
+            continue;
+        }
+        if (orchestrator_supervisor_alive(goals[i], now)) continue;
 
-    GoalStatus respawn_statuses[] = { GOAL_STATUS_PLANNING, GOAL_STATUS_ACTIVE };
-    for (int s = 0; s < 2; s++) {
-        size_t count = 0;
-        Goal** goals = goal_store_list_by_status(store, respawn_statuses[s], &count);
-        if (goals == NULL) continue;
-
-        for (size_t i = 0; i < count; i++) {
-            if (goals[i]->supervisor_pid != 0) continue;
-
-            LOG_INFO("orchestrator: respawning supervisor for goal %s (%s, status=%s)",
-                         goals[i]->id, goals[i]->name,
-                         goal_status_to_string(goals[i]->status));
-            if (orchestrator_spawn_supervisor(store, goals[i]->id) == 0) {
-                respawned++;
-            }
+        /* A live process with a stale heartbeat is busy or wedged, not
+         * gone: starting a second supervisor would duplicate its work. */
+        if (pid_is_running(goals[i]->supervisor_pid)) {
+            LOG_WARN("orchestrator: supervisor pid=%d for goal %s is stalled "
+                         "(no heartbeat for %llds), not respawning",
+                         goals[i]->supervisor_pid, goals[i]->id,
+                         (long long)(now - goals[i]->supervisor_heartbeat_at));
+            continue;
         }
 
-        goal_free_list(goals, count);
+        if (goals[i]->supervisor_pid != 0) {
+            goal_store_update_supervisor(store, goals[i]->id, 0, 0);
+        }
+
+        LOG_INFO("orchestrator: respawning supervisor for goal %s (%s, status=%s)",
+                     goals[i]->id, goals[i]->name,
+                     goal_status_to_string(goals[i]->status));
+        if (orchestrator_spawn_supervisor(store, goals[i]->id) == 0) {
+            respawned++;
+        }
     }
 
+    goal_free_list(goals, count);
     return respawned;
 }

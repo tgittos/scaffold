@@ -377,6 +377,43 @@ void test_json_mode_suppresses_log_system_info(void) {
 }
 
 // =============================================================================
+// Tests for json_output_change_report
+// =============================================================================
+
+void test_json_output_change_report_fields(void) {
+    change_report_t report = {0};
+    report.files_changed = 3;
+    report.insertions = 42;
+    report.deletions = 7;
+    report.commit_count = 2;
+    report.commits_text = strdup("a1b2c3d first commit\ne4f5a6b second commit\n");
+    TEST_ASSERT_NOT_NULL(report.commits_text);
+
+    start_stdout_capture();
+    json_output_change_report(&report);
+    end_stdout_capture();
+
+    free(report.commits_text);
+
+    TEST_ASSERT_NOT_NULL(strstr(captured_output, "\"type\":\"change_report\""));
+    TEST_ASSERT_NOT_NULL(strstr(captured_output, "\"files\":3"));
+    TEST_ASSERT_NOT_NULL(strstr(captured_output, "\"insertions\":42"));
+    TEST_ASSERT_NOT_NULL(strstr(captured_output, "\"deletions\":7"));
+    TEST_ASSERT_NOT_NULL(strstr(captured_output, "a1b2c3d first commit"));
+    TEST_ASSERT_NOT_NULL(strstr(captured_output, "e4f5a6b second commit"));
+    /* Output must be a single JSON line (stdout-purity contract). */
+    TEST_ASSERT_NOT_NULL(strstr(captured_output, "\n"));
+}
+
+void test_json_output_change_report_null(void) {
+    start_stdout_capture();
+    json_output_change_report(NULL);
+    ssize_t bytes_read = end_stdout_capture();
+
+    TEST_ASSERT_EQUAL(0, bytes_read);
+}
+
+// =============================================================================
 // Test Runner
 // =============================================================================
 
@@ -419,6 +456,10 @@ int main(void) {
     RUN_TEST(test_json_mode_suppresses_display_system_info_group_start);
     RUN_TEST(test_json_mode_suppresses_display_system_info_group_end);
     RUN_TEST(test_json_mode_suppresses_log_system_info);
+
+    // json_output_change_report tests
+    RUN_TEST(test_json_output_change_report_fields);
+    RUN_TEST(test_json_output_change_report_null);
 
     return UNITY_END();
 }

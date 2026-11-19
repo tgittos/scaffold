@@ -9,7 +9,7 @@
 typedef struct Services Services;
 
 #define SUBAGENT_MAX_DEFAULT 5
-#define SUBAGENT_TIMEOUT_DEFAULT 300
+#define SUBAGENT_TIMEOUT_DEFAULT 1800
 #define SUBAGENT_ID_LENGTH 16
 #define SUBAGENT_MAX_OUTPUT_LENGTH 131072  // 128KB max output per subagent
 
@@ -52,6 +52,13 @@ typedef struct SubagentManager {
 } SubagentManager;
 
 int subagent_manager_init_with_config(SubagentManager *manager, int max_subagents, int timeout_seconds);
+
+/**
+ * Worker timeout in seconds from the `subagent_timeout` config key.
+ * Falls back to SUBAGENT_TIMEOUT_DEFAULT when the configured value is outside
+ * the range subagent_manager_init_with_config accepts.
+ */
+int subagent_timeout_from_config(void);
 
 /** Set the Services container for dependency injection. */
 void subagent_manager_set_services(SubagentManager *manager, Services *services);

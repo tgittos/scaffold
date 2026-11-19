@@ -3,6 +3,7 @@
 #include "../util/log.h"
 #include "repl.h"
 #include "recap.h"
+#include "../session/conversation_tracker.h"
 #include "../util/ansi_codes.h"
 #include "../util/interrupt.h"
 #include "../ui/output_formatter.h"
@@ -15,6 +16,7 @@
 #include "../ipc/notification_formatter.h"
 #include "../session/conversation_tracker.h"
 #include "../orchestrator/orchestrator.h"
+#include "../orchestrator/goal_progress.h"
 #include "../services/services.h"
 #include <cJSON.h>
 #include <stdio.h>
@@ -30,8 +32,43 @@
 static volatile int g_repl_running = 1;
 static AgentSession* g_repl_session = NULL;
 static char* g_current_prompt = NULL;
+static bool g_json_mode = false;
 
 static void repl_line_callback(char* line);
+
+/* Live = this project's goals that still have a supervisor beating a
+ * heartbeat; printed on quit so the user knows background work continues. */
+static void repl_print_quit_warning(AgentSession* session) {
+    if (session == NULL || session->services == NULL) return;
+    goal_store_t* gs = services_get_goal_store(session->services);
+    if (gs == NULL) return;
+
+    size_t count = 0;
+    Goal** goals = goal_store_list_by_project(gs, goal_project_key(), &count);
+    if (goals == NULL) return;
+
+    time_t now = time(NULL);
+    const char* names[64];
+    size_t live_count = 0;
+    for (size_t i = 0; i < count && live_count < 64; i++) {
+        Goal* g = goals[i];
+        bool running = (g->status == GOAL_STATUS_ACTIVE) ||
+                       (g->status == GOAL_STATUS_PLANNING && g->supervisor_pid > 0);
+        if (running && orchestrator_supervisor_alive(g, now)) {
+            names[live_count++] = g->name;
+        }
+    }
+
+    if (live_count > 0) {
+        char* warning = goal_progress_quit_warning(names, live_count);
+        if (warning != NULL) {
+            fprintf(stderr, "%s\n", warning);
+            free(warning);
+        }
+    }
+
+    goal_free_list(goals, count);
+}
 
 static char* repl_get_prompt(void) {
     char *p = status_line_build_prompt();
@@ -39,6 +76,7 @@ static char* repl_get_prompt(void) {
 }
 
 static void repl_clear_prompt_area(void) {
+    if (g_json_mode) return;
     printf(TERM_CLEAR_LINE);
     printf("\033[A" TERM_CLEAR_LINE);
     status_line_clear_rendered();
@@ -47,7 +85,7 @@ static void repl_clear_prompt_area(void) {
 
 static void repl_install_prompt(void) {
     status_line_render_info();
-    printf("\n");
+    if (!g_json_mode) printf("\n");
     free(g_current_prompt);
     g_current_prompt = repl_get_prompt();
     rl_callback_handler_install(g_current_prompt, repl_line_callback);
@@ -71,14 +109,20 @@ static void repl_update_agent_status(SubagentManager *mgr) {
 
 static void repl_line_callback(char* line) {
     if (line == NULL) {
-        printf("\n");
+        if (!g_json_mode) printf("\n");
+        repl_print_quit_warning(g_repl_session);
         g_repl_running = 0;
         rl_callback_handler_remove();
         return;
     }
 
     if (strcmp(line, "quit") == 0 || strcmp(line, "exit") == 0) {
-        printf("Goodbye!\n");
+        if (g_json_mode) {
+            fprintf(stderr, "Goodbye!\n");
+        } else {
+            printf("Goodbye!\n");
+        }
+        repl_print_quit_warning(g_repl_session);
         free(line);
         g_repl_running = 0;
         rl_callback_handler_remove();
@@ -92,14 +136,27 @@ static void repl_line_callback(char* line) {
 
     add_history(line);
 
-    if (line[0] == '/') {
-        if (slash_command_dispatch(line, g_repl_session) == 0) {
-            free(line);
-            return;
+    if (!repl_should_forward_to_llm(line)) {
+        if (g_json_mode) {
+            /* In --json mode stdout must carry only JSON lines. Redirect
+             * STDOUT_FILENO to stderr for the duration of the dispatch so
+             * all handler printf() calls land on stderr instead.  Plain C
+             * has no exceptions, so the dup2 restore is always reached on
+             * the single fallthrough path. */
+            int saved_stdout = dup(STDOUT_FILENO);
+            dup2(STDERR_FILENO, STDOUT_FILENO);
+            slash_command_dispatch(line, g_repl_session);
+            fflush(stdout);
+            dup2(saved_stdout, STDOUT_FILENO);
+            close(saved_stdout);
+        } else {
+            slash_command_dispatch(line, g_repl_session);
         }
+        free(line);
+        return;
     }
 
-    printf("\n");
+    if (!g_json_mode) printf("\n");
     int result = session_process_message(g_repl_session, line);
     if (result == SESSION_CONTEXT_FULL) {
         fprintf(stderr, "\nContext window full. Try /compact or start a new session.\n");
@@ -113,6 +170,43 @@ static void repl_line_callback(char* line) {
         rl_callback_handler_remove();
         repl_install_prompt();
     }
+}
+
+/* Drain and render any goal progress events published since the last poll.
+ * In --json mode these go out as JSON system events (stdout stays JSON-only);
+ * otherwise they're printed as plain lines between prompts. */
+static void repl_render_goal_progress(AgentSession* session, const char* channel) {
+    if (session == NULL || channel == NULL) return;
+    message_store_t* ms = services_get_message_store(session->services);
+    if (ms == NULL) return;
+
+    size_t count = 0;
+    ChannelMessage** msgs = channel_receive(ms, channel, "repl", 20, &count);
+    if (msgs == NULL) return;
+
+    bool cleared_prompt = false;
+    for (size_t i = 0; i < count; i++) {
+        char* line = goal_progress_format(msgs[i]->content);
+        if (line == NULL) continue;
+
+        if (g_json_mode) {
+            json_output_system("goal_progress", line);
+        } else {
+            if (!cleared_prompt) {
+                rl_callback_handler_remove();
+                repl_clear_prompt_area();
+                cleared_prompt = true;
+            }
+            printf("%s\n", line);
+        }
+        free(line);
+    }
+
+    if (cleared_prompt && g_repl_running) {
+        repl_install_prompt();
+    }
+
+    channel_message_free_list(msgs, count);
 }
 
 static void process_pending_notifications(AgentSession* session) {
@@ -170,9 +264,13 @@ static void process_pending_notifications(AgentSession* session) {
 }
 
 int repl_run_session(AgentSession* session, bool json_mode) {
-    (void)json_mode;
     g_repl_session = session;
     g_repl_running = 1;
+    g_json_mode = json_mode;
+
+    if (json_mode) {
+        rl_outstream = stderr;
+    }
 
     if (interrupt_init() != 0) {
         fprintf(stderr, "Warning: Failed to initialize interrupt handling\n");
@@ -188,6 +286,12 @@ int repl_run_session(AgentSession* session, bool json_mode) {
     goal_store_t *recovery_gs = services_get_goal_store(session->services);
     time_t last_recovery_check = time(NULL);
     const int recovery_check_interval_secs = 5;
+
+    message_store_t *progress_store = services_get_message_store(session->services);
+    char *progress_channel = goal_progress_channel_name(goal_project_key());
+    if (progress_store != NULL && progress_channel != NULL) {
+        goal_progress_subscribe(progress_store, goal_project_key(), "repl");
+    }
 
     while (g_repl_running) {
         interrupt_clear();
@@ -242,13 +346,19 @@ int repl_run_session(AgentSession* session, bool json_mode) {
             if (now - last_recovery_check >= recovery_check_interval_secs) {
                 last_recovery_check = now;
                 orchestrator_reap_supervisors(recovery_gs);
-                int respawned = orchestrator_respawn_dead(recovery_gs);
+                int respawned = orchestrator_respawn_dead(recovery_gs,
+                                                          goal_project_key());
                 if (respawned > 0) {
                     LOG_INFO("REPL: respawned %d dead supervisors",
                                  respawned);
                 }
+                if (progress_store != NULL) {
+                    goal_progress_cleanup(progress_store, GOAL_PROGRESS_RETENTION_SECONDS);
+                }
             }
         }
+
+        repl_render_goal_progress(session, progress_channel);
 
         if (ready == 0) {
             continue;
@@ -274,31 +384,52 @@ int repl_run_session(AgentSession* session, bool json_mode) {
     rl_callback_handler_remove();
     free(g_current_prompt);
     g_current_prompt = NULL;
+    free(progress_channel);
     status_line_cleanup();
     interrupt_cleanup();
     return 0;
 }
 
-void repl_show_greeting(AgentSession* session, bool json_mode) {
+/* Format a human-readable relative time string into buf.
+ * Both event_time and now are injected so the helper is deterministic in tests.
+ * If event_time is 0 or in the future, writes "unknown".
+ */
+static void format_relative_time(time_t event_time, time_t now,
+                                  char* buf, size_t buf_size) {
+    if (buf == NULL || buf_size == 0) return;
+    if (event_time == 0 || now == 0 || event_time > now) {
+        snprintf(buf, buf_size, "unknown");
+        return;
+    }
+    double diff = difftime(now, event_time);
+    if (diff < 60.0) {
+        snprintf(buf, buf_size, "just now");
+    } else if (diff < 3600.0) {
+        snprintf(buf, buf_size, "%dm ago", (int)(diff / 60.0));
+    } else if (diff < 86400.0) {
+        snprintf(buf, buf_size, "%dh ago", (int)(diff / 3600.0));
+    } else {
+        snprintf(buf, buf_size, "%dd ago", (int)(diff / 86400.0));
+    }
+}
+
+void repl_show_greeting(AgentSession* session, bool json_mode, time_t last_time, time_t now) {
     if (json_mode) {
         return;
     }
 
     if (session->session_data.conversation.count == 0) {
-        LOG_DEBUG("Generating welcome message...");
-
-        const char *name = "scaffold";
-        int result = recap_greet(session, name);
-        if (result != 0) {
-            printf("Hello! I'm %s, your AI assistant. What can I help you with today?\n", name);
-        }
+        LOG_DEBUG("Showing static welcome banner.");
+        printf("Hello! I'm scaffold, your AI assistant. "
+               "Type a message to get started, or /help for commands.\n");
     } else {
-        LOG_DEBUG("Generating recap of recent conversation (%zu messages)...",
-                     session->session_data.conversation.count);
-
-        int result = session_generate_recap(session, 5);
-        if (result != 0) {
-            printf("Welcome back! Ready to continue where we left off.\n");
-        }
+        size_t count = session->session_data.conversation.count;
+        LOG_DEBUG("Showing resume banner (%zu messages).", count);
+        time_t effective_last = last_time ? last_time : conversation_tracker_last_message_time();
+        time_t effective_now  = now        ? now        : time(NULL);
+        char rel_time[32];
+        format_relative_time(effective_last, effective_now, rel_time, sizeof(rel_time));
+        printf("Resumed session: %zu messages, last active %s. /recap for a summary.\n",
+               count, rel_time);
     }
 }
