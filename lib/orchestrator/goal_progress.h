@@ -22,6 +22,14 @@ extern "C" {
 #endif
 
 /**
+ * Default retention for progress channel messages. The channel is created
+ * non-persistent specifically so message_cleanup_channel_messages() can trim
+ * it; callers (supervisor + REPL) invoke goal_progress_cleanup() on a timer
+ * so channel_messages doesn't grow unboundedly across a long-lived goal.
+ */
+#define GOAL_PROGRESS_RETENTION_SECONDS (60 * 60)
+
+/**
  * Build the progress channel name for a project ("goals:<project>").
  * When project is NULL or empty, falls back to "goals:default" so
  * unscoped callers still land on a single shared channel.
@@ -75,6 +83,14 @@ char *goal_progress_format(const char *json_event);
  * Returns NULL when count == 0 or names is NULL.
  */
 char *goal_progress_quit_warning(const char **names, size_t count);
+
+/**
+ * Trim progress-channel messages older than `max_age_seconds`. Safe to call
+ * frequently and from multiple processes (plain SQL DELETE); callers should
+ * pass GOAL_PROGRESS_RETENTION_SECONDS unless they have a specific reason
+ * not to. Returns the number of rows deleted, or -1 on error.
+ */
+int goal_progress_cleanup(message_store_t *store, int max_age_seconds);
 
 #ifdef __cplusplus
 }

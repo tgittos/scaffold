@@ -26,12 +26,6 @@ static volatile sig_atomic_t g_supervisor_running = 1;
 /** Seconds the idle wait blocks before waking to heartbeat and re-check. */
 #define SUPERVISOR_IDLE_TIMEOUT_SEC 10
 
-/** Bound on per-goal actions tracked for progress-event deltas. Goals with
- *  more actions than this simply stop getting new-action progress events
- *  (existing ones already tracked keep working) rather than growing memory
- *  unboundedly. */
-#define SUPERVISOR_PROGRESS_SNAPSHOT_MAX 512
-
 #define DEAD_WORKER_REASON "worker died without reporting a result"
 
 static void supervisor_signal_handler(int sig) {
@@ -533,37 +527,68 @@ SupervisorPhase supervisor_resolve_phase(Services *services, const char *goal_id
     return requested;
 }
 
-/** Tracks the last-seen status of one action, so progress events fire only
- *  on a transition rather than on every poll. */
-typedef struct {
-    char id[40];
-    ActionStatus status;
-} ProgressSnapshotEntry;
-
 /**
  * Publish a goal-level progress event (phase/goal transitions, not tied to
  * a specific action). No-op when the message store is unavailable.
  */
-static void supervisor_publish_goal_event(AgentSession *session, const char *project,
+static void supervisor_publish_goal_event(Services *services, const char *project,
                                            const char *goal_name, const char *event,
                                            const char *detail) {
-    message_store_t *ms = services_get_message_store(session->services);
+    message_store_t *ms = services_get_message_store(services);
     if (ms == NULL || goal_name[0] == '\0') return;
     goal_progress_publish(ms, project, event, goal_name, detail);
 }
 
 /**
- * Diff the goal's current actions against `snapshot` and publish a progress
- * event for each action that newly transitioned into RUNNING, COMPLETED, or
- * FAILED since the last call. Updates `snapshot` in place.
+ * Seed `snapshot` with the goal's CURRENT action statuses without publishing
+ * anything. Must run once, before the first diff, so a supervisor that
+ * starts/restarts on a goal with pre-existing RUNNING/COMPLETED/FAILED
+ * actions (routine after a respawn) doesn't treat all of them as brand new
+ * transitions and flood the channel with duplicate events.
  */
-static void supervisor_publish_action_events(AgentSession *session, const char *goal_id,
-                                              const char *project, const char *goal_name,
-                                              ProgressSnapshotEntry *snapshot,
-                                              size_t *snapshot_count) {
-    message_store_t *ms = services_get_message_store(session->services);
-    action_store_t *as = services_get_action_store(session->services);
-    if (ms == NULL || as == NULL || goal_name[0] == '\0') return;
+void supervisor_seed_action_snapshot(Services *services, const char *goal_id,
+                                      ProgressSnapshotEntry *snapshot,
+                                      size_t *snapshot_count) {
+    action_store_t *as = services_get_action_store(services);
+    if (as == NULL) return;
+
+    size_t count = 0;
+    Action **actions = action_store_list_by_goal(as, goal_id, &count);
+    if (actions == NULL) return;
+
+    for (size_t i = 0; i < count && *snapshot_count < SUPERVISOR_PROGRESS_SNAPSHOT_MAX; i++) {
+        size_t slot = (*snapshot_count)++;
+        strncpy(snapshot[slot].id, actions[i]->id, sizeof(snapshot[slot].id) - 1);
+        snapshot[slot].id[sizeof(snapshot[slot].id) - 1] = '\0';
+        snapshot[slot].status = actions[i]->status;
+    }
+
+    action_free_list(actions, count);
+}
+
+/**
+ * Trim the progress channel so it doesn't grow unboundedly across a
+ * long-lived goal. Safe to call often (plain SQL DELETE); no-op when the
+ * message store is unavailable.
+ */
+static void supervisor_cleanup_progress(Services *services) {
+    message_store_t *ms = services_get_message_store(services);
+    if (ms == NULL) return;
+    goal_progress_cleanup(ms, GOAL_PROGRESS_RETENTION_SECONDS);
+}
+
+/**
+ * Diff the goal's current actions against `snapshot` and publish a progress
+ * event for each action that newly transitioned into RUNNING, COMPLETED,
+ * FAILED, or SKIPPED since the last call. Updates `snapshot` in place.
+ */
+void supervisor_publish_action_events(Services *services, const char *goal_id,
+                                       const char *project, const char *goal_name,
+                                       ProgressSnapshotEntry *snapshot,
+                                       size_t *snapshot_count) {
+    message_store_t *ms = services_get_message_store(services);
+    action_store_t *as = services_get_action_store(services);
+    if (ms == NULL || as == NULL || goal_name == NULL || goal_name[0] == '\0') return;
 
     size_t count = 0;
     Action **actions = action_store_list_by_goal(as, goal_id, &count);
@@ -610,6 +635,9 @@ static void supervisor_publish_action_events(AgentSession *session, const char *
         } else if (a->status == ACTION_STATUS_RUNNING) {
             snprintf(detail, sizeof(detail), "%s", desc);
             goal_progress_publish(ms, project, "action_started", goal_name, detail);
+        } else if (a->status == ACTION_STATUS_SKIPPED) {
+            snprintf(detail, sizeof(detail), "%s (%d/%zu)", desc, completed, count);
+            goal_progress_publish(ms, project, "action_skipped", goal_name, detail);
         }
     }
 
@@ -641,6 +669,12 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
     }
     ProgressSnapshotEntry progress_snapshot[SUPERVISOR_PROGRESS_SNAPSHOT_MAX];
     size_t progress_snapshot_count = 0;
+    /* Seed with whatever this goal's actions already look like: on a fresh
+     * goal there are none yet, but on a respawn/restart there may be
+     * RUNNING/COMPLETED/FAILED actions from a previous process lifetime that
+     * must NOT be replayed as new transitions. */
+    supervisor_seed_action_snapshot(session->services, goal_id,
+                                     progress_snapshot, &progress_snapshot_count);
 
     g_supervisor_running = 1;
 
@@ -662,9 +696,10 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
         LOG_INFO("Supervisor started for goal %s (phase=%s)", goal_id,
                      phase == SUPERVISOR_PHASE_PLAN ? "plan" : "execute");
 
-        supervisor_publish_goal_event(session, progress_project, progress_goal_name,
+        supervisor_publish_goal_event(session->services, progress_project, progress_goal_name,
                                        "phase_started",
                                        phase == SUPERVISOR_PHASE_PLAN ? "planning" : "executing");
+        supervisor_cleanup_progress(session->services);
 
         supervisor_heartbeat(session, goal_id);
 
@@ -697,7 +732,7 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
             return SUPERVISOR_EXIT_ERROR;
         }
 
-        supervisor_publish_action_events(session, goal_id, progress_project, progress_goal_name,
+        supervisor_publish_action_events(session->services, goal_id, progress_project, progress_goal_name,
                                           progress_snapshot, &progress_snapshot_count);
 
         int completion = check_phase_completion(session, goal_id, phase);
@@ -709,7 +744,7 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
                 phase = SUPERVISOR_PHASE_EXECUTE;
                 continue;
             }
-            supervisor_publish_goal_event(session, progress_project, progress_goal_name,
+            supervisor_publish_goal_event(session->services, progress_project, progress_goal_name,
                                            "goal_completed", "all actions complete");
             return SUPERVISOR_EXIT_COMPLETE;
         }
@@ -737,6 +772,7 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
             int ready = select(max_fd + 1, &read_fds, NULL, NULL, &timeout);
 
             supervisor_heartbeat(session, goal_id);
+            supervisor_cleanup_progress(session->services);
 
             if (ready < 0) {
                 if (!g_supervisor_running) break;
@@ -804,7 +840,7 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
                 supervisor_heartbeat(session, goal_id);
             }
 
-            supervisor_publish_action_events(session, goal_id, progress_project, progress_goal_name,
+            supervisor_publish_action_events(session->services, goal_id, progress_project, progress_goal_name,
                                               progress_snapshot, &progress_snapshot_count);
 
             completion = check_phase_completion(session, goal_id, phase);
@@ -814,7 +850,7 @@ int supervisor_run(AgentSession *session, const char *goal_id, SupervisorPhase p
                     plan_phase_complete = true;
                     break;
                 }
-                supervisor_publish_goal_event(session, progress_project, progress_goal_name,
+                supervisor_publish_goal_event(session->services, progress_project, progress_goal_name,
                                                "goal_completed", "all actions complete");
                 return SUPERVISOR_EXIT_COMPLETE;
             }

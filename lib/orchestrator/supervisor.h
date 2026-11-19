@@ -4,6 +4,7 @@
 #include "../agent/session.h"
 #include "services/services.h"
 #include <stdbool.h>
+#include <stddef.h>
 
 #define SUPERVISOR_EXIT_COMPLETE    0
 #define SUPERVISOR_EXIT_ERROR      -1
@@ -60,6 +61,57 @@ SupervisorIdleAction supervisor_idle_next(SupervisorIdle *idle, bool timeout_wak
  * @return Number of actions recovered, or -1 on error
  */
 int supervisor_recover_orphaned_actions(Services *services, const char *goal_id);
+
+/** Bound on per-goal actions tracked for progress-event deltas (see
+ *  ProgressSnapshotEntry). Goals with more actions than this simply stop
+ *  getting new-action progress events once the snapshot fills up, rather
+ *  than growing memory unboundedly. */
+#define SUPERVISOR_PROGRESS_SNAPSHOT_MAX 512
+
+/** Tracks the last-seen status of one action, so progress events fire only
+ *  on a transition rather than on every poll. `status` holds an ActionStatus
+ *  value (declared as int here so this header doesn't need action_store.h). */
+typedef struct {
+    char id[40];
+    int status;
+} ProgressSnapshotEntry;
+
+/**
+ * Seed `snapshot` with the goal's CURRENT action statuses without publishing
+ * anything. Callers must run this once, before the first call to
+ * supervisor_publish_action_events(), so a supervisor that starts or
+ * restarts on a goal with pre-existing RUNNING/COMPLETED/FAILED actions
+ * (routine after a respawn) doesn't treat all of them as brand-new
+ * transitions and flood the progress channel with duplicate events.
+ *
+ * @param services       Services container with the action store
+ * @param goal_id        UUID of the goal
+ * @param snapshot       Caller-owned array of at least SUPERVISOR_PROGRESS_SNAPSHOT_MAX entries
+ * @param snapshot_count In/out: number of entries populated so far
+ */
+void supervisor_seed_action_snapshot(Services *services, const char *goal_id,
+                                      ProgressSnapshotEntry *snapshot,
+                                      size_t *snapshot_count);
+
+/**
+ * Diff the goal's current actions against `snapshot` and publish a progress
+ * event (via goal_progress_publish) for each action that newly transitioned
+ * into RUNNING, COMPLETED, FAILED, or SKIPPED since the last call. Updates
+ * `snapshot` in place. No-op when the message store or action store is
+ * unavailable.
+ *
+ * @param services       Services container with the message + action stores
+ * @param goal_id        UUID of the goal
+ * @param project        Project scope key for the progress channel
+ * @param goal_name      Goal name included in published events
+ * @param snapshot       Caller-owned array, previously seeded/updated by this
+ *                       function or supervisor_seed_action_snapshot()
+ * @param snapshot_count In/out: number of entries populated so far
+ */
+void supervisor_publish_action_events(Services *services, const char *goal_id,
+                                       const char *project, const char *goal_name,
+                                       ProgressSnapshotEntry *snapshot,
+                                       size_t *snapshot_count);
 
 /**
  * Resolve the actual phase to use for a supervisor invocation.

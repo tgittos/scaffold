@@ -20,9 +20,20 @@ char *goal_progress_channel_name(const char *project) {
 /* Channels must exist before channel_subscribe()/channel_publish() can
  * reference them (channel_subscriptions/channel_messages both carry a FK
  * to channels(id)). Failure here almost always means the channel already
- * exists, which is fine — ignore it. */
+ * exists, which is fine — ignore it.
+ *
+ * Created NON-persistent (is_persistent=0) on purpose: message_cleanup_
+ * channel_messages() only ever trims non-persistent channels, and progress
+ * events are ephemeral UI chatter, not state that needs to survive forever.
+ * A persistent channel here would accumulate rows with no retention path,
+ * since nothing else in the codebase calls message_cleanup_*. */
 static void ensure_channel_exists(message_store_t *store, const char *channel_name) {
-    channel_create(store, channel_name, "Goal progress events", "system", 1);
+    channel_create(store, channel_name, "Goal progress events", "system", 0);
+}
+
+int goal_progress_cleanup(message_store_t *store, int max_age_seconds) {
+    if (store == NULL) return -1;
+    return message_cleanup_channel_messages(store, max_age_seconds);
 }
 
 int goal_progress_publish(message_store_t *store, const char *project,
@@ -77,6 +88,7 @@ static const char *event_symbol(const char *event) {
     if (strcmp(event, "goal_failed") == 0) return TERM_SYM_ERROR;
     if (strcmp(event, "action_started") == 0) return TERM_SYM_ACTIVE;
     if (strcmp(event, "phase_started") == 0) return TERM_SYM_ACTIVE;
+    if (strcmp(event, "action_skipped") == 0) return TERM_SYM_INFO;
     return TERM_SYM_BULLET;
 }
 

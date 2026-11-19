@@ -352,6 +352,9 @@ int repl_run_session(AgentSession* session, bool json_mode) {
                     LOG_INFO("REPL: respawned %d dead supervisors",
                                  respawned);
                 }
+                if (progress_store != NULL) {
+                    goal_progress_cleanup(progress_store, GOAL_PROGRESS_RETENTION_SECONDS);
+                }
             }
         }
 
