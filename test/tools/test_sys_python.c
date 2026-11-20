@@ -2,6 +2,7 @@
 #include "tools/sys_python.h"
 #include "util/app_home.h"
 #include "util/config.h"
+#include "util/interrupt.h"
 #include <Python.h>
 #include <string.h>
 #include <stdlib.h>
@@ -129,6 +130,20 @@ void test_get_config_int(void) {
     rmdir(home);
 }
 
+void test_cancelled_reflects_interrupt_flag(void) {
+    TEST_ASSERT_EQUAL_INT(0, interrupt_pending()); /* precondition: clear */
+    TEST_ASSERT_NOT_NULL(run_python("import _ralph_sys; before = str(_ralph_sys.cancelled())"));
+    TEST_ASSERT_EQUAL_STRING("0", get_python_str("before"));
+
+    interrupt_handler_trigger();
+    TEST_ASSERT_EQUAL_INT(1, interrupt_pending());
+    TEST_ASSERT_NOT_NULL(run_python("import _ralph_sys; after = str(_ralph_sys.cancelled())"));
+    TEST_ASSERT_EQUAL_STRING("1", get_python_str("after"));
+
+    interrupt_clear();
+    TEST_ASSERT_EQUAL_INT(0, interrupt_pending()); /* don't leak into other tests */
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_sys_module_imports);
@@ -137,6 +152,7 @@ int main(void) {
     RUN_TEST(test_get_executable_path_returns_string_or_none);
     RUN_TEST(test_get_app_home_returns_string);
     RUN_TEST(test_get_config_int);
+    RUN_TEST(test_cancelled_reflects_interrupt_flag);
 
     if (python_initialized) {
         Py_Finalize();
