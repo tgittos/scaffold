@@ -73,11 +73,10 @@ $(PDFIO_LIB): $(ZLIB_LIB) | $(DEPDIR)
 			LDFLAGS="-L$$(pwd)/../zlib-$(ZLIB_VERSION)" \
 			./configure --disable-shared --enable-static; \
 	fi && \
-	sed -i 's|^AR[[:space:]]*=.*|AR\t\t=\t$(AR)|' Makefile && \
-	CC="$(CC)" AR="$(AR)" RANLIB="cosmoranlib" \
+	$(MAKE) CC="$(CC)" AR="$(AR)" RANLIB="$(RANLIB)" \
 		CFLAGS="-O2 -I$$(pwd)/../zlib-$(ZLIB_VERSION)" \
 		LDFLAGS="-L$$(pwd)/../zlib-$(ZLIB_VERSION)" \
-		$(MAKE) libpdfio.a
+		libpdfio.a
 
 # cJSON
 $(CJSON_LIB): | $(DEPDIR)
