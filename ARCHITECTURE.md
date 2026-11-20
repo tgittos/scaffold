@@ -904,6 +904,16 @@ graph TB
 - **Idle re-prompt**: `supervisor_idle_next()` (pure, in `supervisor.c`) tracks idle wakes. Only idle *timeout* wakes count — notification wakes never shorten the window — and after two of them with nothing in flight the supervisor re-prompts the model with the current world state. Re-prompts that produce no work consume the loop's error budget (3), after which the supervisor exits with `SUPERVISOR_EXIT_ERROR` instead of prompting forever. In the plan phase "work in flight" means actions exist; in execute it means an action is RUNNING.
 - **Orphan recovery**: on supervisor start, running actions whose work item is still ASSIGNED belong to workers of a dead supervisor. The item is handed back to the queue via `work_queue_fail()` (action → PENDING), or marked FAILED once its attempts are exhausted.
 
+### Interactive Input Handling
+
+`repl_run_session()` owns one `async_executor_t` (`lib/agent/async_executor.c/h`) for the session's lifetime, created at the start of the function and destroyed (cancelling any in-flight turn first) when the loop exits. This replaces a synchronous `session_process_message()` call that used to block the entire `select()` loop for a turn's full LLM round-trip plus every tool call.
+
+- **Non-blocking submission**: `repl_line_callback()` calls `async_executor_start()`/`async_executor_continue()` instead of `session_process_message()`/`session_continue()` directly. If the executor is already running a turn, the line is pushed onto `g_pending_queue` (`lib/agent/message_queue.c/h`, a plain single-threaded FIFO — both push from the readline callback and pop from the `select()` loop happen on the main thread, so it needs no locking) and a short "(queued...)" acknowledgement is printed; the prompt stays live and keeps accepting input while the turn runs in the background.
+- **Draining the queue**: the `select()` loop adds `async_executor_get_notify_fd()` to its `fd_set`. When readable, `async_executor_process_events()` returns one of `ASYNC_EVENT_COMPLETE`/`ASYNC_EVENT_ERROR`/`ASYNC_EVENT_INTERRUPTED`; `repl_handle_executor_event()` surfaces the outcome (context-full/error text, or — on cancellation — clears the interrupt flag), reinstalls a fresh prompt, then pops and starts the next queued message, if any, under the same executor. Each completion event drains exactly one message; a longer queue drains one event at a time as each turn finishes.
+- **Ctrl+C is press-sensitive**: `rl_catch_signals` is set to `0` before `rl_initialize()` runs (readline's own SIGINT handler would otherwise fight the app's and unconditionally kill the input line, even mid-turn). The app's own handler (`lib/util/interrupt.c`) stays a single async-signal-safe flag; the `select()` loop checks `interrupt_pending()` right after `select()` returns, independent of its return value's sign (a signal can interrupt `select()` making it return -1, but can also land right as it times out or returns ready fds). With a turn running, it calls `async_executor_cancel()` only — never `interrupt_acknowledge()` from the main thread, since the executor thread's own cooperative checks (`lib/network/http_client.c`'s curl abort callback, `tool_batch_executor.c`'s phase boundaries) are what actually consume the flag, and acknowledging it early would race ahead and suppress those checks. With no turn running, it clears the flag and resets the input buffer (`rl_replace_line("", 0)` + `rl_redisplay()`) like a shell. The flag is reset for the next signal once `ASYNC_EVENT_INTERRUPTED` is handled.
+- **History persistence**: `read_history()`/`write_history()` run against `app_home_path("history")` at REPL start/exit, skipped when stdin isn't a tty or `--json` mode is on.
+- **Spinner/readline contention**: the spinner (`lib/ui/spinner.c`) runs on its own thread and writes raw frames straight to stdout; with the prompt now live during a turn, that can race with readline's redisplay while the user is typing. `spinner_pause()`/`spinner_resume()` bracket each `rl_callback_read_char()` call so the spinner skips a frame write during the brief window a keystroke is processed, without stopping or restarting the thread.
+
 ### Live Progress (REPL)
 
 Goal work runs out-of-band (supervisor process, possibly across REPL restarts), so progress is surfaced through a pub/sub channel rather than direct calls:
@@ -1225,6 +1235,7 @@ lib/
 │   ├── tool_orchestration.c/h  # Tool call deduplication and tracking
 │   ├── repl.c/h            # Read-Eval-Print-Loop for interactive mode
 │   ├── async_executor.c/h  # Non-blocking message processing thread
+│   ├── message_queue.c/h   # Single-threaded FIFO for messages queued during a turn
 │   ├── context_enhancement.c/h  # Split prompt builder (base + dynamic context)
 │   ├── recap.c/h           # Conversation recap (via /recap); no LLM call at startup
 │   ├── streaming_handler.c/h   # Streaming orchestration layer

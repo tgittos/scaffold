@@ -3,6 +3,9 @@
 #include "../util/log.h"
 #include "repl.h"
 #include "recap.h"
+#include "async_executor.h"
+#include "message_queue.h"
+#include "../util/app_home.h"
 #include "../session/conversation_tracker.h"
 #include "../util/ansi_codes.h"
 #include "../util/interrupt.h"
@@ -33,8 +36,12 @@ static volatile int g_repl_running = 1;
 static AgentSession* g_repl_session = NULL;
 static char* g_current_prompt = NULL;
 static bool g_json_mode = false;
+static async_executor_t* g_executor = NULL;
+static message_queue_t* g_pending_queue = NULL;
+static char* g_history_path = NULL;
 
 static void repl_line_callback(char* line);
+static void repl_handle_executor_event(int event);
 
 /* Live = this project's goals that still have a supervisor beating a
  * heartbeat; printed on quit so the user knows background work continues. */
@@ -156,20 +163,40 @@ static void repl_line_callback(char* line) {
         return;
     }
 
+    /* A turn is already running in the background: stage this message
+     * instead of blocking. It is sent (in order) once the current turn's
+     * executor event is handled below. */
+    if (g_executor != NULL && async_executor_is_running(g_executor)) {
+        if (g_pending_queue == NULL) {
+            g_pending_queue = message_queue_create();
+        }
+        if (message_queue_push(g_pending_queue, line) == 0 && !g_json_mode) {
+            printf("(queued - will be sent once the current turn finishes)\n");
+        }
+        free(line);
+        return;
+    }
+
     if (!g_json_mode) printf("\n");
-    int result = session_process_message(g_repl_session, line);
-    if (result == SESSION_CONTEXT_FULL) {
-        fprintf(stderr, "\nContext window full. Try /compact or start a new session.\n");
-    } else if (result == -1) {
-        fprintf(stderr, "Error: Failed to process message\n");
+
+    int start_rc = (g_executor != NULL) ? async_executor_start(g_executor, line) : -1;
+    if (start_rc != 0) {
+        /* No executor available (creation failed at startup): fall back to
+         * the old synchronous path rather than silently dropping the
+         * message. */
+        int result = session_process_message(g_repl_session, line);
+        if (result == SESSION_CONTEXT_FULL) {
+            fprintf(stderr, "\nContext window full. Try /compact or start a new session.\n");
+        } else if (result == -1) {
+            fprintf(stderr, "Error: Failed to process message\n");
+        }
+        if (g_repl_running) {
+            rl_callback_handler_remove();
+            repl_install_prompt();
+        }
     }
 
     free(line);
-
-    if (g_repl_running) {
-        rl_callback_handler_remove();
-        repl_install_prompt();
-    }
 }
 
 /* Drain and render any goal progress events published since the last poll.
@@ -251,9 +278,14 @@ static void process_pending_notifications(AgentSession* session) {
             LOG_DEBUG("Processing %d incoming messages", total_count);
             append_conversation_message(&session->session_data.conversation,
                                         "system", notification_text);
-            int cont_rc = session_continue(session);
-            if (cont_rc == SESSION_CONTEXT_FULL) {
-                fprintf(stderr, "\nContext window full. Try /compact or start a new session.\n");
+            /* If a turn is already running, leave the system message in
+             * conversation history; it will be picked up the next time a
+             * turn starts. Otherwise continue asynchronously, same as a
+             * regular message send. */
+            if (g_executor != NULL && !async_executor_is_running(g_executor)) {
+                if (async_executor_continue(g_executor) != 0) {
+                    fprintf(stderr, "\nFailed to continue session\n");
+                }
             }
             free(notification_text);
         } else {
@@ -272,9 +304,28 @@ int repl_run_session(AgentSession* session, bool json_mode) {
         rl_outstream = stderr;
     }
 
+    /* Must happen before readline installs its own signal handlers (the
+     * first readline call below does this implicitly). With the default
+     * (rl_catch_signals = 1), readline installs its own SIGINT handler and
+     * fights the app's: readline would unconditionally kill the input line,
+     * even mid-turn, defeating turn-abort-without-clearing-the-line. */
+    rl_catch_signals = 0;
+    rl_initialize();
+
     if (interrupt_init() != 0) {
         fprintf(stderr, "Warning: Failed to initialize interrupt handling\n");
     }
+
+    bool history_enabled = !json_mode && isatty(STDIN_FILENO);
+    if (history_enabled) {
+        g_history_path = app_home_path("history");
+        if (g_history_path != NULL) {
+            read_history(g_history_path);
+        }
+    }
+
+    g_executor = async_executor_create(session);
+    g_pending_queue = message_queue_create();
 
     repl_install_prompt();
 
@@ -294,8 +345,6 @@ int repl_run_session(AgentSession* session, bool json_mode) {
     }
 
     while (g_repl_running) {
-        interrupt_clear();
-
         fd_set read_fds;
         FD_ZERO(&read_fds);
         FD_SET(STDIN_FILENO, &read_fds);
@@ -309,6 +358,14 @@ int repl_run_session(AgentSession* session, bool json_mode) {
             }
         }
 
+        int executor_fd = (g_executor != NULL) ? async_executor_get_notify_fd(g_executor) : -1;
+        if (executor_fd >= 0) {
+            FD_SET(executor_fd, &read_fds);
+            if (executor_fd > max_fd) {
+                max_fd = executor_fd;
+            }
+        }
+
         SubagentManager* mgr = &session->subagent_manager;
 
         struct timeval timeout;
@@ -317,17 +374,39 @@ int repl_run_session(AgentSession* session, bool json_mode) {
 
         int ready = select(max_fd + 1, &read_fds, NULL, NULL, &timeout);
 
-        if (ready < 0) {
-            if (interrupt_pending()) {
+        /* Checked regardless of select()'s return value/sign: a signal that
+         * interrupted select() makes ready < 0 (and the fd_sets undefined),
+         * but a signal landing right as select() times out or returns data
+         * is still possible, so this must not be nested inside the ready < 0
+         * branch only. Press-sensitive: a turn in flight means Ctrl+C aborts
+         * the turn (the executor thread's own cooperative checks, e.g. in
+         * tool_batch_executor/http_client, do the actual abort+acknowledge;
+         * this only requests it and must not call interrupt_acknowledge()
+         * itself, or it would race ahead and suppress those checks). An idle
+         * prompt means Ctrl+C clears the input buffer, like a shell. */
+        if (interrupt_pending()) {
+            if (g_executor != NULL && async_executor_is_running(g_executor)) {
+                async_executor_cancel(g_executor);
+            } else {
                 interrupt_clear();
                 rl_replace_line("", 0);
                 rl_redisplay();
+            }
+            if (ready < 0) {
                 continue;
             }
+        }
+
+        if (ready < 0) {
             if (g_repl_running) {
                 continue;
             }
             break;
+        }
+
+        if (executor_fd >= 0 && FD_ISSET(executor_fd, &read_fds)) {
+            int event = async_executor_process_events(g_executor);
+            repl_handle_executor_event(event);
         }
 
         int subagent_changes = subagent_poll_all(mgr);
@@ -365,7 +444,15 @@ int repl_run_session(AgentSession* session, bool json_mode) {
         }
 
         if (FD_ISSET(STDIN_FILENO, &read_fds)) {
+            /* Pause the spinner's background fputs() for the duration of
+             * this keystroke: rl_callback_read_char() may redraw the input
+             * line on the same terminal the spinner thread writes raw
+             * frames to, and the two writing concurrently corrupts the
+             * display. Resume immediately after; the spinner otherwise runs
+             * normally while the user isn't actively typing. */
+            spinner_pause();
             rl_callback_read_char();
+            spinner_resume();
         }
 
         if (notify_fd >= 0 && FD_ISSET(notify_fd, &read_fds)) {
@@ -385,9 +472,59 @@ int repl_run_session(AgentSession* session, bool json_mode) {
     free(g_current_prompt);
     g_current_prompt = NULL;
     free(progress_channel);
+
+    /* Cancels any in-flight turn and joins the thread before returning. */
+    async_executor_destroy(g_executor);
+    g_executor = NULL;
+    message_queue_destroy(g_pending_queue);
+    g_pending_queue = NULL;
+
+    if (history_enabled && g_history_path != NULL) {
+        write_history(g_history_path);
+    }
+    free(g_history_path);
+    g_history_path = NULL;
+
     status_line_cleanup();
     interrupt_cleanup();
     return 0;
+}
+
+/* Handle one event from the async executor's notification pipe: surface
+ * any error/context-full/cancellation status, refresh the prompt, and start
+ * the next queued message (if any) under the same executor. Event types are
+ * ASYNC_EVENT_COMPLETE/ERROR/INTERRUPTED; 0 means no event was available and
+ * -1 means pipe_notifier_recv() itself failed — both are no-ops here. */
+static void repl_handle_executor_event(int event) {
+    if (event != ASYNC_EVENT_COMPLETE &&
+        event != ASYNC_EVENT_ERROR &&
+        event != ASYNC_EVENT_INTERRUPTED) {
+        return;
+    }
+
+    if (event == ASYNC_EVENT_ERROR) {
+        const char* err = async_executor_get_error(g_executor);
+        if (err != NULL) {
+            fprintf(stderr, "\n%s\n", err);
+        } else {
+            fprintf(stderr, "\nError: Failed to process message\n");
+        }
+    } else if (event == ASYNC_EVENT_INTERRUPTED) {
+        /* Reset for the next SIGINT now that the turn has fully stopped;
+         * see the press-sensitive handling note in repl_run_session(). */
+        interrupt_clear();
+    }
+
+    if (g_repl_running) {
+        rl_callback_handler_remove();
+        repl_install_prompt();
+    }
+
+    char* next = message_queue_pop(g_pending_queue);
+    if (next != NULL) {
+        async_executor_start(g_executor, next);
+        free(next);
+    }
 }
 
 /* Format a human-readable relative time string into buf.

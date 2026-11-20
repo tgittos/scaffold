@@ -158,6 +158,20 @@ void test_no_ansi_when_not_tty(void) {
         "Spinner must not start (and emit no ANSI codes) when stdout is not a TTY");
 }
 
+void test_spinner_pause_sets_paused_state(void) {
+    TEST_ASSERT_FALSE(spinner_is_paused_for_test());
+    spinner_pause();
+    TEST_ASSERT_TRUE(spinner_is_paused_for_test());
+    spinner_resume();
+    TEST_ASSERT_FALSE(spinner_is_paused_for_test());
+}
+
+void test_spinner_pause_resume_without_start_is_safe(void) {
+    spinner_pause();
+    spinner_resume();
+    TEST_PASS();
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_spinner_start_stop_basic);
@@ -172,5 +186,7 @@ int main(void) {
     RUN_TEST(test_spinner_elapsed);
     RUN_TEST(test_spinner_detail_shown);
     RUN_TEST(test_no_ansi_when_not_tty);
+    RUN_TEST(test_spinner_pause_sets_paused_state);
+    RUN_TEST(test_spinner_pause_resume_without_start_is_safe);
     return UNITY_END();
 }

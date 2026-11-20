@@ -194,7 +194,15 @@ static StreamingContext* streaming_send_request(AgentSession* session,
         }
         streaming_context_free(ctx);
         if (rc == -2) {
-            fprintf(stderr, "Request cancelled.\n");
+            /* Distinct from an error: the turn was deliberately cancelled
+             * (Ctrl+C), the stream is aborted, and nothing is committed to
+             * conversation history. Surface that plainly instead of the
+             * old bare "Request cancelled.", which read like a failure. */
+            if (get_json_output_mode()) {
+                json_output_system("cancelled", "Turn cancelled - nothing saved to history.");
+            } else {
+                fprintf(stderr, "\n⚠ Cancelled - nothing saved to history.\n");
+            }
         } else {
             APIError api_err;
             get_last_api_error(&api_err);
