@@ -200,7 +200,7 @@ int register_python_tool(ToolRegistry *registry) {
     }
 
     int result = register_tool(registry, "python",
-        "Execute Python code in a persistent interpreter. Variables, imports, and function definitions persist across calls. Use for calculations, data processing, and scripting tasks.",
+        "Execute Python code in a persistent interpreter. Variables, imports, and function definitions persist across calls. Use for calculations, data processing, and scripting tasks. Long-running code can poll _ralph_sys.cancelled() to stop early when the user cancels the turn; this is best-effort, and code that does not poll runs until its timeout.",
         parameters, 2, execute_python_tool_call);
 
     for (int i = 0; i < 2; i++) {

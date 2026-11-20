@@ -137,6 +137,9 @@ verifiable — land them as separate commits, not one big change:
    *Done when:* Ctrl-C while a 60-second `shell` command is running returns
    to a clean prompt within ~1 second, with the child *process tree* dead
    (verify with a piped command like `sleep 60 | cat`).
+   *Landed 2026-11-20:* `_ralph_sys.cancelled()` + `start_new_session`/`killpg`
+   in `shell` (the `python` tool stays timeout-only). All five steps of this
+   entry are complete.
 5. Distinct, visible "cancelled" status for the stream-abort path (replace
    the bare "Request cancelled." that currently reads like an error).
    *Done when:* an aborted turn prints a cancellation notice, commits
