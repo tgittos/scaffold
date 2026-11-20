@@ -2,6 +2,7 @@
 #include "util/executable_path.h"
 #include "util/app_home.h"
 #include "util/config.h"
+#include "util/interrupt.h"
 #include "ui/spinner.h"
 #include <Python.h>
 #include <stdlib.h>
@@ -95,6 +96,21 @@ static PyObject *py_progress(PyObject *self, PyObject *args) {
     Py_RETURN_NONE;
 }
 
+/**
+ * _ralph_sys.cancelled()
+ *
+ * Returns 1 if a user cancellation (Ctrl-C mid-turn) is currently
+ * latched, else 0. Tools that block in long waits can poll this in a
+ * short-timeout loop to abort early; the flag is latched by the REPL's
+ * cancel path and cleared when the turn ends, so no state is kept here.
+ */
+static PyObject *py_cancelled(PyObject *self, PyObject *args) {
+    (void)self;
+    (void)args;
+
+    return PyLong_FromLong(interrupt_pending());
+}
+
 static PyMethodDef SysMethods[] = {
     {"get_executable_path", py_get_executable_path, METH_NOARGS,
      "Get the path to the current executable."},
@@ -104,6 +120,8 @@ static PyMethodDef SysMethods[] = {
      "Get an integer config value, or the given default."},
     {"progress", py_progress, METH_VARARGS,
      "Report a progress line to the live spinner detail."},
+    {"cancelled", py_cancelled, METH_NOARGS,
+     "Return 1 if a user cancellation is currently latched."},
     {NULL, NULL, 0, NULL}
 };
 

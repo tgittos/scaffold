@@ -209,6 +209,8 @@ static const struct { const char *filename; const char *sha256_hex; } SHIPPED_DE
     {"search_history.py", "92b337b06fe7d223a508c0b0319324d8167ac352f53e0df32a344b7174c545f5"},
     {"search_history.py", "b8800cce02b67701748479873270e52cf86245ac6ec0f505a420072bc94f1d2e"},
     {"search_history.py", "f7b947e55d8368a5da31511aea7db38050ed59d8efaa825c98d6894bd6494a84"},
+    {"shell.py", "1d93a44f09fe3db855ed692a964ab4c3f2e662ef91bedb44768cb14e3a0c50f0"},
+    {"shell.py", "32bbf9660b41f2d2e9654fb251b8fc31d438d4fda717b5d44474e5eb1d49bcef"},
     {"shell.py", "644eba732e74f8fc5be4e9d38d0f83be0c4069728beafa872dacf8d57aafcf49"},
     {"shell.py", "75153caf7426957db7427fcbcb46725aae5802d85b5ccff9ec7f87614b09e483"},
     {"shell.py", "8d371c8b6f817de1ad2afd4e4be1d4bd667d14ccf287adf0a2a1470add1cd2ce"},

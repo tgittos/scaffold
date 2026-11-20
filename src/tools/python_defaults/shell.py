@@ -28,8 +28,10 @@ def shell(command: str, working_dir: str = None, timeout: int = 30,
         capture_stderr: Whether to capture stderr separately (default: True)
 
     Returns:
-        Dictionary with stdout, stderr, exit_code, and execution_time
+        Dictionary with stdout, stderr, exit_code, execution_time, timed_out, and cancelled
     """
+    import os
+    import signal
     import subprocess
     import threading
     import time
@@ -60,7 +62,8 @@ def shell(command: str, working_dir: str = None, timeout: int = 30,
                 "stderr": "Error: Command failed security validation",
                 "exit_code": -1,
                 "execution_time": 0.0,
-                "timed_out": False
+                "timed_out": False,
+                "cancelled": False
             }
 
     # Validate working directory if specified
@@ -72,7 +75,8 @@ def shell(command: str, working_dir: str = None, timeout: int = 30,
                 "stderr": "Error: Invalid working directory path (directory traversal not allowed)",
                 "exit_code": -1,
                 "execution_time": 0.0,
-                "timed_out": False
+                "timed_out": False,
+                "cancelled": False
             }
 
         wd = Path(working_dir).resolve()
@@ -82,7 +86,8 @@ def shell(command: str, working_dir: str = None, timeout: int = 30,
                 "stderr": f"Error: Working directory not found: {working_dir}",
                 "exit_code": -1,
                 "execution_time": 0.0,
-                "timed_out": False
+                "timed_out": False,
+                "cancelled": False
             }
         if not wd.is_dir():
             return {
@@ -90,23 +95,25 @@ def shell(command: str, working_dir: str = None, timeout: int = 30,
                 "stderr": f"Error: Not a directory: {working_dir}",
                 "exit_code": -1,
                 "execution_time": 0.0,
-                "timed_out": False
+                "timed_out": False,
+                "cancelled": False
             }
         working_dir = str(wd)
 
     start = time.time()
     timed_out = False
+    cancelled = False
 
     # Build a clean environment for child processes.
     # Scaffold's embedded Python sets PYTHONHOME=/zip which breaks any
     # system Python invoked by the agent (e.g. `python -m pytest`).
-    import os as _os
-    clean_env = {k: v for k, v in _os.environ.items()
+    clean_env = {k: v for k, v in os.environ.items()
                  if k not in ("PYTHONHOME", "PYTHONDONTWRITEBYTECODE")}
 
     # Report each output line to the spinner's live detail as it arrives.
     # Convert happens in C; guard so shell.py still works if unavailable.
     _progress = getattr(_ralph_sys, "progress", None)
+    _cancelled = getattr(_ralph_sys, "cancelled", None)
 
     def _drain(stream, chunks):
         """Read a text stream line by line, buffering and reporting each line.
@@ -122,6 +129,17 @@ def shell(command: str, working_dir: str = None, timeout: int = 30,
         finally:
             stream.close()
 
+    def _kill_tree(proc):
+        """SIGKILL the command's whole process group so piped children die too."""
+        if os.name == "posix":
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                proc.kill()
+        else:
+            proc.kill()
+        proc.wait()
+
     try:
         proc = subprocess.Popen(
             command,
@@ -131,6 +149,7 @@ def shell(command: str, working_dir: str = None, timeout: int = 30,
             stderr=subprocess.PIPE,
             text=True,
             env=clean_env,
+            start_new_session=(os.name == "posix"),
         )
 
         stdout_chunks = []
@@ -140,21 +159,31 @@ def shell(command: str, working_dir: str = None, timeout: int = 30,
         t_out.start()
         t_err.start()
 
-        try:
-            proc.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            proc.kill()
-            proc.wait()
+        deadline = time.monotonic() + timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                timed_out = True
+                _kill_tree(proc)
+                break
+            try:
+                proc.wait(timeout=min(0.1, remaining))
+                break
+            except subprocess.TimeoutExpired:
+                if _cancelled is not None and _cancelled():
+                    cancelled = True
+                    _kill_tree(proc)
+                    break
 
         # Join the readers so all buffered output is captured, including the
-        # final chunk flushed when the pipes close.
-        t_out.join()
-        t_err.join()
+        # final chunk flushed when the pipes close. A background process that
+        # left its own group can hold a pipe open; don't wait on it forever.
+        t_out.join(timeout=2)
+        t_err.join(timeout=2)
 
         stdout = ''.join(stdout_chunks)
         stderr = ''.join(stderr_chunks) if capture_stderr else ""
-        exit_code = -1 if timed_out else proc.returncode
+        exit_code = -1 if timed_out or cancelled else proc.returncode
 
     except Exception as e:
         stdout = ""
@@ -185,5 +214,6 @@ def shell(command: str, working_dir: str = None, timeout: int = 30,
         "stderr": stderr,
         "exit_code": exit_code,
         "execution_time": round(execution_time, 3),
-        "timed_out": timed_out
+        "timed_out": timed_out,
+        "cancelled": cancelled
     }

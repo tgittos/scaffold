@@ -2,6 +2,7 @@
 #include "lib/agent/tool_batch_executor.h"
 #include "lib/agent/session.h"
 #include "lib/tools/tool_cache.h"
+#include "util/interrupt.h"
 #include <pthread.h>
 #include <string.h>
 #include <stdlib.h>
@@ -74,6 +75,7 @@ void setUp(void) {
 }
 
 void tearDown(void) {
+    interrupt_clear();
     tool_orchestration_cleanup(&orchestration);
     tool_cache_destroy(session.tools.cache);
     session.tools.cache = NULL;
@@ -389,6 +391,44 @@ void test_cap_does_not_split_utf8(void) {
     free(result.result);
 }
 
+
+static int cancelling_tool_execute(const ToolCall *call, ToolResult *result) {
+    interrupt_handler_trigger();
+    result->tool_call_id = call->id ? strdup(call->id) : NULL;
+    result->result = strdup("{\"cancelled\": true}");
+    result->success = 0;
+    return 0;
+}
+
+void test_serial_batch_skips_tools_after_interrupt(void) {
+    ToolFunction cancelling = {0};
+    cancelling.name = strdup("cancelling_tool");
+    cancelling.description = strdup("latches the interrupt like a Ctrl-C mid-call");
+    cancelling.execute_func = cancelling_tool_execute;
+    cancelling.thread_safe = 0;
+    ToolFunctionArray_push(&session.tools.functions, cancelling);
+    register_recording_tool(&session.tools, "write_file");
+    g_unprompted_runs = 0;
+
+    ToolCall calls[2] = {
+        make_call("c1", "cancelling_tool", "{}"),
+        make_call("c2", "write_file", "{\"path\": \"/tmp/x\", \"content\": \"x\"}")
+    };
+    ToolResult results[2] = {0};
+    int executed = 0;
+
+    int rc = tool_batch_execute(&batch_ctx, calls, 2, results, NULL, &executed);
+
+    TEST_ASSERT_EQUAL_INT(-2, rc);
+    TEST_ASSERT_EQUAL_INT(2, executed);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, g_unprompted_runs,
+        "a tool queued after a cancelled one must not run");
+    TEST_ASSERT_EQUAL_INT(0, results[1].success);
+    TEST_ASSERT_NOT_NULL(strstr(results[1].result, "\"interrupted\""));
+
+    free_calls(calls, 2);
+    free_results(results, 2);
+}
 void test_null_context_returns_error(void) {
     int executed = 0;
     ToolResult results[1] = {0};
@@ -409,6 +449,7 @@ int main(void) {
     RUN_TEST(test_results_in_correct_slots);
     RUN_TEST(test_formerly_gated_tools_run_without_approval);
     RUN_TEST(test_non_thread_safe_falls_back_to_serial);
+    RUN_TEST(test_serial_batch_skips_tools_after_interrupt);
     RUN_TEST(test_tool_cache_thread_safety);
     RUN_TEST(test_null_context_returns_error);
     RUN_TEST(test_oversized_result_is_capped);

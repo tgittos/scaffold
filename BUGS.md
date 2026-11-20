@@ -5,6 +5,34 @@ symptom, where it shows up, and what was expected. Newest entries first;
 entry numbers are discovery order, not priority — each entry carries its
 own **Priority** line instead.
 
+## 4. Shell-tool cancellation edge cases
+
+**Priority: low** — none affects the common Ctrl-C or timeout path.
+
+1. *Narrow kill fallback.* `_kill_tree()` in
+   `src/tools/python_defaults/shell.py` catches only `ProcessLookupError` and
+   `PermissionError` from `os.killpg()`. Any other `OSError` (a platform where
+   `setsid`/`killpg` misbehave under Cosmopolitan) escapes to the outer
+   `except`: the process is not killed and captured stdout is replaced with
+   `""`. Catch `OSError` and fall back to `proc.kill()`.
+2. *Orphaned reader threads.* When `t_out`/`t_err.join(timeout=2)` expires —
+   a background process that called `setsid` still holds the pipe — the
+   reader thread keeps running, keeps calling `_ralph_sys.progress()` into
+   whatever tool's spinner runs next, and its later output is dropped.
+   Close the pipe or signal the reader to stop after a join timeout.
+3. *Interrupt flag leaks between tests.* In
+   `test/tools/test_python_integration.c`, a failed assertion between
+   `interrupt_handler_trigger()` and `interrupt_clear()` longjmps past the
+   clear, leaving the flag latched for every later test. Clear it in
+   `tearDown()`.
+4. *Slow, collision-prone sentinel tests.* The group-kill tests use fixed
+   `/tmp/sf_cancel` / `/tmp/sf_timeout` paths and two `sleep(6)` waits
+   (~12s of suite time). Use `mkstemp`-style paths and a ~2s fixture sleep.
+5. *No controlling terminal.* `start_new_session` detaches the command from
+   the terminal, so prompts that open `/dev/tty` (ssh, sudo, git credential
+   helpers) now fail immediately with `ENXIO` instead of hanging until the
+   timeout. Intended, but undocumented in the `shell` tool description.
+
 ## 3. Input handling is weak: no graceful interrupt, no input queue, no usable history
 
 **Priority: high** — the only entry that blocks day-to-day interactive use.
@@ -137,6 +165,9 @@ verifiable — land them as separate commits, not one big change:
    *Done when:* Ctrl-C while a 60-second `shell` command is running returns
    to a clean prompt within ~1 second, with the child *process tree* dead
    (verify with a piped command like `sleep 60 | cat`).
+   *Landed 2026-11-20:* `_ralph_sys.cancelled()` + `start_new_session`/`killpg`
+   in `shell` (the `python` tool stays timeout-only). All five steps of this
+   entry are complete.
 5. Distinct, visible "cancelled" status for the stream-abort path (replace
    the bare "Request cancelled." that currently reads like an error).
    *Done when:* an aborted turn prints a cancellation notice, commits

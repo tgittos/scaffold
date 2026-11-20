@@ -16,7 +16,7 @@ Application-specific code that uses the library layer. This is a thin wrapper ar
 - **`python_tool_files.c/h`** - Python file-based tool loading system (supports freeform tool invocation for tools with Match: directive; "Thread-safe: true" docstring directive marks tools that run concurrently within a batch; unmodified older shipped default tool files are refreshed from the embedded versions via `SHIPPED_DEFAULT_TOOLS` hashes)
 - **`python_extension.c/h`** - Tool extension interface for Python tools integration with lib/
 - **`http_python.c/h`** - Python extension for C HTTP client (`_ralph_http` module: get, post, download)
-- **`sys_python.c/h`** - Python extension for system info (`_ralph_sys` module: get_executable_path, get_app_home, get_config_int, progress — forwards a tool's live output line to the spinner's detail)
+- **`sys_python.c/h`** - Python extension for system info (`_ralph_sys` module: get_executable_path, get_app_home, get_config_int, progress — forwards a tool's live output line to the spinner's detail, cancelled — 1 while a Ctrl-C interrupt is latched)
 
 ##### Python Default Tools (in `python_defaults/`)
 - **`read_file.py`** - Read file contents with line numbers, returns dict with content/total_lines/range
@@ -24,7 +24,7 @@ Application-specific code that uses the library layer. This is a thin wrapper ar
 - **`list_dir.py`** - List directory contents with filtering and ISO timestamps
 - **`search_files.py`** - Search files by content/pattern with optional context lines, matched_files, total_matches_found
 - **`apply_patch.py`** - Apply text patches using Codex-compatible block find-and-replace format; appends "run the relevant tests" hint to success details
-- **`shell.py`** - Shell command execution with timeout; streams output via `Popen` (one reader thread per pipe to avoid deadlock), reporting each line to `_ralph_sys.progress()` as it arrives while keeping returned stdout/stderr byte-identical to the previous blocking behavior
+- **`shell.py`** - Shell command execution with timeout; streams output via `Popen` (one reader thread per pipe to avoid deadlock), reporting each line to `_ralph_sys.progress()` as it arrives while keeping returned stdout/stderr byte-identical to the previous blocking behavior; runs the command in its own session and polls `_ralph_sys.cancelled()` every 0.1s, SIGKILLing the whole process group on timeout or Ctrl-C (`timed_out` / `cancelled` result keys)
 - **`web_fetch.py`** - Fetch and process web content
 - **`pip.py`** - Package management: install pure-Python packages or list installed packages (action parameter: "install" or "list")
 - **`search_history.py`** - Search git history with structured output (operations: log, pickaxe, blame, diff)
@@ -44,7 +44,7 @@ Generic, CLI-independent components that can be reused. The ralph CLI is a thin 
 - **`message_processor.c/h`** - Buffered (non-streaming) response handling and tool call extraction
 - **`api_round_trip.c/h`** - Single LLM request-response cycle (payload build, HTTP, parse)
 - **`conversation_state.c/h`** - Conversation history append helpers (assistant messages, tool results)
-- **`tool_batch_executor.c/h`** - Batch tool execution; explicitly dispatches MCP and plugin tools (schema-only registry entries); caps each result at `tool_result_max_bytes` (default 32768) keeping head and tail around a `[... N bytes omitted ...]` marker
+- **`tool_batch_executor.c/h`** - Batch tool execution; explicitly dispatches MCP and plugin tools (schema-only registry entries); caps each result at `tool_result_max_bytes` (default 32768) keeping head and tail around a `[... N bytes omitted ...]` marker; in a serial batch, a tool queued after a Ctrl-C gets an `interrupted` result instead of running
 - **`tool_orchestration.c/h`** - Tool call deduplication and per-batch tracking
 - **`repl.c/h`** - Read-Eval-Print-Loop for interactive mode with readline, async processing, and periodic supervisor recovery. Owns one `async_executor_t` for the session's lifetime: submissions go through `async_executor_start()`/`async_executor_continue()` instead of blocking the `select()` loop, a message typed while a turn is running is staged on `g_pending_queue` (`message_queue.c/h`) and started once the turn's `ASYNC_EVENT_*` fires, `rl_catch_signals = 0` + `rl_initialize()` keep the app's own SIGINT handler (`util/interrupt.c`) as the sole press-sensitive brain (turn running → `async_executor_cancel()`; idle → clear the input buffer), and `read_history()`/`write_history()` persist to `app_home_path("history")` (skipped for `--json` or a non-tty stdin). Lines starting with `/` are dispatched to slash commands and never forwarded to the LLM regardless of dispatch result. Subscribes to the current project's goal progress channel (`goals:<project>`, see `orchestrator/goal_progress.c`) at startup and renders new events between prompts (plain line, or a `goal_progress` JSON system event in `--json` mode); on `quit`/`exit`/EOF, warns on stderr if any of the project's goals still have a live supervisor.
 - **`async_executor.c/h`** - Non-blocking message processing using background thread with pipe notification; running flag and condition broadcast occur inside mutex to prevent signal loss. Wired into the interactive path by `repl.c` (one executor per REPL session).
