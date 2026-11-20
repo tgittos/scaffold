@@ -5,6 +5,28 @@ symptom, where it shows up, and what was expected. Newest entries first;
 entry numbers are discovery order, not priority — each entry carries its
 own **Priority** line instead.
 
+## 6. Ctrl-C prints "Request cancelled" three times
+
+**Priority: low** — cosmetic; the turn still cancels.
+
+**Symptom:** A mid-turn Ctrl-C adds three "Request cancelled" messages to
+the chat history output instead of one. Possibly one per retry attempt.
+
+**Where:** Interactive mode, Ctrl-C while a request is in flight.
+
+**Expected:** One cancellation notice per cancelled turn.
+
+## 5. `/recap` output has no footer
+
+**Priority: low** — cosmetic.
+
+**Symptom:** When `/recap` finishes, the footer that follows a regular
+response is not rendered.
+
+**Where:** Interactive mode, `/recap`.
+
+**Expected:** `/recap` ends with the same footer as a regular message.
+
 ## 4. Shell-tool cancellation edge cases
 
 **Priority: low** — none affects the common Ctrl-C or timeout path.
