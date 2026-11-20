@@ -65,6 +65,7 @@ LIB_AGENT_SOURCES := \
     $(LIBDIR)/agent/message_dispatcher.c \
     $(LIBDIR)/agent/message_processor.c \
     $(LIBDIR)/agent/async_executor.c \
+    $(LIBDIR)/agent/message_queue.c \
     $(LIBDIR)/agent/tool_executor.c \
     $(LIBDIR)/agent/tool_batch_executor.c \
     $(LIBDIR)/agent/api_round_trip.c \

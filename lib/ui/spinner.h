@@ -51,6 +51,25 @@ void spinner_set_detail(const char *line);
 void spinner_stop(void);
 
 /**
+ * Pause spinner frame rendering without stopping the background thread.
+ *
+ * Used by the REPL to avoid the spinner thread's raw fputs() racing with
+ * readline's redisplay while the user is actively editing the input line
+ * (e.g. during rl_callback_read_char()). The thread keeps running (elapsed
+ * time keeps advancing) but skips writing frames to stdout until resumed.
+ *
+ * Safe to call even if the spinner was never started.
+ */
+void spinner_pause(void);
+
+/**
+ * Resume spinner frame rendering after spinner_pause().
+ *
+ * Safe to call even if the spinner was never started or is not paused.
+ */
+void spinner_resume(void);
+
+/**
  * Cleanup spinner resources.
  *
  * Should be called during application shutdown to ensure thread
@@ -87,5 +106,8 @@ void spinner_build_frame_for_test(char *buf, size_t buf_size,
 
 /** Return non-zero if the spinner background thread is currently running. */
 int spinner_is_running_for_test(void);
+
+/** Return non-zero if spinner frame rendering is currently paused. */
+int spinner_is_paused_for_test(void);
 
 #endif /* SPINNER_H */

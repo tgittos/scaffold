@@ -17,6 +17,7 @@ static pthread_cond_t g_spinner_cond;
 static pthread_once_t g_spinner_init_once = PTHREAD_ONCE_INIT;
 static volatile int g_spinner_running = 0;
 static volatile int g_spinner_initialized = 0;
+static volatile int g_spinner_paused = 0;
 static char *g_spinner_tool_name = NULL;
 static char *g_spinner_arg_summary = NULL;
 static char *g_spinner_detail = NULL;
@@ -124,11 +125,13 @@ static void *spinner_thread_func(void *arg) {
 
     pthread_mutex_lock(&g_spinner_mutex);
     while (g_spinner_running) {
-        build_spinner_frame(frame, sizeof(frame), bright);
-        fputs(frame, stdout);
-        fflush(stdout);
+        if (!g_spinner_paused) {
+            build_spinner_frame(frame, sizeof(frame), bright);
+            fputs(frame, stdout);
+            fflush(stdout);
 
-        bright = !bright;
+            bright = !bright;
+        }
 
         struct timespec ts;
         clock_gettime(CLOCK_REALTIME, &ts);
@@ -236,4 +239,16 @@ void spinner_cleanup(void) {
         pthread_cond_destroy(&g_spinner_cond);
         g_spinner_initialized = 0;
     }
+}
+
+void spinner_pause(void) {
+    g_spinner_paused = 1;
+}
+
+void spinner_resume(void) {
+    g_spinner_paused = 0;
+}
+
+int spinner_is_paused_for_test(void) {
+    return g_spinner_paused;
 }
