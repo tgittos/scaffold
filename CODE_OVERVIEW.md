@@ -24,7 +24,7 @@ Application-specific code that uses the library layer. This is a thin wrapper ar
 - **`list_dir.py`** - List directory contents with filtering and ISO timestamps
 - **`search_files.py`** - Search files by content/pattern with optional context lines, matched_files, total_matches_found
 - **`apply_patch.py`** - Apply text patches using Codex-compatible block find-and-replace format; appends "run the relevant tests" hint to success details
-- **`shell.py`** - Shell command execution with timeout; streams output via `Popen` (one reader thread per pipe to avoid deadlock), reporting each line to `_ralph_sys.progress()` as it arrives while keeping returned stdout/stderr byte-identical to the previous blocking behavior
+- **`shell.py`** - Shell command execution with timeout; streams output via `Popen` (one reader thread per pipe to avoid deadlock), reporting each line to `_ralph_sys.progress()` as it arrives while keeping returned stdout/stderr byte-identical to the previous blocking behavior; runs the command in its own session and polls `_ralph_sys.cancelled()` every 0.1s, SIGKILLing the whole process group on timeout or Ctrl-C (`timed_out` / `cancelled` result keys)
 - **`web_fetch.py`** - Fetch and process web content
 - **`pip.py`** - Package management: install pure-Python packages or list installed packages (action parameter: "install" or "list")
 - **`search_history.py`** - Search git history with structured output (operations: log, pickaxe, blame, diff)

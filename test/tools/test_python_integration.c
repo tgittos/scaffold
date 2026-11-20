@@ -4,6 +4,7 @@
 #include "tools/sys_python.h"
 #include "lib/tools/tools_system.h"
 #include "util/app_home.h"
+#include "util/interrupt.h"
 #include "../test_fs_utils.h"
 #include <cJSON.h>
 #include <pthread.h>
@@ -353,6 +354,95 @@ void test_shell_tool_exit_code_propagates(void) {
     free(result_exit42.result);
 
     cleanup_tool_registry(&shell_registry);
+    python_cleanup_tool_files();
+}
+
+static long elapsed_ms(const struct timespec *t0, const struct timespec *t1) {
+    return (t1->tv_sec - t0->tv_sec) * 1000 + (t1->tv_nsec - t0->tv_nsec) / 1000000;
+}
+
+/* The pipeline's subshell outlives a direct kill of sh and touches the
+ * sentinel when its sleep ends; only a process-group kill prevents that. */
+void test_shell_tool_cancel_kills_process_group(void) {
+    TEST_ASSERT_EQUAL_INT(0, python_init_tool_files());
+    TEST_ASSERT_EQUAL_INT(0, python_load_tool_files());
+    unlink("/tmp/sf_cancel");
+
+    interrupt_handler_trigger();
+    struct timespec t0, t1;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    ToolCall call = {
+        .id = "sf-cancel",
+        .name = "shell",
+        .arguments = "{\"command\": \"(echo start; sleep 5; touch /tmp/sf_cancel; echo end) | cat\"}"
+    };
+    ToolResult result = {0};
+    TEST_ASSERT_EQUAL_INT(0, execute_python_file_tool_call(&call, &result));
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    interrupt_clear();
+
+    TEST_ASSERT_LESS_THAN_INT(2000, elapsed_ms(&t0, &t1));
+    TEST_ASSERT_NOT_NULL(result.result);
+    TEST_ASSERT_NOT_NULL_MESSAGE(strstr(result.result, "\"cancelled\": true"),
+        "cancelled tool result must carry the cancelled marker");
+    sleep(6);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(-1, access("/tmp/sf_cancel", F_OK),
+        "cancel must kill the whole process group");
+
+    free(result.tool_call_id);
+    free(result.result);
+    python_cleanup_tool_files();
+}
+
+void test_shell_tool_timeout_kills_process_group(void) {
+    TEST_ASSERT_EQUAL_INT(0, python_init_tool_files());
+    TEST_ASSERT_EQUAL_INT(0, python_load_tool_files());
+    unlink("/tmp/sf_timeout");
+
+    struct timespec t0, t1;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    ToolCall call = {
+        .id = "sf-timeout",
+        .name = "shell",
+        .arguments = "{\"command\": \"(sleep 5; touch /tmp/sf_timeout) | cat\", \"timeout\": 1}"
+    };
+    ToolResult result = {0};
+    TEST_ASSERT_EQUAL_INT(0, execute_python_file_tool_call(&call, &result));
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+
+    TEST_ASSERT_LESS_THAN_INT(3000, elapsed_ms(&t0, &t1));
+    TEST_ASSERT_NOT_NULL(result.result);
+    TEST_ASSERT_NOT_NULL(strstr(result.result, "\"timed_out\": true"));
+    sleep(6);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(-1, access("/tmp/sf_timeout", F_OK),
+        "timeout must kill the whole process group");
+
+    free(result.tool_call_id);
+    free(result.result);
+    python_cleanup_tool_files();
+}
+
+void test_shell_tool_ignores_cleared_flag(void) {
+    TEST_ASSERT_EQUAL_INT(0, python_init_tool_files());
+    TEST_ASSERT_EQUAL_INT(0, python_load_tool_files());
+
+    interrupt_handler_trigger();
+    interrupt_clear();
+    ToolCall call = {
+        .id = "sf-cleared",
+        .name = "shell",
+        .arguments = "{\"command\": \"sleep 1\"}"
+    };
+    ToolResult result = {0};
+    TEST_ASSERT_EQUAL_INT(0, execute_python_file_tool_call(&call, &result));
+
+    TEST_ASSERT_EQUAL_INT(1, result.success);
+    TEST_ASSERT_NOT_NULL(result.result);
+    TEST_ASSERT_NOT_NULL(strstr(result.result, "\"exit_code\": 0"));
+    TEST_ASSERT_NOT_NULL(strstr(result.result, "\"cancelled\": false"));
+
+    free(result.tool_call_id);
+    free(result.result);
     python_cleanup_tool_files();
 }
 
@@ -1548,6 +1638,9 @@ int main(void) {
     RUN_TEST(test_python_stdlib_math);
     RUN_TEST(test_shell_tool_exit_code_propagates);
     RUN_TEST(test_shell_reports_progress_lines);
+    RUN_TEST(test_shell_tool_cancel_kills_process_group);
+    RUN_TEST(test_shell_tool_timeout_kills_process_group);
+    RUN_TEST(test_shell_tool_ignores_cleared_flag);
     RUN_TEST(test_python_tool_docstring_parsing);
     RUN_TEST(test_sys_module_accessible);
     RUN_TEST(test_pip_version_key_ordering);
