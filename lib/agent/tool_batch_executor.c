@@ -77,6 +77,9 @@ void tool_result_apply_cap(ToolResult* result, size_t max_bytes) {
     result->result = capped;
 }
 
+static const char INTERRUPTED_RESULT[] =
+    "{\"error\": \"interrupted\", \"message\": \"Cancelled by user\"}";
+
 static void fill_remaining_interrupted(ToolBatchContext* ctx,
                                         ToolCall* calls, int call_count,
                                         int start, int compact,
@@ -89,8 +92,7 @@ static void fill_remaining_interrupted(ToolBatchContext* ctx,
         }
         int s = compact ? *count : j;
         if (compact) call_indices[*count] = j;
-        fill_error_result(&results[s], calls[j].id,
-                          "{\"error\": \"interrupted\", \"message\": \"Cancelled by user\"}");
+        fill_error_result(&results[s], calls[j].id, INTERRUPTED_RESULT);
         if (json_mode) {
             json_output_tool_result(calls[j].id, results[s].result, 1);
         }
@@ -245,6 +247,11 @@ int tool_batch_execute(ToolBatchContext* ctx,
     } else if (!use_parallel) {
         for (int k = 0; k < approved_count; k++) {
             PreScreenEntry* e = &approved[k];
+            if (interrupt_pending()) {
+                fill_error_result(&results[e->slot], calls[e->call_index].id,
+                                  INTERRUPTED_RESULT);
+                continue;
+            }
             spinner_start(calls[e->call_index].name, calls[e->call_index].arguments);
             execute_single_tool(ctx, &calls[e->call_index], &results[e->slot], e);
             spinner_stop();
