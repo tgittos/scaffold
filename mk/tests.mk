@@ -385,6 +385,8 @@ $(TEST_recap_TARGET): $(TEST_recap_OBJECTS) $(LIBAGENT) $(ALL_LIBS)
 # PYTHON TESTS (need stdlib embedding)
 # =============================================================================
 
+PYTHON_DEFAULTS_FILES := $(wildcard $(PYTHON_DEFAULTS_DIR)/*.py)
+
 define PYTHON_TEST_EMBED
 	@set -e; \
 	if [ ! -d "$(PYTHON_STDLIB_DIR)/lib" ]; then \
@@ -400,19 +402,19 @@ define PYTHON_TEST_EMBED
 	rm -f $$EMBED_ZIP
 endef
 
-$(TEST_python_tool_TARGET): $(TEST_python_tool_OBJECTS) $(LIBAGENT) $(ALL_LIBS)
+$(TEST_python_tool_TARGET): $(TEST_python_tool_OBJECTS) $(LIBAGENT) $(ALL_LIBS) $(PYTHON_DEFAULTS_FILES)
 	$(CXX) -o $@ $(TEST_python_tool_OBJECTS) $(LIBAGENT) $(LIBS_STANDARD)
 	$(PYTHON_TEST_EMBED)
 
-$(TEST_python_integration_TARGET): $(TEST_python_integration_OBJECTS) $(LIBAGENT) $(ALL_LIBS)
+$(TEST_python_integration_TARGET): $(TEST_python_integration_OBJECTS) $(LIBAGENT) $(ALL_LIBS) $(PYTHON_DEFAULTS_FILES)
 	$(CXX) -o $@ $(TEST_python_integration_OBJECTS) $(LIBAGENT) $(LIBS_STANDARD)
 	$(PYTHON_TEST_EMBED)
 
-$(TEST_http_python_TARGET): $(TEST_http_python_OBJECTS) $(LIBAGENT) $(ALL_LIBS)
+$(TEST_http_python_TARGET): $(TEST_http_python_OBJECTS) $(LIBAGENT) $(ALL_LIBS) $(PYTHON_DEFAULTS_FILES)
 	$(CXX) -o $@ $(TEST_http_python_OBJECTS) $(LIBAGENT) $(LIBS_STANDARD)
 	$(PYTHON_TEST_EMBED)
 
-$(TEST_sys_python_TARGET): $(TEST_sys_python_OBJECTS) $(LIBAGENT) $(ALL_LIBS)
+$(TEST_sys_python_TARGET): $(TEST_sys_python_OBJECTS) $(LIBAGENT) $(ALL_LIBS) $(PYTHON_DEFAULTS_FILES)
 	$(CXX) -o $@ $(TEST_sys_python_OBJECTS) $(LIBAGENT) $(LIBS_STANDARD)
 	$(PYTHON_TEST_EMBED)
 
